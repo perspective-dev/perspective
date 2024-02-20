@@ -89,7 +89,6 @@ else()
     CHECK_PROTOC_VERSION()
 endif()
 
-# Function to compile .proto files to C++ with protoc
 function(protobuf_generate_cpp SRCS HDRS)
     if(NOT ARGN)
         message(SEND_ERROR "Error: protobuf_generate_cpp() called without any proto files")
@@ -106,22 +105,20 @@ function(protobuf_generate_cpp SRCS HDRS)
         set(GENERATED_SRC "${CMAKE_CURRENT_BINARY_DIR}/${PROTO_NAME}.pb.cc")
         set(GENERATED_HDR "${CMAKE_CURRENT_BINARY_DIR}/${PROTO_NAME}.pb.h")
 
-        execute_process(
-            # COMMAND ${PROTOC_EXECUTABLE} --cpp_out ${CMAKE_CURRENT_BINARY_DIR} --proto_path ${PROTO_PATH} ${PROTO_FILE}
+        add_custom_command(
+            OUTPUT ${GENERATED_SRC} ${GENERATED_HDR}
             COMMAND ${PROTOC_EXECUTABLE} --cpp_out ${CMAKE_CURRENT_BINARY_DIR} ${PROTO_FILE}
-            RESULT_VARIABLE PROTOC_RESULT
-            OUTPUT_VARIABLE PROTOC_OUTPUT
-            ERROR_VARIABLE PROTOC_ERROR
+            DEPENDS ${PROTO_FILE} ${PROTOC_EXECUTABLE}
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            COMMENT "Generating ${GENERATED_SRC} and ${GENERATED_HDR} from ${PROTO_FILE}"
         )
 
-        if(NOT ${PROTOC_RESULT} EQUAL 0)
-            message(FATAL_ERROR "protoc failed: ${PROTOC_ERROR}")
-        endif()
+        set_source_files_properties(${GENERATED_SRC} ${GENERATED_HDR} PROPERTIES GENERATED TRUE)
 
-        list(APPEND _PROTOBUF_GENERATE_CPP_SRCS "${GENERATED_SRC}")
-        list(APPEND _PROTOBUF_GENERATE_CPP_HDRS "${GENERATED_HDR}")
+        list(APPEND _PROTOBUF_GENERATE_CPP_SRCS ${GENERATED_SRC})
+        list(APPEND _PROTOBUF_GENERATE_CPP_HDRS ${GENERATED_HDR})
     endforeach()
     set(${SRCS} ${_PROTOBUF_GENERATE_CPP_SRCS} PARENT_SCOPE)
     set(${HDRS} ${_PROTOBUF_GENERATE_CPP_HDRS} PARENT_SCOPE)
 endfunction()
+
