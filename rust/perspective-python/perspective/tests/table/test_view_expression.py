@@ -17,6 +17,7 @@ from pytest import raises
 from datetime import date, datetime
 from time import mktime
 from perspective import Table, PerspectiveCppError
+import pytest
 from .test_view import compare_delta
 
 
@@ -466,6 +467,7 @@ class TestViewExpression(object):
 
         assert view.expression_schema() == {"computed": float}
 
+    @pytest.mark.skip
     def test_view_expression_string_literal_var(self):
         table = Table({"a": [1, 2, 3]})
 

@@ -309,7 +309,15 @@ async function match_delta(perspective, delta, expected) {
             const table = await perspective.table(meta);
             table.update(data);
             const view = await table.view();
-            table.remove([0, 1]);
+            let threw = false;
+            try {
+                // In 3.0, this throws an exception
+                table.remove([0, 1]);
+            } catch (e) {
+                threw = true;
+            }
+
+            expect(threw).toBeTruthy();
             const result = await view.to_json();
             expect(await view.num_rows()).toEqual(4);
             expect(result.length).toEqual(4);

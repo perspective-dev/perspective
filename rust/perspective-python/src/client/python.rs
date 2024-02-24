@@ -10,6 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -17,13 +18,13 @@ use futures::lock::Mutex;
 use perspective_client::config::Expressions;
 use perspective_client::proto::{RequestEnvelope, ResponseEnvelope};
 use perspective_client::{
-    assert_table_api, assert_view_api, clone, Client, ClientError, Table, TableData,
-    TableInitOptions, UpdateOptions, View, ViewWindow,
+    assert_table_api, assert_view_api, clone, Client, ClientError, ColumnType, OnUpdateOptions,
+    Table, TableData, TableInitOptions, UpdateOptions, View, ViewWindow,
 };
 use prost::Message;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyList, PyString};
+use pyo3::types::{PyBytes, PyDict, PyFunction, PyList, PyString};
 use pythonize::depythonize;
 
 use crate::ffi;
@@ -74,8 +75,23 @@ impl TableData {
             let json_module = PyModule::import(py, "json")?;
             let string = json_module.call_method1("dumps", (pylist,))?;
             Ok(TableData::JsonRows(string.extract::<String>()?))
+        } else if let Ok(pydict) = input.downcast::<PyDict>(py) {
+            let first_key = pydict.keys().get_item(0)?;
+            let first_item = pydict
+                .get_item(first_key)?
+                .ok_or_else(|| PyValueError::new_err("Bad Input"))?;
+            if first_item.downcast::<PyList>().is_ok() {
+                let json_module = PyModule::import(py, "json")?;
+                let string = json_module.call_method1("dumps", (pydict,))?;
+                Ok(TableData::JsonColumns(string.extract::<String>()?))
+            } else {
+                Err(PyValueError::new_err("Schema not implemented"))
+            }
         } else {
-            Err(PyValueError::new_err("Unknown input type"))
+            Err(PyValueError::new_err(format!(
+                "Unknown input type {:?}",
+                input.type_id()
+            )))
         }
     }
 }
@@ -117,17 +133,18 @@ impl PyClient {
                 },
             };
 
-            let table_data = if let Ok(pybytes) = input.downcast::<PyBytes>(py) {
-                TableData::Arrow(pybytes.as_bytes().to_vec())
-            } else if let Ok(pystring) = input.downcast::<PyString>(py) {
-                TableData::Csv(pystring.extract::<String>()?)
-            } else if let Ok(pylist) = input.downcast::<PyList>(py) {
-                let json_module = PyModule::import(py, "json")?;
-                let string = json_module.call_method1("dumps", (pylist,))?;
-                TableData::JsonRows(string.extract::<String>()?)
-            } else {
-                Err(PyValueError::new_err("Unknown input type"))?
-            };
+            let table_data = TableData::from_py(py, input)?;
+            // let table_data = if let Ok(pybytes) = input.downcast::<PyBytes>(py) {
+            //     TableData::Arrow(pybytes.as_bytes().to_vec())
+            // } else if let Ok(pystring) = input.downcast::<PyString>(py) {
+            //     TableData::Csv(pystring.extract::<String>()?)
+            // } else if let Ok(pylist) = input.downcast::<PyList>(py) {
+            //     let json_module = PyModule::import(py, "json")?;
+            //     let string = json_module.call_method1("dumps", (pylist,))?;
+            //     TableData::JsonRows(string.extract::<String>()?)
+            // } else {
+            //     Err(PyValueError::new_err("Unknown input type"))?
+            // };
 
             let table = client.as_ref().unwrap().table(table_data, options);
             Ok::<_, PyErr>(table)
@@ -147,7 +164,7 @@ pub struct PyTable {
     // client: Arc<Mutex<Option<Client>>>,
 }
 
-// assert_table_api!(PyTable);
+assert_table_api!(PyTable);
 
 impl PyTable {
     pub async fn size(&self) -> usize {
@@ -168,6 +185,28 @@ impl PyTable {
 
     pub async fn make_port(&self) -> PyResult<i32> {
         self.table.lock().await.make_port().await.into_pyerr()
+    }
+
+    pub async fn on_delete(&self, callback: Py<PyFunction>) -> PyResult<u32> {
+        let callback = Box::new(move || {
+            Python::with_gil(|py| callback.call0(py));
+        });
+
+        self.table
+            .lock()
+            .await
+            .on_delete(callback)
+            .await
+            .into_pyerr()
+    }
+
+    pub async fn remove_delete(&self, callback_id: u32) -> PyResult<()> {
+        self.table
+            .lock()
+            .await
+            .remove_delete(callback_id)
+            .await
+            .into_pyerr()
     }
 
     pub async fn replace(&self, input: Py<PyAny>) -> PyResult<()> {
@@ -211,9 +250,10 @@ impl PyTable {
             .collect())
     }
 
-    pub async fn view(&self, config: Option<Py<PyAny>>) -> PyResult<PyView> {
-        let config =
-            config.map(|config| Python::with_gil(|py| depythonize(config.as_ref(py)).unwrap()));
+    pub async fn view(&self, kwargs: Option<Py<PyDict>>) -> PyResult<PyView> {
+        let config = kwargs
+            .map(|config| Python::with_gil(|py| depythonize(config.as_ref(py))))
+            .transpose()?;
         let view = self.table.lock().await.view(config).await.into_pyerr()?;
         Ok(PyView {
             view: Arc::new(Mutex::new(view)),
@@ -226,7 +266,7 @@ pub struct PyView {
     view: Arc<Mutex<View>>,
 }
 
-// assert_view_api!(View);
+assert_view_api!(PyView);
 
 impl PyView {
     pub async fn column_paths(&self) -> PyResult<Vec<String>> {
@@ -281,13 +321,58 @@ impl PyView {
             .collect())
     }
 
-    // pub async fn on_update(&self, callback: Py<PyObject>) -> PyResult<()> {
-    //     Ok(())
-    // }
+    pub async fn on_delete(&self, callback: Py<PyFunction>) -> PyResult<u32> {
+        let callback = Box::new(move || {
+            Python::with_gil(|py| callback.call0(py));
+        });
 
-    // pub async fn on_remove(&self, callback: Py<PyObject>) -> PyResult<()> {
-    //     Ok(())
-    // }
+        self.view
+            .lock()
+            .await
+            .on_delete(callback)
+            .await
+            .into_pyerr()
+    }
+
+    pub async fn remove_delete(&self, callback_id: u32) -> PyResult<()> {
+        self.view
+            .lock()
+            .await
+            .remove_delete(callback_id)
+            .await
+            .into_pyerr()
+    }
+
+    pub async fn on_update(&self, callback: Py<PyFunction>, mode: Option<String>) -> PyResult<u32> {
+        let callback = Box::new(move |x: Option<Vec<u8>>| {
+            Python::with_gil(|py| {
+                if let Some(x) = &x {
+                    callback.call1(py, (PyBytes::new(py, x),))
+                } else {
+                    callback.call0(py)
+                }
+            });
+        });
+
+        self.view
+            .lock()
+            .await
+            .on_update(
+                callback,
+                mode.map(|mode| OnUpdateOptions { mode: Some(mode) }),
+            )
+            .await
+            .into_pyerr()
+    }
+
+    pub async fn remove_update(&self, callback_id: u32) -> PyResult<()> {
+        self.view
+            .lock()
+            .await
+            .remove_update(callback_id)
+            .await
+            .into_pyerr()
+    }
 
     pub async fn to_arrow(&self, window: Option<Py<PyDict>>) -> PyResult<Py<PyBytes>> {
         let window: ViewWindow = Python::with_gil(|py| window.map(|x| depythonize(x.as_ref(py))))
@@ -314,6 +399,19 @@ impl PyView {
             .lock()
             .await
             .to_columns_string(window)
+            .await
+            .into_pyerr()
+    }
+
+    pub async fn to_json_string(&self, window: Option<Py<PyDict>>) -> PyResult<String> {
+        let window: ViewWindow = Python::with_gil(|py| window.map(|x| depythonize(x.as_ref(py))))
+            .transpose()?
+            .unwrap_or_default();
+
+        self.view
+            .lock()
+            .await
+            .to_json_string(window)
             .await
             .into_pyerr()
     }

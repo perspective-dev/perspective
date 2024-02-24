@@ -100,12 +100,12 @@ impl From<SortDir> for proto::SortOp {
             SortDir::None => proto::SortOp::SortNone,
             SortDir::Desc => proto::SortOp::SortDesc,
             SortDir::Asc => proto::SortOp::SortAsc,
-            SortDir::ColDesc => todo!(),
-            SortDir::ColAsc => todo!(),
-            SortDir::DescAbs => todo!(),
-            SortDir::AscAbs => todo!(),
-            SortDir::ColDescAbs => todo!(),
-            SortDir::ColAscAbs => todo!(),
+            SortDir::ColDesc => proto::SortOp::SortColDesc,
+            SortDir::ColAsc => proto::SortOp::SortColAsc,
+            SortDir::DescAbs => proto::SortOp::SortDescAbs,
+            SortDir::AscAbs => proto::SortOp::SortAscAbs,
+            SortDir::ColDescAbs => proto::SortOp::SortColDescAbs,
+            SortDir::ColAscAbs => proto::SortOp::SortColAscAbs,
         }
     }
 }
@@ -116,6 +116,12 @@ impl From<proto::SortOp> for SortDir {
             proto::SortOp::SortNone => SortDir::None,
             proto::SortOp::SortDesc => SortDir::Desc,
             proto::SortOp::SortAsc => SortDir::Asc,
+            proto::SortOp::SortColAsc => SortDir::ColAsc,
+            proto::SortOp::SortColDesc => SortDir::ColDesc,
+            proto::SortOp::SortAscAbs => SortDir::AscAbs,
+            proto::SortOp::SortDescAbs => SortDir::DescAbs,
+            proto::SortOp::SortColAscAbs => SortDir::ColAscAbs,
+            proto::SortOp::SortColDescAbs => SortDir::ColDescAbs,
         }
     }
 }

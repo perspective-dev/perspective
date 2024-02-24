@@ -290,9 +290,10 @@ str_to_dtype(const std::string& typestring) {
     }
     if (typestring == "boolean") {
         return DTYPE_BOOL;
-    } else if (typestring == "date") {
+    }
+    if (typestring == "date") {
         return DTYPE_DATE;
-    } else if (typestring == "datetime") {
+    } if (typestring == "datetime") {
         return DTYPE_TIME;
     } else if (typestring == "string") {
         return DTYPE_STR;
@@ -368,9 +369,10 @@ str_to_filter_op(const std::string& str) {
     }
     if (str == ">") {
         return t_filter_op::FILTER_OP_GT;
-    } else if (str == ">=") {
+    }
+    if (str == ">=") {
         return t_filter_op::FILTER_OP_GTEQ;
-    } else if (str == "==") {
+    } if (str == "==") {
         return t_filter_op::FILTER_OP_EQ;
     } else if (str == "!=") {
         return t_filter_op::FILTER_OP_NE;
@@ -410,9 +412,10 @@ str_to_sorttype(const std::string& str) {
     }
     if (str == "desc" || str == "col desc") {
         return SORTTYPE_DESCENDING;
-    } else if (str == "asc abs" || str == "col asc abs") {
+    }
+    if (str == "asc abs" || str == "col asc abs") {
         return SORTTYPE_ASCENDING_ABS;
-    } else if (str == "desc abs" || str == "col desc abs") {
+    } if (str == "desc abs" || str == "col desc abs") {
         return SORTTYPE_DESCENDING_ABS;
     } else {
         std::stringstream ss;

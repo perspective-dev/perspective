@@ -18,7 +18,7 @@ fn main() {
         println!("cargo:warning=MESSAGE Building cmake");
         use cmake::Config;
 
-        let reconfigure = !std::path::Path::new("perspective/libpsp.so").exists();
+        // let reconfigure = !std::path::Path::new("perspective/libpsp.so").exists();
         let cfg = PythonConfig::new(); // Python 3
         let version = cfg.semantic_version().unwrap();
         let lib_dir = format!(
@@ -27,7 +27,7 @@ fn main() {
         );
 
         let _dst = Config::new("../../cpp/perspective")
-            .always_configure(reconfigure)
+            .always_configure(true)
             .define("CMAKE_LIBRARY_OUTPUT_DIRECTORY", &lib_dir)
             // .define("CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG", &lib_dir)
             // .define("CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE", &lib_dir)

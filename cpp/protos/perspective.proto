@@ -383,6 +383,12 @@ enum SortOp {
   SORT_NONE = 0;
   SORT_ASC = 1;
   SORT_DESC = 2;
+  SORT_COL_ASC = 3;
+  SORT_COL_DESC = 4;
+  SORT_ASC_ABS = 5;
+  SORT_DESC_ABS = 6;
+  SORT_COL_ASC_ABS = 7;
+  SORT_COL_DESC_ABS = 8;
 }
 
 message Sort {

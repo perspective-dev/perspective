@@ -17,7 +17,6 @@
 #include "perspective/raw_types.h"
 #include "perspective/schema.h"
 #include "rapidjson/document.h"
-#include "rapidjson/stringbuffer.h"
 #include <memory>
 #include <optional>
 #include <perspective/table.h>
@@ -330,7 +329,7 @@ schema_to_arrow_map(const t_schema& gnode_output_schema) {
             default:
                 std::stringstream ss;
                 ss << "Error loading arrow type " << dtype_to_str(type)
-                   << " for column " << name << std::endl;
+                   << " for column " << name << "\n";
                 PSP_COMPLAIN_AND_ABORT(ss.str())
                 break;
         }
@@ -862,8 +861,8 @@ Table::update_cols(const std::string_view& data) {
 
     if (is_implicit) {
         for (t_uindex ii = 0; ii < nrows; ii++) {
-            psp_pkey_col->set_nth(ii, ii);
-            psp_okey_col->set_nth(ii, ii);
+            psp_pkey_col->set_nth<std::int32_t>(ii, ii);
+            psp_okey_col->set_nth<std::int32_t>(ii, ii);
         }
     }
 
@@ -915,6 +914,7 @@ Table::from_cols(
     data_table.extend(nrows);
 
     if (is_implicit) {
+        // TODO should this be t_uindex?
         data_table.add_column("psp_pkey", DTYPE_INT32, true);
         data_table.add_column("psp_okey", DTYPE_INT32, true);
     } else {
@@ -960,8 +960,8 @@ Table::from_cols(
 
     if (is_implicit) {
         for (t_uindex ii = 0; ii < nrows; ii++) {
-            psp_pkey_col->set_nth(ii, ii);
-            psp_okey_col->set_nth(ii, ii);
+            psp_pkey_col->set_nth<std::int32_t>(ii, ii);
+            psp_okey_col->set_nth<std::int32_t>(ii, ii);
         }
     }
 
@@ -1009,8 +1009,8 @@ Table::update_rows(const std::string_view& data) {
         data_table.add_column("psp_pkey", DTYPE_INT32, true);
         data_table.add_column("psp_okey", DTYPE_INT32, true);
     } else {
-        // data_table.add_column("psp_pkey", schema.get_dtype(index), true);
-        // data_table.add_column("psp_okey", schema.get_dtype(index), true);
+        data_table.add_column("psp_pkey", schema.get_dtype(m_index), true);
+        data_table.add_column("psp_okey", schema.get_dtype(m_index), true);
     }
 
     t_uindex ii = 0;
@@ -1030,8 +1030,8 @@ Table::update_rows(const std::string_view& data) {
         }
 
         if (is_implicit) {
-            psp_pkey_col->set_nth(ii, (ii + m_offset) % m_limit);
-            psp_okey_col->set_nth(ii, (ii + m_offset) % m_limit);
+            psp_pkey_col->set_nth<std::int32_t>(ii, (ii + m_offset) % m_limit);
+            psp_okey_col->set_nth<std::int32_t>(ii, (ii + m_offset) % m_limit);
         }
 
         ii++;

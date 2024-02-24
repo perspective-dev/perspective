@@ -232,3 +232,4 @@ testenv
 rust/perspective/build
 rust/perspective-viewer/build
 rust/perspective-client/src/rust/proto.rs
+.vscode/vscode.css

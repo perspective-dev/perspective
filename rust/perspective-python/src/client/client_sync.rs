@@ -45,7 +45,7 @@ pub fn create_sync_client() -> PySyncClient {
 #[pyclass]
 pub struct PySyncTable(PyTable);
 
-// assert_table_api!(PySyncTable);
+assert_table_api!(PySyncTable);
 
 #[pymethods]
 impl PySyncTable {
@@ -70,6 +70,18 @@ impl PySyncTable {
         block_on(table.make_port())
     }
 
+    #[doc = include_str!("../../../perspective-client/docs/table/on_delete.md")]
+    fn on_delete(&self, callback: Py<PyFunction>) -> PyResult<u32> {
+        let table = self.0.clone();
+        block_on(table.on_delete(callback))
+    }
+
+    #[doc = include_str!("../../../perspective-client/docs/table/remove_delete.md")]
+    fn remove_delete(&self, callback_id: u32) -> PyResult<()> {
+        let table = self.0.clone();
+        block_on(table.remove_delete(callback_id))
+    }
+
     #[doc = include_str!("../../../perspective-client/docs/table/schema.md")]
     fn schema(&self) -> PyResult<HashMap<String, String>> {
         let table = self.0.clone();
@@ -83,7 +95,8 @@ impl PySyncTable {
     }
 
     #[doc = include_str!("../../../perspective-client/docs/table/view.md")]
-    fn view(&self, config: Option<Py<PyAny>>) -> PyResult<PySyncView> {
+    #[pyo3(signature = (**config))]
+    fn view(&self, config: Option<Py<PyDict>>) -> PyResult<PySyncView> {
         Ok(PySyncView(block_on(self.0.view(config))?))
     }
 
@@ -113,7 +126,7 @@ impl PySyncTable {
 #[pyclass]
 pub struct PySyncView(PyView);
 
-// assert_view_api!(PySyncView);
+assert_view_api!(PySyncView);
 
 #[pymethods]
 impl PySyncView {
@@ -125,6 +138,27 @@ impl PySyncView {
     #[doc = include_str!("../../../perspective-client/docs/view/to_columns_string.md")]
     fn to_columns_string(&self, window: Option<Py<PyDict>>) -> PyResult<String> {
         block_on(self.0.to_columns_string(window))
+    }
+
+    #[doc = include_str!("../../../perspective-client/docs/view/to_json_string.md")]
+    fn to_json_string(&self, window: Option<Py<PyDict>>) -> PyResult<String> {
+        block_on(self.0.to_json_string(window))
+    }
+
+    fn to_records<'a>(&self, py: Python<'a>, window: Option<Py<PyDict>>) -> PyResult<&'a PyAny> {
+        let json = block_on(self.0.to_json_string(window))?;
+        let json_module = PyModule::import(py, "json")?;
+        json_module.call_method1("loads", (json,))
+    }
+
+    fn to_json<'a>(&self, py: Python<'a>, window: Option<Py<PyDict>>) -> PyResult<&'a PyAny> {
+        self.to_records(py, window)
+    }
+
+    fn to_columns<'a>(&self, py: Python<'a>, window: Option<Py<PyDict>>) -> PyResult<&'a PyAny> {
+        let json = block_on(self.0.to_columns_string(window))?;
+        let json_module = PyModule::import(py, "json")?;
+        json_module.call_method1("loads", (json,))
     }
 
     #[doc = include_str!("../../../perspective-client/docs/view/to_csv.md")]
@@ -172,13 +206,23 @@ impl PySyncView {
         block_on(self.0.schema())
     }
 
+    #[doc = include_str!("../../../perspective-client/docs/view/on_delete.md")]
+    fn on_delete(&self, callback: Py<PyFunction>) -> PyResult<u32> {
+        block_on(self.0.on_delete(callback))
+    }
+
+    #[doc = include_str!("../../../perspective-client/docs/view/remove_delete.md")]
+    fn remove_delete(&self, callback_id: u32) -> PyResult<()> {
+        block_on(self.0.remove_delete(callback_id))
+    }
+
     #[doc = include_str!("../../../perspective-client/docs/view/on_update.md")]
-    fn on_update(&self, callback: Py<PyAny>) -> PyResult<()> {
-        Ok(())
+    fn on_update(&self, callback: Py<PyFunction>, mode: Option<String>) -> PyResult<u32> {
+        block_on(self.0.on_update(callback, mode))
     }
 
     #[doc = include_str!("../../../perspective-client/docs/view/remove_update.md")]
-    fn remove_update(&self, callback: Py<PyAny>) -> PyResult<()> {
-        Ok(())
+    fn remove_update(&self, callback_id: u32) -> PyResult<()> {
+        block_on(self.0.remove_update(callback_id))
     }
 }

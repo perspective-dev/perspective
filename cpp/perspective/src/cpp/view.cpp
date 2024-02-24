@@ -1240,7 +1240,7 @@ View<CTX_T>::data_slice_to_csv(std::shared_ptr<t_data_slice<CTX_T>> data_slice
     if (!allocated.ok()) {
         std::stringstream ss;
         ss << "Failed to allocate buffer: " << allocated.status().message()
-           << std::endl;
+           << '\n';
         PSP_COMPLAIN_AND_ABORT(ss.str());
     }
 
@@ -1343,7 +1343,7 @@ View<t_ctx1>::set_depth(std::int32_t depth, std::int32_t row_pivot_length) {
         m_ctx->set_depth(depth);
     } else {
         std::cout << "Cannot expand past " << std::to_string(row_pivot_length)
-                  << std::endl;
+                  << '\n';
     }
 }
 
@@ -1354,7 +1354,7 @@ View<t_ctx2>::set_depth(std::int32_t depth, std::int32_t row_pivot_length) {
         m_ctx->set_depth(t_header::HEADER_ROW, depth);
     } else {
         std::cout << "Cannot expand past " << std::to_string(row_pivot_length)
-                  << std::endl;
+                  << '\n';
     }
 }
 

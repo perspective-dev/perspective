@@ -35,7 +35,11 @@
 #include <fstream>
 #include <perspective/portable.h>
 #include <boost/functional/hash.hpp>
+#include <boost/stacktrace.hpp>
 #include <stdlib.h>
+#if defined(PSP_DEBUG) && defined(PSP_ENABLE_WASM)
+#include <emscripten.h>
+#endif
 
 namespace perspective {
 
@@ -165,7 +169,27 @@ std::is_pod<X>::value && std::is_standard_layout<X>::value , \
 #define LOG_DEBUG(X)
 #endif
 
-#define PSP_COMPLAIN_AND_ABORT(X) ::perspective::psp_abort(X);
+#if defined(PSP_DEBUG) && defined(PSP_ENABLE_WASM)
+#define PSP_COMPLAIN_AND_ABORT(X)                                              \
+    {                                                                          \
+        std::stringstream __SS__;                                              \
+        __SS__ << (X) << "\n";                                                 \
+        auto flags = EM_LOG_NO_PATHS;                                          \
+        auto len = emscripten_get_callstack(flags, 0, 0);                      \
+        std::string err;                                                       \
+        err.resize(len);                                                       \
+        emscripten_get_callstack(flags, err.data(), len);                      \
+        __SS__ << err << "\n";                                                 \
+        psp_abort(__SS__.str());                                               \
+    }
+#else
+#define PSP_COMPLAIN_AND_ABORT(X)                                              \
+    {                                                                          \
+        std::stringstream __SS__;                                              \
+        __SS__ << (X) << "\n  at " << __FILE__ << ":" << __LINE__ << "\n";     \
+        psp_abort(__SS__.str());                                               \
+    }
+#endif
 
 #define PSP_VERBOSE_ASSERT(...)                                                        \
     _ID(GET_PSP_VERBOSE_ASSERT(__VA_ARGS__, PSP_VERBOSE_ASSERT2, PSP_VERBOSE_ASSERT1)( \

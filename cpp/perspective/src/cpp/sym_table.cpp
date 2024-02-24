@@ -15,7 +15,6 @@
 #include <perspective/sym_table.h>
 #include <perspective/column.h>
 #include <tsl/hopscotch_map.h>
-#include <functional>
 #include <mutex>
 
 namespace perspective {

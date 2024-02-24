@@ -770,10 +770,9 @@ needs_poll(const proto::Request::ClientReqCase proto_case) {
         case ReqCase::kViewOnUpdateReq:
             return false;
         case proto::Request::CLIENT_REQ_NOT_SET:
-            PSP_COMPLAIN_AND_ABORT("Request type not set");
+            throw std::runtime_error("Unhandled request type");
     }
     throw std::runtime_error("Unhandled request type");
-    PSP_COMPLAIN_AND_ABORT("Unhandled request type");
 }
 
 void
@@ -1147,8 +1146,7 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
             std::vector<t_sortspec> sortby;
             std::vector<std::vector<std::string>> sort_str;
             for (const auto& sort : sorts) {
-                auto column_sort =
-                    sorttype_to_str(sort_op_from_proto(sort.op()));
+                const char* column_sort = sort_op_str_from_proto(sort.op());
                 sort_str.push_back({sort.column(), column_sort});
             }
 
@@ -1763,33 +1761,30 @@ ProtoServer::_process_table(
 
 } // namespace perspective::server
 
-perspective::proto::SortOp
-perspective::sort_op_to_proto(t_sorttype t_sort_op) {
-    switch (t_sort_op) {
-        case SORTTYPE_ASCENDING:
-            return proto::SortOp::SORT_ASC;
-        case SORTTYPE_DESCENDING:
-            return proto::SortOp::SORT_DESC;
-        case SORTTYPE_NONE:
-            return proto::SortOp::SORT_NONE;
-        default:
-            PSP_COMPLAIN_AND_ABORT("Invalid sort op");
-            return proto::SortOp::SORT_NONE;
-    }
-}
-
-perspective::t_sorttype
-perspective::sort_op_from_proto(proto::SortOp sort_op) {
+const char*
+perspective::sort_op_str_from_proto(proto::SortOp sort_op) {
     switch (sort_op) {
         case proto::SORT_NONE:
-            return SORTTYPE_NONE;
+            return "none";
         case proto::SORT_ASC:
-            return SORTTYPE_ASCENDING;
+            return "asc";
         case proto::SORT_DESC:
-            return SORTTYPE_DESCENDING;
+            return "desc";
+        case proto::SORT_ASC_ABS:
+            return "asc abs";
+        case proto::SORT_DESC_ABS:
+            return "desc abs";
+        case proto::SORT_COL_ASC:
+            return "col asc";
+        case proto::SORT_COL_DESC:
+            return "col desc";
+        case proto::SORT_COL_ASC_ABS:
+            return "col asc abs";
+        case proto::SORT_COL_DESC_ABS:
+            return "col desc abs";
         default:
             PSP_COMPLAIN_AND_ABORT("Invalid sort op");
-            return SORTTYPE_NONE;
+            return "none";
     }
 }
 

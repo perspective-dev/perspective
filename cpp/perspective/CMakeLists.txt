@@ -24,7 +24,7 @@ cmake_policy(SET CMP0074 NEW)
 cmake_policy(SET CMP0094 NEW)
 
 if(NOT DEFINED PSP_CMAKE_MODULE_PATH)
-    set(PSP_CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/../../cmake")
+    set(PSP_CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../cmake")
 endif()
 
 set(CMAKE_MODULE_PATH "${PSP_CMAKE_MODULE_PATH}/modules" ${CMAKE_MODULE_PATH})
@@ -72,10 +72,12 @@ option(PSP_CPP_BUILD "Build the C++ Project" OFF)
 option(PSP_PYTHON_BUILD "Build the Python Bindings" OFF)
 option(PSP_CPP_BUILD_STRICT "Build the C++ with strict warnings" OFF)
 
-if(NOT DEFINED PSP_WASM_BUILD)
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     set(PSP_WASM_BUILD ON)
     set(PSP_CPP_BUILD OFF)
-    set(PSP_PYTHON_BUILD OFF)
+else()
+    set(PSP_WASM_BUILD OFF)
+    set(PSP_CPP_BUILD ON)
 endif()
 
 if(PSP_WASM_BUILD AND PSP_CPP_BUILD)
@@ -129,7 +131,7 @@ else()
 endif()
 
 if(NOT DEFINED PSP_CPP_SRC)
-    set(PSP_CPP_SRC "${CMAKE_SOURCE_DIR}")
+    set(PSP_CPP_SRC "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
 if(PSP_CPP_BUILD)
@@ -140,7 +142,7 @@ endif()
 
 if(PSP_PYTHON_BUILD)
     if(NOT DEFINED PSP_PYTHON_SRC)
-        set(PSP_PYTHON_SRC "${CMAKE_SOURCE_DIR}/../../python/perspective/perspective")
+        set(PSP_PYTHON_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../../python/perspective/perspective")
     endif()
 
     set(BUILD_MESSAGE "${BUILD_MESSAGE}\n${Cyan}Building Python ${Red}${PSP_PYTHON_VERSION}${Cyan} binding${ColorReset}")
@@ -191,7 +193,7 @@ if(PSP_PYTHON_BUILD AND MACOS)
 endif()
 
 # ######################
-include_directories("${CMAKE_SOURCE_DIR}/src/include")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src/include")
 
 # if(NOT WIN32)
 # set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
@@ -262,12 +264,14 @@ elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
             else ()
               set(OPT_FLAGS " \
                   -O0 \
+                  -fexceptions \
                   -g3 \
                   ")
             endif ()
         else()
             set(OPT_FLAGS " \
                 -O3 \
+                -fexceptions \
                 -g1 \
                 ")
             if (PSP_PYODIDE)
@@ -422,7 +426,7 @@ set(SOURCE_FILES
     ${PSP_CPP_SRC}/src/cpp/base_impl_osx.cpp
     ${PSP_CPP_SRC}/src/cpp/base_impl_wasm.cpp
     ${PSP_CPP_SRC}/src/cpp/base_impl_win.cpp
-    ${PSP_CPP_SRC}/src/cpp/binding.cpp
+    # ${PSP_CPP_SRC}/src/cpp/binding.cpp
 
     # ${PSP_CPP_SRC}/src/cpp/build_filter.cpp
     # ${PSP_CPP_SRC}/src/cpp/calc_agg_dtype.cpp
@@ -540,6 +544,7 @@ set(PSP_WASM_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \
     -s NO_FILESYSTEM=1 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s MODULARIZE=1 \
+    -s WASM_BIGINT=1 \
     -s DYNAMIC_EXECUTION=0 \
     -s STANDALONE_WASM=1 \
     -s EXPORT_NAME=\"load_perspective\" \
@@ -644,7 +649,8 @@ elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
     # #######################
     else()
         add_library(psp SHARED ${WASM_SOURCE_FILES})
-        target_link_libraries(psp PRIVATE arrow protos)
+        target_compile_options(psp PRIVATE -fvisibility=hidden)
+        target_link_libraries(psp PRIVATE arrow re2 Boost::thread protos)
     endif()
 
     if(PSP_CPP_BUILD_STRICT AND NOT WIN32)
@@ -661,7 +667,7 @@ elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
     endif()
 endif()
 
-set(WORKSPACE_ROOT "${CMAKE_SOURCE_DIR}/../..")
+set(WORKSPACE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 
 if(PSP_WASM_BUILD)
     set(CLANGD_ADD_FLAGS "Add:
@@ -675,11 +681,11 @@ else()
 endif()
 
 # Check for existence of .clangd file
-if(EXISTS ${CMAKE_SOURCE_DIR}/.clangd.in)
-    message(STATUS "${Cyan}Found ${CMAKE_SOURCE_DIR}/.clangd.in${ColorReset}")
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.clangd.in)
+    message(STATUS "${Cyan}Found ${CMAKE_CURRENT_SOURCE_DIR}/.clangd.in${ColorReset}")
     # Configure the .clangd file from the template
     configure_file(
-        ${CMAKE_SOURCE_DIR}/.clangd.in
+        ${CMAKE_CURRENT_SOURCE_DIR}/.clangd.in
         ${CMAKE_BINARY_DIR}/.clangd
         @ONLY
     )

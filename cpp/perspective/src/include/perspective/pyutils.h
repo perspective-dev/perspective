@@ -19,6 +19,10 @@
 #include <boost/thread/shared_mutex.hpp>
 #endif
 
+#ifdef PSP_ENABLE_PYTHON
+#include <Python.h>
+#endif
+
 namespace perspective {
 
 #ifdef PSP_PARALLEL_FOR

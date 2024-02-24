@@ -112,8 +112,7 @@ public:
 
 proto::FilterOp filter_op_to_proto(t_filter_op t_filter_op);
 t_filter_op filter_op_from_proto(proto::FilterOp filter_op);
-proto::SortOp sort_op_to_proto(t_sorttype t_sort_op);
-t_sorttype sort_op_from_proto(proto::SortOp sort_op);
+const char* sort_op_str_from_proto(proto::SortOp sort_op);
 
 /**
  * @brief Create a new context of type `CTX_T`, which will be one of 3

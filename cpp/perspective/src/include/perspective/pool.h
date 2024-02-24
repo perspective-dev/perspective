@@ -27,8 +27,9 @@
 #include <emscripten/val.h>
 typedef emscripten::val t_val;
 #elif defined PSP_ENABLE_PYTHON
-#include <pybind11/pybind11.h>
-typedef py::object t_val;
+// #include <pybind11/pybind11.h>
+// typedef py::object std::uint64_t;
+using t_val = std::uint64_t;
 #endif
 
 namespace perspective {
@@ -45,7 +46,7 @@ class t_update_task;
 
 class PERSPECTIVE_EXPORT t_pool {
     friend class t_update_task;
-    typedef std::pair<t_uindex, std::string> t_ctx_id;
+    using t_ctx_id = std::pair<t_uindex, std::string>;
 
 public:
     PSP_NON_COPYABLE(t_pool);

@@ -15,8 +15,6 @@
 #include <perspective/proto_api.h>
 #include <string>
 #include <tsl/hopscotch_map.h>
-#include <vector>
-#include <cstdint>
 
 using namespace emscripten;
 using namespace perspective;

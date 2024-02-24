@@ -249,7 +249,7 @@ impl From<Filter> for proto::Filter {
                 // FilterTerm::Scalar(Scalar::String(x)) => vec![x,
                 FilterTerm::Scalar(x) => vec![x.into()],
                 FilterTerm::Array(x) if x.len() == 1 => x.into_iter().map(|x| x.into()).collect(),
-                x => {
+                _ => {
                     todo!("Multi arguments filters")
                 },
             },

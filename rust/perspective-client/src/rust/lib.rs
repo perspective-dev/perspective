@@ -30,7 +30,7 @@ pub use crate::client::{Client, TableData, TableInitOptions};
 pub use crate::proto::{ColumnType, ExprValidationError};
 pub use crate::table::{Schema, Table, UpdateOptions, ValidateExpressionsData};
 pub use crate::utils::*;
-pub use crate::view::{View, ViewWindow};
+pub use crate::view::{OnUpdateOptions, View, ViewWindow};
 
 pub mod vendor {
     pub use paste;
@@ -89,6 +89,7 @@ macro_rules! assert_view_api {
                     &$x::schema,
                     &$x::to_arrow,
                     &$x::to_columns_string,
+                    &$x::to_json_string,
                     &$x::to_csv,
                 );
             }

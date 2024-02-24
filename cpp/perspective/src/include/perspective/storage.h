@@ -229,7 +229,7 @@ public:
 
 #ifdef PSP_ENABLE_PYTHON
     /* Python bits */
-    py::array _as_numpy(t_dtype dtype);
+    // py::array _as_numpy(t_dtype dtype);
 #endif
 
 protected:
