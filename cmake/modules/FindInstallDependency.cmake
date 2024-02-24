@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.7.2)
 
+# Workaround for: https://gitlab.kitware.com/cmake/cmake/-/issues/22740
+set(D "$")
+
 # ##################################################
 # Helper to grab dependencies from remote sources #
 # ##################################################
@@ -7,15 +10,22 @@ function(psp_build_dep name cmake_file)
     if(EXISTS ${CMAKE_BINARY_DIR}/${name}-build AND NOT name STREQUAL "lz4")
         psp_build_message("${Cyan}Dependency found - not rebuilding - ${CMAKE_BINARY_DIR}/${name}-build${ColorReset}")
     else()
-        configure_file(${cmake_file} ${name}-download/CMakeLists.txt)
+        configure_file(${cmake_file} ${CMAKE_BINARY_DIR}/${name}-download/CMakeLists.txt)
+        set(_cwd ${CMAKE_BINARY_DIR}/${name}-download)
+        
+        message(STATUS "Configuring ${name} in ${_cwd}")
 
         execute_process(COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" .
             RESULT_VARIABLE result
-            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/${name}-download)
+            OUTPUT_VARIABLE cmd_output
+            ERROR_VARIABLE cmd_error
+            WORKING_DIRECTORY ${_cwd})
 
         if(result)
-            message(FATAL_ERROR "CMake step for ${name} failed: ${result}")
+            message(FATAL_ERROR "CMake step for ${name} failed:\nSTDOUT:${cmd_output}\nSTDERR: ${cmd_error}")
         endif()
+        
+        message("${cmd_output}")
 
         execute_process(COMMAND ${CMAKE_COMMAND} --build .
             RESULT_VARIABLE result
@@ -52,6 +62,11 @@ function(psp_build_dep name cmake_file)
             ${CMAKE_BINARY_DIR}/${name}-build
             EXCLUDE_FROM_ALL)
         include_directories(SYSTEM ${CMAKE_BINARY_DIR}/${name}-src/lib)
+    elseif(${name} STREQUAL protobuf)
+        add_subdirectory(${CMAKE_BINARY_DIR}/${name}-src
+            ${CMAKE_BINARY_DIR}/${name}-build
+            EXCLUDE_FROM_ALL)
+        include_directories(SYSTEM ${CMAKE_BINARY_DIR}/${name}-src/src)
     else()
         add_subdirectory(${CMAKE_BINARY_DIR}/${name}-src
             ${CMAKE_BINARY_DIR}/${name}-build

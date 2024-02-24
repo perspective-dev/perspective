@@ -11,9 +11,8 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone, Utc};
+use perspective::utils::*;
 use wasm_bindgen::prelude::*;
-
-use crate::utils::*;
 
 fn input_value_format(x: &str) -> Result<&str, JsValue> {
     match x.len() {

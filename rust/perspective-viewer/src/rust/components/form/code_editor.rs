@@ -13,6 +13,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use perspective_client::ExprValidationError;
 use wasm_bindgen::JsCast;
 use web_sys::*;
 use yew::prelude::*;
@@ -21,7 +22,6 @@ use crate::components::form::highlight::highlight;
 use crate::components::style::LocalStyle;
 use crate::custom_elements::FunctionDropDownElement;
 use crate::exprtk::{tokenize, Cursor};
-use crate::js::PerspectiveValidationError;
 use crate::utils::*;
 use crate::*;
 
@@ -33,7 +33,7 @@ pub struct CodeEditorProps {
     pub disabled: bool,
 
     #[prop_or_default]
-    pub error: Option<PerspectiveValidationError>,
+    pub error: Option<ExprValidationError>,
 }
 
 /// Capture the input (for re-parse) and caret position whenever the input

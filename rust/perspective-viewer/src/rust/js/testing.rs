@@ -11,10 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 #[cfg(test)]
-use {
-    super::perspective::*, crate::*, std::cell::RefCell, wasm_bindgen::prelude::*,
-    wasm_bindgen::JsCast, wasm_bindgen_futures::JsFuture,
-};
+use wasm_bindgen::prelude::*;
 
 // Must use inline build because the test runner does not import itself in
 // the browser with `type=module` which causes `import.meta` calls to fail,
@@ -33,33 +30,33 @@ extern "C" {
     fn worker() -> js_sys::Promise;
 }
 
-/// Generate a test `Table`, but only create teh webworker once or the tests
-/// will figuratively literally run forever.
-#[cfg(test)]
-pub async fn get_mock_table() -> JsPerspectiveTable {
-    thread_local! {
-        static WORKER: RefCell<Option<JsPerspectiveWorker>> = RefCell::new(None);
-    }
+// /// Generate a test `Table`, but only create teh webworker once or the tests
+// /// will figuratively literally run forever.
+// #[cfg(test)]
+// pub async fn get_mock_table() -> JsPerspectiveTable {
+//     thread_local! {
+//         static WORKER: RefCell<Option<JsPerspectiveWorker>> =
+// RefCell::new(None);     }
 
-    let worker: JsPerspectiveWorker = match WORKER.with(|x| x.borrow().clone()) {
-        Some(x) => x,
-        None => JsFuture::from(worker()).await.unwrap().unchecked_into(),
-    };
+//     let worker: JsPerspectiveWorker = match WORKER.with(|x|
+// x.borrow().clone()) {         Some(x) => x,
+//         None => JsFuture::from(worker()).await.unwrap().unchecked_into(),
+//     };
 
-    WORKER.with(|x| {
-        *x.borrow_mut() = Some(worker.clone());
-    });
+//     WORKER.with(|x| {
+//         *x.borrow_mut() = Some(worker.clone());
+//     });
 
-    worker
-        .table(
-            json!({
-                "A": [1, 2, 3]
-            })
-            .unchecked_into(),
-        )
-        .await
-        .unwrap()
-}
+//     worker
+//         .table(
+//             json!({
+//                 "A": [1, 2, 3]
+//             })
+//             .unchecked_into(),
+//         )
+//         .await
+//         .unwrap()
+// }
 
 /// A macro which set a property called `weak_link` on the container
 /// `Properties` when `cfg(test)`, such that unit tests may send messages to a
@@ -121,8 +118,7 @@ macro_rules! test_html {
             }
         }
 
-        let window = web_sys::window().unwrap();
-        let document = window.document().unwrap();
+        let document = ::perspective::utils::global::document();
         let body = document.body().unwrap();
         let div = document.create_element("div").unwrap();
         body.append_child(&div).unwrap();

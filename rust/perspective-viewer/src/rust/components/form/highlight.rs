@@ -43,7 +43,7 @@ pub fn highlight<'a>(cursor: &mut Cursor<'a>, token: Token<'a>, position: u32) -
     if matches!(token, Token::Break(_)) {
         cursor.increment_line();
     } else {
-        cursor.increment_column(token.content().len());
+        cursor.increment_column(token.content().len() as u32);
     }
 
     result

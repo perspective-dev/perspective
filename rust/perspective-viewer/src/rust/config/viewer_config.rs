@@ -18,6 +18,8 @@ use std::sync::LazyLock;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use perspective::utils::*;
+use perspective_client::config::*;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use wasm_bindgen::prelude::*;

@@ -88,7 +88,11 @@ flycheck_*.el
 *.app
 
 # Build artifacts
-build
+rust/target*
+/docs/build
+/packages/*/build
+/python/*/build
+/examples/*/build
 CMakeCache.txt
 CMakeFiles
 cmake_install.cmake
@@ -122,6 +126,8 @@ target.vscode
 !.vscode/extensions.json
 !.vscode/settings.default.json
 !.vscode/tasks.json
+
+.llvm
 
 # docs
 website/translated_docs
@@ -222,3 +228,7 @@ testenv
 .cache
 .clangd
 .llvm/
+.clangd
+rust/perspective/build
+rust/perspective-viewer/build
+rust/perspective-client/src/rust/proto.rs

@@ -13,7 +13,7 @@
 import { test, expect } from "@finos/perspective-test";
 import { compareContentsToSnapshot } from "@finos/perspective-test";
 
-const path = require("path");
+// import path from "node:path";
 
 async function get_contents(page) {
     return await page.evaluate(async () => {

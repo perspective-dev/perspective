@@ -24,7 +24,7 @@ cmake_policy(SET CMP0074 NEW)
 cmake_policy(SET CMP0094 NEW)
 
 if(NOT DEFINED PSP_CMAKE_MODULE_PATH)
-    set(PSP_CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/../../cmake/")
+    set(PSP_CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/../../cmake")
 endif()
 
 set(CMAKE_MODULE_PATH "${PSP_CMAKE_MODULE_PATH}/modules" ${CMAKE_MODULE_PATH})
@@ -176,7 +176,7 @@ if(PSP_PYTHON_BUILD AND MACOS)
     # https://blog.tim-smith.us/2015/09/python-extension-modules-os-x/
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -undefined dynamic_lookup")
 
-    check_c_compiler_flag("-arch x86_64" x86_64Supported)
+    # check_c_compiler_flag("-arch x86_64" x86_64Supported)
     check_c_compiler_flag("-arch arm64" arm64Supported)
 
     if(x86_64Supported AND arm64Supported)
@@ -219,16 +219,17 @@ if(PSP_WASM_BUILD)
         set(OPT_FLAGS " \
             -O0 \
             -g3 \
-            -gsource-map \
+            -gseparate-dwarf \
             --profiling \
             -Wcast-align \
+            -fwasm-exceptions \
             -Wover-aligned \
             ")
     else()
         set(OPT_FLAGS " \
             -O3 \
             -g0 \
-            -flto \
+            -fwasm-exceptions \
             ")
     endif()
 
@@ -268,7 +269,6 @@ elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
             set(OPT_FLAGS " \
                 -O3 \
                 -g1 \
-                -flto \
                 ")
             if (PSP_PYODIDE)
                 set(OPT_FLAGS "${OPT_FLAGS} -flto")
@@ -342,20 +342,23 @@ elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
         psp_build_message("${Cyan}Using Python ${Python_VERSION}, \nPython_INCLUDE_DIRS: ${Python_INCLUDE_DIRS}, \nPython_LIBRARIES: ${Python_LIBRARIES}, \nPython_EXECUTABLE: ${Python_EXECUTABLE} ${ColorReset}")
         include_directories(${Python_INCLUDE_DIRS})
 
-        psp_build_dep("pybind11" "${PSP_CMAKE_MODULE_PATH}/Pybind.txt.in")
+        # psp_build_dep("pybind11" "${PSP_CMAKE_MODULE_PATH}/Pybind.txt.in")
 
-        find_package(NumPy REQUIRED)
+        # find_package(NumPy REQUIRED)
 
-        if(NOT PYTHON_NUMPY_FOUND)
-            message(FATAL_ERROR "${Red}Numpy could not be located${ColorReset}")
-        else()
-            psp_build_message("${Cyan}Numpy found: ${PYTHON_NUMPY_INCLUDE_DIR}${ColorReset}")
-            include_directories(${PYTHON_NUMPY_INCLUDE_DIR})
-        endif()
+        # if(NOT PYTHON_NUMPY_FOUND)
+        #     message(FATAL_ERROR "${Red}Numpy could not be located${ColorReset}")
+        # else()
+        #     psp_build_message("${Cyan}Numpy found: ${PYTHON_NUMPY_INCLUDE_DIR}${ColorReset}")
+        #     include_directories(${PYTHON_NUMPY_INCLUDE_DIR})
+        # endif()
 
         # ####################
     endif()
 endif()
+
+set(RAPIDJSON_BUILD_TESTS OFF CACHE BOOL "Disable rapidjson tests")
+
 
 # Build header-only dependencies from external source
 psp_build_dep("date" "${PSP_CMAKE_MODULE_PATH}/date.txt.in")
@@ -382,8 +385,12 @@ psp_build_dep("re2" "${PSP_CMAKE_MODULE_PATH}/re2.txt.in")
 # Build exprtk for expression parsing
 psp_build_dep("exprtk" "${PSP_CMAKE_MODULE_PATH}/exprtk.txt.in")
 
+# Protobuf setup
+add_subdirectory(${PSP_CMAKE_MODULE_PATH}/../cpp/protos "${CMAKE_BINARY_DIR}/protos-build")
+
 # ####################
 set(CMAKE_C_FLAGS_DEBUG "")
+set(CMAKE_C_FLAGS_RELEASE "")
 set(CMAKE_C_FLAGS " \
     ${CMAKE_C_FLAGS} \
     ${EXTENDED_FLAGS} \
@@ -393,6 +400,7 @@ set(CMAKE_C_FLAGS " \
 # prevents the default debug flags from overriding the debug flags we
 # set in OPT_FLAGS
 set(CMAKE_CXX_FLAGS_DEBUG "")
+set(CMAKE_CXX_FLAGS_RELEASE "")
 set(CMAKE_CXX_FLAGS " \
     ${CMAKE_CXX_FLAGS} \
     ${EXTENDED_FLAGS} \
@@ -491,28 +499,28 @@ set(SOURCE_FILES
     ${PSP_CPP_SRC}/src/cpp/view_config.cpp
     ${PSP_CPP_SRC}/src/cpp/vocab.cpp
     ${PSP_CPP_SRC}/src/cpp/arrow_csv.cpp
+    ${PSP_CPP_SRC}/src/cpp/server.cpp
+    ${PSP_CPP_SRC}/src/cpp/proto_api.cpp
 )
 
-set(PYTHON_SOURCE_FILES ${SOURCE_FILES}
-    ${PSP_PYTHON_SRC}/src/column.cpp
-)
+set(PYTHON_SOURCE_FILES ${SOURCE_FILES})
 
 set(WASM_SOURCE_FILES ${SOURCE_FILES}
     # ${PSP_CPP_SRC}/src/cpp/vendor/arrow_single_threaded_reader.cpp
 )
 
-set(PYTHON_BINDING_SOURCE_FILES
-    ${PSP_PYTHON_SRC}/src/accessor.cpp
-    ${PSP_PYTHON_SRC}/src/context.cpp
-    ${PSP_PYTHON_SRC}/src/expressions.cpp
-    ${PSP_PYTHON_SRC}/src/fill.cpp
-    ${PSP_PYTHON_SRC}/src/numpy.cpp
-    ${PSP_PYTHON_SRC}/src/python.cpp
-    ${PSP_PYTHON_SRC}/src/serialization.cpp
-    ${PSP_PYTHON_SRC}/src/table.cpp
-    ${PSP_PYTHON_SRC}/src/utils.cpp
-    ${PSP_PYTHON_SRC}/src/view.cpp
-)
+# set(PYTHON_BINDING_SOURCE_FILES
+#     ${PSP_PYTHON_SRC}/src/accessor.cpp
+#     ${PSP_PYTHON_SRC}/src/context.cpp
+#     ${PSP_PYTHON_SRC}/src/expressions.cpp
+#     ${PSP_PYTHON_SRC}/src/fill.cpp
+#     ${PSP_PYTHON_SRC}/src/numpy.cpp
+#     ${PSP_PYTHON_SRC}/src/python.cpp
+#     ${PSP_PYTHON_SRC}/src/serialization.cpp
+#     ${PSP_PYTHON_SRC}/src/table.cpp
+#     ${PSP_PYTHON_SRC}/src/utils.cpp
+#     ${PSP_PYTHON_SRC}/src/view.cpp
+# )
 
 if(WIN32)
     set(CMAKE_CXX_FLAGS " /EHsc /MP /bigobj")
@@ -528,15 +536,17 @@ set(PSP_WASM_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \
     --source-map-base \"\" \
     --memory-init-file 0 \
     --no-entry \
+    --closure=1 \
     -s NO_FILESYSTEM=1 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s MODULARIZE=1 \
+    -s DYNAMIC_EXECUTION=0 \
     -s STANDALONE_WASM=1 \
-    -s WASM_BIGINT=1 \
     -s EXPORT_NAME=\"load_perspective\" \
     -s MAXIMUM_MEMORY=4gb \
     -s ERROR_ON_UNDEFINED_SYMBOLS=1 \
     -s NODEJS_CATCH_EXIT=0 \
+    -s EXCEPTION_STACK_TRACES=1 \
     -s NODEJS_CATCH_REJECTION=0 \
 ")
 
@@ -546,22 +556,21 @@ if(PSP_WASM_BUILD)
     add_library(psp ${WASM_SOURCE_FILES})
     target_compile_definitions(psp PRIVATE PSP_ENABLE_WASM=1)
     set_target_properties(psp PROPERTIES COMPILE_FLAGS "")
-    target_link_libraries(psp arrow re2)
+    target_link_libraries(psp PRIVATE arrow re2 protos)
 
-    # "cjs/perspective.cpp.js" from CMAKE_EXECUTABLE_SYNTAX
-    add_executable(perspective_cjs src/cpp/emscripten.cpp)
-    target_link_libraries(perspective_cjs psp)
+    add_executable(perspective_cjs src/cpp/emscripten_api.cpp)
+    target_link_libraries(perspective_cjs psp protos)
     target_compile_definitions(perspective_cjs PRIVATE PSP_ENABLE_WASM=1)
-    target_link_options(perspective_cjs PUBLIC -sENVIRONMENT="node" -sUSE_ES6_IMPORT_META=0 -sEXPORT_ES6=0)
+    target_link_options(perspective_cjs PUBLIC -sENVIRONMENT="node" -sUSE_ES6_IMPORT_META=1 -sEXPORT_ES6=1)
     set_target_properties(perspective_cjs PROPERTIES RUNTIME_OUTPUT_DIRECTORY "./node/")
-    set_target_properties(perspective_cjs PROPERTIES OUTPUT_NAME "perspective.cpp")
+    set_target_properties(perspective_cjs PROPERTIES OUTPUT_NAME "perspective-server")
 
-    add_executable(perspective_esm src/cpp/emscripten.cpp)
-    target_link_libraries(perspective_esm psp)
+    add_executable(perspective_esm src/cpp/emscripten_api.cpp)
+    target_link_libraries(perspective_esm psp protos)
     target_compile_definitions(perspective_esm PRIVATE PSP_ENABLE_WASM=1)
     target_link_options(perspective_esm PUBLIC -sENVIRONMENT="web" -sUSE_ES6_IMPORT_META=1 -sEXPORT_ES6=1)
     set_target_properties(perspective_esm PROPERTIES RUNTIME_OUTPUT_DIRECTORY "./web/")
-    set_target_properties(perspective_esm PROPERTIES OUTPUT_NAME "perspective.cpp")
+    set_target_properties(perspective_esm PROPERTIES OUTPUT_NAME "perspective-server")
 elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
     if(NOT WIN32)
         set(CMAKE_SHARED_LIBRARY_SUFFIX .so)
@@ -584,7 +593,7 @@ elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
     endif()
 
     if(PSP_PYODIDE)
-        add_library(psppy SHARED ${PYTHON_SOURCE_FILES} ${PYTHON_BINDING_SOURCE_FILES})
+        add_library(psppy SHARED)
         set(PSP_PYTHON_DEFS PSP_ENABLE_WASM=1)
         target_compile_definitions(psppy PRIVATE ${PSP_PYTHON_DEFS})
         include_directories(${PSP_PYTHON_SRC}/include)
@@ -597,45 +606,45 @@ elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
         # Python extra targets #
         # #######################
         add_library(psp SHARED ${PYTHON_SOURCE_FILES})
-        add_library(psppy SHARED ${PYTHON_BINDING_SOURCE_FILES})
+        # add_library(psppy SHARED ${PYTHON_BINDING_SOURCE_FILES})
 
         include_directories(${PSP_PYTHON_SRC}/include)
 
         target_compile_definitions(psp PRIVATE PSP_ENABLE_PYTHON=1 PSP_PARALLEL_FOR=1)
-        target_compile_definitions(psppy PRIVATE PSP_ENABLE_PYTHON=1 PSP_PARALLEL_FOR=1)
+        # target_compile_definitions(psppy PRIVATE PSP_ENABLE_PYTHON=1 PSP_PARALLEL_FOR=1)
 
         if(WIN32)
-            target_compile_definitions(psppy PRIVATE WIN32=1)
-            target_compile_definitions(psppy PRIVATE _WIN32=1)
+            # target_compile_definitions(psppy PRIVATE WIN32=1)
+            # target_compile_definitions(psppy PRIVATE _WIN32=1)
 
             # .dll not importable
-            set_property(TARGET psppy PROPERTY SUFFIX .pyd)
+            # set_property(TARGET psppy PROPERTY SUFFIX .pyd)
         elseif(MACOS OR NOT MANYLINUX)
-            target_compile_options(psppy PRIVATE -Wdeprecated-declarations)
+            # target_compile_options(psppy PRIVATE -Wdeprecated-declarations)
             set_property(TARGET psp PROPERTY INSTALL_RPATH ${CMAKE_INSTALL_RPATH} ${module_origin_path})
-            set_property(TARGET psppy PROPERTY INSTALL_RPATH ${CMAKE_INSTALL_RPATH} ${module_origin_path})
+            # set_property(TARGET psppy PROPERTY INSTALL_RPATH ${CMAKE_INSTALL_RPATH} ${module_origin_path})
 
             target_compile_options(psp PRIVATE -fvisibility=hidden)
-            target_compile_options(psppy PRIVATE -fvisibility=hidden)
+            # target_compile_options(psppy PRIVATE -fvisibility=hidden)
         else()
-            target_compile_options(psppy PRIVATE -Wdeprecated-declarations)
+            # target_compile_options(psppy PRIVATE -Wdeprecated-declarations)
         endif()
 
         # Link against minimal arrow static library
-        target_link_libraries(psp arrow re2 Boost::thread)
-        target_link_libraries(psppy psp)
+        target_link_libraries(psp PRIVATE arrow re2 Boost::thread protos)
+        # target_link_libraries(psppy psp)
 
         # The compiled libraries will be put in CMAKE_LIBRARY_OUTPUT_DIRECTORY by default. In the
         # setup.py file, we designate this to be in the build/lib.<platform> directory. However,
         # since we want to be able to test perspective in-source, we also copy the libraries into
         # the source folder. These two commands do that.
-        add_custom_command(TARGET psp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:psp> ${PSP_PYTHON_SRC}/table/)
-        add_custom_command(TARGET psppy POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:psppy> ${PSP_PYTHON_SRC}/table/)
+        # add_custom_command(TARGET psp POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:psp> ${PSP_PYTHON_SRC}/table/)
+        # add_custom_command(TARGET psppy POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:psppy> ${PSP_PYTHON_SRC}/table/)
 
     # #######################
     else()
         add_library(psp SHARED ${WASM_SOURCE_FILES})
-        target_link_libraries(psp arrow)
+        target_link_libraries(psp PRIVATE arrow protos)
     endif()
 
     if(PSP_CPP_BUILD_STRICT AND NOT WIN32)
@@ -651,8 +660,6 @@ elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
         target_compile_definitions(psp PRIVATE _WIN32=1)
     endif()
 endif()
-
-# C++ IDE Setup
 
 set(WORKSPACE_ROOT "${CMAKE_SOURCE_DIR}/../..")
 

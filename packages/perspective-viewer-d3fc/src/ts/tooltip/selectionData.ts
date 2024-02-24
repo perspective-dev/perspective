@@ -10,7 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { get_type_config } from "../../../../perspective/src/js/config";
 import { Settings } from "../types";
 
 export function toValue(type, value) {
@@ -19,10 +18,10 @@ export function toValue(type, value) {
         case "datetime":
             return value instanceof Date
                 ? value
-                : new Date(parseInt(value)).toLocaleString(
-                      [],
-                      get_type_config(type).format
-                  );
+                : new Date(parseInt(value)).toLocaleString([], {
+                      dateStyle: "short",
+                      timeStyle: "medium",
+                  });
         case "integer":
             return parseInt(value, 10);
         case "float":

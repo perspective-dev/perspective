@@ -1,17 +1,16 @@
 {
     "cmake.configureOnOpen": true,
     "cmake.sourceDirectory": "${workspaceFolder}/cpp/perspective/",
+    "cmake.buildDirectory": "${workspaceFolder}/cpp/perspective/dist/vscode",
     "cmake.buildEnvironment": {
         "PSP_ENABLE_WASM": "1"
     },
     "python.formatting.provider": "black",
-    "rust-analyzer.linkedProjects": [
-        "${workspaceFolder}/rust/perspective-viewer/Cargo.toml"
-    ],
     "rust-analyzer.server.extraEnv": {
         "RA_LOG": "rust_analyzer::reload=info",
         "CARGO_TARGET_DIR": "${workspaceFolder}/perspective-viewer/dist/analyzer"
     },
+    "rust-analyzer.check.extraArgs": ["--target-dir=rust/target/vscode"],
     "rust-analyzer.rustfmt.overrideCommand": [
         "cargo",
         "run",
@@ -21,5 +20,6 @@
     "rust-analyzer.check.command": "clippy",
     "playwright.env": {
         "TZ": "UTC"
-    }
+    },
+    "clangd.arguments": ["--enable-config"]
 }

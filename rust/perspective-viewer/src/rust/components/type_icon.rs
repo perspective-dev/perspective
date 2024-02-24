@@ -10,24 +10,24 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use perspective_client::ColumnType;
 use yew::html::IntoPropValue;
 use yew::{classes, function_component, html, Properties};
 
 use crate::components::style::LocalStyle;
-use crate::config::Type;
 use crate::css;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum TypeIconType {
-    Type(Type),
+    Type(ColumnType),
     Expr,
 }
-impl From<Type> for TypeIconType {
-    fn from(value: Type) -> Self {
+impl From<ColumnType> for TypeIconType {
+    fn from(value: ColumnType) -> Self {
         Self::Type(value)
     }
 }
-impl IntoPropValue<TypeIconType> for Type {
+impl IntoPropValue<TypeIconType> for ColumnType {
     fn into_prop_value(self) -> TypeIconType {
         TypeIconType::Type(self)
     }
@@ -49,6 +49,5 @@ pub struct TypeIconProps {
 #[function_component(TypeIcon)]
 pub fn type_icon(p: &TypeIconProps) -> yew::Html {
     let class = classes!(p.ty.to_string(), "type-icon");
-
     html! { <><LocalStyle href={css!("type-icon")} /><span {class} /></> }
 }

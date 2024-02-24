@@ -10,6 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use perspective::utils::*;
 use serde::*;
 use wasm_bindgen::prelude::*;
 
@@ -74,13 +75,13 @@ extern "C" {
     #[wasm_bindgen(method, catch)]
     pub async fn restyle(
         this: &JsPerspectiveViewerPlugin,
-        view: &JsPerspectiveView
+        view: perspective::JsView
     ) -> ApiResult<JsValue>;
 
     #[wasm_bindgen(method, catch)]
     pub async fn draw(
         this: &JsPerspectiveViewerPlugin,
-        view: &JsPerspectiveView,
+        view: perspective::JsView,
         column_limit: Option<usize>,
         row_limit: Option<usize>,
         force: bool
@@ -89,7 +90,7 @@ extern "C" {
     #[wasm_bindgen(method, catch)]
     pub async fn update(
         this: &JsPerspectiveViewerPlugin,
-        view: &JsPerspectiveView,
+        view: perspective::JsView,
         column_limit: Option<usize>,
         row_limit: Option<usize>,
         force: bool

@@ -18,7 +18,7 @@
 namespace perspective {
 namespace apachearrow {
 
-    int64_t parseAsArrowTimestamp(const std::string& input);
+    std::optional<int64_t> parseAsArrowTimestamp(const std::string& input);
 
     /**
      * @brief Initialize the arrow loader with a CSV.
@@ -26,7 +26,7 @@ namespace apachearrow {
      * @param ptr
      */
     std::shared_ptr<::arrow::Table> csvToTable(
-        std::string& csv,
+        const std::string_view& csv,
         bool is_update,
         std::unordered_map<std::string, std::shared_ptr<arrow::DataType>>&
             schema

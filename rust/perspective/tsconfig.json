@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+        "module": "esnext",
+        "target": "es2022",
+        "declaration": true,
+        "diagnostics": true,
+        "emitDeclarationOnly": true,
+        "outDir": "dist/esm",
+        "rootDir": "src/ts",
+        "allowSyntheticDefaultImports": true,
+        "moduleResolution": "bundler",
+        "skipLibCheck": true,
+        "resolveJsonModule": true
+    },
+    "files": ["src/ts/perspective.ts"]
+}

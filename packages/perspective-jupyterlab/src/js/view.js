@@ -14,7 +14,7 @@ import { DOMWidgetView } from "@jupyter-widgets/base";
 import { PerspectiveJupyterWidget } from "./widget";
 import { PerspectiveJupyterClient } from "./client";
 
-import perspective from "@finos/perspective/dist/esm/perspective.js";
+import perspective from "@finos/perspective/src/ts/perspective.ts";
 
 function isEqual(a, b) {
     if (a === b) return true;

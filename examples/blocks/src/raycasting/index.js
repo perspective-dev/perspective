@@ -133,12 +133,10 @@ const LAYOUT = {
     theme: "Pro Dark",
 };
 
-window.addEventListener("DOMContentLoaded", async function () {
-    const heatmap_plugin = await window.viewer.getPlugin("Heatmap");
-    heatmap_plugin.max_cells = 100000;
-    const worker = perspective.worker();
-    const index = new Array(Math.pow(RESOLUTION, 2)).fill(0);
-    const table = worker.table({ index });
-    window.viewer.load(table);
-    await window.viewer.restore(LAYOUT);
-});
+const heatmap_plugin = await window.viewer.getPlugin("Heatmap");
+heatmap_plugin.max_cells = 100000;
+const worker = await perspective.worker();
+const index = new Array(Math.pow(RESOLUTION, 2)).fill(0);
+const table = worker.table({ index });
+window.viewer.load(table);
+await window.viewer.restore(LAYOUT);

@@ -14,12 +14,13 @@ use std::cell::RefCell;
 use std::future::Future;
 use std::rc::Rc;
 
+use perspective::utils::global;
+use perspective_client::clone;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
 use super::mimetype::*;
 use crate::js::clipboard_item::*;
-use crate::utils::*;
 use crate::*;
 
 /// Copy a `JsPerspectiveView` to the clipboard as a CSV.

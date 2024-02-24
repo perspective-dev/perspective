@@ -10,9 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use perspective_client::ExprValidationError;
 use yew::prelude::*;
-
-use crate::js::PerspectiveValidationError;
 
 /// Because ExprTK reports errors in column/row coordinates and visually needs
 /// to be applied to an entire token rather than a single character, we need
@@ -22,17 +21,17 @@ use crate::js::PerspectiveValidationError;
 /// as other convenient data for HTML rendering, and can be called incrementally
 /// while iterating tokens after parsing.
 pub struct Cursor<'a> {
-    row: usize,
-    col: usize,
+    row: u32,
+    col: u32,
     index: u32,
-    pub err: &'a Option<PerspectiveValidationError>,
+    pub err: &'a Option<ExprValidationError>,
     pub txt: &'a str,
     pub noderef: NodeRef,
     pub auto: Option<String>,
 }
 
 impl<'a> Cursor<'a> {
-    pub fn new(err: &'a Option<PerspectiveValidationError>) -> Self {
+    pub fn new(err: &'a Option<ExprValidationError>) -> Self {
         Self {
             row: 1,
             col: 0,
@@ -47,9 +46,9 @@ impl<'a> Cursor<'a> {
     /// Is the cursor currently overlapping a token with an error?
     pub const fn is_error(&self) -> bool {
         if let Some(err) = &self.err {
-            err.line + 1 == self.row as i32
-                && err.column >= self.col as i32
-                && err.column < (self.col + self.txt.len()) as i32
+            err.line + 1 == self.row
+                && err.column >= self.col
+                && err.column < (self.col + self.txt.len() as u32)
         } else {
             false
         }
@@ -61,14 +60,14 @@ impl<'a> Cursor<'a> {
     }
 
     /// TODO this is alot of type backage for what could just be `num_rows()`.
-    pub fn map_rows<T, F: Fn(usize) -> T>(self, f: F) -> impl Iterator<Item = T> {
+    pub fn map_rows<T, F: Fn(u32) -> T>(self, f: F) -> impl Iterator<Item = T> {
         (0..self.row).map(f)
     }
 
     /// Increment the counter column by `size` characters.
-    pub fn increment_column(&mut self, size: usize) {
+    pub fn increment_column(&mut self, size: u32) {
         self.col += size;
-        self.index += size as u32;
+        self.index += size;
     }
 
     /// Increment to the next line, typewriter-style.

@@ -56,7 +56,6 @@ impl Component for PluginSelector {
     type Properties = PluginSelectorProps;
 
     fn create(ctx: &Context<Self>) -> Self {
-        enable_weak_link_test!(ctx.props(), ctx.link());
         let options = generate_plugin_optgroups(&ctx.props().renderer);
         let _plugin_sub = ctx.props().renderer.plugin_changed.add_listener({
             let link = ctx.link().clone();

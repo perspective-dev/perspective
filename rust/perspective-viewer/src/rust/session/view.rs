@@ -15,12 +15,9 @@ use std::rc::Rc;
 
 use derivative::Derivative;
 use futures::Future;
+use perspective::utils::ApiResult;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
-
-use crate::js::perspective::*;
-use crate::utils::ApiResult;
 
 /// `PerspectiveOwned` is a newtype-ed `Rc` smart pointer which guarantees
 /// either a `JsPerspectiveView` or `JsPerspectiveTable` will have its
@@ -29,50 +26,55 @@ use crate::utils::ApiResult;
 #[derivative(Clone(bound = ""))]
 pub struct PerspectiveOwned<T>(Rc<PerspectiveOwnedSession<T>>)
 where
-    T: AsyncDelete + JsCast + 'static;
+    T: AsyncDelete + Clone + 'static;
 
 /// An owned `JsPerspectiveView` which calls its JavaScript `delete()` method
 /// when this struct is `drop()`-ed.
-pub type View = PerspectiveOwned<JsPerspectiveView>;
+pub type OwnedView = PerspectiveOwned<perspective_client::View>;
 
 /// `<perspective-viewer>` does not currently take ownership of `Table`. objects
 /// so this is not currently needed, but it will be in the future and this
 /// polymorphism is the motiviation behind the `PerspectiveOwned<T>` type.
 #[allow(dead_code)]
-pub type Table = PerspectiveOwned<JsPerspectiveTable>;
+pub type OwnedTable = PerspectiveOwned<perspective_client::Table>;
 
 impl<T> PerspectiveOwned<T>
 where
-    T: AsyncDelete + JsCast + 'static,
+    T: AsyncDelete + Clone + 'static,
 {
     /// Take ownership of a `T` and construct a `PerspectiveOwned<T>`.
     pub fn new(obj: T) -> Self {
         Self(Rc::new(PerspectiveOwnedSession(obj)))
     }
+}
 
+impl PerspectiveOwned<perspective_client::View> {
     /// Get a reference to the owned object as a `JsValue`, which is necessary
     /// to pass it back to other JavaScript APIs.
     pub fn as_jsvalue(&self) -> JsValue {
-        self.0 .0.as_ref().unchecked_ref::<JsValue>().clone()
+        perspective::JsView::from(self.0 .0.clone()).into()
     }
 
-    /// Typically we don't want to clone `T` because it defeats the purpose of
-    /// this RAII wrapper;  however, in the singular case of returning a
-    /// JavaScript reference to a JavaScript API call, it is necessary.
-    /// The `JsPerspectiveView` returned is not `delete()`ed when destructed.
-    ///
-    /// We use this slighly awkward mechanism to clone `JsPerspectiveView`,
-    /// rather than jsut deriving `Clone`, because we don't want `.clone()`
-    /// itself to be public, as this method should only be called to return
-    /// a `JsPerspectiveView` copy to a JavaScript call.
-    pub fn js_get(&self) -> T {
-        self.as_jsvalue().unchecked_into::<T>()
+    pub fn as_jsview(&self) -> perspective::JsView {
+        self.0 .0.clone().into()
+    }
+}
+
+impl PerspectiveOwned<perspective_client::Table> {
+    /// Get a reference to the owned object as a `JsValue`, which is necessary
+    /// to pass it back to other JavaScript APIs.
+    pub fn as_jsvalue(&self) -> JsValue {
+        perspective::JsTable::from(self.0 .0.clone()).into()
+    }
+
+    pub fn as_jstable(&self) -> perspective::JsTable {
+        self.0 .0.clone().into()
     }
 }
 
 impl<T> Deref for PerspectiveOwned<T>
 where
-    T: AsyncDelete + JsCast + 'static,
+    T: AsyncDelete + Clone + 'static,
 {
     type Target = T;
 
@@ -86,18 +88,13 @@ where
 /// `PerspectiveOwnedSession<T>` is a newtype wrapper for implementing `Drop`.
 /// Alternatively, we could just implement `Drop` directly on
 /// `JsPerspectiveView` and `JsPerspectiveTable`.
-struct PerspectiveOwnedSession<T: AsyncDelete + JsCast + 'static>(T);
+struct PerspectiveOwnedSession<T: AsyncDelete + Clone + 'static>(T);
 
-impl<T: AsyncDelete + JsCast + 'static> Drop for PerspectiveOwnedSession<T> {
+impl<T: AsyncDelete + Clone + 'static> Drop for PerspectiveOwnedSession<T> {
     fn drop(&mut self) {
-        let obj = self
-            .0
-            .unchecked_ref::<JsValue>()
-            .clone()
-            .unchecked_into::<T>();
-
+        let obj = self.0.clone();
         spawn_local(async move {
-            obj.delete()
+            obj.owned_delete()
                 .await
                 .expect("Failed to delete perspective object");
         });
@@ -105,18 +102,18 @@ impl<T: AsyncDelete + JsCast + 'static> Drop for PerspectiveOwnedSession<T> {
 }
 
 pub trait AsyncDelete {
-    fn delete(self) -> impl Future<Output = ApiResult<JsValue>>;
+    fn owned_delete(self) -> impl Future<Output = ApiResult<JsValue>>;
 }
 
-impl AsyncDelete for JsPerspectiveView {
-    async fn delete(self) -> ApiResult<JsValue> {
+impl AsyncDelete for perspective_client::View {
+    async fn owned_delete(self) -> ApiResult<JsValue> {
         self.delete().await?;
         Ok(JsValue::UNDEFINED)
     }
 }
 
-impl AsyncDelete for JsPerspectiveTable {
-    async fn delete(self) -> ApiResult<JsValue> {
+impl AsyncDelete for perspective_client::Table {
+    async fn owned_delete(self) -> ApiResult<JsValue> {
         self.delete().await?;
         Ok(JsValue::UNDEFINED)
     }

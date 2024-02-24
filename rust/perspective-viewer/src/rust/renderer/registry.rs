@@ -16,12 +16,12 @@ use std::rc::Rc;
 use std::thread::LocalKey;
 
 use extend::ext;
+use perspective::utils::global;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::*;
 
 use crate::js::plugin::*;
-use crate::utils::*;
 
 thread_local! {
     pub static PLUGIN_REGISTRY: Rc<RefCell<Vec<PluginRecord>>> = Rc::new(RefCell::new(vec![]));

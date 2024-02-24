@@ -137,6 +137,8 @@ std::is_pod<X>::value && std::is_standard_layout<X>::value , \
 #define LOG_DESTRUCTOR(X)
 #define LOG_INIT(X)
 #endif
+#define LOG_DEBUG(X)                                                           \
+    std::cout << __FILE__ << ":" << __LINE__ << " DEBUG: " << X << '\n'
 #else
 #define PSP_VERBOSE_ASSERT1(COND, MSG)                                         \
     {                                                                          \
@@ -160,11 +162,10 @@ std::is_pod<X>::value && std::is_standard_layout<X>::value , \
 #define LOG_CONSTRUCTOR(X)
 #define LOG_DESTRUCTOR(X)
 #define LOG_INIT(X)
+#define LOG_DEBUG(X)
 #endif
 
-#define PSP_COMPLAIN_AND_ABORT(X)                                              \
-    ::perspective::psp_abort(X);                                               \
-    abort();
+#define PSP_COMPLAIN_AND_ABORT(X) ::perspective::psp_abort(X);
 
 #define PSP_VERBOSE_ASSERT(...)                                                        \
     _ID(GET_PSP_VERBOSE_ASSERT(__VA_ARGS__, PSP_VERBOSE_ASSERT2, PSP_VERBOSE_ASSERT1)( \
@@ -404,7 +405,7 @@ PERSPECTIVE_EXPORT bool is_linear_order_type(t_dtype dtype);
 PERSPECTIVE_EXPORT std::string get_dtype_descr(t_dtype dtype);
 PERSPECTIVE_EXPORT std::string dtype_to_str(t_dtype dtype);
 PERSPECTIVE_EXPORT t_dtype str_to_dtype(const std::string& typestring);
-PERSPECTIVE_EXPORT std::string get_status_descr(t_status status);
+PERSPECTIVE_EXPORT std::string get_status_descr(t_status dtype);
 PERSPECTIVE_EXPORT t_uindex get_dtype_size(t_dtype dtype);
 PERSPECTIVE_EXPORT bool is_vlen_dtype(t_dtype dtype);
 PERSPECTIVE_EXPORT bool is_neq_transition(t_value_transition t);

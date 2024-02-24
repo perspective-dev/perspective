@@ -15,8 +15,7 @@ use std::future::Future;
 use std::rc::Rc;
 
 use async_lock::Mutex;
-
-use crate::utils::ApiResult;
+use perspective::utils::ApiResult;
 
 #[derive(Default)]
 pub struct DebounceMutexData {

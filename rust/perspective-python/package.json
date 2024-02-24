@@ -1,0 +1,16 @@
+{
+    "name": "@finos/perspective-python",
+    "version": "2.8.0",
+    "description": "",
+    "private": true,
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/finos/perspective"
+    },
+    "license": "Apache-2.0",
+    "scripts": {
+        "build": "maturin develop -F buildpython",
+        "clean": "rimraf dist && rimraf build",
+        "test": "python -m pytest perspective/tests"
+    }
+}

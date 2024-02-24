@@ -10,6 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use perspective::utils::ApiFuture;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::*;
@@ -19,7 +20,6 @@ use crate::components::viewer::{PerspectiveViewer, PerspectiveViewerMsg};
 use crate::js::*;
 use crate::renderer::*;
 use crate::utils::*;
-use crate::*;
 
 pub struct ResizeObserverHandle {
     elem: HtmlElement,
@@ -42,7 +42,7 @@ impl ResizeObserverHandle {
             on_resize,
         };
 
-        let _callback = (move |xs| state.on_resize(&xs)).into_closure_mut();
+        let _callback = Closure::new(move |xs| state.on_resize(&xs));
         let func = _callback.as_ref().unchecked_ref::<js_sys::Function>();
         let observer = ResizeObserver::new(func);
         observer.observe(elem);

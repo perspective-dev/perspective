@@ -14,6 +14,7 @@ use std::collections::HashSet;
 
 use futures::join;
 use itertools::Itertools;
+use perspective::utils::ApiFuture;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 

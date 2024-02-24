@@ -13,7 +13,6 @@
 import * as d3 from "d3";
 import { toValue } from "../tooltip/selectionData";
 import { Settings } from "../types";
-import { RowPath } from "@finos/perspective";
 
 export type TreeData = {
     name: string;
@@ -30,7 +29,7 @@ export function treeData(settings: Settings) {
     );
     settings.data.forEach((d, j) => {
         const groups = Array.isArray(d.__ROW_PATH__)
-            ? (d.__ROW_PATH__ as RowPath)
+            ? (d.__ROW_PATH__ as string[])
             : [];
 
         const splits = getSplitNames(d);

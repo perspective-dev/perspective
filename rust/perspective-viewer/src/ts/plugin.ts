@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type * as perspective from "@finos/perspective";
+// import type * as perspective from "@finos/perspective";
 
 /**
  * The `IPerspectiveViewerPlugin` interface defines the necessary API for a
@@ -123,7 +123,7 @@ export interface IPerspectiveViewerPlugin {
      * }
      * ```
      */
-    draw(view: perspective.View): Promise<void>;
+    // draw(view: perspective.View): Promise<void>;
 
     /**
      * Draw under the assumption that the `ViewConfig` has not changed since
@@ -137,7 +137,7 @@ export interface IPerspectiveViewerPlugin {
      * }
      * ```
      */
-    update(view: perspective.View): Promise<void>;
+    // update(view: perspective.View): Promise<void>;
 
     /**
      * Clear this plugin, though it is up to the discretion of the plugin
@@ -243,11 +243,11 @@ export class HTMLPerspectiveViewerPluginElement
         }
     }
 
-    async update(view: perspective.View): Promise<void> {
+    async update(view): Promise<void> {
         return this.draw(view);
     }
 
-    async draw(view: perspective.View): Promise<void> {
+    async draw(view): Promise<void> {
         this.style.backgroundColor = "#fff";
         const csv = await view.to_csv();
         const css = `margin:0;overflow:scroll;position:absolute;width:100%;height:100%`;

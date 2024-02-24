@@ -14,8 +14,8 @@ const fs = require("fs");
 const microtime = require("microtime");
 
 let PERSPECTIVE, VERSION;
-function load_version(path, i) {
-    const module = require(path);
+async function load_version(path, i) {
+    const module = await import(path);
     let { version } = JSON.parse(
         fs.readFileSync(require.resolve(`${path}/package.json`))
     );
@@ -50,8 +50,8 @@ function new_table(perspective) {
     }
 }
 
-const ITERATIONS = 10;
-const WARM_UP_ITERATIONS = 1;
+const ITERATIONS = 20;
+const WARM_UP_ITERATIONS = 10;
 
 Object.defineProperty(Array.prototype, "push_if", {
     value: function (x) {
@@ -254,9 +254,11 @@ async function table_suite() {
         const table = await perspective.table(new_table(perspective));
         const view = await table.view();
         const csv = await view.to_csv();
+        const json = await view.to_json();
+        const columns = await view.to_columns();
         await view.delete();
         await table.delete();
-        return { csv };
+        return { csv, columns, json };
     }
 
     await benchmark({
@@ -281,6 +283,30 @@ async function table_suite() {
             return await perspective.table(csv);
         },
     });
+
+    await benchmark({
+        name: `.table(json)`,
+        before_all,
+        async after(_perspective, _, table) {
+            await table.delete();
+        },
+
+        async test(perspective, { table, json }) {
+            return await perspective.table(json);
+        },
+    });
+
+    await benchmark({
+        name: `.table(columns)`,
+        before_all,
+        async after(_perspective, _, table) {
+            await table.delete();
+        },
+
+        async test(perspective, { table, columns }) {
+            return await perspective.table(columns);
+        },
+    });
 }
 
 async function bench_all() {
@@ -290,7 +316,7 @@ async function bench_all() {
     process.send({ finished: true });
 }
 
-process.on("message", ({ path, i }) => {
-    load_version(path, i);
+process.on("message", async ({ path, i }) => {
+    await load_version(path, i);
     bench_all();
 });

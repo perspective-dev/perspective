@@ -14,7 +14,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::str::FromStr;
 
+use ::perspective::utils::global;
+use ::perspective::{JsTable, JsView};
 use js_sys::*;
+use perspective_client::config::ViewConfigUpdate;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
@@ -155,9 +158,21 @@ impl PerspectiveViewerElement {
         clone!(self.renderer, self.session);
         ApiFuture::new(async move {
             let task = async {
-                let table = JsFuture::from(promise)
-                    .await?
-                    .unchecked_into::<JsPerspectiveTable>();
+                #[wasm_bindgen]
+                extern "C" {
+                    pub type Model;
+
+                    #[wasm_bindgen(method)]
+                    pub fn unsafe_get_model(this: &Model) -> *const JsTable;
+                }
+
+                let jstable = JsFuture::from(promise).await?.unchecked_into::<Model>();
+
+                pub fn unsafe_set_model(ptr: *const JsTable) -> JsTable {
+                    (unsafe { ptr.as_ref().unwrap() }).clone()
+                }
+
+                let table = unsafe_set_model(jstable.unsafe_get_model());
 
                 tracing::debug!(
                     "Successfully loaded {:.0} rows from Table",
@@ -165,7 +180,7 @@ impl PerspectiveViewerElement {
                 );
 
                 session.reset_stats();
-                session.set_table(table).await?;
+                session.set_table(table.get_table().clone()).await?;
                 session.validate().await?.create_view().await
             };
 
@@ -196,9 +211,9 @@ impl PerspectiveViewerElement {
 
     /// Get the underlying `View` for thie viewer.
     #[wasm_bindgen(js_name = "getView")]
-    pub fn get_view(&self) -> ApiFuture<JsPerspectiveView> {
+    pub fn get_view(&self) -> ApiFuture<JsView> {
         let session = self.session.clone();
-        ApiFuture::new(async move { Ok(session.get_view().ok_or("No table set")?.js_get()) })
+        ApiFuture::new(async move { Ok(session.get_view().ok_or("No table set")?.as_jsview()) })
     }
 
     /// Get the underlying `Table` for this viewer.
@@ -207,15 +222,15 @@ impl PerspectiveViewerElement {
     /// - `wait_for_table` whether to wait for `load()` to be called, or fail
     ///   immediately if `load()` has not yet been called.
     #[wasm_bindgen(js_name = "getTable")]
-    pub fn get_table(&self, wait_for_table: Option<bool>) -> ApiFuture<JsPerspectiveTable> {
+    pub fn get_table(&self, wait_for_table: Option<bool>) -> ApiFuture<JsTable> {
         let session = self.session.clone();
         ApiFuture::new(async move {
             match session.get_table() {
-                Some(table) => Ok(table),
+                Some(table) => Ok(table.into()),
                 None if !wait_for_table.unwrap_or_default() => Err("No table set".into()),
                 None => {
                     session.table_loaded.listen_once().await?;
-                    Ok(session.get_table().ok_or("No table set")?)
+                    Ok(session.get_table().ok_or("No table set")?.into())
                 },
             }
         })
@@ -554,7 +569,8 @@ impl PerspectiveViewerElement {
             let force = force.map(SettingsUpdate::Update);
             let task = root
                 .borrow()
-                .as_apierror()?
+                .as_ref()
+                .into_apierror()?
                 .send_message_async(|x| PerspectiveViewerMsg::ToggleSettingsInit(force, Some(x)));
 
             task.await.map_err(|_| JsValue::from("Cancelled"))?
@@ -603,13 +619,15 @@ impl PerspectiveViewerElement {
         clone!(self.session, self.root);
         ApiFuture::new(async move {
             let locator = session.metadata().get_column_locator(Some(column_name));
-            let task = root.borrow().as_apierror()?.send_message_async(|sender| {
-                PerspectiveViewerMsg::OpenColumnSettings {
+            let task = root
+                .borrow()
+                .as_ref()
+                .into_apierror()?
+                .send_message_async(|sender| PerspectiveViewerMsg::OpenColumnSettings {
                     locator,
                     sender: Some(sender),
                     toggle: true,
-                }
-            });
+                });
             task.await.map_err(|_| ApiError::from("Cancelled"))
         })
     }
@@ -625,13 +643,15 @@ impl PerspectiveViewerElement {
         clone!(self.session, self.root);
         ApiFuture::new(async move {
             let locator = session.metadata().get_column_locator(column_name);
-            let task = root.borrow().as_apierror()?.send_message_async(|sender| {
-                PerspectiveViewerMsg::OpenColumnSettings {
+            let task = root
+                .borrow()
+                .as_ref()
+                .into_apierror()?
+                .send_message_async(|sender| PerspectiveViewerMsg::OpenColumnSettings {
                     locator,
                     sender: Some(sender),
                     toggle: toggle.unwrap_or_default(),
-                }
-            });
+                });
             task.await.map_err(|_| ApiError::from("Cancelled"))
         })
     }

@@ -46,7 +46,9 @@ exports.WasmPlugin = function WasmPlugin(inline) {
                 pluginData: args.pluginData,
                 contents: `
                     import wasm from ${JSON.stringify(args.path)};
-                    export default Promise.resolve(wasm);
+                    export default function() { 
+                        return Promise.resolve(wasm.buffer); 
+                    };
                 `,
             })
         );
@@ -57,11 +59,9 @@ exports.WasmPlugin = function WasmPlugin(inline) {
                 pluginData: args.pluginData,
                 contents: `
                 import wasm from ${JSON.stringify(args.path)};
-                async function get_wasm() {
-                    return new URL(wasm, import.meta.url);
-                }
-
-                export default get_wasm();
+                export default function() { 
+                    return fetch(new URL(wasm, import.meta.url));
+                };
             `,
             })
         );

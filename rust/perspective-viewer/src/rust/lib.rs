@@ -38,19 +38,26 @@ mod renderer;
 mod session;
 pub mod utils;
 
+use perspective::utils::*;
+use perspective::JsClient;
 use wasm_bindgen::prelude::*;
 
 use crate::custom_elements::copy_dropdown::CopyDropDownMenuElement;
 use crate::custom_elements::debug_plugin::PerspectiveDebugPluginElement;
 use crate::custom_elements::export_dropdown::ExportDropDownMenuElement;
 use crate::custom_elements::viewer::PerspectiveViewerElement;
-use crate::utils::{define_web_component, ApiResult, JsValueSerdeExt};
+use crate::utils::define_web_component;
 
 /// Register a plugin globally.
 #[wasm_bindgen(js_name = "registerPlugin")]
 pub fn js_register_plugin(name: &str) {
     use crate::renderer::*;
     PLUGIN_REGISTRY.register_plugin(name);
+}
+
+#[wasm_bindgen]
+pub fn js_worker(send: js_sys::Function) -> JsClient {
+    perspective::worker(send)
 }
 
 /// Export all ExprTK commands, for use in generating documentation.
@@ -70,10 +77,10 @@ pub fn js_get_exprtk_commands() -> ApiResult<Box<[JsValue]>> {
 /// preserve backwards-compatible synchronous API).
 #[cfg(not(test))]
 #[cfg(not(feature = "define_custom_elements_async"))]
-#[wasm_bindgen(js_name = "defineWebComponents")]
-pub fn js_define_web_components() {
-    crate::utils::set_global_logging();
-    define_web_components!("export * as psp from '../../perspective.js'");
+#[wasm_bindgen(js_name = "init")]
+pub fn js_init() {
+    perspective::utils::set_global_logging();
+    define_web_components!("export * as psp from '../../perspective-viewer.js'");
     tracing::info!("Perspective initialized.");
 }
 

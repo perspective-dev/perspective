@@ -38,7 +38,7 @@ namespace apachearrow {
          *
          * @param ptr
          */
-        void initialize(uintptr_t ptr, std::uint32_t);
+        void initialize(const std::uint8_t* ptr, std::uint32_t);
 
         /**
          * @brief Initialize the arrow loader with a CSV.
@@ -46,7 +46,7 @@ namespace apachearrow {
          * @param ptr
          */
         void init_csv(
-            std::string& csv,
+            const std::string_view& csv,
             bool is_update,
             std::unordered_map<std::string, std::shared_ptr<arrow::DataType>>&
                 schema
@@ -95,7 +95,7 @@ namespace apachearrow {
 
     template <typename T, typename V>
     void iter_col_copy(
-        std::shared_ptr<t_column> dest,
+        const std::shared_ptr<t_column>& dest,
         std::shared_ptr<arrow::Array> src,
         const int64_t offset,
         const int64_t len

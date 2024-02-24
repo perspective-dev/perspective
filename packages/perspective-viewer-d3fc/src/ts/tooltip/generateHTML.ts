@@ -12,7 +12,6 @@
 
 import { select } from "d3";
 import { getGroupValues, getSplitValues, getDataValues } from "./selectionData";
-import { get_type_config } from "../../../../perspective/src/js/config";
 import { Settings } from "../types";
 
 export function generateHtml(tooltipDiv, data, settings: Settings) {
@@ -41,6 +40,6 @@ const formatNumber = (value) =>
         ? "-"
         : value.toLocaleString(undefined, {
               style: "decimal",
-              minimumFractionDigits: get_type_config("float").precision,
-              maximumFractionDigits: get_type_config("float").precision,
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
           });

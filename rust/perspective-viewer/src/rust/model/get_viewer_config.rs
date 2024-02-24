@@ -13,13 +13,14 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use perspective_client::clone;
+
 use super::columns_iter_set::*;
 use super::structural::*;
 use crate::config::*;
 use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::*;
-use crate::utils::*;
 use crate::*;
 
 /// A `ViewerConfig` is constructed from various properties acrosss the

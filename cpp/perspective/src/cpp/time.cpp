@@ -267,9 +267,9 @@ operator<<(std::ostream& os, const perspective::t_time& t) {
     struct tm tstruct;
     bool rcode = t.as_tm(tstruct);
     if (rcode) {
-        os << "t_time<" << t.str(tstruct) << ">" << '\n';
+        os << "t_time<" << t.str(tstruct) << ">" << std::endl;
     } else {
-        os << "t_time<" << t.raw_value() << ">" << '\n';
+        os << "t_time<" << t.raw_value() << ">" << std::endl;
     }
 
     return os;

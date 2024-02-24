@@ -31,6 +31,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 
 use futures::future::{join_all, select_all};
+use perspective::json;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::*;
@@ -42,7 +43,6 @@ use self::plugin_store::*;
 pub use self::registry::*;
 use self::render_timer::*;
 use crate::config::*;
-use crate::js::perspective::*;
 use crate::js::plugin::*;
 use crate::json;
 use crate::presentation::ColumnConfigMap;
@@ -169,9 +169,11 @@ impl Renderer {
         Ok(result.unwrap())
     }
 
-    pub async fn restyle_all(&self, view: &JsPerspectiveView) -> ApiResult<JsValue> {
+    pub async fn restyle_all(&self, view: &perspective_client::View) -> ApiResult<JsValue> {
         let plugins = self.get_all_plugins();
-        let tasks = plugins.iter().map(|plugin| plugin.restyle(view));
+        let tasks = plugins
+            .iter()
+            .map(|plugin| plugin.restyle(view.clone().into()));
 
         join_all(tasks)
             .await
@@ -282,17 +284,17 @@ impl Renderer {
         }
     }
 
-    async fn draw_view(&self, view: &JsPerspectiveView, is_update: bool) -> ApiResult<()> {
+    async fn draw_view(&self, view: &perspective_client::View, is_update: bool) -> ApiResult<()> {
         let plugin = self.get_active_plugin()?;
         let meta = self.metadata().clone();
         let limits = get_row_and_col_limits(view, &meta).await?;
         self.session_changed.emit((is_update, limits));
         let viewer_elem = &self.0.borrow().viewer_elem.clone();
         if is_update {
-            let task = plugin.update(view, limits.2, limits.3, false);
+            let task = plugin.update(view.clone().into(), limits.2, limits.3, false);
             activate_plugin(viewer_elem, &plugin, task).await
         } else {
-            let task = plugin.draw(view, limits.2, limits.3, false);
+            let task = plugin.draw(view.clone().into(), limits.2, limits.3, false);
             activate_plugin(viewer_elem, &plugin, task).await
         }
     }

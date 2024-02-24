@@ -52,6 +52,7 @@
         "cpy": "^9.0.1"
     },
     "jupyterlab": {
+        "webpackConfig": "./webpack.config.js",
         "extension": true,
         "outputDir": "../../python/perspective/perspective/labextension",
         "sharedPackages": {

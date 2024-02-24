@@ -14,16 +14,15 @@ use std::collections::{HashMap, HashSet};
 use std::iter::IntoIterator;
 use std::ops::{Deref, DerefMut};
 
+use perspective_client::ColumnType;
+
 use crate::components::viewer::ColumnLocator;
 use crate::config::*;
-use crate::js::perspective::*;
-use crate::utils::*;
 use crate::*;
 
 struct SessionViewExpressionMetadata {
-    schema: HashMap<String, Type>,
-    alias: HashMap<String, String>,
     edited: HashMap<String, String>,
+    expressions: perspective_client::ValidateExpressionsData,
 }
 
 /// Metadata state reflects data we could fetch from a `View`, but would like to
@@ -52,28 +51,18 @@ impl DerefMut for SessionMetadata {
 #[derive(Default)]
 pub struct SessionMetadataState {
     column_names: Vec<String>,
-    table_schema: HashMap<String, Type>,
+    table_schema: HashMap<String, ColumnType>,
     edit_port: f64,
-    view_schema: Option<HashMap<String, Type>>,
+    view_schema: Option<HashMap<String, ColumnType>>,
     expr_meta: Option<SessionViewExpressionMetadata>,
 }
 
 impl SessionMetadata {
     /// Creates a new `SessionMetadata` from a `JsPerspectiveTable`.
-    pub(super) async fn from_table(table: &JsPerspectiveTable) -> ApiResult<Self> {
-        let column_names = {
-            let columns = table.columns().await?;
-            if columns.length() > 0 {
-                (0..columns.length())
-                    .map(|i| columns.get(i).as_string().unwrap())
-                    .collect::<Vec<String>>()
-            } else {
-                vec![]
-            }
-        };
-
-        let table_schema = table.schema().await?.into_serde_ext()?;
-        let edit_port = table.make_port().await?;
+    pub(super) async fn from_table(table: &perspective_client::Table) -> ApiResult<Self> {
+        let column_names = table.columns().await?;
+        let table_schema = table.schema().await?;
+        let edit_port = table.make_port().await? as f64;
         Ok(Self(Some(SessionMetadataState {
             column_names,
             table_schema,
@@ -84,28 +73,19 @@ impl SessionMetadata {
 
     pub(super) fn update_view_schema(
         &mut self,
-        view_schema: &JsPerspectiveViewSchema,
+        view_schema: &perspective_client::Schema,
     ) -> ApiResult<()> {
-        let view_schema = view_schema.into_serde_ext()?;
-        self.as_mut().unwrap().view_schema = Some(view_schema);
+        self.as_mut().unwrap().view_schema = Some(view_schema.clone());
         Ok(())
     }
 
     pub(super) fn update_expressions(
         &mut self,
-        valid_recs: &JsPerspectiveValidatedExpressions,
+        valid_recs: &perspective_client::ValidateExpressionsData,
     ) -> ApiResult<HashSet<String>> {
-        if js_sys::Object::keys(&valid_recs.errors()).length() > 0 {
+        if !valid_recs.errors.is_empty() {
             return Err("Expressions invalid".into());
         }
-
-        let expression_alias: HashMap<String, String> =
-            valid_recs.expression_alias().into_serde_ext()?;
-
-        let expression_schema: HashMap<String, Type> =
-            valid_recs.expression_schema().into_serde_ext()?;
-
-        let expression_names = expression_schema.keys().cloned().collect::<HashSet<_>>();
 
         let mut edited = self
             .as_mut()
@@ -115,22 +95,28 @@ impl SessionMetadata {
             .map(|x| x.edited)
             .unwrap_or_default();
 
-        edited.retain(|k, _| expression_alias.get(k).is_some());
+        edited.retain(|k, _| valid_recs.expression_alias.get(k).is_some());
         self.as_mut().unwrap().expr_meta = Some(SessionViewExpressionMetadata {
-            schema: expression_schema,
-            alias: expression_alias,
+            expressions: valid_recs.clone(),
             edited,
         });
 
-        Ok(expression_names)
+        Ok(valid_recs.expression_schema.keys().cloned().collect())
     }
 
     /// Returns the unique column names in this session that are expression
     /// columns.
     pub fn get_expression_columns(&self) -> impl Iterator<Item = &'_ String> {
-        maybe!(Some(self.as_ref()?.expr_meta.as_ref()?.schema.keys()))
-            .into_iter()
-            .flatten()
+        maybe!(Some(
+            self.as_ref()?
+                .expr_meta
+                .as_ref()?
+                .expressions
+                .expression_schema
+                .keys()
+        ))
+        .into_iter()
+        .flatten()
     }
 
     /// Returns the full original expression `String` for an expression alias.
@@ -139,7 +125,13 @@ impl SessionMetadata {
     /// # Arguments
     /// - `alias` An alias name for an expression column in this `Session`.
     pub fn get_expression_by_alias(&self, alias: &str) -> Option<String> {
-        self.as_ref()?.expr_meta.as_ref()?.alias.get(alias).cloned()
+        self.as_ref()?
+            .expr_meta
+            .as_ref()?
+            .expressions
+            .expression_alias
+            .get(alias)
+            .cloned()
     }
 
     /// Returns the edited expression `String` (e.g. the not-yet-saved, edited
@@ -181,7 +173,12 @@ impl SessionMetadata {
 
     pub fn is_column_expression(&self, name: &str) -> bool {
         let is_expr = maybe!(Some(
-            self.as_ref()?.expr_meta.as_ref()?.schema.contains_key(name)
+            self.as_ref()?
+                .expr_meta
+                .as_ref()?
+                .expressions
+                .expression_schema
+                .contains_key(name)
         ));
 
         is_expr.unwrap_or_default()
@@ -228,13 +225,17 @@ impl SessionMetadata {
     /// # Arguments
     /// - `name` The column name (or expresison alias) to retrieve a principal
     ///   type.
-    pub fn get_column_table_type(&self, name: &str) -> Option<Type> {
+    pub fn get_column_table_type(&self, name: &str) -> Option<ColumnType> {
         maybe!({
             let meta = self.as_ref()?;
-            meta.table_schema
-                .get(name)
-                .or_else(|| meta.expr_meta.as_ref()?.schema.get(name))
-                .cloned()
+            meta.table_schema.get(name).cloned().or_else(|| {
+                meta.expr_meta
+                    .as_ref()?
+                    .expressions
+                    .expression_schema
+                    .get(name)
+                    .cloned()
+            })
         })
     }
 
@@ -247,7 +248,7 @@ impl SessionMetadata {
     /// # Arguments
     /// - `name` The column name (or expresison alias) to retrieve a `View`
     ///   type.
-    pub fn get_column_view_type(&self, name: &str) -> Option<Type> {
+    pub fn get_column_view_type(&self, name: &str) -> Option<ColumnType> {
         maybe!(self.as_ref()?.view_schema.as_ref()?.get(name)).cloned()
     }
 
@@ -259,7 +260,7 @@ impl SessionMetadata {
             let coltype = self.get_column_table_type(name)?;
             let aggregates = coltype.aggregates_iter();
             Some(match coltype {
-                Type::Float | Type::Integer => {
+                ColumnType::Float | ColumnType::Integer => {
                     let num_cols = self
                         .get_expression_columns()
                         .cloned()
@@ -270,7 +271,9 @@ impl SessionMetadata {
                         })
                         .collect::<Option<Vec<_>>>()?
                         .into_iter()
-                        .filter(|(_, coltype)| *coltype == Type::Integer || *coltype == Type::Float)
+                        .filter(|(_, coltype)| {
+                            *coltype == ColumnType::Integer || *coltype == ColumnType::Float
+                        })
                         .map(|(name, _)| {
                             Aggregate::MultiAggregate(MultiAggregate::WeightedMean, name)
                         });

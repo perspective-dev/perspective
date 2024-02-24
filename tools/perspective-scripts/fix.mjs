@@ -21,11 +21,11 @@ if (import.meta.url.startsWith("file:")) {
         await run(true);
 
         dotenv.config({ path: "./.perspectiverc" });
-        if (process.env.PSP_PROJECT === "python") {
-            await import("./fix_python.mjs");
-        } else {
-            lint_js(true);
-        }
+        // if (process.env.PSP_PROJECT === "python") {
+        // await import("./fix_python.mjs");
+        // } else {
+        lint_js(true);
+        // }
 
         cppLint.fixFormatting();
     }

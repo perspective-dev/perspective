@@ -15,9 +15,9 @@ use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::rc::Rc;
 
+use perspective::utils::global;
 use web_sys::HtmlStyleElement;
 
-use crate::utils::*;
 use crate::*;
 
 type CSSResource = (&'static str, &'static str);

@@ -11,12 +11,11 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { groupFromKey } from "../series/seriesKey";
-import { DataRow } from "@finos/perspective";
 import { DataRowsWithKey, Settings } from "../types";
 
 export function filterData(
     settings: Settings,
-    data: DataRow[] | undefined = undefined
+    data: any[] | undefined = undefined
 ) {
     const useData = data || settings.data;
     const len = settings.hideKeys?.length ?? 0;

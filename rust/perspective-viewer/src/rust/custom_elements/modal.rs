@@ -15,6 +15,7 @@ use std::rc::Rc;
 
 use derivative::Derivative;
 use futures::Future;
+use perspective::utils::{global, *};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::*;
@@ -238,9 +239,9 @@ where
 
         if self.own_focus {
             let mut this = Some(self.clone());
-            *self.blurhandler.borrow_mut() = Some(
-                (move |_| this.take().and_then(|x| x.hide().ok()).unwrap_or(())).into_closure_mut(),
-            );
+            *self.blurhandler.borrow_mut() = Some(Closure::new(move |_| {
+                this.take().and_then(|x| x.hide().ok()).unwrap_or(())
+            }));
 
             self.custom_element
                 .dataset()
@@ -377,7 +378,7 @@ where
 }
 
 fn get_theme(elem: &HtmlElement) -> Option<String> {
-    let styles = window().unwrap().get_computed_style(elem).unwrap().unwrap();
+    let styles = global::window().get_computed_style(elem).unwrap().unwrap();
     styles
         .get_property_value("--theme-name")
         .ok()

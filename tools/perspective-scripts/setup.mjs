@@ -116,6 +116,11 @@ async function focus_package() {
                     value: "perspective",
                 },
                 {
+                    key: "y",
+                    name: "perspective-python",
+                    value: "perspective-python",
+                },
+                {
                     key: "v",
                     name: "perspective-viewer",
                     value: "perspective-viewer",
@@ -131,7 +136,7 @@ async function focus_package() {
                     value: "perspective-viewer-d3fc",
                 },
                 {
-                    key: "l",
+                    key: "i",
                     name: "perspective-jupyterlab",
                     value: "perspective-jupyterlab",
                 },
@@ -167,56 +172,9 @@ async function focus_package() {
 }
 
 async function javascript_options() {
-    const new_config = await inquirer.prompt([PROMPT_DEBUG]);
-    CONFIG.add(new_config);
-    CONFIG.write();
-}
-
-async function python_options() {
     const new_config = await inquirer.prompt([PROMPT_DEBUG, PROMPT_DOCKER]);
     CONFIG.add(new_config);
     CONFIG.write();
 }
 
-async function choose_project() {
-    const answers = await inquirer.prompt([
-        {
-            type: "expand",
-            name: "PSP_PROJECT",
-            message: "Focus (J)avascript or (P)ython?",
-            default: CONFIG["PSP_PROJECT"] || "js",
-            choices: [
-                {
-                    key: "j",
-                    name: "Javascript",
-                    value: "js",
-                },
-                {
-                    key: "p",
-                    name: "python",
-                    value: "python",
-                },
-            ],
-        },
-    ]);
-
-    CONFIG.add(answers);
-    CONFIG.write();
-    switch (CONFIG.PSP_PROJECT) {
-        case "js":
-            {
-                await focus_package();
-            }
-            break;
-        case "python":
-            {
-                await python_options();
-            }
-            break;
-        default: {
-            choose_docker();
-        }
-    }
-}
-
-choose_project();
+focus_package();

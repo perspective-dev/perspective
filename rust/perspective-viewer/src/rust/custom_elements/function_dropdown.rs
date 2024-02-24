@@ -13,6 +13,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use perspective::utils::global;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::*;
@@ -22,7 +23,6 @@ use yew::*;
 use crate::components::function_dropdown::*;
 use crate::custom_elements::modal::*;
 use crate::exprtk::{CompletionItemSuggestion, COMPLETIONS};
-use crate::utils::ApiFuture;
 use crate::*;
 
 #[wasm_bindgen]
@@ -91,8 +91,7 @@ impl FunctionDropDownElement {
 
 impl Default for FunctionDropDownElement {
     fn default() -> Self {
-        let document = window().unwrap().document().unwrap();
-        let dropdown = document
+        let dropdown = global::document()
             .create_element("perspective-dropdown")
             .unwrap()
             .unchecked_into::<HtmlElement>();

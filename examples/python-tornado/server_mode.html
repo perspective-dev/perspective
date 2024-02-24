@@ -12,9 +12,10 @@
     <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no" />
 
-        <script type="module" src="http://localhost:8080/node_modules/@finos/perspective-viewer/dist/cdn/perspective-viewer.js"></script>
-        <script type="module" src="http://localhost:8080/node_modules/@finos/perspective-viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js"></script>
-        <script type="module" src="http://localhost:8080/node_modules/@finos/perspective-viewer-d3fc/dist/cdn/perspective-viewer-d3fc.js"></script>
+        <script type="module" src="http://localhost:8080/node_modules/@finos/perspective-viewer@2.7.1/dist/cdn/perspective-viewer.js"></script>
+        <script type="module" src="http://localhost:8080/node_modules/@finos/perspective-viewer-datagrid@2.7.1/dist/cdn/perspective-viewer-datagrid.js"></script>
+        <script type="module" src="http://localhost:8080/node_modules/@finos/perspective-viewer-d3fc@2.7.1/dist/cdn/perspective-viewer-d3fc.js"></script>
+        <script type="module" src="http://localhost:8080/node_modules/@finos/perspective-viewer-openlayers/dist/cdn/perspective-viewer-openlayers.js"></script>
 
         <link rel="stylesheet" crossorigin="anonymous" href="/node_modules/@finos/perspective-viewer/dist/css/themes.css" />
 
@@ -30,27 +31,19 @@
     </head>
 
     <body>
-        <perspective-viewer id="viewer" editable> </perspective-viewer>
+        <perspective-viewer id="viewer" editable></perspective-viewer>
 
         <script type="module">
-            import perspective from "/node_modules/@finos/perspective/dist/cdn/perspective.js";
+            import perspective from "http://localhost:8080/node_modules/@finos/perspective-viewer@2.7.1/dist/cdn/perspective-viewer.js";
+            const REQ = fetch("/node_modules/superstore-arrow/superstore.lz4.arrow");
             window.addEventListener("DOMContentLoaded", async function () {
                 // Create a client that expects a Perspective server to accept
                 // Websocket connections at the specified URL.
-                const websocket = perspective.websocket("ws://localhost:8080/websocket");
+                const websocket = await perspective.websocket("ws://localhost:8082/websocket");
+                const resp = await REQ;
+                const arrow = await resp.arrayBuffer();
+                const table = websocket.table(arrow);
 
-                /* This shows Perspective running in "server mode": the `table`
-            variable is a proxy for the `Table` we created on the server.
-            
-            All operations that are possible through the Javascript API are
-            possible on the Python API as well, thus calling `view()`,
-            `schema()`, `update()` etc on `const table` will pass those
-            operations to the Python `Table`, execute the commands,
-            and return the result back to Javascript.
-            */
-                const table = websocket.open_table("data_source_one");
-
-                // Load this in the `<perspective-viewer>`.
                 document.getElementById("viewer").load(table);
             });
         </script>

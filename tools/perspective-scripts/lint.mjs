@@ -40,11 +40,11 @@ if (import.meta.url.startsWith("file:")) {
         dotenv.config({ path: "./.perspectiverc" });
         const { default: run } = await import("./lint_headers.mjs");
         const exit_code = await run(false);
-        if (process.env.PSP_PROJECT === "python") {
-            await import("./lint_python.mjs");
-        } else {
-            lint_js();
-        }
+        // if (process.env.PSP_PROJECT === "python") {
+        // await import("./lint_python.mjs");
+        // } else {
+        lint_js();
+        // }
 
         cppLint.checkFormatting();
         process.exit(exit_code);

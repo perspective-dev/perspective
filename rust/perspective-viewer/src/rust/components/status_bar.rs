@@ -76,7 +76,6 @@ impl Component for StatusBar {
     type Properties = StatusBarProps;
 
     fn create(ctx: &Context<Self>) -> Self {
-        enable_weak_link_test!(ctx.props(), ctx.link());
         let _sub = [
             ctx.props()
                 .session

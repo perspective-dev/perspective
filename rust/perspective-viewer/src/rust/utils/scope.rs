@@ -12,10 +12,9 @@
 
 use extend::ext;
 use futures::channel::oneshot::*;
+use perspective::utils::ApiResult;
 use yew::html::Scope;
 use yew::prelude::*;
-
-use super::ApiResult;
 
 #[ext]
 pub impl<T> Scope<T>

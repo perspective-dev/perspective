@@ -19,6 +19,4 @@ const _server = new WebSocketServer({
         path.join(__dirname, "../../../..", "node_modules"),
     ],
     port: 6598,
-    host_psp: undefined,
-    on_start: undefined,
 });

@@ -16,6 +16,7 @@ use std::iter::{repeat_with, Iterator};
 use std::rc::Rc;
 
 use futures::future::{join_all, select_all};
+use perspective::utils::{global, *};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;

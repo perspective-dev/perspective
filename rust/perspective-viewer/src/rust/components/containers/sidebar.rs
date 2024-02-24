@@ -10,13 +10,13 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use perspective_client::clone;
 use web_sys::Element;
 use yew::{
     function_component, html, use_effect_with, use_node_ref, use_state_eq, AttrValue, Callback,
     Children, Html, Properties,
 };
 
-use crate::clone;
 use crate::components::editable_header::{EditableHeader, EditableHeaderProps};
 
 #[derive(PartialEq, Clone, Properties)]

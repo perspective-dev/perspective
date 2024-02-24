@@ -27,7 +27,7 @@ let plugins = [PerspectiveJupyterPlugin];
 
 // Conditionally import renderers if running in jupyterlab only
 if (window && window._JUPYTERLAB) {
-    const { PerspectiveRenderers } = require("./renderer");
+    const { PerspectiveRenderers } = await import("./renderer");
     plugins.push(PerspectiveRenderers);
 }
 

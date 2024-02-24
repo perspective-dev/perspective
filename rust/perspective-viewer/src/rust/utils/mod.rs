@@ -16,9 +16,7 @@
 //! modules when it helps reduce boiler-plate.
 
 mod browser;
-mod clone;
-mod closure;
-mod console_logger;
+
 mod custom_element;
 mod datetime;
 mod debounce;
@@ -28,7 +26,6 @@ mod json;
 mod number_format;
 mod pubsub;
 mod scope;
-mod serde;
 mod tee;
 mod wasm_abi;
 mod weak_scope;
@@ -37,20 +34,16 @@ mod weak_scope;
 mod tests;
 
 pub use browser::*;
-pub use closure::*;
-pub use console_logger::*;
 pub use custom_element::*;
 pub use datetime::*;
 pub use debounce::*;
 pub use errors::*;
 pub use number_format::*;
+pub use perspective_client::clone;
 pub use pubsub::*;
 pub use scope::*;
 pub use tee::*;
 pub use weak_scope::*;
-
-pub use self::futures::*;
-pub use self::serde::*;
 
 #[macro_export]
 macro_rules! maybe {

@@ -34,6 +34,12 @@
 
 namespace perspective {
 
+void write_scalar(
+    t_tscalar scalar,
+    bool is_formatted,
+    rapidjson::Writer<rapidjson::StringBuffer>& writer
+);
+
 template <typename CTX_T>
 class PERSPECTIVE_EXPORT View {
 public:
@@ -135,12 +141,6 @@ public:
     std::pair<t_tscalar, t_tscalar> get_min_max(const std::string& colname
     ) const;
 
-    void write_scalar(
-        t_tscalar scalar,
-        bool is_formatted,
-        rapidjson::Writer<rapidjson::StringBuffer>& writer
-    ) const;
-
     void write_row_path(
         t_uindex start_row,
         t_uindex end_row,
@@ -156,6 +156,20 @@ public:
         t_uindex end_row,
         bool has_row_path,
         bool leaves_only,
+        bool is_formatted,
+        std::shared_ptr<t_data_slice<CTX_T>> slice,
+        const std::vector<std::vector<t_tscalar>>& col_names,
+        rapidjson::Writer<rapidjson::StringBuffer>& writer
+    ) const;
+
+    void write_row(
+        t_uindex c,
+        t_uindex start_col,
+        t_uindex end_col,
+        bool has_row_path,
+        bool leaves_only,
+        bool ids,
+        bool pkeys,
         bool is_formatted,
         std::shared_ptr<t_data_slice<CTX_T>> slice,
         const std::vector<std::vector<t_tscalar>>& col_names,
@@ -191,6 +205,23 @@ public:
         t_uindex end_col
     ) const;
 
+    std::string to_rows(
+        t_uindex start_row,
+        t_uindex end_row,
+        t_uindex start_col,
+        t_uindex end_col,
+        t_uindex hidden,
+        bool is_formatted,
+        bool get_pkeys,
+        bool get_ids,
+        bool leaves_only,
+        t_uindex num_sides,
+        bool has_row_path,
+        const std::string& nidx,
+        t_uindex columns_length,
+        t_uindex group_by_length
+    ) const;
+
     std::string to_columns(
         t_uindex start_row,
         t_uindex end_row,
@@ -203,7 +234,7 @@ public:
         bool leaves_only,
         t_uindex num_sides,
         bool has_row_path,
-        std::string nidx,
+        const std::string& nidx,
         t_uindex columns_length,
         t_uindex group_by_length
     ) const;

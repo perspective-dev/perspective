@@ -11,9 +11,8 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 use ::futures::channel::oneshot::*;
+use perspective::utils::{global, *};
 use wasm_bindgen::prelude::*;
-
-use crate::utils::*;
 
 /// An `async` version of `queueMicrotask()`, curiously absent from [`web_sys`].
 pub async fn await_queue_microtask() -> ApiResult<()> {

@@ -4,7 +4,8 @@
     "version": "2.9.0",
     "description": "A collection of simple client-side Perspective examples for `http://bl.ocks.org`.",
     "scripts": {
-        "start": "mkdirp dist && node server.mjs"
+        "start": "mkdirp dist && node --experimental-modules server.mjs",
+        "repl": "node --experimental-repl-await"
     },
     "main": "index.mjs",
     "keywords": [],

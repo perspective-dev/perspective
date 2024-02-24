@@ -17,7 +17,6 @@ use wasm_bindgen_futures::spawn_local;
 use wasm_bindgen_test::*;
 
 use crate::utils::*;
-use crate::*;
 
 #[wasm_bindgen_test]
 async fn test_request_animation_frame_async() {

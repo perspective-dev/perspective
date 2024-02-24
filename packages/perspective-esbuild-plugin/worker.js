@@ -13,15 +13,17 @@
 const fs = require("fs");
 const path = require("path");
 const esbuild = require("esbuild");
-const { EmptyPlugin } = require("./empty.js");
 
 exports.WorkerPlugin = function WorkerPlugin(options = {}) {
     const inline = !!options.inline;
     const targetdir = options.targetdir || "build/worker";
     function setup(build) {
-        build.onResolve({ filter: /\.worker\.js$/ }, (args) => {
+        build.onResolve({ filter: /\.worker(\.js)?$/ }, (args) => {
             if (args.namespace === "worker-stub") {
-                const outfile = `${targetdir}/` + path.basename(args.path);
+                const outfile =
+                    `${targetdir}/` +
+                    path.basename(args.path).replace(".worker", "");
+
                 const entryPoint = path.join(
                     args.pluginData.resolveDir,
                     args.path
@@ -43,7 +45,7 @@ exports.WorkerPlugin = function WorkerPlugin(options = {}) {
                 });
 
                 return {
-                    path: args.path,
+                    path: args.path.replace(".worker", ""),
                     namespace: "worker",
                     pluginData: {
                         outfile,

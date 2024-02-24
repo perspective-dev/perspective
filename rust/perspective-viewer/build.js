@@ -10,18 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-const { execSync } = require("child_process");
-const fs = require("fs");
-const { build } = require("@finos/perspective-esbuild-plugin/build");
-const {
-    PerspectiveEsbuildPlugin,
-} = require("@finos/perspective-esbuild-plugin");
+import { execSync } from "child_process";
+import { build } from "@finos/perspective-esbuild-plugin/build.js";
+import { PerspectiveEsbuildPlugin } from "@finos/perspective-esbuild-plugin";
+import { NodeModulesExternal } from "@finos/perspective-esbuild-plugin/external.js";
 
-const {
-    NodeModulesExternal,
-} = require("@finos/perspective-esbuild-plugin/external");
-
-const cpy_mod = import("cpy");
+import cpy from "cpy";
 
 const IS_DEBUG =
     !!process.env.PSP_DEBUG || process.argv.indexOf("--debug") >= 0;
@@ -80,9 +74,17 @@ const INHERIT = {
     stderr: "inherit",
 };
 
+function get_host() {
+    return /host\: (.+?)$/gm.exec(execSync(`rustc -vV`).toString())[1];
+}
 async function build_all() {
     // Rust
-    execSync(`cargo bundle ${IS_DEBUG ? "" : "--release"}`, INHERIT);
+    execSync(
+        `cargo bundle --target=${get_host()} --release -- perspective_viewer ${
+            IS_DEBUG ? "" : "--release"
+        }`,
+        INHERIT
+    );
 
     // JavaScript
     execSync("npx tsc --project tsconfig.json", INHERIT);
@@ -90,9 +92,9 @@ async function build_all() {
     await Promise.all(POSTBUILD.map(build)).catch(() => process.exit(1));
 
     // legacy compat
-    const { default: cpy } = await cpy_mod;
     await cpy("target/themes/*", "dist/css");
-    await cpy("dist/pkg/*", "dist/esm");
+    await cpy("dist/pkg/*.wasm", "dist/esm");
+    await cpy("dist/pkg/*.js", "dist/esm");
 }
 
 build_all();

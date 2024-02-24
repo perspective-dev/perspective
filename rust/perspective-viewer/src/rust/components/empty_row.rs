@@ -14,13 +14,14 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use derivative::Derivative;
+use perspective_client::clone;
 use wasm_bindgen::JsCast;
 use web_sys::*;
 use yew::prelude::*;
 
 use crate::components::style::LocalStyle;
+use crate::css;
 use crate::custom_elements::FilterDropDownElement;
-use crate::{clone, css};
 
 #[derive(Default)]
 pub struct EmptyRow {

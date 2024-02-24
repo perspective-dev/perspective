@@ -1,0 +1,58 @@
+#  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+#  ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+#  ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+#  ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+#  ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+#  ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+#  ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+#  ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+#  ┃ This file is part of the Perspective library, distributed under the terms ┃
+#  ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+#  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+[package]
+name = "perspective-python"
+version = "2.8.0"
+edition = "2021"
+description = "A data visualization and analytics component, especially well-suited for large and/or streaming datasets."
+repository = "https://github.com/finos/perspective"
+license = "Apache-2.0"
+homepage = "https://perspective.finos.org"
+build = "build.rs"
+authors = ["Andrew Stein <steinlink@gmail.com>"]
+keywords = ["experimental"]
+include = ["src/**/*", "Cargo.toml", "package.json"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "perspective"
+crate-type = ["cdylib"]
+
+[features]
+buildpython = []
+default = []
+
+[build-dependencies]
+pyo3-build-config = "0.20.2"
+cxx-build = "1.0.115"
+cmake = "0.1.50"
+python-config-rs = "0.1.2"
+
+[dependencies]
+perspective-client = { path = "../perspective-client", version = "2.8.0" }
+extend = "1.1.2"
+pyo3 = { version = "0.20", features = ["extension-module", "serde"] }
+pyo3-asyncio = { version = "0.20", features = ["attributes", "tokio-runtime"] }
+pythonize = "0.20"
+cxx = "1.0.115"
+futures = "0.3.28"
+prost = { version = "0.12.3", default-features = false, features = [
+    "prost-derive",
+    "std",
+] }
+
+# Async-aware logging that can be disabled at compile-time.
+tracing = { version = ">=0.1.36" }
+tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
+
+prost-types = "0.12.3"

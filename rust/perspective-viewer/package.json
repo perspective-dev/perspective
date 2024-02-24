@@ -6,6 +6,7 @@
         "type": "git",
         "url": "https://github.com/finos/perspective"
     },
+    "type": "module",
     "license": "Apache-2.0",
     "unpkg": "dist/cdn/perspective-viewer.js",
     "jsdelivr": "dist/cdn/perspective-viewer.js",

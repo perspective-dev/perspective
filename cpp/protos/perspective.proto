@@ -1,0 +1,422 @@
+syntax = "proto3";
+
+import "google/protobuf/struct.proto";
+
+package perspective.proto;
+
+option optimize_for = LITE_RUNTIME;
+
+enum EntityType {
+  UNKNOWN = 0;
+  TABLE = 1;
+  VIEW = 2;
+}
+
+message RequestEnvelope {
+  uint32 msg_id = 1;
+  string entity_id = 2;
+  EntityType entity_type = 3;
+  reserved 4 to 49;
+  Request payload = 50;
+}
+
+message ResponseEnvelope {
+  uint32 msg_id = 1;
+  string entity_id = 2;
+  EntityType entity_type = 3;
+  reserved 4 to 49;
+  Response payload = 50;
+}
+
+message Request {
+  oneof client_req {
+    MakeTableReq make_table_req = 1;
+    TableDeleteReq table_delete_req = 2;
+    TableSizeReq table_size_req = 3;
+    TableColumnsReq table_columns_req = 4;
+    TableSchemaReq table_schema_req = 5;
+    TableMakePortReq table_make_port_req = 6;
+    TableValidateExprReq table_validate_expr_req = 7;
+    TableMakeViewReq table_make_view_req = 8;
+    TableOnDeleteReq table_on_delete_req = 23;
+    TableRemoveDeleteReq table_remove_delete_req = 24;
+    TableClearReq table_clear_req = 9;
+    TableUpdateReq table_update_req = 10;
+    TableReplaceReq table_replace_req = 11;
+    TableRemoveReq table_remove_req = 28;
+    ViewSchemaReq view_schema_req = 12;
+    ViewDimensionsReq view_dimensions_req = 13;
+    ViewGetConfigReq view_get_config_req = 14;
+    ViewNumRowsReq view_num_rows_req = 15;
+    ViewColumnPathsReq view_column_paths_req = 16;
+    ViewDeleteReq view_delete_req = 17;
+    ViewExpressionSchemaReq view_expression_schema_req = 18;
+    ViewOnUpdateReq view_on_update_req = 19;
+    ViewOnDeleteReq view_on_delete_req = 25;
+    ViewRemoveDeleteReq view_remove_delete_req = 26;
+    ViewToColumnsStringReq view_to_columns_string_req = 20;
+    ViewToRowsStringReq view_to_rows_string_req = 29;
+    ViewToCSVReq view_to_csv_req = 21;
+    ViewToArrowReq view_to_arrow_req = 22;
+    ViewGetMinMaxReq view_get_min_max_req = 27;
+  }
+}
+
+message Response {
+  oneof client_resp {
+    ServerError server_error = 1;
+    MakeTableResp make_table_resp = 2;
+    TableDeleteResp table_delete_resp = 3;
+    TableSizeResp table_size_resp = 4;
+    TableColumnsResp table_columns_resp = 5;
+    TableSchemaResp table_schema_resp = 6;
+    TableMakePortResp table_make_port_resp = 7;
+    TableValidateExprResp table_validate_expr_resp = 8;
+    TableMakeViewResp table_make_view_resp = 9;
+    TableOnDeleteResp table_on_delete_resp = 24;
+    TableRemoveDeleteResp table_remove_delete_resp = 25;
+    TableClearResp table_clear_resp = 10;
+    TableUpdateResp table_update_resp = 11;
+    TableReplaceResp table_replace_resp = 12;
+    TableRemoveResp table_remove_resp = 29;
+    ViewSchemaResp view_schema_resp = 13;
+    ViewDimensionsResp view_dimensions_resp = 14;
+    ViewGetConfigResp view_get_config_resp = 15;
+    ViewNumRowsResp view_num_rows_resp = 16;
+    ViewColumnPathsResp view_column_paths_resp = 17;
+    ViewDeleteResp view_delete_resp = 18;
+    ViewExpressionSchemaResp view_expression_schema_resp = 19;
+    ViewOnUpdateResp view_on_update_resp = 20;
+    ViewOnDeleteResp view_on_delete_resp = 26;
+    ViewRemoveDeleteResp view_remove_delete_resp = 27;
+    ViewToColumnsStringResp view_to_columns_string_resp = 21;
+    ViewToRowsStringResp view_to_rows_string_resp = 30;
+    ViewToCSVResp view_to_csv_resp = 22;
+    ViewToArrowResp view_to_arrow_resp = 23;
+    ViewGetMinMaxResp view_get_min_max_resp = 28;
+  }
+}
+
+message ServerError {
+  string message = 1;
+}
+
+message MakeTableReq {
+  MakeTableData data = 1;
+  optional MakeTableOptions options = 2;
+}
+
+message MakeTableOptions {
+  oneof make_table_type {
+    MakeIndexTable make_index_table = 1;
+    MakeLimitTable make_limit_table = 2;
+  };
+}
+
+message MakeIndexTable {
+  string index = 1;
+}
+
+message MakeLimitTable {
+  uint32 limit = 1;
+}
+
+message MakeTableData {
+  oneof data {
+    Schema from_schema = 1;
+    string from_csv = 2;
+    bytes from_arrow = 3;
+    string from_rows = 4;
+    string from_cols = 5;
+    string from_view = 6;
+  };
+}
+
+message KeyTypePair {
+  string name = 1;
+  ColumnType type = 2;
+}
+
+message Schema {
+  repeated KeyTypePair schema = 1;
+}
+
+message MakeTableResp {}
+
+message TableDeleteReq {}
+message TableDeleteResp {}
+
+message TableSizeReq {}
+message TableSizeResp {
+  uint32 size = 2;
+}
+
+message TableColumnsReq {}
+message TableColumnsResp {
+  repeated string columns = 1;
+}
+
+message TableSchemaReq {}
+message TableSchemaResp {
+  map<string, ColumnType> schema = 1;
+}
+
+message TableMakePortReq {}
+message TableMakePortResp {
+  uint32 port_id = 1;
+}
+
+message TableValidateExprReq {
+  map<string, string> column_to_expr = 1;
+}
+
+message TableValidateExprResp {
+  map<string, ColumnType> expression_schema = 1;
+  map<string, ExprValidationError> errors = 2;
+  map<string, string> expression_alias = 3;
+}
+
+message ExprValidationError {
+  string error_message = 1;
+  uint32 line = 2;
+  uint32 column = 3;
+}
+
+message TableMakeViewReq {
+  string view_id = 1;
+  ViewConfig config = 2;
+}
+
+message TableMakeViewResp {
+  string view_id = 1;
+}
+
+message TableOnDeleteReq {}
+message TableOnDeleteResp {}
+
+message TableRemoveDeleteReq { 
+  uint32 id = 1;
+}
+message TableRemoveDeleteResp {}
+
+message TableClearReq {}
+message TableClearResp {}
+
+message TableUpdateReq {
+  MakeTableData data = 1;
+}
+
+message TableUpdateResp {}
+
+message TableReplaceReq {
+  MakeTableData data = 1;
+}
+
+message TableReplaceResp {}
+
+message TableRemoveReq {
+  MakeTableData data = 1;
+}
+
+message TableRemoveResp {}
+
+message ViewSchemaReq {}
+message ViewSchemaResp {
+  map<string, ColumnType> schema = 1;
+}
+
+message ViewDimensionsReq {}
+message ViewDimensionsResp {
+  uint32 num_table_rows = 1;
+  uint32 num_table_columns = 2;
+  uint32 num_view_rows = 3;
+  uint32 num_view_columns = 4;
+}
+
+message ViewGetConfigReq {}
+message ViewGetConfigResp {
+  ViewConfig config = 1;
+}
+
+message ViewNumRowsReq {}
+message ViewNumRowsResp {
+  uint32 num_rows = 1;
+}
+
+message ViewOnUpdateReq {}
+message ViewOnUpdateResp {
+  optional bytes arrow = 1;
+}
+
+message ViewOnDeleteReq {}
+message ViewOnDeleteResp {}
+
+message ViewRemoveDeleteReq { 
+  uint32 id = 1;
+}
+message ViewRemoveDeleteResp {}
+
+message ViewPort {
+  optional uint32 start_row = 1;
+  optional uint32 start_col = 2;
+  optional uint32 end_row = 3;
+  optional uint32 end_col = 4;
+}
+
+message ViewToColumnsStringReq {
+  ViewPort viewport = 1;
+  optional bool id = 2;
+  optional bool index = 3;
+  optional bool formatted = 4;
+  optional bool leaves_only = 5;
+}
+
+message ViewToColumnsStringResp {
+  string json_string = 1;
+}
+
+
+message ViewToRowsStringReq {
+  ViewPort viewport = 1;
+  optional bool id = 2;
+  optional bool index = 3;
+  optional bool formatted = 4;
+  optional bool leaves_only = 5;
+}
+
+message ViewToRowsStringResp {
+  string json_string = 1;
+}
+
+message ViewToArrowReq {
+  ViewPort viewport = 1;
+//   optional bool id = 5;
+//   optional bool formatted = 6;
+//   optional bool leaves_only = 7;
+}
+
+message ViewToArrowResp {
+  bytes arrow = 1;
+}
+
+message ViewColumnPathsReq {
+}
+
+// // TODO This is a better paths representations but its not compatible with
+// // the legacy API. Let's do this when we can fix the API.
+
+// message ColumnPath {
+//   repeated string path = 1;
+// }
+
+message ViewColumnPathsResp {
+  repeated string paths = 1;
+  // repeated ColumnPath paths = 1;
+}
+
+message ViewDeleteReq {}
+message ViewDeleteResp {}
+
+message ViewGetMinMaxReq {
+  string column_name = 1;
+}
+
+message ViewGetMinMaxResp {
+  string min = 1;
+  string max = 2;
+}
+
+
+message ViewExpressionSchemaReq {}
+message ViewExpressionSchemaResp {
+  map<string, ColumnType> schema = 1;
+}
+
+message ViewToCSVReq {
+  ViewPort viewport = 1;
+}
+
+message ViewToCSVResp {
+  string csv = 1;
+}
+
+message Scalar {
+  oneof scalar {
+    bool bool_scalar = 1;
+    int64 date_scalar = 2;
+    int64 datetime_scalar = 3;
+    double float_scalar = 4;
+    int32 int_scalar = 5;
+    string string_scalar = 6;
+  }
+}
+
+enum ColumnType {
+  BOOLEAN = 0;
+  DATE = 1;
+  DATETIME = 2;
+  FLOAT = 3;
+  INTEGER = 4;
+  STRING = 5;
+}
+
+enum FilterOp {
+  FILTER_UNKNOWN = 0;
+  FILTER_LT = 1;
+  FILTER_LTEQ = 2;
+  FILTER_GT = 3;
+  FILTER_GTEQ = 4;
+  FILTER_EQ = 5;
+  FILTER_NE = 6;
+  FILTER_BEGINS_WITH = 7;
+  FILTER_ENDS_WITH = 8;
+  FILTER_IN = 9;
+  FILTER_CONTAINS = 10;
+  FILTER_NOT_IN = 11;
+  FILTER_AND = 12;
+  FILTER_OR = 13;
+  FILTER_IS_NULL = 14;
+  FILTER_IS_NOT_NULL = 15;
+}
+
+enum SortOp {
+  SORT_NONE = 0;
+  SORT_ASC = 1;
+  SORT_DESC = 2;
+}
+
+message Sort {
+  string column = 1;
+  SortOp op = 2;
+}
+
+message Filter {
+  string column = 1;
+  FilterOp op = 2;
+  repeated Scalar value = 3;
+}
+
+message ViewConfig {
+  repeated string group_by = 1;
+  repeated string split_by = 2;
+  ColumnsUpdate columns = 3;
+  repeated Filter filter = 4;
+  repeated Sort sort = 5;
+  map<string, string> expressions = 6;
+  map<string, AggList> aggregates = 7;
+
+  message AggList {
+    repeated string aggregations = 1;
+  }
+}
+
+message ColumnsUpdate {
+  oneof opt_columns {
+    google.protobuf.NullValue default_columns = 1;
+    Columns columns = 2;
+  }
+}
+
+message Columns {
+  repeated string columns = 1;
+}

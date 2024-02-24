@@ -44,5 +44,3 @@ export * from "./extensions";
 export * from "./migrate";
 
 import "./bootstrap";
-
-export default {};

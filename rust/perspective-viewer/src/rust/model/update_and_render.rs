@@ -10,6 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use perspective_client::config::ViewConfigUpdate;
 use yew::prelude::*;
 
 use super::structural::*;
@@ -37,7 +38,7 @@ pub trait UpdateAndRender: HasRenderer + HasSession {
     }
 
     /// Apply a `ViewConfigUpdate` to the current `View` and render.
-    fn update_and_render(&self, update: crate::config::ViewConfigUpdate) -> ApiFuture<()> {
+    fn update_and_render(&self, update: ViewConfigUpdate) -> ApiFuture<()> {
         self.session().update_view_config(update);
         clone!(self.session(), self.renderer());
         ApiFuture::new(update_and_render(session, renderer))

@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 use itertools::Itertools;
+use perspective_client::config::Symbol;
 use yew::{function_component, html, Callback, Html, Properties};
 
 use crate::components::containers::select::{Select, SelectItem};

@@ -14,10 +14,10 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use itertools::Itertools;
+use perspective_client::clone;
 use yew::{function_component, html, Html, Properties};
 
 use super::symbol_config::SymbolKVPair;
-use crate::clone;
 use crate::components::empty_row::EmptyRow;
 use crate::custom_elements::FilterDropDownElement;
 

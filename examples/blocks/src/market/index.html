@@ -1,66 +1,23 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <meta
-            name="viewport"
-            content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no"
-        />
-        <link
-            rel="preload"
-            href="/node_modules/@finos/perspective-viewer/dist/cdn/perspective_bg.wasm"
-            as="fetch"
-            type="application/wasm"
-            crossorigin="anonymous"
-        />
-        <link
-            rel="preload"
-            href="/node_modules/@finos/perspective/dist/cdn/perspective.js"
-            as="script"
-            type="application/javascript"
-            crossorigin="anonymous"
-        />
-        <link
-            rel="preload"
-            href="/node_modules/@finos/perspective/dist/cdn/perspective.cpp.wasm"
-            as="fetch"
-            type="application/wasm"
-            crossorigin="anonymous"
-        />
-        <link
-            rel="preload"
-            href="/node_modules/@finos/perspective/dist/cdn/perspective.worker.js"
-            as="fetch"
-            type="application/javascript"
-            crossorigin="anonymous"
-        />
-        <script
-            type="module"
-            src="/node_modules/@finos/perspective-viewer/dist/cdn/perspective-viewer.js"
-        ></script>
-        <script
-            type="module"
-            src="/node_modules/@finos/perspective-viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js"
-        ></script>
-        <script
-            type="module"
-            src="/node_modules/@finos/perspective-viewer-d3fc/dist/cdn/perspective-viewer-d3fc.js"
-        ></script>
+        <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no" />
+        <link rel="preload" href="/node_modules/@finos/perspective-viewer/dist/cdn/perspective.rx.wasm" as="fetch" type="application/wasm" crossorigin="anonymous" />
+        <link rel="preload" href="/node_modules/@finos/perspective/dist/cdn/perspective.js" as="script" type="application/javascript" crossorigin="anonymous" />
+        <link rel="preload" href="/node_modules/@finos/perspective/dist/cdn/perspective.cpp.wasm" as="fetch" type="application/wasm" crossorigin="anonymous" />
+        <link rel="preload" href="/node_modules/@finos/perspective/dist/cdn/perspective.worker.js" as="fetch" type="application/javascript" crossorigin="anonymous" />
+        <script type="module" src="/node_modules/@finos/perspective-viewer/dist/cdn/perspective-viewer.js"></script>
+        <script type="module" src="/node_modules/@finos/perspective-viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js"></script>
+        <script type="module" src="/node_modules/@finos/perspective-viewer-d3fc/dist/cdn/perspective-viewer-d3fc.js"></script>
         <script type="module" src="market.js"></script>
         <link rel="stylesheet" href="index.css" />
-        <link
-            rel="stylesheet"
-            crossorigin="anonymous"
-            href="/node_modules/@finos/perspective-viewer/dist/css/themes.css"
-        />
+        <link rel="stylesheet" crossorigin="anonymous" href="/node_modules/@finos/perspective-viewer/dist/css/themes.css" />
     </head>
     <body>
         <div id="app">
             <div id="header">
                 <a href="https://perspective.finos.org">
-                    <img
-                        height="12"
-                        src="https://raw.githubusercontent.com/finos/perspective/master/docs/static/svg/perspective-logo-dark.svg"
-                    />
+                    <img height="12" src="https://raw.githubusercontent.com/finos/perspective/master/docs/static/svg/perspective-logo-dark.svg" />
                 </a>
                 <label>Market Simulation Demo</label>
                 <select></select>

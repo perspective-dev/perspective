@@ -334,6 +334,16 @@ jobs:
             - name: Install CCache
               run: sudo apt install -y ccache
 
+            - name: Install Protobuf
+              env:
+                  PB_REL: "https://github.com/protocolbuffers/protobuf/releases"
+                  PROTOBUF_VERSION: "25.1"
+              run: |
+                  curl -LO $PB_REL/download/v${PROTOBUF_VERSION}/protoc-${PROTOBUF_VERSION}-linux-x86_64.zip
+                  unzip protoc-${PROTOBUF_VERSION}-linux-x86_64.zip -d /tmp/protobuf
+                  sudo mv /tmp/protobuf/bin/* /usr/local/bin/
+                  sudo mv /tmp/protobuf/include/* /usr/local/include/
+
             #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
             #~~~~~~~~~ Build Pipelines ~~~~~~~~~#
             #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#

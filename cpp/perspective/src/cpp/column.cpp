@@ -368,9 +368,8 @@ t_column::object_copied<std::uint64_t>(t_uindex ptr) const {}
 
 void
 t_column::notify_object_copied(t_uindex idx) const {
-    if (*get_nth_status(idx) == STATUS_VALID) {
-        object_copied<PSP_OBJECT_TYPE>(*(get_nth<std::uint64_t>(idx)));
-    }
+    // if (*get_nth_status(idx) == STATUS_VALID)
+    //     object_copied<PSP_OBJECT_TYPE>(*(get_nth<std::uint64_t>(idx)));
 }
 
 template <>
@@ -379,9 +378,8 @@ t_column::object_cleared<std::uint64_t>(t_uindex ptr) const {}
 
 void
 t_column::notify_object_cleared(t_uindex idx) const {
-    if (*get_nth_status(idx) == STATUS_VALID) {
-        object_cleared<PSP_OBJECT_TYPE>(*(get_nth<std::uint64_t>(idx)));
-    }
+    // if (*get_nth_status(idx) == STATUS_VALID)
+    //     object_cleared<PSP_OBJECT_TYPE>(*(get_nth<std::uint64_t>(idx)));
 }
 
 t_lstore*
@@ -772,7 +770,7 @@ t_column::clear_objects() const {
 void
 t_column::pprint() const {
     for (t_uindex idx = 0, loop_end = size(); idx < loop_end; ++idx) {
-        std::cout << idx << ": " << get_scalar(idx) << '\n';
+        std::cout << idx << ": " << get_scalar(idx) << std::endl;
     };
 }
 

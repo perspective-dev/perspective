@@ -230,6 +230,10 @@ export const copy_files_to_python_folder = (link_files) => {
     const dlic = sh.path`${dist}/LICENSE`;
     const readme = sh.path`${__dirname}/../../README.md`;
     const dreadme = sh.path`${dist}/README.md`;
+    const clangd = sh.path`${__dirname}/../../cpp/perspective/.clangd.in`;
+    const dclangd = sh.path`${dist}/.clangd.in`;
+    const protos = sh.path`${__dirname}/../../protos`;
+    const protosd = sh.path`${dist}/protos`;
 
     fse.mkdirpSync(dist);
     const copies = [
@@ -238,6 +242,8 @@ export const copy_files_to_python_folder = (link_files) => {
         [lic, dlic],
         [readme, dreadme],
         [cmake, dcmake],
+        [clangd, dclangd],
+        [protos, protosd],
     ];
     for (let [src, dst] of copies) {
         if (link_files) {

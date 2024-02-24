@@ -63,11 +63,6 @@ if (!IS_JUPYTER) {
     await run_with_scope`test:build`;
 }
 
-// if (!PACKAGE || minimatch("perspective-viewer", PACKAGE)) {
-//     console.log("-- Running Rust tests");
-//     execute`yarn lerna --scope=@finos/perspective-viewer exec yarn test:run:rust`;
-// }
-
 if (process.env.PACKAGE) {
     if (IS_JUPYTER) {
         // Jupyterlab is guaranteed to have started at this point, so
@@ -77,7 +72,13 @@ if (process.env.PACKAGE) {
         process.exit(0);
     }
 
-    playwright(process.env.PACKAGE).runSync();
+    if (process.env.PACKAGE !== "perspective-python") {
+        playwright(process.env.PACKAGE).runSync();
+    }
+
+    if (process.env.PACKAGE.indexOf("perspective-python") >= 0) {
+        sh`yarn workspace @finos/perspective-python test`.runSync();
+    }
 } else {
     console.log("-- Running all tests");
     playwright().runSync();

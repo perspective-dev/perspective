@@ -14,6 +14,8 @@ pub mod stub;
 mod symbol;
 
 use itertools::Itertools;
+use perspective::utils::*;
+use perspective_client::ColumnType;
 use yew::{function_component, html, Html, Properties};
 
 use crate::components::column_settings_sidebar::style_tab::stub::Stub;
@@ -38,7 +40,7 @@ pub struct StyleTabProps {
     pub renderer: Renderer,
     pub presentation: Presentation,
 
-    pub ty: Option<Type>,
+    pub ty: Option<ColumnType>,
     pub column_name: String,
 }
 derive_model!(Session, Renderer, Presentation, CustomEvents for StyleTabProps);

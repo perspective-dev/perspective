@@ -18,20 +18,12 @@ mod clipboard;
 pub mod clipboard_item;
 mod intersection_observer;
 mod mimetype;
-pub mod perspective;
 pub mod plugin;
 pub mod resize_observer;
 mod testing;
 
-#[cfg(test)]
-mod tests;
-
 pub use self::clipboard::*;
 pub use self::intersection_observer::*;
 pub use self::mimetype::*;
-pub use self::perspective::*;
 pub use self::plugin::*;
 pub use self::resize_observer::*;
-// pub use self::testing::enable_weak_link_test;
-#[cfg(test)]
-pub use self::testing::*;

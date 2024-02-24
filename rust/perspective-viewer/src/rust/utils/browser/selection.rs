@@ -10,9 +10,9 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use perspective::utils::global;
 use wasm_bindgen::JsCast;
 
-use crate::utils::*;
 use crate::*;
 
 /// Utilities for caret position.  DOM elements have different APIs for this

@@ -10,6 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+#include <optional>
 #include <perspective/emscripten.h>
 #include <perspective/arrow_loader.h>
 #include <perspective/arrow_writer.h>
@@ -66,7 +67,7 @@ namespace binding {
     is_valid_datetime(t_val filter_term) {
         return t_val(
             apachearrow::parseAsArrowTimestamp(filter_term.as<std::string>())
-            != -1
+            != std::nullopt
         );
     }
 
@@ -75,7 +76,7 @@ namespace binding {
         time_t tt;
         if (item.typeOf().as<std::string>().compare("string") == 0) {
             tt = time_t(
-                apachearrow::parseAsArrowTimestamp(item.as<std::string>())
+                *apachearrow::parseAsArrowTimestamp(item.as<std::string>())
                 / 1000
             );
         } else if (item.typeOf().as<std::string>().compare("number") == 0) {
@@ -97,7 +98,8 @@ namespace binding {
     bool
     val_to_datetime(t_val& item, int64_t* out) {
         if (item.typeOf().as<std::string>().compare("string") == 0) {
-            (*out) = apachearrow::parseAsArrowTimestamp(item.as<std::string>());
+            (*out) =
+                *apachearrow::parseAsArrowTimestamp(item.as<std::string>());
         } else if (item.typeOf().as<std::string>().compare("number") == 0) {
             (*out) = static_cast<int64_t>(item.as<double>());
         } else if (item.typeOf().as<std::string>().compare("object") == 0) {
@@ -593,7 +595,7 @@ namespace binding {
                     if (max_check == 50) {
                         std::cout << "Data parse warning: Array data has "
                                      "inconsistent rows"
-                                  << "\n";
+                                  << std::endl;
                     }
 
                     for (auto s = new_names.begin(); s != new_names.end();
@@ -605,7 +607,7 @@ namespace binding {
                     }
 
                     std::cout << "Extended from " << old_size << "to "
-                              << names.size() << "\n";
+                              << names.size() << std::endl;
                     max_check *= 2;
                 }
             }
@@ -662,7 +664,8 @@ namespace binding {
                 t = t_dtype::DTYPE_TIME;
             }
         } else if (jstype == "string") {
-            if (apachearrow::parseAsArrowTimestamp(x.as<std::string>()) != -1) {
+            if (apachearrow::parseAsArrowTimestamp(x.as<std::string>())
+                != std::nullopt) {
                 t = t_dtype::DTYPE_TIME;
             } else {
                 std::string lower =
@@ -740,7 +743,7 @@ namespace binding {
                 if (name == "__INDEX__") {
                     std::cout << "Warning: __INDEX__ column should not be in "
                                  "the Table schema."
-                              << "\n";
+                              << std::endl;
                     continue;
                 }
                 std::string value = data[name].as<std::string>();
@@ -761,8 +764,7 @@ namespace binding {
                 } else {
                     std::stringstream ss;
                     ss << "Unknown type '" << value << "' for key '" << name
-                       << "'"
-                       << "\n";
+                       << "'" << std::endl;
                     PSP_COMPLAIN_AND_ABORT(ss.str());
                 }
 
@@ -962,8 +964,7 @@ namespace binding {
             if (!is_update && isnan(fval)) {
                 std::cout << "Promoting column `" << name
                           << "` from int64 to string because `" << fval
-                          << "` is nan"
-                          << "\n";
+                          << "` is nan" << std::endl;
                 tbl.promote_column(name, DTYPE_STR, i, false);
                 col = tbl.get_column(name);
                 _fill_col_string(
@@ -1020,8 +1021,7 @@ namespace binding {
                     double fval = item.as<double>();
                     if (!is_update
                         && (fval > 2147483647 || fval < -2147483648)) {
-                        std::cout << "Promoting to float"
-                                  << "\n";
+                        std::cout << "Promoting to float" << std::endl;
                         tbl.promote_column(name, DTYPE_FLOAT64, i, true);
                         col = tbl.get_column(name);
                         type = DTYPE_FLOAT64;
@@ -1029,8 +1029,7 @@ namespace binding {
                     } else if (!is_update && isnan(fval)) {
                         std::cout << "Promoting column `" << name
                                   << "` from int32 to string because `" << fval
-                                  << "` is nan"
-                                  << "\n";
+                                  << "` is nan" << std::endl;
                         tbl.promote_column(name, DTYPE_STR, i, false);
                         col = tbl.get_column(name);
                         _fill_col_string(
@@ -1351,7 +1350,7 @@ namespace binding {
                                 std::stringstream ss;
                                 ss << "Error loading arrow type "
                                    << dtype_to_str(type) << " for column "
-                                   << name << "\n";
+                                   << name << std::endl;
                                 PSP_COMPLAIN_AND_ABORT(ss.str())
                                 break;
                         }
@@ -1365,8 +1364,7 @@ namespace binding {
                 // Allocate memory
                 ptr = reinterpret_cast<std::uintptr_t>(malloc(length));
                 if (ptr == NULL) {
-                    std::cout << "Unable to load arrow of size 0"
-                              << "\n";
+                    std::cout << "Unable to load arrow of size 0" << std::endl;
                     return nullptr;
                 }
 
@@ -1411,7 +1409,7 @@ namespace binding {
                                               << column_names[idx]
                                               << "` to maintain consistency "
                                                  "with Arrow type."
-                                              << "\n";
+                                              << std::endl;
                                     gnode->promote_column(name, arrow_dtype);
                                 } break;
                                 default: {
@@ -1529,7 +1527,7 @@ namespace binding {
                     && apachearrow::parseAsArrowTimestamp(
                            filter_term.as<std::string>()
                        )
-                    != -1;
+                    != std::nullopt;
             } else {
                 return has_value(filter_term);
             }
@@ -1673,7 +1671,7 @@ namespace binding {
                 ss << "View creation failed: cannot create expression column '"
                    << expression_alias
                    << "' that overwrites a column that already exists."
-                   << "\n";
+                   << std::endl;
                 PSP_COMPLAIN_AND_ABORT(ss.str());
             }
 

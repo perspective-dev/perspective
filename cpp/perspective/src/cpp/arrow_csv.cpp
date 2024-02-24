@@ -409,7 +409,7 @@ std::vector<std::shared_ptr<arrow::TimestampParser>> DATE_READERS{
     arrow::TimestampParser::MakeStrptime("%H:%M:%S.%f")
 };
 
-int64_t
+std::optional<int64_t>
 parseAsArrowTimestamp(const std::string& input) {
     for (const auto& candidate : DATE_PARSERS) {
         int64_t datetime;
@@ -419,12 +419,13 @@ parseAsArrowTimestamp(const std::string& input) {
             return datetime;
         }
     }
-    return -1;
+
+    return std::nullopt;
 }
 
 std::shared_ptr<::arrow::Table>
 csvToTable(
-    std::string& csv,
+    const std::string_view& csv,
     bool is_update,
     std::unordered_map<std::string, std::shared_ptr<arrow::DataType>>& schema
 ) {

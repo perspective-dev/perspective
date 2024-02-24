@@ -378,7 +378,7 @@ t_lstore::reserve_impl(t_uindex capacity, bool allow_shrink) {
 
     if (t_env::log_storage_resize()) {
         std::cout << repr() << " ocap => " << ocapacity << " ncap => "
-                  << capacity << '\n';
+                  << capacity << std::endl;
     }
 
     switch (m_backing_store) {
@@ -635,13 +635,13 @@ t_lstore::fill(const t_lstore& other, const t_mask& mask, t_uindex elem_size) {
 
 void
 t_lstore::pprint() const {
-    std::cout << repr() << '\n';
+    std::cout << repr() << std::endl;
     t_uindex nelems = size() / sizeof(std::uint8_t);
     for (t_uindex idx = 0; idx < size() / nelems; ++idx) {
 
         std::cout << idx << " => "
                   << static_cast<t_uindex>(*(get_nth<std::uint8_t>(idx)))
-                  << '\n';
+                  << std::endl;
     }
 }
 
@@ -654,21 +654,5 @@ t_lstore::clone() const {
     rval->fill(*this);
     return rval;
 }
-
-#ifdef PSP_ENABLE_PYTHON
-py::array
-t_lstore::_as_numpy(t_dtype dtype) {
-    PSP_TRACE_SENTINEL();
-    PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    PSP_VERBOSE_ASSERT(
-        dtype != DTYPE_STR, "as_numpy not implemented for string columns yet"
-    );
-
-    // TODO
-    py::array result;
-    return result;
-    // PSP_VERBOSE_ASSERT(rval, "Null array found!");
-}
-#endif
 
 } // end namespace perspective

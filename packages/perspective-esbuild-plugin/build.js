@@ -15,7 +15,7 @@ const esbuild = require("esbuild");
 const CUTOFF_PERCENT = 0.02;
 
 const DEFAULT_BUILD = {
-    target: ["es2021"],
+    target: ["es2022"],
     bundle: true,
     minify: !process.env.PSP_DEBUG,
     sourcemap: true,

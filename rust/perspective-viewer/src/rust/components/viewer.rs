@@ -13,6 +13,8 @@
 use std::rc::Rc;
 
 use futures::channel::oneshot::*;
+use itertools::Itertools;
+use perspective_client::ColumnType;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
@@ -86,7 +88,7 @@ impl ColumnLocator {
         matches!(self, ColumnLocator::NewExpression)
     }
 
-    pub fn view_type(&self, session: &Session) -> Option<Type> {
+    pub fn view_type(&self, session: &Session) -> Option<ColumnType> {
         let name = self.name().cloned().unwrap_or_default();
         session.metadata().get_column_view_type(name.as_str())
     }

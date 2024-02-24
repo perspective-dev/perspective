@@ -18,7 +18,6 @@ use crate::config::{Expression, ViewConfigUpdate};
 use crate::presentation::{OpenColumnSettings, Presentation};
 use crate::renderer::Renderer;
 use crate::session::Session;
-use crate::utils::*;
 use crate::*;
 
 #[derive(PartialEq)]

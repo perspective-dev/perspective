@@ -10,8 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { Client } from "@finos/perspective/src/js/api/client.js";
-
 /**
  * `PerspectiveJupyterClient` acts as a message bus between the frontend and
  * backend, passing messages from `perspective-viewer` (method calls,
@@ -21,7 +19,7 @@ import { Client } from "@finos/perspective/src/js/api/client.js";
  * This client implements the `Client` class as defined in
  * `@finos/perspective/api`.
  */
-export class PerspectiveJupyterClient extends Client {
+export class PerspectiveJupyterClient {
     /**
      * Create a new instance of the client.
      *
@@ -30,7 +28,7 @@ export class PerspectiveJupyterClient extends Client {
      */
 
     constructor(view) {
-        super();
+        // super();
         this.view = view;
     }
 

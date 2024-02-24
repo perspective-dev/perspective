@@ -13,8 +13,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use perspective::utils::global;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::*;
 use yew::*;
@@ -55,7 +55,7 @@ impl ExportDropDownMenuElement {
 
     pub fn hide(&self) -> ApiResult<()> {
         let borrowed = self.modal.borrow();
-        borrowed.as_apierror()?.hide()
+        borrowed.as_ref().into_apierror()?.hide()
     }
 
     /// Internal Only.
@@ -72,8 +72,7 @@ impl ExportDropDownMenuElement {
 
 impl ExportDropDownMenuElement {
     pub fn new_from_model<A: GetViewerConfigModel>(model: &A) -> Self {
-        let document = window().unwrap().document().unwrap();
-        let dropdown = document
+        let dropdown = global::document()
             .create_element("perspective-export-menu")
             .unwrap()
             .unchecked_into::<HtmlElement>();

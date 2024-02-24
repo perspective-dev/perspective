@@ -12,6 +12,7 @@
 
 use std::collections::HashSet;
 
+use perspective_client::ColumnType;
 use web_sys::*;
 use yew::prelude::*;
 
@@ -29,7 +30,6 @@ use crate::model::*;
 use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::*;
-use crate::utils::ApiFuture;
 use crate::*;
 
 enum ColumnState {
@@ -73,13 +73,13 @@ impl ActiveColumnProps {
         }
     }
 
-    fn get_table_type(&self) -> Option<Type> {
+    fn get_table_type(&self) -> Option<ColumnType> {
         self.get_name()
             .as_ref()
             .and_then(|x| self.session.metadata().get_column_table_type(x))
     }
 
-    fn _get_view_type(&self) -> Option<Type> {
+    fn _get_view_type(&self) -> Option<ColumnType> {
         self.get_name()
             .as_ref()
             .and_then(|x| self.session.metadata().get_column_view_type(x))

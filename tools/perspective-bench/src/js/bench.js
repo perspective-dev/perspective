@@ -23,7 +23,7 @@ const path = require("path");
  * @param {Array} obs_records an array of records to persist
  */
 async function persist_to_arrow(obs_records) {
-    const psp = require("@finos/perspective");
+    const psp = await import("@finos/perspective");
     const table = await psp.table({
         version: "string",
         time: "float",

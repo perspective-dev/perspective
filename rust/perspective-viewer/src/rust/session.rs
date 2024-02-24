@@ -23,21 +23,22 @@ use std::iter::IntoIterator;
 use std::ops::Deref;
 use std::rc::Rc;
 
+use perspective::utils::*;
+use perspective_client::config::*;
+use perspective_client::ViewWindow;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use yew::html::ImplicitClone;
 use yew::prelude::*;
 
 use self::metadata::*;
-use self::view::{PerspectiveOwned, View};
+use self::replace_expression_update::*;
+use self::view::{OwnedView, PerspectiveOwned};
 pub use self::view_subscription::ViewStats;
 use self::view_subscription::*;
-use crate::config::*;
 use crate::dragdrop::*;
-use crate::js::perspective::*;
 use crate::js::plugin::*;
 use crate::utils::*;
-use crate::{JsValueSerdeExt, *};
 
 /// The `Session` struct is the principal interface to the Perspective engine,
 /// the `Table` and `View` objects for this viewer, and all associated state
@@ -61,7 +62,7 @@ pub struct SessionHandle {
 /// Mutable state for `Session`.
 #[derive(Default)]
 pub struct SessionData {
-    table: Option<JsPerspectiveTable>,
+    table: Option<perspective_client::Table>,
     metadata: SessionMetadata,
     config: ViewConfig,
     view_sub: Option<ViewSubscription>,
@@ -129,14 +130,14 @@ impl Session {
         self.borrow().table.is_some()
     }
 
-    pub fn get_table(&self) -> Option<JsPerspectiveTable> {
+    pub fn get_table(&self) -> Option<perspective_client::Table> {
         self.borrow().table.clone()
     }
 
     /// Reset this `Session`'s state with a new `Table`.  Implicitly clears the
     /// `ViewSubscription`, which will need to be re-initialized later via
     /// `create_view()`.
-    pub async fn set_table(&self, table: JsPerspectiveTable) -> ApiResult<JsValue> {
+    pub async fn set_table(&self, table: perspective_client::Table) -> ApiResult<JsValue> {
         let metadata = SessionMetadata::from_table(&table).await?;
         self.borrow_mut().view_sub = None;
         self.borrow_mut().metadata = metadata;
@@ -169,7 +170,7 @@ impl Session {
     }
 
     pub fn js_get_table(&self) -> Option<JsValue> {
-        self.borrow().table.clone()?.dyn_into().ok()
+        Some(perspective::JsTable::from(self.borrow().table.clone()?).into())
     }
 
     pub fn js_get_view(&self) -> Option<JsValue> {
@@ -197,6 +198,7 @@ impl Session {
         drag: DragEffect,
         requirements: &ViewConfigRequirements,
     ) -> ViewConfigUpdate {
+        use self::drag_drop_update::*;
         self.get_view_config()
             .create_drag_drop_update(column, index, drop, drag, requirements)
     }
@@ -214,6 +216,7 @@ impl Session {
 
         let old_expr = Expression::new(Some(old_expr_name.into()), old_expr_val.into());
 
+        use self::replace_expression_update::*;
         self.get_view_config()
             .create_replace_expression_update(&old_expr, new_expr)
     }
@@ -237,41 +240,58 @@ impl Session {
     pub async fn validate_expr(
         &self,
         expr: &str,
-    ) -> Result<Option<PerspectiveValidationError>, JsValue> {
-        let arr = json!({"_": expr});
+    ) -> Result<Option<perspective_client::ExprValidationError>, ApiError> {
+        // let arr = HashMap::from_iter([("_".to_string(), expr.to_string())]);
         let table = self.borrow().table.as_ref().unwrap().clone();
-        let errors = table.validate_expressions(arr).await?.errors();
-        let error_keys = js_sys::Object::keys(&errors);
-        if error_keys.length() > 0 {
-            let js_err = js_sys::Reflect::get(&errors, &error_keys.get(0))?;
-            Ok(Some(js_err.into_serde_ext().unwrap()))
-        } else {
-            Ok(None)
-        }
+        let errors = table
+            .validate_expressions(ExpressionsDeserde::Array(vec![expr.to_string()]).into())
+            .await?
+            .errors;
+
+        Ok(errors.get("_").cloned())
     }
 
-    pub async fn arrow_as_vec(&self, flat: bool) -> Result<Vec<u8>, JsValue> {
-        let arrow = self.flat_as_jsvalue(flat).await?.to_arrow().await?;
-        Ok(js_sys::Uint8Array::new(&arrow).to_vec())
+    pub async fn arrow_as_vec(&self, flat: bool) -> Result<Vec<u8>, ApiError> {
+        Ok(self
+            .flat_view(flat)
+            .await?
+            .to_arrow(ViewWindow::default())
+            .await?)
     }
 
     pub async fn arrow_as_jsvalue(self, flat: bool) -> Result<js_sys::ArrayBuffer, ApiError> {
-        self.flat_as_jsvalue(flat).await?.to_arrow().await
+        let arrow = self
+            .flat_view(flat)
+            .await?
+            .to_arrow(ViewWindow::default())
+            .await?;
+
+        Ok(js_sys::Uint8Array::from(&arrow[..])
+            .buffer()
+            .unchecked_into())
     }
 
     pub async fn json_as_jsvalue(self, flat: bool) -> Result<js_sys::Object, ApiError> {
-        self.flat_as_jsvalue(flat).await?.to_columns().await
+        let json = self
+            .flat_view(flat)
+            .await?
+            .to_columns_string(ViewWindow::default())
+            .await?;
+
+        Ok(js_sys::JSON::parse(&json)?.unchecked_into())
     }
 
     pub async fn csv_as_jsvalue(&self, flat: bool) -> Result<js_sys::JsString, ApiError> {
-        let opts = json!({"formatted": true});
-        self.flat_as_jsvalue(flat)
-            .await?
-            .to_csv(opts.unchecked_into())
-            .await
+        let opts = ViewWindow {
+            formatted: Some(true),
+            ..ViewWindow::default()
+        };
+
+        let csv = self.flat_view(flat).await?.to_csv(opts).await;
+        Ok(csv.map(js_sys::JsString::from)?)
     }
 
-    pub fn get_view(&self) -> Option<View> {
+    pub fn get_view(&self) -> Option<OwnedView> {
         self.borrow()
             .view_sub
             .as_ref()
@@ -296,23 +316,18 @@ impl Session {
     ///
     /// # Arguments
     /// - `column` The name of the column (or expression).
-    pub async fn get_column_values(&self, column: String) -> Result<Vec<String>, JsValue> {
-        let expressions = self.borrow().config.expressions.clone();
-        let config = ViewConfig {
-            group_by: vec![column],
-            columns: vec![],
+    pub async fn get_column_values(&self, column: String) -> Result<Vec<String>, ApiError> {
+        let expressions = Some(self.borrow().config.expressions.clone());
+        let config = ViewConfigUpdate {
+            group_by: Some(vec![column]),
+            columns: Some(vec![]),
             expressions,
-            ..ViewConfig::default()
+            ..ViewConfigUpdate::default()
         };
 
-        let js_config = config.as_jsvalue()?;
         let table = self.borrow().table.clone().unwrap();
-        let view = table.view(&js_config).await?;
-        let csv = view
-            .to_csv(json!({}))
-            .await?
-            .as_string()
-            .ok_or_else(|| JsValue::from("Bad CSV"))?;
+        let view = table.view(Some(config.clone())).await?;
+        let csv = view.to_csv(ViewWindow::default()).await?;
 
         ApiFuture::spawn(async move {
             view.delete().await?;
@@ -338,6 +353,7 @@ impl Session {
         config_update: &mut ViewConfigUpdate,
         requirements: &ViewConfigRequirements,
     ) {
+        use self::column_defaults_update::*;
         config_update.set_update_column_defaults(
             &self.metadata(),
             &self.borrow().config.columns,
@@ -381,22 +397,10 @@ impl Session {
         Ok(ValidSession(self))
     }
 
-    // async fn get_validated_expression_name(&self, expr: &JsValue) ->
-    // ApiResult<String> {     let arr =
-    // std::iter::once(expr).collect::<js_sys::Array>();     let table =
-    // self.borrow().table.as_ref().unwrap().clone();     let schema =
-    // table.validate_expressions(arr).await?.expression_schema();
-    //     let schema_keys = js_sys::Object::keys(&schema);
-    //     schema_keys.get(0).as_string().into_apierror()
-    // }
-
-    async fn flat_as_jsvalue(&self, flat: bool) -> ApiResult<View> {
+    async fn flat_view(&self, flat: bool) -> ApiResult<OwnedView> {
         if flat {
             let table = self.borrow().table.clone().into_apierror()?;
-            table
-                .view(&json!({}).unchecked_into())
-                .await
-                .map(PerspectiveOwned::new)
+            Ok(table.view(None).await.map(PerspectiveOwned::new)?)
         } else {
             self.borrow()
                 .view_sub
@@ -432,9 +436,7 @@ impl Session {
             .ok_or("`restore()` called before `load()`")?
             .clone();
 
-        let arr = JsValue::from_serde_ext(&config.expressions)?.unchecked_into::<js_sys::Object>();
-
-        let valid_recs = table.validate_expressions(arr).await?;
+        let valid_recs = table.validate_expressions(config.expressions).await?;
         let expression_names = self.metadata_mut().update_expressions(&valid_recs)?;
 
         // re-fetch config after `await`; `expressions` and `all_columns` are ok,
@@ -508,7 +510,6 @@ impl<'a> ValidSession<'a> {
     /// `update()` subscription, consuming this `ValidSession<'_>` and returning
     /// the original `&Session`.
     pub async fn create_view(&self) -> Result<&'a Session, ApiError> {
-        let js_config = self.0.borrow().config.as_jsvalue()?;
         if !self.0.reset_clean() && !self.0.borrow().is_paused {
             let table = self
                 .0
@@ -517,7 +518,8 @@ impl<'a> ValidSession<'a> {
                 .clone()
                 .ok_or("`restore()` called before `load()`")?;
 
-            let view = table.view(&js_config).await?;
+            let view_config = self.0.borrow().config.clone();
+            let view = table.view(Some(view_config.into())).await?;
             let view_schema = view.schema().await?;
             self.0.metadata_mut().update_view_schema(&view_schema)?;
 
@@ -532,8 +534,6 @@ impl<'a> ValidSession<'a> {
                 ViewSubscription::new(view, config, on_stats, on_update)
             };
 
-            // self.0.borrow_mut().metadata.as_mut().unwrap().view_schema =
-            // Some(view_schema);
             self.0.borrow_mut().view_sub = Some(sub);
         }
 

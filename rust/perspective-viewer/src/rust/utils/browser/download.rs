@@ -10,9 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use perspective::utils::{global, *};
 use wasm_bindgen::JsCast;
-
-use crate::utils::*;
 
 pub fn download(name: &str, value: &web_sys::Blob) -> ApiResult<()> {
     let element: web_sys::HtmlElement = global::document().create_element("a")?.unchecked_into();

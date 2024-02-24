@@ -22,17 +22,17 @@ const __dirname = url.fileURLToPath(new URL(".", import.meta.url)).slice(0, -1);
 
 export function tidyLint(flags) {
     dotenv.config({ path: "./.perspectiverc" });
-    if (process.env.PSP_PROJECT === "js") {
-        const cppPath = sh.path`${__dirname}/../../cpp/perspective`;
-        const cppDistPath = sh.path`${cppPath}/dist/release`;
-        tidy(cppDistPath, sh.path`${cppPath}/src`, flags);
-    } else if (process.env.PSP_PROJECT === "python") {
-        const cppPath = sh.path`${__dirname}/../../python/perspective`;
-        const cppDistPath = sh.path`${cppPath}/build/last_build`;
-        tidy(cppDistPath, sh.path`${cppPath}/perspective`, flags);
-    } else {
-        console.error("Unknown project type, skipping lint");
-    }
+    // if (process.env.PSP_PROJECT === "js") {
+    const cppPath = sh.path`${__dirname}/../../cpp/perspective`;
+    const cppDistPath = sh.path`${cppPath}/dist/release`;
+    tidy(cppDistPath, sh.path`${cppPath}/src`, flags);
+    // } else if (process.env.PSP_PROJECT === "python") {
+    //     const cppPath = sh.path`${__dirname}/../../python/perspective`;
+    //     const cppDistPath = sh.path`${cppPath}/build/last_build`;
+    //     tidy(cppDistPath, sh.path`${cppPath}/perspective`, flags);
+    // } else {
+    //     console.error("Unknown project type, skipping lint");
+    // }
 }
 
 /** @typedef {import('./sh.mjs').Command} Command */
@@ -89,13 +89,13 @@ export function checkFormatting() {
     formatLint(sh.path`./cpp/perspective/src/cpp/vendor/*.cpp`);
     formatLint(sh.path`./cpp/perspective/src/include/perspective/*.h`);
     formatLint(sh.path`./cpp/perspective/src/include/perspective/vendor/*.h`);
-    formatLint(sh.path`./python/perspective/perspective/src/*.cpp`);
-    formatLint(
-        sh.path`./python/perspective/perspective/include/perspective/*.h`
-    );
-    formatLint(
-        sh.path`./python/perspective/perspective/include/perspective/python/*.h`
-    );
+    // formatLint(sh.path`./python/perspective/perspective/src/*.cpp`);
+    // formatLint(
+    //     sh.path`./python/perspective/perspective/include/perspective/*.h`
+    // );
+    // formatLint(
+    //     sh.path`./python/perspective/perspective/include/perspective/python/*.h`
+    // );
 
     tidyLint();
 }
@@ -108,11 +108,11 @@ export function fixFormatting() {
     clangFormatFix(
         sh.path`./cpp/perspective/src/include/perspective/vendor/*.h`
     );
-    clangFormatFix(sh.path`./python/perspective/perspective/src/*.cpp`);
-    clangFormatFix(
-        sh.path`./python/perspective/perspective/include/perspective/*.h`
-    );
-    clangFormatFix(
-        sh.path`./python/perspective/perspective/include/perspective/python/*.h`
-    );
+    // clangFormatFix(sh.path`./python/perspective/perspective/src/*.cpp`);
+    // clangFormatFix(
+    //     sh.path`./python/perspective/perspective/include/perspective/*.h`
+    // );
+    // clangFormatFix(
+    //     sh.path`./python/perspective/perspective/include/perspective/python/*.h`
+    // );
 }

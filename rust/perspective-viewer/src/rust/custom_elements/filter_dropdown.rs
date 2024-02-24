@@ -14,6 +14,8 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
+use perspective::utils::global;
+use perspective_client::clone;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::*;
@@ -23,7 +25,6 @@ use yew::*;
 use crate::components::filter_dropdown::*;
 use crate::custom_elements::modal::*;
 use crate::session::Session;
-use crate::utils::ApiFuture;
 use crate::*;
 
 #[wasm_bindgen]
@@ -46,8 +47,7 @@ impl ImplicitClone for FilterDropDownElement {}
 
 impl FilterDropDownElement {
     pub fn new(session: Session) -> Self {
-        let document = window().unwrap().document().unwrap();
-        let dropdown = document
+        let dropdown = global::document()
             .create_element("perspective-dropdown")
             .unwrap()
             .unchecked_into::<HtmlElement>();

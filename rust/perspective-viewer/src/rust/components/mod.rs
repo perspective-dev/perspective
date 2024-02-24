@@ -41,12 +41,3 @@ pub mod style_controls;
 // pub mod empty_row;
 pub mod editable_header;
 pub mod empty_row;
-#[cfg(test)]
-mod tests;
-
-// pub use self::column_selector::InPlaceColumn;
-// pub use self::containers::*;
-// pub use self::copy_dropdown::*;
-// pub use self::modal::*;
-// pub use self::style::*;
-// pub use self::viewer::*;

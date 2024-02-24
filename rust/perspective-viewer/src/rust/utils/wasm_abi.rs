@@ -38,7 +38,7 @@ macro_rules! derive_wasm_abi {
             #[inline]
             unsafe fn from_abi(js: Self::Abi) -> Self {
                 let obj = js_sys::Object::from_abi(js);
-                use $crate::utils::JsValueSerdeExt;
+                use ::perspective::utils::JsValueSerdeExt;
                 JsValue::from(obj).into_serde_ext().unwrap()
             }
         }
@@ -52,7 +52,7 @@ macro_rules! derive_wasm_abi {
             #[inline]
             fn into_abi(self) -> Self::Abi {
                 use wasm_bindgen::JsCast;
-                <wasm_bindgen::JsValue as $crate::utils::JsValueSerdeExt>::from_serde_ext(&self).unwrap().unchecked_into::<js_sys::Object>().into_abi()
+                <wasm_bindgen::JsValue as ::perspective::utils::JsValueSerdeExt>::from_serde_ext(&self).unwrap().unchecked_into::<js_sys::Object>().into_abi()
             }
         }
 

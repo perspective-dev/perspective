@@ -11,7 +11,7 @@
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 [package]
-name = "perspective"
+name = "perspective-viewer"
 version = "2.9.0"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2021"
@@ -21,21 +21,7 @@ license = "Apache-2.0"
 homepage = "https://perspective.finos.org"
 keywords = ["experimental"]
 build = "build.rs"
-include = [
-    "build.rs",
-    "src/**/*",
-    "Cargo.toml",
-    "package.json",
-    "tasks/bundle/*",
-]
-
-[workspace]
-members = [
-    "tasks/bundle",
-    "tasks/bootstrap-runtime",
-    "tasks/bootstrap",
-    "tasks/lint",
-]
+include = ["build.rs", "src/**/*", "Cargo.toml", "package.json"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -44,17 +30,6 @@ path = "src/rust/lib.rs"
 [features]
 define_custom_elements_async = []
 default = []
-
-[profile.dev]
-panic = "abort"
-opt-level = "s"
-
-[profile.release]
-panic = "abort"
-opt-level = "z"
-codegen-units = 1
-lto = true
-strip = true
 
 [build-dependencies]
 serde_json = { version = "1.0.59", features = ["raw_value"] }
@@ -66,6 +41,9 @@ anyhow = "1.0.66"
 wasm-bindgen-test = "0.3.13"
 
 [dependencies]
+perspective-client = { path = "../perspective-client", version = "2.8.0" }
+perspective = { path = "../perspective", version = "2.8.0" }
+
 # Provides async `Mutex` for locked sections such as `render`
 async-lock = "2.5.0"
 
@@ -105,6 +83,8 @@ rmp-serde = "1.1.1"
 # Serialization for tokens and JS APIs
 serde = { version = "1.0", features = ["derive"] }
 
+serde_bytes = "0.11"
+
 # Support for "unknown"/dictionary types such as `plugin_config`
 serde_json = { version = "1.0.107", features = ["raw_value"] }
 
@@ -116,10 +96,10 @@ tracing = { version = ">=0.1.36" }
 tracing-subscriber = "0.3.15"
 
 # Browser API bindings
-wasm-bindgen = { version = "=0.2.87", features = ["serde-serialize"] }
+wasm-bindgen = { version = "=0.2.90", features = ["serde-serialize"] }
 
 # Browser `Promise` bindings
-wasm-bindgen-futures = "0.4.37"
+wasm-bindgen-futures = "0.4.40"
 
 # Web framework
 yew = { version = "0.21.0", features = ["csr"] }

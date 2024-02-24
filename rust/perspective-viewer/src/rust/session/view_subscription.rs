@@ -10,13 +10,15 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 
 use super::view::*;
 use crate::config::*;
-use crate::js::perspective::*;
 use crate::utils::*;
 use crate::*;
 
@@ -33,8 +35,9 @@ pub struct ViewStats {
 
 #[derive(Clone)]
 struct ViewSubscriptionData {
-    view: View,
-    config: ViewConfig,
+    view: OwnedView,
+    config: Rc<ViewConfig>,
+    callback_id: Rc<Cell<u32>>,
     on_stats: Callback<ViewStats>,
     on_update: Callback<()>,
 }
@@ -43,7 +46,7 @@ struct ViewSubscriptionData {
 /// the `Closure` state as well as cleanup via `on_delete()`.
 pub struct ViewSubscription {
     data: ViewSubscriptionData,
-    closure: Closure<dyn Fn(JsValue) -> js_sys::Promise>,
+    // closure: Closure<dyn Fn(JsValue) -> js_sys::Promise>,
 }
 
 impl ViewSubscriptionData {
@@ -58,10 +61,10 @@ impl ViewSubscriptionData {
     /// `is_aggregated` here.
     async fn update_view_stats(self) -> ApiResult<JsValue> {
         let dimensions = self.view.dimensions().await?;
-        let num_rows = dimensions.num_table_rows() as u32;
-        let num_cols = dimensions.num_table_columns() as u32;
-        let virtual_rows = dimensions.num_view_rows() as u32;
-        let virtual_cols = dimensions.num_view_columns() as u32;
+        let num_rows = dimensions.num_table_rows as u32;
+        let num_cols = dimensions.num_table_columns as u32;
+        let virtual_rows = dimensions.num_view_rows as u32;
+        let virtual_cols = dimensions.num_view_columns as u32;
         let stats = ViewStats {
             num_table_cells: Some((num_rows, num_cols)),
             num_view_cells: Some((virtual_rows, virtual_cols)),
@@ -87,38 +90,53 @@ impl ViewSubscription {
     /// * `on_stats` - a callback for metadata notifications, from Perspective's
     ///   `View.on_update()`.
     pub fn new(
-        view: JsPerspectiveView,
+        view: perspective_client::View,
         config: ViewConfig,
         on_stats: Callback<ViewStats>,
         on_update: Callback<()>,
     ) -> Self {
         let data = ViewSubscriptionData {
-            view: View::new(view),
-            config,
+            view: OwnedView::new(view),
+            config: config.into(),
             on_stats,
+            callback_id: Rc::default(),
             on_update,
         };
 
-        let fun = {
+        let emit = perspective::utils::LocalPollLoop::new({
             clone!(data);
-            move |_| js_sys::Promise::from(ApiFuture::new(data.clone().on_view_update()))
-        };
+            move |_| {
+                ApiFuture::spawn(data.clone().on_view_update());
+                Ok(JsValue::UNDEFINED)
+            }
+        });
 
-        let closure = fun.into_closure();
-        data.view.on_update(closure.as_ref().unchecked_ref());
+        ApiFuture::spawn({
+            clone!(data.view, data.callback_id);
+            async move {
+                let result = view
+                    .on_update(Box::new(move |msg| spawn_local(emit.poll(msg))), None)
+                    .await?;
+                callback_id.set(result);
+                Ok(())
+            }
+        });
+
         ApiFuture::spawn(data.clone().update_view_stats());
-        Self { data, closure }
+        Self { data }
     }
 
     /// Getter for the underlying `View()`.
-    pub const fn get_view(&self) -> &View {
+    pub const fn get_view(&self) -> &OwnedView {
         &self.data.view
     }
 }
 
 impl Drop for ViewSubscription {
     fn drop(&mut self) {
-        let update = self.closure.as_ref().unchecked_ref();
-        self.data.view.remove_update(update);
+        ApiFuture::spawn({
+            clone!(self.data.view, self.data.callback_id);
+            async move { Ok(view.remove_update(callback_id.get()).await?) }
+        });
     }
 }

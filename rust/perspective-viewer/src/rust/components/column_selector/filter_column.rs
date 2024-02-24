@@ -13,6 +13,7 @@
 use std::collections::HashSet;
 
 use chrono::{NaiveDate, TimeZone, Utc};
+use perspective_client::ColumnType;
 use wasm_bindgen::JsCast;
 use web_sys::*;
 use yew::prelude::*;
@@ -27,7 +28,7 @@ use crate::dragdrop::*;
 use crate::model::*;
 use crate::renderer::*;
 use crate::session::*;
-use crate::utils::{posix_to_utc_str, str_to_utc_posix, ApiFuture};
+use crate::utils::{posix_to_utc_str, str_to_utc_posix};
 use crate::*;
 
 /// A control for a single filter condition.
@@ -77,11 +78,11 @@ impl FilterColumnProps {
         (self.filter.1 == FilterOp::EQ
             || self.filter.1 == FilterOp::NE
             || self.filter.1 == FilterOp::In)
-            && self.get_filter_type() == Some(Type::String)
+            && self.get_filter_type() == Some(ColumnType::String)
     }
 
     /// Get this filter's type, e.g. the type of the column.
-    fn get_filter_type(&self) -> Option<Type> {
+    fn get_filter_type(&self) -> Option<ColumnType> {
         self.session
             .metadata()
             .get_column_table_type(&self.filter.0)
@@ -92,8 +93,8 @@ impl FilterColumnProps {
     fn get_filter_input(&self) -> Option<String> {
         let filter_type = self.get_filter_type()?;
         match (&filter_type, &self.filter.2) {
-            (Type::Date, FilterTerm::Scalar(Scalar::Float(x)))
-            | (Type::Date, FilterTerm::Scalar(Scalar::DateTime(x))) => {
+            (ColumnType::Date, FilterTerm::Scalar(Scalar::Float(x)))
+            | (ColumnType::Date, FilterTerm::Scalar(Scalar::DateTime(x))) => {
                 if *x > 0_f64 {
                     Some(
                         Utc.timestamp_opt(*x as i64 / 1000, (*x as u32 % 1000) * 1000)
@@ -105,13 +106,13 @@ impl FilterColumnProps {
                     None
                 }
             },
-            (Type::Datetime, FilterTerm::Scalar(Scalar::Float(x) | Scalar::DateTime(x))) => {
+            (ColumnType::Datetime, FilterTerm::Scalar(Scalar::Float(x) | Scalar::DateTime(x))) => {
                 posix_to_utc_str(*x).ok()
             },
-            (Type::Bool, FilterTerm::Scalar(Scalar::Bool(x))) => {
+            (ColumnType::Boolean, FilterTerm::Scalar(Scalar::Bool(x))) => {
                 Some((if *x { "true" } else { "false" }).to_owned())
             },
-            (Type::Bool, _) => Some("true".to_owned()),
+            (ColumnType::Boolean, _) => Some("true".to_owned()),
             (_, x) => Some(format!("{}", x)),
         }
     }
@@ -119,7 +120,7 @@ impl FilterColumnProps {
     /// Get the allowed `FilterOp`s for this filter.
     fn get_filter_ops(&self) -> Vec<FilterOp> {
         match self.get_filter_type() {
-            Some(Type::String) => vec![
+            Some(ColumnType::String) => vec![
                 FilterOp::EQ,
                 FilterOp::NE,
                 FilterOp::GT,
@@ -134,7 +135,7 @@ impl FilterColumnProps {
                 FilterOp::IsNotNull,
                 FilterOp::IsNull,
             ],
-            Some(Type::Bool) => {
+            Some(ColumnType::Boolean) => {
                 vec![FilterOp::EQ, FilterOp::IsNull, FilterOp::IsNotNull]
             },
             Some(_) => vec![
@@ -181,8 +182,8 @@ impl FilterColumnProps {
                     .collect(),
             )),
             _ => match self.get_filter_type() {
-                Some(Type::String) => Some(FilterTerm::Scalar(Scalar::String(val))),
-                Some(Type::Integer) => {
+                Some(ColumnType::String) => Some(FilterTerm::Scalar(Scalar::String(val))),
+                Some(ColumnType::Integer) => {
                     if val.is_empty() {
                         None
                     } else if let Ok(num) = val.parse::<f64>() {
@@ -191,7 +192,7 @@ impl FilterColumnProps {
                         None
                     }
                 },
-                Some(Type::Float) => {
+                Some(ColumnType::Float) => {
                     if val.is_empty() {
                         None
                     } else if let Ok(num) = val.parse::<f64>() {
@@ -200,17 +201,17 @@ impl FilterColumnProps {
                         None
                     }
                 },
-                Some(Type::Date) => match NaiveDate::parse_from_str(&val, "%Y-%m-%d") {
+                Some(ColumnType::Date) => match NaiveDate::parse_from_str(&val, "%Y-%m-%d") {
                     Ok(ref posix) => posix
                         .and_hms_opt(0, 0, 0)
                         .map(|x| FilterTerm::Scalar(Scalar::DateTime(x.timestamp_millis() as f64))),
                     _ => None,
                 },
-                Some(Type::Datetime) => match str_to_utc_posix(&val) {
+                Some(ColumnType::Datetime) => match str_to_utc_posix(&val) {
                     Ok(x) => Some(FilterTerm::Scalar(Scalar::DateTime(x))),
                     _ => None,
                 },
-                Some(Type::Bool) => Some(FilterTerm::Scalar(match val.as_str() {
+                Some(ColumnType::Boolean) => Some(FilterTerm::Scalar(match val.as_str() {
                     "true" => Scalar::Bool(true),
                     _ => Scalar::Bool(false),
                 })),
@@ -247,7 +248,7 @@ impl Component for FilterColumn {
             .get_filter_input()
             .unwrap_or_else(|| "".to_owned());
         let input_ref = NodeRef::default();
-        if ctx.props().get_filter_type() == Some(Type::Bool) {
+        if ctx.props().get_filter_type() == Some(ColumnType::Boolean) {
             ctx.props().update_filter_input(input.clone());
         }
 
@@ -258,7 +259,7 @@ impl Component for FilterColumn {
         match msg {
             FilterColumnMsg::FilterInput(column, input) => {
                 let target = self.input_ref.cast::<HtmlInputElement>().unwrap();
-                let input = if ctx.props().get_filter_type() == Some(Type::Bool) {
+                let input = if ctx.props().get_filter_type() == Some(ColumnType::Boolean) {
                     if target.checked() {
                         "true".to_owned()
                     } else {
@@ -385,13 +386,13 @@ impl Component for FilterColumn {
         });
 
         let type_class = match col_type {
-            Some(Type::Float) | Some(Type::Integer) => "num-filter",
-            Some(Type::String) => "string-filter",
+            Some(ColumnType::Float) | Some(ColumnType::Integer) => "num-filter",
+            Some(ColumnType::String) => "string-filter",
             _ => "",
         };
 
         let input_elem = match col_type {
-            Some(Type::Integer) => html! {
+            Some(ColumnType::Integer) => html! {
                 <input
                     type="number"
                     placeholder="Value"
@@ -403,7 +404,7 @@ impl Component for FilterColumn {
                     oninput={input}
                 />
             },
-            Some(Type::Float) => html! {
+            Some(ColumnType::Float) => html! {
                 <input
                     type="number"
                     placeholder="Value"
@@ -414,7 +415,7 @@ impl Component for FilterColumn {
                     oninput={input}
                 />
             },
-            Some(Type::String) => html! {
+            Some(ColumnType::String) => html! {
                 <input
                     type="text"
                     size="4"
@@ -431,7 +432,7 @@ impl Component for FilterColumn {
                     oninput={input}
                 />
             },
-            Some(Type::Date) => html! {
+            Some(ColumnType::Date) => html! {
                 <input
                     type="date"
                     placeholder="Value"
@@ -442,7 +443,7 @@ impl Component for FilterColumn {
                     oninput={input}
                 />
             },
-            Some(Type::Datetime) => html! {
+            Some(ColumnType::Datetime) => html! {
                 <input
                     type="datetime-local"
                     placeholder="Value"
@@ -454,7 +455,7 @@ impl Component for FilterColumn {
                     oninput={input}
                 />
             },
-            Some(Type::Bool) => {
+            Some(ColumnType::Boolean) => {
                 html! {
                     <input
                         type="checkbox"
@@ -484,9 +485,13 @@ impl Component for FilterColumn {
                 ondragstart={dragstart}
                 ondragend={dragend}
             >
-                <LocalStyle href={css!("filter-item")} />
-                <div class="pivot-column-border">
-                    <TypeIcon ty={Type::String} />
+                <LocalStyle
+                    href={css!("filter-item")}
+                />
+                <div
+                    class="pivot-column-border"
+                >
+                    <TypeIcon ty={ColumnType::String} />
                     <span class="column_name">{ filter.0.to_owned() }</span>
                     <FilterOpSelector
                         class="filterop-selector"
@@ -496,7 +501,9 @@ impl Component for FilterColumn {
                         on_select={select}
                     />
                     if !matches!(&filter.1, FilterOp::IsNotNull | FilterOp::IsNull) {
-                        if col_type == Some(Type::Bool) { { input_elem } } else {
+                        if col_type == Some(ColumnType::Boolean) {
+                            { input_elem }
+                        } else {
                             <label
                                 class={format!("input-sizer {}", type_class)}
                                 data-value={format!("{}", filter.2)}

@@ -14,6 +14,11 @@ import { Project, defineConfig, devices } from "@playwright/test";
 import path from "path";
 import * as dotenv from "dotenv";
 
+import url from "node:url";
+
+globalThis.__filename = url.fileURLToPath(import.meta.url);
+globalThis.__dirname = path.dirname(__filename);
+
 dotenv.config({ path: "./.perspectiverc" });
 
 // TODO Don't hardcode this. AFAICT this can only be accomplished by choosing
@@ -81,11 +86,11 @@ const BROWSER_PACKAGES = [
 const NODE_PACKAGES = [
     {
         packageName: "perspective",
-        testDir: "packages/perspective/test/js",
+        testDir: "rust/perspective/test/js",
     },
     {
         packageName: "perspective-tz",
-        testDir: "packages/perspective/test/tz",
+        testDir: "rust/perspective/test/tz",
     },
 ];
 
@@ -160,16 +165,16 @@ export default defineConfig({
     },
     forbidOnly: !!process.env.CI,
     retries: process.env.CI ? 2 : 0,
-    quiet: true,
+    quiet: !process.env.PSP_DEBUG,
     reporter: process.env.CI ? [["github"], ["html"]] : [["dot"]],
     projects: PROJECTS,
     outputDir: "dist/results",
     use: {
         viewport: { width: 1280, height: 720 },
         actionTimeout: 0,
-        trace: "retain-on-failure",
-        screenshot: "only-on-failure",
-        video: "retain-on-failure",
+        // trace: "retain-on-failure",
+        // screenshot: "only-on-failure",
+        // video: "retain-on-failure",
     },
     globalSetup: RUN_JUPYTERLAB
         ? require.resolve(
@@ -184,7 +189,7 @@ export default defineConfig({
     snapshotPathTemplate:
         "dist/snapshots/{projectName}/{testFilePath}/{arg}{ext}",
     webServer: {
-        command: "yarn ts-node src/js/start_test_server.ts",
+        command: "node --loader ts-node/esm src/js/start_test_server.ts",
         port: TEST_SERVER_PORT,
         reuseExistingServer: true,
     },

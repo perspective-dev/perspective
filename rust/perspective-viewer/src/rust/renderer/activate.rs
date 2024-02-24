@@ -12,11 +12,11 @@
 
 use std::future::Future;
 
+use perspective::utils::ApiResult;
 use wasm_bindgen::JsCast;
 use web_sys::*;
 
 use crate::js::plugin::JsPerspectiveViewerPlugin;
-use crate::utils::ApiResult;
 
 /// Given an async `task` which draws `plugin`, activates the plugin in stages
 /// to prevent screen shearing.  First, and plugin is appended ot the DOM with

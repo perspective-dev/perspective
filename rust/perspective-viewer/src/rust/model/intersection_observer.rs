@@ -10,11 +10,11 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use perspective_client::config::ViewConfigUpdate;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::*;
 
-use crate::config::*;
 use crate::js::*;
 use crate::model::*;
 use crate::renderer::*;
@@ -31,7 +31,7 @@ pub struct IntersectionObserverHandle {
 impl IntersectionObserverHandle {
     pub fn new(elem: &HtmlElement, session: &Session, renderer: &Renderer) -> Self {
         clone!(session, renderer);
-        let _callback = (move |xs: js_sys::Array| {
+        let _callback = Closure::new(move |xs: js_sys::Array| {
             let intersect = xs
                 .get(0)
                 .unchecked_into::<IntersectionObserverEntry>()
@@ -40,8 +40,7 @@ impl IntersectionObserverHandle {
             clone!(session, renderer);
             let state = IntersectionObserverState { session, renderer };
             ApiFuture::spawn(state.set_pause(intersect));
-        })
-        .into_closure_mut();
+        });
 
         let func = _callback.as_ref().unchecked_ref::<js_sys::Function>();
         let observer = IntersectionObserver::new(func);

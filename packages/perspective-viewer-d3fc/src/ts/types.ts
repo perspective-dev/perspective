@@ -14,7 +14,6 @@ import {
     IPerspectiveViewerPlugin,
     PerspectiveColumnConfig,
 } from "@finos/perspective-viewer";
-import { DataRow, Type } from "@finos/perspective";
 
 export interface Element {
     msMatchesSelector(selectors: string): boolean;
@@ -71,13 +70,13 @@ export type ColorStyles = {
 
 export type TextStyles = Record<string, string>; // Should this be optional?
 
-export type DataRowsWithKey = DataRow[] & {
+export type DataRowsWithKey = any[] & {
     key?: string;
 };
 
 export type MainValue = {
     name: string;
-    type: Type;
+    type: any;
 };
 
 // NOTE: Should these props be optional?
@@ -92,7 +91,7 @@ export type Settings = {
     axisMemo: Axis[];
     colorStyles?: ColorStyles;
     crossValues: any[]; // string[]?
-    data: DataRow[];
+    data: any[];
     filter: any[];
     mainValues: MainValue[];
     splitMainValues?: string[];

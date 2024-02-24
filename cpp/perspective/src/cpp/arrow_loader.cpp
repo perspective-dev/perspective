@@ -16,7 +16,7 @@ namespace perspective::apachearrow {
 
 void
 load_stream(
-    const uintptr_t ptr,
+    const std::uint8_t* ptr,
     const uint32_t length,
     std::shared_ptr<arrow::Table>& table
 ) {
@@ -27,23 +27,25 @@ load_stream(
     if (!status.ok()) {
         std::stringstream ss;
         ss << "Failed to open RecordBatchStreamReader: "
-           << status.status().ToString() << '\n';
+           << status.status().ToString() << std::endl;
         PSP_COMPLAIN_AND_ABORT(ss.str());
     } else {
         auto batch_reader = *status;
-        auto status5 = batch_reader->ReadAll(&table);
+        auto status5 = batch_reader->ToTable();
         if (!status5.ok()) {
             std::stringstream ss;
-            ss << "Failed to read stream record batch: " << status5.ToString()
-               << '\n';
+            ss << "Failed to read stream record batch: "
+               << status5.status().ToString() << std::endl;
             PSP_COMPLAIN_AND_ABORT(ss.str());
         };
+
+        table = *status5;
     }
 }
 
 void
 load_file(
-    const uintptr_t ptr,
+    const std::uint8_t* ptr,
     const uint32_t length,
     std::shared_ptr<arrow::Table>& table
 ) {
@@ -55,7 +57,7 @@ load_file(
     if (!status.ok()) {
         std::stringstream ss;
         ss << "Failed to open RecordBatchFileReader: "
-           << status.status().ToString() << '\n';
+           << status.status().ToString() << std::endl;
         PSP_COMPLAIN_AND_ABORT(ss.str());
     } else {
         std::shared_ptr<arrow::ipc::RecordBatchFileReader> batch_reader =
@@ -78,7 +80,7 @@ load_file(
         if (!status3.ok()) {
             std::stringstream ss;
             ss << "Failed to create Table from RecordBatches: "
-               << status3.status().ToString() << '\n';
+               << status3.status().ToString() << std::endl;
             PSP_COMPLAIN_AND_ABORT(ss.str());
         };
         table = *status3;
@@ -139,16 +141,13 @@ convert_type(const std::string& src) {
         return DTYPE_STR;
     }
     std::stringstream ss;
-    ss << "Could not load arrow column of type `" << src << "`" << '\n';
+    ss << "Could not load arrow column of type `" << src << "`" << std::endl;
     PSP_COMPLAIN_AND_ABORT(ss.str());
     return DTYPE_STR;
 }
 
 void
-ArrowLoader::initialize(const uintptr_t ptr, const uint32_t length) {
-    arrow::io::BufferReader buffer_reader(
-        reinterpret_cast<const std::uint8_t*>(ptr), length
-    );
+ArrowLoader::initialize(const std::uint8_t* ptr, const uint32_t length) {
     if (std::memcmp("ARROW1", (const void*)ptr, 6) == 0) {
         load_file(ptr, length, m_table);
     } else {
@@ -166,7 +165,7 @@ ArrowLoader::initialize(const uintptr_t ptr, const uint32_t length) {
 
 void
 ArrowLoader::init_csv(
-    std::string& csv,
+    const std::string_view& csv,
     bool is_update,
     std::unordered_map<std::string, std::shared_ptr<arrow::DataType>>&
         psp_schema
@@ -245,7 +244,7 @@ ArrowLoader::fill_table(
                 std::stringstream ss;
                 ss << "Specified indexx `" << index
                    << "` is invalid as it does not appear in the Table."
-                   << '\n';
+                   << std::endl;
                 PSP_COMPLAIN_AND_ABORT(ss.str());
             }
 
@@ -258,7 +257,7 @@ ArrowLoader::fill_table(
 template <typename T, typename V>
 void
 iter_col_copy(
-    std::shared_ptr<t_column> dest,
+    const std::shared_ptr<t_column>& dest,
     std::shared_ptr<arrow::Array> src,
     const int64_t offset,
     const int64_t len
@@ -345,7 +344,7 @@ copy_array(
                 default: {
                     std::stringstream ss;
                     ss << "Could not copy dictionary array indices of type'"
-                       << indices->type()->name() << "'" << '\n';
+                       << indices->type()->name() << "'" << std::endl;
                     PSP_COMPLAIN_AND_ABORT(ss.str());
                 }
             }
@@ -559,7 +558,7 @@ copy_array(
             std::stringstream ss;
             std::string arrow_type = src->type()->ToString();
             ss << "Could not load Arrow column of type `" << arrow_type << "`."
-               << '\n';
+               << std::endl;
             PSP_COMPLAIN_AND_ABORT(ss.str());
         }
     }
@@ -668,7 +667,7 @@ ArrowLoader::fill_column(
                     ss << "Could not fill column `" << name << "` with "
                        << "t_dtype: `" << get_dtype_descr(column_dtype) << "`, "
                        << "array type: `" << get_dtype_descr(type) << "`"
-                       << '\n';
+                       << std::endl;
                     PSP_COMPLAIN_AND_ABORT(ss.str());
                 };
             }

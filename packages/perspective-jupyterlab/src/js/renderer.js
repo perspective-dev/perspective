@@ -22,7 +22,7 @@ import {
 import { ABCWidgetFactory, DocumentWidget } from "@jupyterlab/docregistry";
 import { PerspectiveWidget } from "./psp_widget";
 
-import perspective from "@finos/perspective/dist/esm/perspective.js";
+import perspective from "@finos/perspective/src/ts/perspective.ts";
 /**
  * The name of the factories that creates widgets.
  */

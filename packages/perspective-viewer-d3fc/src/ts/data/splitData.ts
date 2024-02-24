@@ -12,16 +12,15 @@
 
 import { labelFunction } from "../axis/axisLabel";
 import { Settings } from "../types";
-import { DataRow } from "@finos/perspective";
 
 export type SplitData = {
     key: string;
     crossValue: string;
     mainValue: string | number | boolean | Date;
-    row: DataRow;
+    row: any;
 };
 
-export function splitData(settings: Settings, data: DataRow[]): SplitData[][] {
+export function splitData(settings: Settings, data: any[]): SplitData[][] {
     const labelfn = labelFunction(settings);
 
     return data.map((col, i) => {

@@ -1,0 +1,24 @@
+cmake_minimum_required(VERSION 3.7.2)
+
+project(protobuf-download NONE)
+
+if("" STREQUAL "${LIBPROTOBUF_VERSION}")
+  set(LIBPROTOBUF_VERSION v25.1)
+  message(FATAL_ERROR "LIBPROTOBUF_VERSION not set, using default: ${D}{LIBPROTOBUF_VERSION}")
+else()
+  set(LIBPROTOBUF_VERSION ${LIBPROTOBUF_VERSION})
+  message(STATUS "LIBPROTOBUF_VERSION set to: ${D}{LIBPROTOBUF_VERSION}")
+endif()
+
+include(ExternalProject)
+ExternalProject_Add(protobuf
+  GIT_REPOSITORY    https://github.com/protocolbuffers/protobuf.git
+  GIT_TAG           "${D}{LIBPROTOBUF_VERSION}"
+  SOURCE_DIR        "${CMAKE_BINARY_DIR}/protobuf-src"
+  BINARY_DIR        "${CMAKE_BINARY_DIR}/protobuf-build"
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND     ""
+  INSTALL_COMMAND   ""
+  TEST_COMMAND      ""
+  CMAKE_ARGS        " -DCMAKE_MODULE_PATH=${CMAKE_MODULE_PATH} -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+)

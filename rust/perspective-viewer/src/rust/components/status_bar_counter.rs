@@ -15,7 +15,6 @@ use yew::prelude::*;
 use crate::session::ViewStats;
 #[cfg(test)]
 use crate::utils::*;
-use crate::*;
 
 #[derive(Properties)]
 pub struct StatusBarRowsCounterProps {
@@ -43,7 +42,6 @@ impl Component for StatusBarRowsCounter {
     type Properties = StatusBarRowsCounterProps;
 
     fn create(_ctx: &Context<Self>) -> Self {
-        enable_weak_link_test!(_ctx.props(), _ctx.link());
         Self {}
     }
 

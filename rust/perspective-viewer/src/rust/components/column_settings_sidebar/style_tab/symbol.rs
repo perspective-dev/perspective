@@ -20,6 +20,8 @@ use std::rc::Rc;
 
 use itertools::Itertools;
 use yew::{html, Callback, Html, Properties};
+use perspective_client::config::{PluginConfig, Symbol};
+use yew::{html, Html, Properties};
 
 use self::symbol_config::SymbolKVPair;
 use crate::components::column_settings_sidebar::style_tab::symbol::symbol_pairs::PairsList;

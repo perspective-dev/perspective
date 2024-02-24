@@ -61,42 +61,42 @@ const LAB_BUILD = {
 };
 
 const NB_BUILDS = [
-    {
-        entryPoints: ["src/js/notebook/extension.js"],
-        define: {
-            global: "window",
-        },
-        plugins: [
-            WasmPlugin(true),
-            WorkerPlugin({ inline: true }),
-            AMDLoader([]),
-        ],
-        loader: {
-            ".ttf": "file",
-            ".css": "text",
-        },
-        external: ["@jupyter*", "@lumino*"],
-        format: "cjs",
-        outfile: path.join(NBEXTENSION_PATH, "extension.js"),
-    },
-    {
-        entryPoints: ["src/js/notebook/index.js"],
-        define: {
-            global: "window",
-        },
-        plugins: [
-            WasmPlugin(true),
-            WorkerPlugin({ inline: true }),
-            AMDLoader(["@jupyter-widgets/base"]),
-        ],
-        external: ["@jupyter*"],
-        format: "cjs",
-        loader: {
-            ".ttf": "file",
-            ".css": "text",
-        },
-        outfile: path.join(NBEXTENSION_PATH, "index.js"),
-    },
+    // {
+    //     entryPoints: ["src/js/notebook/extension.js"],
+    //     define: {
+    //         global: "window",
+    //     },
+    //     plugins: [
+    //         WasmPlugin(true),
+    //         WorkerPlugin({ inline: true }),
+    //         AMDLoader([]),
+    //     ],
+    //     loader: {
+    //         ".ttf": "file",
+    //         ".css": "text",
+    //     },
+    //     external: ["@jupyter*", "@lumino*"],
+    //     format: "cjs",
+    //     outfile: path.join(NBEXTENSION_PATH, "extension.js"),
+    // },
+    // {
+    //     entryPoints: ["src/js/notebook/index.js"],
+    //     define: {
+    //         global: "window",
+    //     },
+    //     plugins: [
+    //         WasmPlugin(true),
+    //         WorkerPlugin({ inline: true }),
+    //         AMDLoader(["@jupyter-widgets/base"]),
+    //     ],
+    //     external: ["@jupyter*"],
+    //     format: "cjs",
+    //     loader: {
+    //         ".ttf": "file",
+    //         ".css": "text",
+    //     },
+    //     outfile: path.join(NBEXTENSION_PATH, "index.js"),
+    // },
 ];
 
 const { BuildCss } = require("@prospective.co/procss/target/cjs/procss.js");

@@ -13,7 +13,6 @@
 import { labelFunction } from "../axis/axisLabel";
 import { DataRowsWithKey, Settings } from "../types";
 import { splitIntoMultiSeries } from "./splitIntoMultiSeries";
-import { DataRow } from "@finos/perspective";
 
 type MappedSeries = {
     crossValue: any;
@@ -23,7 +22,7 @@ type MappedSeries = {
     highValue: any;
     lowValue: any;
     key: string;
-    row: DataRow;
+    row: any;
 };
 
 interface MappedSeriesArray extends Array<MappedSeries> {

@@ -49,8 +49,8 @@ public:
      */
     Table(
         std::shared_ptr<t_pool> pool,
-        const std::vector<std::string>& column_names,
-        const std::vector<t_dtype>& data_types,
+        std::vector<std::string> column_names,
+        std::vector<t_dtype> data_types,
         std::uint32_t limit,
         std::string index
     );
@@ -90,6 +90,8 @@ public:
      * @return t_schema
      */
     t_schema get_schema() const;
+
+    void clear();
 
     /**
      * @brief Given a vector of expressions and its associated metadata
@@ -139,7 +141,7 @@ public:
      *
      * @param id
      */
-    void unregister_gnode(t_uindex id);
+    void unregister_gnode(t_uindex id) const;
 
     /**
      * @brief Reset the gnode with the given `id`, thus deregistering any
@@ -147,7 +149,7 @@ public:
      *
      * @param id
      */
-    void reset_gnode(t_uindex id);
+    void reset_gnode(t_uindex id) const;
 
     /**
      * @brief Create a `t_port` on `m_gnode`, which allows updates and removes
@@ -157,14 +159,14 @@ public:
      * @return t_uindex the ID of the port, which can be passed into `update`
      * and `delete` methods in Javascript or Python.
      */
-    t_uindex make_port();
+    t_uindex make_port() const;
 
     /**
      * @brief Given a port ID, remove the input port associated with the ID.
      *
      * @param port_id
      */
-    void remove_port(t_uindex port_id);
+    void remove_port(t_uindex port_id) const;
 
     /**
      * @brief The offset determines where we begin to write data into the Table.
@@ -188,6 +190,53 @@ public:
     // Setters
     void set_column_names(const std::vector<std::string>& column_names);
     void set_data_types(const std::vector<t_dtype>& data_types);
+
+    void remove_cols(const std::string_view& data);
+    void remove_rows(const std::string_view& data);
+
+    void update_arrow(const std::string_view& data);
+    void update_csv(const std::string_view& data);
+    void update_rows(const std::string_view& data);
+    void update_cols(const std::string_view& data);
+    // void update_cols(const std::string_view& data) const;
+
+    static std::shared_ptr<Table> from_csv(
+        const std::string& index,
+        const std::string_view& data,
+        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max()
+    );
+
+    static std::shared_ptr<Table> from_cols(
+        const std::string& index,
+        const std::string_view& data,
+        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max()
+    );
+
+    static std::shared_ptr<Table> from_rows(
+        const std::string& index,
+        const std::string_view& data,
+        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max()
+    );
+
+    static std::shared_ptr<Table> from_schema(
+        const std::string& index,
+        const t_schema& schema,
+        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max()
+    );
+
+    static std::shared_ptr<Table> from_arrow(
+        const std::string& index,
+        const std::string_view& data,
+        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max()
+    );
+
+    static std::shared_ptr<Table> make_table(
+        const std::vector<std::string>& column_names,
+        const std::vector<t_dtype>& data_types,
+        std::uint32_t limit,
+        const std::string& index,
+        const std::string_view& data
+    );
 
 private:
     /**

@@ -15,12 +15,10 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::rc::Rc;
 
+use perspective::utils::global;
 use serde::*;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::*;
-
-use crate::utils::*;
 
 /// A utility struct to track and calculate framerate metrics.
 #[derive(Default, Clone)]
@@ -49,7 +47,7 @@ pub struct RenderTimerStats {
 
 impl MovingWindowRenderTimer {
     pub async fn capture_time<T>(&self, f: impl Future<Output = T>) -> T {
-        let perf = window().unwrap().performance().unwrap();
+        let perf = global::window().performance().unwrap();
         let start = match *self.0.borrow() {
             RenderTimerType::Constant(_) => 0_f64,
             RenderTimerType::Moving(..) => perf.now(),
@@ -77,7 +75,7 @@ impl MovingWindowRenderTimer {
         match &*self.0.borrow_mut() {
             RenderTimerType::Constant(_) => None,
             RenderTimerType::Moving(_, timings) => {
-                let perf = window().unwrap().performance().unwrap();
+                let perf = global::window().performance().unwrap();
                 let mut state = timings.borrow_mut();
                 let stats = (&*state).into();
                 state.total_render_count = 0;
@@ -116,8 +114,7 @@ impl MovingWindowRenderTimer {
 impl Drop for RenderTimerType {
     fn drop(&mut self) {
         if let Self::Moving(closure, _) = self {
-            let document = window().unwrap().document().unwrap();
-            document
+            global::document()
                 .remove_event_listener_with_callback(
                     "visibilitychange",
                     closure.as_ref().unchecked_ref(),
@@ -148,13 +145,11 @@ impl RefCell<RenderTimerState> {
     /// the next frame timing will be the time the tab was hidden + render time.
     fn register_on_visibility_change(self: &Rc<Self>) -> Closure<dyn Fn(JsValue)> {
         let state = self.clone();
-        let fun = move |_| {
+        let closure = Closure::new(move |_| {
             *state.borrow_mut() = Default::default();
-        };
+        });
 
-        let closure = fun.into_closure();
-        let document = window().unwrap().document().unwrap();
-        document
+        global::document()
             .add_event_listener_with_callback("visibilitychange", closure.as_ref().unchecked_ref())
             .unwrap();
 
@@ -164,7 +159,7 @@ impl RefCell<RenderTimerState> {
 
 impl Default for RenderTimerState {
     fn default() -> Self {
-        let perf = window().unwrap().performance().unwrap();
+        let perf = global::window().performance().unwrap();
         let start_time = perf.now();
         Self {
             render_times: Default::default(),
@@ -176,7 +171,7 @@ impl Default for RenderTimerState {
 
 impl From<&RenderTimerState> for RenderTimerStats {
     fn from(value: &RenderTimerState) -> Self {
-        let perf = window().unwrap().performance().unwrap();
+        let perf = global::window().performance().unwrap();
         let now = perf.now();
         let total_time = now - value.start_time;
         RenderTimerStats {

@@ -16,8 +16,8 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use async_lock::Mutex;
+use perspective::utils::{global, ApiFuture, ApiResult, ToApiError};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
 use web_sys::*;
 use yew::html::ImplicitClone;
 
@@ -292,7 +292,7 @@ fn fill_rule_theme_names(
     rule: &Option<CssRule>,
     elem: &HtmlElement,
 ) -> ApiResult<()> {
-    if let Some(rule) = rule.as_apierror()?.dyn_ref::<CssStyleRule>() {
+    if let Some(rule) = rule.as_ref().into_apierror()?.dyn_ref::<CssStyleRule>() {
         let txt = rule.selector_text();
         if elem.matches(&txt)? {
             let style = rule.style();
@@ -332,8 +332,7 @@ fn fill_sheet_theme_names(
 /// Search the document's `styleSheets` for rules which apply to `elem` and
 /// provide the `--theme-name` CSS custom property.
 fn get_theme_names(elem: &HtmlElement) -> Result<Vec<String>, JsValue> {
-    let doc = window().unwrap().document().unwrap();
-    let sheets = doc.style_sheets();
+    let sheets = global::document().style_sheets();
     let mut themes: Vec<String> = vec![];
     for sheet in iter_index!(sheets) {
         fill_sheet_theme_names(&mut themes, &sheet, elem)?;

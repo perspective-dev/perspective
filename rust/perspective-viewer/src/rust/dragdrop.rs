@@ -14,6 +14,7 @@ use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
 
+use perspective_client::clone;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::*;

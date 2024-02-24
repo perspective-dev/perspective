@@ -13,6 +13,7 @@
 use std::rc::Rc;
 
 use itertools::Itertools;
+use perspective_client::config::Symbol;
 use yew::{html, Callback, Html, Properties};
 
 use super::symbol_config::SymbolKVPair;

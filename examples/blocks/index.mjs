@@ -30,7 +30,7 @@ const replacements = {
     "perspective-viewer-d3fc/dist/cdn/perspective-viewer-d3fc.js": `perspective-viewer-d3fc@${version}/dist/cdn/perspective-viewer-d3fc.js`,
     "perspective-workspace/dist/cdn/perspective-workspace.js": `perspective-workspace@${version}/dist/cdn/perspective-workspace.js`,
     "perspective/dist/cdn/perspective.cpp.wasm": `perspective@${version}/dist/cdn/perspective.cpp.wasm`,
-    "perspective-viewer/dist/cdn/perspective_bg.wasm": `perspective-viewer@${version}/dist/cdn/perspective_bg.wasm`,
+    "perspective-viewer/dist/cdn/perspective.rx.wasm": `perspective-viewer@${version}/dist/cdn/perspective.rx.wasm`,
     "perspective/dist/cdn/perspective.worker.js": `perspective@${version}/dist/cdn/perspective.worker.js`,
 };
 

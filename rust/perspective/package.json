@@ -1,0 +1,47 @@
+{
+    "name": "@finos/perspective",
+    "version": "2.8.0",
+    "description": "",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/finos/perspective"
+    },
+    "type": "module",
+    "license": "Apache-2.0",
+    "unpkg": "dist/cdn/perspective.js",
+    "jsdelivr": "dist/cdn/perspective.js",
+    "exports": {
+        ".": {
+            "node": {
+                "types": "./dist/pkg/perspective.d.ts",
+                "default": "./dist/node/perspective.mjs"
+            },
+            "default": "./dist/esm/perspective.inline.js"
+        },
+        "./dist/*": "./dist/*",
+        "./src/*": "./src/*",
+        "./test/*": "./test/*",
+        "./package.json": "./package.json",
+        "./tsconfig.json": "./tsconfig.json"
+    },
+    "files": [
+        "dist/**/*",
+        "src/**/*",
+        "tsconfig.json"
+    ],
+    "types": "dist/pkg/perspective.d.ts",
+    "scripts": {
+        "build": "node ./build.js",
+        "clean": "rimraf dist && rimraf build",
+        "test:run:rust": "rustup run nightly wasm-pack test --chrome --headless"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "devDependencies": {
+        "react": "^16.14.0",
+        "@finos/perspective-esbuild-plugin": "^2.8.0",
+        "@finos/perspective-test": "^2.8.0",
+        "cpy": "^9.0.1"
+    }
+}

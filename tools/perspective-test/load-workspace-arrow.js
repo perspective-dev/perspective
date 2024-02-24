@@ -10,12 +10,15 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import perspective from "/perspective.js";
+import perspective from "/node_modules/@finos/perspective/dist/cdn/perspective.js";
 
 async function load() {
-    let resp = await fetch("/superstore-arrow/superstore.lz4.arrow");
+    let resp = await fetch(
+        "/node_modules/superstore-arrow/superstore.lz4.arrow"
+    );
+
     let arrow = await resp.arrayBuffer();
-    const worker = perspective.worker();
+    const worker = await perspective.worker();
     const table = await worker.table(arrow);
     let workspace = document.getElementById("workspace");
     window.__TABLE__ = table;

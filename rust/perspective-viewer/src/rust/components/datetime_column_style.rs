@@ -16,6 +16,7 @@ mod simple;
 use std::sync::{Arc, LazyLock};
 
 use derivative::Derivative;
+use perspective::json;
 use wasm_bindgen::*;
 use yew::prelude::*;
 use yew::*;
