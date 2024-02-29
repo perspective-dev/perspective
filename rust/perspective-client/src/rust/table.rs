@@ -27,7 +27,7 @@ use crate::view::View;
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct UpdateOptions {
     pub format: Option<String>,
-    pub port_id: Option<i32>,
+    pub port_id: Option<u32>,
 }
 
 #[derive(Clone)]
@@ -199,7 +199,7 @@ impl Table {
     }
 
     #[doc = include_str!("../../docs/table/update.md")]
-    pub async fn update(&self, input: TableData, _options: UpdateOptions) -> ClientResult<()> {
+    pub async fn update(&self, input: TableData, options: UpdateOptions) -> ClientResult<()> {
         let data = match input {
             TableData::Csv(x) => make_table_data::Data::FromCsv(x),
             TableData::Arrow(x) => make_table_data::Data::FromArrow(x.into()),
@@ -215,6 +215,7 @@ impl Table {
 
         let msg = self.client_message(ClientReq::TableUpdateReq(TableUpdateReq {
             data: Some(MakeTableData { data: Some(data) }),
+            port_id: options.port_id.unwrap_or(0),
         }));
 
         match self.client.oneshot(&msg).await {

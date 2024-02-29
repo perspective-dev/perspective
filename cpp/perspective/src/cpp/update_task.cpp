@@ -18,7 +18,7 @@ namespace perspective {
 t_update_task::t_update_task(t_pool& pool) : m_pool(pool) {}
 
 void
-t_update_task::run() {
+t_update_task::run(std::optional<std::function<void(std::uint32_t)>> callback) {
     auto work_to_do = m_pool.m_data_remaining.load();
     m_pool.m_data_remaining.store(false);
 
@@ -33,6 +33,9 @@ t_update_task::run() {
                      ++port_id) {
                     bool did_notify_context = g->process(port_id);
                     if (did_notify_context) {
+                        if (callback) {
+                            (*callback)(port_id);
+                        }
                         m_pool.notify_userspace(port_id);
                     }
                     g->clear_output_ports();

@@ -194,10 +194,10 @@ public:
     void remove_cols(const std::string_view& data);
     void remove_rows(const std::string_view& data);
 
-    void update_arrow(const std::string_view& data);
-    void update_csv(const std::string_view& data);
-    void update_rows(const std::string_view& data);
-    void update_cols(const std::string_view& data);
+    void update_arrow(const std::string_view& data, std::uint32_t port_id);
+    void update_csv(const std::string_view& data, std::uint32_t port_id);
+    void update_rows(const std::string_view& data, std::uint32_t port_id);
+    void update_cols(const std::string_view& data, std::uint32_t port_id);
     // void update_cols(const std::string_view& data) const;
 
     static std::shared_ptr<Table> from_csv(

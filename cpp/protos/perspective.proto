@@ -204,6 +204,7 @@ message TableClearResp {}
 
 message TableUpdateReq {
   MakeTableData data = 1;
+  uint32 port_id = 2;
 }
 
 message TableUpdateResp {}
@@ -246,6 +247,7 @@ message ViewNumRowsResp {
 message ViewOnUpdateReq {}
 message ViewOnUpdateResp {
   optional bytes arrow = 1;
+  uint32 port_id = 2;
 }
 
 message ViewOnDeleteReq {}

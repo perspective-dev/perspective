@@ -338,7 +338,7 @@ schema_to_arrow_map(const t_schema& gnode_output_schema) {
 }
 
 void
-Table::update_csv(const std::string_view& data) {
+Table::update_csv(const std::string_view& data, std::uint32_t port_id) {
     auto type_map = schema_to_arrow_map(get_gnode()->get_output_schema());
     apachearrow::ArrowLoader arrow_loader;
     arrow_loader.init_csv(data, true, type_map);
@@ -351,7 +351,7 @@ Table::update_csv(const std::string_view& data) {
         data_table, get_schema(), m_index, m_offset, m_limit, true
     );
     calculate_offset(row_count);
-    m_pool->send(get_gnode()->get_id(), 0, data_table);
+    m_pool->send(get_gnode()->get_id(), port_id, data_table);
 }
 
 std::shared_ptr<Table>
@@ -524,7 +524,7 @@ fill_column_json(
             if (value.IsInt64()) {
                 // std::cout << "WIP " << value.GetInt() << std::endl;
                 if (value.GetInt64() > std::numeric_limits<std::int32_t>::max())
-                    [[unlikely]] {
+                    [[likely]] {
                     LOG_DEBUG("Promoting due to int32 overflow");
                     return {DTYPE_FLOAT64};
                 }
@@ -793,7 +793,7 @@ Table::remove_cols(const std::string_view& data) {
 }
 
 void
-Table::update_cols(const std::string_view& data) {
+Table::update_cols(const std::string_view& data, std::uint32_t port_id) {
     // 1.) Infer schema
     rapidjson::Document document;
     document.Parse(data.data());
@@ -826,6 +826,8 @@ Table::update_cols(const std::string_view& data) {
     data_table.init();
     data_table.extend(nrows);
 
+    LOG_DEBUG("Updating table with schema " << schema);
+    LOG_DEBUG("Implicit index? " << is_implicit);
     if (is_implicit) {
         data_table.add_column("psp_pkey", DTYPE_INT32, true);
         data_table.add_column("psp_okey", DTYPE_INT32, true);
@@ -845,9 +847,7 @@ Table::update_cols(const std::string_view& data) {
             auto col = data_table.get_column(col_name);
             auto promote = fill_column_json(col, ii, cell);
             if (promote) {
-                data_table.promote_column(col_name, *promote, ii, true);
-                col = data_table.get_column(col_name);
-                fill_column_json(col, ii, cell);
+                PSP_COMPLAIN_AND_ABORT("Can't promote column on update");
             }
 
             if (!is_implicit && m_index == col_name) {
@@ -860,14 +860,14 @@ Table::update_cols(const std::string_view& data) {
     }
 
     if (is_implicit) {
-        for (t_uindex ii = 0; ii < nrows; ii++) {
-            psp_pkey_col->set_nth<std::int32_t>(ii, ii);
-            psp_okey_col->set_nth<std::int32_t>(ii, ii);
+        for (std::uint32_t ii = 0; ii < nrows; ii++) {
+            psp_pkey_col->set_nth<std::uint32_t>(ii, (m_offset + ii) % m_limit);
+            psp_okey_col->set_nth<std::uint32_t>(ii, (m_offset + ii) % m_limit);
         }
     }
 
     calculate_offset(nrows);
-    m_pool->send(get_gnode()->get_id(), 0, data_table);
+    m_pool->send(get_gnode()->get_id(), port_id, data_table);
 }
 
 std::shared_ptr<Table>
@@ -981,7 +981,7 @@ Table::from_cols(
 // std::cout << buffer.GetString() << std::endl;
 
 void
-Table::update_rows(const std::string_view& data) {
+Table::update_rows(const std::string_view& data, std::uint32_t port_id) {
     // 1.) Infer schema
     rapidjson::Document document;
     document.Parse(data.data());
@@ -1022,23 +1022,26 @@ Table::update_rows(const std::string_view& data) {
     for (const auto& row : document.GetArray()) {
         for (const auto& it : row.GetObject()) {
             auto col = data_table.get_column(it.name.GetString());
-            fill_column_json(col, ii, it.value);
-            // if (!is_implicit && index == it.name.GetString()) {
-            //     fill_column_json(psp_pkey_col, ii, it.value);
-            //     fill_column_json(psp_okey_col, ii, it.value);
-            // }
+            auto out = fill_column_json(col, ii, it.value);
+            if (out) {
+                PSP_COMPLAIN_AND_ABORT("Can't promote column on update");
+            }
+            if (!is_implicit && m_index == it.name.GetString()) {
+                fill_column_json(psp_pkey_col, ii, it.value);
+                fill_column_json(psp_okey_col, ii, it.value);
+            }
         }
 
         if (is_implicit) {
-            psp_pkey_col->set_nth<std::int32_t>(ii, (ii + m_offset) % m_limit);
-            psp_okey_col->set_nth<std::int32_t>(ii, (ii + m_offset) % m_limit);
+            psp_pkey_col->set_nth<std::uint32_t>(ii, (ii + m_offset) % m_limit);
+            psp_okey_col->set_nth<std::uint32_t>(ii, (ii + m_offset) % m_limit);
         }
 
         ii++;
     }
 
     calculate_offset(size);
-    m_pool->send(get_gnode()->get_id(), 0, data_table);
+    m_pool->send(get_gnode()->get_id(), port_id, data_table);
 }
 
 std::shared_ptr<Table>
@@ -1056,6 +1059,7 @@ Table::from_rows(
     }
 
     if (!document[0].IsObject()) {
+        LOG_DEBUG("Received non-object " << document[0].GetType());
         // TODO Legacy error message
         PSP_COMPLAIN_AND_ABORT(
             "Cannot determine data types without column names!\n"
@@ -1106,13 +1110,26 @@ Table::from_rows(
     for (const auto& row : document.GetArray()) {
         for (const auto& it : row.GetObject()) {
             auto col = data_table.get_column(it.name.GetString());
-            fill_column_json(col, ii, it.value);
+            const auto* col_name = it.name.GetString();
+            const auto& cell = it.value;
+            auto promote = fill_column_json(col, ii, cell);
+            LOG_DEBUG("PROMOTE_RESPONSE: " << promote.value_or(DTYPE_NONE));
+            if (promote) {
+                LOG_DEBUG(
+                    "Promoting column " << col_name << " from "
+                                        << dtype_to_str(col->get_dtype())
+                                        << " to " << dtype_to_str(*promote)
+                );
+                data_table.promote_column(col_name, *promote, ii, true);
+                col = data_table.get_column(col_name);
+                fill_column_json(col, ii, cell);
+            }
+
             if (!is_implicit && index == it.name.GetString()) {
                 fill_column_json(psp_pkey_col, ii, it.value);
                 fill_column_json(psp_okey_col, ii, it.value);
             }
         }
-
         if (is_implicit) {
             psp_pkey_col->set_nth<std::int32_t>(ii, ii);
             psp_okey_col->set_nth<std::int32_t>(ii, ii);
@@ -1166,7 +1183,7 @@ Table::from_schema(
 }
 
 void
-Table::update_arrow(const std::string_view& data) {
+Table::update_arrow(const std::string_view& data, std::uint32_t port_id) {
     apachearrow::ArrowLoader arrow_loader;
     arrow_loader.initialize(
         reinterpret_cast<const std::uint8_t*>(data.data()), data.size()
@@ -1182,7 +1199,7 @@ Table::update_arrow(const std::string_view& data) {
     );
 
     calculate_offset(row_count);
-    m_pool->send(get_gnode()->get_id(), 0, data_table);
+    m_pool->send(get_gnode()->get_id(), port_id, data_table);
 }
 
 std::shared_ptr<Table>

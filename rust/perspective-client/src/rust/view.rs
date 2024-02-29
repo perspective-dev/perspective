@@ -274,12 +274,12 @@ impl View {
     #[doc = include_str!("../../docs/view/on_update.md")]
     pub async fn on_update(
         &self,
-        on_update: Box<dyn Fn(Option<Vec<u8>>) + Send + Sync + 'static>,
+        on_update: Box<dyn Fn((Option<Vec<u8>>, u32)) + Send + Sync + 'static>,
         _options: Option<OnUpdateOptions>,
     ) -> ClientResult<u32> {
         let callback = move |resp| match resp {
-            ClientResp::ViewOnUpdateResp(ViewOnUpdateResp { arrow }) => {
-                on_update(arrow.map(|x| x.into()));
+            ClientResp::ViewOnUpdateResp(ViewOnUpdateResp { arrow, port_id }) => {
+                on_update((arrow.map(|x| x.into()), port_id));
                 Ok(())
             },
             resp => Err(resp.into()),

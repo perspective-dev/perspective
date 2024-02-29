@@ -1433,17 +1433,15 @@ function validate_typed_array(typed_array, column_data) {
             }
             let data = [];
             for (let i = 0; i < 35000; i++) {
-                data.push([
-                    {
-                        a: makeid(),
-                        b: makeid(),
-                        c: makeid(),
-                        d: makeid(),
-                        w: i + 0.5,
-                        x: i,
-                        y: makeid(),
-                    },
-                ]);
+                data.push({
+                    a: makeid(),
+                    b: makeid(),
+                    c: makeid(),
+                    d: makeid(),
+                    w: i + 0.5,
+                    x: i,
+                    y: makeid(),
+                });
             }
             let table = await perspective.table(data);
             let view = await table.view();

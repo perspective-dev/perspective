@@ -236,8 +236,8 @@ ArrowLoader::fill_table(
             auto* okey_col = tbl.add_column("psp_okey", DTYPE_INT32, true);
 
             for (std::uint32_t ridx = 0; ridx < tbl.size(); ++ridx) {
-                key_col->set_nth<std::int32_t>(ridx, (ridx + offset) % limit);
-                okey_col->set_nth<std::int32_t>(ridx, (ridx + offset) % limit);
+                key_col->set_nth<std::uint32_t>(ridx, (ridx + offset) % limit);
+                okey_col->set_nth<std::uint32_t>(ridx, (ridx + offset) % limit);
             }
         } else {
             if (!input_schema.has_column(index)) {

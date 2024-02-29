@@ -667,36 +667,7 @@ elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
     endif()
 endif()
 
-set(WORKSPACE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
-
-if(PSP_WASM_BUILD)
-    set(CLANGD_ADD_FLAGS "Add:
-        [
-            -target,
-            wasm32-unknown-emscripten,
-            --sysroot=${WORKSPACE_ROOT}/.emsdk/upstream/emscripten/cache/sysroot,
-        ]")
-else()
-    set(CLANGD_ADD_FLAGS "")
-endif()
-
-# Check for existence of .clangd file
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.clangd.in)
-    message(STATUS "${Cyan}Found ${CMAKE_CURRENT_SOURCE_DIR}/.clangd.in${ColorReset}")
-    # Configure the .clangd file from the template
-    configure_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/.clangd.in
-        ${CMAKE_BINARY_DIR}/.clangd
-        @ONLY
-    )
-    # Symlink .clangd to the project root
-    execute_process(
-        COMMAND ln -sf ${CMAKE_BINARY_DIR}/.clangd ${WORKSPACE_ROOT}/.clangd
-    )
-    message(STATUS "${Cyan}Created ${CMAKE_BINARY_DIR}/.clangd${ColorReset}")
-else()
-    message("${Yellow}No .clangd.in found, skipping IDE setup${ColorReset}")
-endif()
+include(SetupClangd)
 
 if(NOT WIN32)
     include_directories(SYSTEM ${Boost_INCLUDE_DIRS})

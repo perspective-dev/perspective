@@ -466,7 +466,26 @@ impl JsView {
     #[doc = include_str!("../../../perspective-client/docs/view/on_update.md")]
     #[wasm_bindgen]
     pub async fn on_update(&self, on_update: Function, _options: &JsValue) -> ApiResult<u32> {
-        let emit = LocalPollLoop::new(move |_| on_update.call0(&JsValue::UNDEFINED));
+        let emit = LocalPollLoop::new(move |(arrow, port_id): (Option<Vec<u8>>, u32)| {
+            let js_obj = js_sys::Object::new();
+            if let Some(arrow) = arrow {
+                if let Err(err) = js_sys::Reflect::set(
+                    &js_obj,
+                    &"delta".into(),
+                    &js_sys::Uint8Array::from(&arrow[..]).buffer(),
+                ) {
+                    tracing::error!("Failed to set data: {:?}", err);
+                }
+            }
+            if let Err(err) = js_sys::Reflect::set(&js_obj, &"port_id".into(), &port_id.into()) {
+                tracing::error!(
+                    "Failed to set port_id:
+            {:?}",
+                    err
+                );
+            }
+            on_update.call1(&JsValue::UNDEFINED, &js_obj)
+        });
         let on_update = Box::new(move |msg| spawn_local(emit.poll(msg)));
         Ok(self.0.on_update(on_update, None).await?)
     }

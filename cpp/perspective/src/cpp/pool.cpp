@@ -140,11 +140,11 @@ t_pool::get_lock() const {
 #endif
 
 void
-t_pool::_process() {
+t_pool::_process(std::optional<std::function<void(std::uint32_t)>> callback) {
     auto work_to_do = m_data_remaining.load();
     if (work_to_do) {
         t_update_task task(*this);
-        task.run();
+        task.run(callback);
     }
 }
 

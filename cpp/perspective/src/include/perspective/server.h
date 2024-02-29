@@ -216,6 +216,11 @@ namespace server {
         [[nodiscard]]
         virtual std::pair<t_tscalar, t_tscalar>
         get_min_max(const std::string& col_name) const = 0;
+
+        [[nodiscard]]
+        virtual std::shared_ptr<std::string> get_row_delta_as_arrow() const = 0;
+
+        virtual void set_deltas_enabled(bool enabled_state) = 0;
     };
 
     template <typename CTX_T>
@@ -379,6 +384,18 @@ namespace server {
         std::pair<t_tscalar, t_tscalar>
         get_min_max(const std::string& col_name) const override {
             return m_view->get_min_max(col_name);
+        }
+
+        [[nodiscard]]
+        std::shared_ptr<std::string>
+        get_row_delta_as_arrow() const override {
+            auto delta = m_view->get_row_delta();
+            return m_view->data_slice_to_arrow(delta, false, false);
+        }
+
+        void
+        set_deltas_enabled(bool enabled_state) override {
+            m_view->get_context()->set_deltas_enabled(enabled_state);
         }
 
     private:

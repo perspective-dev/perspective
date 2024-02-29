@@ -94,7 +94,10 @@ public:
 
     void send(t_uindex gnode_id, t_uindex port_id, const t_data_table& table);
 
-    void _process();
+    void _process(
+        std::optional<std::function<void(std::uint32_t)>> callback =
+            std::nullopt
+    );
 
     void init();
     void stop();

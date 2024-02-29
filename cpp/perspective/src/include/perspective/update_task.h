@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 #pragma once
+#include <optional>
 #include <perspective/first.h>
 #include <perspective/base.h>
 #include <perspective/exports.h>
@@ -21,7 +22,8 @@ class t_pool;
 class PERSPECTIVE_EXPORT t_update_task {
 public:
     t_update_task(t_pool& pool);
-    virtual void run();
+    virtual void run(std::optional<std::function<void(std::uint32_t)>> callback
+    );
 
 private:
     t_pool& m_pool;

@@ -753,6 +753,7 @@ needs_poll(const proto::Request::ClientReqCase proto_case) {
         case ReqCase::kViewSchemaReq:
         case ReqCase::kViewGetMinMaxReq:
         case ReqCase::kTableRemoveReq:
+        case ReqCase::kTableMakeViewReq:
             return true;
         case ReqCase::kTableOnDeleteReq:
         case ReqCase::kViewOnDeleteReq:
@@ -761,7 +762,6 @@ needs_poll(const proto::Request::ClientReqCase proto_case) {
         case ReqCase::kTableUpdateReq:
         case ReqCase::kTableReplaceReq:
         case ReqCase::kTableDeleteReq:
-        case ReqCase::kTableMakeViewReq:
         case ReqCase::kTableClearReq:
         case ReqCase::kViewGetConfigReq:
         case ReqCase::kViewColumnPathsReq:
@@ -978,7 +978,8 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                     expr.expression,
                     expr.parse_expression_string,
                     std::vector<std::pair<std::string, std::string>>{
-                        expr.column_id_map.begin(), expr.column_id_map.end()}
+                        expr.column_id_map.begin(), expr.column_id_map.end()
+                    }
                 );
             }
 
@@ -1030,15 +1031,15 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
             const auto& r = req.table_replace_req();
             switch (r.data().data_case()) {
                 case proto::MakeTableData::kFromArrow: {
-                    table->update_arrow(r.data().from_arrow());
+                    table->update_arrow(r.data().from_arrow(), 0);
                     break;
                 }
                 case proto::MakeTableData::kFromCsv: {
-                    table->update_csv(r.data().from_csv());
+                    table->update_csv(r.data().from_csv(), 0);
                     break;
                 }
                 case proto::MakeTableData::kFromRows: {
-                    table->update_rows(r.data().from_rows());
+                    table->update_rows(r.data().from_rows(), 0);
                     break;
                 }
                 case proto::MakeTableData::kFromCols:
@@ -1090,19 +1091,19 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
             auto table = m_resources.get_table(env.entity_id());
             switch (r.data().data_case()) {
                 case proto::MakeTableData::kFromArrow: {
-                    table->update_arrow(r.data().from_arrow());
+                    table->update_arrow(r.data().from_arrow(), r.port_id());
                     break;
                 }
                 case proto::MakeTableData::kFromCsv: {
-                    table->update_csv(r.data().from_csv());
+                    table->update_csv(r.data().from_csv(), r.port_id());
                     break;
                 }
                 case proto::MakeTableData::kFromRows: {
-                    table->update_rows(r.data().from_rows());
+                    table->update_rows(r.data().from_rows(), r.port_id());
                     break;
                 }
                 case proto::MakeTableData::kFromCols: {
-                    table->update_cols(r.data().from_cols());
+                    table->update_cols(r.data().from_cols(), r.port_id());
                     break;
                 }
                 case proto::MakeTableData::kFromSchema:
@@ -1127,11 +1128,13 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
 
             const auto& group_by = cfg.group_by();
             std::vector<std::string> row_pivots{
-                group_by.begin(), group_by.end()};
+                group_by.begin(), group_by.end()
+            };
 
             const auto& split_by = cfg.split_by();
             std::vector<std::string> column_pivots{
-                split_by.begin(), split_by.end()};
+                split_by.begin(), split_by.end()
+            };
 
             const auto& aggs = cfg.aggregates();
             tsl::ordered_map<std::string, std::vector<std::string>> aggregates;
@@ -1259,7 +1262,8 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
             if (cols.has_columns()) {
                 columns = {
                     cols.columns().columns().begin(),
-                    cols.columns().columns().end()};
+                    cols.columns().columns().end()
+                };
             } else {
                 columns = table->get_column_names();
                 for (const auto& f : expressions) {
@@ -1726,22 +1730,57 @@ ProtoServer::_process_table_unchecked(
     const ServerResources::t_id& table_id,
     std::vector<ProtoServer::ResponseEnvelope>& outs
 ) {
-    table->get_pool()->_process();
-    auto view_ids = m_resources.get_view_ids(table_id);
-    for (const auto& view_id : view_ids) {
-        auto subscriptions = m_resources.get_view_on_update_sub(view_id);
-        for (auto& subscription : subscriptions) {
-            proto::ResponseEnvelope resp_env;
-            resp_env.set_msg_id(subscription.id); // this is wrong
-            resp_env.set_entity_id(view_id);
-            resp_env.set_entity_type(proto::VIEW);
+    // auto gnode = table->get_gnode();
+    // for (auto port = 0; port < gnode->num_input_ports(); ++port) {
+    //     auto has_changes = gnode->process(port);
+    //     if (has_changes) {
+    //         // record changes per port.
+    //         auto view_ids = m_resources.get_view_ids(table_id);
+    //         for (const auto& view_id : view_ids) {
+    //             auto view = m_resources.get_view(view_id);
+    //             auto subscriptions =
+    //                 m_resources.get_view_on_update_sub(view_id);
+    //             for (auto& subscription : subscriptions) {
+    //                 proto::ResponseEnvelope resp_env;
+    //                 resp_env.set_msg_id(subscription.id); // this is wrong
+    //                 resp_env.set_entity_id(view_id);
+    //                 resp_env.set_entity_type(proto::VIEW);
 
-            Resp out;
-            out.mutable_view_on_update_resp();
-            *resp_env.mutable_payload() = out;
-            outs.emplace_back(std::move(resp_env));
+    //                 Resp out;
+    //                 auto* r = out.mutable_view_on_update_resp();
+    //                 r->set_port_id(port);
+    //                 *r->mutable_arrow() = *view->get_row_delta_as_arrow();
+    //                 *resp_env.mutable_payload() = out;
+    //                 outs.emplace_back(std::move(resp_env));
+    //             }
+    //         }
+    //     }
+    // }
+
+    // TOOD: Go back to this but maybe have this function take a lambda to grab
+    // deltas/port_ids.
+    //
+    table->get_pool()->_process([this, table_id, &outs](auto port_id) {
+        // record changes per port.
+        auto view_ids = m_resources.get_view_ids(table_id);
+        for (const auto& view_id : view_ids) {
+            auto view = m_resources.get_view(view_id);
+            auto subscriptions = m_resources.get_view_on_update_sub(view_id);
+            for (auto& subscription : subscriptions) {
+                proto::ResponseEnvelope resp_env;
+                resp_env.set_msg_id(subscription.id);
+                resp_env.set_entity_id(view_id);
+                resp_env.set_entity_type(proto::VIEW);
+
+                Resp out;
+                auto* r = out.mutable_view_on_update_resp();
+                r->set_port_id(port_id);
+                *r->mutable_arrow() = *view->get_row_delta_as_arrow();
+                *resp_env.mutable_payload() = out;
+                outs.emplace_back(std::move(resp_env));
+            }
         }
-    }
+    });
 }
 
 void
