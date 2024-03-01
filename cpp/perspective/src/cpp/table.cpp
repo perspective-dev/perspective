@@ -480,7 +480,7 @@ fill_column_json(
     //     << " at index " << i << " with dtype "
     //     << dtype_to_str(col->get_dtype()));
     if (value.IsNull()) {
-        col->set_valid(i, false);
+        col->unset(i);
         return std::nullopt;
     }
 
@@ -1041,6 +1041,7 @@ Table::update_rows(const std::string_view& data, std::uint32_t port_id) {
     }
 
     calculate_offset(size);
+    data_table.pprint();
     m_pool->send(get_gnode()->get_id(), port_id, data_table);
 }
 

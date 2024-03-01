@@ -613,6 +613,7 @@ t_column::set_valid(t_uindex idx, bool valid) {
 
 void
 t_column::set_status(t_uindex idx, t_status status) {
+    PSP_VERBOSE_ASSERT(is_status_enabled(), "Status not available for column");
     m_status->set_nth<t_status>(idx, status);
 }
 

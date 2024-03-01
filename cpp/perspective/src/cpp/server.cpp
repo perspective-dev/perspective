@@ -1335,6 +1335,11 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                 PSP_COMPLAIN_AND_ABORT("Invalid number of sides");
             }
 
+            // TODO: Only enable this if the mode of on_update is
+            //       "row" or "cell"
+            erased_view->set_deltas_enabled(true);
+            // Seems to only affect 1 & 2 sided contexts
+
             m_resources.host_view(r.view_id(), env.entity_id(), erased_view);
             proto::Response resp;
             auto* make_view = resp.mutable_table_make_view_resp();
@@ -1730,36 +1735,6 @@ ProtoServer::_process_table_unchecked(
     const ServerResources::t_id& table_id,
     std::vector<ProtoServer::ResponseEnvelope>& outs
 ) {
-    // auto gnode = table->get_gnode();
-    // for (auto port = 0; port < gnode->num_input_ports(); ++port) {
-    //     auto has_changes = gnode->process(port);
-    //     if (has_changes) {
-    //         // record changes per port.
-    //         auto view_ids = m_resources.get_view_ids(table_id);
-    //         for (const auto& view_id : view_ids) {
-    //             auto view = m_resources.get_view(view_id);
-    //             auto subscriptions =
-    //                 m_resources.get_view_on_update_sub(view_id);
-    //             for (auto& subscription : subscriptions) {
-    //                 proto::ResponseEnvelope resp_env;
-    //                 resp_env.set_msg_id(subscription.id); // this is wrong
-    //                 resp_env.set_entity_id(view_id);
-    //                 resp_env.set_entity_type(proto::VIEW);
-
-    //                 Resp out;
-    //                 auto* r = out.mutable_view_on_update_resp();
-    //                 r->set_port_id(port);
-    //                 *r->mutable_arrow() = *view->get_row_delta_as_arrow();
-    //                 *resp_env.mutable_payload() = out;
-    //                 outs.emplace_back(std::move(resp_env));
-    //             }
-    //         }
-    //     }
-    // }
-
-    // TOOD: Go back to this but maybe have this function take a lambda to grab
-    // deltas/port_ids.
-    //
     table->get_pool()->_process([this, table_id, &outs](auto port_id) {
         // record changes per port.
         auto view_ids = m_resources.get_view_ids(table_id);
