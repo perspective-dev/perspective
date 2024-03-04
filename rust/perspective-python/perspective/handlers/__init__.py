@@ -10,13 +10,19 @@
 #  ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-__version__ = "2.8.0"
+from .common import PerspectiveHandlerBase
 
-from .perspective import *
-from .core.exception import PerspectiveError
+try:
+    from .aiohttp import *
+except ImportError:
+    ...
 
+try:
+    from .starlette import *
+except ImportError:
+    ...
 
-from .legacy import PerspectiveManager, Table, PerspectiveCppError, set_threadpool_size
-from .widget import PerspectiveWidget
-from .viewer import PerspectiveViewer
-from .handlers import PerspectiveTornadoHandler
+try:
+    from .tornado import *
+except ImportError:
+    ...

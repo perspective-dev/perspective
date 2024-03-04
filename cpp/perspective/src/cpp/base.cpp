@@ -293,17 +293,18 @@ str_to_dtype(const std::string& typestring) {
     }
     if (typestring == "date") {
         return DTYPE_DATE;
-    } if (typestring == "datetime") {
-        return DTYPE_TIME;
-    } else if (typestring == "string") {
-        return DTYPE_STR;
-    } else {
-        PSP_COMPLAIN_AND_ABORT(
-            "Could not convert unknown type string `" + typestring
-            + "` to dtype."
-        );
-        return DTYPE_NONE;
     }
+    if (typestring == "datetime") {
+        return DTYPE_TIME;
+    }
+    if (typestring == "string") {
+        return DTYPE_STR;
+    }
+
+    PSP_COMPLAIN_AND_ABORT(
+        "Could not convert unknown type string `" + typestring + "` to dtype."
+    );
+    return DTYPE_NONE;
 }
 
 std::string
@@ -334,7 +335,7 @@ filter_op_to_str(t_filter_op op) {
             return "endswith";
         } break;
         case FILTER_OP_CONTAINS: {
-            return "in";
+            return "contains";
         } break;
         case FILTER_OP_OR: {
             return "or";
@@ -372,34 +373,45 @@ str_to_filter_op(const std::string& str) {
     }
     if (str == ">=") {
         return t_filter_op::FILTER_OP_GTEQ;
-    } if (str == "==") {
+    }
+    if (str == "==") {
         return t_filter_op::FILTER_OP_EQ;
-    } else if (str == "!=") {
+    }
+    if (str == "!=") {
         return t_filter_op::FILTER_OP_NE;
-    } else if (str == "begins with" || str == "startswith") {
+    }
+    if (str == "begins with" || str == "startswith") {
         return t_filter_op::FILTER_OP_BEGINS_WITH;
-    } else if (str == "ends with" || str == "endswith") {
+    }
+    if (str == "ends with" || str == "endswith") {
         return t_filter_op::FILTER_OP_ENDS_WITH;
-    } else if (str == "in") {
+    }
+    if (str == "in") {
         return t_filter_op::FILTER_OP_IN;
-    } else if (str == "contains") {
+    }
+    if (str == "contains") {
         return t_filter_op::FILTER_OP_CONTAINS;
-    } else if (str == "not in") {
+    }
+    if (str == "not in") {
         return t_filter_op::FILTER_OP_NOT_IN;
-    } else if (str == "&" || str == "and") {
-        return t_filter_op::FILTER_OP_AND;
-    } else if (str == "|" || str == "or") {
-        return t_filter_op::FILTER_OP_OR;
-    } else if (str == "is null" || str == "is None") {
-        return t_filter_op::FILTER_OP_IS_NULL;
-    } else if (str == "is not null" || str == "is not None") {
-        return t_filter_op::FILTER_OP_IS_NOT_NULL;
-    } else {
-        std::stringstream ss;
-        ss << "Unknown filter operator string: `" << str << std::endl;
-        PSP_COMPLAIN_AND_ABORT(ss.str());
+    }
+    if (str == "&" || str == "and") {
         return t_filter_op::FILTER_OP_AND;
     }
+    if (str == "|" || str == "or") {
+        return t_filter_op::FILTER_OP_OR;
+    }
+    if (str == "is null" || str == "is None") {
+        return t_filter_op::FILTER_OP_IS_NULL;
+    }
+    if (str == "is not null" || str == "is not None") {
+        return t_filter_op::FILTER_OP_IS_NOT_NULL;
+    }
+
+    std::stringstream ss;
+    ss << "Unknown filter operator string: `" << str << std::endl;
+    PSP_COMPLAIN_AND_ABORT(ss.str());
+    return t_filter_op::FILTER_OP_AND;
 }
 
 t_sorttype
@@ -415,14 +427,15 @@ str_to_sorttype(const std::string& str) {
     }
     if (str == "asc abs" || str == "col asc abs") {
         return SORTTYPE_ASCENDING_ABS;
-    } if (str == "desc abs" || str == "col desc abs") {
-        return SORTTYPE_DESCENDING_ABS;
-    } else {
-        std::stringstream ss;
-        ss << "Unknown sort type string: `" << str << std::endl;
-        PSP_COMPLAIN_AND_ABORT(ss.str());
-        return SORTTYPE_DESCENDING;
     }
+    if (str == "desc abs" || str == "col desc abs") {
+        return SORTTYPE_DESCENDING_ABS;
+    }
+
+    std::stringstream ss;
+    ss << "Unknown sort type string: `" << str << std::endl;
+    PSP_COMPLAIN_AND_ABORT(ss.str());
+    return SORTTYPE_DESCENDING;
 }
 
 std::string

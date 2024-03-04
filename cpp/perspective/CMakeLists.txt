@@ -253,20 +253,20 @@ elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
     else()
         if(CMAKE_BUILD_TYPE_LOWER STREQUAL debug)
             if (PSP_PYODIDE)
-              set(OPT_FLAGS " \
-                  -O0 \
-                  -g3 \
-                  -gsource-map \
-                  --profiling \
-                  -Wcast-align \
-                  -Wover-aligned \
-                  ")
+                set(OPT_FLAGS " \
+                    -O0 \
+                    -g3 \
+                    -gsource-map \
+                    --profiling \
+                    -Wcast-align \
+                    -Wover-aligned \
+                    ")
             else ()
-              set(OPT_FLAGS " \
-                  -O0 \
-                  -fexceptions \
-                  -g3 \
-                  ")
+                 set(OPT_FLAGS " \
+                    -O0 \
+                    -fexceptions \
+                    -g3 \
+                    ")
             endif ()
         else()
             set(OPT_FLAGS " \
@@ -545,6 +545,7 @@ set(PSP_WASM_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s MODULARIZE=1 \
     -s WASM_BIGINT=1 \
+    -s TEXTDECODER=2 \
     -s DYNAMIC_EXECUTION=0 \
     -s STANDALONE_WASM=1 \
     -s EXPORT_NAME=\"load_perspective\" \

@@ -211,8 +211,8 @@ static std::string
 re_bool_to_str(std::string&& expression) {
     static const RE2 true_("true");
     static const RE2 false_("false");
-    RE2::Replace(&expression, true_, "True");
-    RE2::Replace(&expression, false_, "False");
+    RE2::GlobalReplace(&expression, true_, "True");
+    RE2::GlobalReplace(&expression, false_, "False");
     return std::move(expression);
 }
 
@@ -813,6 +813,12 @@ ProtoServer::handle_process_table(
 
 ProtoServerResp<ProtoServer::ResponseEnvelope>
 ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
+    static bool is_init_expr = false;
+    if (!is_init_expr) {
+        t_computed_expression_parser::init();
+        is_init_expr = true;
+    }
+
     ProtoServerResp<ProtoServer::ResponseEnvelope> proto_resp;
     proto::ResponseEnvelope resp_env;
     auto push_resp = [&](Resp&& resp) {
@@ -1484,17 +1490,33 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
         case proto::Request::kViewToRowsStringReq: {
             auto view = m_resources.get_view(env.entity_id());
             const auto& r = req.view_to_rows_string_req();
+            auto config = view->get_view_config();
             std::string nidx;
+            std::uint32_t num_hidden = 0;
             switch (view->sides()) {
                 case 0:
                     nidx = "zero";
                     break;
-                case 1:
+                case 1: {
                     nidx = "one";
-                    break;
-                case 2:
+                    const auto& cols = config->get_columns();
+                    for (const auto& s : config->get_sortspec()) {
+                        if (std::find(cols.begin(), cols.end(), s.m_colname)
+                            == cols.end()) {
+                            num_hidden++;
+                        }
+                    }
+                } break;
+                case 2: {
                     nidx = "two";
-                    break;
+                    const auto& cols = config->get_columns();
+                    for (const auto& s : config->get_sortspec()) {
+                        if (std::find(cols.begin(), cols.end(), s.m_colname)
+                            == cols.end()) {
+                            num_hidden++;
+                        }
+                    }
+                } break;
                 default:
                     PSP_COMPLAIN_AND_ABORT(
                         "Invalid number of sides: "
@@ -1502,14 +1524,13 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                     );
             }
 
-            auto config = view->get_view_config();
             auto dims = parse_format_options(
                 r.viewport(),
                 view->num_columns(),
                 view->num_rows(),
                 view->sides(),
                 config->is_column_only(),
-                0
+                num_hidden
             );
 
             auto json_str = view->to_rows(
@@ -1517,7 +1538,7 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                 dims.end_row,
                 dims.start_col,
                 dims.end_col,
-                0,
+                num_hidden,
                 r.formatted(),
                 r.index(),
                 r.id(),
@@ -1525,8 +1546,8 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                 view->sides(),
                 view->sides() > 0 && !config->is_column_only(),
                 nidx,
-                view->num_columns(),
-                0
+                config->get_columns().size(),
+                view->get_view_config()->get_row_pivots().size()
             );
 
             proto::Response resp;
@@ -1538,17 +1559,33 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
         case proto::Request::kViewToColumnsStringReq: {
             auto view = m_resources.get_view(env.entity_id());
             const auto& r = req.view_to_columns_string_req();
+            auto config = view->get_view_config();
             std::string nidx;
+            std::uint32_t num_hidden = 0;
             switch (view->sides()) {
                 case 0:
                     nidx = "zero";
                     break;
-                case 1:
+                case 1: {
                     nidx = "one";
-                    break;
-                case 2:
+                    const auto& cols = config->get_columns();
+                    for (const auto& s : config->get_sortspec()) {
+                        if (std::find(cols.begin(), cols.end(), s.m_colname)
+                            == cols.end()) {
+                            num_hidden++;
+                        }
+                    }
+                } break;
+                case 2: {
                     nidx = "two";
-                    break;
+                    const auto& cols = config->get_columns();
+                    for (const auto& s : config->get_sortspec()) {
+                        if (std::find(cols.begin(), cols.end(), s.m_colname)
+                            == cols.end()) {
+                            num_hidden++;
+                        }
+                    }
+                } break;
                 default:
                     PSP_COMPLAIN_AND_ABORT(
                         "Invalid number of sides: "
@@ -1556,14 +1593,13 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                     );
             }
 
-            auto config = view->get_view_config();
             auto dims = parse_format_options(
                 r.viewport(),
                 view->num_columns(),
                 view->num_rows(),
                 view->sides(),
                 config->is_column_only(),
-                0
+                num_hidden
             );
 
             auto json_str = view->to_columns(
@@ -1571,7 +1607,7 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                 dims.end_row,
                 dims.start_col,
                 dims.end_col,
-                0,
+                num_hidden,
                 r.formatted(),
                 r.index(),
                 r.id(),
@@ -1579,14 +1615,13 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                 view->sides(),
                 view->sides() > 0 && !config->is_column_only(),
                 nidx,
-                view->num_columns(),
-                0
+                config->get_columns().size(),
+                config->get_row_pivots().size()
             );
 
             proto::Response resp;
             auto* view_cols_str = resp.mutable_view_to_columns_string_resp();
             view_cols_str->set_json_string(json_str);
-
             push_resp(std::move(resp));
             break;
         }

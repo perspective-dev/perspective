@@ -10,13 +10,6 @@
 #  ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-__version__ = "2.8.0"
+from bench import Benchmark, Suite, Runner
 
-from .perspective import *
-from .core.exception import PerspectiveError
-
-
-from .legacy import PerspectiveManager, Table, PerspectiveCppError, set_threadpool_size
-from .widget import PerspectiveWidget
-from .viewer import PerspectiveViewer
-from .handlers import PerspectiveTornadoHandler
+__all__ = ["Benchmark", "Suite", "Runner"]

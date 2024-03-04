@@ -704,7 +704,8 @@ const datetime_data_local = [
             });
         });
 
-        test.describe("is_valid_filter", function () {
+        // TODO `is_valid_filter` is not currently used and is soon to be replaced by `validate()`
+        test.describe.skip("is_valid_filter", function () {
             test("x == 2", async function () {
                 let table = await perspective.table(data);
                 let isValid = await table.is_valid_filter(["x", "==", 2]);

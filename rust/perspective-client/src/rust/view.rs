@@ -26,6 +26,8 @@ pub struct OnUpdateOptions {
     pub mode: Option<String>,
 }
 
+pub type OnUpdateArgs = (Option<Vec<u8>>, u32);
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Dimensions {
     pub num_view_rows: usize,
@@ -274,7 +276,7 @@ impl View {
     #[doc = include_str!("../../docs/view/on_update.md")]
     pub async fn on_update(
         &self,
-        on_update: Box<dyn Fn((Option<Vec<u8>>, u32)) + Send + Sync + 'static>,
+        on_update: Box<dyn Fn(OnUpdateArgs) + Send + Sync + 'static>,
         _options: Option<OnUpdateOptions>,
     ) -> ClientResult<u32> {
         let callback = move |resp| match resp {

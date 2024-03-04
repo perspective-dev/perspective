@@ -117,7 +117,7 @@ impl PySyncTable {
         &self,
         input: Py<PyAny>,
         format: Option<String>,
-        port_id: Option<i32>,
+        port_id: Option<u32>,
     ) -> PyResult<()> {
         block_on(self.0.update(input, format, port_id))
     }

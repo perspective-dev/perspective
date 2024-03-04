@@ -28,6 +28,10 @@ use crate::utils::*;
 use crate::view::View;
 use crate::{proto, Table};
 
+/// The possible formats of input data which [`Client::table`] and
+/// [`Table::update`] may take as an argument. The latter method will not work
+/// with [`TableData::View`] and [`TableData::Schema`] variants, and attempts to
+/// call [`Table::update`] with these variants will error.
 #[derive(Debug)]
 pub enum TableData {
     Schema(Vec<(String, ColumnType)>),
@@ -38,12 +42,44 @@ pub enum TableData {
     View(View),
 }
 
+impl From<TableData> for proto::make_table_data::Data {
+    fn from(value: TableData) -> Self {
+        match value {
+            TableData::Csv(x) => make_table_data::Data::FromCsv(x),
+            TableData::Arrow(x) => make_table_data::Data::FromArrow(x.into()),
+            TableData::JsonRows(x) => make_table_data::Data::FromRows(x),
+            TableData::JsonColumns(x) => make_table_data::Data::FromCols(x),
+            TableData::View(view) => make_table_data::Data::FromView(view.name),
+            TableData::Schema(x) => make_table_data::Data::FromSchema(proto::Schema {
+                schema: x
+                    .into_iter()
+                    .map(|(name, r#type)| KeyTypePair {
+                        name,
+                        r#type: r#type as i32,
+                    })
+                    .collect(),
+            }),
+        }
+    }
+}
+
+/// Options which impact the behavior of [`Client::table`], as well as
+/// subsequent calls to [`Table::update`], even though this latter method
+/// itself does not take [`TableInitOptions`] as an argument, since this
+/// parameter is fixed at creation.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum TableInitOptions {
+    /// This [`Table`] should use the column named by the `index` parameter as
+    /// the `index`, which causes [`Table::update`] and [`Client::table`] input
+    /// to either insert or update existing rows based on `index` column
+    /// value equality.
     #[serde(rename = "index")]
     Index { index: String },
 
+    /// This [`Table`] should be limited to `limit` rows, after which the
+    /// _earliest_ rows will be overwritten (where _earliest_ is defined as
+    /// relative to insertion order).
     #[serde(rename = "limit")]
     Limit { limit: u32 },
 }
@@ -63,21 +99,21 @@ impl From<TableInitOptions> for proto::MakeTableOptions {
     }
 }
 
-type Subscriptions<C> = Arc<RwLock<HashMap<u32, C>>>;
-
-type ManyCallback = Box<dyn Fn(ClientResp) -> Result<(), ClientError> + Send + Sync + 'static>;
-type OnceCallback = Box<dyn FnOnce(ClientResp) -> Result<(), ClientError> + Send + Sync + 'static>;
-
-type SendFuture = Pin<Box<dyn Future<Output = ()> + Send + Sync + 'static>>;
-type SendCallback = Arc<dyn Fn(&RequestEnvelope) -> SendFuture + Send + Sync + 'static>;
-
 #[derive(Clone)]
+#[doc = include_str!("../../docs/client.md")]
 pub struct Client {
     send: SendCallback,
     id_gen: Arc<AtomicU32>,
     subscriptions_once: Subscriptions<OnceCallback>,
     subscriptions_many: Subscriptions<ManyCallback>,
 }
+
+type Subscriptions<C> = Arc<RwLock<HashMap<u32, C>>>;
+type ManyCallback = Box<dyn Fn(ClientResp) -> Result<(), ClientError> + Send + Sync + 'static>;
+type OnceCallback = Box<dyn FnOnce(ClientResp) -> Result<(), ClientError> + Send + Sync + 'static>;
+
+type SendFuture = Pin<Box<dyn Future<Output = ()> + Send + Sync + 'static>>;
+type SendCallback = Arc<dyn Fn(&RequestEnvelope) -> SendFuture + Send + Sync + 'static>;
 
 impl std::fmt::Debug for Client {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -90,6 +126,7 @@ impl std::fmt::Debug for Client {
 impl Client {
     /// Create a new client instance with a closure over an external message
     /// queue's `push()`.
+    #[doc(hidden)]
     pub fn new<T>(send: T) -> Self
     where
         T: Fn(&RequestEnvelope) -> Pin<Box<dyn Future<Output = ()> + Send + Sync + 'static>>
@@ -106,6 +143,7 @@ impl Client {
     }
 
     /// Handle a message from the external message queue.
+    #[doc(hidden)]
     pub fn receive(&self, msg: ResponseEnvelope) -> Result<(), ClientError> {
         let payload = msg
             .payload
@@ -126,37 +164,22 @@ impl Client {
         Ok(())
     }
 
-    #[doc = include_str!("../../docs/table.md")]
+    #[doc = include_str!("../../docs/client/table.md")]
     pub async fn table(
         &self,
         input: TableData,
         options: Option<TableInitOptions>,
     ) -> ClientResult<Table> {
         let name = nanoid!();
-        let data = match input {
-            TableData::Csv(x) => make_table_data::Data::FromCsv(x),
-            TableData::Arrow(x) => make_table_data::Data::FromArrow(x.into()),
-            TableData::JsonRows(x) => make_table_data::Data::FromRows(x),
-            TableData::JsonColumns(x) => make_table_data::Data::FromCols(x),
-            TableData::View(view) => make_table_data::Data::FromView(view.name),
-            TableData::Schema(x) => make_table_data::Data::FromSchema(proto::Schema {
-                schema: x
-                    .into_iter()
-                    .map(|(name, r#type)| KeyTypePair {
-                        name,
-                        r#type: r#type as i32,
-                    })
-                    .collect(),
-            }),
-        };
-
         let msg = RequestEnvelope {
             msg_id: self.gen_id(),
             entity_id: name.clone(),
             entity_type: EntityType::Table as i32,
             payload: Some(Request {
                 client_req: Some(ClientReq::MakeTableReq(MakeTableReq {
-                    data: Some(MakeTableData { data: Some(data) }),
+                    data: Some(MakeTableData {
+                        data: Some(input.into()),
+                    }),
                     options: options.map(|x| x.into()),
                 })),
             }),

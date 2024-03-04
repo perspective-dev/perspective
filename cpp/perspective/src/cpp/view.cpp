@@ -1648,6 +1648,19 @@ View<CTX_T>::write_row_path(
     }
 }
 
+std::string
+col_path_to_legacy(const std::vector<t_tscalar>& col_path) {
+    std::stringstream column_name;
+    if (!col_path.empty()) {
+        for (auto i = 0; i < col_path.size() - 1; ++i) {
+            column_name << col_path[i].to_string() << "|";
+        }
+    }
+
+    column_name << col_path[col_path.size() - 1].get<const char*>();
+    return column_name.str();
+}
+
 template <typename CTX_T>
 void
 View<CTX_T>::write_column(
@@ -1662,18 +1675,8 @@ View<CTX_T>::write_column(
     rapidjson::Writer<rapidjson::StringBuffer>& writer
 ) const {
 
-    std::stringstream column_name;
-
-    if (!col_names.at(c).empty()) {
-        for (auto i = 0; i < col_names.at(c).size() - 1; ++i) {
-            column_name << col_names.at(c)[i].to_string() << "|";
-        }
-    }
-
-    column_name << col_names[c][col_names[c].size() - 1].get<const char*>();
-    const std::string& tmp = column_name.str();
     t_uindex depth = m_row_pivots.size();
-    writer.Key(tmp.c_str());
+    writer.Key(col_path_to_legacy(col_names.at(c)).c_str());
     writer.StartArray();
 
     for (auto r = start_row; r < end_row; ++r) {
@@ -1846,6 +1849,10 @@ View<t_ctx1>::to_rows(
 
     std::vector<std::string> column_names;
     for (auto c = start_col + 1; c < end_col; ++c) {
+        if (c >= (columns_length - hidden) + 1) {
+            continue;
+        }
+
         column_names.emplace_back(
             col_names[c][col_names[c].size() - 1].template get<const char*>()
         );
@@ -1897,6 +1904,10 @@ View<t_ctx1>::to_rows(
 
         // Columns
         for (auto c = start_col + 1; c < end_col; ++c) {
+            if (c >= (columns_length - hidden) + 1) {
+                continue;
+            }
+
             writer.Key(column_names[c - (start_col + 1)].c_str());
             auto scalar = slice->get(r, c);
             write_scalar(scalar, is_formatted, writer);
@@ -1940,14 +1951,13 @@ View<t_ctx2>::to_rows(
         return s.GetString();
     }
 
-    t_uindex depth = m_row_pivots.size();
     std::vector<std::string> column_names;
     for (auto c = start_col + 1; c < end_col; ++c) {
-        column_names.emplace_back(
-            col_names[c][col_names[c].size() - 1].template get<const char*>()
-        );
+        column_names.emplace_back(col_path_to_legacy(col_names.at(c)));
     }
 
+    t_uindex depth = m_row_pivots.size();
+    bool column_only = is_column_only();
     for (auto r = start_row; r < end_row; ++r) {
         if (has_row_path && leaves_only) {
             if (m_ctx->unity_get_row_depth(r) < depth) {
@@ -1960,7 +1970,7 @@ View<t_ctx2>::to_rows(
 
         // `__ROW_PATH__`
         const auto row_path = get_row_path(r);
-        if (group_by_length > 0) {
+        if (!column_only) {
             writer.Key("__ROW_PATH__");
             writer.StartArray();
             for (auto entry = row_path.size(); entry > 0; entry--) {
@@ -1996,6 +2006,10 @@ View<t_ctx2>::to_rows(
 
         // Columns
         for (auto c = start_col + 1; c < end_col; ++c) {
+            if (((c - 1) % (columns_length + hidden)) >= columns_length) {
+                continue;
+            }
+
             writer.Key(column_names[c - (start_col + 1)].c_str());
             auto scalar = slice->get(r, c);
             write_scalar(scalar, is_formatted, writer);
@@ -2227,6 +2241,7 @@ View<t_ctx2>::to_columns(
     write_row_path(
         start_row, end_row, has_row_path, leaves_only, is_formatted, writer
     );
+
     if (get_ids) {
         writer.Key("__ID__");
         writer.StartArray();

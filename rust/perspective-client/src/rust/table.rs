@@ -24,25 +24,26 @@ use crate::proto::{ColumnType, ExprValidationError, *};
 use crate::utils::*;
 use crate::view::View;
 
+pub type Schema = HashMap<String, ColumnType>;
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct UpdateOptions {
     pub format: Option<String>,
     pub port_id: Option<u32>,
 }
 
-#[derive(Clone)]
-pub struct Table {
-    name: String,
-    client: Client,
-}
-
-pub type Schema = HashMap<String, ColumnType>;
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ValidateExpressionsData {
     pub expression_schema: HashMap<String, ColumnType>,
     pub errors: HashMap<String, ExprValidationError>,
     pub expression_alias: HashMap<String, String>,
+}
+
+#[doc = include_str!("../../docs/table.md")]
+#[derive(Clone)]
+pub struct Table {
+    name: String,
+    client: Client,
 }
 
 assert_table_api!(Table);

@@ -1,0 +1,58 @@
+<!--
+   
+   Copyright (c) 2019, the Perspective Authors.
+   
+   This file is part of the Perspective library, distributed under the terms of
+   the Apache License 2.0.  The full license can be found in the LICENSE file.
+
+-->
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no"
+        />
+
+        <script src="http://localhost:8080/perspective-viewer"></script>
+        <script src="http://localhost:8080/perspective-viewer-datagrid"></script>
+        <script src="http://localhost:8080/perspective-viewer-d3fc"></script>
+        <script src="http://localhost:8080/perspective"></script>
+
+        <link rel="stylesheet" href="http://localhost:8080/pro.dark.css" />
+
+        <style>
+            perspective-viewer {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+            }
+        </style>
+    </head>
+
+    <body>
+        <perspective-viewer
+            id="viewer"
+            editable
+            plugin="Y Bar"
+            columns='["__TIME__"]'
+            row-pivots='["group", "name"]'
+            column-pivots='["group", "name"]'
+            aggregates="{'__TIME__':'avg'}"
+        >
+        </perspective-viewer>
+
+        <script>
+            window.addEventListener("DOMContentLoaded", async function () {
+                const websocket = perspective.websocket(
+                    "ws://localhost:8888/websocket"
+                );
+                const table = websocket.open_table("benchmark_results");
+                document.getElementById("viewer").load(table);
+            });
+        </script>
+    </body>
+</html>

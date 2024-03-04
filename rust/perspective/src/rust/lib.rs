@@ -288,15 +288,11 @@ impl JsTable {
     #[wasm_bindgen]
     pub async fn update(&self, input: &JsValue, options: JsValue) -> ApiResult<()> {
         let input = TableData::from_js_value(input)?;
-        self.0
-            .update(
-                input,
-                options
-                    .into_serde_ext::<UpdateOptions>()
-                    .unwrap_or_default(),
-            )
-            .await?;
+        let options = options
+            .into_serde_ext::<UpdateOptions>()
+            .unwrap_or_default();
 
+        self.0.update(input, options).await?;
         Ok(())
     }
 
@@ -391,14 +387,10 @@ impl JsView {
     #[wasm_bindgen]
     pub async fn get_min_max(&self, name: String) -> ApiResult<Array> {
         let result = self.0.get_min_max(name).await?;
-        tracing::error!("{} | {}", result.0, result.1);
-        Ok(Array::from_iter(
-            [
-                js_sys::JSON::parse(&result.0)?,
-                js_sys::JSON::parse(&result.1)?,
-            ]
-            .into_iter(),
-        ))
+        Ok([result.0, result.1]
+            .iter()
+            .map(|x| js_sys::JSON::parse(x))
+            .collect::<Result<_, _>>()?)
     }
 
     #[doc = include_str!("../../../perspective-client/docs/view/num_rows.md")]

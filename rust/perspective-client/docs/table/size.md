@@ -1,1 +1,1 @@
-Returns the number of rows in a `Table`.
+Returns the number of rows in a [`Table`].

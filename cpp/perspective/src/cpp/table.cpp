@@ -1041,7 +1041,6 @@ Table::update_rows(const std::string_view& data, std::uint32_t port_id) {
     }
 
     calculate_offset(size);
-    data_table.pprint();
     m_pool->send(get_gnode()->get_id(), port_id, data_table);
 }
 
@@ -1131,9 +1130,10 @@ Table::from_rows(
                 fill_column_json(psp_okey_col, ii, it.value);
             }
         }
+
         if (is_implicit) {
-            psp_pkey_col->set_nth<std::int32_t>(ii, ii);
-            psp_okey_col->set_nth<std::int32_t>(ii, ii);
+            psp_pkey_col->set_nth<std::int32_t>(ii, ii % limit);
+            psp_okey_col->set_nth<std::int32_t>(ii, ii % limit);
         }
 
         ii++;

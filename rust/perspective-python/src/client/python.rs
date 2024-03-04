@@ -18,8 +18,8 @@ use futures::lock::Mutex;
 use perspective_client::config::Expressions;
 use perspective_client::proto::{RequestEnvelope, ResponseEnvelope};
 use perspective_client::{
-    assert_table_api, assert_view_api, clone, Client, ClientError, ColumnType, OnUpdateOptions,
-    Table, TableData, TableInitOptions, UpdateOptions, View, ViewWindow,
+    assert_table_api, assert_view_api, clone, Client, ClientError, OnUpdateOptions, Table,
+    TableData, TableInitOptions, UpdateOptions, View, ViewWindow,
 };
 use prost::Message;
 use pyo3::exceptions::PyValueError;
@@ -85,7 +85,15 @@ impl TableData {
                 let string = json_module.call_method1("dumps", (pydict,))?;
                 Ok(TableData::JsonColumns(string.extract::<String>()?))
             } else {
-                Err(PyValueError::new_err("Schema not implemented"))
+                let mut schema = vec![];
+                for (key, val) in pydict.into_iter() {
+                    schema.push((
+                        key.extract::<String>()?,
+                        val.extract::<String>()?.as_str().try_into().into_pyerr()?,
+                    ));
+                }
+
+                Ok(TableData::Schema(schema))
             }
         } else {
             Err(PyValueError::new_err(format!(
@@ -134,18 +142,6 @@ impl PyClient {
             };
 
             let table_data = TableData::from_py(py, input)?;
-            // let table_data = if let Ok(pybytes) = input.downcast::<PyBytes>(py) {
-            //     TableData::Arrow(pybytes.as_bytes().to_vec())
-            // } else if let Ok(pystring) = input.downcast::<PyString>(py) {
-            //     TableData::Csv(pystring.extract::<String>()?)
-            // } else if let Ok(pylist) = input.downcast::<PyList>(py) {
-            //     let json_module = PyModule::import(py, "json")?;
-            //     let string = json_module.call_method1("dumps", (pylist,))?;
-            //     TableData::JsonRows(string.extract::<String>()?)
-            // } else {
-            //     Err(PyValueError::new_err("Unknown input type"))?
-            // };
-
             let table = client.as_ref().unwrap().table(table_data, options);
             Ok::<_, PyErr>(table)
         })?;
@@ -189,7 +185,7 @@ impl PyTable {
 
     pub async fn on_delete(&self, callback: Py<PyFunction>) -> PyResult<u32> {
         let callback = Box::new(move || {
-            Python::with_gil(|py| callback.call0(py));
+            Python::with_gil(|py| callback.call0(py)).expect("`on_delete()` callback failed");
         });
 
         self.table
@@ -219,7 +215,7 @@ impl PyTable {
         &self,
         input: Py<PyAny>,
         format: Option<String>,
-        port_id: Option<i32>,
+        port_id: Option<u32>,
     ) -> PyResult<()> {
         let table = self.table.lock().await;
         let table_data = Python::with_gil(|py| TableData::from_py(py, input))?;
@@ -323,7 +319,7 @@ impl PyView {
 
     pub async fn on_delete(&self, callback: Py<PyFunction>) -> PyResult<u32> {
         let callback = Box::new(move || {
-            Python::with_gil(|py| callback.call0(py));
+            Python::with_gil(|py| callback.call0(py)).expect("`on_delete()` callback failed");
         });
 
         self.view
@@ -344,14 +340,15 @@ impl PyView {
     }
 
     pub async fn on_update(&self, callback: Py<PyFunction>, mode: Option<String>) -> PyResult<u32> {
-        let callback = Box::new(move |x: Option<Vec<u8>>| {
+        let callback = Box::new(move |x: (Option<Vec<u8>>, u32)| {
             Python::with_gil(|py| {
-                if let Some(x) = &x {
+                if let Some(x) = &x.0 {
                     callback.call1(py, (PyBytes::new(py, x),))
                 } else {
                     callback.call0(py)
                 }
-            });
+            })
+            .expect("`on_update()` callback failed");
         });
 
         self.view

@@ -35,7 +35,6 @@
 #include <fstream>
 #include <perspective/portable.h>
 #include <boost/functional/hash.hpp>
-#include <boost/stacktrace.hpp>
 #include <stdlib.h>
 #if defined(PSP_DEBUG) && defined(PSP_ENABLE_WASM)
 #include <emscripten.h>

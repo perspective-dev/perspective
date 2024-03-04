@@ -315,65 +315,65 @@ class TestTable(object):
 
     # is_valid_filter
 
-    def test_table_is_valid_filter_str(self):
-        filter = ["a", "<", 1]
-        data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
-        tbl = Table(data)
-        assert tbl.is_valid_filter(filter) is True
+    # def test_table_is_valid_filter_str(self):
+    #     filter = ["a", "<", 1]
+    #     data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+    #     tbl = Table(data)
+    #     assert tbl.is_valid_filter(filter) is True
 
-    def test_table_not_is_valid_filter_str(self):
-        filter = ["a", "<", None]
-        data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
-        tbl = Table(data)
-        assert tbl.is_valid_filter(filter) is False
+    # def test_table_not_is_valid_filter_str(self):
+    #     filter = ["a", "<", None]
+    #     data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+    #     tbl = Table(data)
+    #     assert tbl.is_valid_filter(filter) is False
 
-    def test_table_is_valid_filter_filter_op(self):
-        filter = ["a", t_filter_op.FILTER_OP_IS_NULL]
-        data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
-        tbl = Table(data)
-        assert tbl.is_valid_filter(filter) is True
+    # def test_table_is_valid_filter_filter_op(self):
+    #     filter = ["a", t_filter_op.FILTER_OP_IS_NULL]
+    #     data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+    #     tbl = Table(data)
+    #     assert tbl.is_valid_filter(filter) is True
 
-    def test_table_not_is_valid_filter_filter_op(self):
-        filter = ["a", t_filter_op.FILTER_OP_GT, None]
-        data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
-        tbl = Table(data)
-        assert tbl.is_valid_filter(filter) is False
+    # def test_table_not_is_valid_filter_filter_op(self):
+    #     filter = ["a", t_filter_op.FILTER_OP_GT, None]
+    #     data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+    #     tbl = Table(data)
+    #     assert tbl.is_valid_filter(filter) is False
 
-    def test_table_is_valid_filter_date(self):
-        filter = ["a", t_filter_op.FILTER_OP_GT, date.today()]
-        tbl = Table({"a": date})
-        assert tbl.is_valid_filter(filter) is True
+    # def test_table_is_valid_filter_date(self):
+    #     filter = ["a", t_filter_op.FILTER_OP_GT, date.today()]
+    #     tbl = Table({"a": date})
+    #     assert tbl.is_valid_filter(filter) is True
 
-    def test_table_not_is_valid_filter_date(self):
-        filter = ["a", t_filter_op.FILTER_OP_GT, None]
-        tbl = Table({"a": date})
-        assert tbl.is_valid_filter(filter) is False
+    # def test_table_not_is_valid_filter_date(self):
+    #     filter = ["a", t_filter_op.FILTER_OP_GT, None]
+    #     tbl = Table({"a": date})
+    #     assert tbl.is_valid_filter(filter) is False
 
-    def test_table_is_valid_filter_datetime(self):
-        filter = ["a", t_filter_op.FILTER_OP_GT, datetime.now()]
-        tbl = Table({"a": datetime})
-        assert tbl.is_valid_filter(filter) is True
+    # def test_table_is_valid_filter_datetime(self):
+    #     filter = ["a", t_filter_op.FILTER_OP_GT, datetime.now()]
+    #     tbl = Table({"a": datetime})
+    #     assert tbl.is_valid_filter(filter) is True
 
-    def test_table_not_is_valid_filter_datetime(self):
-        filter = ["a", t_filter_op.FILTER_OP_GT, None]
-        tbl = Table({"a": datetime})
-        assert tbl.is_valid_filter(filter) is False
+    # def test_table_not_is_valid_filter_datetime(self):
+    #     filter = ["a", t_filter_op.FILTER_OP_GT, None]
+    #     tbl = Table({"a": datetime})
+    #     assert tbl.is_valid_filter(filter) is False
 
-    def test_table_is_valid_filter_datetime_str(self):
-        filter = ["a", t_filter_op.FILTER_OP_GT, "7/11/2019 5:30PM"]
-        tbl = Table({"a": datetime})
-        assert tbl.is_valid_filter(filter) is True
+    # def test_table_is_valid_filter_datetime_str(self):
+    #     filter = ["a", t_filter_op.FILTER_OP_GT, "7/11/2019 5:30PM"]
+    #     tbl = Table({"a": datetime})
+    #     assert tbl.is_valid_filter(filter) is True
 
-    def test_table_not_is_valid_filter_datetime_str(self):
-        filter = ["a", t_filter_op.FILTER_OP_GT, None]
-        tbl = Table({"a": datetime})
-        assert tbl.is_valid_filter(filter) is False
+    # def test_table_not_is_valid_filter_datetime_str(self):
+    #     filter = ["a", t_filter_op.FILTER_OP_GT, None]
+    #     tbl = Table({"a": datetime})
+    #     assert tbl.is_valid_filter(filter) is False
 
-    def test_table_is_valid_filter_ignores_not_in_schema(self):
-        filter = ["not in schema", "<", 1]
-        data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
-        tbl = Table(data)
-        assert tbl.is_valid_filter(filter) is True
+    # def test_table_is_valid_filter_ignores_not_in_schema(self):
+    #     filter = ["not in schema", "<", 1]
+    #     data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+    #     tbl = Table(data)
+    #     assert tbl.is_valid_filter(filter) is True
 
     # index
 

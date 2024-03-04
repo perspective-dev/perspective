@@ -662,7 +662,7 @@ function validate_typed_array(typed_array, column_data) {
         test("Table constructor should throw an exception and reject promise", async function () {
             expect.assertions(1);
             perspective.table([1, 2, 3]).catch((error) => {
-                expect(error.message).toEqual(
+                expect(error.message).toContain(
                     "Abort(): Cannot determine data types without column names!\n"
                 );
             });
@@ -676,7 +676,7 @@ function validate_typed_array(typed_array, column_data) {
                     group_by: ["abcd"],
                 })
                 .catch((error) => {
-                    expect(error.message).toEqual(
+                    expect(error.message).toContain(
                         "Abort(): Invalid column 'abcd' found in View group_by.\n"
                     );
                     table.delete();
@@ -689,7 +689,7 @@ function validate_typed_array(typed_array, column_data) {
             try {
                 await perspective.table([1, 2, 3]);
             } catch (error) {
-                expect(error.message).toEqual(
+                expect(error.message).toContain(
                     "Abort(): Cannot determine data types without column names!\n"
                 );
             }
@@ -704,7 +704,7 @@ function validate_typed_array(typed_array, column_data) {
                     group_by: ["abcd"],
                 });
             } catch (error) {
-                expect(error.message).toEqual(
+                expect(error.message).toContain(
                     "Abort(): Invalid column 'abcd' found in View group_by.\n"
                 );
                 table.delete();

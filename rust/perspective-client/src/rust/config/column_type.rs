@@ -44,6 +44,7 @@ use serde::{Deserialize, Serialize};
 // }
 
 use crate::proto::ColumnType;
+use crate::ClientError;
 
 impl Display for ColumnType {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
@@ -59,31 +60,50 @@ impl Display for ColumnType {
 }
 
 impl FromStr for ColumnType {
-    type Err = ();
+    type Err = ClientError;
 
     fn from_str(val: &str) -> Result<Self, Self::Err> {
-        Ok(val.into())
+        val.try_into()
     }
 }
 
-impl From<&str> for ColumnType {
-    fn from(val: &str) -> Self {
+impl TryFrom<&str> for ColumnType {
+    type Error = ClientError;
+
+    fn try_from(val: &str) -> Result<Self, Self::Error> {
         if val == "string" {
-            Self::String
+            Ok(Self::String)
         } else if val == "integer" {
-            Self::Integer
+            Ok(Self::Integer)
         } else if val == "float" {
-            Self::Float
+            Ok(Self::Float)
         } else if val == "boolean" {
-            Self::Boolean
+            Ok(Self::Boolean)
         } else if val == "date" {
-            Self::Date
+            Ok(Self::Date)
         } else if val == "datetime" {
-            Self::Datetime
+            Ok(Self::Datetime)
         } else {
-            panic!("Unknown type {}", val);
+            Err(ClientError::Internal(format!("Unknown type {}", val)))
         }
     }
+    // fn from(val: &str) -> Self {
+    //     if val == "string" {
+    //         Self::String
+    //     } else if val == "integer" {
+    //         Self::Integer
+    //     } else if val == "float" {
+    //         Self::Float
+    //     } else if val == "boolean" {
+    //         Self::Boolean
+    //     } else if val == "date" {
+    //         Self::Date
+    //     } else if val == "datetime" {
+    //         Self::Datetime
+    //     } else {
+    //         panic!("Unknown type {}", val);
+    //     }
+    // }
 }
 
 impl ColumnType {
