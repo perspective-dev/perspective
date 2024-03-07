@@ -209,19 +209,21 @@ impl From<Scalar> for proto::Scalar {
     fn from(value: Scalar) -> Self {
         match value {
             Scalar::Float(x) => proto::Scalar {
-                scalar: Some(scalar::Scalar::FloatScalar(x)),
+                scalar: Some(scalar::Scalar::Float(x)),
             },
             Scalar::String(x) => proto::Scalar {
-                scalar: Some(scalar::Scalar::StringScalar(x)),
+                scalar: Some(scalar::Scalar::String(x)),
             },
             Scalar::Bool(x) => proto::Scalar {
-                scalar: Some(scalar::Scalar::BoolScalar(x)),
+                scalar: Some(scalar::Scalar::Bool(x)),
             },
             // Scalar::Date(_) => todo!(),
             Scalar::DateTime(x) => proto::Scalar {
-                scalar: Some(scalar::Scalar::DatetimeScalar(x as i64)),
+                scalar: Some(scalar::Scalar::Datetime(x as i64)),
             },
-            Scalar::Null => proto::Scalar { scalar: None },
+            Scalar::Null => proto::Scalar {
+                scalar: Some(scalar::Scalar::Null(0)),
+            },
         }
     }
 }
@@ -229,12 +231,13 @@ impl From<Scalar> for proto::Scalar {
 impl From<proto::Scalar> for Scalar {
     fn from(value: proto::Scalar) -> Self {
         match value.scalar {
-            Some(scalar::Scalar::BoolScalar(x)) => Scalar::Bool(x),
-            Some(scalar::Scalar::StringScalar(x)) => Scalar::String(x),
-            Some(scalar::Scalar::IntScalar(x)) => Scalar::Float(x as f64),
-            Some(scalar::Scalar::DateScalar(x)) => Scalar::DateTime(x as f64),
-            Some(scalar::Scalar::FloatScalar(x)) => Scalar::Float(x),
-            Some(scalar::Scalar::DatetimeScalar(x)) => Scalar::DateTime(x as f64),
+            Some(scalar::Scalar::Bool(x)) => Scalar::Bool(x),
+            Some(scalar::Scalar::String(x)) => Scalar::String(x),
+            Some(scalar::Scalar::Int(x)) => Scalar::Float(x as f64),
+            Some(scalar::Scalar::Date(x)) => Scalar::DateTime(x as f64),
+            Some(scalar::Scalar::Float(x)) => Scalar::Float(x),
+            Some(scalar::Scalar::Datetime(x)) => Scalar::DateTime(x as f64),
+            Some(scalar::Scalar::Null(_)) => Scalar::Null,
             None => todo!(),
         }
     }

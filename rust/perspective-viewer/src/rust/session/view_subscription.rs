@@ -13,6 +13,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use perspective_client::OnUpdateOptions;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
@@ -115,7 +116,10 @@ impl ViewSubscription {
             clone!(data.view, data.callback_id);
             async move {
                 let result = view
-                    .on_update(Box::new(move |msg| spawn_local(emit.poll(msg))), None)
+                    .on_update(
+                        Box::new(move |msg| spawn_local(emit.poll(msg))),
+                        OnUpdateOptions::default(),
+                    )
                     .await?;
                 callback_id.set(result);
                 Ok(())

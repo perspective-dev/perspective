@@ -312,7 +312,7 @@ async function match_delta(perspective, delta, expected) {
             let threw = false;
             try {
                 // In 3.0, this throws an exception
-                table.remove([0, 1]);
+                await table.remove([0, 1]);
             } catch (e) {
                 threw = true;
             }

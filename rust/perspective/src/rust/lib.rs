@@ -48,7 +48,7 @@ impl Vec<(String, ColumnType)> {
     fn from_js_value(value: &JsValue) -> ApiResult<Vec<(String, ColumnType)>> {
         Ok(Object::keys(value.unchecked_ref())
             .iter()
-            .flat_map(|x| -> Result<_, JsValue> {
+            .map(|x| -> Result<_, JsValue> {
                 let key = x.as_string().into_apierror()?;
                 let val = Reflect::get(value, &x)?
                     .as_string()
@@ -57,7 +57,7 @@ impl Vec<(String, ColumnType)> {
 
                 Ok((key, val))
             })
-            .collect())
+            .collect::<Result<Vec<_>, _>>()?)
     }
 }
 
@@ -81,17 +81,16 @@ impl Vec<(String, ColumnType)> {
 #[ext]
 impl TableData {
     fn from_js_value(value: &JsValue) -> ApiResult<TableData> {
-        use TableData::*;
         let err_fn = || JsValue::from(format!("Failed to construct Table {:?}", value));
         if value.is_string() {
-            Ok(Csv(value.as_string().into_apierror()?))
+            Ok(TableData::Csv(value.as_string().into_apierror()?))
         } else if value.is_instance_of::<ArrayBuffer>() {
             let uint8array = Uint8Array::new(value);
             let slice = uint8array.to_vec();
-            Ok(Arrow(slice))
+            Ok(TableData::Arrow(slice))
         } else if value.is_instance_of::<Array>() {
             let rows = JSON::stringify(value)?.as_string().into_apierror()?;
-            Ok(JsonRows(rows))
+            Ok(TableData::JsonRows(rows))
         } else if Reflect::has(value, &"__get_model".into())? {
             let val = Reflect::get(value, &"__get_model".into())?
                 .dyn_into::<Function>()?
@@ -100,13 +99,24 @@ impl TableData {
             let view = JsView::try_from_js_value(val)?;
             Ok(TableData::View(view.0))
         } else if value.is_instance_of::<Object>() {
-            let first_col = Object::keys(value.unchecked_ref()).get(0);
-            let first_val = Reflect::get(value, &first_col)?;
-            if first_val.is_string() {
+            let all_strings = || {
+                Object::values(value.unchecked_ref())
+                    .to_vec()
+                    .iter()
+                    .all(|x| x.is_string())
+            };
+            let all_arrays = || {
+                Object::values(value.unchecked_ref())
+                    .to_vec()
+                    .iter()
+                    .all(|x| x.is_instance_of::<Array>())
+            };
+            if all_strings() {
                 Ok(TableData::Schema(Vec::from_js_value(value)?))
-            } else if first_val.is_instance_of::<Array>() {
-                let cols = JSON::stringify(value)?.as_string().into_apierror()?;
-                Ok(JsonColumns(cols))
+            } else if all_arrays() {
+                Ok(TableData::JsonColumns(
+                    JSON::stringify(value)?.as_string().into_apierror()?,
+                ))
             } else {
                 Err(err_fn().into())
             }
@@ -457,7 +467,7 @@ impl JsView {
 
     #[doc = include_str!("../../../perspective-client/docs/view/on_update.md")]
     #[wasm_bindgen]
-    pub async fn on_update(&self, on_update: Function, _options: &JsValue) -> ApiResult<u32> {
+    pub async fn on_update(&self, on_update: Function, options: &JsValue) -> ApiResult<u32> {
         let emit = LocalPollLoop::new(move |(arrow, port_id): (Option<Vec<u8>>, u32)| {
             let js_obj = js_sys::Object::new();
             if let Some(arrow) = arrow {
@@ -479,7 +489,11 @@ impl JsView {
             on_update.call1(&JsValue::UNDEFINED, &js_obj)
         });
         let on_update = Box::new(move |msg| spawn_local(emit.poll(msg)));
-        Ok(self.0.on_update(on_update, None).await?)
+        let on_update_opts = options
+            .into_serde_ext::<OnUpdateOptions>()
+            .ok()
+            .unwrap_or_default();
+        Ok(self.0.on_update(on_update, on_update_opts).await?)
     }
 
     #[doc = include_str!("../../../perspective-client/docs/view/remove_update.md")]

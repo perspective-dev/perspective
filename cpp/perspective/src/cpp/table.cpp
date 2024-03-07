@@ -24,6 +24,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 // Give each Table a unique ID so that operations on it map back correctly
@@ -470,15 +471,85 @@ PROMOTE_IMPL(DTYPE_INT32, DTYPE_INT64, DTYPE_INT64)
 // PROMOTE_IMPL(std::int32_t, std::float_t, DTYPE_FLOAT32)
 // PROMOTE_IMPL(std::int32_t, std::double_t, DTYPE_FLOAT64)
 
+template <typename A>
+static A
+coerce_to(const rapidjson::Value& value) {
+    if constexpr (std::is_same_v<A, std::int32_t> || std::is_same_v<A, std::int64_t> || std::is_same_v<A, double>) {
+        if (value.IsInt()) {
+            return value.GetInt();
+        }
+        if (value.IsInt64()) {
+            return value.GetInt64();
+        }
+        if (value.IsDouble()) {
+            return value.GetDouble();
+        }
+        if (value.IsFloat()) {
+            return value.GetFloat();
+        }
+        if (value.IsString()) {
+            if constexpr (std::is_same_v<A, std::int32_t>) {
+                return std::atoi(value.GetString());
+            } else if constexpr (std::is_same_v<A, std::int64_t>) {
+                return std::atoll(value.GetString());
+            } else if constexpr (std::is_same_v<A, double> || std::is_same_v<A, float>) {
+                return std::atof(value.GetString());
+            } else {
+                static_assert(!std::is_same_v<A, A>, "No coercion for type");
+            }
+        }
+        if (value.IsNull()) {
+            return 0;
+        }
+
+        std::stringstream ss;
+        ss << "Could not coerce " << value.GetType() << " to "
+           << "a number";
+        throw std::runtime_error(ss.str());
+    } else if constexpr (std::is_same_v<A, std::string>) {
+        switch (value.GetType()) {
+            case rapidjson::kNullType:
+                return "";
+            case rapidjson::kFalseType:
+                return "false";
+            case rapidjson::kTrueType:
+                return "true";
+            case rapidjson::kObjectType:
+                throw std::runtime_error("Cannot coerce object to string");
+            case rapidjson::kArrayType:
+                throw std::runtime_error("Cannot coerce array to string");
+            case rapidjson::kStringType:
+                return value.GetString();
+            case rapidjson::kNumberType:
+                if (value.IsInt()) {
+                    return std::to_string(value.GetInt());
+                }
+                if (value.IsInt64()) {
+                    return std::to_string(value.GetInt64());
+                }
+                if (value.IsDouble()) {
+                    return std::to_string(value.GetDouble());
+                }
+                if (value.IsFloat()) {
+                    return std::to_string(value.GetFloat());
+                }
+        }
+
+        std::stringstream ss;
+        ss << "Could not coerce " << value.GetType() << " to "
+           << "a string";
+        throw std::runtime_error(ss.str());
+    } else {
+        static_assert(!std::is_same_v<A, A>, "No coercion for type");
+    }
+}
+
 std::optional<t_dtype>
 fill_column_json(
     const std::shared_ptr<t_column>& col,
     const t_uindex i,
     const rapidjson::Value& value
 ) {
-    // LOG_DEBUG("Filling column"
-    //     << " at index " << i << " with dtype "
-    //     << dtype_to_str(col->get_dtype()));
     if (value.IsNull()) {
         col->unset(i);
         return std::nullopt;
@@ -487,18 +558,11 @@ fill_column_json(
     switch (col->get_dtype()) {
         case t_dtype::DTYPE_STR: {
             if (!value.IsString()) {
-                std::stringstream ss;
-                ss << "Expected string, found " << value.GetType();
-                PSP_COMPLAIN_AND_ABORT(ss.str());
+                auto v = coerce_to<std::string>(value);
+                col->set_nth(i, v);
+            } else {
+                col->set_nth(i, value.GetString());
             }
-            // auto str = std::string_view(value.GetString());
-            // if (str.find_first_not_of("0123456789.") == std::string::npos) {
-            //     if (str.find('.') != std::string::npos) {
-            //         return {DTYPE_FLOAT64};
-            //     }
-            //     return {DTYPE_INT32};
-            // }
-            col->set_nth(i, value.GetString());
             return std::nullopt;
         }
         case t_dtype::DTYPE_INT32: {
@@ -843,11 +907,17 @@ Table::update_cols(const std::string_view& data, std::uint32_t port_id) {
     for (const auto& col : document.GetObject()) {
         t_uindex ii = 0;
         const auto& col_name = col.name.GetString();
+        if (!schema.has_column(col_name)) {
+            LOG_DEBUG("Ignoring column " << col_name);
+            continue;
+        }
         for (const auto& cell : col.value.GetArray()) {
             auto col = data_table.get_column(col_name);
             auto promote = fill_column_json(col, ii, cell);
             if (promote) {
-                PSP_COMPLAIN_AND_ABORT("Can't promote column on update");
+                data_table.promote_column(col_name, *promote, ii, true);
+                col = data_table.get_column(col_name);
+                fill_column_json(col, ii, cell);
             }
 
             if (!is_implicit && m_index == col_name) {
@@ -1021,10 +1091,19 @@ Table::update_rows(const std::string_view& data, std::uint32_t port_id) {
     // 3.) Fill table
     for (const auto& row : document.GetArray()) {
         for (const auto& it : row.GetObject()) {
+            if (!schema.has_column(it.name.GetString())) {
+                LOG_DEBUG("Ignoring column " << it.name.GetString());
+                LOG_DEBUG("Schema:\n" << schema);
+                continue;
+            }
             auto col = data_table.get_column(it.name.GetString());
-            auto out = fill_column_json(col, ii, it.value);
-            if (out) {
-                PSP_COMPLAIN_AND_ABORT("Can't promote column on update");
+            auto promote = fill_column_json(col, ii, it.value);
+            if (promote) {
+                data_table.promote_column(
+                    it.name.GetString(), *promote, ii, true
+                );
+                col = data_table.get_column(it.name.GetString());
+                fill_column_json(col, ii, it.value);
             }
             if (!is_implicit && m_index == it.name.GetString()) {
                 fill_column_json(psp_pkey_col, ii, it.value);
@@ -1166,7 +1245,7 @@ Table::from_schema(
         if (!schema.has_column(index)) {
             std::stringstream ss;
             ss << "Specified index `" << index
-               << "` does not appear in the Table." << std::endl;
+               << "` does not appear in the Table." << '\n';
             PSP_COMPLAIN_AND_ABORT(ss.str());
         }
 

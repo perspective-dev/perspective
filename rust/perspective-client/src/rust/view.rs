@@ -14,6 +14,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use self::view_on_update_req::Mode;
 use crate::assert_view_api;
 use crate::client::Client;
 use crate::proto::request::ClientReq;
@@ -23,7 +24,14 @@ pub use crate::utils::*;
 
 #[derive(Default, Deserialize)]
 pub struct OnUpdateOptions {
-    pub mode: Option<String>,
+    pub mode: Option<OnUpdateMode>,
+}
+
+#[derive(Default, Deserialize)]
+pub enum OnUpdateMode {
+    #[default]
+    #[serde(rename = "row")]
+    Row,
 }
 
 pub type OnUpdateArgs = (Option<Vec<u8>>, u32);
@@ -277,7 +285,7 @@ impl View {
     pub async fn on_update(
         &self,
         on_update: Box<dyn Fn(OnUpdateArgs) + Send + Sync + 'static>,
-        _options: Option<OnUpdateOptions>,
+        options: OnUpdateOptions,
     ) -> ClientResult<u32> {
         let callback = move |resp| match resp {
             ClientResp::ViewOnUpdateResp(ViewOnUpdateResp { arrow, port_id }) => {
@@ -287,7 +295,9 @@ impl View {
             resp => Err(resp.into()),
         };
 
-        let msg = self.client_message(ClientReq::ViewOnUpdateReq(ViewOnUpdateReq {}));
+        let msg = self.client_message(ClientReq::ViewOnUpdateReq(ViewOnUpdateReq {
+            mode: options.mode.map(|OnUpdateMode::Row| Mode::Row as i32),
+        }));
         self.client.subscribe(&msg, Box::new(callback)).await;
         Ok(msg.msg_id)
     }

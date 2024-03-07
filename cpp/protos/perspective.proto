@@ -244,7 +244,12 @@ message ViewNumRowsResp {
   uint32 num_rows = 1;
 }
 
-message ViewOnUpdateReq {}
+message ViewOnUpdateReq {
+  enum Mode {
+    ROW = 0;
+  }
+  optional Mode mode = 1;
+}
 message ViewOnUpdateResp {
   optional bytes arrow = 1;
   uint32 port_id = 2;
@@ -344,12 +349,13 @@ message ViewToCSVResp {
 
 message Scalar {
   oneof scalar {
-    bool bool_scalar = 1;
-    int64 date_scalar = 2;
-    int64 datetime_scalar = 3;
-    double float_scalar = 4;
-    int32 int_scalar = 5;
-    string string_scalar = 6;
+    bool bool = 1;
+    int64 date = 2;
+    int64 datetime = 3;
+    double float = 4;
+    int32 int = 5;
+    string string = 6;
+    google.protobuf.NullValue null = 7;
   }
 }
 

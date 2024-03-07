@@ -754,12 +754,13 @@ needs_poll(const proto::Request::ClientReqCase proto_case) {
         case ReqCase::kViewGetMinMaxReq:
         case ReqCase::kTableRemoveReq:
         case ReqCase::kTableMakeViewReq:
+        case ReqCase::kViewOnUpdateReq:
             return true;
         case ReqCase::kTableOnDeleteReq:
         case ReqCase::kViewOnDeleteReq:
         case ReqCase::kViewRemoveDeleteReq:
-        case ReqCase::kTableRemoveDeleteReq:
         case ReqCase::kTableUpdateReq:
+        case ReqCase::kTableRemoveDeleteReq:
         case ReqCase::kTableReplaceReq:
         case ReqCase::kTableDeleteReq:
         case ReqCase::kTableClearReq:
@@ -767,7 +768,6 @@ needs_poll(const proto::Request::ClientReqCase proto_case) {
         case ReqCase::kViewColumnPathsReq:
         case ReqCase::kViewDeleteReq:
         case ReqCase::kViewExpressionSchemaReq:
-        case ReqCase::kViewOnUpdateReq:
             return false;
         case proto::Request::CLIENT_REQ_NOT_SET:
             throw std::runtime_error("Unhandled request type");
@@ -1177,31 +1177,31 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                     t_tscalar a;
                     a.clear();
                     switch (arg.scalar_case()) {
-                        case proto::Scalar::kBoolScalar: {
-
-                            a.set(arg.bool_scalar());
+                        case proto::Scalar::kBool: {
+                            a.set(arg.bool_());
                             args.push_back(a);
                             break;
                         }
-                        case proto::Scalar::kFloatScalar: {
-                            a.set(arg.float_scalar());
+                        case proto::Scalar::kFloat: {
+                            a.set(arg.float_());
                             args.push_back(a);
                             break;
                         }
-                        case proto::Scalar::kIntScalar: {
-                            a.set(arg.int_scalar());
-                            args.push_back(a);
-                            break;
-                        }
-
-                        case proto::Scalar::kStringScalar: {
-                            a.set(arg.string_scalar().c_str());
+                        case proto::Scalar::kInt: {
+                            a.set(arg.int_());
                             args.push_back(a);
                             break;
                         }
 
-                        case proto::Scalar::kDateScalar:
-                        case proto::Scalar::kDatetimeScalar:
+                        case proto::Scalar::kString: {
+                            a.set(arg.string().c_str());
+                            args.push_back(a);
+                            break;
+                        }
+
+                        case proto::Scalar::kNull:
+                        case proto::Scalar::kDate:
+                        case proto::Scalar::kDatetime:
                         case proto::Scalar::SCALAR_NOT_SET:
                             PSP_COMPLAIN_AND_ABORT(
                                 "Filter scalar type not implemented"
@@ -1340,11 +1340,6 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
             } else {
                 PSP_COMPLAIN_AND_ABORT("Invalid number of sides");
             }
-
-            // TODO: Only enable this if the mode of on_update is
-            //       "row" or "cell"
-            erased_view->set_deltas_enabled(true);
-            // Seems to only affect 1 & 2 sided contexts
 
             m_resources.host_view(r.view_id(), env.entity_id(), erased_view);
             proto::Response resp;
@@ -1724,6 +1719,12 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
         case proto::Request::kViewOnUpdateReq: {
             Subscription sub_info{.id = env.msg_id()};
             m_resources.create_view_on_update_sub(env.entity_id(), sub_info);
+            if (req.view_on_update_req().has_mode()
+                && req.view_on_update_req().mode()
+                    == proto::ViewOnUpdateReq_Mode::ViewOnUpdateReq_Mode_ROW) {
+                auto view = m_resources.get_view(env.entity_id());
+                view->set_deltas_enabled(true);
+            }
             break;
         }
         case proto::Request::kViewGetMinMaxReq: {
