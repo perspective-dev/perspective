@@ -147,8 +147,8 @@ t_schema::retype_column(const std::string& colname, t_dtype dtype) {
 }
 
 bool
-t_schema::has_column(const std::string& colname) const {
-    auto iter = m_colidx_map.find(colname);
+t_schema::has_column(std::string_view colname) const {
+    auto iter = m_colidx_map.find(colname.data());
     return iter != m_colidx_map.end();
 }
 

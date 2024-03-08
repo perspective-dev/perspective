@@ -37,7 +37,7 @@ struct PERSPECTIVE_EXPORT t_schema {
     void add_column(const std::string& colname, t_dtype dtype);
     void retype_column(const std::string& colname, t_dtype dtype);
     t_schema drop(const std::set<std::string>& columns) const;
-    bool has_column(const std::string& colname) const;
+    bool has_column(std::string_view colname) const;
 
     bool is_pkey() const;
 

@@ -172,10 +172,10 @@ t_data_table::get_dtype(const std::string& colname) const {
 }
 
 std::shared_ptr<t_column>
-t_data_table::get_column_safe(const std::string& colname) {
+t_data_table::get_column_safe(std::string_view colname) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    t_uindex idx = m_schema.get_colidx_safe(colname);
+    t_uindex idx = m_schema.get_colidx_safe(colname.data());
     if (idx == -1) {
         return nullptr;
     }
@@ -183,26 +183,26 @@ t_data_table::get_column_safe(const std::string& colname) {
 }
 
 std::shared_ptr<t_column>
-t_data_table::get_column(const std::string& colname) {
+t_data_table::get_column(std::string_view colname) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    t_uindex idx = m_schema.get_colidx(colname);
+    t_uindex idx = m_schema.get_colidx(colname.data());
     return m_columns[idx];
 }
 
 std::shared_ptr<t_column>
-t_data_table::get_column(const std::string& colname) const {
+t_data_table::get_column(std::string_view colname) const {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    t_uindex idx = m_schema.get_colidx(colname);
+    t_uindex idx = m_schema.get_colidx(colname.data());
     return m_columns[idx];
 }
 
 std::shared_ptr<t_column>
-t_data_table::get_column_safe(const std::string& colname) const {
+t_data_table::get_column_safe(std::string_view colname) const {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    t_uindex idx = m_schema.get_colidx_safe(colname);
+    t_uindex idx = m_schema.get_colidx_safe(colname.data());
     if (idx == -1) {
         return nullptr;
     }
@@ -210,18 +210,18 @@ t_data_table::get_column_safe(const std::string& colname) const {
 }
 
 std::shared_ptr<const t_column>
-t_data_table::get_const_column(const std::string& colname) const {
+t_data_table::get_const_column(std::string_view colname) const {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    t_uindex idx = m_schema.get_colidx(colname);
+    t_uindex idx = m_schema.get_colidx(colname.data());
     return m_columns[idx];
 }
 
 std::shared_ptr<const t_column>
-t_data_table::get_const_column_safe(const std::string& colname) const {
+t_data_table::get_const_column_safe(std::string_view colname) const {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    t_uindex idx = m_schema.get_colidx_safe(colname);
+    t_uindex idx = m_schema.get_colidx_safe(colname.data());
     if (idx == -1) {
         return nullptr;
     }
@@ -304,10 +304,10 @@ t_data_table::reserve(t_uindex capacity) {
 }
 
 t_column*
-t_data_table::_get_column(const std::string& colname) {
+t_data_table::_get_column(std::string_view colname) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    t_uindex idx = m_schema.get_colidx(colname);
+    t_uindex idx = m_schema.get_colidx(colname.data());
     return m_columns[idx].get();
 }
 
@@ -722,13 +722,14 @@ t_data_table::drop_column(const std::string& name) {
 
 void
 t_data_table::promote_column(
-    const std::string& name,
+    std::string_view col_name,
     t_dtype new_dtype,
     std::int32_t iter_limit,
     bool fill
 ) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+    const auto* name = col_name.data();
 
     if (!m_schema.has_column(name)) {
         std::cout << "Cannot promote a column that does not exist." << '\n';

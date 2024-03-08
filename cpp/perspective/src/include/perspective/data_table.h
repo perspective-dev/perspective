@@ -92,19 +92,19 @@ public:
     t_uindex get_capacity() const;
     t_dtype get_dtype(const std::string& colname) const;
 
-    std::shared_ptr<t_column> get_column(const std::string& colname);
+    std::shared_ptr<t_column> get_column(std::string_view colname);
 
-    std::shared_ptr<t_column> get_column_safe(const std::string& colname);
+    std::shared_ptr<t_column> get_column_safe(std::string_view colname);
 
-    std::shared_ptr<t_column> get_column(const std::string& colname) const;
+    std::shared_ptr<t_column> get_column(std::string_view colname) const;
 
-    std::shared_ptr<t_column> get_column_safe(const std::string& colname) const;
+    std::shared_ptr<t_column> get_column_safe(std::string_view colname) const;
 
-    std::shared_ptr<const t_column> get_const_column(const std::string& colname
+    std::shared_ptr<const t_column> get_const_column(std::string_view colname
     ) const;
 
     std::shared_ptr<const t_column>
-    get_const_column_safe(const std::string& colname) const;
+    get_const_column_safe(std::string_view colname) const;
 
     std::shared_ptr<const t_column> get_const_column(t_uindex idx) const;
 
@@ -125,7 +125,7 @@ public:
      */
     void set_table_size(t_uindex size);
 
-    t_column* _get_column(const std::string& colname);
+    t_column* _get_column(std::string_view colname);
 
     std::shared_ptr<t_data_table> flatten() const;
 
@@ -193,7 +193,7 @@ public:
     add_column(const std::string& cname, t_dtype dtype, bool status_enabled);
 
     void promote_column(
-        const std::string& cname,
+        std::string_view col_name,
         t_dtype new_dtype,
         std::int32_t iter_limit,
         bool fill

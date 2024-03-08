@@ -17,6 +17,7 @@
 #include "perspective/raw_types.h"
 #include "perspective/schema.h"
 #include "rapidjson/document.h"
+#include <ctime>
 #include <memory>
 #include <optional>
 #include <perspective/table.h>
@@ -473,7 +474,7 @@ PROMOTE_IMPL(DTYPE_INT32, DTYPE_INT64, DTYPE_INT64)
 
 template <typename A>
 static A
-coerce_to(const rapidjson::Value& value) {
+json_into(const rapidjson::Value& value) {
     if constexpr (std::is_same_v<A, std::int32_t> || std::is_same_v<A, std::int64_t> || std::is_same_v<A, double>) {
         if (value.IsInt()) {
             return value.GetInt();
@@ -539,6 +540,34 @@ coerce_to(const rapidjson::Value& value) {
         ss << "Could not coerce " << value.GetType() << " to "
            << "a string";
         throw std::runtime_error(ss.str());
+    } else if constexpr (std::is_same_v<A, t_date>) {
+        time_t tt;
+        if (value.IsString()) {
+            tt = time_t(
+                *apachearrow::parseAsArrowTimestamp(value.GetString()) / 1000
+            );
+        } else if (value.IsInt64()) {
+            tt = time_t(value.GetInt64() / 1000);
+        } else {
+            throw std::runtime_error("Could not coerce to date");
+        }
+        tm local_tm = *localtime(&tt);
+        throw std::runtime_error("Not implemented");
+        return t_date(
+            local_tm.tm_year + 1900, local_tm.tm_mon, local_tm.tm_mday
+        );
+    } else if constexpr (std::is_same_v<A, t_time>) {
+        if (value.IsString()) {
+            return t_time(*apachearrow::parseAsArrowTimestamp(value.GetString())
+            );
+        }
+        if (value.IsDouble()) {
+            return t_time(value.GetDouble());
+        }
+        if (value.IsInt()) {
+            return t_time(value.GetInt());
+        }
+        throw std::runtime_error("Could not coerce to time");
     } else {
         static_assert(!std::is_same_v<A, A>, "No coercion for type");
     }
@@ -558,7 +587,7 @@ fill_column_json(
     switch (col->get_dtype()) {
         case t_dtype::DTYPE_STR: {
             if (!value.IsString()) {
-                auto v = coerce_to<std::string>(value);
+                auto v = json_into<std::string>(value);
                 col->set_nth(i, v);
             } else {
                 col->set_nth(i, value.GetString());
@@ -666,80 +695,11 @@ fill_column_json(
             return std::nullopt;
         }
         case t_dtype::DTYPE_TIME: {
-            std::uint64_t tt = 0;
-
-            // rapidjson::StringBuffer buffer;
-
-            // buffer.Clear();
-
-            // rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-            // value.Accept(writer);
-
-            // std::cout << buffer.GetString() << std::endl;
-
-            if (value.IsString()) {
-                tt = *apachearrow::parseAsArrowTimestamp(value.GetString());
-            } else if (value.IsDouble()) {
-                tt = static_cast<int64_t>(value.GetDouble());
-            } else if (value.IsInt()) {
-                tt = static_cast<int64_t>(value.GetInt());
-            }
-            // // } else if (value.Is == 0) {
-            // //     tt = time_t(static_cast<int64_t>(item.as<double>()) /
-            // 1000);
-            // // } else if
-            // (item.typeOf().as<std::string>().compare("object") == 0) {
-            // //     tt = time_t(
-            // //
-            // static_cast<int64_t>(item.call<t_val>("getTime").as<double>())
-            // //         / 1000);
-            // } else {
-            //     return false;
-
-            else {
-                PSP_COMPLAIN_AND_ABORT("Can't parse date");
-            }
-
-            col->set_nth(i, tt);
+            col->set_nth(i, json_into<t_time>(value));
             return std::nullopt;
         }
         case t_dtype::DTYPE_DATE: {
-            time_t tt;
-
-            // rapidjson::StringBuffer buffer;
-
-            // buffer.Clear();
-
-            // rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-            // value.Accept(writer);
-
-            // std::cout << buffer.GetString() << std::endl;
-
-            if (value.IsString()) {
-                tt = time_t(
-                    *apachearrow::parseAsArrowTimestamp(value.GetString())
-                    / 1000
-                );
-                // // } else if (value.Is == 0) {
-                // //     tt = time_t(static_cast<int64_t>(item.as<double>()) /
-                // 1000);
-                // // } else if
-                // (item.typeOf().as<std::string>().compare("object") == 0) {
-                // //     tt = time_t(
-                // //
-                // static_cast<int64_t>(item.call<t_val>("getTime").as<double>())
-                // //         / 1000);
-                // } else {
-                //     return false;
-            } else {
-                PSP_COMPLAIN_AND_ABORT("Can't parse date");
-            }
-
-            tm local_tm = *localtime(&tt);
-            auto date = t_date(
-                local_tm.tm_year + 1900, local_tm.tm_mon, local_tm.tm_mday
-            );
-            col->set_nth(i, date);
+            col->set_nth(i, json_into<t_date>(value));
             return std::nullopt;
         }
         default:
@@ -883,35 +843,46 @@ Table::update_cols(const std::string_view& data, std::uint32_t port_id) {
     }
 
     bool is_implicit = m_index.empty();
-    t_schema schema = get_schema();
+    t_schema table_schema = get_schema();
 
     // 2.) Create table
-    t_data_table data_table(schema);
+    t_data_table data_table(table_schema);
     data_table.init();
     data_table.extend(nrows);
 
-    LOG_DEBUG("Updating table with schema " << schema);
+    LOG_DEBUG("Updating table with schema " << table_schema);
     LOG_DEBUG("Implicit index? " << is_implicit);
     if (is_implicit) {
         data_table.add_column("psp_pkey", DTYPE_INT32, true);
-        data_table.add_column("psp_okey", DTYPE_INT32, true);
     } else {
-        data_table.add_column("psp_pkey", schema.get_dtype(m_index), true);
-        data_table.add_column("psp_okey", schema.get_dtype(m_index), true);
+        data_table.add_column(
+            "psp_pkey", table_schema.get_dtype(m_index), true
+        );
     }
 
     const auto& psp_pkey_col = data_table.get_column("psp_pkey");
-    const auto& psp_okey_col = data_table.get_column("psp_okey");
+
+    auto schema = data_table.get_schema();
+
+    if (is_implicit && !document.GetObject().HasMember("__INDEX__")) {
+        for (std::uint32_t ii = 0; ii < nrows; ii++) {
+            psp_pkey_col->set_nth<std::uint32_t>(ii, (m_offset + ii) % m_limit);
+        }
+    }
 
     // 3.) Fill table
-    for (const auto& col : document.GetObject()) {
+    for (const auto& column : document.GetObject()) {
         t_uindex ii = 0;
-        const auto& col_name = col.name.GetString();
+        std::string_view col_name = column.name.GetString();
+        if (std::string_view{column.name.GetString()} == "__INDEX__") {
+            col_name = "psp_pkey";
+        }
+
         if (!schema.has_column(col_name)) {
             LOG_DEBUG("Ignoring column " << col_name);
             continue;
         }
-        for (const auto& cell : col.value.GetArray()) {
+        for (const auto& cell : column.value.GetArray()) {
             auto col = data_table.get_column(col_name);
             auto promote = fill_column_json(col, ii, cell);
             if (promote) {
@@ -920,21 +891,15 @@ Table::update_cols(const std::string_view& data, std::uint32_t port_id) {
                 fill_column_json(col, ii, cell);
             }
 
-            if (!is_implicit && m_index == col_name) {
+            if (!is_implicit && m_index == column.name.GetString()) {
                 fill_column_json(psp_pkey_col, ii, cell);
-                fill_column_json(psp_okey_col, ii, cell);
             }
 
             ii++;
         }
     }
 
-    if (is_implicit) {
-        for (std::uint32_t ii = 0; ii < nrows; ii++) {
-            psp_pkey_col->set_nth<std::uint32_t>(ii, (m_offset + ii) % m_limit);
-            psp_okey_col->set_nth<std::uint32_t>(ii, (m_offset + ii) % m_limit);
-        }
-    }
+    data_table.clone_column("psp_pkey", "psp_okey");
 
     calculate_offset(nrows);
     m_pool->send(get_gnode()->get_id(), port_id, data_table);
@@ -1056,7 +1021,7 @@ Table::update_rows(const std::string_view& data, std::uint32_t port_id) {
     rapidjson::Document document;
     document.Parse(data.data());
     if (document.Size() == 0) {
-        PSP_COMPLAIN_AND_ABORT("Can't create table from empty rows")
+        return;
     }
 
     if (!document[0].IsObject()) {
@@ -1067,57 +1032,64 @@ Table::update_rows(const std::string_view& data, std::uint32_t port_id) {
     }
 
     bool is_implicit = m_index.empty();
-    t_schema schema = get_schema();
+    t_schema table_schema = get_schema();
 
     // 2.) Create table
     t_uindex size = document.Size();
-    t_data_table data_table(schema);
+    t_data_table data_table(table_schema);
     data_table.init();
     data_table.extend(size);
 
     if (is_implicit) {
         data_table.add_column("psp_pkey", DTYPE_INT32, true);
-        data_table.add_column("psp_okey", DTYPE_INT32, true);
     } else {
-        data_table.add_column("psp_pkey", schema.get_dtype(m_index), true);
-        data_table.add_column("psp_okey", schema.get_dtype(m_index), true);
+        data_table.add_column(
+            "psp_pkey", table_schema.get_dtype(m_index), true
+        );
     }
 
     t_uindex ii = 0;
 
     const auto& psp_pkey_col = data_table.get_column("psp_pkey");
-    const auto& psp_okey_col = data_table.get_column("psp_okey");
+
+    auto schema = data_table.get_schema();
 
     // 3.) Fill table
     for (const auto& row : document.GetArray()) {
+        if (is_implicit) {
+            psp_pkey_col->set_nth<std::uint32_t>(ii, (ii + m_offset) % m_limit);
+        }
+
         for (const auto& it : row.GetObject()) {
-            if (!schema.has_column(it.name.GetString())) {
-                LOG_DEBUG("Ignoring column " << it.name.GetString());
+            std::shared_ptr<t_column> col;
+            std::string_view col_name = it.name.GetString();
+
+            if (std::string_view{it.name.GetString()} == "__INDEX__") {
+                col_name = "psp_pkey";
+            }
+
+            if (!schema.has_column(col_name)) {
+                LOG_DEBUG("Ignoring column " << col_name);
                 LOG_DEBUG("Schema:\n" << schema);
                 continue;
             }
-            auto col = data_table.get_column(it.name.GetString());
+            col = data_table.get_column(col_name);
+
             auto promote = fill_column_json(col, ii, it.value);
             if (promote) {
-                data_table.promote_column(
-                    it.name.GetString(), *promote, ii, true
-                );
-                col = data_table.get_column(it.name.GetString());
+                data_table.promote_column(col_name, *promote, ii, true);
+                col = data_table.get_column(col_name);
                 fill_column_json(col, ii, it.value);
             }
             if (!is_implicit && m_index == it.name.GetString()) {
                 fill_column_json(psp_pkey_col, ii, it.value);
-                fill_column_json(psp_okey_col, ii, it.value);
             }
-        }
-
-        if (is_implicit) {
-            psp_pkey_col->set_nth<std::uint32_t>(ii, (ii + m_offset) % m_limit);
-            psp_okey_col->set_nth<std::uint32_t>(ii, (ii + m_offset) % m_limit);
         }
 
         ii++;
     }
+
+    data_table.clone_column("psp_pkey", "psp_okey");
 
     calculate_offset(size);
     m_pool->send(get_gnode()->get_id(), port_id, data_table);
