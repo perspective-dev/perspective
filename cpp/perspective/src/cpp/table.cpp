@@ -26,6 +26,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 
 // Give each Table a unique ID so that operations on it map back correctly
@@ -445,6 +446,7 @@ rapidjson_type_to_dtype(const rapidjson::Value& value) {
         case rapidjson::Type::kFalseType:
             return t_dtype::DTYPE_BOOL;
         case rapidjson::kNullType:
+            return t_dtype::DTYPE_NONE;
         case rapidjson::kObjectType:
         case rapidjson::kArrayType:
             PSP_COMPLAIN_AND_ABORT("Unknown JSON type");
@@ -506,7 +508,7 @@ json_into(const rapidjson::Value& value) {
         std::stringstream ss;
         ss << "Could not coerce " << value.GetType() << " to "
            << "a number";
-        throw std::runtime_error(ss.str());
+        PSP_COMPLAIN_AND_ABORT(ss.str());
     } else if constexpr (std::is_same_v<A, std::string>) {
         switch (value.GetType()) {
             case rapidjson::kNullType:
@@ -516,9 +518,9 @@ json_into(const rapidjson::Value& value) {
             case rapidjson::kTrueType:
                 return "true";
             case rapidjson::kObjectType:
-                throw std::runtime_error("Cannot coerce object to string");
+                PSP_COMPLAIN_AND_ABORT("Cannot coerce object to string");
             case rapidjson::kArrayType:
-                throw std::runtime_error("Cannot coerce array to string");
+                PSP_COMPLAIN_AND_ABORT("Cannot coerce array to string");
             case rapidjson::kStringType:
                 return value.GetString();
             case rapidjson::kNumberType:
@@ -539,7 +541,7 @@ json_into(const rapidjson::Value& value) {
         std::stringstream ss;
         ss << "Could not coerce " << value.GetType() << " to "
            << "a string";
-        throw std::runtime_error(ss.str());
+        PSP_COMPLAIN_AND_ABORT(ss.str());
     } else if constexpr (std::is_same_v<A, t_date>) {
         time_t tt;
         if (value.IsString()) {
@@ -549,10 +551,10 @@ json_into(const rapidjson::Value& value) {
         } else if (value.IsInt64()) {
             tt = time_t(value.GetInt64() / 1000);
         } else {
-            throw std::runtime_error("Could not coerce to date");
+            PSP_COMPLAIN_AND_ABORT("Could not coerce to date");
         }
         tm local_tm = *localtime(&tt);
-        throw std::runtime_error("Not implemented");
+
         return t_date(
             local_tm.tm_year + 1900, local_tm.tm_mon, local_tm.tm_mday
         );
@@ -567,7 +569,7 @@ json_into(const rapidjson::Value& value) {
         if (value.IsInt()) {
             return t_time(value.GetInt());
         }
-        throw std::runtime_error("Could not coerce to time");
+        PSP_COMPLAIN_AND_ABORT("Could not coerce to time");
     } else {
         static_assert(!std::is_same_v<A, A>, "No coercion for type");
     }
@@ -937,7 +939,13 @@ Table::from_cols(
 
         nrows = it.value.Size();
 
-        data_types.push_back(rapidjson_type_to_dtype(it.value[0]));
+        for (const auto& column_value : it.value.GetArray()) {
+            auto dtype = rapidjson_type_to_dtype(column_value);
+            if (dtype != DTYPE_NONE) {
+                data_types.push_back(rapidjson_type_to_dtype(it.value[0]));
+                break;
+            }
+        }
         column_names.emplace_back(it.name.GetString());
     }
 
@@ -1121,15 +1129,37 @@ Table::from_rows(
     std::vector<t_dtype> data_types;
     bool is_implicit = true;
 
-    // https://github.com/Tencent/rapidjson/issues/1994
-    for (const auto& it : first_row.GetObject()) {
-        if (it.name.GetString() == index) {
-            is_implicit = false;
-        }
+    std::unordered_set<std::string> columns_known_type;
 
-        data_types.push_back(rapidjson_type_to_dtype(it.value));
-        column_names.emplace_back(it.name.GetString());
-    }
+    [&]() {
+        for (const auto& row : document.GetArray()) {
+            // https://github.com/Tencent/rapidjson/issues/1994
+            for (const auto& col : row.GetObject()) {
+                if (col.name.GetString() == index) {
+                    is_implicit = false;
+                }
+
+                if (columns_known_type.count(col.name.GetString()) > 0) {
+                    continue;
+                }
+
+                auto dtype = rapidjson_type_to_dtype(col.value);
+                if (dtype != DTYPE_NONE) {
+                    columns_known_type.insert(col.name.GetString());
+                    data_types.push_back(rapidjson_type_to_dtype(col.value));
+                    column_names.emplace_back(col.name.GetString());
+                }
+
+                // Allows us to finish quicker if all have a uniform number of
+                // columns. Otherwise we would have to iterate over the entire
+                // dataset.
+                if (columns_known_type.size()
+                    == row.GetObject().MemberCount()) {
+                    return;
+                }
+            }
+        }
+    }();
 
     t_schema schema(column_names, data_types);
 

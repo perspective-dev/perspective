@@ -1635,8 +1635,10 @@ import perspective from "@finos/perspective";
                 expressions_common.int_float_data
             );
             let emit;
-            let result = new Promise((x) => {
-                emit = x;
+            let emitReject;
+            let result = new Promise((success, reject) => {
+                emit = success;
+                emitReject = reject;
             });
 
             table
@@ -1649,6 +1651,9 @@ import perspective from "@finos/perspective";
                     );
                     table.delete();
                     emit();
+                })
+                .then(() => {
+                    emitReject("Promise should have thrown an error");
                 });
 
             await result;

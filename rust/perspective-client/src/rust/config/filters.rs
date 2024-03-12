@@ -183,6 +183,12 @@ pub enum FilterTerm {
     Array(Vec<Scalar>),
 }
 
+impl Default for FilterTerm {
+    fn default() -> Self {
+        Self::Scalar(Scalar::Null)
+    }
+}
+
 impl Display for FilterTerm {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
@@ -203,7 +209,7 @@ impl Display for FilterTerm {
 
 #[derive(Clone, Deserialize, Debug, PartialEq, Serialize)]
 #[serde()]
-pub struct Filter(pub String, pub FilterOp, pub FilterTerm);
+pub struct Filter(pub String, pub FilterOp, #[serde(default)] pub FilterTerm);
 
 impl From<Scalar> for proto::Scalar {
     fn from(value: Scalar) -> Self {

@@ -80,7 +80,7 @@ struct PERSPECTIVE_EXPORT t_tscalar {
     t_tscalar(int v);
 
     template <typename T>
-    T get() const;
+    T get() const = delete;
 
     void set(std::int64_t v);
     void set(std::int32_t v);

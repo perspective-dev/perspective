@@ -21,6 +21,7 @@
 #include "perspective/scalar.h"
 #include "perspective/sparse_tree.h"
 #include "perspective/table.h"
+#include "perspective/time.h"
 #include "perspective/view.h"
 #include "perspective/view_config.h"
 #include "re2/re2.h"
@@ -33,6 +34,7 @@
 #include <tsl/hopscotch_map.h>
 #include <tsl/ordered_map.h>
 #include <vector>
+#include <ctime>
 
 namespace perspective {
 template <>
@@ -597,7 +599,12 @@ ProtoServer::handle_message(const std::string_view& data) {
             );
         }
         serialized_responses.should_poll = resp_msg.should_poll;
-    } catch (PerspectiveException e) {
+    } catch (const PerspectiveException& e) {
+        proto::Response resp;
+        auto* err = resp.mutable_server_error()->mutable_message();
+        *err = std::string(e.what());
+        responses.emplace_back(std::move(resp));
+    } catch (const std::exception& e) {
         proto::Response resp;
         auto* err = resp.mutable_server_error()->mutable_message();
         *err = std::string(e.what());
@@ -1167,7 +1174,6 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                 column_only = true;
             }
 
-            // TODO: Figure out filter later
             std::vector<
                 std::tuple<std::string, std::string, std::vector<t_tscalar>>>
                 filter;
@@ -1199,12 +1205,45 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                             break;
                         }
 
+                        case proto::Scalar::kDate: {
+                            auto date_ts = arg.date();
+                            // convert ts to date
+                            auto tt = std::chrono::system_clock::to_time_t(
+                                std::chrono::system_clock::time_point(
+                                    std::chrono::seconds(date_ts)
+                                )
+                            );
+
+                            auto* date = std::localtime(&tt);
+
+                            t_date d{
+                                static_cast<std::int16_t>(date->tm_year + 1900),
+                                static_cast<std::int8_t>(date->tm_mon),
+                                static_cast<std::int8_t>(date->tm_mday)
+                            };
+                            a.set(d);
+                            args.push_back(a);
+                            break;
+                        }
+                        case proto::Scalar::kDatetime: {
+                            auto datetime_ts = arg.datetime();
+                            // convert ts to date
+                            auto tt = t_time(datetime_ts);
+
+                            a.set(tt);
+                            args.push_back(a);
+
+                            break;
+                        }
+
                         case proto::Scalar::kNull:
-                        case proto::Scalar::kDate:
-                        case proto::Scalar::kDatetime:
+                            a.set(t_none());
+                            args.push_back(a);
+                            break;
                         case proto::Scalar::SCALAR_NOT_SET:
                             PSP_COMPLAIN_AND_ABORT(
-                                "Filter scalar type not implemented"
+                                "Filter scalar type not implemented: "
+                                + std::to_string(arg.scalar_case())
                             )
                             break;
                     }
@@ -1425,7 +1464,59 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                 view_config_proto->add_split_by(agg);
             }
 
-            // TODO: Filter, Sort, Expressions, and Aggregations
+            // TODO: Sort, Expressions, and Aggregations
+
+            for (const auto& filter : view_config->get_fterm()) {
+                auto* proto_filter = view_config_proto->mutable_filter();
+                auto* f = proto_filter->Add();
+                f->set_column(filter.m_colname);
+                f->set_op(filter_op_to_proto(filter.m_op));
+                auto vals = std::vector<t_tscalar>(filter.m_bag.size() + 1);
+                if (filter.m_op != FILTER_OP_NOT_IN
+                    && filter.m_op != FILTER_OP_IN) {
+                    vals.push_back(filter.m_threshold);
+                } else {
+                    for (const auto& scalar : filter.m_bag) {
+                        vals.push_back(scalar);
+                    }
+                }
+                for (const auto& scalar : vals) {
+                    auto* s = f->mutable_value()->Add();
+                    switch (scalar.get_dtype()) {
+                        case DTYPE_BOOL:
+                            s->set_bool_(scalar.get<bool>());
+                            break;
+                        case DTYPE_FLOAT64:
+                            s->set_float_(scalar.get<double>());
+                            break;
+                        case DTYPE_INT64:
+                            s->set_int_(static_cast<std::int32_t>(
+                                scalar.get<std::int64_t>()
+                            ));
+                            break;
+                        case DTYPE_STR:
+                            s->set_string(scalar.get<const char*>());
+                            break;
+                        case DTYPE_DATE: {
+                            auto tm = scalar.get<t_date>().get_tm();
+                            s->set_date(std::mktime(&tm));
+                            break;
+                        }
+                        case DTYPE_TIME:
+                            s->set_datetime(scalar.get<t_time>().raw_value());
+                            break;
+                        case DTYPE_NONE:
+                            s->set_null(
+                                ::google::protobuf::NullValue::NULL_VALUE
+                            );
+                            break;
+                        default:
+                            PSP_COMPLAIN_AND_ABORT(
+                                "Invalid scalar type: " + scalar.to_string()
+                            );
+                    }
+                }
+            }
 
             for (const auto& expr : view_config->get_expressions()) {
                 auto* proto_exprs = view_config_proto->mutable_expressions();
