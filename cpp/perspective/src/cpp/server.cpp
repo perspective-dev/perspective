@@ -258,7 +258,7 @@ re_bool_to_str(std::string&& expression) {
 // }
 
 template <typename Lambda>
-std::string
+static std::string
 replace_with_re2(
     const std::string& input, const re2::RE2& pattern, Lambda replacer
 ) {
@@ -283,7 +283,9 @@ replace_with_re2(
         // ↓↓↓↓↓↓↓↓↓↓↓↓ This would be lost otherwise
         // Lorem ipsum "dolor" sit amet, consectetur adipiscing elit.
 
-        // Calculate the start of the actual match
+        // Calculate the start of the actual match.
+        // This unfortunately only works if nothing consumes
+        // input _after_ the outer match.
         const char* match_start = input_piece.data() - outer_match.size();
 
         // Append the text that was consumed but is not part of the match
@@ -338,16 +340,17 @@ re_intern_strings(std::string&& expression) {
 static auto
 re_unintern_some_exprs(std::string&& expression) {
     static const RE2 interned_param(
-        "((?:bucket|match|match_all|search|indexof)\\((.*?)\\))"
+        "(?:bucket|match|match_all|search|indexof|replace|replace_all)\\("
+        "(?:.*?,\\s*(intern\\(('.*?')\\)))"
     );
     static const RE2 intern_match("intern\\(('.*?')\\)");
 
     auto parsed_expression_string = replace_with_re2(
         expression,
         interned_param,
-        [&](const std::string& outer_match, const std::string& _) {
-            std::string out = outer_match;
-            RE2::GlobalReplace(&out, intern_match, "\\1");
+        [&](const std::string& outer_match, const std::string& inner_match) {
+            LOG_DEBUG("UNINTERNING: " << inner_match);
+            std::string out = inner_match;
             return out;
         }
     );
@@ -371,6 +374,10 @@ parse_expression_strings(const F& column_expr) {
         validated_expr.expression_alias = colname;
         validated_expr.parse_expression_string = expr;
 
+        LOG_DEBUG(
+            "Before preprocessing: " << validated_expr.parse_expression_string
+        );
+
         validated_expr.parse_expression_string =
             re_bool_to_str(std::move(validated_expr.parse_expression_string));
 
@@ -388,6 +395,10 @@ parse_expression_strings(const F& column_expr) {
 
         validated_expr.parse_expression_string = re_unintern_some_exprs(
             std::move(validated_expr.parse_expression_string)
+        );
+
+        LOG_DEBUG(
+            "After preprocessing: " << validated_expr.parse_expression_string
         );
 
         validated_exprs.emplace_back(std::move(validated_expr));
@@ -1056,10 +1067,12 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                     break;
                 }
                 case proto::MakeTableData::kFromCols:
+                    table->update_cols(r.data().from_cols(), 0);
+                    break;
                 case proto::MakeTableData::kFromSchema:
                 case proto::MakeTableData::DATA_NOT_SET:
                 default: {
-                    PSP_COMPLAIN_AND_ABORT("MakeTableReq malformed");
+                    PSP_COMPLAIN_AND_ABORT("TableReplaceReq malformed");
                     break;
                 }
             }
