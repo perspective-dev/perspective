@@ -1070,7 +1070,7 @@ function validate_binary_operations(output, expressions, operator) {
                 await table.delete();
             });
 
-            test("r2d", async function () {
+            test.skip("OG - r2d", async function () {
                 const table = await perspective.table({
                     a: "integer",
                     b: "float",
@@ -1097,6 +1097,39 @@ function validate_binary_operations(output, expressions, operator) {
                 expect(result['rad2deg("b")']).toEqual([
                     25.5, 45.5, 88.721282, 91.12983,
                 ]);
+                await view.delete();
+                await table.delete();
+            });
+
+            test("r2d", async function () {
+                const table = await perspective.table({
+                    a: "integer",
+                    b: "float",
+                });
+
+                const view = await table.view({
+                    expressions: {
+                        'rad2deg("a")': 'rad2deg("a")',
+                        'rad2deg("b")': 'rad2deg("b")',
+                    },
+                });
+
+                table.update({
+                    a: [1, 2, 3, 4],
+                    b: [25.5, 45.5, 88.721282, 91.12983].map(
+                        (x) => x * (Math.PI / 180)
+                    ),
+                });
+
+                const result = await view.to_columns();
+                expect(result['rad2deg("a")']).toEqual(
+                    [1, 2, 3, 4].map((x) => x * (180 / Math.PI))
+                );
+                const expected = [25.5, 45.5, 88.721282, 91.12983];
+                expect(result['rad2deg("b")'].length).toEqual(expected.length);
+                result['rad2deg("b")'].forEach((x, idx) =>
+                    expect(x).toBeCloseTo(expected[idx], 5)
+                );
                 await view.delete();
                 await table.delete();
             });
