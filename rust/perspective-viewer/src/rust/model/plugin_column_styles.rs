@@ -11,13 +11,13 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 use itertools::Itertools;
+use perspective::utils::ApiResult;
 
 use super::{HasRenderer, HasSession};
 use crate::config::ColumnStyleOpts;
 use crate::derive_model;
 use crate::renderer::Renderer;
 use crate::session::Session;
-use crate::utils::ApiResult;
 
 /// TODO: This pattern of creating query objects to pass around would be
 /// redundant if we had a grab-bag of models to clone around.

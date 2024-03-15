@@ -98,17 +98,14 @@ export interface IPerspectiveViewerPlugin {
      * and its view type, determines whether or not to render column styles in the settings sidebar.
      * Implementing this function and `column_style_config` allows the plugin to interface with the viewer's column configuration API.
      */
-    can_render_column_styles?: (
-        view_type: perspective.Type,
-        group: string
-    ) => boolean;
+    can_render_column_styles?: (view_type: string, group: string) => boolean;
 
     /**
      * Determines which column configuration controls are populated in the viewer.
      * Corresponds to the data the plugin will recieve on save.
      * Implementing this function and `can_render_column_styles` allows the plugin to interface with the viewer's column configuration API.
      */
-    column_style_config?: (view_type: perspective.Type, group: string) => any;
+    column_style_config?: (view_type: string, group: string) => any;
 
     /**
      * Render this plugin using the provided `View`.  While there is no

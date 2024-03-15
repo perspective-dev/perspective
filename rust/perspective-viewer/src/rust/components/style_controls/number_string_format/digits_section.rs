@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 use itertools::Itertools;
+use perspective_client::ColumnType;
 use yew::html;
 
 use super::CustomNumberFormat;
@@ -21,13 +22,12 @@ use crate::components::form::optional_field::OptionalField;
 use crate::components::form::select_field::SelectEnumField;
 use crate::components::style_controls::CustomNumberFormatMsg;
 use crate::config::{
-    RoundingIncrement, RoundingMode, RoundingPriority, TrailingZeroDisplay, Type,
-    ROUNDING_INCREMENTS,
+    RoundingIncrement, RoundingMode, RoundingPriority, TrailingZeroDisplay, ROUNDING_INCREMENTS,
 };
 
 impl CustomNumberFormat {
     pub fn digits_section(&self, ctx: &yew::prelude::Context<Self>) -> yew::prelude::Html {
-        let is_float = matches!(ctx.props().view_type, Type::Float);
+        let is_float = matches!(ctx.props().view_type, ColumnType::Float);
         html! {
             <>
                 <NumberField

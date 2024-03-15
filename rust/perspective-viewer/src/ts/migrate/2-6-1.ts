@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { ViewConfig } from "@finos/perspective";
+// import { ViewConfig } from "@finos/perspective";
 import Semver from "./semver";
 import { Options } from "../migrate";
 
@@ -86,9 +86,9 @@ export default function migrate_2_6_1(old: any, options: Options) {
     return old;
 }
 
-export type Config261 = ViewConfig & {
-    version: Semver;
-    plugin?: string;
-    settings?: boolean;
-    plugin_config?: any;
-};
+// export type Config261 = ViewConfig & {
+//     version: Semver;
+//     plugin?: string;
+//     settings?: boolean;
+//     plugin_config?: any;
+// };

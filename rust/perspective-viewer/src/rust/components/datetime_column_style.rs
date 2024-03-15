@@ -17,6 +17,7 @@ use std::sync::{Arc, LazyLock};
 
 use derivative::Derivative;
 use perspective::json;
+use perspective::utils::global::navigator;
 use wasm_bindgen::*;
 use yew::prelude::*;
 use yew::*;
@@ -28,7 +29,6 @@ use crate::components::datetime_column_style::custom::DatetimeStyleCustom;
 use crate::components::datetime_column_style::simple::DatetimeStyleSimple;
 use crate::components::form::select_field::{SelectEnumField, SelectValueField};
 use crate::config::*;
-use crate::utils::global::navigator;
 use crate::utils::WeakScope;
 use crate::*;
 

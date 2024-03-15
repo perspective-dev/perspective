@@ -41,8 +41,8 @@ anyhow = "1.0.66"
 wasm-bindgen-test = "0.3.13"
 
 [dependencies]
-perspective-client = { path = "../perspective-client", version = "2.8.0" }
-perspective = { path = "../perspective", version = "2.8.0" }
+perspective-client = { path = "../perspective-client", version = "2.9.0" }
+perspective = { path = "../perspective", version = "2.9.0" }
 
 # Provides async `Mutex` for locked sections such as `render`
 async-lock = "2.5.0"

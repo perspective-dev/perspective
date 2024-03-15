@@ -15,7 +15,7 @@ mod symbol;
 
 use itertools::Itertools;
 use perspective::utils::*;
-use perspective_client::ColumnType;
+use perspective_client::{clone, ColumnType};
 use yew::{function_component, html, Html, Properties};
 
 use crate::components::column_settings_sidebar::style_tab::stub::Stub;
@@ -24,14 +24,13 @@ use crate::components::datetime_column_style::DatetimeColumnStyle;
 use crate::components::number_column_style::NumberColumnStyle;
 use crate::components::string_column_style::StringColumnStyle;
 use crate::components::style_controls::CustomNumberFormat;
-use crate::config::{ColumnConfigValueUpdate, Type};
+use crate::config::ColumnConfigValueUpdate;
 use crate::custom_events::CustomEvents;
+use crate::derive_model;
 use crate::model::PluginColumnStyles;
 use crate::presentation::Presentation;
 use crate::renderer::Renderer;
 use crate::session::Session;
-use crate::utils::ApiFuture;
-use crate::{clone, derive_model};
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct StyleTabProps {
@@ -107,7 +106,7 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                     .as_ref()
                     .map(|config| config.datagrid_datetime_style.clone());
 
-                let enable_time_config = props.ty.unwrap() == Type::Datetime;
+                let enable_time_config = props.ty.unwrap() == ColumnType::Datetime;
                 components.push(("Datetime Styles", html! {
                     <DatetimeColumnStyle
                         {enable_time_config}

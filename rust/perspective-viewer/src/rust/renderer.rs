@@ -32,8 +32,8 @@ use std::rc::Rc;
 
 use futures::future::{join_all, select_all};
 use perspective::json;
+use perspective::utils::{ApiError, ApiResult};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
 use web_sys::*;
 use yew::html::ImplicitClone;
 
@@ -44,7 +44,6 @@ pub use self::registry::*;
 use self::render_timer::*;
 use crate::config::*;
 use crate::js::plugin::*;
-use crate::json;
 use crate::presentation::ColumnConfigMap;
 use crate::session::*;
 use crate::utils::*;

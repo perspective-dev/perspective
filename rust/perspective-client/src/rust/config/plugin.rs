@@ -10,63 +10,58 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use web_sys::{HtmlInputElement, InputEvent};
-use yew::{function_component, html, Callback, Properties, TargetCast};
+use std::collections::HashMap;
+use std::fmt::Debug;
 
-use crate::components::form::optional_field::OptionalField;
+use serde::{Deserialize, Serialize};
 
-#[derive(Properties, Debug, PartialEq, Clone)]
-pub struct NumberFieldProps {
-    pub label: String,
-    pub current_value: Option<f64>,
-    pub default: f64,
-    pub on_change: Callback<Option<f64>>,
-
-    #[prop_or_default]
-    pub disabled: bool,
-
-    #[prop_or_default]
-    pub min: Option<f64>,
-
-    #[prop_or_default]
-    pub max: Option<f64>,
-
-    #[prop_or_default]
-    pub step: Option<f64>,
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct Symbol {
+    /// the name of the symbol
+    pub name: String,
+    /// unescaped HTML string
+    pub html: String,
+}
+impl std::fmt::Display for Symbol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.name)
+    }
 }
 
-#[function_component(NumberField)]
-pub fn number_field(props: &NumberFieldProps) -> yew::Html {
-    let parse_number_input = |event: InputEvent| {
-        Some(
-            event
-                .target_unchecked_into::<HtmlInputElement>()
-                .value_as_number(),
-        )
-    };
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct SymbolAttributes {
+    /// a vec of SVGs to render
+    pub symbols: Vec<Symbol>,
+}
 
-    let number_input = html! {
-        <input
-            type="number"
-            class="parameter"
-            min={props.min.map(|val| val.to_string())}
-            max={props.max.map(|val| val.to_string())}
-            step={props.step.map(|val| val.to_string())}
-            value={props.current_value.unwrap_or(props.default).to_string()}
-            oninput={props.on_change.reform(parse_number_input)}
-        />
-    };
+/// The default style configurations per type, as retrived by
+/// plugin.plugin_attributes
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct DefaultStyleAttributes {
+    pub string: serde_json::Value,
+    pub datetime: serde_json::Value,
+    pub date: serde_json::Value,
+    pub integer: serde_json::Value,
+    pub float: serde_json::Value,
+    pub bool: serde_json::Value,
+}
 
-    html! {
-        <div class="row">
-            <OptionalField
-                label={props.label.clone()}
-                on_check={props.on_change.reform(|_| None)}
-                checked={props.current_value.map(|val| val != props.default).unwrap_or_default()}
-                disabled={props.disabled}
-            >
-                { number_input }
-            </OptionalField>
-        </div>
-    }
+/// The data needed to populate a column's settings. These are typically default
+/// values, a listing of possible values, or other basic configuration settings
+/// for the plugin. This is the result of calling plugin.plugin_attributes
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct PluginAttributes {
+    pub symbol: Option<SymbolAttributes>,
+    pub style: Option<DefaultStyleAttributes>,
+    // color: ColorAttributes,
+    // axis: AxisAttributes,
+    //...
+}
+
+/// The configuration which is created as the result of calling plugin.save
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct PluginConfig {
+    /// Refers to the currently active columns. Maps name to configuration.
+    #[serde(default)]
+    pub columns: HashMap<String, serde_json::Value>,
 }

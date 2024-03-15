@@ -15,6 +15,7 @@ mod misc_section;
 mod style_section;
 mod types;
 
+use perspective_client::ColumnType;
 pub use types::*;
 use yew::{html, Callback, Component, Properties};
 
@@ -26,7 +27,7 @@ use crate::{css, max, min};
 pub struct CustomNumberFormatProps {
     pub restored_config: CustomNumberFormatConfig,
     pub on_change: Callback<ColumnConfigValueUpdate>,
-    pub view_type: Type,
+    pub view_type: ColumnType,
     // just for rerendering
     pub column_name: String,
 }
@@ -235,7 +236,7 @@ impl Component for CustomNumberFormat {
             },
         };
 
-        let is_float = ctx.props().view_type == Type::Float;
+        let is_float = ctx.props().view_type == ColumnType::Float;
         let filtered_config = self.config.clone().filter_default(is_float);
         let value =
             (filtered_config != CustomNumberFormatConfig::default()).then_some(filtered_config);

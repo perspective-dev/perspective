@@ -13,24 +13,18 @@
 //! A collection of (de-)serializable structs which capture the application
 //! state, suitable for persistence, history, etc. features.
 
-mod aggregates;
-mod column_type;
 mod columns_config;
 mod datetime_column_style;
 mod number_column_style;
 mod number_string_format;
-mod sort;
 mod string_column_style;
 pub mod view_config;
 mod viewer_config;
 
-pub use aggregates::*;
-pub use column_type::*;
 pub use columns_config::*;
 pub use datetime_column_style::*;
 pub use number_column_style::*;
 pub use number_string_format::*;
-pub use sort::*;
 pub use perspective_client::config::*;
 pub use string_column_style::*;
 pub use view_config::*;

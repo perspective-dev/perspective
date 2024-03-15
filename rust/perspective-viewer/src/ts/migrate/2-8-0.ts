@@ -12,7 +12,6 @@
 
 import Semver from "./semver";
 import { Options } from "../migrate";
-import { Config261 } from "./2-6-1";
 import {
     PerspectiveColumnConfig,
     PerspectiveColumnConfigValue,
@@ -24,7 +23,7 @@ import {
  * @param options
  * @returns
  */
-export default function migrate_2_7_1(old: Config271, options: Options) {
+export default function migrate_2_7_1(old: any, options: Options) {
     let next_version = options.version_chain.shift();
     if (old.version?.gt(next_version!)) {
         return old;
@@ -139,7 +138,3 @@ export default function migrate_2_7_1(old: Config271, options: Options) {
     }
     return old;
 }
-
-export type Config271 = Config261 & {
-    columns_config?: PerspectiveColumnConfig;
-};

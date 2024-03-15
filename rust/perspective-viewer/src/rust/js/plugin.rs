@@ -14,9 +14,7 @@ use perspective::utils::*;
 use serde::*;
 use wasm_bindgen::prelude::*;
 
-use super::perspective::JsPerspectiveView;
 use crate::presentation::ColumnConfigMap;
-use crate::utils::*;
 
 /// Perspective FFI
 #[wasm_bindgen]

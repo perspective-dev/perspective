@@ -132,14 +132,14 @@ export class FormatterCache {
     }
 
     create_number_formatter(type, plugin) {
-        const format = {
+        let format = {
             style: "decimal",
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         };
 
         if (plugin.number_format !== undefined) {
-            format = plugin.number_format;
+            format = { ...format, ...plugin.number_format };
         }
 
         return new FORMATTER_CONS[type](navigator.languages, format);
