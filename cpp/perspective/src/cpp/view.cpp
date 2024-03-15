@@ -1849,7 +1849,7 @@ View<t_ctx1>::to_rows(
 
     std::vector<std::string> column_names;
     for (auto c = start_col + 1; c < end_col; ++c) {
-        if (c >= (columns_length - hidden) + 1) {
+        if (c > columns_length) {
             continue;
         }
 
@@ -1904,7 +1904,7 @@ View<t_ctx1>::to_rows(
 
         // Columns
         for (auto c = start_col + 1; c < end_col; ++c) {
-            if (c >= (columns_length - hidden) + 1) {
+            if (c >= columns_length + 1) {
                 continue;
             }
 

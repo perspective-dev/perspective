@@ -829,6 +829,52 @@ ProtoServer::handle_process_table(
     }
 }
 
+static std::string_view
+view_sides_to_string(const ErasedView& view) {
+    switch (view.sides()) {
+        case 0:
+            return "zero";
+        case 1:
+            return "one";
+        case 2:
+            return "two";
+        default:
+            PSP_COMPLAIN_AND_ABORT("Invalid number of sides");
+    }
+}
+
+static std::uint32_t
+calculate_num_hidden(const ErasedView& view, const t_view_config& config) {
+    auto num_hidden = 0;
+    switch (view.sides()) {
+        case 0:
+            break;
+        case 1: {
+            const auto& cols = config.get_columns();
+            for (const auto& s : config.get_sortspec()) {
+                if (std::find(cols.begin(), cols.end(), s.m_colname)
+                    == cols.end()) {
+                    num_hidden++;
+                }
+            }
+        } break;
+        case 2: {
+            const auto& cols = config.get_columns();
+            for (const auto& s : config.get_sortspec()) {
+                if (std::find(cols.begin(), cols.end(), s.m_colname)
+                    == cols.end()) {
+                    num_hidden++;
+                }
+            }
+        } break;
+        default:
+            PSP_COMPLAIN_AND_ABORT(
+                "Invalid number of sides: " + std::to_string(view.sides())
+            );
+    }
+    return num_hidden;
+}
+
 ProtoServerResp<ProtoServer::ResponseEnvelope>
 ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
     static bool is_init_expr = false;
@@ -1329,6 +1375,20 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                 }
             }
 
+            LOG_DEBUG(
+                "Creating view config with \n"
+                << "row_pivots: " << row_pivots << '\n'
+                << "column_pivots: " << column_pivots
+                << '\n'
+                // << "aggregates: " << aggregates << '\n'
+                << "columns: " << columns
+                << '\n'
+                // << "filter: " << filter << '\n'
+                << "sort_str: " << sort_str << '\n'
+                << "expressions: " << expressions << '\n'
+                << "column_only: " << column_only << '\n'
+            );
+
             auto config = std::make_shared<t_view_config>(
                 row_pivots,
                 column_pivots,
@@ -1479,6 +1539,13 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
 
             // TODO: Sort, Expressions, and Aggregations
 
+            for (const auto& sort : view_config->get_sortspec()) {
+                auto* proto_sort = view_config_proto->mutable_sort();
+                auto* s = proto_sort->Add();
+                s->set_column(sort.m_colname);
+                sort.m_sort_type;
+            }
+
             for (const auto& filter : view_config->get_fterm()) {
                 auto* proto_filter = view_config_proto->mutable_filter();
                 auto* f = proto_filter->Add();
@@ -1590,38 +1657,8 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
             auto view = m_resources.get_view(env.entity_id());
             const auto& r = req.view_to_rows_string_req();
             auto config = view->get_view_config();
-            std::string nidx;
-            std::uint32_t num_hidden = 0;
-            switch (view->sides()) {
-                case 0:
-                    nidx = "zero";
-                    break;
-                case 1: {
-                    nidx = "one";
-                    const auto& cols = config->get_columns();
-                    for (const auto& s : config->get_sortspec()) {
-                        if (std::find(cols.begin(), cols.end(), s.m_colname)
-                            == cols.end()) {
-                            num_hidden++;
-                        }
-                    }
-                } break;
-                case 2: {
-                    nidx = "two";
-                    const auto& cols = config->get_columns();
-                    for (const auto& s : config->get_sortspec()) {
-                        if (std::find(cols.begin(), cols.end(), s.m_colname)
-                            == cols.end()) {
-                            num_hidden++;
-                        }
-                    }
-                } break;
-                default:
-                    PSP_COMPLAIN_AND_ABORT(
-                        "Invalid number of sides: "
-                        + std::to_string(view->sides())
-                    );
-            }
+            std::string nidx{view_sides_to_string(*view)};
+            auto num_hidden = calculate_num_hidden(*view, *config);
 
             auto dims = parse_format_options(
                 r.viewport(),
@@ -1659,38 +1696,8 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
             auto view = m_resources.get_view(env.entity_id());
             const auto& r = req.view_to_columns_string_req();
             auto config = view->get_view_config();
-            std::string nidx;
-            std::uint32_t num_hidden = 0;
-            switch (view->sides()) {
-                case 0:
-                    nidx = "zero";
-                    break;
-                case 1: {
-                    nidx = "one";
-                    const auto& cols = config->get_columns();
-                    for (const auto& s : config->get_sortspec()) {
-                        if (std::find(cols.begin(), cols.end(), s.m_colname)
-                            == cols.end()) {
-                            num_hidden++;
-                        }
-                    }
-                } break;
-                case 2: {
-                    nidx = "two";
-                    const auto& cols = config->get_columns();
-                    for (const auto& s : config->get_sortspec()) {
-                        if (std::find(cols.begin(), cols.end(), s.m_colname)
-                            == cols.end()) {
-                            num_hidden++;
-                        }
-                    }
-                } break;
-                default:
-                    PSP_COMPLAIN_AND_ABORT(
-                        "Invalid number of sides: "
-                        + std::to_string(view->sides())
-                    );
-            }
+            std::string nidx{view_sides_to_string(*view)};
+            auto num_hidden = calculate_num_hidden(*view, *config);
 
             auto dims = parse_format_options(
                 r.viewport(),
@@ -1779,14 +1786,16 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
         }
         case proto::Request::kViewToArrowReq: {
             auto view = m_resources.get_view(env.entity_id());
-            const auto& r = req.view_to_csv_req();
+            const auto& r = req.view_to_arrow_req();
+            auto config = view->get_view_config();
+            auto num_hidden = calculate_num_hidden(*view, *config);
             auto dims = parse_format_options(
                 r.viewport(),
                 view->num_columns(),
                 view->num_rows(),
                 view->sides(),
                 view->get_view_config()->is_column_only(),
-                0
+                num_hidden
             );
 
             proto::Response resp;
@@ -1802,13 +1811,15 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
             LOG_DEBUG("Handling ViewToCsvReq");
             auto view = m_resources.get_view(env.entity_id());
             const auto& r = req.view_to_csv_req();
+            auto config = view->get_view_config();
+            auto num_hidden = calculate_num_hidden(*view, *config);
             auto dims = parse_format_options(
                 r.viewport(),
                 view->num_columns(),
                 view->num_rows(),
                 view->sides(),
                 view->get_view_config()->is_column_only(),
-                0
+                num_hidden
             );
 
             proto::Response resp;

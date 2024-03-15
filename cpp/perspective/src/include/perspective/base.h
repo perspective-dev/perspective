@@ -72,6 +72,7 @@ const t_index INVALID_INDEX = -1;
  * @param message
  * @return PERSPECTIVE_EXPORT
  */
+[[noreturn]]
 PERSPECTIVE_EXPORT void psp_abort(const std::string& message);
 
 // #define PSP_TRACE_SENTINEL() t_trace _psp_trace_sentinel;
