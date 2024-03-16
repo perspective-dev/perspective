@@ -1033,6 +1033,44 @@ const random_string = (
 
             // Because a bad regex does not raise a parse error, it is still
             // valid to create a view from them.
+            await expect(
+                table.view({
+                    expressions,
+                })
+            ).rejects.toThrow();
+
+            await table.delete();
+        });
+
+        // I don't know what makes a parse error unique in the internal comment,
+        // but `validate()` and `expression` shoul dbe identical in behavior.
+        test.skip("OG - Match string with bad regex should fail type-checking", async () => {
+            const table = await perspective.table({
+                a: ["ABC", "DEF", "cbA", "HIjK", "lMNoP"],
+                b: ["ABC", "ad", "asudfh", "HIjK", "lMNoP"],
+            });
+
+            const expressions = [
+                `match("a", '*.')`,
+                "match('abc', '(?=a)')",
+                `match("a", '?')`,
+            ];
+
+            const validated = await table.validate_expressions(expressions);
+            expect(validated.expression_schema).toEqual({});
+
+            for (const expr of expressions) {
+                expect(validated.expression_schema[expr]).toBeUndefined();
+                expect(validated.errors[expr]).toEqual({
+                    line: 0,
+                    column: 0,
+                    error_message:
+                        "Type Error - inputs do not resolve to a valid expression.",
+                });
+            }
+
+            // Because a bad regex does not raise a parse error, it is still
+            // valid to create a view from them.
             const view = await table.view({
                 expressions,
             });
@@ -1075,23 +1113,12 @@ const random_string = (
                 });
             }
 
-            // FIXME: because a bad regex does not raise a parser error,
-            // it is still valid to create a view from them without validation,
-            // but this path is only accessible through the View API and
-            // not the viewer.
-            const view = await table.view({
-                expressions,
-            });
+            await expect(
+                table.view({
+                    expressions,
+                })
+            ).rejects.toThrow();
 
-            const schema = await view.expression_schema();
-            const results = await view.to_columns();
-
-            for (const expr of expressions) {
-                expect(schema[expr]).toEqual("boolean");
-                expect(results[expr]).toEqual(Array(5).fill(null));
-            }
-
-            await view.delete();
             await table.delete();
         });
 
@@ -1271,13 +1298,11 @@ const random_string = (
 
         test("Match string with regex, randomized", async () => {
             const data = { a: [] };
-
             for (let i = 0; i < 500; i++) {
                 data.a.push(random_string(100, true));
             }
 
             const table = await perspective.table(data);
-
             const expressions = [
                 `match("a", '.*')`, // should match everything
                 `match("a", '.{100}')`, // should match strings the size of max
@@ -1288,18 +1313,15 @@ const random_string = (
             });
 
             const schema = await view.expression_schema();
-
             for (const expr of expressions) {
                 expect(schema[expr]).toEqual("boolean");
             }
 
             const results = await view.to_columns();
-
             for (let i = 0; i < 500; i++) {
                 const a = results[expressions[0]][i];
                 const b = results[expressions[1]][i];
                 const source = data.a[i];
-
                 if (source === null) {
                     expect(a).toEqual(null);
                     expect(b).toEqual(null);

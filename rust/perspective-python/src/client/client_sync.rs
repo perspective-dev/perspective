@@ -49,6 +49,14 @@ assert_table_api!(PySyncTable);
 
 #[pymethods]
 impl PySyncTable {
+    fn get_index(&self) -> Option<String> {
+        block_on(self.0.get_index())
+    }
+
+    fn get_limit(&self) -> Option<u32> {
+        block_on(self.0.get_limit())
+    }
+
     #[doc = include_str!("../../../perspective-client/docs/table/clear.md")]
     fn clear(&self) -> PyResult<()> {
         block_on(self.0.clear())

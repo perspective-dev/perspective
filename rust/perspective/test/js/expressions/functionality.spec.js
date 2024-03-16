@@ -1646,8 +1646,8 @@ import perspective from "@finos/perspective";
                     expressions: { w: "upper('abc')" },
                 })
                 .catch((e) => {
-                    expect(e.message).toMatch(
-                        `Abort(): View creation failed: cannot create expression column 'w' that overwrites a column that already exists.\n`
+                    expect(e.message.split("\n")[0]).toMatch(
+                        `Abort(): Value Error - expression \"w\" cannot overwrite an existing column.`
                     );
                     table.delete();
                     emit();
@@ -2267,8 +2267,8 @@ import perspective from "@finos/perspective";
                     columns: ['"w" + "x"', "x"],
                 });
             } catch (e) {
-                expect(e.message).toEqual(
-                    `Abort(): Invalid column '"w" + "x"' found in View columns.\n`
+                expect(e.message.split("\n")[0]).toEqual(
+                    `Abort(): Invalid column '"w" + "x"' found in View columns.`
                 );
             }
 

@@ -12,19 +12,20 @@
 
 use std::any::Any;
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use futures::lock::Mutex;
 use perspective_client::config::Expressions;
 use perspective_client::proto::{RequestEnvelope, ResponseEnvelope};
 use perspective_client::{
-    assert_table_api, assert_view_api, clone, Client, ClientError, OnUpdateOptions, Table,
-    TableData, TableInitOptions, UpdateOptions, View, ViewWindow,
+    assert_table_api, assert_view_api, clone, Client, ClientError, ColumnType, OnUpdateMode,
+    OnUpdateOptions, Table, TableData, TableInitOptions, UpdateOptions, View, ViewWindow,
 };
 use prost::Message;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyFunction, PyList, PyString};
+use pyo3::types::{PyBytes, PyDict, PyFunction, PyList, PyString, PyType};
 use pythonize::depythonize;
 
 use crate::ffi;
@@ -163,6 +164,14 @@ pub struct PyTable {
 assert_table_api!(PyTable);
 
 impl PyTable {
+    pub async fn get_index(&self) -> Option<String> {
+        self.table.lock().await.get_index()
+    }
+
+    pub async fn get_limit(&self) -> Option<u32> {
+        self.table.lock().await.get_limit()
+    }
+
     pub async fn size(&self) -> usize {
         self.table.lock().await.size().await.unwrap()
     }
@@ -351,13 +360,15 @@ impl PyView {
             .expect("`on_update()` callback failed");
         });
 
+        let mode = mode
+            .map(|x| OnUpdateMode::from_str(x.as_str()))
+            .transpose()
+            .into_pyerr()?;
+
         self.view
             .lock()
             .await
-            .on_update(
-                callback,
-                mode.map(|mode| OnUpdateOptions { mode: Some(mode) }),
-            )
+            .on_update(callback, OnUpdateOptions { mode })
             .await
             .into_pyerr()
     }

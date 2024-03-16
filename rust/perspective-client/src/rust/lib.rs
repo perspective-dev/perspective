@@ -26,11 +26,11 @@ pub mod config;
 pub mod proto;
 pub mod utils;
 
-pub use crate::client::{Client, TableData, TableInitOptions};
+pub use crate::client::{Client, TableData};
 pub use crate::proto::{ColumnType, ExprValidationError};
-pub use crate::table::{Schema, Table, UpdateOptions, ValidateExpressionsData};
+pub use crate::table::{Schema, Table, TableInitOptions, UpdateOptions, ValidateExpressionsData};
 pub use crate::utils::*;
-pub use crate::view::{OnUpdateOptions, View, ViewWindow};
+pub use crate::view::{OnUpdateMode, OnUpdateOptions, View, ViewWindow};
 
 pub mod vendor {
     pub use paste;
@@ -50,14 +50,16 @@ macro_rules! assert_table_api {
             fn [< _assert_table_api_ $x:lower >]() {
                 let _ = (
                     &$x::clear,
-                    &$x::delete,
                     &$x::columns,
-                    &$x::size,
-                    &$x::schema,
+                    &$x::delete,
+                    &$x::get_index,
+                    &$x::get_limit,
                     &$x::make_port,
                     &$x::on_delete,
                     &$x::remove_delete,
                     &$x::replace,
+                    &$x::schema,
+                    &$x::size,
                     &$x::update,
                     &$x::validate_expressions,
                     &$x::view,

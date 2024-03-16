@@ -1454,7 +1454,7 @@ function validate_typed_array(typed_array, column_data) {
         test.describe("get_index/get_limit", function () {
             test("get_index() on unindexed table", async function () {
                 const table = await perspective.table(data);
-                expect(await table.get_index()).toBeNull();
+                expect(await table.get_index()).toBeUndefined();
                 await table.delete();
             });
 
@@ -1466,7 +1466,7 @@ function validate_typed_array(typed_array, column_data) {
 
             test("get_limit() on table without limit", async function () {
                 const table = await perspective.table(data);
-                expect(await table.get_limit()).toBeNull();
+                expect(await table.get_limit()).toBeUndefined();
                 await table.delete();
             });
 
@@ -1478,7 +1478,35 @@ function validate_typed_array(typed_array, column_data) {
         });
 
         test.describe("Limit table constructors", function () {
+            // This is a better version of the OG but still questionable.
+            // IMO we should not allow this without an explicit `__INDEX__`.
             test("Should not apply partial updates on limit tables when index wraps", async function () {
+                const table = await perspective.table(
+                    { a: "float", b: "float" },
+                    {
+                        limit: 3,
+                    }
+                );
+
+                table.update([
+                    { a: 10, b: 1 },
+                    { a: 20, b: 2 },
+                ]);
+
+                await table.update([{ a: 30 }, { a: 40 }]);
+                const view = await table.view();
+                const records = await view.to_json();
+                await view.delete();
+                await table.delete();
+                expect(records).toEqual([
+                    { a: 40, b: null },
+                    { a: 20, b: 2 },
+                    { a: 30, b: null },
+                ]);
+            });
+
+            // We don' tsupport mixed-partial updates anymore!
+            test.skip("OG - Should not apply partial updates on limit tables when index wraps", async function () {
                 const table = await perspective.table(
                     { a: "float", b: "float" },
                     {

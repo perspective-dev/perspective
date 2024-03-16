@@ -938,14 +938,20 @@ Table::from_cols(
         }
 
         nrows = it.value.Size();
-
+        bool found = false;
         for (const auto& column_value : it.value.GetArray()) {
             auto dtype = rapidjson_type_to_dtype(column_value);
             if (dtype != DTYPE_NONE) {
-                data_types.push_back(rapidjson_type_to_dtype(it.value[0]));
+                data_types.push_back(dtype);
+                found = true;
                 break;
             }
         }
+
+        if (!found) {
+            PSP_COMPLAIN_AND_ABORT("Could not infer column type");
+        }
+
         column_names.emplace_back(it.name.GetString());
     }
 
@@ -1047,7 +1053,6 @@ Table::update_rows(const std::string_view& data, std::uint32_t port_id) {
     t_data_table data_table(table_schema);
     data_table.init();
     data_table.extend(size);
-
     if (is_implicit) {
         data_table.add_column("psp_pkey", DTYPE_INT32, true);
     } else {
@@ -1057,10 +1062,13 @@ Table::update_rows(const std::string_view& data, std::uint32_t port_id) {
     }
 
     t_uindex ii = 0;
-
     const auto& psp_pkey_col = data_table.get_column("psp_pkey");
-
     auto schema = data_table.get_schema();
+    // t_uindex col_count;
+    // bool supports_partial =
+    //     m_limit == std::numeric_limits<int>::max() && !m_index.empty();
+    bool is_first_row = true;
+    std::vector<std::string> missing_columns = m_column_names;
 
     // 3.) Fill table
     for (const auto& row : document.GetArray()) {
@@ -1068,10 +1076,10 @@ Table::update_rows(const std::string_view& data, std::uint32_t port_id) {
             psp_pkey_col->set_nth<std::uint32_t>(ii, (ii + m_offset) % m_limit);
         }
 
+        // col_count = m_column_names.size();
         for (const auto& it : row.GetObject()) {
             std::shared_ptr<t_column> col;
             std::string_view col_name = it.name.GetString();
-
             if (std::string_view{it.name.GetString()} == "__INDEX__") {
                 col_name = "psp_pkey";
             }
@@ -1081,16 +1089,44 @@ Table::update_rows(const std::string_view& data, std::uint32_t port_id) {
                 LOG_DEBUG("Schema:\n" << schema);
                 continue;
             }
-            col = data_table.get_column(col_name);
 
+            if (is_first_row) {
+                missing_columns.erase(
+                    std ::remove(
+                        missing_columns.begin(), missing_columns.end(), col_name
+                    ),
+                    missing_columns.end()
+                );
+            }
+
+            // col_count--;
+            col = data_table.get_column(col_name);
             auto promote = fill_column_json(col, ii, it.value);
             if (promote) {
                 data_table.promote_column(col_name, *promote, ii, true);
                 col = data_table.get_column(col_name);
                 fill_column_json(col, ii, it.value);
             }
+
             if (!is_implicit && m_index == it.name.GetString()) {
                 fill_column_json(psp_pkey_col, ii, it.value);
+            }
+        }
+
+        // // Check if this row "overflows", wrapping around due to a `m_limit`
+        // // value, as partial updates are not allowed in this case.
+        // if (!supports_partial && col_count != 0) {
+        //     std::cout << col_count << std::endl;
+        //     PSP_COMPLAIN_AND_ABORT(
+        //         "Inconsistent row count in update - `Table` partial updates "
+        //         "require an `index`"
+        //     );
+        // }
+
+        is_first_row = false;
+        if (ii + m_offset >= m_limit) {
+            for (auto& col_name : missing_columns) {
+                data_table.get_column(col_name)->unset(ii);
             }
         }
 
@@ -1098,7 +1134,6 @@ Table::update_rows(const std::string_view& data, std::uint32_t port_id) {
     }
 
     data_table.clone_column("psp_pkey", "psp_okey");
-
     calculate_offset(size);
     m_pool->send(get_gnode()->get_id(), port_id, data_table);
 }
@@ -1124,11 +1159,11 @@ Table::from_rows(
             "Cannot determine data types without column names!\n"
         )
     }
+
     const rapidjson::Value& first_row = document[0];
     std::vector<std::string> column_names;
     std::vector<t_dtype> data_types;
     bool is_implicit = true;
-
     std::unordered_set<std::string> columns_known_type;
 
     [&]() {

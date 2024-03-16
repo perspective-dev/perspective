@@ -933,7 +933,7 @@ const pivot_data = [
             const view = await table.view({
                 expressions: { '"x" * "y"': '"x" * "y"' },
             });
-            table.update([
+            await table.update([
                 { __INDEX__: 0, x: 1, y: 10 },
                 { __INDEX__: 2, x: 3, y: 20 },
             ]);

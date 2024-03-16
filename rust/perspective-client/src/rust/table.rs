@@ -15,16 +15,53 @@ use std::collections::HashMap;
 use nanoid::*;
 use serde::{Deserialize, Serialize};
 
-use crate::assert_table_api;
 use crate::client::{Client, TableData};
 use crate::config::{Expressions, ViewConfigUpdate};
+use crate::proto::make_table_options::MakeTableType;
 use crate::proto::request::ClientReq;
 use crate::proto::response::ClientResp;
 use crate::proto::{ColumnType, ExprValidationError, *};
 use crate::utils::*;
 use crate::view::View;
+use crate::{assert_table_api, proto};
 
 pub type Schema = HashMap<String, ColumnType>;
+
+/// Options which impact the behavior of [`Client::table`], as well as
+/// subsequent calls to [`Table::update`], even though this latter method
+/// itself does not take [`TableInitOptions`] as an argument, since this
+/// parameter is fixed at creation.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TableInitOptions {
+    /// This [`Table`] should use the column named by the `index` parameter as
+    /// the `index`, which causes [`Table::update`] and [`Client::table`] input
+    /// to either insert or update existing rows based on `index` column
+    /// value equality.
+    #[serde(rename = "index")]
+    Index { index: String },
+
+    /// This [`Table`] should be limited to `limit` rows, after which the
+    /// _earliest_ rows will be overwritten (where _earliest_ is defined as
+    /// relative to insertion order).
+    #[serde(rename = "limit")]
+    Limit { limit: u32 },
+}
+
+impl From<TableInitOptions> for proto::MakeTableOptions {
+    fn from(value: TableInitOptions) -> Self {
+        MakeTableOptions {
+            make_table_type: Some(match value {
+                TableInitOptions::Index { index } => {
+                    MakeTableType::MakeIndexTable(MakeIndexTable { index })
+                },
+                TableInitOptions::Limit { limit } => {
+                    MakeTableType::MakeLimitTable(MakeLimitTable { limit })
+                },
+            }),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct UpdateOptions {
@@ -44,13 +81,18 @@ pub struct ValidateExpressionsData {
 pub struct Table {
     name: String,
     client: Client,
+    options: Option<TableInitOptions>,
 }
 
 assert_table_api!(Table);
 
 impl Table {
-    pub(crate) fn new(name: String, client: Client) -> Self {
-        Table { name, client }
+    pub(crate) fn new(name: String, client: Client, options: Option<TableInitOptions>) -> Self {
+        Table {
+            name,
+            client,
+            options,
+        }
     }
 
     fn client_message(&self, req: ClientReq) -> RequestEnvelope {
@@ -59,6 +101,22 @@ impl Table {
             entity_id: self.name.clone(),
             entity_type: EntityType::Table as i32,
             payload: Some(req.into()),
+        }
+    }
+
+    pub fn get_index(&self) -> Option<String> {
+        if let Some(TableInitOptions::Index { index }) = &self.options {
+            Some(index.to_owned())
+        } else {
+            None
+        }
+    }
+
+    pub fn get_limit(&self) -> Option<u32> {
+        if let Some(TableInitOptions::Limit { limit }) = &self.options {
+            Some(*limit)
+        } else {
+            None
         }
     }
 

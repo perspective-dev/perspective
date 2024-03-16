@@ -1321,9 +1321,36 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
                 table->get_gnode()->get_output_schema()
             );
 
-            for (const auto& expr : exprs) {
-                const auto& gnode = table->get_gnode();
+            std::vector<std::tuple<
+                std::string,
+                std::string,
+                std::string,
+                std::vector<std::pair<std::string, std::string>>>>
+                legacy_exprs;
 
+            legacy_exprs.resize(1);
+            for (const auto& expr : exprs) {
+                legacy_exprs[0] = {
+                    expr.expression_alias,
+                    expr.expression,
+                    expr.parse_expression_string,
+                    std::vector<std::pair<std::string, std::string>>{
+                        expr.column_id_map.begin(), expr.column_id_map.end()
+                    }
+                };
+
+                // Validate these expression, creating is not the same thing!
+                const auto& res = table->validate_expressions(legacy_exprs);
+                if (!res.get_expression_errors().empty()) {
+                    // TODO unify error reporting - this works differently than
+                    // `validate_expressions()`. In this case there is
+                    // guaranteed to only be one ...
+                    PSP_COMPLAIN_AND_ABORT(res.get_expression_errors()
+                                               .at(expr.expression_alias)
+                                               .m_error_message);
+                }
+
+                const auto& gnode = table->get_gnode();
                 auto column_id_map =
                     std::vector<std::pair<std::string, std::string>>(
                         expr.column_id_map.begin(), expr.column_id_map.end()
@@ -1331,7 +1358,6 @@ ProtoServer::_handle_message(const Req& req, const RequestEnvelope& env) {
 
                 auto expr_vocab = gnode->get_expression_vocab();
                 t_expression_vocab& expression_vocab = *expr_vocab;
-
                 auto expression_regex_mapping =
                     gnode->get_expression_regex_mapping();
                 t_regex_mapping& regex_mapping = *expression_regex_mapping;

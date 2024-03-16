@@ -61,23 +61,6 @@ impl Vec<(String, ColumnType)> {
     }
 }
 
-// mod internal {
-//     #[wasm_bindgen::prelude::wasm_bindgen(
-//         inline_js = "export {JsView as ExternalJsView} from
-// '../../perspective.js';"     )]
-//     extern "C" {
-//         #[wasm_bindgen]
-//         pub type ExternalJsView;
-
-//         #[wasm_bindgen(method)]
-//         pub fn __get_model(this: &ExternalJsView) -> super::JsView;
-//     }
-// }
-
-// fn is() {
-//     value.dyn_ref::<internal::ExternalJsView>().is_some()
-// }
-
 #[ext]
 impl TableData {
     fn from_js_value(value: &JsValue) -> ApiResult<TableData> {
@@ -220,6 +203,16 @@ impl JsTable {
 
 #[wasm_bindgen]
 impl JsTable {
+    #[wasm_bindgen]
+    pub async fn get_index(&self) -> Option<String> {
+        self.0.get_index()
+    }
+
+    #[wasm_bindgen]
+    pub async fn get_limit(&self) -> Option<u32> {
+        self.0.get_limit()
+    }
+
     #[doc = include_str!("../../../perspective-client/docs/table/clear.md")]
     #[wasm_bindgen]
     pub async fn clear(&self) -> ApiResult<()> {

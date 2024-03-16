@@ -26,7 +26,7 @@ use crate::proto::response::ClientResp;
 use crate::proto::*;
 use crate::utils::*;
 use crate::view::View;
-use crate::{proto, Table};
+use crate::{proto, Table, TableInitOptions};
 
 /// The possible formats of input data which [`Client::table`] and
 /// [`Table::update`] may take as an argument. The latter method will not work
@@ -58,42 +58,6 @@ impl From<TableData> for proto::make_table_data::Data {
                         r#type: r#type as i32,
                     })
                     .collect(),
-            }),
-        }
-    }
-}
-
-/// Options which impact the behavior of [`Client::table`], as well as
-/// subsequent calls to [`Table::update`], even though this latter method
-/// itself does not take [`TableInitOptions`] as an argument, since this
-/// parameter is fixed at creation.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum TableInitOptions {
-    /// This [`Table`] should use the column named by the `index` parameter as
-    /// the `index`, which causes [`Table::update`] and [`Client::table`] input
-    /// to either insert or update existing rows based on `index` column
-    /// value equality.
-    #[serde(rename = "index")]
-    Index { index: String },
-
-    /// This [`Table`] should be limited to `limit` rows, after which the
-    /// _earliest_ rows will be overwritten (where _earliest_ is defined as
-    /// relative to insertion order).
-    #[serde(rename = "limit")]
-    Limit { limit: u32 },
-}
-
-impl From<TableInitOptions> for proto::MakeTableOptions {
-    fn from(value: TableInitOptions) -> Self {
-        MakeTableOptions {
-            make_table_type: Some(match value {
-                TableInitOptions::Index { index } => {
-                    MakeTableType::MakeIndexTable(MakeIndexTable { index })
-                },
-                TableInitOptions::Limit { limit } => {
-                    MakeTableType::MakeLimitTable(MakeLimitTable { limit })
-                },
             }),
         }
     }
@@ -180,14 +144,14 @@ impl Client {
                     data: Some(MakeTableData {
                         data: Some(input.into()),
                     }),
-                    options: options.map(|x| x.into()),
+                    options: options.as_ref().map(|x| x.clone().into()),
                 })),
             }),
         };
 
         let client = self.clone();
         match self.oneshot(&msg).await {
-            ClientResp::MakeTableResp(_) => Ok(Table::new(name, client)),
+            ClientResp::MakeTableResp(_) => Ok(Table::new(name, client, options)),
             resp => Err(resp.into()),
         }
     }

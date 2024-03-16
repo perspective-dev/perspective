@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +33,18 @@ pub enum OnUpdateMode {
     #[default]
     #[serde(rename = "row")]
     Row,
+}
+
+impl FromStr for OnUpdateMode {
+    type Err = ClientError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "row" {
+            Ok(OnUpdateMode::Row)
+        } else {
+            Err(ClientError::Option)
+        }
+    }
 }
 
 pub type OnUpdateArgs = (Option<Vec<u8>>, u32);
