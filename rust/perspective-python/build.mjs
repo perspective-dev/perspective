@@ -98,6 +98,7 @@ if (build_wheel) {
                 "Expected PYTHON to be set in CONDA_BUILD environment, but it isn't.  maturin will likely detect the wrong Python."
             );
         }
+
         // we need to generate proto.rs using conda's protoc, which is set in
         // the environment.  we use the unstable "versioned" python abi
         features.push(["generate-proto"]);

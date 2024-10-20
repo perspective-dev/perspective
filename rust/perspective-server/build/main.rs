@@ -41,6 +41,10 @@ pub fn copy_dir_all(
 }
 
 fn main() -> Result<(), std::io::Error> {
+    if std::env::var("DOCS_RS").is_ok() {
+        return Ok(());
+    }
+
     let markdown = fs::read_to_string("./docs/lib.md")?;
     let markdown = Regex::new("<img src=\"(.+?)\"")
         .expect("regex")
@@ -54,10 +58,6 @@ fn main() -> Result<(), std::io::Error> {
         });
 
     std::fs::write("docs/lib_gen.md", markdown.as_ref())?;
-    if std::env::var("DOCS_RS").is_ok() {
-        return Ok(());
-    }
-
     if std::env::var("CARGO_FEATURE_EXTERNAL_CPP").is_ok() {
         println!("cargo:warning=MESSAGE Building in development mode");
         let root_dir_env = std::env::var("PSP_ROOT_DIR").expect("Must set PSP_ROOT_DIR");

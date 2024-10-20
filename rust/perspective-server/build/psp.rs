@@ -51,10 +51,13 @@ pub fn cmake_build() -> Result<Option<PathBuf>, std::io::Error> {
                         vcpkg_root.replace("\\", "/")
                     ),
                 );
-            }
+            },
             Err(_) => {
-                println!("cargo:warning=MESSAGE VCPKG_ROOT not set in environment, not setting CMAKE_TOOLCHAIN_FILE")
-            }
+                println!(
+                    "cargo:warning=MESSAGE VCPKG_ROOT not set in environment, not setting \
+                     CMAKE_TOOLCHAIN_FILE"
+                )
+            },
         }
     }
 
@@ -79,11 +82,14 @@ pub fn cmake_build() -> Result<Option<PathBuf>, std::io::Error> {
         dst.build_arg(format!("-j{}", num_cpus::get()));
     }
 
-    // Conda sets CMAKE_ARGS for e.g. cross-compiling toolchain in the environment - normally they
-    // are passed directly to a cmake invocation in the recipe, but our conda recipe doesn't
-    // directly invoke cmake
+    // Conda sets CMAKE_ARGS for e.g. cross-compiling toolchain in the environment -
+    // normally they are passed directly to a cmake invocation in the recipe,
+    // but our conda recipe doesn't directly invoke cmake
     if let Ok(cmake_args) = std::env::var("CMAKE_ARGS") {
-        println!("cargo:warning=MESSAGE Setting CMAKE_ARGS from enviornment {:?}", cmake_args);
+        println!(
+            "cargo:warning=MESSAGE Setting CMAKE_ARGS from enviornment {:?}",
+            cmake_args
+        );
         for arg in Shlex::new(&cmake_args) {
             dst.configure_arg(arg);
         }
