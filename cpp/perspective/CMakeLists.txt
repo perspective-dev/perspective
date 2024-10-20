@@ -341,6 +341,7 @@ list(APPEND all_deps_INCLUDE_DIRS
 
 psp_build_dep("Boost" "${PSP_CMAKE_MODULE_PATH}/Boost.txt.in")
 list(APPEND all_deps_INCLUDE_DIRS ${Boost_INCLUDE_DIRS})
+psp_build_dep("lz4" "${PSP_CMAKE_MODULE_PATH}/lz4.txt.in")
 
 # Arrow builds its own dependencies
 psp_build_message("${Cyan}Building Apache Arrow${ColorReset}")
@@ -611,7 +612,7 @@ elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
 
         # Link against arrow static library
         # Linking against arrow_static also links against its bundled dependencies
-        target_link_libraries(psp PRIVATE arrow_static re2 protos)
+        target_link_libraries(psp PRIVATE arrow_static re2 protos lz4_static)
     else()
         add_library(psp STATIC ${WASM_SOURCE_FILES})
         target_include_directories(psp PRIVATE ${psp_INCLUDE_DIRS})

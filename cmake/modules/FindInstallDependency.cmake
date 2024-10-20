@@ -73,6 +73,12 @@ function(psp_build_dep name cmake_file)
             ${CMAKE_BINARY_DIR}/${name}-build
             EXCLUDE_FROM_ALL)
         set(${name}_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/${name}-src PARENT_SCOPE)
+    elseif(${name} STREQUAL lz4)
+        # lz4's CMakeLists.txt is in a subdir, build/cmake
+        add_subdirectory(${CMAKE_BINARY_DIR}/${name}-src/build/cmake
+            ${CMAKE_BINARY_DIR}/${name}-build
+            EXCLUDE_FROM_ALL)
+        include_directories(SYSTEM ${CMAKE_BINARY_DIR}/${name}-src/lib)
     elseif(${name} STREQUAL protobuf)
         add_subdirectory(${CMAKE_BINARY_DIR}/${name}-src
             ${CMAKE_BINARY_DIR}/${name}-build
