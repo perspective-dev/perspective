@@ -682,6 +682,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
 
 [[package]]
+name = "fallible-iterator"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
+
+[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -873,7 +879,7 @@ version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22030e2c5a68ec659fde1e949a745124b48e6fa8b045b7ed5bd1fe4ccc5c4e5d"
 dependencies = [
- "fallible-iterator",
+ "fallible-iterator 0.2.0",
  "indexmap 1.9.3",
  "stable_deref_trait",
 ]
@@ -1729,9 +1735,14 @@ version = "4.0.1"
 dependencies = [
  "async-lock",
  "axum",
+ "fallible-iterator 0.3.0",
  "futures",
+ "indexmap 2.12.1",
  "perspective-client",
  "perspective-server",
+ "prost",
+ "serde",
+ "serde_json",
  "tokio",
  "tracing",
 ]
@@ -1810,9 +1821,12 @@ name = "perspective-python"
 version = "4.0.1"
 dependencies = [
  "async-lock",
+ "bytes",
+ "chrono",
  "cmake",
  "extend",
  "futures",
+ "indexmap 2.12.1",
  "macro_rules_attribute",
  "num_cpus",
  "perspective-client",
@@ -1823,6 +1837,7 @@ dependencies = [
  "pyo3-build-config 0.22.6",
  "python-config-rs",
  "pythonize",
+ "serde",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1835,11 +1850,16 @@ dependencies = [
  "async-lock",
  "cmake",
  "futures",
+ "indexmap 2.12.1",
  "link-cplusplus",
  "num_cpus",
  "perspective-client",
+ "prost",
  "protobuf-src",
+ "serde",
+ "serde_json",
  "shlex",
+ "thiserror 1.0.69",
  "tracing",
 ]
 

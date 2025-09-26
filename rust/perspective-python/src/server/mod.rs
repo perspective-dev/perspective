@@ -14,6 +14,7 @@ mod server_async;
 mod server_sync;
 pub(crate) mod session_async;
 pub(crate) mod session_sync;
+pub(crate) mod virtual_server_sync;
 
 pub use server_async::*;
 pub use server_sync::*;
