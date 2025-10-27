@@ -59,11 +59,15 @@ python-config-rs = "0.1.2"
 [dependencies]
 perspective-client = { version = "3.8.0" }
 perspective-server = { version = "3.8.0" }
+bytes = "1.10.1"
+chrono = "0.4"
 macro_rules_attribute = "0.2.0"
 async-lock = "2.5.0"
 pollster = "0.3.0"
 extend = "1.1.2"
+indexmap = "2.2.6"
 futures = "0.3.28"
+serde = { version = "1.0" }
 pyo3 = { version = "0.25.1", features = [
     "experimental-async",
     "extension-module",
