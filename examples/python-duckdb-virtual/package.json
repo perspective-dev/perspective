@@ -1,0 +1,22 @@
+{
+    "name": "python-duckdb-virtual",
+    "private": true,
+    "version": "3.7.4",
+    "description": "An example of streaming a `perspective-python` server to the browser.",
+    "scripts": {
+        "start": "PYTHONPATH=../../python/perspective python3 server.py"
+    },
+    "keywords": [],
+    "license": "Apache-2.0",
+    "dependencies": {
+        "@finos/perspective": "workspace:^",
+        "@finos/perspective-viewer": "workspace:^",
+        "@finos/perspective-viewer-d3fc": "workspace:^",
+        "@finos/perspective-viewer-datagrid": "workspace:^",
+        "@finos/perspective-workspace": "workspace:^",
+        "superstore-arrow": "catalog:"
+    },
+    "devDependencies": {
+        "npm-run-all": "catalog:"
+    }
+}

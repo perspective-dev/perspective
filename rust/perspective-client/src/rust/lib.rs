@@ -44,11 +44,12 @@ pub mod config;
 
 #[rustfmt::skip]
 #[allow(clippy::all)]
-mod proto;
+pub mod proto;
 
 pub mod utils;
 
 pub use crate::client::{Client, ClientHandler, Features, ReconnectCallback, SystemInfo};
+use crate::proto::HostedTable;
 pub use crate::session::{ProxySession, Session};
 pub use crate::table::{
     DeleteOptions, ExprValidationResult, Table, TableInitOptions, TableReadFormat, UpdateOptions,
@@ -64,6 +65,16 @@ pub type ExprValidationError = crate::proto::table_validate_expr_resp::ExprValid
 #[doc(hidden)]
 pub mod vendor {
     pub use paste;
+}
+
+impl From<&str> for HostedTable {
+    fn from(entity_id: &str) -> Self {
+        HostedTable {
+            entity_id: entity_id.to_string(),
+            index: None,
+            limit: None,
+        }
+    }
 }
 
 /// Assert that an implementation of domain language wrapper for [`Table`]
