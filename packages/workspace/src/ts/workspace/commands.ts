@@ -154,9 +154,9 @@ export const createCommands = (
         isVisible: (args) => {
             const target_widget = workspace.getWidgetByName(
                 args.target_widget_name as string,
-            )!;
+            );
 
-            return target_widget.title.label !== "";
+            return target_widget?.title.label !== "";
         },
         label: (args) => {
             const target_widget = workspace.getWidgetByName(
@@ -194,9 +194,9 @@ export const createCommands = (
         isVisible: (args) => {
             const widget = workspace.getWidgetByName(
                 args.widget_name as string,
-            )!;
+            );
 
-            return widget.parent! === (workspace.get_dock_panel() as Widget)
+            return widget?.parent === (workspace.get_dock_panel() as Widget)
                 ? true
                 : false;
         },
@@ -220,8 +220,10 @@ export const createCommands = (
             ),
         // iconClass: "menu-duplicate",
         isVisible: (args) => {
-            return workspace.getWidgetByName(args.widget_name as string)!
-                .parent! === (workspace.get_dock_panel() as Widget)
+            const parent = workspace.getWidgetByName(
+                args.widget_name as string,
+            )?.parent;
+            return parent === (workspace.get_dock_panel() as Widget)
                 ? true
                 : false;
         },
