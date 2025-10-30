@@ -15,5 +15,8 @@
         "pro_self_extracting_wasm": "catalog:",
         "typescript": "catalog:",
         "zx": "catalog:"
+    },
+    "publishConfig": {
+        "access": "public"
     }
 }

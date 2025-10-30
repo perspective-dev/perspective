@@ -987,6 +987,9 @@ jobs:
               working-directory: ./rust/perspective-js
 
             - run: pnpm pack --pack-destination=../..
+              working-directory: ./rust/perspective-server
+
+            - run: pnpm pack --pack-destination=../..
               working-directory: ./rust/perspective-viewer
 
             - run: pnpm pack --pack-destination=../..
