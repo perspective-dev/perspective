@@ -1474,6 +1474,31 @@ class TestView(object):
             {"a": util.to_timestamp(datetime(2019, 7, 11, () * 1000)), "b": 4}
         ]
 
+    def test_view_filter_datetime_as_number_eq(self, util):
+        data = [
+            {"a": datetime(2019, 7, 11, 8, 15).timestamp(), "b": 2},
+            {"a": datetime(2019, 7, 11, 8, 16).timestamp(), "b": 4},
+        ]
+
+        tbl = Table({"a": "datetime", "b": "integer"})
+        tbl.update(data)
+        view = tbl.view(filter=[["a", "==", datetime(2019, 7, 11, 8, 15).timestamp()]])
+        assert view.to_records() == [
+            {"a": datetime(2019, 7, 11, 8, 15).timestamp(), "b": 2}
+        ]
+
+    def test_view_filter_datetime_as_number_neq(self, util):
+        data = [
+            {"a": datetime(2019, 7, 11, 8, 15).timestamp(), "b": 2},
+            {"a": datetime(2019, 7, 11, 8, 16).timestamp(), "b": 4},
+        ]
+        tbl = Table({"a": "datetime", "b": "integer"})
+        tbl.update(data)
+        view = tbl.view(filter=[["a", "!=", datetime(2019, 7, 11, 8, 15).timestamp()]])
+        assert view.to_records() == [
+            {"a": datetime(2019, 7, 11, 8, 16).timestamp(), "b": 4}
+        ]
+
     def test_view_filter_datetime_str_eq(self, util):
         data = [
             {"a": datetime(2019, 7, 11, 8, 15), "b": 2},

@@ -395,7 +395,8 @@ const datetime_data_local = [
             });
 
             test("w == datetime as Date() object", async function () {
-                const table = await perspective.table(datetime_data);
+                const table = await perspective.table({ x: "datetime" });
+                await table.update(datetime_data);
                 expect(await table.schema()).toEqual({
                     x: "datetime",
                 });
@@ -413,8 +414,33 @@ const datetime_data_local = [
                 await table.delete();
             });
 
-            test.skip("w == datetime as US locale string", async function () {
-                const table = await perspective.table(datetime_data);
+            test("w == datetime as Number", async function () {
+                const table = await perspective.table({ x: "datetime" });
+                await table.update(datetime_data);
+                expect(await table.schema()).toEqual({
+                    x: "datetime",
+                });
+
+                const view = await table.view({
+                    filter: [["x", "==", +datetime_data[0]["x"]]],
+                });
+
+                expect(await view.num_rows()).toBe(1);
+                let data = await view.to_json();
+                data = data.map((d) => {
+                    d.x = new Date(d.x);
+                    return d;
+                });
+
+                expect(data).toEqual(datetime_data.slice(0, 1));
+                await view.delete();
+                await table.delete();
+            });
+
+            test("w == datetime as US locale string", async function () {
+                const table = await perspective.table({ x: "datetime" });
+                await table.update(datetime_data);
+
                 expect(await table.schema()).toEqual({
                     x: "datetime",
                 });

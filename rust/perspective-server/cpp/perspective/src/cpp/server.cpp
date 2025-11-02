@@ -1297,7 +1297,7 @@ coerce_to(const t_dtype dtype, const A& val) {
                 return scalar;
             }
             case DTYPE_TIME: {
-                t_time time{std::chrono::milliseconds((long)val).count()};
+                t_time time{std::chrono::milliseconds((long long)val).count()};
                 scalar.set(time);
                 return scalar;
             }
