@@ -12,16 +12,50 @@
 
 import { Settings } from "../types";
 
-export function toValue(type, value) {
+function createDateFormatter(type: string, columnConfig?: any) {
+    const dateFormat = columnConfig?.date_format;
+    
+    if (type === "date") {
+        const options: Intl.DateTimeFormatOptions = {
+            timeZone: "UTC",
+            dateStyle: dateFormat?.dateStyle === "disabled" ? undefined : (dateFormat?.dateStyle ?? "short"),
+        };
+        return new Intl.DateTimeFormat(navigator.languages as string[], options);
+    }
+    
+    // datetime
+    if (dateFormat?.format === "custom") {
+        const options: Intl.DateTimeFormatOptions = {
+            timeZone: dateFormat?.timeZone,
+            second: dateFormat?.second === "disabled" ? undefined : dateFormat?.second,
+            minute: dateFormat?.minute === "disabled" ? undefined : dateFormat?.minute,
+            hour: dateFormat?.hour === "disabled" ? undefined : dateFormat?.hour,
+            day: dateFormat?.day === "disabled" ? undefined : dateFormat?.day,
+            weekday: dateFormat?.weekday === "disabled" ? undefined : dateFormat?.weekday,
+            month: dateFormat?.month === "disabled" ? undefined : dateFormat?.month,
+            year: dateFormat?.year === "disabled" ? undefined : dateFormat?.year,
+            hour12: dateFormat?.hour12,
+            fractionalSecondDigits: dateFormat?.fractionalSecondDigits,
+        };
+        return new Intl.DateTimeFormat(navigator.languages as string[], options);
+    }
+    
+    const options: Intl.DateTimeFormatOptions = {
+        timeZone: dateFormat?.timeZone,
+        dateStyle: dateFormat?.dateStyle === "disabled" ? undefined : (dateFormat?.dateStyle ?? "short"),
+        timeStyle: dateFormat?.timeStyle === "disabled" ? undefined : (dateFormat?.timeStyle ?? "medium"),
+    };
+    return new Intl.DateTimeFormat(navigator.languages as string[], options);
+}
+
+export function toValue(type: string, value: any, columnConfig?: any) {
     switch (type) {
         case "date":
-        case "datetime":
-            return value instanceof Date
-                ? value
-                : new Date(parseInt(value)).toLocaleString([], {
-                      dateStyle: "short",
-                      timeStyle: "medium",
-                  });
+        case "datetime": {
+            const date = value instanceof Date ? value : new Date(parseInt(value));
+            const formatter = createDateFormatter(type, columnConfig);
+            return formatter.format(date);
+        }
         case "integer":
             return parseInt(value, 10);
         case "float":
@@ -30,7 +64,7 @@ export function toValue(type, value) {
     return value;
 }
 
-export function getGroupValues(data, settings) {
+export function getGroupValues(data, settings: Settings) {
     if (settings.crossValues.length === 0) return [];
     if (data.crossValue.length === 0) return [];
     const groupValues = (data.crossValue.split
@@ -38,10 +72,14 @@ export function getGroupValues(data, settings) {
         : Array.isArray(data.crossValue)
           ? data.crossValue
           : [data.crossValue]) || [data.key];
-    return groupValues.map((cross, i) => ({
-        name: settings.crossValues[i].name,
-        value: toValue(settings.crossValues[i].type, cross),
-    }));
+    return groupValues.map((cross, i) => {
+        const columnName = settings.crossValues[i].name;
+        const columnConfig = settings.columns_config?.[columnName];
+        return {
+            name: columnName,
+            value: toValue(settings.crossValues[i].type, cross, columnConfig),
+        };
+    });
 }
 
 export function getSplitValues(data, settings: Settings) {
@@ -54,37 +92,50 @@ export function getSplitValues(data, settings: Settings) {
         splitValues = data.mainValue.split("|");
     }
 
-    return settings.splitValues.map((split, i) => ({
-        name: split.name,
-        value: toValue(split.type, splitValues[i]),
-    }));
+    return settings.splitValues.map((split, i) => {
+        const columnConfig = settings.columns_config?.[split.name];
+        return {
+            name: split.name,
+            value: toValue(split.type, splitValues[i], columnConfig),
+        };
+    });
 }
 
-export function getDataValues(data, settings) {
+export function getDataValues(data, settings: Settings) {
     if (settings.mainValues.length > 1) {
         if (data.mainValues) {
-            return settings.mainValues.map((main, i) => ({
-                name: main.name,
-                value: toValue(main.type, data.mainValues[i]),
-            }));
+            return settings.mainValues.map((main, i) => {
+                const columnConfig = settings.columns_config?.[main.name];
+                return {
+                    name: main.name,
+                    value: toValue(main.type, data.mainValues[i], columnConfig),
+                };
+            });
         }
-        return settings.mainValues.map((main) => ({
-            name: main.name,
-            value: toValue(
-                main.type,
-                data.row[getDataRowKey(data.key, main, settings.realValues)],
-            ),
-        }));
+        return settings.mainValues.map((main) => {
+            const columnConfig = settings.columns_config?.[main.name];
+            return {
+                name: main.name,
+                value: toValue(
+                    main.type,
+                    data.row[getDataRowKey(data.key, main, settings.realValues)],
+                    columnConfig,
+                ),
+            };
+        });
     }
+    const mainValue = settings.mainValues[0];
+    const columnConfig = settings.columns_config?.[mainValue.name];
     return [
         {
-            name: settings.mainValues[0].name,
+            name: mainValue.name,
             value: toValue(
-                settings.mainValues[0].type,
+                mainValue.type,
                 data.colorValue ||
                     data.mainValue - data.baseValue ||
                     data.mainValue ||
                     data.mainValues,
+                columnConfig,
             ),
         },
     ];

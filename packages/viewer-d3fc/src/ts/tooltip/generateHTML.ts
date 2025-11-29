@@ -31,15 +31,23 @@ function addDataValues(tooltipDiv, values) {
             select(this)
                 .text(`${d.name}: `)
                 .append("b")
-                .text(formatNumber(d.value));
+                .text(formatValue(d.value));
         });
 }
 
-const formatNumber = (value) =>
-    value === null || value === undefined
-        ? "-"
-        : value.toLocaleString(undefined, {
-              style: "decimal",
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-          });
+const formatValue = (value) => {
+    if (value === null || value === undefined) {
+        return "-";
+    }
+    if (typeof value === "string") {
+        return value;
+    }
+    if (typeof value === "number") {
+        return value.toLocaleString(undefined, {
+            style: "decimal",
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    }
+    return String(value);
+};
