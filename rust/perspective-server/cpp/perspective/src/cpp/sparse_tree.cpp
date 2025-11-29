@@ -35,8 +35,8 @@
 
 namespace perspective {
 
-// Tweet length
-const t_uindex MAX_JOIN_SIZE = 280;
+// Maximum size for join aggregate strings (64KB)
+const t_uindex MAX_JOIN_SIZE = 65536;
 
 t_tscalar
 get_dominant(std::vector<t_tscalar>& values) {
