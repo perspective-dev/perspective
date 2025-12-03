@@ -188,6 +188,7 @@ jobs:
             matrix:
                 os:
                     - ubuntu-22.04
+                    - ubuntu-22.04-arm
                     - macos-14
                     - windows-2022
                 arch:
@@ -201,6 +202,10 @@ jobs:
                       arch: x86_64
                       python-version: 3.9
                       container: pagmo2/manylinux228_x86_64_with_deps
+                    - os: ubuntu-22.04-arm
+                      arch: aarch64
+                      python-version: 3.9
+                      container: pagmo2/manylinux228_aarch64_with_deps
                 is-release:
                     - ${{ startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' }}
                 exclude:
@@ -208,6 +213,8 @@ jobs:
                       arch: aarch64
                     - os: ubuntu-22.04
                       arch: aarch64
+                    - os: ubuntu-22.04-arm
+                      arch: x86_64
                     - os: macos-14
                       is-release: false
                     - os: macos-14

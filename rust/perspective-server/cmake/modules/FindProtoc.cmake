@@ -9,7 +9,17 @@ function(download_protoc VERSION DESTINATION)
     elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
         set(PROTOC_ZIP "protoc-${VERSION}-osx-x86_64.zip")
     elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
-        set(PROTOC_ZIP "protoc-${VERSION}-linux-x86_64.zip")
+        # Detect host architecture for Linux
+        execute_process(
+            COMMAND uname -m
+            OUTPUT_VARIABLE HOST_ARCH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        if(HOST_ARCH STREQUAL "aarch64")
+            set(PROTOC_ZIP "protoc-${VERSION}-linux-aarch_64.zip")
+        else()
+            set(PROTOC_ZIP "protoc-${VERSION}-linux-x86_64.zip")
+        endif()
     else()
         message(FATAL_ERROR "Unsupported host system: ${CMAKE_HOST_SYSTEM_NAME}")
     endif()
@@ -56,7 +66,7 @@ else()
             OUTPUT_VARIABLE PROTOC_VERSION_OUTPUT
             OUTPUT_STRIP_TRAILING_WHITESPACE
         )
-        
+
         if(NOT PROTOC_VERSION_OUTPUT MATCHES "^libprotoc ([0-9]+)\\.([0-9]+)(:?\\.([0-9]+))?")
             message(WARNING "Unable to determine protoc version")
             return()
@@ -71,7 +81,7 @@ else()
         else()
             set(FOUND_VERSION "${PROTOC_VERSION_MAJOR}.${PROTOC_VERSION_MINOR}.${PROTOC_VERSION_PATCH}")
         endif()
-        
+
         # Force the external project to use the same version as our installed protoc CLI
         set(LIBPROTOBUF_VERSION "v${FOUND_VERSION}" PARENT_SCOPE)
 
@@ -120,4 +130,3 @@ function(protobuf_generate_cpp SRCS HDRS)
     set(${SRCS} ${_PROTOBUF_GENERATE_CPP_SRCS} PARENT_SCOPE)
     set(${HDRS} ${_PROTOBUF_GENERATE_CPP_HDRS} PARENT_SCOPE)
 endfunction()
-

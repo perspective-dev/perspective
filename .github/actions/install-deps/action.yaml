@@ -55,10 +55,19 @@ runs:
               remove-codeql: "true"
 
         # https://github.com/open-telemetry/opentelemetry-cpp/issues/2998
+        # Skip on arm64 Linux - use system cmake instead
         - name: Setup cmake
           uses: jwlawson/actions-setup-cmake@v2
+          if: ${{ !(inputs.arch == 'aarch64' && runner.os == 'Linux') }}
           with:
               cmake-version: "3.29.6"
+
+        # Use system cmake on arm64 Linux (the setup-cmake action doesn't support arm64 Linux)
+        - name: Install cmake (arm64 Linux)
+          if: ${{ inputs.arch == 'aarch64' && runner.os == 'Linux' }}
+          shell: bash
+          run: |
+              dnf install -y cmake
 
         - name: Install pnpm
           uses: pnpm/action-setup@v3
@@ -151,6 +160,20 @@ runs:
               toolchain: nightly-2025-02-01
               targets: aarch64-apple-darwin
               components: rustfmt, clippy, rust-src
+
+        # Remove any pre-installed x86_64 rustup on arm64 runners
+        - name: Clean up incompatible rustup (aarch64 Linux)
+          if: ${{ inputs.rust == 'true' && inputs.arch == 'aarch64' && runner.os == 'Linux' }}
+          shell: bash
+          run: |
+              if command -v rustup &>/dev/null; then
+                  if ! rustup --version &>/dev/null; then
+                      echo "Removing incompatible rustup binary"
+                      rm -f "$(which rustup)"
+                      rm -rf ~/.cargo/bin
+                      rm -rf ~/.rustup
+                  fi
+              fi
 
         - name: Install rust (aarch64 Linux)
           uses: dtolnay/rust-toolchain@nightly
