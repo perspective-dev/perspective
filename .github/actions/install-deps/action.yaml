@@ -161,20 +161,6 @@ runs:
               targets: aarch64-apple-darwin
               components: rustfmt, clippy, rust-src
 
-        # Remove any pre-installed x86_64 rustup on arm64 runners
-        - name: Clean up incompatible rustup (aarch64 Linux)
-          if: ${{ inputs.rust == 'true' && inputs.arch == 'aarch64' && runner.os == 'Linux' }}
-          shell: bash
-          run: |
-              if command -v rustup &>/dev/null; then
-                  if ! rustup --version &>/dev/null; then
-                      echo "Removing incompatible rustup binary"
-                      rm -f "$(which rustup)"
-                      rm -rf ~/.cargo/bin
-                      rm -rf ~/.rustup
-                  fi
-              fi
-
         - name: Install rust (aarch64 Linux)
           uses: dtolnay/rust-toolchain@nightly
           if: ${{ inputs.rust == 'true' && inputs.arch == 'aarch64' && runner.os == 'Linux' }}

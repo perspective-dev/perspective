@@ -46,10 +46,7 @@ fn cmake_build() -> Result<Option<PathBuf>, std::io::Error> {
     dst.define("ARROW_BUILD_EXAMPLES", "OFF");
     dst.define("RAPIDJSON_BUILD_EXAMPLES", "OFF");
     dst.define("ARROW_CXX_FLAGS_DEBUG", "-Wno-error");
-    // Only use protobuf-src's protoc if we're not on Linux arm64
-    // On Linux arm64, let cmake download the correct protoc binary
-    #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
-    dst.define("PSP_PROTOC_PATH", protoc());
+    dst.define("PSP_PROTOC_PATH", protoc().parent());
     dst.define("CMAKE_COLOR_DIAGNOSTICS", "ON");
     dst.define(
         "PSP_PROTO_PATH",

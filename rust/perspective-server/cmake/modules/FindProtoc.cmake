@@ -9,13 +9,7 @@ function(download_protoc VERSION DESTINATION)
     elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
         set(PROTOC_ZIP "protoc-${VERSION}-osx-x86_64.zip")
     elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
-        # Detect host architecture for Linux
-        execute_process(
-            COMMAND uname -m
-            OUTPUT_VARIABLE HOST_ARCH
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-        )
-        if(HOST_ARCH STREQUAL "aarch64")
+        if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "aarch64")
             set(PROTOC_ZIP "protoc-${VERSION}-linux-aarch_64.zip")
         else()
             set(PROTOC_ZIP "protoc-${VERSION}-linux-x86_64.zip")
