@@ -88,7 +88,7 @@ runs:
           if: ${{ inputs.skip_cache == 'false' && inputs.python == 'true' }}
           with:
               path: ~/.cache/pip
-              key: ${{ runner.os }}-pip-${{ hashFiles('**/setup.py') }}
+              key: ${{ runner.os }}-pip-${{ hashFiles('rust/perspective-python/requirements.txt') }}
               restore-keys: |
                   ${{ runner.os }}-pip-
 
@@ -96,7 +96,7 @@ runs:
           uses: actions/cache@v4
           if: ${{ inputs.skip_cache == 'false' && inputs.rust == 'true' }}
           with:
-              key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+              key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
               path: |
                   ~/.cargo/bin/
                   ~/.cargo/registry/index/
@@ -104,6 +104,16 @@ runs:
                   ~/.cargo/git/db/
               restore-keys: |
                   ${{ runner.os }}-cargo-
+
+        - name: Setup build cache
+          uses: actions/cache@v4
+          if: ${{ inputs.skip_cache == 'false' && inputs.rust == 'true' }}
+          with:
+              key: ${{ github.job }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('rust/perspective-python/requirements.txt') }}
+              path: |
+                  ~/rust/target
+              restore-keys: |
+                  ${{ runner.os }}-build-
 
         # - name: ccache
         #   uses: hendrikmuhs/ccache-action@v1.2
