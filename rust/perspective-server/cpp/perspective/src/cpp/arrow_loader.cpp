@@ -170,8 +170,11 @@ convert_type(const std::string& src) {
     if (src == "uint64") {
         return DTYPE_UINT64;
     }
-    if (src == "decimal" || src == "decimal128" || src == "int64") {
+    if (src == "int64") {
         return DTYPE_INT64;
+    }
+    if (src == "decimal" || src == "decimal128") {
+        return DTYPE_FLOAT64;
     }
     if (src == "float") {
         return DTYPE_FLOAT32;
@@ -750,16 +753,13 @@ copy_array(
         case arrow::Decimal128Type::type_id:
         case arrow::DecimalType::type_id: {
             std::shared_ptr<arrow::Decimal128Array> scol =
-                std::static_pointer_cast<arrow::DecimalArray>(src);
+                std::static_pointer_cast<arrow::Decimal128Array>(src);
+            auto decimal_type =
+                std::static_pointer_cast<arrow::Decimal128Type>(src->type());
+            int32_t scale = decimal_type->scale();
             auto* vals = (arrow::Decimal128*)scol->raw_values();
             for (uint32_t i = 0; i < len; ++i) {
-                arrow::Status status =
-                    vals[i].ToInteger(dest->get_nth<int64_t>(offset + i));
-                if (!status.ok()) {
-                    PSP_COMPLAIN_AND_ABORT(
-                        "Could not write Decimal to column: " + status.message()
-                    );
-                };
+                dest->set_nth<double>(offset + i, vals[i].ToDouble(scale));
             }
         } break;
         case arrow::BooleanType::type_id: {

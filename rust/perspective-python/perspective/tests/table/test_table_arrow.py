@@ -185,7 +185,7 @@ class TestTableArrow(object):
         tbl = Table(arrow_data)
         assert tbl.size() == 10
         assert tbl.schema() == {
-            "a": "integer",
+            "a": "float",
         }
         assert tbl.view().to_columns() == {"a": data[0]}
 
@@ -389,7 +389,7 @@ class TestTableArrow(object):
         tbl = Table(arrow_data)
         assert tbl.size() == 10
         assert tbl.schema() == {
-            "a": "integer",
+            "a": "float",
         }
         assert tbl.view().to_columns() == {"a": data[0]}
 
