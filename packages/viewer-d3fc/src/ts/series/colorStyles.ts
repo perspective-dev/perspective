@@ -60,7 +60,11 @@ export const initialiseStyles = (
 };
 
 const getOpacityFromColor = (color) => {
-    return d3.color(color).opacity;
+    if (!color) {
+        return 1.0; // Default to fully opaque when color is undefined
+    }
+    const parsed = d3.color(color);
+    return parsed ? parsed.opacity : 1.0;
 };
 
 const stepAsColor = (value, opacity) => {
