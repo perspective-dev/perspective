@@ -24,7 +24,7 @@ catalog:
     # Dependencies
     "@d3fc/d3fc-chart": "5.1.9"
     "@d3fc/d3fc-element": "6.2.0"
-    "@jupyter-widgets/base": ">2 <5"
+    "@jupyter-widgets/base": ">2 <7"
     "@jupyterlab/application": ">2 <5"
     "@lumino/application": "<3"
     "@lumino/widgets": "<3"

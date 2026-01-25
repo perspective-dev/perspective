@@ -29,7 +29,7 @@
         "@perspective-dev/viewer": "workspace:",
         "@perspective-dev/client": "workspace:",
         "@perspective-dev/server": "workspace:",
-        "@jupyter-widgets/base": ">2 <5",
+        "@jupyter-widgets/base": ">2 <7",
         "@jupyterlab/application": ">2 <5",
         "@lumino/application": "<3",
         "@lumino/widgets": "<3"
