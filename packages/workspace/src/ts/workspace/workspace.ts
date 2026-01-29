@@ -815,13 +815,11 @@ export class PerspectiveWorkspace extends SplitPanel {
                     );
 
                     (async () => {
-                        for (const table of (
-                            await Promise.all(
-                                this.client.map((client) =>
-                                    client.get_hosted_table_names(),
-                                ),
-                            )
-                        ).map((x) => x.flatMap((x: any) => x))) {
+                        const names = await Promise.all(
+                            this.client.map((c) => c.get_hosted_table_names()),
+                        ).then((x) => x.flat());
+
+                        for (const table of names) {
                             let args;
                             if (widget !== null) {
                                 args = {
