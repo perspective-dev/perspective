@@ -156,7 +156,7 @@ impl Component for ColumnSettingsPanel {
     }
 
     fn update(&mut self, ctx: &yew::prelude::Context<Self>, msg: Self::Message) -> bool {
-        let result = match msg {
+        match msg {
             ColumnSettingsPanelMsg::SetExprValue(val) => {
                 if self.expr_value != val {
                     self.expr_value = val;
@@ -241,9 +241,7 @@ impl Component for ColumnSettingsPanel {
                     false
                 }
             },
-        };
-
-        result
+        }
     }
 
     fn view(&self, ctx: &yew::prelude::Context<Self>) -> Html {

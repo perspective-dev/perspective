@@ -87,19 +87,19 @@ impl Component for FilterDropDown {
             },
             FilterDropDownMsg::ItemDown => {
                 self.selected += 1;
-                if let Some(ref values) = self.values {
-                    if self.selected >= values.len() {
-                        self.selected = 0;
-                    }
+                if let Some(ref values) = self.values
+                    && self.selected >= values.len()
+                {
+                    self.selected = 0;
                 };
 
                 true
             },
             FilterDropDownMsg::ItemUp => {
-                if let Some(ref values) = self.values {
-                    if self.selected < 1 {
-                        self.selected = values.len();
-                    }
+                if let Some(ref values) = self.values
+                    && self.selected < 1
+                {
+                    self.selected = values.len();
                 };
 
                 self.selected -= 1;

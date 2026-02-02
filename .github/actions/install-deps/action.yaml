@@ -116,14 +116,14 @@ runs:
           shell: bash
           run: echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
 
-        # Use python 3.9 from manylinu
-        - run: echo "/opt/python/cp39-cp39/bin" >> $GITHUB_PATH
+        # Use python 3.12 from manylinu
+        - run: echo "/opt/python/cp311-cp311/bin" >> $GITHUB_PATH
           shell: bash
           if: ${{ runner.os == 'Linux' }}
 
         - name: Set up Python ${{ matrix.python-version }}
           uses: actions/setup-python@v5
-          if: ${{ inputs.python == 'true' && runner.os != 'Linux' }}
+          if: ${{ inputs.python == 'true' && inputs.manylinux == 'false' }}
           with:
               python-version: ${{ matrix.python-version }}
               cache: "pip"
@@ -145,7 +145,7 @@ runs:
           uses: dtolnay/rust-toolchain@nightly
           if: ${{ inputs.rust == 'true' && inputs.arch != 'aarch64' }}
           with:
-              toolchain: nightly-2025-02-01
+              toolchain: nightly-2026-01-01
               targets: wasm32-unknown-unknown
               components: rustfmt, clippy, rust-src
 
@@ -153,7 +153,7 @@ runs:
           uses: dtolnay/rust-toolchain@nightly
           if: ${{ inputs.rust == 'true' && inputs.arch == 'aarch64' && runner.os == 'macOS' }}
           with:
-              toolchain: nightly-2025-02-01
+              toolchain: nightly-2026-01-01
               targets: aarch64-apple-darwin
               components: rust-src
 
@@ -161,7 +161,7 @@ runs:
           uses: dtolnay/rust-toolchain@nightly
           if: ${{ inputs.rust == 'true' && inputs.arch == 'aarch64' && runner.os == 'Linux' }}
           with:
-              toolchain: nightly-2025-02-01
+              toolchain: nightly-2026-01-01
               targets: aarch64-unknown-linux-gnu
               components: rust-src
 
@@ -199,7 +199,7 @@ runs:
         - name: Install Python dependencies
           shell: bash
           if: ${{ inputs.python == 'true' && inputs.manylinux == 'true' }}
-          run: /opt/python/cp39-cp39/bin/python -m pip install -r rust/perspective-python/requirements.txt
+          run: /opt/python/cp311-cp311/bin/python -m pip install -r rust/perspective-python/requirements.txt
 
         - name: manylinux deps
           shell: bash
@@ -225,4 +225,3 @@ runs:
         #   if: ${{ runner.os == 'Linux' }}
         #   run: |
         #       rm -rf /__t/*
-

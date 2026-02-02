@@ -3,7 +3,7 @@ bundle = "run -p perspective-bundle"
 
 [build]
 # rustflags = ["--cfg=web_sys_unstable_apis", "--cfg=pyo3_disable_reference_pool"]
-rustflags = ["--cfg=web_sys_unstable_apis"]
+rustflags = ["--cfg=web_sys_unstable_apis", "-Csymbol-mangling-version=v0"]
 target-dir = "rust/target"
 
 [target.wasm32-unknown-unknown]

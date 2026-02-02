@@ -72,7 +72,7 @@ jobs:
                 os:
                     - ubuntu-22.04
                 python-version:
-                    - 3.9
+                    - 3.11
                 node-version: [22.x]
 
         steps:
@@ -124,7 +124,7 @@ jobs:
                 os:
                     - ubuntu-22.04
                 python-version:
-                    - 3.9
+                    - 3.11
                 node-version: [22.x]
 
         steps:
@@ -192,16 +192,16 @@ jobs:
                     - aarch64
                     - x86_64
                 python-version:
-                    - 3.9
+                    - 3.11
                 node-version: [22.x]
                 include:
                     - os: ubuntu-22.04
                       arch: x86_64
-                      python-version: 3.9
+                      python-version: 3.11
                       container: quay.io/pypa/manylinux_2_28_x86_64
                     - os: ubuntu-22.04-arm
                       arch: aarch64
-                      python-version: 3.9
+                      python-version: 3.11
                       container: quay.io/pypa/manylinux_2_28_aarch64
                 is-release:
                     - ${{ startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' }}
@@ -394,7 +394,7 @@ jobs:
                 arch:
                     - x86_64
                 python-version:
-                    - 3.9
+                    - 3.11
                 node-version: [22.x]
         steps:
             - name: Checkout
@@ -442,7 +442,7 @@ jobs:
                 arch:
                     - x86_64
                 python-version:
-                    - 3.9
+                    - 3.11
                 node-version: [22.x]
         steps:
             - name: Checkout
@@ -509,7 +509,7 @@ jobs:
                     - aarch64
                     - x86_64
                 python-version:
-                    - 3.9
+                    - 3.11
                 node-version: [22.x]
                 is-release:
                     - ${{ startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' }}
@@ -620,7 +620,7 @@ jobs:
                 os:
                     - ubuntu-22.04
                 python-version:
-                    - 3.9
+                    - 3.11
                 node-version: [22.x]
 
         steps:
@@ -672,8 +672,8 @@ jobs:
                     - x86_64
                     - aarch64
                 python-version:
-                    - 3.9
-                    # - 3.12
+                    - 3.11
+                    # - 3.11
                 node-version: [22.x]
                 is-release:
                     - ${{ startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' }}
@@ -733,7 +733,7 @@ jobs:
                 arch:
                     - x86_64
                 python-version:
-                    - 3.9
+                    - 3.11
         steps:
             - name: Checkout
               uses: actions/checkout@v4
@@ -788,8 +788,8 @@ jobs:
                   # Maturin got this wrong: the packages should be in .dist-info/licenses/
                   # Newer versions of Maturin will fix it, so search for either location.
                   # https://github.com/PyO3/maturin/pull/862 https://github.com/PyO3/maturin/pull/2181
-                  grep -E '.dist-info/(license|license_files)/LICENSE.md' wheel_installed_files.txt
-                  grep -E '.dist-info/(license|license_files)/LICENSE_THIRDPARTY_cargo.yml' wheel_installed_files.txt
+                  grep -E '.dist-info/(licenses|license|license_files)/LICENSE.md' wheel_installed_files.txt
+                  grep -E '.dist-info/(licenses|license|license_files)/LICENSE_THIRDPARTY_cargo.yml' wheel_installed_files.txt
 
             - name: Verify labextension
               shell: bash
@@ -822,7 +822,7 @@ jobs:
             fail-fast: false
             matrix:
                 os: [ubuntu-22.04]
-                python-version: [3.9]
+                python-version: [3.11]
                 node-version: [22.x]
                 arch: [x86_64]
         steps:
@@ -961,11 +961,11 @@ jobs:
 
             - uses: actions/download-artifact@v4
               with:
-                  name: perspective-python-dist-aarch64-macos-14-3.9
+                  name: perspective-python-dist-aarch64-macos-14-3.11
 
             - uses: actions/download-artifact@v4
               with:
-                  name: perspective-python-dist-aarch64-ubuntu-22.04-arm-3.9
+                  name: perspective-python-dist-aarch64-ubuntu-22.04-arm-3.11
 
             # - uses: actions/download-artifact@v4
             #   with:
@@ -973,15 +973,15 @@ jobs:
 
             - uses: actions/download-artifact@v4
               with:
-                  name: perspective-python-dist-x86_64-windows-2022-3.9
+                  name: perspective-python-dist-x86_64-windows-2022-3.11
 
             - uses: actions/download-artifact@v4
               with:
-                  name: perspective-python-dist-x86_64-ubuntu-22.04-3.9
+                  name: perspective-python-dist-x86_64-ubuntu-22.04-3.11
 
             - uses: actions/download-artifact@v4
               with:
-                  name: perspective-python-dist-wasm32-emscripten-3.9
+                  name: perspective-python-dist-wasm32-emscripten-3.11
 
             - uses: actions/download-artifact@v4
               with:
