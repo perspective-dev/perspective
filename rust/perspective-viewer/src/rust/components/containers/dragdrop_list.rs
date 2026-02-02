@@ -213,10 +213,11 @@ where
                     .position(|x| x.1.1.as_ref().unwrap().props.get_item() == *column);
 
                 valid_duplicate_drag = is_duplicate.is_some() && !ctx.props().allow_duplicates;
-                if let Some(duplicate) = is_duplicate {
-                    if !is_append && (!ctx.props().allow_duplicates || is_self_move) {
-                        columns.remove(duplicate);
-                    }
+                if let Some(duplicate) = is_duplicate
+                    && !is_append
+                    && (!ctx.props().allow_duplicates || is_self_move)
+                {
+                    columns.remove(duplicate);
                 }
 
                 // If inserting into the middle of the list, use

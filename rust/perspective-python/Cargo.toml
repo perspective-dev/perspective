@@ -42,7 +42,7 @@ rustdoc-args = ["--html-in-header", "docs/index.html"]
 
 [features]
 default = []
-abi3 = ["pyo3/abi3-py39"]
+abi3 = ["pyo3/abi3-py311"]
 external-cpp = ["perspective-server/external-cpp"]
 generate-proto = ["perspective-client/generate-proto"]
 protobuf-src = ["perspective-client/protobuf-src"]

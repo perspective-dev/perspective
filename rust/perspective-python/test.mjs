@@ -48,7 +48,7 @@ if (process.env.PSP_PYODIDE) {
             // with --timeout_method=signal, tests hang.  seems like the
             // pytest-pyodide webserver fixture does not shut down
             "--timeout_method=thread",
-            // ...process.argv.slice(2),
+            ...process.argv.slice(2),
         ],
         execOpts,
     );
@@ -59,7 +59,7 @@ if (process.env.PSP_PYODIDE) {
             "perspective/tests",
             "-W error",
             "--timeout=300",
-            // ...process.argv.slice(2),
+            ...process.argv.slice(2),
         ],
         execOpts,
     );

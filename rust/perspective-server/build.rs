@@ -24,10 +24,9 @@ fn main() -> Result<(), std::io::Error> {
 
     if std::option_env!("PSP_DISABLE_CPP").is_none()
         && std::env::var("CARGO_FEATURE_DISABLE_CPP").is_err()
+        && let Some(artifact_dir) = cmake_build()?
     {
-        if let Some(artifact_dir) = cmake_build()? {
-            cmake_link_deps(&artifact_dir)?;
-        }
+        cmake_link_deps(&artifact_dir)?;
     }
 
     Ok(())

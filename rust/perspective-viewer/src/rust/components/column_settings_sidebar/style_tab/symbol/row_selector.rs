@@ -55,15 +55,15 @@ pub fn row_selector(props: &RowSelectorProps) -> Html {
 
     let inner = if props.selected_row.is_none() || props.focused {
         let mut pairs = props.pairs.clone();
-        if let Some(ref rowval) = props.selected_row {
-            if let Some((i, _)) = pairs.iter().find_position(|pair| {
+        if let Some(ref rowval) = props.selected_row
+            && let Some((i, _)) = pairs.iter().find_position(|pair| {
                 pair.key
                     .as_ref()
                     .map(|keyval| keyval == rowval)
                     .unwrap_or_default()
-            }) {
-                pairs.remove(i);
-            }
+            })
+        {
+            pairs.remove(i);
         }
 
         let exclude: HashSet<_> = pairs

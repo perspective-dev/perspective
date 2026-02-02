@@ -13,9 +13,9 @@
         }
     },
     "type": "module",
-    "emscripten": "3.1.58",
+    "emscripten": "4.0.9",
     "llvm": "17.0.6",
-    "pyodide": "0.27.1",
+    "pyodide": "0.29.3",
     "engines": {
         "node": ">=16 <23"
     },

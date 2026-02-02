@@ -93,10 +93,10 @@ impl FilterDropDownElement {
                         FilterDropDownMsg::SetValues(values),
                     ]);
 
-                    if let Some(x) = self.target.borrow().clone() {
-                        if !self.modal.is_open() {
-                            ApiFuture::spawn(self.modal.clone().open(x, None))
-                        }
+                    if let Some(x) = self.target.borrow().clone()
+                        && !self.modal.is_open()
+                    {
+                        ApiFuture::spawn(self.modal.clone().open(x, None))
                     }
                 }
             },
