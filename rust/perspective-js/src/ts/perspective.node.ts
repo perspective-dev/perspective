@@ -337,6 +337,12 @@ export function createMessageHandler(
     return virtual_server.createMessageHandler(perspective_client, handler);
 }
 
+/**
+ * The initialized WASM module. Use this when you need to pass the module
+ * to components that require it, such as `DuckDBHandler`.
+ */
+export { perspective_client as wasmModule };
+
 export default {
     table,
     websocket,

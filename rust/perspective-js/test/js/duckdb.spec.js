@@ -20,8 +20,9 @@ import { test, expect } from "@perspective-dev/test";
 import {
     default as perspective,
     createMessageHandler,
+    wasmModule,
 } from "@perspective-dev/client";
-import { DuckDBHandler } from "@perspective-dev/client/dist/esm/virtual_servers/duckdb.js";
+import { DuckDBHandler } from "@perspective-dev/client/src/ts/virtual_servers/duckdb.ts";
 
 const require = createRequire(import.meta.url);
 const DUCKDB_DIST = path.dirname(require.resolve("@duckdb/duckdb-wasm"));
@@ -76,7 +77,7 @@ test.describe("DuckDB Virtual Server", function () {
 
     test.beforeAll(async () => {
         db = await initializeDuckDB();
-        const server = createMessageHandler(new DuckDBHandler(db));
+        const server = createMessageHandler(new DuckDBHandler(db, wasmModule));
         client = await perspective.worker(server);
         await loadSuperstoreData(db);
     });

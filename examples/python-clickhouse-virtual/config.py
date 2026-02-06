@@ -10,62 +10,17 @@
 #  ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-[package]
-name = "perspective-server"
-version = "4.1.1"
-authors = ["Andrew Stein <steinlink@gmail.com>"]
-edition = "2024"
-description = "A data visualization and analytics component, especially well-suited for large and/or streaming datasets."
-repository = "https://github.com/perspective-dev/perspective"
-license = "Apache-2.0"
-homepage = "https://perspective-dev.github.io"
-keywords = []
-build = "build.rs"
-include = [
-    "src/**/*",
-    "build.rs",
-    "include/**/*",
-    "cpp/**/*",
-    "docs/**/*",
-    "cmake/**/*",
-    "Cargo.toml",
-]
+CLICKHOUSE_HOST = "localhost"
+CLICKHOUSE_PORT = 8123
+CLICKHOUSE_USER = "default"
+CLICKHOUSE_PASSWORD = ""
+CLICKHOUSE_DATABASE = "nyc_taxi"
 
-[features]
-default = ["python"]
-external-cpp = []
-wasm-exceptions = []
-python = []
-disable-cpp = []
+# NYC taxi data settings
+NYC_TAXI_TABLE = "trips"
+NYC_TAXI_DATA_URL = (
+    "https://datasets-documentation.s3.eu-west-3.amazonaws.com/nyc-taxi/trips_0.gz"
+)
 
-[build-dependencies]
-cmake = "0.1.50"
-num_cpus = "^1.15.0"
-shlex = "1.3.0"
-protobuf-src = { version = "2.1.1" }
-
-[dependencies]
-perspective-client = { version = "4.1.1" }
-
-# Key order is frequently implicitly relied upon in dynamic languages, so for
-# convenience we try to provide this (as well as explicit metadata calls).
-indexmap = { version = "2.2.6", features = ["serde"] }
-
-# Convenient way to crawl the C++ static archive path
-link-cplusplus = "1.0.12"
-
-async-lock = "2.5.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0.107", features = ["raw_value"] }
-tracing = { version = ">=0.1.36" }
-thiserror = { version = "1.0.55" }
-futures = "0.3"
-
-[dependencies.prost]
-version = "0.12.3"
-default-features = false
-features = ["prost-derive", "std"]
-
-[lib]
-crate-type = ["rlib"]
-path = "src/lib.rs"
+# Batch size for inserting data
+BATCH_SIZE = 100000

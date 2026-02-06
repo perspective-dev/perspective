@@ -16,7 +16,7 @@ use std::ops::{Deref, DerefMut};
 use indexmap::IndexMap;
 use serde::Serialize;
 
-use crate::config::Scalar;
+use crate::config::{Scalar, ViewConfig};
 
 /// A column of data returned from a virtual server query.
 ///
@@ -133,24 +133,32 @@ template_psp!(bool, Boolean, Bool, bool);
 ///
 /// This struct represents a rectangular slice of data from a view. It can be
 /// serialized to JSON in either column-oriented or row-oriented format.
-#[derive(Debug, Default, Serialize)]
-pub struct VirtualDataSlice(IndexMap<String, VirtualDataColumn>);
+#[derive(Debug, Serialize)]
+#[serde(transparent)]
+pub struct VirtualDataSlice(
+    #[serde(skip)] ViewConfig,
+    IndexMap<String, VirtualDataColumn>,
+);
 
 impl Deref for VirtualDataSlice {
     type Target = IndexMap<String, VirtualDataColumn>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.1
     }
 }
 
 impl DerefMut for VirtualDataSlice {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.1
     }
 }
 
 impl VirtualDataSlice {
+    pub  fn new(config: ViewConfig) -> Self {
+        VirtualDataSlice(config, IndexMap::default())
+    }
+
     pub(super) fn to_rows(&self) -> Vec<IndexMap<String, VirtualDataCell>> {
         let num_rows = self.values().next().map(|x| x.len()).unwrap_or(0);
         (0..num_rows)
@@ -189,32 +197,41 @@ impl VirtualDataSlice {
     pub fn set_col<T: SetVirtualDataColumn>(
         &mut self,
         name: &str,
-        group_by_index: Option<usize>,
+        grouping_id: Option<usize>,
         index: usize,
         value: T,
     ) -> Result<(), Box<dyn Error>> {
-        if group_by_index.is_some() {
-            if !self.contains_key("__ROW_PATH__") {
-                self.insert(
-                    "__ROW_PATH__".to_owned(),
-                    VirtualDataColumn::RowPath(vec![]),
-                );
-            }
-
-            let Some(VirtualDataColumn::RowPath(col)) = self.get_mut("__ROW_PATH__") else {
-                return Err("__ROW_PATH__ column has unexpected type".into());
-            };
-
-            if let Some(row) = col.get_mut(index) {
-                let scalar = value.to_scalar();
-                row.push(scalar);
-            } else {
-                while col.len() < index {
-                    col.push(vec![])
+        if let Some(grouping_id) = grouping_id
+            && let Some(x) = regex::Regex::new("__ROW_PATH_([0-9]+?)__")
+                .unwrap()
+                .captures(name)
+        {
+            let group_by_index = x.get(1).unwrap().as_str().parse::<u32>()?;
+            let max_grouping_id = 2_i32.pow((self.0.group_by.len() as u32) - group_by_index) - 1;
+            if (grouping_id as i32) < max_grouping_id {
+                
+                if !self.contains_key("__ROW_PATH__") {
+                    self.insert(
+                        "__ROW_PATH__".to_owned(),
+                        VirtualDataColumn::RowPath(vec![]),
+                    );
                 }
 
-                let scalar = value.to_scalar();
-                col.push(vec![scalar]);
+                let Some(VirtualDataColumn::RowPath(col)) = self.get_mut("__ROW_PATH__") else {
+                    return Err("__ROW_PATH__ column has unexpected type".into());
+                };
+
+                if let Some(row) = col.get_mut(index) {
+                    let scalar = value.to_scalar();
+                    row.push(scalar);
+                } else {
+                    while col.len() < index {
+                        col.push(vec![])
+                    }
+
+                    let scalar = value.to_scalar();
+                    col.push(vec![scalar]);
+                }
             }
 
             Ok(())

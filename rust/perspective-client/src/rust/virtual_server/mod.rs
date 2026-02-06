@@ -16,12 +16,14 @@
 //! messages and delegate operations to a custom backend handler.
 
 mod data;
+mod duckdb_sql;
 mod error;
 mod features;
 mod handler;
 mod server;
 
 pub use data::{SetVirtualDataColumn, VirtualDataCell, VirtualDataColumn, VirtualDataSlice};
+pub use duckdb_sql::{DuckDBSqlBuilder, DuckDBSqlError, DuckDBSqlResult};
 pub use error::{ResultExt, VirtualServerError};
 pub use features::{AggSpec, Features};
 pub use handler::{VirtualServerFuture, VirtualServerHandler};

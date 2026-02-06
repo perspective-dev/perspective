@@ -77,13 +77,22 @@ pub struct PerspectiveViewerElement {
     _subscriptions: Rc<[Subscription; 2]>,
 }
 
-// derive_model!( Renderer, Root, Session, Presentation for
-// PerspectiveViewerElement);
-
 impl CustomElementMetadata for PerspectiveViewerElement {
     const CUSTOM_ELEMENT_NAME: &'static str = "perspective-viewer";
     const STATICS: &'static [&'static str] = ["registerPlugin", "getExprTKCommands"].as_slice();
 }
+
+// #[derive(serde::Deserialize, ts_rs::TS)]
+// pub struct GetViewOptions {
+//     pub is_open: bool
+// }
+
+// #[wasm_bindgen]
+// extern "C" {
+//     #[derive(Clone)]
+//     #[wasm_bindgen(typescript_type = "GetViewOptions")]
+//     pub type JsGetViewOptions;
+// }
 
 #[wasm_bindgen]
 impl PerspectiveViewerElement {

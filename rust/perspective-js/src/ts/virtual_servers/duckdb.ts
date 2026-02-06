@@ -18,75 +18,7 @@ import type { ColumnType } from "@perspective-dev/client/dist/esm/ts-rs/ColumnTy
 import type { ViewConfig } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfig.d.ts";
 import type { ViewWindow } from "@perspective-dev/client/dist/esm/ts-rs/ViewWindow.d.ts";
 import type * as duckdb from "@duckdb/duckdb-wasm";
-
-const NUMBER_AGGS = [
-    "sum",
-    "count",
-    "any_value",
-    "arbitrary",
-    "array_agg",
-    "avg",
-    "bit_and",
-    "bit_or",
-    "bit_xor",
-    "bitstring_agg",
-    "bool_and",
-    "bool_or",
-    "countif",
-    "favg",
-    "fsum",
-    "geomean",
-    "kahan_sum",
-    "last",
-    "max",
-    "min",
-    "product",
-    "string_agg",
-    "sumkahan",
-];
-
-const STRING_AGGS = [
-    "count",
-    "any_value",
-    "arbitrary",
-    "first",
-    "countif",
-    "last",
-    "string_agg",
-];
-
-const FILTER_OPS = [
-    "==",
-    "!=",
-    "LIKE",
-    "IS DISTINCT FROM",
-    "IS NOT DISTINCT FROM",
-    ">=",
-    "<=",
-    ">",
-    "<",
-];
-
-function duckdbTypeToPsp(name: string): ColumnType {
-    if (name === "VARCHAR") return "string";
-    if (
-        name === "DOUBLE" ||
-        name === "BIGINT" ||
-        name === "HUGEINT" ||
-        name.startsWith("Decimal")
-    )
-        return "float";
-    if (name.startsWith("Decimal")) return "float";
-    if (name.startsWith("Int")) return "integer";
-    if (name === "INTEGER") return "integer";
-    if (name === "Utf8") return "string";
-    if (name === "Date32<DAY>") return "date";
-    if (name === "Float64") return "float";
-    if (name === "DATE") return "date";
-    if (name === "BOOLEAN") return "boolean";
-    if (name === "TIMESTAMP" || name.startsWith("Timestamp")) return "datetime";
-    throw new Error(`Unknown type '${name}'`);
-}
+import type * as perspective from "../../../dist/wasm/perspective-js.js";
 
 function convertDecimalToNumber(value: any, dtypeString: string) {
     if (
@@ -139,7 +71,6 @@ async function runQuery(
     options: { columns?: boolean } = {},
 ) {
     query = query.replace(/\s+/g, " ").trim();
-    // console.log("Query:", query);
     try {
         const result = await db.query(query);
         if (options.columns) {
@@ -160,43 +91,37 @@ async function runQuery(
 
 export class DuckDBHandler implements VirtualServerHandler {
     private db: duckdb.AsyncDuckDBConnection;
+    private sqlBuilder: perspective.JsDuckDBSqlBuilder;
+    constructor(db: duckdb.AsyncDuckDBConnection, mod?: typeof perspective) {
+        if (!mod) {
+            if (customElements) {
+                const viewer_class: any =
+                    customElements.get("perspective-viewer");
+                if (viewer_class) {
+                    mod = viewer_class.__wasm_module__;
+                } else {
+                    throw new Error("Missing perspective-client.wasm");
+                }
+            } else {
+            }
+        }
 
-    constructor(db: duckdb.AsyncDuckDBConnection) {
         this.db = db;
+        this.sqlBuilder = new mod!.JsDuckDBSqlBuilder();
     }
 
     getFeatures() {
-        return {
-            group_by: true,
-            split_by: true,
-            sort: true,
-            expressions: true,
-            filter_ops: {
-                integer: FILTER_OPS,
-                float: FILTER_OPS,
-                string: FILTER_OPS,
-                boolean: FILTER_OPS,
-                date: FILTER_OPS,
-                datetime: FILTER_OPS,
-            },
-            aggregates: {
-                integer: NUMBER_AGGS,
-                float: NUMBER_AGGS,
-                string: STRING_AGGS,
-                boolean: STRING_AGGS,
-                date: STRING_AGGS,
-                datetime: STRING_AGGS,
-            },
-        };
+        return this.sqlBuilder.getFeatures();
     }
 
     async getHostedTables() {
-        const results = await runQuery(this.db, "SHOW ALL TABLES");
+        const query = this.sqlBuilder.getHostedTables();
+        const results = await runQuery(this.db, query);
         return results.map((row) => row.toJSON().name);
     }
 
     async tableSchema(tableId: string) {
-        const query = `DESCRIBE ${tableId}`;
+        const query = this.sqlBuilder.tableSchema(tableId);
         const results = await runQuery(this.db, query);
         const schema = {} as Record<string, ColumnType>;
         for (const result of results) {
@@ -204,7 +129,9 @@ export class DuckDBHandler implements VirtualServerHandler {
             const colName = res.column_name;
             if (!colName.startsWith("__") || !colName.endsWith("__")) {
                 const cleanName = colName.split("_").slice(-1)[0] as string;
-                schema[cleanName] = duckdbTypeToPsp(res.column_type);
+                schema[cleanName] = this.sqlBuilder.duckdbTypeToPsp(
+                    res.column_type,
+                ) as ColumnType;
             }
         }
 
@@ -212,7 +139,7 @@ export class DuckDBHandler implements VirtualServerHandler {
     }
 
     async viewColumnSize(viewId: string, config: ViewConfig) {
-        const query = `SELECT COUNT(*) FROM (DESCRIBE ${viewId})`;
+        const query = this.sqlBuilder.viewColumnSize(viewId);
         const results = await runQuery(this.db, query);
         const gs = config.group_by?.length || 0;
         const count = Number(Object.values(results[0].toJSON())[0]);
@@ -223,187 +150,29 @@ export class DuckDBHandler implements VirtualServerHandler {
     }
 
     async tableSize(tableId: string) {
-        const query = `SELECT COUNT(*) FROM ${tableId}`;
+        const query = this.sqlBuilder.tableSize(tableId);
         const results = await runQuery(this.db, query);
         return Number(results[0].toJSON()["count_star()"]);
     }
 
-    // async viewSchema(viewId: string, config: ViewConfig) {
-    //     return this.tableSchema(viewId);
-    // }
-
-    // async viewSize(viewId: string) {
-    //     return this.tableSize(viewId);
-    // }
-
     async tableMakeView(tableId: string, viewId: string, config: ViewConfig) {
-        const columns = config.columns || [];
-        const group_by = config.group_by || [];
-        const split_by = config.split_by || [];
-        const aggregates = config.aggregates || {};
-        const sort = config.sort || [];
-        const expressions = config.expressions || {};
-        const filter = config.filter || [];
-
-        const colName = (col: string) => {
-            const expr = expressions[col];
-            return expr || `"${col}"`;
-        };
-
-        const getAggregate = (col: string) => aggregates[col] || null;
-
-        const generateSelectClauses = () => {
-            const clauses = [];
-            if (group_by.length > 0) {
-                for (const col of columns) {
-                    if (col !== null) {
-                        // TODO texodus
-                        const agg = getAggregate(col) || "any_value";
-                        clauses.push(`${agg}(${colName(col)}) as "${col}"`);
-                    }
-                }
-
-                if (split_by.length === 0) {
-                    for (let idx = 0; idx < group_by.length; idx++) {
-                        clauses.push(
-                            `${colName(group_by[idx])} as __ROW_PATH_${idx}__`,
-                        );
-                    }
-
-                    const groups = group_by.map(colName).join(", ");
-                    clauses.push(`GROUPING_ID(${groups}) AS __GROUPING_ID__`);
-                }
-            } else if (columns.length > 0) {
-                for (const col of columns) {
-                    if (col !== null) {
-                        // TODO texodus
-                        clauses.push(
-                            `${colName(col)} as "${col.replace(/"/g, '""')}"`,
-                        );
-                    }
-                }
-            }
-
-            return clauses;
-        };
-
-        const orderByClauses = [];
-        const windowClauses = [];
-        const whereClauses = [];
-
-        if (group_by.length > 0) {
-            for (let gidx = 0; gidx < group_by.length; gidx++) {
-                const groups = group_by
-                    .slice(0, gidx + 1)
-                    .map(colName)
-                    .join(", ");
-                if (split_by.length === 0) {
-                    orderByClauses.push(`GROUPING_ID(${groups}) DESC`);
-                }
-
-                for (const [sort_col, sort_dir] of sort) {
-                    if (sort_dir !== "none") {
-                        const agg = getAggregate(sort_col) || "any_value";
-                        if (gidx >= group_by.length - 1) {
-                            orderByClauses.push(
-                                `${agg}(${colName(sort_col)}) ${sort_dir}`,
-                            );
-                        } else {
-                            orderByClauses.push(
-                                `first(${agg}(${colName(sort_col)})) OVER __WINDOW_${gidx}__ ${sort_dir}`,
-                            );
-                        }
-                    }
-                }
-
-                orderByClauses.push(`__ROW_PATH_${gidx}__ ASC`);
-            }
-        } else {
-            for (const [sort_col, sort_dir] of sort) {
-                if (sort_dir) {
-                    orderByClauses.push(`${colName(sort_col)} ${sort_dir}`);
-                }
-            }
-        }
-
-        if (sort.length > 0 && group_by.length > 1) {
-            for (let gidx = 0; gidx < group_by.length - 1; gidx++) {
-                const partition = Array.from(
-                    { length: gidx + 1 },
-                    (_, i) => `__ROW_PATH_${i}__`,
-                ).join(", ");
-                const sub_groups = group_by
-                    .slice(0, gidx + 1)
-                    .map(colName)
-                    .join(", ");
-                const groups = group_by.map(colName).join(", ");
-                windowClauses.push(
-                    `__WINDOW_${gidx}__ AS (PARTITION BY GROUPING_ID(${sub_groups}), ${partition} ORDER BY ${groups})`,
-                );
-            }
-        }
-
-        for (const [name, op, value] of filter) {
-            if (value !== null && value !== undefined) {
-                const term_lit =
-                    typeof value === "string" ? `'${value}'` : String(value);
-                whereClauses.push(`${colName(name)} ${op} ${term_lit}`);
-            }
-        }
-
-        let query;
-        if (split_by.length > 0) {
-            query = `SELECT * FROM ${tableId}`;
-        } else {
-            const selectClauses = generateSelectClauses();
-            query = `SELECT ${selectClauses.join(", ")} FROM ${tableId}`;
-        }
-
-        if (whereClauses.length > 0) {
-            query = `${query} WHERE ${whereClauses.join(" AND ")}`;
-        }
-
-        if (split_by.length > 0) {
-            const groups = group_by.map(colName).join(", ");
-            const group_aliases = group_by
-                .map((x, i) => `${colName(x)} AS __ROW_PATH_${i}__`)
-                .join(", ");
-            const pivotOn = split_by.map((c) => `"${c}"`).join(", ");
-            const pivotUsing = generateSelectClauses().join(", ");
-
-            query = `
-                SELECT * EXCLUDE (${groups}), ${group_aliases} FROM (
-                    PIVOT (${query})
-                    ON ${pivotOn}
-                    USING ${pivotUsing}
-                    GROUP BY ${groups}
-                )
-            `;
-        } else if (group_by.length > 0) {
-            const groups = group_by.map(colName).join(", ");
-            query = `${query} GROUP BY ROLLUP(${groups})`;
-        }
-
-        if (windowClauses.length > 0) {
-            query = `${query} WINDOW ${windowClauses.join(", ")}`;
-        }
-
-        if (orderByClauses.length > 0) {
-            query = `${query} ORDER BY ${orderByClauses.join(", ")}`;
-        }
-
-        query = `CREATE TABLE ${viewId} AS (${query})`;
+        const query = this.sqlBuilder.tableMakeView(tableId, viewId, config);
         await runQuery(this.db, query);
     }
 
     async tableValidateExpression(tableId: string, expression: string) {
-        const query = `DESCRIBE (select ${expression} from ${tableId})`;
+        const query = this.sqlBuilder.tableValidateExpression(
+            tableId,
+            expression,
+        );
         const results = await runQuery(this.db, query);
-        return duckdbTypeToPsp(results[0].toJSON()["column_type"]);
+        return this.sqlBuilder.duckdbTypeToPsp(
+            results[0].toJSON()["column_type"],
+        ) as ColumnType;
     }
 
     async viewDelete(viewId: string) {
-        const query = `DROP TABLE IF EXISTS ${viewId}`;
+        const query = this.sqlBuilder.viewDelete(viewId);
         await runQuery(this.db, query);
     }
 
@@ -415,47 +184,27 @@ export class DuckDBHandler implements VirtualServerHandler {
     ) {
         const group_by = config.group_by || [];
         const split_by = config.split_by || [];
-        const start_col = viewport.start_col;
-        const end_col = viewport.end_col;
-        const start_row = viewport.start_row || 0;
-        const end_row = viewport.end_row;
 
-        let limit = "";
-        if (end_row !== null && end_row !== undefined) {
-            limit = `LIMIT ${end_row - start_row} OFFSET ${start_row}`;
-        }
-
-        const schemaQuery = `DESCRIBE ${viewId}`;
+        // First, get the schema to pass to the SQL builder
+        const schemaQuery = this.sqlBuilder.viewSchema(viewId);
         const schemaResults = await runQuery(this.db, schemaQuery);
-        const columnTypes = new Map();
+        const columnTypes = new Map<string, string>();
+        const schema: Record<string, ColumnType> = {};
         for (const result of schemaResults) {
             const res = result.toJSON();
             columnTypes.set(res.column_name, res.column_type);
+            schema[res.column_name] = this.sqlBuilder.duckdbTypeToPsp(
+                res.column_type,
+            ) as ColumnType;
         }
 
-        const dataColumns = Array.from(columnTypes.entries())
-            .filter(([colName]) => !colName.startsWith("__"))
-            .slice(start_col, end_col);
-
-        const groupByColsList = [];
-        if (group_by.length > 0) {
-            if (split_by.length === 0) {
-                groupByColsList.push("__GROUPING_ID__");
-            }
-            for (let idx = 0; idx < group_by.length; idx++) {
-                groupByColsList.push(`__ROW_PATH_${idx}__`);
-            }
-        }
-
-        const allColumns = [
-            ...groupByColsList.map((col) => `"${col}"`),
-            ...dataColumns.map(([colName]) => `"${colName}"`),
-        ];
-
-        const query = `
-            SELECT ${allColumns.join(", ")}
-            FROM ${viewId} ${limit}
-        `;
+        // Generate the data query using the Rust SQL builder
+        const query = this.sqlBuilder.viewGetData(
+            viewId,
+            config,
+            viewport,
+            schema,
+        );
 
         const { rows, columns, dtypes } = await runQuery(this.db, query, {
             columns: true,
@@ -468,48 +217,24 @@ export class DuckDBHandler implements VirtualServerHandler {
                 continue;
             }
 
-            let group_by_index = null;
-            let max_grouping_id = null;
-            const row_path_match = col.match(/__ROW_PATH_(\d+)__/);
-            if (row_path_match) {
-                group_by_index = parseInt(row_path_match[1]);
-                max_grouping_id = 2 ** (group_by.length - group_by_index) - 1;
-            }
-
-            const dtype = duckdbTypeToPsp(dtypes[cidx]);
+            const dtype = this.sqlBuilder.duckdbTypeToPsp(
+                dtypes[cidx],
+            ) as ColumnType;
+            
             const isDecimal = dtypes[cidx].startsWith("Decimal");
-            const colName =
-                group_by_index !== null
-                    ? "__ROW_PATH__"
-                    : col.replace(/_/g, "|");
-
             for (let ridx = 0; ridx < rows.length; ridx++) {
                 const row = rows[ridx];
                 const rowArray = row.toArray();
-                const shouldSet =
-                    split_by.length > 0 ||
-                    max_grouping_id === null ||
-                    rowArray[0] < max_grouping_id;
-
-                if (shouldSet) {
-                    let value = rowArray[cidx];
-
-                    if (isDecimal) {
-                        value = convertDecimalToNumber(value, dtypes[cidx]);
-                    }
-
-                    if (typeof value === "bigint") {
-                        value = Number(value);
-                    }
-
-                    dataSlice.setCol(
-                        dtype,
-                        colName,
-                        ridx,
-                        value,
-                        group_by_index,
-                    );
+                let value = rowArray[cidx];
+                if (isDecimal) {
+                    value = convertDecimalToNumber(value, dtypes[cidx]);
                 }
+
+                if (typeof value === "bigint") {
+                    value = Number(value);
+                }
+
+                dataSlice.setCol(dtype, col, ridx, value, Number(rowArray[0]));
             }
         }
     }

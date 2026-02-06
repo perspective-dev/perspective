@@ -57,7 +57,7 @@ path = "src/rust/lib.rs"
 [build-dependencies]
 prost-build = { version = "0.12.3" }
 # https://github.com/abseil/abseil-cpp/issues/1241#issuecomment-2138616329
-protobuf-src = { version = "=2.0.1", optional = true }
+protobuf-src = { version = "=2.1.1", optional = true }
 
 [dependencies]
 async-lock = { version = "2.5.0" }
@@ -70,6 +70,7 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 num-traits = "0.2.19"
 rand = { version = "=0.9.1" }
 rand-unique = { version = "0.2.0" }
+regex = "1.12.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = { version = "0.11" }
 serde_json = { version = "1.0.107", features = ["raw_value"] }

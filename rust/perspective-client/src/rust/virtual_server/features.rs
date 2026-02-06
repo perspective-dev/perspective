@@ -13,7 +13,7 @@
 use std::borrow::Cow;
 
 use indexmap::IndexMap;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::proto::get_features_resp::{AggregateArgs, AggregateOptions, ColumnTypeOptions};
 use crate::proto::{ColumnType, GetFeaturesResp};
@@ -23,7 +23,7 @@ use crate::proto::{ColumnType, GetFeaturesResp};
 /// This struct is returned by
 /// [`VirtualServerHandler::get_features`](super::VirtualServerHandler::get_features)
 /// to inform clients about which operations are available.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct Features<'a> {
     /// Whether group-by aggregation is supported.
     #[serde(default)]
@@ -58,7 +58,7 @@ pub struct Features<'a> {
 ///
 /// Aggregates can either take no additional arguments ([`AggSpec::Single`])
 /// or require column type arguments ([`AggSpec::Multiple`]).
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum AggSpec<'a> {
     /// An aggregate function with no additional arguments.

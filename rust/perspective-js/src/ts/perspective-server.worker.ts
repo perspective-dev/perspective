@@ -17,6 +17,9 @@ import {
 } from "./wasm/engine.ts";
 import { compile_perspective } from "./wasm/emscripten_api.ts";
 
+// @ts-ignore unholy black magic
+self.queueMicrotask = undefined;
+
 let GLOBAL_SERVER: PerspectiveServer;
 let POLL_THREAD: PerspectivePollThread;
 

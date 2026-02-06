@@ -10,62 +10,71 @@
 #  ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-[package]
-name = "perspective-server"
-version = "4.1.1"
-authors = ["Andrew Stein <steinlink@gmail.com>"]
-edition = "2024"
-description = "A data visualization and analytics component, especially well-suited for large and/or streaming datasets."
-repository = "https://github.com/perspective-dev/perspective"
-license = "Apache-2.0"
-homepage = "https://perspective-dev.github.io"
-keywords = []
-build = "build.rs"
-include = [
-    "src/**/*",
-    "build.rs",
-    "include/**/*",
-    "cpp/**/*",
-    "docs/**/*",
-    "cmake/**/*",
-    "Cargo.toml",
-]
+from pathlib import Path
 
-[features]
-default = ["python"]
-external-cpp = []
-wasm-exceptions = []
-python = []
-disable-cpp = []
+import perspective
+import perspective.handlers.tornado
+import perspective.virtual_servers.duckdb
+import tornado.ioloop
+import tornado.web
+import tornado.websocket
 
-[build-dependencies]
-cmake = "0.1.50"
-num_cpus = "^1.15.0"
-shlex = "1.3.0"
-protobuf-src = { version = "2.1.1" }
+from loguru import logger
+from tornado.web import StaticFileHandler
 
-[dependencies]
-perspective-client = { version = "4.1.1" }
+import clickhouse_connect
 
-# Key order is frequently implicitly relied upon in dynamic languages, so for
-# convenience we try to provide this (as well as explicit metadata calls).
-indexmap = { version = "2.2.6", features = ["serde"] }
+import config
 
-# Convenient way to crawl the C++ static archive path
-link-cplusplus = "1.0.12"
 
-async-lock = "2.5.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0.107", features = ["raw_value"] }
-tracing = { version = ">=0.1.36" }
-thiserror = { version = "1.0.55" }
-futures = "0.3"
+INPUT_FILE = (
+    Path(__file__).parent.resolve()
+    / "node_modules"
+    / "superstore-arrow"
+    / "superstore.parquet"
+)
 
-[dependencies.prost]
-version = "0.12.3"
-default-features = false
-features = ["prost-derive", "std"]
 
-[lib]
-crate-type = ["rlib"]
-path = "src/lib.rs"
+if __name__ == "__main__":
+    client = clickhouse_connect.get_client(
+        host=config.CLICKHOUSE_HOST,
+        port=config.CLICKHOUSE_PORT,
+        username=config.CLICKHOUSE_USER,
+        password=config.CLICKHOUSE_PASSWORD,
+    )
+
+    # print(client)
+    import taxi
+
+    # taxi.fetch()
+    # db = duckdb.connect(":memory:perspective")
+    # db.sql(
+    #     f"""
+    #     SET default_null_order=NULLS_FIRST_ON_ASC_LAST_ON_DESC;
+    #     CREATE TABLE data_source_one AS
+    #         SELECT * FROM '{INPUT_FILE}';
+    #     """,
+    # )
+
+    virtual_server = perspective.virtual_servers.duckdb.DuckDBVirtualServer(client)
+    app = tornado.web.Application(
+        [
+            (
+                r"/websocket",
+                perspective.handlers.tornado.PerspectiveTornadoHandler,
+                {"perspective_server": virtual_server},
+            ),
+            (r"/node_modules/(.*)", StaticFileHandler, {"path": "../../node_modules/"}),
+            (
+                r"/(.*)",
+                StaticFileHandler,
+                {"path": "./", "default_filename": "index.html"},
+            ),
+        ],
+        websocket_max_message_size=100 * 1024 * 1024,
+    )
+
+    app.listen(3000)
+    logger.info("Listening on http://localhost:3000")
+    loop = tornado.ioloop.IOLoop.current()
+    loop.start()

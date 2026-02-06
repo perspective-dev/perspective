@@ -91,7 +91,7 @@ version = "11.0.1"
 features = ["serde-json-impl", "no-serde-warnings", "import-esm"]
 
 [dependencies.wasm-bindgen]
-version = "=0.2.105"
+version = "=0.2.106"
 features = ["serde-serialize", "enable-interning"]
 
 [dependencies.web-sys]

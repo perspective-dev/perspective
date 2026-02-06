@@ -47,6 +47,7 @@ strip = true
 # These are only respected when `cargo` is invoked from the project root
 [patch.crates-io]
 # simd-adler32 = { git = "https://github.com/mcountryman/simd-adler32.git", rev = "b279034d9eb554c3e5e0af523db044f08d8297ba" }
+# protobuf-src = { rev = "1aba500e469f8bdc384a0fe9e69c189fda72e059", git = "https://github.com/MaterializeInc/rust-protobuf-native" }
 perspective-client = { path = "rust/perspective-client" }
 perspective-server = { path = "rust/perspective-server" }
 perspective-js = { path = "rust/perspective-js" }

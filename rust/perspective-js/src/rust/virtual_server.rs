@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 
 use indexmap::IndexMap;
 use js_sys::{Array, Date, Object, Reflect};
+use perspective_client::config::ViewConfig;
 use perspective_client::proto::{ColumnType, HostedTable};
 use perspective_client::virtual_server::{
     Features, ResultExt, VirtualDataSlice, VirtualServer, VirtualServerHandler,
@@ -27,6 +28,7 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
+use crate::JsViewConfig;
 use crate::utils::{ApiError, ApiFuture, *};
 
 // Conditional type alias matching the trait definition
@@ -482,9 +484,10 @@ impl VirtualServerHandler for JsServerHandler {
         let config_value = serde_wasm_bindgen::to_value(config).unwrap();
         let window_value = serde_wasm_bindgen::to_value(&window).unwrap();
 
+
         Box::pin(async move {
             let this = JsServerHandler(handler);
-            let data = JsVirtualDataSlice::default();
+            let data = JsVirtualDataSlice::new(config_value.clone().unchecked_into());
 
             {
                 let args = Array::new();
@@ -498,7 +501,7 @@ impl VirtualServerHandler for JsServerHandler {
             // Lock the mutex and take ownership of the inner data
             // We can't unwrap the Arc because the JsValue might still hold a reference
             let JsVirtualDataSlice(_obj, arc) = data;
-            let slice = std::mem::take(&mut *arc.lock().unwrap());
+            let slice = std::mem::take(&mut *arc.lock().unwrap()).unwrap();
             Ok(slice)
         })
     }
@@ -532,22 +535,25 @@ impl From<perspective_client::proto::ViewPort> for JsViewPort {
 
 #[wasm_bindgen]
 #[derive(Clone)]
-pub struct JsVirtualDataSlice(Object, Arc<Mutex<VirtualDataSlice>>);
+pub struct JsVirtualDataSlice(Object, Arc<Mutex<Option<VirtualDataSlice>>>);
 
-impl Default for JsVirtualDataSlice {
-    fn default() -> Self {
-        JsVirtualDataSlice(
-            Object::new(),
-            Arc::new(Mutex::new(VirtualDataSlice::default())),
-        )
-    }
-}
+// impl Default for JsVirtualDataSlice {
+//     fn new() -> Self {
+//         JsVirtualDataSlice(
+//             Object::new(),
+//             Arc::new(Mutex::new(VirtualDataSlice::new(config))),
+//         )
+//     }
+// }
 
 #[wasm_bindgen]
 impl JsVirtualDataSlice {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(config: JsViewConfig) -> Self {
+        JsVirtualDataSlice(
+            Object::new(),
+            Arc::new(Mutex::new(Some(VirtualDataSlice::new(config.into_serde_ext().unwrap())))),
+        )
     }
 
     #[wasm_bindgen(js_name = "setCol")]
@@ -582,11 +588,14 @@ impl JsVirtualDataSlice {
             self.1
                 .lock()
                 .unwrap()
+                .as_mut()
+                .unwrap()
                 .set_col(name, group_by_index, index as usize, None as Option<String>)
                 .unwrap();
         } else if let Some(s) = val.as_string() {
             self.1
                 .lock()
+                .unwrap().as_mut()
                 .unwrap()
                 .set_col(name, group_by_index, index as usize, Some(s))
                 .unwrap();
@@ -607,12 +616,14 @@ impl JsVirtualDataSlice {
         if val.is_null() || val.is_undefined() {
             self.1
                 .lock()
+                .unwrap().as_mut()
                 .unwrap()
                 .set_col(name, group_by_index, index as usize, None as Option<i32>)
                 .unwrap();
         } else if let Some(n) = val.as_f64() {
             self.1
                 .lock()
+                .unwrap().as_mut()
                 .unwrap()
                 .set_col(name, group_by_index, index as usize, Some(n as i32))
                 .unwrap();
@@ -633,13 +644,13 @@ impl JsVirtualDataSlice {
         if val.is_null() || val.is_undefined() {
             self.1
                 .lock()
-                .unwrap()
+                .unwrap().as_mut().unwrap()
                 .set_col(name, group_by_index, index as usize, None as Option<f64>)
                 .unwrap();
         } else if let Some(n) = val.as_f64() {
             self.1
                 .lock()
-                .unwrap()
+                .unwrap().as_mut().unwrap()
                 .set_col(name, group_by_index, index as usize, Some(n))
                 .unwrap();
         } else {
@@ -659,13 +670,13 @@ impl JsVirtualDataSlice {
         if val.is_null() || val.is_undefined() {
             self.1
                 .lock()
-                .unwrap()
+                .unwrap().as_mut().unwrap()
                 .set_col(name, group_by_index, index as usize, None as Option<bool>)
                 .unwrap();
         } else if let Some(b) = val.as_bool() {
             self.1
                 .lock()
-                .unwrap()
+                .unwrap().as_mut().unwrap()
                 .set_col(name, group_by_index, index as usize, Some(b))
                 .unwrap();
         } else {
@@ -685,20 +696,20 @@ impl JsVirtualDataSlice {
         if val.is_null() || val.is_undefined() {
             self.1
                 .lock()
-                .unwrap()
+                .unwrap().as_mut().unwrap()
                 .set_col(name, group_by_index, index as usize, None as Option<i64>)
                 .unwrap();
         } else if let Some(date) = val.dyn_ref::<Date>() {
             let timestamp = date.get_time() as i64;
             self.1
                 .lock()
-                .unwrap()
+                .unwrap().as_mut().unwrap()
                 .set_col(name, group_by_index, index as usize, Some(timestamp))
                 .unwrap();
         } else if let Some(n) = val.as_f64() {
             self.1
                 .lock()
-                .unwrap()
+                .unwrap().as_mut().unwrap()
                 .set_col(name, group_by_index, index as usize, Some(n as i64))
                 .unwrap();
         } else {
