@@ -243,10 +243,10 @@ impl Presentation {
     /// A `bool` indicating whether the internal state changed.
     pub async fn set_theme_name(&self, theme: Option<&str>) -> ApiResult<bool> {
         let (themes, selected) = self.get_selected_theme_config().await?;
-        if let Some(x) = selected {
-            if themes.get(x).map(|x| x.as_str()) == theme {
-                return Ok(false);
-            }
+        if let Some(x) = selected
+            && themes.get(x).map(|x| x.as_str()) == theme
+        {
+            return Ok(false);
         }
 
         let index = if let Some(theme) = theme {

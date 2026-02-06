@@ -82,10 +82,10 @@ where
                 true
             },
             ModalMsg::SubMsg(msg) => {
-                if let Some(child) = &ctx.props().child {
-                    if let Some(link) = child.props.weak_link().borrow().as_ref() {
-                        link.send_message(msg);
-                    }
+                if let Some(child) = &ctx.props().child
+                    && let Some(link) = child.props.weak_link().borrow().as_ref()
+                {
+                    link.send_message(msg);
                 }
 
                 false

@@ -514,18 +514,18 @@ impl FilterColumnProps {
             }
         };
 
-        if let Some(input) = filter_input {
-            if &input != filter_column.term() {
-                *filter_column.term_mut() = input;
-                let update = ViewConfigUpdate {
-                    filter: Some(filters),
-                    ..ViewConfigUpdate::default()
-                };
+        if let Some(input) = filter_input
+            && &input != filter_column.term()
+        {
+            *filter_column.term_mut() = input;
+            let update = ViewConfigUpdate {
+                filter: Some(filters),
+                ..ViewConfigUpdate::default()
+            };
 
-                self.update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
-            }
+            self.update_and_render(update)
+                .map(ApiFuture::spawn)
+                .unwrap_or_log();
         }
     }
 }

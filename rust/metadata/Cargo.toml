@@ -22,7 +22,7 @@ path = "main.rs"
 bench = false
 
 [dependencies.cargo-bundle-licenses]
-version = "2.0.0"
+version = "4.2.0"
 artifact = ["bin"]
 
 [dependencies.ts-rs]

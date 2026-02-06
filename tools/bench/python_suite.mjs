@@ -44,8 +44,6 @@ const CLIENT_VERSION = {
     "2.4.0": "perspective-2-4-0",
     "2.3.2": "perspective-2-3-0",
     "2.3.1": "perspective-2-3-0",
-    "2.2.0": "perspective-2-2-0",
-    "2.1.4": "perspective-2-1-0",
 };
 
 fs.mkdirSync(path.join(__dirname, "./dist"), { recursive: true });

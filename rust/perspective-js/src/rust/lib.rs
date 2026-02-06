@@ -26,6 +26,8 @@
 extern crate alloc;
 
 mod client;
+#[cfg(target_arch = "wasm32")]
+mod duckdb_sql;
 mod table;
 mod table_data;
 pub mod utils;
@@ -37,6 +39,8 @@ mod virtual_server;
 use wasm_bindgen::prelude::*;
 
 pub use crate::client::Client;
+#[cfg(target_arch = "wasm32")]
+pub use crate::duckdb_sql::*;
 pub use crate::table::*;
 pub use crate::table_data::*;
 #[cfg(target_arch = "wasm32")]

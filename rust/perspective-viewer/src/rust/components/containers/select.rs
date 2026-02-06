@@ -100,12 +100,12 @@ where
                             ctx.props().on_select.emit(self.selected.clone());
                             return true;
                         }
-                    } else if code.as_str() == "ArrowDown" {
-                        if let Some(x) = find_nth(idx + 1, &ctx.props().values) {
-                            self.selected = x.clone();
-                            ctx.props().on_select.emit(self.selected.clone());
-                            return true;
-                        }
+                    } else if code.as_str() == "ArrowDown"
+                        && let Some(x) = find_nth(idx + 1, &ctx.props().values)
+                    {
+                        self.selected = x.clone();
+                        ctx.props().on_select.emit(self.selected.clone());
+                        return true;
                     }
                 }
 

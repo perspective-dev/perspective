@@ -37,12 +37,16 @@ pub fn main() {
         .chain(args)
         .collect::<Vec<_>>();
 
-    let exit_code = std::process::Command::new(env!("CARGO_BIN_FILE_YEW_FMT"))
-        .args(yewfmt_args)
-        .spawn()
-        .expect("Could not spawn process")
-        .wait()
-        .expect("Process did not start");
+    if let Some(cmd) = option_env!("CARGO_BIN_FILE_YEW_FMT") {
+        let exit_code = std::process::Command::new(cmd)
+            .args(yewfmt_args)
+            .spawn()
+            .expect("Could not spawn process")
+            .wait()
+            .expect("Process did not start");
 
-    std::process::exit(exit_code.code().unwrap())
+        std::process::exit(exit_code.code().unwrap())
+    } else {
+        std::process::exit(1)
+    }
 }

@@ -22,7 +22,7 @@ import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1
 
 const LOGGER = {
     log(entry) {
-        table2.update([{ timestamp: entry.timestamp, sql: entry.value }]);
+        // table2.update([{ timestamp: entry.timestamp, sql: entry.value }]);
     },
 };
 
@@ -30,31 +30,31 @@ const db = await initializeDuckDB();
 const server = perspective.createMessageHandler(new DuckDBHandler(db));
 const client = await perspective.worker(server);
 
-const logworker = await perspective.worker();
-const table2 = await logworker.table(
-    { timestamp: "datetime", sql: "string" },
-    { name: "logs", limit: 10_000 },
-);
+// const logworker = await perspective.worker();
+// const table2 = await logworker.table(
+//     { timestamp: "datetime", sql: "string" },
+//     { name: "logs", limit: 10_000 },
+// );
 
-const log_element = document.querySelector("#logger");
-log_element.load(logworker);
-log_element.restore({
-    table: "logs",
-    sort: [["timestamp", "desc"]],
-    title: "SQL Log",
-});
+// const log_element = document.querySelector("#logger");
+// log_element.load(logworker);
+// log_element.restore({
+//     table: "logs",
+//     sort: [["timestamp", "desc"]],
+//     title: "SQL Log",
+// });
 
-const log_element2 = document.querySelector("#logger2");
-log_element2.load(logworker);
-log_element2.restore({
-    table: "logs",
-    sort: [["timestamp", "desc"]],
-    columns: ["sql"],
-    group_by: ["1s"],
-    plugin: "Y Bar",
-    expressions: { "1s": `bucket("timestamp",'1s')` },
-    title: "SQL Timeline",
-});
+// const log_element2 = document.querySelector("#logger2");
+// log_element2.load(logworker);
+// log_element2.restore({
+//     table: "logs",
+//     sort: [["timestamp", "desc"]],
+//     columns: ["sql"],
+//     group_by: ["1s"],
+//     plugin: "Y Bar",
+//     expressions: { "1s": `bucket("timestamp",'1s')` },
+//     title: "SQL Timeline",
+// });
 
 async function initializeDuckDB() {
     const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();

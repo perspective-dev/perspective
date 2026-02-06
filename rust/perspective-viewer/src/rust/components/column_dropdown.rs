@@ -91,19 +91,19 @@ impl Component for ColumnDropDown {
             },
             ColumnDropDownMsg::ItemDown => {
                 self.selected += 1;
-                if let Some(ref values) = self.values {
-                    if self.selected >= values.len() {
-                        self.selected = 0;
-                    }
+                if let Some(ref values) = self.values
+                    && self.selected >= values.len()
+                {
+                    self.selected = 0;
                 }
 
                 true
             },
             ColumnDropDownMsg::ItemUp => {
-                if let Some(ref values) = self.values {
-                    if self.selected < 1 {
-                        self.selected = values.len();
-                    }
+                if let Some(ref values) = self.values
+                    && self.selected < 1
+                {
+                    self.selected = values.len();
                 }
 
                 self.selected -= 1;

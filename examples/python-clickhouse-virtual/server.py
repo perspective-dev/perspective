@@ -10,21 +10,71 @@
 #  ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-[package]
-name = "perspective-lint"
-description = "A CLI utility to lint rust code"
-version = "4.1.1"
-edition = "2024"
-publish = false
+from pathlib import Path
 
-[[bin]]
-name = "lint"
-path = "main.rs"
-bench = false
+import perspective
+import perspective.handlers.tornado
+import perspective.virtual_servers.duckdb
+import tornado.ioloop
+import tornado.web
+import tornado.websocket
 
-[features]
-default = []
+from loguru import logger
+from tornado.web import StaticFileHandler
 
-[dependencies]
-yew-fmt = { version = "0.6.3", artifact = "bin", optional = true }
-glob = "0.3.1"
+import clickhouse_connect
+
+import config
+
+
+INPUT_FILE = (
+    Path(__file__).parent.resolve()
+    / "node_modules"
+    / "superstore-arrow"
+    / "superstore.parquet"
+)
+
+
+if __name__ == "__main__":
+    client = clickhouse_connect.get_client(
+        host=config.CLICKHOUSE_HOST,
+        port=config.CLICKHOUSE_PORT,
+        username=config.CLICKHOUSE_USER,
+        password=config.CLICKHOUSE_PASSWORD,
+    )
+
+    # print(client)
+    import taxi
+
+    # taxi.fetch()
+    # db = duckdb.connect(":memory:perspective")
+    # db.sql(
+    #     f"""
+    #     SET default_null_order=NULLS_FIRST_ON_ASC_LAST_ON_DESC;
+    #     CREATE TABLE data_source_one AS
+    #         SELECT * FROM '{INPUT_FILE}';
+    #     """,
+    # )
+
+    virtual_server = perspective.virtual_servers.duckdb.DuckDBVirtualServer(client)
+    app = tornado.web.Application(
+        [
+            (
+                r"/websocket",
+                perspective.handlers.tornado.PerspectiveTornadoHandler,
+                {"perspective_server": virtual_server},
+            ),
+            (r"/node_modules/(.*)", StaticFileHandler, {"path": "../../node_modules/"}),
+            (
+                r"/(.*)",
+                StaticFileHandler,
+                {"path": "./", "default_filename": "index.html"},
+            ),
+        ],
+        websocket_max_message_size=100 * 1024 * 1024,
+    )
+
+    app.listen(3000)
+    logger.info("Listening on http://localhost:3000")
+    loop = tornado.ioloop.IOLoop.current()
+    loop.start()

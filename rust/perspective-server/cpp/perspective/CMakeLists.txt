@@ -210,6 +210,10 @@ if(NOT DEFINED PSP_WASM_EXCEPTIONS AND NOT PSP_PYTHON_BUILD)
     set(PSP_WASM_EXCEPTIONS ON)
 endif()
 
+if(PSP_PYODIDE)
+    set(PSP_WASM_EXCEPTIONS ON)
+endif()
+
 set(DEBUG_LEVEL "0")
 if(PSP_HEAP_INSTRUMENTS)
     set(DEBUG_LEVEL "3")
@@ -347,17 +351,12 @@ endif()
 set(RAPIDJSON_BUILD_TESTS OFF CACHE BOOL "Disable rapidjson tests")
 
 if(PSP_PYODIDE)
-    set(RELOCATABLE_FLAGS " -sRELOCATABLE=1 -sSIDE_MODULE=2 ")
+    set(RELOCATABLE_FLAGS " -sRELOCATABLE=1 -sSIDE_MODULE=2 -fwasm-exceptions -sSUPPORT_LONGJMP=wasm \ ")
     string(APPEND CMAKE_EXE_LINKER_FLAGS "${RELOCATABLE_FLAGS} -sWASM_BIGINT=1 ")
     string(APPEND CMAKE_C_FLAGS "${RELOCATABLE_FLAGS}")
     string(APPEND CMAKE_CXX_FLAGS "${RELOCATABLE_FLAGS}")
-endif()
-
-if(PSP_PYODIDE)
     string(APPEND CMAKE_CXX_FLAGS " -fvisibility=hidden")
-endif()
 
-if (PSP_PYODIDE AND NOT PSP_WASM_EXCEPTIONS)
     # Emscripten exceptions
     string(APPEND CMAKE_CXX_FLAGS " -fexceptions")
 endif()

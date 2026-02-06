@@ -11,6 +11,6 @@
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 [toolchain]
-channel = "nightly-2025-02-01"
+channel = "nightly-2026-01-01"
 components = ["rustfmt", "clippy", "rust-src"]
 targets = ["wasm32-unknown-unknown", "wasm32-unknown-emscripten"]

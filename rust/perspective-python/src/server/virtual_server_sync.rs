@@ -280,7 +280,7 @@ impl VirtualServerHandler for PyServerHandler {
         let window: PyViewPort = viewport.clone().into();
         Box::pin(async move {
             Python::with_gil(|py| {
-                let data = PyVirtualDataSlice::default();
+                let data = PyVirtualDataSlice(Arc::new(Mutex::new(VirtualDataSlice::new(config.clone()))));
                 let _ = handler.call_method1(
                     py,
                     pyo3::intern!(py, "view_get_data"),
@@ -324,7 +324,7 @@ impl From<perspective_client::proto::ViewPort> for PyViewPort {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 #[pyclass(name = "VirtualDataSlice")]
 pub struct PyVirtualDataSlice(Arc<Mutex<VirtualDataSlice>>);
 

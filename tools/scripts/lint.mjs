@@ -30,7 +30,7 @@ export async function lint_js(is_fix = false) {
     const dirty = is_fix ? ["--allow-dirty"] : [];
     const staged = is_fix ? ["--allow-staged"] : [];
     const fix = is_fix ? ["--fix"] : [];
-    await $`cargo build -p perspective-lint`.verbose();
+    await $`cargo build -p perspective-lint --features="yew-fmt"`.verbose();
     await $`cargo clippy ${fix} ${dirty} ${staged} -p perspective-viewer -- -Dwarnings`.verbose();
     await $`RUSTFMT="rust/target/debug/lint" cargo fmt ${check}`.verbose();
 }
