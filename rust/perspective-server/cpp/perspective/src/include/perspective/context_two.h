@@ -55,6 +55,7 @@ public:
     void column_sort_by(const std::vector<t_sortspec>& sortby);
 
     void set_depth(t_header header, t_depth depth);
+    void set_leaves_only(bool enabled);
 
     std::pair<t_tscalar, t_tscalar> get_min_max(const std::string& colname
     ) const;
@@ -93,6 +94,7 @@ private:
     t_depth m_column_depth;
     bool m_column_depth_set;
     std::shared_ptr<t_expression_tables> m_expression_tables;
+    bool m_leaves_only = false;
 };
 
 } // end namespace perspective

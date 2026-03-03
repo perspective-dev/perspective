@@ -70,13 +70,16 @@ notify_sparse_tree_common(
 
     auto zero_strands = tree->zero_strands();
 
-    t_uindex t_osize = process_traversal ? traversal->size() : 0;
-    if (process_traversal) {
+    bool is_leaves_only =
+        process_traversal && traversal != nullptr && traversal->is_leaves_only();
+
+    if (process_traversal && !is_leaves_only) {
+        t_uindex t_osize = traversal->size();
         traversal->drop_tree_indices(zero_strands);
-    }
-    t_uindex t_nsize = process_traversal ? traversal->size() : 0;
-    if (t_osize != t_nsize) {
-        tree->set_has_deltas(true);
+        t_uindex t_nsize = traversal->size();
+        if (t_osize != t_nsize) {
+            tree->set_has_deltas(true);
+        }
     }
 
     auto non_zero_ids = tree->non_zero_ids(zero_strands);
@@ -88,61 +91,68 @@ notify_sparse_tree_common(
 
     tree->update_aggs_from_static(dctx, gstate, expression_master_table);
 
-    std::set<t_uindex> visited;
-
-    struct t_leaf_path {
-        std::vector<t_tscalar> m_path;
-        t_uindex m_lfidx;
-    };
-
-    std::vector<t_leaf_path> leaf_paths(non_zero_leaves.size());
-
-    t_uindex count = 0;
-
-    for (auto lfidx : non_zero_leaves) {
-        leaf_paths[count].m_lfidx = lfidx;
-        tree->get_sortby_path(lfidx, leaf_paths[count].m_path);
-        std::reverse(
-            leaf_paths[count].m_path.begin(), leaf_paths[count].m_path.end()
-        );
-        ++count;
-    }
-
-    std::sort(
-        leaf_paths.begin(),
-        leaf_paths.end(),
-        [](const t_leaf_path& a, const t_leaf_path& b) {
-            return a.m_path < b.m_path;
-        }
-    );
-
-    if (!leaf_paths.empty() && (traversal != nullptr)
-        && traversal->size() == 1) {
-        if (traversal->get_node(0).m_expanded) {
-            traversal->populate_root_children(tree);
-        }
+    if (is_leaves_only) {
+        traversal->rebuild_from_leaves(ctx_sortby);
     } else {
-        for (const auto& lpath : leaf_paths) {
-            t_uindex lfidx = lpath.m_lfidx;
-            auto ancestry = tree->get_ancestry(lfidx);
+        std::set<t_uindex> visited;
 
-            t_uindex num_tnodes_existed = 0;
+        struct t_leaf_path {
+            std::vector<t_tscalar> m_path;
+            t_uindex m_lfidx;
+        };
 
-            for (auto nidx : ancestry) {
-                if (non_zero_ids.find(nidx) == non_zero_ids.end()
-                    || visited.find(nidx) != visited.end()) {
-                    ++num_tnodes_existed;
-                } else {
-                    break;
+        std::vector<t_leaf_path> leaf_paths(non_zero_leaves.size());
+
+        t_uindex count = 0;
+
+        for (auto lfidx : non_zero_leaves) {
+            leaf_paths[count].m_lfidx = lfidx;
+            tree->get_sortby_path(lfidx, leaf_paths[count].m_path);
+            std::reverse(
+                leaf_paths[count].m_path.begin(),
+                leaf_paths[count].m_path.end()
+            );
+            ++count;
+        }
+
+        std::sort(
+            leaf_paths.begin(),
+            leaf_paths.end(),
+            [](const t_leaf_path& a, const t_leaf_path& b) {
+                return a.m_path < b.m_path;
+            }
+        );
+
+        if (!leaf_paths.empty() && (traversal != nullptr)
+            && traversal->size() == 1) {
+            if (traversal->get_node(0).m_expanded) {
+                traversal->populate_root_children(tree);
+            }
+        } else {
+            for (const auto& lpath : leaf_paths) {
+                t_uindex lfidx = lpath.m_lfidx;
+                auto ancestry = tree->get_ancestry(lfidx);
+
+                t_uindex num_tnodes_existed = 0;
+
+                for (auto nidx : ancestry) {
+                    if (non_zero_ids.find(nidx) == non_zero_ids.end()
+                        || visited.find(nidx) != visited.end()) {
+                        ++num_tnodes_existed;
+                    } else {
+                        break;
+                    }
                 }
-            }
 
-            if (process_traversal) {
-                traversal->add_node(ctx_sortby, ancestry, num_tnodes_existed);
-            }
+                if (process_traversal) {
+                    traversal->add_node(
+                        ctx_sortby, ancestry, num_tnodes_existed
+                    );
+                }
 
-            for (auto nidx : ancestry) {
-                visited.insert(nidx);
+                for (auto nidx : ancestry) {
+                    visited.insert(nidx);
+                }
             }
         }
     }

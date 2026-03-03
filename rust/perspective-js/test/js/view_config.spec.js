@@ -58,6 +58,7 @@ const data = [
                 group_by: ["y"],
                 sort: [],
                 split_by: [],
+                group_rollup_mode: "rollup",
             });
 
             view.delete();
@@ -81,6 +82,7 @@ const data = [
                 group_by: ["y"],
                 sort: [],
                 split_by: [],
+                group_rollup_mode: "rollup",
             });
 
             view.delete();
@@ -109,6 +111,7 @@ const data = [
                 group_by: ["y"],
                 sort: [],
                 split_by: [],
+                group_rollup_mode: "rollup",
             });
 
             view.delete();
@@ -142,6 +145,7 @@ const data = [
                 group_by: ["y"],
                 sort: [],
                 split_by: [],
+                group_rollup_mode: "rollup",
             });
 
             view.delete();
@@ -165,6 +169,7 @@ const data = [
                 group_by: ["y"],
                 sort: [],
                 split_by: [],
+                group_rollup_mode: "rollup",
             });
 
             view.delete();
