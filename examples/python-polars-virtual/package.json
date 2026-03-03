@@ -1,7 +1,7 @@
 {
     "name": "python-polars-virtual",
     "private": true,
-    "version": "4.2.0",
+    "version": "4.3.0",
     "description": "An example of a Polars-backed Perspective virtual server.",
     "scripts": {
         "start": "PYTHONPATH=../../python/perspective python3 server.py"

@@ -61,6 +61,7 @@ WebAssembly, Python, and Rust.
     - [`perspective.handlers.tornado`](https://perspective-dev.github.io/python/perspective/handlers/tornado.html)
     - [`perspective.virtual_servers.clickhouse`](https://perspective-dev.github.io/python/perspective/virtual_servers/clickhouse.html)
     - [`perspective.virtual_servers.duckdb`](https://perspective-dev.github.io/python/perspective/virtual_servers/duckdb.html)
+    - [`perspective.virtual_servers.polars`](https://perspective-dev.github.io/python/perspective/virtual_servers/polars.html)
 - Rust API
     - [`perspective`](https://docs.rs/perspective/latest/perspective/)
     - [`perspective-client`](https://docs.rs/perspective-client/latest/perspective_client/)

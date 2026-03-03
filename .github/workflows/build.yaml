@@ -748,7 +748,7 @@ jobs:
                   rust: "true"
                   cpp: "true"
                   python: "true"
-                  javascript: "false"
+                  javascript: "true"
                   skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
 
             - uses: actions/download-artifact@v4

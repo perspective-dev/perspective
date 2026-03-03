@@ -13,7 +13,7 @@
 [package]
 name = "perspective-lint"
 description = "A CLI utility to lint rust code"
-version = "4.2.0"
+version = "4.3.0"
 edition = "2024"
 publish = false
 

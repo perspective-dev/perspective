@@ -12,7 +12,7 @@
 
 [package]
 name = "perspective-python"
-version = "4.2.0"
+version = "4.3.0"
 edition = "2024"
 description = "A data visualization and analytics component, especially well-suited for large and/or streaming datasets."
 repository = "https://github.com/perspective-dev/perspective"
@@ -57,8 +57,8 @@ pyo3-build-config = "0.25.1"
 python-config-rs = "0.1.2"
 
 [dependencies]
-perspective-client = { version = "4.2.0" }
-perspective-server = { version = "4.2.0" }
+perspective-client = { version = "4.3.0" }
+perspective-server = { version = "4.3.0" }
 bytes = "1.10.1"
 chrono = "0.4"
 macro_rules_attribute = "0.2.2"

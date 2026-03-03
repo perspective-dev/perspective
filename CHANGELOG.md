@@ -1,6 +1,26 @@
+# [v4.3.0](https://github.com/perspective-dev/perspective/releases/tag/v4.3.0)
+
+_3 March 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.2.0...v4.3.0))
+
+Features
+
+- `polars` Virtual Server [#3125](https://github.com/finos/perspective/pull/3125)
+- Fix `split_by` support for rollups in generic SQL [#3127](https://github.com/finos/perspective/pull/3127)
+
+Fixes
+
+- Fix view conflation test timeout [#3126](https://github.com/finos/perspective/pull/3126)
+
+Misc
+
+- Add virtual server docs [#3124](https://github.com/finos/perspective/pull/3124)
+- Relax React version [#3131](https://github.com/finos/perspective/pull/3131)
+- ci: Revert to mainline actions-setup-cmake [#3130](https://github.com/finos/perspective/pull/3130)
+- Move to Windows 2025 CI [#3123](https://github.com/finos/perspective/pull/3123)
+
 # [v4.2.0](https://github.com/perspective-dev/perspective/releases/tag/v4.2.0)
 
-_15 February 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.2.0...v4.2.0))
+_14 February 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.1.1...v4.2.0))
 
 **Breaking**
 

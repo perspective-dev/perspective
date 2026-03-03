@@ -12,7 +12,7 @@
 
 [package]
 name = "perspective-viewer"
-version = "4.2.0"
+version = "4.3.0"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
 description = "A data visualization and analytics component, especially well-suited for large and/or streaming datasets."
@@ -48,8 +48,8 @@ anyhow = "1.0.66"
 wasm-bindgen-test = "0.3.13"
 
 [dependencies]
-perspective-client = { version = "4.2.0" }
-perspective-js = { version = "4.2.0" }
+perspective-client = { version = "4.3.0" }
+perspective-js = { version = "4.3.0" }
 
 # Provides async `Mutex` for locked sections such as `render`
 async-lock = "2.5.0"
@@ -106,9 +106,7 @@ tracing = { version = ">=0.1.36" }
 tracing-subscriber = "0.3.15"
 
 # Browser API bindings
-wasm-bindgen = { version = "=0.2.108", features = [
-  "enable-interning",
-] }
+wasm-bindgen = { version = "=0.2.108", features = ["enable-interning"] }
 
 # Pass perspective-js arguments to viewer
 wasm-bindgen-derive = "0.3.0"

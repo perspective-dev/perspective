@@ -1,7 +1,7 @@
 {
     "name": "esbuild-example",
     "private": true,
-    "version": "4.2.0",
+    "version": "4.3.0",
     "description": "An esbuild example app built using `@perspective-dev/viewer`.",
     "scripts": {
         "build": "node build.js",

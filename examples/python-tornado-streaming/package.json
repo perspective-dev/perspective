@@ -1,7 +1,7 @@
 {
     "name": "python-tornado-streaming",
     "private": true,
-    "version": "4.2.0",
+    "version": "4.3.0",
     "description": "An example of streaming a `perspective-python` server to the browser.",
     "scripts": {
         "start": "PYTHONPATH=../../python/perspective python3 server.py"

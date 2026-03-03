@@ -2,7 +2,7 @@
     "name": "@perspective-dev/server",
     "author": "The Perspective Authors",
     "license": "Apache-2.0",
-    "version": "4.2.0",
+    "version": "4.3.0",
     "main": "./dist/wasm/perspective-server.js",
     "files": [
         "dist/wasm/**/*"
