@@ -80,6 +80,7 @@ test.describe("Events", () => {
             plugin: "Debug",
             plugin_config: {},
             group_by: ["State"],
+            group_rollup_mode: "rollup",
             settings: true,
             sort: [],
             table: "load-viewer-csv",

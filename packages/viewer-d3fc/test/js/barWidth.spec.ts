@@ -47,6 +47,7 @@ test.describe("Bar Width", () => {
             group_by: ["Order Date"],
             split_by: ["Profit"],
             theme: "Pro Light",
+            group_rollup_mode: "flat",
         });
 
         await compareSVGContentsToSnapshot(

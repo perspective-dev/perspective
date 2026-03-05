@@ -125,7 +125,7 @@ pub impl ViewConfig {
             filter: Some(filter),
             filter_op: None,
             group_by_depth: None,
-            leaves_only: None,
+            group_rollup_mode: None,
         }
     }
 }

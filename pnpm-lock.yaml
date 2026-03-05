@@ -157,8 +157,8 @@ catalogs:
       specifier: '>17 <20'
       version: 18.3.1
     regular-table:
-      specifier: '=0.8.1'
-      version: 0.8.1
+      specifier: '=0.8.3'
+      version: 0.8.3
     stoppable:
       specifier: '=1.1.0'
       version: 1.1.0
@@ -898,7 +898,7 @@ importers:
         version: 3.1.2
       regular-table:
         specifier: 'catalog:'
-        version: 0.8.1
+        version: 0.8.3
     devDependencies:
       '@perspective-dev/esbuild-plugin':
         specifier: 'workspace:'
@@ -7900,8 +7900,8 @@ packages:
     resolution: {integrity: sha512-NZQZdC5wOE/H3UT28fVGL+ikOZcEzfMGk/c3iN9UGxzWHMa1op7274oyiUVrAG4B2EuFhus8SvkaYnhvW92p9Q==}
     hasBin: true
 
-  regular-table@0.8.1:
-    resolution: {integrity: sha512-+HZgc1CFER+M5dFhsL5MYEU6WKRhLwxRT85h7OCJM0kfuZiYZBi2kSH4/HRc4aCNGiczQbp1EvuEhTgjSdBl7w==}
+  regular-table@0.8.3:
+    resolution: {integrity: sha512-GANAV656dyTza89S1pz1NwQdcIZv+uUyV5z9k2mPnVfQxWVY150Ft75p35El0ICGpKvUG9mz6BP5vq4+d9BwUg==}
     engines: {node: '>=16'}
 
   rehype-raw@7.0.0:
@@ -17841,7 +17841,7 @@ snapshots:
     dependencies:
       jsesc: 3.1.0
 
-  regular-table@0.8.1: {}
+  regular-table@0.8.3: {}
 
   rehype-raw@7.0.0:
     dependencies:

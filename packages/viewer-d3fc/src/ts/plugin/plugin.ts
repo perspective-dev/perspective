@@ -136,6 +136,10 @@ class HTMLPerspectiveViewerD3fcPluginElement extends HTMLElement {
         return this._chart.plugin.selectMode || "select";
     }
 
+    get group_rollups(): string[] {
+        return ["flat"];
+    }
+
     get min_config_columns() {
         return (
             this._chart.plugin.initial?.count ||

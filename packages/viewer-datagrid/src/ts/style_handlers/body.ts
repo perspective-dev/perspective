@@ -49,6 +49,11 @@ export function applyBodyCellStyles(
     const hasSelected = selectedRowsMap.has(regularTable);
     const selected = selectedRowsMap.get(regularTable);
 
+    regularTable.classList.toggle(
+        "flat-group-rollup-mode",
+        this._config.group_rollup_mode === "flat",
+    );
+
     for (const { element: td, metadata, isHeader } of cells) {
         const column_name =
             metadata.column_header?.[this._config.split_by.length];

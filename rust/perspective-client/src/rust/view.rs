@@ -379,7 +379,6 @@ impl View {
             id: window.id,
             index: window.index,
             formatted: window.formatted,
-
         }));
 
         match self.client.oneshot(&msg).await? {
@@ -398,7 +397,6 @@ impl View {
             id: window.id,
             index: window.index,
             formatted: window.formatted,
-
         }));
 
         match self.client.oneshot(&msg).await? {
@@ -418,7 +416,6 @@ impl View {
             id: window.id,
             index: window.index,
             formatted: window.formatted,
-
         }));
 
         match self.client.oneshot(&msg).await? {

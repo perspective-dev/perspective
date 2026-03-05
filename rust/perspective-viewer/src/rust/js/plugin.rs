@@ -10,6 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use perspective_client::config::GroupRollupMode;
 use perspective_js::utils::*;
 use serde::*;
 use wasm_bindgen::prelude::*;
@@ -60,6 +61,9 @@ extern "C" {
 
     #[wasm_bindgen(method, getter)]
     pub fn priority(this: &JsPerspectiveViewerPlugin) -> Option<i32>;
+
+    #[wasm_bindgen(method, getter)]
+    pub fn group_rollups(this: &JsPerspectiveViewerPlugin) -> Option<js_sys::Array>;
 
     /// Don't call this method directly. Instead, call the corresponding method on the PluginColumnStyles model.
     #[wasm_bindgen(method, catch)]
@@ -146,6 +150,7 @@ pub struct ViewConfigRequirements {
     pub max_cells: Option<usize>,
     pub name: String,
     pub render_warning: bool,
+    pub group_rollups: Option<Vec<GroupRollupMode>>,
 }
 
 impl ViewConfigRequirements {
@@ -169,6 +174,9 @@ impl JsPerspectiveViewerPlugin {
             max_cells: self.max_cells(),
             name: self.name(),
             render_warning: self.render_warning().unwrap_or(true),
+            group_rollups: self
+                .group_rollups()
+                .map(|x| x.into_serde_ext::<Vec<GroupRollupMode>>().unwrap()),
         })
     }
 }

@@ -220,9 +220,9 @@ where
         };
 
         let value = if ctx.props().is_autosize {
-            self.selected.to_string()
+            Some(self.selected.to_string())
         } else {
-            "".to_owned()
+            None
         };
 
         html! {
@@ -230,7 +230,7 @@ where
                 <label>
                     { ctx.props().label.as_ref().map(|x| x.to_string()).unwrap_or_default() }
                 </label>
-                <div class={wrapper_class} data-value={value.clone()}>{ select }</div>
+                <div class={wrapper_class} data-value={value}>{ select }</div>
             } else {
                 <div class={wrapper_class} data-value={value}>{ select }</div>
             }

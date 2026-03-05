@@ -52,6 +52,22 @@ export function* format_tree_header_row_path(
     }
 }
 
+export function* format_flat_header_row_path(
+    this: DatagridModel,
+    paths: unknown[][] = [],
+    row_headers: string[],
+    regularTable: RegularTable,
+): Generator<RowHeaderCell[]> {
+    const plugins: ColumnsConfig =
+        (regularTable as any)[PRIVATE_PLUGIN_SYMBOL] || {};
+
+    for (let path of paths) {
+        yield path.map((part, i) =>
+            format_cell.call(this, row_headers[i], part, plugins, true),
+        ) as RowHeaderCell[];
+    }
+}
+
 /**
  * Format a single cell of the `group_by` tree header.
  */
