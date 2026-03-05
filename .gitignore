@@ -65,3 +65,4 @@ docs/static/browser
 docs/static/viewer
 docs/static/react
 rust/perspective-server/build
+target/

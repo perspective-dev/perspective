@@ -683,20 +683,23 @@ export class PerspectiveWorkspace extends SplitPanel {
 
     async _filterViewer(
         viewer: HTMLPerspectiveViewerElement,
-        filters: [string, string, string][],
+        removeFilters: psp.Filter[],
+        insertFilters: psp.Filter[],
         candidates: Set<string>,
     ) {
         const config = await viewer.save();
         const table = await viewer.getTable();
         const availableColumns = Object.keys(await table.schema());
         const currentFilters = config.filter || [];
-        const columnAvailable = (filter: [string, string, any]) =>
+        const columnAvailable = (filter: psp.Filter) =>
             filter[0] && availableColumns.includes(filter[0]);
 
-        const validFilters = filters.filter(columnAvailable);
+        const clearColumns = new Set<string>(removeFilters.map((f) => f[0]));
+        const validFilters = insertFilters.filter(columnAvailable);
         validFilters.push(
             ...currentFilters.filter(
-                (x: [string, ..._: string[]]) => !candidates.has(x[0]),
+                (x: [string, ..._: string[]]) =>
+                    !candidates.has(x[0]) && !clearColumns.has(x[0]),
             ),
         );
 
@@ -712,14 +715,21 @@ export class PerspectiveWorkspace extends SplitPanel {
         const candidates = new Set([
             ...(config["group_by"] || []),
             ...(config["split_by"] || []),
-            ...(config.filter || []).map((x: [string, string, any]) => x[0]),
+            ...(config.filter || []).map((x: psp.Filter) => x[0]),
         ]);
 
-        const filters = [...event.detail.config.filter];
+        const removeFilters = (
+            (event.detail.removeConfigs ?? []) as psp.ViewConfigUpdate[]
+        ).flatMap((x) => x.filter ?? []);
+        const insertFilters = (
+            (event.detail.insertConfigs ?? []) as psp.ViewConfigUpdate[]
+        ).flatMap((x) => x.filter ?? []);
+
         toArray(this.dockpanel.widgets()).forEach((widget) => {
             this._filterViewer(
                 (widget as PerspectiveViewerWidget).viewer,
-                filters,
+                removeFilters,
+                insertFilters,
                 candidates,
             );
         });

@@ -27,7 +27,8 @@ export interface ToggleGloalFilterEventDetail {
     isGlobalFilter: boolean;
 }
 
-interface PerspectiveWorkspaceProps extends React.HTMLAttributes<HTMLElement> {
+export interface PerspectiveWorkspaceProps
+    extends React.HTMLAttributes<HTMLElement> {
     client: psp.Client | Promise<psp.Client>;
     layout: PerspectiveWorkspaceConfig;
     onLayoutUpdate?: (layout: PerspectiveWorkspaceConfig) => void;
