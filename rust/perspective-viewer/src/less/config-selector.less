@@ -270,6 +270,30 @@
             display: inline-block;
         }
 
+        .pivot_controls {
+            display: flex;
+            justify-content: flex-end;
+            height: 15px;
+            margin-bottom: -24px;
+            margin-right: 28px;
+            margin-top: 9px;
+            select:hover {
+                color: var(--icon--color, inherit);
+            }
+        }
+
+        .group_rollup_wrapper {
+            width: 48px;
+            margin-bottom: -30px;
+            flex: 0 1 auto;
+            color: var(--inactive--color);
+            padding-top: 15px;
+            font-size: 9px;
+            select {
+                font-size: 9px !important;
+            }
+        }
+
         #transpose_button {
             cursor: pointer;
             flex-grow: 0;
@@ -278,12 +302,12 @@
             user-select: none;
             padding: 0;
             align-self: center;
-            margin-bottom: -23px;
-            margin-top: 11.5px;
-            align-self: flex-end;
+            // margin-bottom: -23px;
+            // margin-top: 11.5px;
+            // align-self: flex-end;
             z-index: 1;
             min-height: 0px;
-            margin-right: 30px;
+            // margin-right: 30px;
 
             &:hover:before {
                 color: var(--icon--color, inherit);

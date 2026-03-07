@@ -75,6 +75,10 @@ t_traversal::populate_root_children(const std::shared_ptr<const t_stree>& tree
 
 t_index
 t_traversal::expand_node(t_index exp_idx) {
+    if (m_leaves_only) {
+        return 0;
+    }
+
     t_tvnode& exp_tvnode = (*m_nodes)[exp_idx];
 
     if (exp_tvnode.m_expanded) {
@@ -120,6 +124,10 @@ t_index
 t_traversal::expand_node(
     const std::vector<t_sortspec>& sortby, t_index exp_idx, t_ctx2* ctx2
 ) {
+    if (m_leaves_only) {
+        return 0;
+    }
+
     t_tvnode& exp_tvnode = (*m_nodes)[exp_idx];
 
     if (exp_tvnode.m_expanded) {
@@ -197,6 +205,10 @@ t_traversal::expand_node(
 
 t_index
 t_traversal::collapse_node(t_index idx) {
+    if (m_leaves_only) {
+        return 0;
+    }
+
     t_tvnode& node = (*m_nodes)[idx];
 
     if (!node.m_expanded) {
@@ -699,4 +711,87 @@ t_traversal::get_node_expanded(t_index idx) const {
     }
     return m_nodes->at(idx).m_expanded;
 }
+
+void
+t_traversal::set_leaves_only(bool enabled, t_uindex leaf_depth) {
+    m_leaves_only = enabled;
+    m_leaf_depth = leaf_depth;
+    if (m_leaves_only) {
+        rebuild_from_leaves({});
+    }
+}
+
+bool
+t_traversal::is_leaves_only() const {
+    return m_leaves_only;
+}
+
+void
+t_traversal::collect_leaves(
+    t_uindex tnid,
+    t_uindex current_depth,
+    const std::vector<t_sortspec>& sortby,
+    const std::vector<t_index>& sortby_agg_indices,
+    const std::vector<t_sorttype>& sort_orders
+) {
+    if (current_depth >= m_leaf_depth) {
+        t_tvnode node;
+        node.m_expanded = false;
+        node.m_depth = m_leaf_depth;
+        node.m_rel_pidx = 0;
+        node.m_ndesc = 0;
+        node.m_nchild = 0;
+        node.m_tnid = tnid;
+        m_nodes->push_back(node);
+        return;
+    }
+
+    t_stnode_vec children;
+    m_tree->get_child_nodes(tnid, children);
+
+    if (!sortby.empty() && children.size() > 1) {
+        auto n_children = children.size();
+        auto sortelems =
+            std::make_shared<std::vector<t_mselem>>(n_children);
+        std::vector<t_tscalar> aggregates(sortby.size());
+
+        for (t_uindex i = 0; i < n_children; ++i) {
+            m_tree->get_aggregates_for_sorting(
+                children[i].m_idx, sortby_agg_indices, aggregates, nullptr
+            );
+            (*sortelems)[i] = t_mselem(aggregates, i);
+        }
+
+        std::vector<t_index> sorted_idx(n_children);
+        t_multisorter sorter(sortelems, sort_orders);
+        argsort(sorted_idx, sorter);
+
+        t_stnode_vec sorted_children(n_children);
+        for (t_uindex i = 0; i < n_children; ++i) {
+            sorted_children[i] = children[sorted_idx[i]];
+        }
+        children = std::move(sorted_children);
+    }
+
+    for (const auto& child : children) {
+        collect_leaves(
+            child.m_idx, current_depth + 1, sortby, sortby_agg_indices,
+            sort_orders
+        );
+    }
+}
+
+void
+t_traversal::rebuild_from_leaves(const std::vector<t_sortspec>& sortby) {
+    m_nodes = std::make_shared<std::vector<t_tvnode>>();
+
+    std::vector<t_index> sortby_agg_indices(sortby.size());
+    for (t_uindex i = 0; i < sortby.size(); ++i) {
+        sortby_agg_indices[i] = sortby[i].m_agg_index;
+    }
+
+    std::vector<t_sorttype> sort_orders = get_sort_orders(sortby);
+    collect_leaves(0, 0, sortby, sortby_agg_indices, sort_orders);
+}
+
 } // end namespace perspective

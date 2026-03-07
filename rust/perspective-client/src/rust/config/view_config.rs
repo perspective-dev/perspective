@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 use std::collections::HashMap;
+use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -21,6 +22,48 @@ use super::filters::*;
 use super::sort::*;
 use crate::proto;
 use crate::proto::columns_update;
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq, TS)]
+pub enum GroupRollupMode {
+    #[default]
+    #[serde(rename = "rollup")]
+    Rollup,
+
+    #[serde(rename = "flat")]
+    Flat,
+    // #[serde(rename = "total")]
+    // Total,
+}
+
+impl Display for GroupRollupMode {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(fmt, "{}", match self {
+            Self::Rollup => "Rollup",
+            Self::Flat => "Flat",
+            // Self::Total => "Total",
+        })
+    }
+}
+
+impl From<proto::view_config::GroupRollupMode> for GroupRollupMode {
+    fn from(value: proto::view_config::GroupRollupMode) -> Self {
+        match value {
+            proto::view_config::GroupRollupMode::Rollup => Self::Rollup,
+            proto::view_config::GroupRollupMode::Flat => Self::Flat,
+            // proto::view_config::GroupRollupMode::Total => Self::Total,
+        }
+    }
+}
+
+impl From<GroupRollupMode> for proto::view_config::GroupRollupMode {
+    fn from(value: GroupRollupMode) -> Self {
+        match value {
+            GroupRollupMode::Rollup => proto::view_config::GroupRollupMode::Rollup,
+            GroupRollupMode::Flat => proto::view_config::GroupRollupMode::Flat,
+            // GroupRollupMode::Total => proto::view_config::GroupRollupMode::Total,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
@@ -36,6 +79,10 @@ pub struct ViewConfig {
 
     #[serde(default)]
     pub filter: Vec<Filter>,
+
+    // #[serde(skip_serializing_if = "is_default_value")]
+    #[serde(default)]
+    pub group_rollup_mode: GroupRollupMode,
 
     #[serde(skip_serializing_if = "is_default_value")]
     #[serde(default)]
@@ -164,6 +211,11 @@ pub struct ViewConfigUpdate {
     #[serde(default)]
     #[ts(optional)]
     pub filter_op: Option<FilterReducer>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[ts(optional)]
+    pub group_rollup_mode: Option<GroupRollupMode>,
 }
 
 impl From<ViewConfigUpdate> for proto::ViewConfig {
@@ -202,6 +254,9 @@ impl From<ViewConfigUpdate> for proto::ViewConfig {
                 .map(|(x, y)| (x, y.into()))
                 .collect(),
             group_by_depth: value.group_by_depth,
+            group_rollup_mode: value
+                .group_rollup_mode
+                .map(|x| proto::view_config::GroupRollupMode::from(x).into()),
         }
     }
 }
@@ -236,6 +291,7 @@ impl From<ViewConfig> for ViewConfigUpdate {
             expressions: Some(value.expressions),
             aggregates: Some(value.aggregates),
             group_by_depth: value.group_by_depth,
+            group_rollup_mode: Some(value.group_rollup_mode),
         }
     }
 }
@@ -265,6 +321,12 @@ impl From<proto::ViewConfig> for ViewConfig {
                 .map(|(x, y)| (x, y.into()))
                 .collect(),
             group_by_depth: value.group_by_depth,
+            group_rollup_mode: value
+                .group_rollup_mode
+                .map(proto::view_config::GroupRollupMode::try_from)
+                .and_then(|x| x.ok())
+                .map(|x| x.into())
+                .unwrap_or_default(),
         }
     }
 }
@@ -281,6 +343,7 @@ impl From<ViewConfigUpdate> for ViewConfig {
             expressions: value.expressions.unwrap_or_default(),
             aggregates: value.aggregates.unwrap_or_default(),
             group_by_depth: value.group_by_depth,
+            group_rollup_mode: value.group_rollup_mode.unwrap_or_default(),
         }
     }
 }
@@ -312,6 +375,10 @@ impl From<proto::ViewConfig> for ViewConfigUpdate {
                     .collect(),
             ),
             group_by_depth: value.group_by_depth,
+            group_rollup_mode: value
+                .group_rollup_mode
+                .and_then(|x| proto::view_config::GroupRollupMode::try_from(x).ok())
+                .map(|x| x.into()),
         }
     }
 }
@@ -346,6 +413,7 @@ impl ViewConfig {
         changed = Self::_apply(&mut self.sort, update.sort) || changed;
         changed = Self::_apply(&mut self.aggregates, update.aggregates) || changed;
         changed = Self::_apply(&mut self.expressions, update.expressions) || changed;
+        changed = Self::_apply(&mut self.group_rollup_mode, update.group_rollup_mode) || changed;
         changed
     }
 

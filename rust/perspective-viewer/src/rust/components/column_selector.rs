@@ -355,11 +355,7 @@ impl Component for ColumnSelector {
             })
             .collect();
 
-        let size = if !inactive_children.is_empty() {
-            56.0
-        } else {
-            28.0
-        };
+        let size = 28.0;
 
         let add_column = if ctx
             .props()

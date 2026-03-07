@@ -100,10 +100,6 @@ pub struct ViewWindow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub index: Option<bool>,
 
-    #[ts(optional)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub leaves_only: Option<bool>,
-
     /// Only impacts [`View::to_csv`]
     #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -383,7 +379,6 @@ impl View {
             id: window.id,
             index: window.index,
             formatted: window.formatted,
-            leaves_only: window.leaves_only,
         }));
 
         match self.client.oneshot(&msg).await? {
@@ -402,7 +397,6 @@ impl View {
             id: window.id,
             index: window.index,
             formatted: window.formatted,
-            leaves_only: window.leaves_only,
         }));
 
         match self.client.oneshot(&msg).await? {
@@ -422,7 +416,6 @@ impl View {
             id: window.id,
             index: window.index,
             formatted: window.formatted,
-            leaves_only: window.leaves_only,
         }));
 
         match self.client.oneshot(&msg).await? {

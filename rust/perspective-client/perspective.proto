@@ -393,7 +393,6 @@ message ViewToColumnsStringReq {
     optional bool id = 2;
     optional bool index = 3;
     optional bool formatted = 4;
-    optional bool leaves_only = 5;
 }
 
 message ViewToColumnsStringResp {
@@ -405,7 +404,6 @@ message ViewToRowsStringReq {
     optional bool id = 2;
     optional bool index = 3;
     optional bool formatted = 4;
-    optional bool leaves_only = 5;
 }
 
 message ViewToRowsStringResp {
@@ -417,7 +415,6 @@ message ViewToNdjsonStringReq {
     optional bool id = 2;
     optional bool index = 3;
     optional bool formatted = 4;
-    optional bool leaves_only = 5;
 }
 
 message ViewToNdjsonStringResp {
@@ -522,6 +519,7 @@ message ViewConfig {
     map<string, AggList> aggregates = 7;
     FilterReducer filter_op = 8;
     optional uint32 group_by_depth = 9;
+    optional GroupRollupMode group_rollup_mode = 10;
 
     message AggList {
         repeated string aggregations = 1;
@@ -541,6 +539,12 @@ message ViewConfig {
     enum FilterReducer {
         AND = 0;
         OR = 1;
+    }
+
+    enum GroupRollupMode {
+        ROLLUP = 0;
+        FLAT = 1;
+        // TOTAL = 2;
     }
 }
 

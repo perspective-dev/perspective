@@ -346,9 +346,13 @@ void
 t_ctx1::step_end() {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    sort_by(m_sortby);
-    if (m_depth_set) {
-        set_depth(m_depth);
+    if (m_leaves_only) {
+        m_traversal->rebuild_from_leaves(m_sortby);
+    } else {
+        sort_by(m_sortby);
+        if (m_depth_set) {
+            set_depth(m_depth);
+        }
     }
 }
 
@@ -422,6 +426,14 @@ t_ctx1::set_depth(t_depth depth) {
     m_rows_changed = (retval > 0);
     m_depth = depth;
     m_depth_set = true;
+}
+
+void
+t_ctx1::set_leaves_only(bool enabled) {
+    PSP_TRACE_SENTINEL();
+    PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+    m_leaves_only = enabled;
+    m_traversal->set_leaves_only(enabled, m_config.get_num_rpivots());
 }
 
 std::vector<t_tscalar>
@@ -556,6 +568,9 @@ t_ctx1::reset(bool reset_expressions) {
     m_tree->init();
     m_tree->set_deltas_enabled(get_feature_state(CTX_FEAT_DELTA));
     m_traversal = std::make_shared<t_traversal>(m_tree);
+    if (m_leaves_only) {
+        m_traversal->set_leaves_only(true, m_config.get_num_rpivots());
+    }
 
     if (reset_expressions) {
         m_expression_tables->reset();

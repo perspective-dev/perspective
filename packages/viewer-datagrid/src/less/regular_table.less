@@ -128,7 +128,17 @@ perspective-viewer {
     border-color: var(--selected-row--background-color, #ea7319) !important;
 }
 
+regular-table.flat-group-rollup-mode.vertical-row-headers
+    th.psp-tree-label:not(:last-of-type) {
+    writing-mode: vertical-lr;
+}
+
 .psp-row-selected.psp-tree-label:not(:hover):before {
+    color: white;
+}
+
+regular-table:not(.flat-group-rollup-mode)
+    .psp-row-selected.psp-tree-label:not(:hover):before {
     color: white;
 }
 
@@ -254,29 +264,36 @@ tbody th:empty {
     max-width: 20px;
     pointer-events: none;
 }
-.psp-tree-label {
-    max-width: 0px;
-    min-width: 0px;
-}
-.psp-tree-label:before {
-    color: var(--icon--color);
-    font-family: var(--button--font-family, inherit);
-    padding-right: 11px;
-}
-.psp-tree-label-expand:before {
-    content: var(--tree-label-expand--content, "+");
-}
-.psp-tree-label-collapse:before {
-    content: var(--tree-label-collapse--content, "-");
-}
-.psp-tree-label-expand,
-.psp-tree-label-collapse {
-    cursor: pointer;
-}
 
-.psp-tree-label:hover:before {
-    color: var(--active--color);
-    text-shadow: 0px 0px 5px var(--active--color);
+regular-table:not(.flat-group-rollup-mode) {
+    .psp-tree-label {
+        max-width: 0px;
+        min-width: 0px;
+    }
+
+    .psp-tree-label:before {
+        color: var(--icon--color);
+        font-family: var(--button--font-family, inherit);
+        padding-right: 11px;
+    }
+
+    .psp-tree-label-expand:before {
+        content: var(--tree-label-expand--content, "+");
+    }
+
+    .psp-tree-label-collapse:before {
+        content: var(--tree-label-collapse--content, "-");
+    }
+
+    .psp-tree-label-expand,
+    .psp-tree-label-collapse {
+        cursor: pointer;
+    }
+
+    .psp-tree-label:hover:before {
+        color: var(--active--color);
+        text-shadow: 0px 0px 5px var(--active--color);
+    }
 }
 
 .psp-tree-leaf {

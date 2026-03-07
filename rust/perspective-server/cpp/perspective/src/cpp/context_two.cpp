@@ -110,8 +110,12 @@ t_ctx2::step_begin() {
 
 void
 t_ctx2::step_end() {
-    if (m_row_depth_set) {
-        set_depth(HEADER_ROW, m_row_depth);
+    if (m_leaves_only) {
+        m_rtraversal->rebuild_from_leaves(m_sortby);
+    } else {
+        if (m_row_depth_set) {
+            set_depth(HEADER_ROW, m_row_depth);
+        }
     }
     if (m_column_depth_set) {
         set_depth(HEADER_COLUMN, m_column_depth);
@@ -738,7 +742,7 @@ t_ctx2::resolve_cells(const std::vector<std::pair<t_uindex, t_uindex>>& cells
 
         rval[idx].m_agg_index = agg_idx;
 
-        if (cell.first == 0) {
+        if (cell.first == 0 && !m_leaves_only) {
             rval[idx].m_idx = c_ptidx;
             rval[idx].m_treenum = 0;
         } else if (c_path.empty()) {
@@ -935,6 +939,12 @@ t_ctx2::set_depth(t_header header, t_depth depth) {
     }
 }
 
+void
+t_ctx2::set_leaves_only(bool enabled) {
+    m_leaves_only = enabled;
+    m_rtraversal->set_leaves_only(enabled, m_config.get_num_rpivots());
+}
+
 std::vector<t_tscalar>
 t_ctx2::get_pkeys(const std::vector<std::pair<t_uindex, t_uindex>>& cells
 ) const {
@@ -1089,6 +1099,9 @@ t_ctx2::reset(bool reset_expressions) {
 
     m_rtraversal = std::make_shared<t_traversal>(rtree());
     m_ctraversal = std::make_shared<t_traversal>(ctree());
+    if (m_leaves_only) {
+        m_rtraversal->set_leaves_only(true, m_config.get_num_rpivots());
+    }
 
     if (reset_expressions) {
         m_expression_tables->reset();

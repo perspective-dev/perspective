@@ -1774,7 +1774,6 @@ View<CTX_T>::write_row_path(
     t_uindex start_row,
     t_uindex end_row,
     bool has_row_path,
-    bool leaves_only,
     bool is_formatted,
     rapidjson::Writer<rapidjson::StringBuffer>& writer
 ) const {
@@ -1782,21 +1781,13 @@ View<CTX_T>::write_row_path(
     if (has_row_path) {
         writer.Key("__ROW_PATH__");
         writer.StartArray();
-        t_uindex depth = m_row_pivots.size();
         for (auto r = start_row; r < end_row; ++r) {
-            if (leaves_only) {
-                if (m_ctx->unity_get_row_depth(r) < depth) {
-                    continue;
-                }
-            }
-
             writer.StartArray();
             const auto row_path = get_row_path(r);
 
             // Question: Why are the row paths reversed?
             for (auto entry = row_path.size(); entry > 0; entry--) {
                 const t_tscalar& scalar = row_path[entry - 1];
-
                 write_scalar(scalar, is_formatted, writer);
             }
 
@@ -1827,24 +1818,16 @@ View<CTX_T>::write_column(
     t_uindex start_row,
     t_uindex end_row,
     bool has_row_path,
-    bool leaves_only,
     bool is_formatted,
     std::shared_ptr<t_data_slice<CTX_T>> slice,
     const std::vector<std::vector<t_tscalar>>& col_names,
     rapidjson::Writer<rapidjson::StringBuffer>& writer
 ) const {
 
-    t_uindex depth = m_row_pivots.size();
     writer.Key(col_path_to_legacy(col_names.at(c)).c_str());
     writer.StartArray();
 
     for (auto r = start_row; r < end_row; ++r) {
-        if (has_row_path && leaves_only) {
-            if (m_ctx->unity_get_row_depth(r) < depth) {
-                continue;
-            }
-        }
-
         auto scalar = slice->get(r, c);
 
         write_scalar(scalar, is_formatted, writer);
@@ -1859,22 +1842,14 @@ View<CTX_T>::write_index_column(
     t_uindex start_row,
     t_uindex end_row,
     bool has_row_path,
-    bool leaves_only,
     bool is_formatted,
     std::shared_ptr<t_data_slice<CTX_T>> slice,
     rapidjson::Writer<rapidjson::StringBuffer>& writer
 ) const {
-    t_uindex depth = m_row_pivots.size();
     writer.Key("__INDEX__");
     writer.StartArray();
 
     for (auto r = start_row; r < end_row; ++r) {
-        if (has_row_path && leaves_only) {
-            if (m_ctx->unity_get_row_depth(r) < depth) {
-                continue;
-            }
-        }
-
         std::vector<t_tscalar> keys = slice->get_pkeys(r, 0);
 
         writer.StartArray();
@@ -1901,7 +1876,6 @@ View<T>::to_rows(
     bool is_formatted,
     bool get_pkeys,
     bool get_ids,
-    bool leaves_only,
     t_uindex num_sides,
     bool has_row_path,
     const std::string& nidx,
@@ -1929,8 +1903,6 @@ View<T>::to_rows(
         );
     }
 
-    t_uindex depth = m_row_pivots.size();
-
     // These columns don't exist as far as the view/table is concerned. They're
     // scoped to the serialization of the view itself.
     //
@@ -1943,12 +1915,6 @@ View<T>::to_rows(
 
     if (start_col <= (end_col + num_virtual_columns)) {
         for (auto r = start_row; r < end_row; ++r) {
-            if (has_row_path && leaves_only) {
-                if (m_ctx->unity_get_row_depth(r) < depth) {
-                    continue;
-                }
-            }
-
             writer.StartObject();
             if (get_ids) {
                 std::pair<t_uindex, t_uindex> pair{r, 0};
@@ -1998,7 +1964,6 @@ View<t_ctx1>::to_rows(
     bool is_formatted,
     bool get_pkeys,
     bool get_ids,
-    bool leaves_only,
     t_uindex num_sides,
     bool has_row_path,
     const std::string& nidx,
@@ -2018,8 +1983,6 @@ View<t_ctx1>::to_rows(
         return s.GetString();
     }
 
-    t_uindex depth = m_row_pivots.size();
-
     std::vector<std::string> column_names;
     for (auto c = start_col + 1; c < end_col; ++c) {
         if (c > columns_length) {
@@ -2032,12 +1995,6 @@ View<t_ctx1>::to_rows(
     }
 
     for (auto r = start_row; r < end_row; ++r) {
-        if (has_row_path && leaves_only) {
-            if (m_ctx->unity_get_row_depth(r) < depth) {
-                continue;
-            }
-        }
-
         // Row
         writer.StartObject();
 
@@ -2104,7 +2061,6 @@ View<t_ctx2>::to_rows(
     bool is_formatted,
     bool get_pkeys,
     bool get_ids,
-    bool leaves_only,
     t_uindex num_sides,
     bool has_row_path,
     const std::string& nidx,
@@ -2129,15 +2085,8 @@ View<t_ctx2>::to_rows(
         column_names.emplace_back(col_path_to_legacy(col_names.at(c)));
     }
 
-    t_uindex depth = m_row_pivots.size();
     bool column_only = is_column_only();
     for (auto r = start_row; r < end_row; ++r) {
-        if (has_row_path && leaves_only) {
-            if (m_ctx->unity_get_row_depth(r) < depth) {
-                continue;
-            }
-        }
-
         // Row
         writer.StartObject();
 
@@ -2257,7 +2206,6 @@ View<T>::to_ndjson(
     bool is_formatted,
     bool get_pkeys,
     bool get_ids,
-    bool leaves_only,
     t_uindex num_sides,
     bool has_row_path,
     const std::string& nidx,
@@ -2279,8 +2227,6 @@ View<T>::to_ndjson(
         );
     }
 
-    t_uindex depth = m_row_pivots.size();
-
     // These columns don't exist as far as the view/table is concerned. They're
     // scoped to the serialization of the view itself.
     //
@@ -2299,11 +2245,6 @@ View<T>::to_ndjson(
 
             rapidjson::StringBuffer s;
             rapidjson::Writer<rapidjson::StringBuffer> writer(s);
-            if (has_row_path && leaves_only) {
-                if (m_ctx->unity_get_row_depth(r) < depth) {
-                    continue;
-                }
-            }
 
             writer.StartObject();
             if (get_ids) {
@@ -2354,7 +2295,6 @@ View<t_ctx1>::to_ndjson(
     bool is_formatted,
     bool get_pkeys,
     bool get_ids,
-    bool leaves_only,
     t_uindex num_sides,
     bool has_row_path,
     const std::string& nidx,
@@ -2369,7 +2309,6 @@ View<t_ctx1>::to_ndjson(
         return "";
     }
 
-    t_uindex depth = m_row_pivots.size();
     std::vector<std::string> column_names;
     for (auto c = start_col + 1; c < end_col; ++c) {
         if (c > columns_length) {
@@ -2389,11 +2328,6 @@ View<t_ctx1>::to_ndjson(
 
         rapidjson::StringBuffer s;
         rapidjson::Writer<rapidjson::StringBuffer> writer(s);
-        if (has_row_path && leaves_only) {
-            if (m_ctx->unity_get_row_depth(r) < depth) {
-                continue;
-            }
-        }
 
         // Row
         writer.StartObject();
@@ -2462,7 +2396,6 @@ View<t_ctx2>::to_ndjson(
     bool is_formatted,
     bool get_pkeys,
     bool get_ids,
-    bool leaves_only,
     t_uindex num_sides,
     bool has_row_path,
     const std::string& nidx,
@@ -2482,7 +2415,6 @@ View<t_ctx2>::to_ndjson(
         column_names.emplace_back(col_path_to_legacy(col_names.at(c)));
     }
 
-    t_uindex depth = m_row_pivots.size();
     bool column_only = is_column_only();
     std::stringstream ndjson;
     for (auto r = start_row; r < end_row; ++r) {
@@ -2492,11 +2424,6 @@ View<t_ctx2>::to_ndjson(
 
         rapidjson::StringBuffer s;
         rapidjson::Writer<rapidjson::StringBuffer> writer(s);
-        if (has_row_path && leaves_only) {
-            if (m_ctx->unity_get_row_depth(r) < depth) {
-                continue;
-            }
-        }
 
         // Row
         writer.StartObject();
@@ -2566,7 +2493,6 @@ View<T>::to_columns(
     bool is_formatted,
     bool get_pkeys,
     bool get_ids,
-    bool _leaves_only,
     t_uindex num_sides,
     bool _has_row_path,
     const std::string& nidx,
@@ -2588,7 +2514,6 @@ View<T>::to_columns(
             start_row,
             end_row,
             false,
-            false,
             is_formatted,
             slice,
             col_names,
@@ -2598,7 +2523,7 @@ View<T>::to_columns(
 
     if (get_pkeys) {
         write_index_column(
-            start_row, end_row, false, false, is_formatted, slice, writer
+            start_row, end_row, false, is_formatted, slice, writer
         );
     }
 
@@ -2633,7 +2558,6 @@ View<t_ctx1>::to_columns(
     bool is_formatted,
     bool get_pkeys,
     bool get_ids,
-    bool leaves_only,
     t_uindex num_sides,
     bool has_row_path,
     const std::string& nidx,
@@ -2648,7 +2572,7 @@ View<t_ctx1>::to_columns(
     rapidjson::StringBuffer s;
     rapidjson::Writer<rapidjson::StringBuffer> writer(s);
     writer.StartObject();
-    write_row_path(start_row, end_row, true, leaves_only, is_formatted, writer);
+    write_row_path(start_row, end_row, true, is_formatted, writer);
     if (get_ids) {
         writer.Key("__ID__");
         writer.StartArray();
@@ -2677,7 +2601,6 @@ View<t_ctx1>::to_columns(
             start_row,
             end_row,
             true,
-            leaves_only,
             is_formatted,
             slice,
             col_names,
@@ -2687,7 +2610,7 @@ View<t_ctx1>::to_columns(
 
     if (get_pkeys) {
         write_index_column(
-            start_row, end_row, true, leaves_only, is_formatted, slice, writer
+            start_row, end_row, true, is_formatted, slice, writer
         );
     }
 
@@ -2706,7 +2629,6 @@ View<t_ctx2>::to_columns(
     bool is_formatted,
     bool get_pkeys,
     bool get_ids,
-    bool leaves_only,
     t_uindex num_sides,
     bool has_row_path,
     const std::string& nidx,
@@ -2721,7 +2643,7 @@ View<t_ctx2>::to_columns(
     rapidjson::Writer<rapidjson::StringBuffer> writer(s);
     writer.StartObject();
     write_row_path(
-        start_row, end_row, has_row_path, leaves_only, is_formatted, writer
+        start_row, end_row, has_row_path, is_formatted, writer
     );
 
     if (get_ids) {
@@ -2756,7 +2678,6 @@ View<t_ctx2>::to_columns(
             start_row,
             end_row,
             has_row_path,
-            leaves_only,
             is_formatted,
             slice,
             col_names,
@@ -2769,7 +2690,6 @@ View<t_ctx2>::to_columns(
             start_row,
             end_row,
             has_row_path,
-            leaves_only,
             is_formatted,
             slice,
             writer
