@@ -201,11 +201,11 @@ impl Component for SplitPanel {
         let count = iter.len();
         let contents = html! {
             <>
-                <LocalStyle key=0 href={css!("containers/split-panel")} />
+                <LocalStyle href={css!("containers/split-panel")} />
                 for (i, x) in iter {
                     if i == 0 {
                         if count == 1 {
-                            <key={i}>
+                            <key=0>
                                 {x}
                             </>
                         } else {

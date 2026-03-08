@@ -483,5 +483,126 @@ const data = {
                 table.delete();
             });
         });
+
+        test.describe("total", function () {
+            test.skip("returns only grand total with group_by", async function () {
+                const table = await perspective.table(data);
+                const view = await table.view({
+                    group_by: ["y"],
+                    group_rollup_mode: "total",
+                });
+                const json = await view.to_json();
+                expect(json).toStrictEqual([
+                    { __ROW_PATH__: [], w: 40, x: 20, y: 8, z: 4 },
+                ]);
+                view.delete();
+                table.delete();
+            });
+
+            test("returns only grand total schema", async function () {
+                const table = await perspective.table(data);
+                const view = await table.view({
+                    group_rollup_mode: "total",
+                });
+
+                const json = await view.schema();
+                expect(json).toStrictEqual({
+                    w: "float",
+                    x: "integer",
+                    y: "integer",
+                    z: "integer",
+                });
+
+                view.delete();
+                table.delete();
+            });
+
+            test("returns only grand total", async function () {
+                const table = await perspective.table(data);
+                const view = await table.view({
+                    group_rollup_mode: "total",
+                });
+
+                const json = await view.to_json();
+                expect(json).toStrictEqual([
+                    { __ROW_PATH__: [], w: 40, x: 20, y: 8, z: 8 },
+                ]);
+
+                view.delete();
+                table.delete();
+            });
+
+            test("num_rows returns 1 without group_by", async function () {
+                const table = await perspective.table(data);
+                const view = await table.view({
+                    group_rollup_mode: "total",
+                });
+
+                const num_rows = await view.num_rows();
+                expect(num_rows).toEqual(1);
+                view.delete();
+                table.delete();
+            });
+
+            test("to_columns works", async function () {
+                const table = await perspective.table(data);
+                const view = await table.view({
+                    group_rollup_mode: "total",
+                });
+
+                const cols = await view.to_columns();
+                expect(cols).toStrictEqual({
+                    w: [40],
+                    x: [20],
+                    y: [8],
+                    z: [8],
+                });
+
+                view.delete();
+                table.delete();
+            });
+
+            test("with split_by", async function () {
+                const table = await perspective.table(data);
+                const view = await table.view({
+                    split_by: ["z"],
+                    group_rollup_mode: "total",
+                });
+                const json = await view.to_json();
+                expect(json).toStrictEqual([
+                    {
+                        __ROW_PATH__: [],
+                        "false|w": 22,
+                        "false|x": 10,
+                        "false|y": 4,
+                        "false|z": 4,
+                        "true|w": 18,
+                        "true|x": 10,
+                        "true|y": 4,
+                        "true|z": 4,
+                    },
+                ]);
+                view.delete();
+                table.delete();
+            });
+
+            test("updates after table.update()", async function () {
+                const table = await perspective.table(data);
+                const view = await table.view({
+                    group_rollup_mode: "total",
+                });
+                const before = await view.to_json();
+                expect(before).toStrictEqual([
+                    { __ROW_PATH__: [], w: 40, x: 20, y: 8, z: 8 },
+                ]);
+                table.update([{ w: 10, x: 5, y: "e", z: true }]);
+                const after = await view.to_json();
+                expect(after).toStrictEqual([
+                    { __ROW_PATH__: [], w: 50, x: 25, y: 9, z: 9 },
+                ]);
+                view.delete();
+                table.delete();
+            });
+        });
     });
 })(perspective);

@@ -110,7 +110,9 @@ t_ctx2::step_begin() {
 
 void
 t_ctx2::step_end() {
-    if (m_leaves_only) {
+    if (m_total_only) {
+        m_rtraversal->rebuild_for_total();
+    } else if (m_leaves_only) {
         m_rtraversal->rebuild_from_leaves(m_sortby);
     } else {
         if (m_row_depth_set) {
@@ -943,6 +945,12 @@ void
 t_ctx2::set_leaves_only(bool enabled) {
     m_leaves_only = enabled;
     m_rtraversal->set_leaves_only(enabled, m_config.get_num_rpivots());
+}
+
+void
+t_ctx2::set_total_only(bool enabled) {
+    m_total_only = enabled;
+    m_rtraversal->set_total_only(enabled);
 }
 
 std::vector<t_tscalar>

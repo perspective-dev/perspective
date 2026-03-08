@@ -794,4 +794,30 @@ t_traversal::rebuild_from_leaves(const std::vector<t_sortspec>& sortby) {
     collect_leaves(0, 0, sortby, sortby_agg_indices, sort_orders);
 }
 
+void
+t_traversal::set_total_only(bool enabled) {
+    m_total_only = enabled;
+    if (m_total_only) {
+        rebuild_for_total();
+    }
+}
+
+bool
+t_traversal::is_total_only() const {
+    return m_total_only;
+}
+
+void
+t_traversal::rebuild_for_total() {
+    m_nodes = std::make_shared<std::vector<t_tvnode>>();
+    t_tvnode node;
+    node.m_expanded = false;
+    node.m_depth = 0;
+    node.m_rel_pidx = 0;
+    node.m_ndesc = 0;
+    node.m_nchild = 0;
+    node.m_tnid = 0;
+    m_nodes->push_back(node);
+}
+
 } // end namespace perspective

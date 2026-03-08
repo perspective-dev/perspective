@@ -35,6 +35,9 @@ pub struct ScrollPanelProps {
     pub viewport_ref: Option<NodeRef>,
 
     #[prop_or_default]
+    pub initial_width: Option<f64>,
+
+    #[prop_or_default]
     pub class: Classes,
 
     #[prop_or_default]
@@ -51,6 +54,9 @@ pub struct ScrollPanelProps {
 
     #[prop_or_default]
     pub on_resize: Option<Rc<PubSub<()>>>,
+
+    #[prop_or_default]
+    pub on_auto_width: Callback<f64>,
 
     #[prop_or_default]
     pub on_dimensions_reset: Option<Rc<PubSub<()>>>,
@@ -125,7 +131,7 @@ impl Component for ScrollPanel {
         Self {
             viewport_ref: Default::default(),
             viewport_height: 0f64,
-            viewport_width: 0f64,
+            viewport_width: ctx.props().initial_width.unwrap_or_default(),
             content_window: None,
             needs_rerender: true,
             total_height,
@@ -150,6 +156,7 @@ impl Component for ScrollPanel {
 
                 self.viewport_height = rect.height() - 8.0;
                 self.viewport_width = self.viewport_width.max(rect.width() - 6.0);
+                ctx.props().on_auto_width.emit(self.viewport_width);
                 re_render
             },
             ScrollPanelMsg::CalculateWindowContent => self.calculate_window_content(ctx),

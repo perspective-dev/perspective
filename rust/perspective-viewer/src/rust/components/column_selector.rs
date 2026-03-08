@@ -28,6 +28,7 @@ use std::rc::Rc;
 pub use empty_column::*;
 pub use invalid_column::*;
 use perspective_js::utils::ApiFuture;
+pub use pivot_column::*;
 use web_sys::*;
 use yew::prelude::*;
 
@@ -77,6 +78,7 @@ pub enum ColumnSelectorMsg {
     TableLoaded,
     ViewCreated,
     HoverActiveIndex(Option<usize>),
+    SetWidth(f64),
     Drag(DragEffect),
     DragEnd,
     Drop((String, DragTarget, DragEffect, usize)),
@@ -91,6 +93,7 @@ pub struct ColumnSelector {
     named_row_count: usize,
     drag_container: DragDropContainer,
     column_dropdown: ColumnDropDownElement,
+    viewport_width: f64,
     on_reset: Rc<PubSub<()>>,
 }
 
@@ -147,6 +150,7 @@ impl Component for ColumnSelector {
         Self {
             _subscriptions: [table_sub, view_sub, drop_sub, drag_sub, dragend_sub],
             named_row_count,
+            viewport_width: 0f64,
             drag_container,
             column_dropdown,
             on_reset: Default::default(),
@@ -157,6 +161,10 @@ impl Component for ColumnSelector {
         match msg {
             Drag(DragEffect::Move(DragTarget::Active)) => false,
             Drag(_) | DragEnd | TableLoaded => true,
+            SetWidth(w) => {
+                self.viewport_width = w;
+                false
+            },
             ViewCreated => {
                 let named = maybe! {
                     let plugin =
@@ -385,8 +393,8 @@ impl Component for ColumnSelector {
             inactive_children.insert(0, add_column);
         }
 
-        let selected_columns = html! {
-            <div id="selected-columns">
+        let mut selected_columns = vec![html! {
+            <div id="selected-columns" key="__active_columns__">
                 <ScrollPanel
                     id="active-columns"
                     class={active_classes}
@@ -394,13 +402,27 @@ impl Component for ColumnSelector {
                     dragenter={&self.drag_container.dragenter}
                     dragleave={&self.drag_container.dragleave}
                     viewport_ref={&self.drag_container.noderef}
+                    initial_width={self.viewport_width}
+                    on_auto_width={ctx.link().callback(ColumnSelectorMsg::SetWidth)}
                     drop={ondrop}
                     on_resize={&ctx.props().on_resize}
                     on_dimensions_reset={&self.on_reset}
                     children={std::iter::once(config_selector).chain(active_columns).collect::<Vec<_>>()}
                 />
             </div>
-        };
+        }];
+
+        if !inactive_children.is_empty() {
+            selected_columns.push(html! {
+                <ScrollPanel
+                    id="sub-columns"
+                    key="__sub_columns__"
+                    on_resize={&ctx.props().on_resize}
+                    on_dimensions_reset={&self.on_reset}
+                    children={inactive_children}
+                />
+            })
+        }
 
         html! {
             <>
@@ -411,15 +433,7 @@ impl Component for ColumnSelector {
                     skip_empty=true
                     orientation={Orientation::Vertical}
                 >
-                    { selected_columns }
-                    if !inactive_children.is_empty() {
-                        <ScrollPanel
-                            id="sub-columns"
-                            on_resize={&ctx.props().on_resize}
-                            on_dimensions_reset={&self.on_reset}
-                            children={inactive_children}
-                        />
-                    }
+                    { for selected_columns }
                 </SplitPanel>
             </>
         }

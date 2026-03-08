@@ -26,11 +26,15 @@ pub struct PivotColumnProps {
     /// Column name.
     pub column: String,
 
+    #[prop_or_default]
+    pub column_type: Option<ColumnType>,
+
     /// The drag starte of this column, if applicable.
     pub action: DragTarget,
 
     // State
-    pub session: Session,
+    #[prop_or_default]
+    pub opt_session: Option<Session>,
     pub dragdrop: DragDrop,
 }
 
@@ -74,12 +78,13 @@ impl Component for PivotColumn {
             move |_event| dragdrop.notify_drag_end()
         });
 
-        let col_type = ctx
-            .props()
-            .session
-            .metadata()
-            .get_column_table_type(&ctx.props().column)
-            .unwrap_or(ColumnType::Integer);
+        let col_type = ctx.props().column_type.unwrap_or_else(|| {
+            ctx.props()
+                .opt_session
+                .as_ref()
+                .and_then(|x| x.metadata().get_column_table_type(&ctx.props().column))
+                .unwrap_or(ColumnType::Integer)
+        });
 
         html! {
             <div

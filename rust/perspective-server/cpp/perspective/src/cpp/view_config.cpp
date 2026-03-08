@@ -29,7 +29,8 @@ t_view_config::t_view_config(
     const std::vector<std::shared_ptr<t_computed_expression>>& expressions,
     std::string filter_op,
     bool column_only,
-    bool leaves_only
+    bool leaves_only,
+    bool total_only
 ) :
     m_init(false),
     m_vocab(std::move(vocab)),
@@ -44,7 +45,8 @@ t_view_config::t_view_config(
     m_column_pivot_depth(-1),
     m_filter_op(std::move(filter_op)),
     m_column_only(column_only),
-    m_leaves_only(leaves_only) {}
+    m_leaves_only(leaves_only),
+    m_total_only(total_only) {}
 
 void
 t_view_config::init(const std::shared_ptr<t_schema>& schema) {
@@ -270,6 +272,11 @@ t_view_config::is_column_only() const {
 bool
 t_view_config::is_leaves_only() const {
     return m_leaves_only;
+}
+
+bool
+t_view_config::is_total_only() const {
+    return m_total_only;
 }
 
 std::int32_t

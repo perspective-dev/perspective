@@ -544,7 +544,7 @@ message ViewConfig {
     enum GroupRollupMode {
         ROLLUP = 0;
         FLAT = 1;
-        // TOTAL = 2;
+        TOTAL = 2;
     }
 }
 

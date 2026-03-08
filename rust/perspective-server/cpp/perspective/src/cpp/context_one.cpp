@@ -346,7 +346,9 @@ void
 t_ctx1::step_end() {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    if (m_leaves_only) {
+    if (m_total_only) {
+        m_traversal->rebuild_for_total();
+    } else if (m_leaves_only) {
         m_traversal->rebuild_from_leaves(m_sortby);
     } else {
         sort_by(m_sortby);
@@ -434,6 +436,14 @@ t_ctx1::set_leaves_only(bool enabled) {
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
     m_leaves_only = enabled;
     m_traversal->set_leaves_only(enabled, m_config.get_num_rpivots());
+}
+
+void
+t_ctx1::set_total_only(bool enabled) {
+    PSP_TRACE_SENTINEL();
+    PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+    m_total_only = enabled;
+    m_traversal->set_total_only(enabled);
 }
 
 std::vector<t_tscalar>
