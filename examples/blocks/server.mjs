@@ -51,6 +51,7 @@ const dev_template = (name) => `
 `;
 
 const gists = [
+    "duckdb",
     "fractal",
     "raycasting",
     "evictions",
@@ -58,7 +59,6 @@ const gists = [
     "covid",
     "movies",
     "superstore",
-    "citibike",
     "olympics",
     "editable",
     "file",
