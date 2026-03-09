@@ -11,11 +11,11 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import getCellConfig from "../get_cell_config.js";
-import type {
-    RegularTable,
-    DatagridModel,
-    PerspectiveViewerElement,
-    HandledMouseEvent,
+import {
+    type RegularTable,
+    type DatagridModel,
+    type PerspectiveViewerElement,
+    type HandledMouseEvent,
     PerspectiveSelectDetail,
 } from "../types.js";
 
@@ -52,28 +52,31 @@ export async function selectionListener(
         const is_deselect =
             !!selected && id.length === selected.length && key_match;
 
-        let detail: PerspectiveSelectDetail = {
-            selected: !is_deselect,
-            row: {},
-            config: { filter: [] },
-        };
-
         const { row, column_names, config } = await getCellConfig(
             this,
             meta.y,
             meta.type === "body" ? meta.x : 0,
         );
 
+        let detail: PerspectiveSelectDetail;
         if (is_deselect) {
             selected_rows_map.delete(regularTable);
-            detail = {
-                ...detail,
+            detail = new PerspectiveSelectDetail(
+                false,
                 row,
-                config: { filter: structuredClone(this._config.filter) },
-            };
+                [],
+                [],
+                [{ filter: structuredClone(this._config.filter) }],
+            );
         } else {
             selected_rows_map.set(regularTable, id);
-            detail = { ...detail, row, column_names, config };
+            detail = new PerspectiveSelectDetail(
+                true,
+                row,
+                column_names,
+                [],
+                [config],
+            );
         }
 
         await regularTable.draw({ preserve_width: true });

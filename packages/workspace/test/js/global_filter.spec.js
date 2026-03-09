@@ -23,6 +23,12 @@ test.beforeEach(async ({ page }) => {
             await new Promise((x) => setTimeout(x, 10));
         }
     });
+    await page.evaluate(async () => {
+        const { PerspectiveSelectDetail } = await import(
+            "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js"
+        );
+        window.PerspectiveSelectDetail = PerspectiveSelectDetail;
+    });
 });
 
 function tests(context, compare) {
@@ -139,6 +145,221 @@ function tests(context, compare) {
         expect(cfg.viewers.Two.filter).toEqual([]);
 
         return compare(page, `${context}-datagrid-filters-work.txt`);
+    });
+
+    test("removeConfigs removes a programmatically applied filter from slave viewers", async ({
+        page,
+    }) => {
+        const config = {
+            viewers: {
+                One: {
+                    table: "superstore",
+                    name: "Test",
+                    group_by: ["State"],
+                    columns: ["Sales"],
+                    plugin: "Datagrid",
+                },
+                Two: { table: "superstore", name: "One" },
+            },
+            master: {
+                widgets: ["One"],
+            },
+            detail: {
+                main: {
+                    currentIndex: 0,
+                    type: "tab-area",
+                    widgets: ["Two"],
+                },
+            },
+        };
+
+        async function awaitConfigChange() {
+            return await page.evaluate(async () => {
+                let resolve;
+                const timer = new Promise((x) => {
+                    resolve = x;
+                });
+
+                workspace.addEventListener("workspace-layout-update", resolve);
+                await timer;
+                workspace.removeEventListener(
+                    "workspace-layout-update",
+                    resolve,
+                );
+
+                return await workspace.save();
+            });
+        }
+
+        await page.evaluate(async (config) => {
+            const workspace = document.getElementById("workspace");
+            await workspace.restore(config);
+            await workspace.flush();
+        }, config);
+
+        // Apply a filter for "Category" via programmatic dispatch.
+        // "Category" is not in the master's group_by/split_by/filter, so it
+        // would not be cleared by the candidates mechanism on deselect.
+        let cfgPromise = awaitConfigChange();
+        await page.evaluate(async () => {
+            const masterViewer = document.querySelector(
+                ".workspace-master-widget",
+            );
+            masterViewer.dispatchEvent(
+                new CustomEvent("perspective-select", {
+                    bubbles: true,
+                    composed: true,
+                    detail: new PerspectiveSelectDetail(
+                        true,
+                        {},
+                        ["Category"],
+                        [],
+                        [{ filter: [["Category", "==", "Furniture"]] }],
+                    ),
+                }),
+            );
+        });
+
+        let cfg = await cfgPromise;
+        expect(cfg.viewers.Two.filter).toEqual([
+            ["Category", "==", "Furniture"],
+        ]);
+
+        // Use removeConfigs to explicitly clear the Category filter from
+        // slave viewers.
+        cfgPromise = awaitConfigChange();
+        await page.evaluate(async () => {
+            const masterViewer = document.querySelector(
+                ".workspace-master-widget",
+            );
+            masterViewer.dispatchEvent(
+                new CustomEvent("perspective-select", {
+                    bubbles: true,
+                    composed: true,
+                    detail: new PerspectiveSelectDetail(
+                        true,
+                        {},
+                        [],
+                        [{ filter: [["Category", "==", "Furniture"]] }],
+                        [],
+                    ),
+                }),
+            );
+        });
+
+        cfg = await cfgPromise;
+        expect(cfg.viewers.Two.filter).toEqual([]);
+    });
+
+    test("removeConfigs preserves other slave filters while clearing targeted column", async ({
+        page,
+    }) => {
+        const config = {
+            viewers: {
+                One: {
+                    table: "superstore",
+                    name: "Test",
+                    group_by: ["State"],
+                    columns: ["Sales"],
+                    plugin: "Datagrid",
+                },
+                Two: { table: "superstore", name: "One" },
+            },
+            master: {
+                widgets: ["One"],
+            },
+            detail: {
+                main: {
+                    currentIndex: 0,
+                    type: "tab-area",
+                    widgets: ["Two"],
+                },
+            },
+        };
+
+        async function awaitConfigChange() {
+            return await page.evaluate(async () => {
+                let resolve;
+                const timer = new Promise((x) => {
+                    resolve = x;
+                });
+
+                workspace.addEventListener("workspace-layout-update", resolve);
+                await timer;
+                workspace.removeEventListener(
+                    "workspace-layout-update",
+                    resolve,
+                );
+
+                return await workspace.save();
+            });
+        }
+
+        await page.evaluate(async (config) => {
+            const workspace = document.getElementById("workspace");
+            await workspace.restore(config);
+            await workspace.flush();
+        }, config);
+
+        // Apply filters for both "Category" and "Segment" via programmatic
+        // dispatch.
+        let cfgPromise = awaitConfigChange();
+        await page.evaluate(async () => {
+            const masterViewer = document.querySelector(
+                ".workspace-master-widget",
+            );
+            masterViewer.dispatchEvent(
+                new CustomEvent("perspective-select", {
+                    bubbles: true,
+                    composed: true,
+                    detail: new PerspectiveSelectDetail(
+                        true,
+                        {},
+                        ["Category", "Segment"],
+                        [],
+                        [
+                            {
+                                filter: [
+                                    ["Category", "==", "Furniture"],
+                                    ["Segment", "==", "Consumer"],
+                                ],
+                            },
+                        ],
+                    ),
+                }),
+            );
+        });
+
+        let cfg = await cfgPromise;
+        expect(cfg.viewers.Two.filter).toEqual([
+            ["Category", "==", "Furniture"],
+            ["Segment", "==", "Consumer"],
+        ]);
+
+        // Remove only "Category"; "Segment" filter should be preserved.
+        cfgPromise = awaitConfigChange();
+        await page.evaluate(async () => {
+            const masterViewer = document.querySelector(
+                ".workspace-master-widget",
+            );
+            masterViewer.dispatchEvent(
+                new CustomEvent("perspective-select", {
+                    bubbles: true,
+                    composed: true,
+                    detail: new PerspectiveSelectDetail(
+                        true,
+                        {},
+                        [],
+                        [{ filter: [["Category", "==", "Furniture"]] }],
+                        [],
+                    ),
+                }),
+            );
+        });
+
+        cfg = await cfgPromise;
+        // Category is cleared, Segment is preserved.
+        expect(cfg.viewers.Two.filter).toEqual([["Segment", "==", "Consumer"]]);
     });
 
     test("Child classes of datagrid behave the same way", async ({ page }) => {

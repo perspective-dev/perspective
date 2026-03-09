@@ -35,6 +35,7 @@ export { IPerspectiveViewerPlugin } from "./plugin";
 export { HTMLPerspectiveViewerPluginElement } from "./plugin";
 
 export type * from "./extensions.ts";
+export { PerspectiveSelectDetail } from "./extensions.ts";
 export type * from "./ts-rs/ViewerConfigUpdate.d.ts";
 export type * from "./ts-rs/ColumnConfigValues.d.ts";
 export type * from "./ts-rs/Filter.d.ts";

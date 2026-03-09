@@ -17,6 +17,7 @@ import type {
     ColumnType,
     SortDir,
     ViewWindow,
+    ViewConfigUpdate,
 } from "@perspective-dev/client";
 import { RegularTableElement } from "regular-table";
 import { CellMetadata, DataResponse } from "regular-table/dist/esm/types";
@@ -244,7 +245,7 @@ export type FormatterCache = Map<string, FormatterCacheEntry>;
 export interface CellConfigResult {
     row: Record<string, unknown>;
     column_names: string[];
-    config: Partial<ViewConfig>;
+    config: ViewConfigUpdate;
 }
 
 // Custom event detail types
@@ -254,12 +255,7 @@ export interface PerspectiveClickDetail {
     config: Partial<ViewConfig>;
 }
 
-export interface PerspectiveSelectDetail {
-    selected: boolean;
-    row: Record<string, unknown>;
-    column_names?: string[];
-    config: Partial<ViewConfig>;
-}
+export { PerspectiveSelectDetail } from "@perspective-dev/viewer";
 
 // Mouse event with handled flag
 export interface HandledMouseEvent extends MouseEvent {
