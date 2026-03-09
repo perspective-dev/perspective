@@ -11,14 +11,16 @@
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import os
+import tempfile
+import urllib.request
+
 import pytest
 import duckdb
 
 from perspective import Client
 from perspective.virtual_servers.duckdb import DuckDBVirtualServer
 
-
-SUPERSTORE_PARQUET = os.path.join(
+_SUPERSTORE_LOCAL = os.path.join(
     os.path.dirname(__file__),
     "..",
     "..",
@@ -27,6 +29,22 @@ SUPERSTORE_PARQUET = os.path.join(
     "superstore-arrow",
     "superstore.parquet",
 )
+
+_SUPERSTORE_URL = (
+    "https://cdn.jsdelivr.net/npm/superstore-arrow@3.2.0/superstore.parquet"
+)
+
+
+def _get_superstore_parquet():
+    if os.path.exists(_SUPERSTORE_LOCAL):
+        return _SUPERSTORE_LOCAL
+    path = os.path.join(tempfile.gettempdir(), "superstore.parquet")
+    if not os.path.exists(path):
+        urllib.request.urlretrieve(_SUPERSTORE_URL, path)
+    return path
+
+
+SUPERSTORE_PARQUET = _get_superstore_parquet()
 
 
 @pytest.fixture(scope="module")
