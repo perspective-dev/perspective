@@ -1,0 +1,142 @@
+// ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+// ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+// ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+// ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+// ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+// ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+// ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+// ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+// ┃ This file is part of the Perspective library, distributed under the terms ┃
+// ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+// ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+@import "icons.less";
+@import "intl.less";
+
+@import url("ref://pro.less");
+
+// Register theme for auto-detection
+perspective-viewer,
+perspective-viewer[theme="Botanical"] {
+    --theme-name: "Botanical";
+}
+
+perspective-viewer[theme="Botanical"] {
+    @include perspective-viewer-botanical;
+}
+
+perspective-copy-menu[theme="Botanical"],
+perspective-export-menu[theme="Botanical"],
+perspective-dropdown[theme="Botanical"],
+perspective-date-column-style[theme="Botanical"],
+perspective-datetime-column-style[theme="Botanical"],
+perspective-number-column-style[theme="Botanical"],
+perspective-string-column-style[theme="Botanical"] {
+    @include perspective-modal-botanical;
+}
+
+@mixin perspective-viewer-botanical {
+    @include perspective-viewer-pro;
+    @include perspective-viewer-botanical--colors;
+    @include perspective-viewer-botanical--datagrid;
+    @include perspective-viewer-botanical--d3fc;
+    @include perspective-viewer-botanical--openlayers;
+}
+
+@mixin perspective-modal-botanical {
+    @include perspective-modal-pro;
+    @include perspective-viewer-botanical--colors;
+
+    background-color: #1a2e1a;
+    border: 1px solid #3d5c3d;
+}
+
+@mixin perspective-viewer-botanical--colors {
+    background-color: #1a2e1a;
+    color: #e0ead8;
+    --icon--color: #e0ead8;
+    --active--color: #5a9e4b;
+    --error--color: #e8836a;
+    --inactive--color: #526b4a;
+    --inactive--border-color: #3d5c3d;
+    --plugin--background: #1a2e1a;
+    --modal-target--background: rgba(224, 234, 216, 0.05);
+    --active--background: rgba(90, 158, 75, 0.5);
+    --expression--operator-color: #b8c9ad;
+    --expression--function-color: #7bc96f;
+    --expression--error-color: rgb(232, 131, 106);
+    --calendar--filter: invert(1);
+    --warning--color: #1a2e1a;
+    --warning--background: var(--icon--color);
+
+    --select-arrow--background-image: var(
+        --select-arrow-light--background-image
+    );
+
+    --select-arrow--hover--background-image: var(
+        --select-arrow-dark--background-image
+    );
+
+    // Syntax
+    --code-editor-symbol--color: #e0ead8;
+    --code-editor-literal--color: #a8d8a0;
+    --code-editor-operator--color: rgb(206, 176, 104);
+    --code-editor-comment--color: rgb(120, 160, 100);
+    --code-editor-column--color: #c9a0d8;
+}
+
+@mixin perspective-viewer-botanical--openlayers {
+    --map-tile-url: "http://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
+    --map-attribution--filter: invert(1) hue-rotate(180deg);
+    --map-element-background: #1e3420;
+    --map-category-1: rgb(90, 158, 75);
+    --map-category-2: rgb(206, 176, 104);
+    --map-category-3: rgb(160, 110, 180);
+    --map-category-4: rgb(80, 170, 150);
+    --map-category-5: rgb(140, 170, 90);
+    --map-category-6: rgb(200, 120, 140);
+    --map-category-7: rgb(100, 150, 190);
+    --map-category-8: rgb(210, 140, 80);
+    --map-category-9: rgb(130, 120, 190);
+    --map-category-10: rgb(170, 200, 110);
+    --map-gradient: linear-gradient(#e8836a 0%, #1a2e1a 50%, #5a9e4b 100%);
+}
+
+@mixin perspective-viewer-botanical--datagrid {
+    --rt-pos-cell--color: #7bc96f;
+    --rt-neg-cell--color: #ebac21;
+}
+
+@mixin perspective-viewer-botanical--d3fc {
+    --d3fc-legend--text: #b8c9ad;
+    --d3fc-treedata--labels: #e0ead8;
+    --d3fc-treedata--hover-highlight: #e0ead8;
+    --d3fc-tooltip--color: #e0ead8;
+    --d3fc-axis-ticks--color: #b8c9ad;
+    --d3fc-axis--lines: #526b4a;
+    --d3fc-gridline--color: #2a4228;
+    --d3fc-tooltip--background: rgba(30, 52, 32, 1);
+    --d3fc-tooltip--border-color: #1a2e1a;
+    --d3fc-legend--background: var(--plugin--background);
+
+    --d3fc-series: rgb(90, 158, 75);
+    --d3fc-series-1: rgb(90, 158, 75);
+    --d3fc-series-2: rgb(206, 176, 104);
+    --d3fc-series-3: rgb(160, 110, 180);
+    --d3fc-series-4: rgb(80, 170, 150);
+    --d3fc-series-5: rgb(140, 170, 90);
+    --d3fc-series-6: rgb(200, 120, 140);
+    --d3fc-series-7: rgb(100, 150, 190);
+    --d3fc-series-8: rgb(210, 140, 80);
+    --d3fc-series-9: rgb(130, 120, 190);
+    --d3fc-series-10: rgb(170, 200, 110);
+
+    --d3fc-full--gradient: linear-gradient(
+        #e8836a 0%,
+        #1a2e1a 50%,
+        #5a9e4b 100%
+    );
+
+    --d3fc-positive--gradient: linear-gradient(#1a2e1a 0%, #5a9e4b 100%);
+    --d3fc-negative--gradient: linear-gradient(#e8836a 0%, #1a2e1a 100%);
+}

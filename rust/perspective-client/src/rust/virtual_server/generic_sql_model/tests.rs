@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 
 use super::*;
-use crate::config::Aggregate;
+use crate::config::{Aggregate, GroupRollupMode};
 
 #[test]
 fn test_get_hosted_tables() {
@@ -278,6 +278,30 @@ fn test_table_make_view_mixed_row_and_col_sort() {
 }
 
 #[test]
+fn test_table_make_view_pivoted_with_sort() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string())];
+    config.split_by = vec!["quarter".to_string()];
+    config.sort = vec![Sort("value".to_string(), SortDir::Desc)];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(sql.contains("PIVOT"), "expected PIVOT: {}", sql);
+    assert!(
+        sql.contains("ROW_NUMBER() OVER (ORDER BY \"value\" DESC)"),
+        "expected sort in ROW_NUMBER window: {}",
+        sql
+    );
+    assert!(
+        sql.ends_with("ORDER BY __ROW_NUM__)"),
+        "should end with ORDER BY __ROW_NUM__: {}",
+        sql
+    );
+}
+
+#[test]
 fn test_view_get_data_col_sort_ascending() {
     let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
     let mut config = ViewConfig::default();
@@ -358,4 +382,235 @@ fn test_view_get_data() {
     assert!(sql.contains("SELECT"));
     assert!(sql.contains("FROM my_view"));
     assert!(sql.contains("LIMIT 100 OFFSET 0"));
+}
+
+#[test]
+fn test_table_make_view_flat_group_by() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string())];
+    config.group_by = vec!["category".to_string()];
+    config.group_rollup_mode = GroupRollupMode::Flat;
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(
+        sql.contains("GROUP BY \"category\""),
+        "expected plain GROUP BY: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("ROLLUP"),
+        "should not contain ROLLUP: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("__GROUPING_ID__"),
+        "should not contain __GROUPING_ID__: {}",
+        sql
+    );
+    assert!(
+        sql.contains("__ROW_PATH_0__"),
+        "should contain __ROW_PATH_0__: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_flat_group_by_with_split_by() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string())];
+    config.group_by = vec!["category".to_string()];
+    config.split_by = vec!["quarter".to_string()];
+    config.group_rollup_mode = GroupRollupMode::Flat;
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(sql.contains("PIVOT"), "expected PIVOT: {}", sql);
+    assert!(
+        !sql.contains("ROLLUP"),
+        "should not contain ROLLUP: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("__GROUPING_ID__"),
+        "should not contain __GROUPING_ID__: {}",
+        sql
+    );
+    assert!(
+        sql.contains("__ROW_PATH_0__"),
+        "should contain __ROW_PATH_0__: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_flat_group_by_with_sort() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string())];
+    config.group_by = vec!["category".to_string()];
+    config.sort = vec![Sort("value".to_string(), SortDir::Asc)];
+    config.aggregates = HashMap::from([(
+        "value".to_string(),
+        Aggregate::SingleAggregate("sum".to_string()),
+    )]);
+    config.group_rollup_mode = GroupRollupMode::Flat;
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(
+        sql.contains("sum(\"value\") ASC"),
+        "expected direct aggregate in ORDER BY: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("ROLLUP"),
+        "should not contain ROLLUP: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("__WINDOW_"),
+        "should not contain WINDOW clauses: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_flat_group_by_with_split_by_and_sort() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string())];
+    config.group_by = vec!["category".to_string()];
+    config.split_by = vec!["quarter".to_string()];
+    config.sort = vec![Sort("value".to_string(), SortDir::Desc)];
+    config.aggregates = HashMap::from([(
+        "value".to_string(),
+        Aggregate::SingleAggregate("sum".to_string()),
+    )]);
+    config.group_rollup_mode = GroupRollupMode::Flat;
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(sql.contains("PIVOT"), "expected PIVOT: {}", sql);
+    assert!(
+        !sql.contains("ROLLUP"),
+        "should not contain ROLLUP: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("__GROUPING_ID__"),
+        "should not contain __GROUPING_ID__: {}",
+        sql
+    );
+    assert!(
+        sql.contains("__SORT_0__"),
+        "expected __SORT_0__ for flat+pivoted+sort: {}",
+        sql
+    );
+    assert!(
+        sql.contains("__SORT_0__ DESC"),
+        "expected __SORT_0__ DESC in ORDER BY: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("sum(\"value\") DESC"),
+        "should not have raw aggregate in ORDER BY: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_view_get_data_flat_no_grouping_id() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.group_by = vec!["category".to_string()];
+    config.group_rollup_mode = GroupRollupMode::Flat;
+    let viewport = ViewPort {
+        start_row: Some(0),
+        end_row: Some(100),
+        start_col: Some(0),
+        end_col: None,
+    };
+
+    let mut schema = IndexMap::new();
+    schema.insert("value".to_string(), ColumnType::Float);
+    let sql = builder
+        .view_get_data("my_view", &config, &viewport, &schema)
+        .unwrap();
+
+    assert!(
+        !sql.contains("__GROUPING_ID__"),
+        "flat mode should not select __GROUPING_ID__: {}",
+        sql
+    );
+    assert!(
+        sql.contains("__ROW_PATH_0__"),
+        "flat mode should still select __ROW_PATH_0__: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_total() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string())];
+    config.group_rollup_mode = GroupRollupMode::Total;
+    config.aggregates = HashMap::from([(
+        "value".to_string(),
+        Aggregate::SingleAggregate("sum".to_string()),
+    )]);
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(
+        sql.contains("sum(\"value\")"),
+        "expected aggregate function: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("GROUP BY"),
+        "should not contain GROUP BY: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("ORDER BY"),
+        "should not contain ORDER BY: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_total_with_split_by() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string())];
+    config.split_by = vec!["quarter".to_string()];
+    config.group_rollup_mode = GroupRollupMode::Total;
+    config.aggregates = HashMap::from([(
+        "value".to_string(),
+        Aggregate::SingleAggregate("sum".to_string()),
+    )]);
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(sql.contains("PIVOT"), "expected PIVOT: {}", sql);
+    assert!(
+        !sql.contains("GROUP BY"),
+        "should not contain GROUP BY: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("ROW_NUMBER"),
+        "should not contain ROW_NUMBER: {}",
+        sql
+    );
 }

@@ -317,11 +317,11 @@
         @include scrollbar;
     }
 
-    #sub-columns:before {
+    #sub-columns .scroll-panel-container:before {
         font-size: var(--label--font-size, 0.75em);
         padding: var(--column_type--padding, 0px 0px 0px 0px);
         position: absolute;
-        margin-top: 14px;
+        margin-top: -13px;
         top: 0;
         content: var(--all-columns-label--content, "All Columns");
     }

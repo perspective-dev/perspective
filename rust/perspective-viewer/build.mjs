@@ -127,6 +127,7 @@ async function build_all() {
     add(builder, "icons.less");
     add(builder, "pro.less");
     add(builder, "pro-dark.less");
+    add(builder, "botanical.less");
     add(builder, "monokai.less");
     add(builder, "solarized.less");
     add(builder, "solarized-dark.less");

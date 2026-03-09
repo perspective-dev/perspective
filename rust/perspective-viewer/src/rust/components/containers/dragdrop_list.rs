@@ -14,11 +14,13 @@ use std::collections::HashSet;
 use std::marker::PhantomData;
 
 use derivative::Derivative;
+use perspective_client::proto::ColumnType;
 use web_sys::*;
 use yew::html::Scope;
 use yew::prelude::*;
 
 use crate::components::column_selector::{EmptyColumn, InPlaceColumn, InvalidColumn};
+use crate::components::type_icon::TypeIcon;
 use crate::custom_elements::ColumnDropDownElement;
 use crate::dragdrop::*;
 use crate::utils::DragTarget;
@@ -32,11 +34,15 @@ where
     <U as Component>::Properties: DragDropListItemProps,
 {
     pub parent: Scope<T>,
+
     pub dragdrop: DragDrop,
     pub name: &'static str,
     pub column_dropdown: ColumnDropDownElement,
     pub exclude: HashSet<String>,
     pub children: ChildrenWithProps<U>,
+
+    #[prop_or_default]
+    pub disabled: bool,
 
     #[prop_or_default]
     pub is_dragover: Option<(
@@ -59,6 +65,7 @@ where
             && self.children == other.children
             && self.allow_duplicates == other.allow_duplicates
             && self.is_dragover == other.is_dragover
+            && self.disabled == other.disabled
     }
 }
 
@@ -283,20 +290,34 @@ where
         let column_dropdown = ctx.props().column_dropdown.clone();
         let exclude = ctx.props().exclude.clone();
         let on_select = ctx.props().parent.callback(V::create);
+        let class = classes!("rrow");
+        let is_enabled = true;
+
         html! {
-            <div ref={&self.elem} class="rrow">
+            <div ref={&self.elem} {class}>
                 <div
                     id={ctx.props().name}
-                    ondragover={dragover}
-                    ondragenter={drag_container.dragenter}
-                    ondragleave={drag_container.dragleave}
+                    ondragover={is_enabled.then_some(dragover)}
+                    ondragenter={is_enabled.then_some(drag_container.dragenter)}
+                    ondragleave={is_enabled.then_some(drag_container.dragleave)}
                     ref={drag_container.noderef}
-                    ondrop={drop}
+                    ondrop={is_enabled.then_some(drop)}
                 >
                     <div class="psp-text-field">
                         <ul class="psp-text-field__input" for={ctx.props().name}>
                             { columns_html }
-                            if ctx.props().is_dragover.is_none() | (!invalid_drag && valid_duplicate_drag) {
+                            if ctx.props().disabled && ctx.props().is_dragover.is_none() {
+                                <div class="pivot-column">
+                                    <div class="pivot-column-border pivot-column-total">
+                                        <TypeIcon ty={ColumnType::Integer} />
+                                        <span class="column_name">{ "TOTAL" }</span>
+                                    </div>
+                                    <span
+                                        class="toggle-mode is_column_active"
+                                        onmousedown={ctx.props().parent.callback(move |_| V::close(0))}
+                                    />
+                                </div>
+                            } else if ctx.props().is_dragover.is_none() | (!invalid_drag && valid_duplicate_drag) {
                                 <EmptyColumn {column_dropdown} {exclude} {on_select} />
                             } else if invalid_drag {
                                 <InvalidColumn />

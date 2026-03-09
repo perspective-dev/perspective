@@ -31,24 +31,18 @@ pub impl ViewConfigUpdate {
         columns: &[Option<String>],
         requirements: &ViewConfigRequirements,
     ) {
-        if requirements
-            .group_rollups
-            .as_ref()
-            .map(|x| {
-                !x.contains(
-                    self.group_rollup_mode
-                        .as_ref()
-                        .unwrap_or(&GroupRollupMode::Rollup),
-                )
-            })
-            .unwrap_or_default()
-        {
-            self.group_rollup_mode = requirements
-                .group_rollups
-                .as_ref()
-                .and_then(|x| x.first())
-                .cloned();
+        let rollup_features = metadata
+            .get_features()
+            .map(|x| x.get_group_rollup_modes())
+            .unwrap_or_default();
 
+        let group_rollups = requirements.get_group_rollups(&rollup_features);
+        if !group_rollups.contains(
+            self.group_rollup_mode
+                .as_ref()
+                .unwrap_or(&GroupRollupMode::Rollup),
+        ) {
+            self.group_rollup_mode = group_rollups.first().cloned();
             tracing::error!(
                 "Setting plugin-advised rollup mode {:?}",
                 self.group_rollup_mode

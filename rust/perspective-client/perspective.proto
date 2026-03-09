@@ -207,6 +207,13 @@ message Response {
 //
 // Virtual API
 
+
+enum GroupRollupMode {
+    ROLLUP = 0;
+    FLAT = 1;
+    TOTAL = 2;
+}
+
 // Informs the client of the feature set, e.g. what to expect in the
 // `ViewConfig` message.
 message GetFeaturesReq {}
@@ -218,6 +225,7 @@ message GetFeaturesResp {
     bool sort = 5;
     map<uint32, ColumnTypeOptions> filter_ops = 6;
     map<uint32, AggregateOptions> aggregates = 7;
+    repeated GroupRollupMode group_rollup_mode = 8;
 
     message ColumnTypeOptions {
         repeated string options = 1;
@@ -232,7 +240,6 @@ message GetFeaturesResp {
         repeated ColumnType args = 2;
     }
 }
-
 
 // `Client::get_hosted_tables`
 message GetHostedTablesReq {
@@ -539,12 +546,6 @@ message ViewConfig {
     enum FilterReducer {
         AND = 0;
         OR = 1;
-    }
-
-    enum GroupRollupMode {
-        ROLLUP = 0;
-        FLAT = 1;
-        // TOTAL = 2;
     }
 }
 

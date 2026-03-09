@@ -130,7 +130,9 @@ make_context(
 
     auto pool = table->get_pool();
     auto gnode = table->get_gnode();
-    if (view_config->is_leaves_only()) {
+    if (view_config->is_total_only()) {
+        ctx1->set_total_only(true);
+    } else if (view_config->is_leaves_only()) {
         ctx1->set_leaves_only(true);
     } else if (row_pivot_depth > -1) {
         ctx1->set_depth(row_pivot_depth - 1);
@@ -195,7 +197,9 @@ make_context(
         ctx2->column_sort_by(col_sortspec);
     }
 
-    if (view_config->is_leaves_only() && !column_only) {
+    if (view_config->is_total_only()) {
+        ctx2->set_total_only(true);
+    } else if (view_config->is_leaves_only() && !column_only) {
         ctx2->set_leaves_only(true);
     } else if (row_pivot_depth > -1) {
         ctx2->set_depth(t_header::HEADER_ROW, row_pivot_depth - 1);
@@ -1353,6 +1357,9 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             features->set_sort(true);
             features->set_on_update(true);
             features->set_expressions(true);
+            features->add_group_rollup_mode(proto::GroupRollupMode::ROLLUP);
+            features->add_group_rollup_mode(proto::GroupRollupMode::FLAT);
+            features->add_group_rollup_mode(proto::GroupRollupMode::TOTAL);
             proto::GetFeaturesResp_ColumnTypeOptions opts;
             opts.add_options("==");
             opts.add_options("!=");
@@ -1883,6 +1890,8 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             }
 
             bool column_only = false;
+            bool is_total =
+                cfg.has_group_rollup_mode() ? cfg.group_rollup_mode() == 2 : false;
 
             // make sure that primary keys are created for column-only views
             if (row_pivots.empty() && !column_pivots.empty()) {
@@ -2097,6 +2106,8 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
 
             bool leaves_only =
                 cfg.has_group_rollup_mode() ? cfg.group_rollup_mode() == 1 : false;
+            bool total_only =
+                cfg.has_group_rollup_mode() ? cfg.group_rollup_mode() == 2 : false;
 
             auto config = std::make_shared<t_view_config>(
                 vocab,
@@ -2109,7 +2120,8 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 expressions,
                 filter_op,
                 column_only,
-                leaves_only
+                leaves_only,
+                total_only
             );
             config->init(schema);
 
@@ -2125,6 +2137,8 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 } else {
                     sides = 1;
                 }
+            } else if (total_only) {
+                sides = 1;
             } else {
                 sides = 0;
             }
@@ -2414,11 +2428,14 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 );
             }
 
-            if (view_config->is_leaves_only()) {
-                const auto mode = proto::ViewConfig_GroupRollupMode::ViewConfig_GroupRollupMode_FLAT;
+            if (view_config->is_total_only()) {
+                const auto mode = proto::GroupRollupMode::TOTAL;
+                view_config_proto->set_group_rollup_mode(mode);
+            } else if (view_config->is_leaves_only()) {
+                const auto mode = proto::GroupRollupMode::FLAT;
                 view_config_proto->set_group_rollup_mode(mode);
             } else {
-                const auto mode = proto::ViewConfig_GroupRollupMode::ViewConfig_GroupRollupMode_ROLLUP;
+                const auto mode = proto::GroupRollupMode::ROLLUP;
                 view_config_proto->set_group_rollup_mode(mode);
             }
 
@@ -2580,7 +2597,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 r.index(),
                 r.id(),
                 view->sides(),
-                view->sides() > 0 && !config->is_column_only(),
+                view->sides() > 0 && !config->is_column_only() && !config->get_row_pivots().empty(),
                 nidx,
                 config->get_columns().size(),
                 config->get_row_pivots().size()

@@ -74,7 +74,10 @@ View<CTX_T>::View(
     }
 
     // configure data window for `get_data` and `row_delta`
-    is_column_only() ? m_row_offset = 1 : m_row_offset = 0;
+    // Column-only views skip the grand total row (offset=1), but
+    // total_only mode needs to return exactly that row.
+    is_column_only() && !m_view_config->is_total_only() ? m_row_offset = 1
+                                                        : m_row_offset = 0;
 
     // TODO: make sure is 0 for column only - right now get_data returns row
     // path for everything
@@ -127,7 +130,7 @@ View<t_ctx2>::sides() const {
 template <typename CTX_T>
 std::int32_t
 View<CTX_T>::num_rows() const {
-    if (is_column_only()) {
+    if (is_column_only() && !m_view_config->is_total_only()) {
         return m_ctx->get_row_count() - 1;
     }
     return m_ctx->get_row_count();
@@ -458,7 +461,7 @@ View<CTX_T>::schema() const {
         std::string type_string = dtype_to_str(types[agg_name]);
         new_schema[agg_name] = type_string;
 
-        if (!m_row_pivots.empty() && !is_column_only()) {
+        if ((!m_row_pivots.empty() || m_view_config->is_total_only()) && !is_column_only()) {
             new_schema[agg_name] =
                 _map_aggregate_types(agg_name, new_schema[agg_name]);
         }
@@ -537,7 +540,7 @@ View<CTX_T>::expression_schema() const {
         const std::string& expression_alias = expr->get_expression_alias();
         new_schema[expression_alias] = dtype_to_str(expr->get_dtype());
 
-        if (!m_row_pivots.empty() && !is_column_only()) {
+        if ((!m_row_pivots.empty() || m_view_config->is_total_only()) && !is_column_only()) {
             new_schema[expression_alias] = _map_aggregate_types(
                 expression_alias, new_schema[expression_alias]
             );
@@ -2572,7 +2575,7 @@ View<t_ctx1>::to_columns(
     rapidjson::StringBuffer s;
     rapidjson::Writer<rapidjson::StringBuffer> writer(s);
     writer.StartObject();
-    write_row_path(start_row, end_row, true, is_formatted, writer);
+    write_row_path(start_row, end_row, has_row_path, is_formatted, writer);
     if (get_ids) {
         writer.Key("__ID__");
         writer.StartArray();

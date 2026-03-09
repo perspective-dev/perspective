@@ -72,8 +72,10 @@ notify_sparse_tree_common(
 
     bool is_leaves_only =
         process_traversal && traversal != nullptr && traversal->is_leaves_only();
+    bool is_total_only =
+        process_traversal && traversal != nullptr && traversal->is_total_only();
 
-    if (process_traversal && !is_leaves_only) {
+    if (process_traversal && !is_leaves_only && !is_total_only) {
         t_uindex t_osize = traversal->size();
         traversal->drop_tree_indices(zero_strands);
         t_uindex t_nsize = traversal->size();
@@ -91,7 +93,9 @@ notify_sparse_tree_common(
 
     tree->update_aggs_from_static(dctx, gstate, expression_master_table);
 
-    if (is_leaves_only) {
+    if (is_total_only) {
+        traversal->rebuild_for_total();
+    } else if (is_leaves_only) {
         traversal->rebuild_from_leaves(ctx_sortby);
     } else {
         std::set<t_uindex> visited;

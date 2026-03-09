@@ -31,8 +31,9 @@ pub enum GroupRollupMode {
 
     #[serde(rename = "flat")]
     Flat,
-    // #[serde(rename = "total")]
-    // Total,
+
+    #[serde(rename = "total")]
+    Total,
 }
 
 impl Display for GroupRollupMode {
@@ -40,27 +41,27 @@ impl Display for GroupRollupMode {
         write!(fmt, "{}", match self {
             Self::Rollup => "Rollup",
             Self::Flat => "Flat",
-            // Self::Total => "Total",
+            Self::Total => "Total",
         })
     }
 }
 
-impl From<proto::view_config::GroupRollupMode> for GroupRollupMode {
-    fn from(value: proto::view_config::GroupRollupMode) -> Self {
+impl From<proto::GroupRollupMode> for GroupRollupMode {
+    fn from(value: proto::GroupRollupMode) -> Self {
         match value {
-            proto::view_config::GroupRollupMode::Rollup => Self::Rollup,
-            proto::view_config::GroupRollupMode::Flat => Self::Flat,
-            // proto::view_config::GroupRollupMode::Total => Self::Total,
+            proto::GroupRollupMode::Rollup => Self::Rollup,
+            proto::GroupRollupMode::Flat => Self::Flat,
+            proto::GroupRollupMode::Total => Self::Total,
         }
     }
 }
 
-impl From<GroupRollupMode> for proto::view_config::GroupRollupMode {
+impl From<GroupRollupMode> for proto::GroupRollupMode {
     fn from(value: GroupRollupMode) -> Self {
         match value {
-            GroupRollupMode::Rollup => proto::view_config::GroupRollupMode::Rollup,
-            GroupRollupMode::Flat => proto::view_config::GroupRollupMode::Flat,
-            // GroupRollupMode::Total => proto::view_config::GroupRollupMode::Total,
+            GroupRollupMode::Rollup => proto::GroupRollupMode::Rollup,
+            GroupRollupMode::Flat => proto::GroupRollupMode::Flat,
+            GroupRollupMode::Total => proto::GroupRollupMode::Total,
         }
     }
 }
@@ -256,7 +257,7 @@ impl From<ViewConfigUpdate> for proto::ViewConfig {
             group_by_depth: value.group_by_depth,
             group_rollup_mode: value
                 .group_rollup_mode
-                .map(|x| proto::view_config::GroupRollupMode::from(x).into()),
+                .map(|x| proto::GroupRollupMode::from(x).into()),
         }
     }
 }
@@ -323,7 +324,7 @@ impl From<proto::ViewConfig> for ViewConfig {
             group_by_depth: value.group_by_depth,
             group_rollup_mode: value
                 .group_rollup_mode
-                .map(proto::view_config::GroupRollupMode::try_from)
+                .map(proto::GroupRollupMode::try_from)
                 .and_then(|x| x.ok())
                 .map(|x| x.into())
                 .unwrap_or_default(),
@@ -377,7 +378,7 @@ impl From<proto::ViewConfig> for ViewConfigUpdate {
             group_by_depth: value.group_by_depth,
             group_rollup_mode: value
                 .group_rollup_mode
-                .and_then(|x| proto::view_config::GroupRollupMode::try_from(x).ok())
+                .and_then(|x| proto::GroupRollupMode::try_from(x).ok())
                 .map(|x| x.into()),
         }
     }
@@ -404,8 +405,28 @@ impl ViewConfig {
 
     /// Apply `ViewConfigUpdate` to a `ViewConfig`, ignoring any fields in
     /// `update` which were unset.
-    pub fn apply_update(&mut self, update: ViewConfigUpdate) -> bool {
+    pub fn apply_update(&mut self, mut update: ViewConfigUpdate) -> bool {
         let mut changed = false;
+        if ((self.group_rollup_mode == GroupRollupMode::Total
+            && update.group_rollup_mode.is_none())
+            || update.group_rollup_mode == Some(GroupRollupMode::Total))
+            && update
+                .group_by
+                .as_ref()
+                .map(|x| !x.is_empty())
+                .unwrap_or_default()
+        {
+            tracing::warn!("`total` incompatible with `group_by`");
+            changed = true;
+            update.group_rollup_mode = Some(GroupRollupMode::Rollup);
+        }
+
+        if update.group_rollup_mode == Some(GroupRollupMode::Total) && !self.group_by.is_empty() {
+            tracing::warn!("`group_by` incompatible with `total`");
+            changed = true;
+            update.group_by = Some(vec![]);
+        }
+
         changed = Self::_apply(&mut self.group_by, update.group_by) || changed;
         changed = Self::_apply(&mut self.split_by, update.split_by) || changed;
         changed = Self::_apply(&mut self.columns, update.columns) || changed;
@@ -414,11 +435,17 @@ impl ViewConfig {
         changed = Self::_apply(&mut self.aggregates, update.aggregates) || changed;
         changed = Self::_apply(&mut self.expressions, update.expressions) || changed;
         changed = Self::_apply(&mut self.group_rollup_mode, update.group_rollup_mode) || changed;
+        if self.group_rollup_mode == GroupRollupMode::Total && !self.group_by.is_empty() {
+            tracing::warn!("`total` incompatible with `group_by`");
+            changed = true;
+            self.group_by = vec![];
+        }
+
         changed
     }
 
     pub fn is_aggregated(&self) -> bool {
-        !self.group_by.is_empty()
+        !self.group_by.is_empty() || self.group_rollup_mode == GroupRollupMode::Total
     }
 
     pub fn is_column_expression_in_use(&self, name: &str) -> bool {

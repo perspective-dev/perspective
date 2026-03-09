@@ -150,7 +150,7 @@ pub struct ViewConfigRequirements {
     pub max_cells: Option<usize>,
     pub name: String,
     pub render_warning: bool,
-    pub group_rollups: Option<Vec<GroupRollupMode>>,
+    group_rollups: Option<Vec<GroupRollupMode>>,
 }
 
 impl ViewConfigRequirements {
@@ -159,6 +159,17 @@ impl ViewConfigRequirements {
             .as_ref()
             .map(|x| index < x.len() - 1)
             .unwrap_or(false)
+    }
+
+    pub fn get_group_rollups(&self, rollup_features: &[GroupRollupMode]) -> Vec<GroupRollupMode> {
+        self.group_rollups
+            .clone()
+            .map(|x| {
+                x.into_iter()
+                    .filter(|y| rollup_features.is_empty() || rollup_features.contains(y))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 

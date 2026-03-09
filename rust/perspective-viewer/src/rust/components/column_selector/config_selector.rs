@@ -64,6 +64,7 @@ pub enum ConfigSelectorMsg {
     TransposePivots,
     ViewCreated,
     New(DragTarget, InPlaceColumn),
+    UpdateGroupRollupMode(GroupRollupMode),
 }
 
 #[derive(Clone)]
@@ -136,11 +137,9 @@ impl Component for ConfigSelector {
                 ctx.props().onselect.emit(());
                 false
             },
-            ConfigSelectorMsg::Close(index, DragTarget::GroupBy) => {
-                let mut group_by = ctx.props().session.get_view_config().group_by.clone();
-                group_by.remove(index);
+            ConfigSelectorMsg::UpdateGroupRollupMode(mode) => {
                 let config = ViewConfigUpdate {
-                    group_by: Some(group_by),
+                    group_rollup_mode: Some(mode),
                     ..ViewConfigUpdate::default()
                 };
 
@@ -149,8 +148,44 @@ impl Component for ConfigSelector {
                     .map(ApiFuture::spawn)
                     .unwrap_or_log();
 
-                ctx.props().onselect.emit(());
                 false
+            },
+            ConfigSelectorMsg::Close(index, DragTarget::GroupBy) => {
+                if ctx.props().session.get_view_config().group_rollup_mode == GroupRollupMode::Total
+                {
+                    let requirements = ctx.props().renderer.metadata();
+
+                    let rollup_features = ctx
+                        .props()
+                        .session
+                        .metadata()
+                        .get_features()
+                        .map(|x| x.get_group_rollup_modes())
+                        .unwrap();
+
+                    let group_rollups = requirements.get_group_rollups(&rollup_features);
+
+                    ctx.link()
+                        .send_message(ConfigSelectorMsg::UpdateGroupRollupMode(
+                            group_rollups.first().cloned().unwrap(),
+                        ));
+                    false
+                } else {
+                    let mut group_by = ctx.props().session.get_view_config().group_by.clone();
+                    group_by.remove(index);
+                    let config = ViewConfigUpdate {
+                        group_by: Some(group_by),
+                        ..ViewConfigUpdate::default()
+                    };
+
+                    ctx.props()
+                        .update_and_render(config)
+                        .map(ApiFuture::spawn)
+                        .unwrap_or_log();
+
+                    ctx.props().onselect.emit(());
+                    false
+                }
             },
             ConfigSelectorMsg::Close(index, DragTarget::SplitBy) => {
                 let mut split_by = ctx.props().session.get_view_config().split_by.clone();
@@ -228,6 +263,7 @@ impl Component for ConfigSelector {
                 ctx.props().onselect.emit(());
                 false
             },
+
             ConfigSelectorMsg::SetFilterValue(index, input) => {
                 let mut filter = ctx.props().session.get_view_config().filter.clone();
 
@@ -438,11 +474,15 @@ impl Component for ConfigSelector {
         let config = session.get_view_config();
         let transpose = ctx.link().callback(|_| ConfigSelectorMsg::TransposePivots);
         let column_dropdown = self.column_dropdown.clone();
-        let class = if dragdrop.get_drag_column().is_some() {
-            "dragdrop-highlight"
-        } else {
-            ""
-        };
+        let mut class = classes!();
+
+        if dragdrop.get_drag_column().is_some() {
+            class.push("dragdrop-highlight");
+        }
+
+        if config.group_rollup_mode == GroupRollupMode::Total {
+            class.push("group-rollup-mode-total");
+        }
 
         let dragend = Callback::from({
             let dragdrop = dragdrop.clone();
@@ -452,57 +492,51 @@ impl Component for ConfigSelector {
         let metadata = session.metadata();
         let features = metadata.get_features().unwrap();
         let requirements = renderer.metadata();
+        let on_group_rollup_mode = ctx
+            .link()
+            .callback(ConfigSelectorMsg::UpdateGroupRollupMode);
 
-        let on_group_rollup_mode = Callback::from({
-            let props = ctx.props().clone();
-            move |x| {
-                let config = ViewConfigUpdate {
-                    group_rollup_mode: Some(x),
-                    ..ViewConfigUpdate::default()
-                };
+        let rollup_features = ctx
+            .props()
+            .session
+            .metadata()
+            .get_features()
+            .map(|x| x.get_group_rollup_modes())
+            .unwrap();
 
-                props
-                    .update_and_render(config)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
-            }
-        });
+        let group_rollups = requirements.get_group_rollups(&rollup_features);
 
         html! {
             <div slot="top_panel" id="top_panel" {class} ondragend={dragend}>
                 <LocalStyle href={css!("config-selector")} />
                 <div class="pivot_controls">
-                    if !config.group_by.is_empty() {
-                        if requirements.group_rollups.as_ref().map(|x| x.len()).unwrap_or_default() > 1 {
-                            <Select<GroupRollupMode>
-                                id="group_rollup_mode_selector"
-                                wrapper_class="group_rollup_wrapper"
-                                values={Rc::new(
-                                requirements
-                                    .group_rollups
-                                    .as_ref()
-                                    .unwrap()
+                    if group_rollups.len() > 1 {
+                        <Select<GroupRollupMode>
+                            id="group_rollup_mode_selector"
+                            wrapper_class="group_rollup_wrapper"
+                            values={Rc::new(
+                                group_rollups
                                     .iter()
                                     .map(|x| SelectItem::Option(*x))
                                     .collect(),
                             )}
-                                selected={config.group_rollup_mode}
-                                on_select={on_group_rollup_mode}
-                            />
-                        }
-                        if config.split_by.is_empty() {
-                            <span
-                                id="transpose_button"
-                                class="rrow centered"
-                                title="Transpose Pivots"
-                                onmousedown={transpose.clone()}
-                            />
-                        }
+                            selected={config.group_rollup_mode}
+                            on_select={on_group_rollup_mode}
+                        />
+                    }
+                    if !config.group_by.is_empty() && config.split_by.is_empty() {
+                        <span
+                            id="transpose_button"
+                            class="rrow centered"
+                            title="Transpose Pivots"
+                            onmousedown={transpose.clone()}
+                        />
                     }
                 </div>
                 if features.group_by {
                     <GroupBySelector
                         name="group_by"
+                        disabled={config.group_rollup_mode == GroupRollupMode::Total}
                         parent={ctx.link().clone()}
                         column_dropdown={column_dropdown.clone()}
                         exclude={config.group_by.iter().cloned().collect::<HashSet<_>>()}
@@ -515,7 +549,7 @@ impl Component for ConfigSelector {
                                         action={DragTarget::GroupBy}
                                         column={group_by.clone()}
                                         {dragdrop}
-                                        {session}
+                                        opt_session={session}
                                     >
                                     </PivotColumn>
                                 }
@@ -546,9 +580,8 @@ impl Component for ConfigSelector {
                                 <PivotColumn
                                     action={ DragTarget::SplitBy }
                                     column={ split_by.clone() }
-
                                     {dragdrop}
-                                    {session}>
+                                    opt_session={session}>
                                 </PivotColumn>
                             }
                         }) }

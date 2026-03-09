@@ -44,6 +44,7 @@ public:
     std::vector<t_tscalar> get_row_path(t_index idx) const;
     void set_depth(t_depth depth);
     void set_leaves_only(bool enabled);
+    void set_total_only(bool enabled);
 
     t_index get_row_idx(const std::vector<t_tscalar>& path) const;
 
@@ -62,6 +63,7 @@ private:
     t_depth m_depth;
     bool m_depth_set;
     bool m_leaves_only = false;
+    bool m_total_only = false;
 };
 
 } // end namespace perspective

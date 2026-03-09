@@ -136,6 +136,10 @@ public:
     bool is_leaves_only() const;
     void rebuild_from_leaves(const std::vector<t_sortspec>& sortby);
 
+    void set_total_only(bool enabled);
+    bool is_total_only() const;
+    void rebuild_for_total();
+
 private:
     void collect_leaves(
         t_uindex tnid,
@@ -149,6 +153,7 @@ private:
     std::shared_ptr<std::vector<t_tvnode>> m_nodes;
     bool m_leaves_only = false;
     t_uindex m_leaf_depth = 0;
+    bool m_total_only = false;
 };
 
 /**

@@ -134,7 +134,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
     }
 
     get group_rollups(): string[] {
-        return ["rollup", "flat"];
+        return ["rollup", "flat", "total"];
     }
 
     /**

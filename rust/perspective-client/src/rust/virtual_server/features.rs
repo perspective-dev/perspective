@@ -15,6 +15,7 @@ use std::borrow::Cow;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
+use crate::config::GroupRollupMode;
 use crate::proto::get_features_resp::{AggregateArgs, AggregateOptions, ColumnTypeOptions};
 use crate::proto::{ColumnType, GetFeaturesResp};
 
@@ -28,6 +29,10 @@ pub struct Features<'a> {
     /// Whether group-by aggregation is supported.
     #[serde(default)]
     pub group_by: bool,
+
+    /// Which `group_by_rollup_mode` options are supported
+    #[serde(default)]
+    pub group_rollup_mode: Vec<GroupRollupMode>,
 
     /// Whether split-by (pivot) operations are supported.
     #[serde(default)]
@@ -71,6 +76,11 @@ impl<'a> From<Features<'a>> for GetFeaturesResp {
     fn from(value: Features<'a>) -> GetFeaturesResp {
         GetFeaturesResp {
             group_by: value.group_by,
+            group_rollup_mode: value
+                .group_rollup_mode
+                .iter()
+                .map(|x| crate::proto::GroupRollupMode::from(*x) as i32)
+                .collect(),
             split_by: value.split_by,
             expressions: value.expressions,
             on_update: value.on_update,

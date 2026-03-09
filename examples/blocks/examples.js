@@ -24,7 +24,6 @@ const LOCAL_EXAMPLES = [
     "webcam",
     "movies",
     "superstore",
-    "citibike",
     "olympics",
     "dataset",
 ];

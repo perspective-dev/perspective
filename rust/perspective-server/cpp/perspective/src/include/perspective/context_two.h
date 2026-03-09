@@ -56,6 +56,7 @@ public:
 
     void set_depth(t_header header, t_depth depth);
     void set_leaves_only(bool enabled);
+    void set_total_only(bool enabled);
 
     std::pair<t_tscalar, t_tscalar> get_min_max(const std::string& colname
     ) const;
@@ -95,6 +96,7 @@ private:
     bool m_column_depth_set;
     std::shared_ptr<t_expression_tables> m_expression_tables;
     bool m_leaves_only = false;
+    bool m_total_only = false;
 };
 
 } // end namespace perspective

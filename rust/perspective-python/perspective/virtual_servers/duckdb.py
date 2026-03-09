@@ -111,6 +111,7 @@ class DuckDBVirtualServerHandler(VirtualServerHandler):
             "split_by": True,
             "sort": True,
             "expressions": True,
+            "group_rollup_mode": ["rollup", "flat", "total"],
             "filter_ops": {
                 "integer": FILTER_OPS,
                 "float": FILTER_OPS,
