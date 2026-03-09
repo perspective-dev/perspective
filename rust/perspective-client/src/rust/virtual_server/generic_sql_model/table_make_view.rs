@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use crate::config::{Aggregate, Sort, SortDir, ViewConfig};
+use crate::config::{Aggregate, GroupRollupMode, Sort, SortDir, ViewConfig};
 
 fn aggregate_to_string(agg: &Aggregate) -> String {
     match agg {
@@ -35,10 +35,23 @@ fn is_col_sort(dir: &SortDir) -> bool {
 }
 
 enum QueryOrientation {
+    /// Default
     Flat,
+
+    /// `group_by` set
     Grouped,
+
+    /// `split_by` set
     Pivoted,
+
+    /// `group_by` and `split_by` set
     GroupedAndPivoted,
+
+    /// `total` set
+    Total,
+
+    /// `total` and `split_by`
+    TotalPivoted,
 }
 
 /// Precomputed context for building a SQL view query from a [`ViewConfig`].
@@ -105,14 +118,24 @@ impl<'a> ViewQueryContext<'a> {
             QueryOrientation::Grouped => {
                 let mut clauses = self.select_clauses();
                 clauses.extend(self.row_path_select_clauses());
-                clauses.push(self.grouping_id_clause());
-                format!(
-                    "SELECT {} FROM {}{} GROUP BY ROLLUP({})",
-                    clauses.join(", "),
-                    self.table,
-                    where_sql,
-                    self.group_col_names.join(", ")
-                )
+                if self.is_flat_mode() {
+                    format!(
+                        "SELECT {} FROM {}{} GROUP BY {}",
+                        clauses.join(", "),
+                        self.table,
+                        where_sql,
+                        self.group_col_names.join(", ")
+                    )
+                } else {
+                    clauses.push(self.grouping_id_clause());
+                    format!(
+                        "SELECT {} FROM {}{} GROUP BY ROLLUP({})",
+                        clauses.join(", "),
+                        self.table,
+                        where_sql,
+                        self.group_col_names.join(", ")
+                    )
+                }
             },
             QueryOrientation::Pivoted => {
                 let select = self.select_clauses();
@@ -135,12 +158,13 @@ impl<'a> ViewQueryContext<'a> {
                     .collect::<Vec<_>>()
                     .join(", ");
 
+                let row_num_order = self.pivot_row_num_order();
                 format!(
                     "SELECT * EXCLUDE (__ROW_NUM__) FROM (PIVOT (SELECT {}, {}, ROW_NUMBER() OVER \
-                     (ORDER BY rowid) as __ROW_NUM__ FROM {}{}) ON {} USING {} GROUP BY \
-                     __ROW_NUM__)",
+                     (ORDER BY {}) as __ROW_NUM__ FROM {}{}) ON {} USING {} GROUP BY __ROW_NUM__)",
                     select.join(", "),
                     split_cols,
+                    row_num_order,
                     self.table,
                     where_sql,
                     self.pivot_on_expr(),
@@ -152,7 +176,9 @@ impl<'a> ViewQueryContext<'a> {
                 let split_cols_joined = self.pivot_on_expr();
                 let mut inner_clauses = self.select_clauses();
                 inner_clauses.extend(self.row_path_select_clauses());
-                inner_clauses.push(self.grouping_id_clause());
+                if !self.is_flat_mode() {
+                    inner_clauses.push(self.grouping_id_clause());
+                }
                 for sb_col in &self.config.split_by {
                     inner_clauses.push(self.col_name(sb_col));
                 }
@@ -160,30 +186,53 @@ impl<'a> ViewQueryContext<'a> {
                 for (sidx, Sort(sort_col, sort_dir)) in self.config.sort.iter().enumerate() {
                     if *sort_dir != SortDir::None && !is_col_sort(sort_dir) {
                         let agg = self.get_aggregate(sort_col);
-                        inner_clauses.push(format!(
-                            "sum({}({})) OVER (PARTITION BY {}({}), {}) AS __SORT_{}__",
-                            agg,
-                            self.col_name(sort_col),
-                            self.grouping_fn,
-                            groups_joined,
-                            groups_joined,
-                            sidx,
-                        ));
+                        if self.is_flat_mode() {
+                            inner_clauses.push(format!(
+                                "sum({}({})) OVER (PARTITION BY {}) AS __SORT_{}__",
+                                agg,
+                                self.col_name(sort_col),
+                                groups_joined,
+                                sidx,
+                            ));
+                        } else {
+                            inner_clauses.push(format!(
+                                "sum({}({})) OVER (PARTITION BY {}({}), {}) AS __SORT_{}__",
+                                agg,
+                                self.col_name(sort_col),
+                                self.grouping_fn,
+                                groups_joined,
+                                groups_joined,
+                                sidx,
+                            ));
+                        }
                     }
                 }
 
-                let inner_query = format!(
-                    "SELECT {} FROM {}{} GROUP BY ROLLUP({}), {}",
-                    inner_clauses.join(", "),
-                    self.table,
-                    where_sql,
-                    groups_joined,
-                    split_cols_joined,
-                );
+                let inner_query = if self.is_flat_mode() {
+                    format!(
+                        "SELECT {} FROM {}{} GROUP BY {}, {}",
+                        inner_clauses.join(", "),
+                        self.table,
+                        where_sql,
+                        groups_joined,
+                        split_cols_joined,
+                    )
+                } else {
+                    format!(
+                        "SELECT {} FROM {}{} GROUP BY ROLLUP({}), {}",
+                        inner_clauses.join(", "),
+                        self.table,
+                        where_sql,
+                        groups_joined,
+                        split_cols_joined,
+                    )
+                };
 
                 let pivot_using = self.select_clauses().join(", ");
                 let mut row_id_cols = self.row_path_aliases.clone();
-                row_id_cols.push("__GROUPING_ID__".to_string());
+                if !self.is_flat_mode() {
+                    row_id_cols.push("__GROUPING_ID__".to_string());
+                }
                 for (sidx, Sort(_, sort_dir)) in self.config.sort.iter().enumerate() {
                     if *sort_dir != SortDir::None && !is_col_sort(sort_dir) {
                         row_id_cols.push(format!("__SORT_{}__", sidx));
@@ -198,6 +247,49 @@ impl<'a> ViewQueryContext<'a> {
                     row_id_cols.join(", ")
                 )
             },
+            QueryOrientation::Total => {
+                let select = self.select_clauses().join(", ");
+                format!("SELECT {} FROM {}{}", select, self.table, where_sql)
+            },
+            QueryOrientation::TotalPivoted => {
+                let raw_cols: Vec<String> = self
+                    .config
+                    .columns
+                    .iter()
+                    .flatten()
+                    .map(|col| self.col_name(col))
+                    .collect();
+
+                let split_cols: String = self
+                    .config
+                    .split_by
+                    .iter()
+                    .map(|c| format!("\"{}\"", c))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let pivot_using: Vec<String> = self
+                    .config
+                    .columns
+                    .iter()
+                    .flatten()
+                    .map(|col| {
+                        let agg = self.get_aggregate(col);
+                        let escaped = col.replace('"', "\"\"").replace('_', "-");
+                        format!("{}(\"{}\") as \"{}\"", agg, escaped, escaped)
+                    })
+                    .collect();
+
+                format!(
+                    "SELECT * FROM (PIVOT (SELECT {}, {} FROM {}{}) ON {} USING {})",
+                    raw_cols.join(", "),
+                    split_cols,
+                    self.table,
+                    where_sql,
+                    self.pivot_on_expr(),
+                    pivot_using.join(", "),
+                )
+            },
         };
 
         if !windows.is_empty() {
@@ -206,7 +298,16 @@ impl<'a> ViewQueryContext<'a> {
 
         if !order_by.is_empty() {
             query = format!("{} ORDER BY {}", query, order_by.join(", "));
-        } else if self.config.group_by.is_empty() {
+        } else if self.is_flat_mode() && !self.config.group_by.is_empty() {
+            let default_order: Vec<String> = self
+                .row_path_aliases
+                .iter()
+                .map(|alias| format!("{} ASC", alias))
+                .collect();
+            query = format!("{} ORDER BY {}", query, default_order.join(", "));
+        } else if self.config.group_by.is_empty()
+            && self.config.group_rollup_mode != GroupRollupMode::Total
+        {
             let default_order = if self.config.split_by.is_empty() {
                 "rowid"
             } else {
@@ -219,7 +320,23 @@ impl<'a> ViewQueryContext<'a> {
         query
     }
 
+    fn is_flat_mode(&self) -> bool {
+        self.config.group_rollup_mode == GroupRollupMode::Flat
+    }
+
+    fn needs_aggregation(&self) -> bool {
+        !self.config.group_by.is_empty() || self.config.group_rollup_mode == GroupRollupMode::Total
+    }
+
     fn query_orientation(&self) -> QueryOrientation {
+        if self.config.group_rollup_mode == GroupRollupMode::Total {
+            return if self.config.split_by.is_empty() {
+                QueryOrientation::Total
+            } else {
+                QueryOrientation::TotalPivoted
+            };
+        }
+
         match (
             self.config.group_by.is_empty(),
             self.config.split_by.is_empty(),
@@ -250,7 +367,7 @@ impl<'a> ViewQueryContext<'a> {
 
     fn select_clauses(&self) -> Vec<String> {
         let mut clauses = Vec::new();
-        if !self.config.group_by.is_empty() {
+        if self.needs_aggregation() {
             for col in self.config.columns.iter().flatten() {
                 let agg = self.get_aggregate(col);
                 let escaped = col.replace('"', "\"\"").replace("_", "-");
@@ -290,6 +407,25 @@ impl<'a> ViewQueryContext<'a> {
         }
     }
 
+    /// Builds the `ORDER BY` expression for the `ROW_NUMBER()` window
+    /// function used inside `PIVOT` queries. Uses sort config if available,
+    /// otherwise falls back to `rowid`.
+    fn pivot_row_num_order(&self) -> String {
+        let sort_exprs: Vec<String> = self
+            .config
+            .sort
+            .iter()
+            .filter(|Sort(_, dir)| *dir != SortDir::None && !is_col_sort(dir))
+            .map(|Sort(col, dir)| format!("{} {}", self.col_name(col), sort_dir_to_string(dir)))
+            .collect();
+
+        if sort_exprs.is_empty() {
+            "rowid".to_string()
+        } else {
+            sort_exprs.join(", ")
+        }
+    }
+
     fn pivot_on_expr(&self) -> String {
         self.config
             .split_by
@@ -318,7 +454,19 @@ impl<'a> ViewQueryContext<'a> {
 
     fn order_by_clauses(&self) -> Vec<String> {
         let mut clauses = Vec::new();
-        if !self.config.group_by.is_empty() {
+        if !self.config.group_by.is_empty() && self.is_flat_mode() {
+            for (sidx, Sort(sort_col, sort_dir)) in self.config.sort.iter().enumerate() {
+                if *sort_dir != SortDir::None && !is_col_sort(sort_dir) {
+                    let dir = sort_dir_to_string(sort_dir);
+                    if !self.config.split_by.is_empty() {
+                        clauses.push(format!("__SORT_{}__ {}", sidx, dir));
+                    } else {
+                        let agg = self.get_aggregate(sort_col);
+                        clauses.push(format!("{}({}) {}", agg, self.col_name(sort_col), dir));
+                    }
+                }
+            }
+        } else if !self.config.group_by.is_empty() {
             for gidx in 0..self.config.group_by.len() {
                 if !self.config.split_by.is_empty() {
                     let shift = self.config.group_by.len() - 1 - gidx;
@@ -370,7 +518,7 @@ impl<'a> ViewQueryContext<'a> {
 
                 clauses.push(format!("{} ASC", self.row_path_aliases[gidx]));
             }
-        } else {
+        } else if self.config.split_by.is_empty() {
             for Sort(sort_col, sort_dir) in &self.config.sort {
                 if *sort_dir != SortDir::None && !is_col_sort(sort_dir) {
                     let dir = sort_dir_to_string(sort_dir);
@@ -383,7 +531,7 @@ impl<'a> ViewQueryContext<'a> {
     }
 
     fn window_clauses(&self) -> Vec<String> {
-        if self.config.sort.is_empty() || self.config.group_by.len() <= 1 {
+        if self.is_flat_mode() || self.config.sort.is_empty() || self.config.group_by.len() <= 1 {
             return Vec::new();
         }
 

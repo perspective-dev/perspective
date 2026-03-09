@@ -43,7 +43,7 @@ use std::fmt;
 use indexmap::IndexMap;
 use serde::Deserialize;
 
-use crate::config::{FilterTerm, Scalar, Sort, SortDir, ViewConfig};
+use crate::config::{FilterTerm, GroupRollupMode, Scalar, Sort, SortDir, ViewConfig};
 use crate::proto::{ColumnType, ViewPort};
 use crate::virtual_server::generic_sql_model::table_make_view::ViewQueryContext;
 
@@ -242,7 +242,9 @@ impl GenericSQLVirtualServerModel {
 
         let mut group_by_cols: Vec<String> = Vec::new();
         if !group_by.is_empty() {
-            group_by_cols.push("\"__GROUPING_ID__\"".to_string());
+            if config.group_rollup_mode != GroupRollupMode::Flat {
+                group_by_cols.push("\"__GROUPING_ID__\"".to_string());
+            }
             for idx in 0..group_by.len() {
                 group_by_cols.push(format!("\"__ROW_PATH_{}__\"", idx));
             }

@@ -316,8 +316,9 @@ t_view_config::fill_aggspecs(const std::shared_ptr<t_schema>& schema) {
             // Generate a default aggregate based on the column type.
             std::vector<t_dep> dependencies{t_dep(column, DEPTYPE_COLUMN)};
             t_aggtype agg_type;
-            m_column_only ? agg_type = AGGTYPE_ANY
-                          : agg_type = _get_default_aggregate(dtype);
+            (m_column_only && !m_total_only)
+                ? agg_type = AGGTYPE_ANY
+                : agg_type = _get_default_aggregate(dtype);
             m_aggspecs.emplace_back(column, agg_type, dependencies);
             m_aggregate_names.push_back(column);
         }
@@ -340,7 +341,8 @@ t_view_config::fill_aggspecs(const std::shared_ptr<t_schema>& schema) {
                     m_column_pivots.begin(), m_column_pivots.end(), column
                 )
                 != m_column_pivots.end();
-            bool is_column_only = m_row_pivots.empty() || m_column_only;
+            bool is_column_only =
+                (m_row_pivots.empty() || m_column_only) && !m_total_only;
             bool is_row_sort = sort[1].rfind("col", 0) != 0;
 
             std::vector<t_dep> dependencies{t_dep(column, DEPTYPE_COLUMN)};
@@ -442,7 +444,7 @@ t_view_config::make_aggspec(
     std::vector<t_dep> dependencies{t_dep(column, DEPTYPE_COLUMN)};
     dependencies.reserve(2);
 
-    if (m_column_only) {
+    if (m_column_only && !m_total_only) {
         agg_type = t_aggtype::AGGTYPE_ANY;
     } else {
         if (aggregate.at(0) == "weighted mean") {

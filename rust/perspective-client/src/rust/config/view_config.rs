@@ -46,22 +46,22 @@ impl Display for GroupRollupMode {
     }
 }
 
-impl From<proto::view_config::GroupRollupMode> for GroupRollupMode {
-    fn from(value: proto::view_config::GroupRollupMode) -> Self {
+impl From<proto::GroupRollupMode> for GroupRollupMode {
+    fn from(value: proto::GroupRollupMode) -> Self {
         match value {
-            proto::view_config::GroupRollupMode::Rollup => Self::Rollup,
-            proto::view_config::GroupRollupMode::Flat => Self::Flat,
-            proto::view_config::GroupRollupMode::Total => Self::Total,
+            proto::GroupRollupMode::Rollup => Self::Rollup,
+            proto::GroupRollupMode::Flat => Self::Flat,
+            proto::GroupRollupMode::Total => Self::Total,
         }
     }
 }
 
-impl From<GroupRollupMode> for proto::view_config::GroupRollupMode {
+impl From<GroupRollupMode> for proto::GroupRollupMode {
     fn from(value: GroupRollupMode) -> Self {
         match value {
-            GroupRollupMode::Rollup => proto::view_config::GroupRollupMode::Rollup,
-            GroupRollupMode::Flat => proto::view_config::GroupRollupMode::Flat,
-            GroupRollupMode::Total => proto::view_config::GroupRollupMode::Total,
+            GroupRollupMode::Rollup => proto::GroupRollupMode::Rollup,
+            GroupRollupMode::Flat => proto::GroupRollupMode::Flat,
+            GroupRollupMode::Total => proto::GroupRollupMode::Total,
         }
     }
 }
@@ -257,7 +257,7 @@ impl From<ViewConfigUpdate> for proto::ViewConfig {
             group_by_depth: value.group_by_depth,
             group_rollup_mode: value
                 .group_rollup_mode
-                .map(|x| proto::view_config::GroupRollupMode::from(x).into()),
+                .map(|x| proto::GroupRollupMode::from(x).into()),
         }
     }
 }
@@ -324,7 +324,7 @@ impl From<proto::ViewConfig> for ViewConfig {
             group_by_depth: value.group_by_depth,
             group_rollup_mode: value
                 .group_rollup_mode
-                .map(proto::view_config::GroupRollupMode::try_from)
+                .map(proto::GroupRollupMode::try_from)
                 .and_then(|x| x.ok())
                 .map(|x| x.into())
                 .unwrap_or_default(),
@@ -378,7 +378,7 @@ impl From<proto::ViewConfig> for ViewConfigUpdate {
             group_by_depth: value.group_by_depth,
             group_rollup_mode: value
                 .group_rollup_mode
-                .and_then(|x| proto::view_config::GroupRollupMode::try_from(x).ok())
+                .and_then(|x| proto::GroupRollupMode::try_from(x).ok())
                 .map(|x| x.into()),
         }
     }

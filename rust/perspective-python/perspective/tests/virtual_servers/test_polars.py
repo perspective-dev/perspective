@@ -673,6 +673,218 @@ class TestPolarsDataTypes:
         view.delete()
 
 
+class TestPolarsGroupRollupMode:
+    def test_flat_mode_with_group_by(self, client):
+        table = client.open_table("superstore")
+        view = table.view(
+            columns=["Sales"],
+            group_by=["Region"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+        num_rows = view.num_rows()
+        assert num_rows == 4
+        json = view.to_json()
+        assert json == approx_json(
+            [
+                {"__ROW_PATH__": ["Central"], "Sales": 501239.8908000005},
+                {"__ROW_PATH__": ["East"], "Sales": 678781.2399999979},
+                {"__ROW_PATH__": ["South"], "Sales": 391721.9050000003},
+                {"__ROW_PATH__": ["West"], "Sales": 725457.8245000006},
+            ]
+        )
+        view.delete()
+
+    def test_flat_mode_with_multi_level_group_by(self, client):
+        table = client.open_table("superstore")
+        view = table.view(
+            columns=["Sales"],
+            group_by=["Region", "Category"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+        num_rows = view.num_rows()
+        assert num_rows == 12
+        json = view.to_json()
+        assert json == approx_json(
+            [
+                {"__ROW_PATH__": ["Central", "Furniture"], "Sales": 163797.16380000004},
+                {
+                    "__ROW_PATH__": ["Central", "Office Supplies"],
+                    "Sales": 167026.41500000027,
+                },
+                {"__ROW_PATH__": ["Central", "Technology"], "Sales": 170416.3119999999},
+                {"__ROW_PATH__": ["East", "Furniture"], "Sales": 208291.20400000009},
+                {
+                    "__ROW_PATH__": ["East", "Office Supplies"],
+                    "Sales": 205516.0549999999,
+                },
+                {"__ROW_PATH__": ["East", "Technology"], "Sales": 264973.9810000003},
+                {"__ROW_PATH__": ["South", "Furniture"], "Sales": 117298.6840000001},
+                {
+                    "__ROW_PATH__": ["South", "Office Supplies"],
+                    "Sales": 125651.31299999992,
+                },
+                {"__ROW_PATH__": ["South", "Technology"], "Sales": 148771.9079999999},
+                {"__ROW_PATH__": ["West", "Furniture"], "Sales": 252612.7435000003},
+                {
+                    "__ROW_PATH__": ["West", "Office Supplies"],
+                    "Sales": 220853.24900000007,
+                },
+                {"__ROW_PATH__": ["West", "Technology"], "Sales": 251991.83199999997},
+            ]
+        )
+        view.delete()
+
+    def test_flat_mode_with_group_by_and_split_by(self, client):
+        table = client.open_table("superstore")
+        view = table.view(
+            columns=["Sales"],
+            group_by=["Category"],
+            split_by=["Region"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+        num_rows = view.num_rows()
+        assert num_rows == 3
+        json = view.to_json()
+        assert json == approx_json(
+            [
+                {
+                    "__ROW_PATH__": ["Furniture"],
+                    "Central|Sales": 163797.16380000004,
+                    "East|Sales": 208291.20400000009,
+                    "South|Sales": 117298.6840000001,
+                    "West|Sales": 252612.7435000003,
+                },
+                {
+                    "__ROW_PATH__": ["Office Supplies"],
+                    "Central|Sales": 167026.41500000027,
+                    "East|Sales": 205516.0549999999,
+                    "South|Sales": 125651.31299999992,
+                    "West|Sales": 220853.24900000007,
+                },
+                {
+                    "__ROW_PATH__": ["Technology"],
+                    "Central|Sales": 170416.3119999999,
+                    "East|Sales": 264973.9810000003,
+                    "South|Sales": 148771.9079999999,
+                    "West|Sales": 251991.83199999997,
+                },
+            ]
+        )
+        view.delete()
+
+    def test_flat_mode_with_group_by_and_split_by_and_sort(self, client):
+        table = client.open_table("superstore")
+        view = table.view(
+            columns=["Sales"],
+            group_by=["Category"],
+            split_by=["Region"],
+            sort=[["Sales", "desc"]],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+        num_rows = view.num_rows()
+        assert num_rows == 3
+        json = view.to_json()
+        assert json == approx_json(
+            [
+                {
+                    "__ROW_PATH__": ["Technology"],
+                    "Central|Sales": 170416.3119999999,
+                    "East|Sales": 264973.9810000003,
+                    "South|Sales": 148771.9079999999,
+                    "West|Sales": 251991.83199999997,
+                },
+                {
+                    "__ROW_PATH__": ["Furniture"],
+                    "Central|Sales": 163797.16380000004,
+                    "East|Sales": 208291.20400000009,
+                    "South|Sales": 117298.6840000001,
+                    "West|Sales": 252612.7435000003,
+                },
+                {
+                    "__ROW_PATH__": ["Office Supplies"],
+                    "Central|Sales": 167026.41500000027,
+                    "East|Sales": 205516.0549999999,
+                    "South|Sales": 125651.31299999992,
+                    "West|Sales": 220853.24900000007,
+                },
+            ]
+        )
+        view.delete()
+
+    def test_flat_mode_with_group_by_and_sort(self, client):
+        table = client.open_table("superstore")
+        view = table.view(
+            columns=["Sales"],
+            group_by=["Region"],
+            sort=[["Sales", "desc"]],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+        json = view.to_json()
+        assert json == approx_json(
+            [
+                {"__ROW_PATH__": ["West"], "Sales": 725457.8245000006},
+                {"__ROW_PATH__": ["East"], "Sales": 678781.2399999979},
+                {"__ROW_PATH__": ["Central"], "Sales": 501239.8908000005},
+                {"__ROW_PATH__": ["South"], "Sales": 391721.9050000003},
+            ]
+        )
+        view.delete()
+
+    def test_total_mode(self, client):
+        table = client.open_table("superstore")
+        view = table.view(
+            columns=["Sales"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="total",
+        )
+        num_rows = view.num_rows()
+        assert num_rows == 1
+        json = view.to_json()
+        assert json == approx_json([{"Sales": 2297200.860299955}])
+        view.delete()
+
+    def test_total_mode_with_multiple_columns(self, client):
+        table = client.open_table("superstore")
+        view = table.view(
+            columns=["Sales", "Quantity"],
+            aggregates={"Sales": "sum", "Quantity": "sum"},
+            group_rollup_mode="total",
+        )
+        json = view.to_json()
+        assert json == approx_json(
+            [{"Sales": 2297200.860299955, "Quantity": 37873}]
+        )
+        view.delete()
+
+    def test_total_mode_with_split_by(self, client):
+        table = client.open_table("superstore")
+        view = table.view(
+            columns=["Sales"],
+            split_by=["Region"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="total",
+        )
+        num_rows = view.num_rows()
+        assert num_rows == 1
+        json = view.to_json()
+        assert json == approx_json(
+            [
+                {
+                    "Central|Sales": 501239.8908000005,
+                    "East|Sales": 678781.2399999979,
+                    "South|Sales": 391721.9050000003,
+                    "West|Sales": 725457.8245000006,
+                }
+            ]
+        )
+        view.delete()
+
+
 class TestPolarsCombinedOperations:
     def test_group_by_filter_sort(self, client):
         table = client.open_table("superstore")

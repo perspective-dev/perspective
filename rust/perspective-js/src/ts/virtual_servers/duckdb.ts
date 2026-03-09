@@ -208,6 +208,7 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
             split_by: true,
             sort: true,
             expressions: true,
+            group_rollup_mode: ["rollup", "flat", "total"],
             filter_ops: {
                 integer: FILTER_OPS,
                 float: FILTER_OPS,
@@ -258,7 +259,8 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
         const results = await runQuery(this.db, query);
         const count = Number(Object.values(results[0].toJSON())[0]);
         const gs = config.group_by?.length || 0;
-        return count - (gs === 0 ? 0 : gs + 1);
+        const is_flat = config.group_rollup_mode === "flat";
+        return count - (gs === 0 ? 0 : is_flat ? gs : gs + 1);
     }
 
     async tableSize(tableId: string) {
@@ -297,6 +299,8 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
     ) {
         const is_group_by = config.group_by?.length > 0;
         const is_split_by = config.split_by?.length > 0;
+        const is_flat = config.group_rollup_mode === "flat";
+        const has_grouping_id = is_group_by && !is_flat;
         const query = this.sqlBuilder.viewGetData(
             viewId,
             config,
@@ -309,7 +313,7 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
         });
 
         for (let cidx = 0; cidx < columns.length; cidx++) {
-            if (cidx === 0 && is_group_by) {
+            if (cidx === 0 && has_grouping_id) {
                 // This is the grouping_id column, skip it
                 continue;
             }
@@ -323,7 +327,9 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
             const isDecimal = dtypes[cidx].startsWith("Decimal");
             for (let ridx = 0; ridx < rows.length; ridx++) {
                 const rowArray = rows[ridx].toArray();
-                const grouping_id = Number(rowArray[0]);
+                const grouping_id = has_grouping_id
+                    ? Number(rowArray[0])
+                    : undefined;
                 let value = rowArray[cidx];
                 if (isDecimal) {
                     value = convertDecimalToNumber(value, dtypes[cidx]);

@@ -91,6 +91,19 @@ impl<U: Copy + 'static> SystemInfo<U> {
 #[derive(Clone, Debug, Default)]
 pub struct Features(Arc<GetFeaturesResp>);
 
+impl Features {
+    pub fn get_group_rollup_modes(&self) -> Vec<crate::config::GroupRollupMode> {
+        self.group_rollup_mode
+            .iter()
+            .map(|x| {
+                crate::config::GroupRollupMode::from(
+                    crate::proto::GroupRollupMode::try_from(*x).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>()
+    }
+}
+
 impl Deref for Features {
     type Target = GetFeaturesResp;
 

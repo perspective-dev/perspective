@@ -96,6 +96,7 @@ class PolarsVirtualServerHandler(VirtualServerHandler):
             "split_by": True,
             "sort": True,
             "expressions": True,
+            "group_rollup_mode": ["rollup", "flat", "total"],
             "filter_ops": {
                 "integer": FILTER_OPS,
                 "float": FILTER_OPS,
@@ -156,6 +157,7 @@ class PolarsVirtualServerHandler(VirtualServerHandler):
         filters = config.get("filter", [])
         split_by = config.get("split_by", [])
         expressions = config.get("expressions", {})
+        group_rollup_mode = config.get("group_rollup_mode", "rollup")
 
         if expressions:
             for expr_name, expr_str in expressions.items():
@@ -165,18 +167,41 @@ class PolarsVirtualServerHandler(VirtualServerHandler):
         df = apply_filters(df, filters)
 
         col_alias = lambda c: c.replace("_", "-")
+        is_flat = group_rollup_mode == "flat"
+        is_total = group_rollup_mode == "total"
 
-        if split_by and group_by:
-            result = build_split_by_grouped(
-                df, group_by, split_by, columns, aggregates, col_alias
-            )
-            result = apply_sort_grouped(result, sort, group_by, col_alias)
+        if is_total:
+            if split_by:
+                result = build_split_by_total(
+                    df, split_by, columns, aggregates, col_alias
+                )
+            else:
+                result = build_total(df, columns, aggregates, col_alias)
+        elif split_by and group_by:
+            if is_flat:
+                result = build_split_by_grouped_flat(
+                    df, group_by, split_by, columns, aggregates, col_alias
+                )
+                result = apply_sort_split_by_flat(
+                    result, sort, columns, group_by, split_by
+                )
+            else:
+                result = build_split_by_grouped(
+                    df, group_by, split_by, columns, aggregates, col_alias
+                )
+                result = apply_sort_grouped(result, sort, group_by, col_alias)
         elif split_by:
             result = build_split_by_flat(df, split_by, columns, col_alias)
             result = apply_sort_flat(result, sort, col_alias)
         elif group_by:
-            result = build_rollup(df, group_by, columns, aggregates, col_alias)
-            result = apply_sort_grouped(result, sort, group_by, col_alias)
+            if is_flat:
+                result = build_flat_group_by(
+                    df, group_by, columns, aggregates, col_alias
+                )
+                result = apply_sort_flat(result, sort, col_alias)
+            else:
+                result = build_rollup(df, group_by, columns, aggregates, col_alias)
+                result = apply_sort_grouped(result, sort, group_by, col_alias)
         else:
             select_exprs = [pl.col(c).alias(col_alias(c)) for c in columns]
             result = df.select(select_exprs)
@@ -199,7 +224,9 @@ class PolarsVirtualServerHandler(VirtualServerHandler):
 
         group_by = config.get("group_by", [])
         split_by = config.get("split_by", [])
+        group_rollup_mode = config.get("group_rollup_mode", "rollup")
         is_split_by = len(split_by) > 0
+        is_flat = group_rollup_mode == "flat"
 
         start_row = viewport.get("start_row", 0) or 0
         end_row = viewport.get("end_row") or df.height
@@ -218,20 +245,21 @@ class PolarsVirtualServerHandler(VirtualServerHandler):
             data_columns = data_columns[start_col:]
 
         has_group_by = len(group_by) > 0
+        has_grouping_id = has_group_by and not is_flat
 
         all_cols = []
-        if has_group_by:
+        if has_grouping_id:
             all_cols.append("__GROUPING_ID__")
         for idx in range(len(group_by)):
             all_cols.append(f"__ROW_PATH_{idx}__")
         all_cols.extend(data_columns)
 
         grouping_ids = None
-        if has_group_by:
+        if has_grouping_id:
             grouping_ids = df_slice["__GROUPING_ID__"].to_list()
 
         for cidx, col in enumerate(all_cols):
-            if cidx == 0 and has_group_by:
+            if cidx == 0 and has_grouping_id:
                 continue
 
             series = df_slice[col]
@@ -383,6 +411,109 @@ def build_rollup(df, group_by, columns, aggregates, col_alias):
     return result
 
 
+def build_flat_group_by(df, group_by, columns, aggregates, col_alias):
+    """Build a simple GROUP BY (no rollup) - only leaf-level rows."""
+    n = len(group_by)
+    data_columns = [c for c in columns if c not in group_by]
+
+    agg_exprs = []
+    for col in data_columns:
+        agg_name = aggregates.get(col, default_aggregate(col, df))
+        agg_exprs.append(get_polars_agg_expr(col, agg_name).alias(col_alias(col)))
+
+    grouped = df.group_by(group_by, maintain_order=True).agg(agg_exprs)
+
+    for idx in range(n):
+        grouped = grouped.with_columns(
+            pl.col(group_by[idx]).alias(f"__ROW_PATH_{idx}__")
+        )
+
+    for gb_col in group_by:
+        if gb_col in grouped.columns:
+            grouped = grouped.drop(gb_col)
+
+    path_cols = [f"__ROW_PATH_{i}__" for i in range(n)]
+    data_col_aliases = [col_alias(c) for c in data_columns]
+    final_order = path_cols + data_col_aliases
+    result = grouped.select([c for c in final_order if c in grouped.columns])
+    return result.sort(path_cols)
+
+
+def build_total(df, columns, aggregates, col_alias):
+    """Build a single total row aggregating the entire dataset."""
+    agg_exprs = []
+    for col in columns:
+        agg_name = aggregates.get(col, default_aggregate(col, df))
+        agg_exprs.append(get_polars_agg_expr(col, agg_name).alias(col_alias(col)))
+    return df.select(agg_exprs)
+
+
+def build_split_by_total(df, split_by, columns, aggregates, col_alias):
+    """Build a single total row with split_by (pivot) columns."""
+    split_col = split_by[0]
+    data_columns = [c for c in columns if c not in split_by]
+    split_values = sorted(df[split_col].unique().to_list())
+
+    agg_exprs = []
+    for sv in split_values:
+        filter_expr = pl.col(split_col) == sv
+        for dc in data_columns:
+            agg_name = aggregates.get(dc, default_aggregate(dc, df))
+            col_name = f"{sv}_{col_alias(dc)}"
+            agg_exprs.append(
+                get_polars_agg_expr(dc, agg_name, filter_expr=filter_expr).alias(
+                    col_name
+                )
+            )
+
+    return df.select(agg_exprs)
+
+
+def build_split_by_grouped_flat(df, group_by, split_by, columns, aggregates, col_alias):
+    """Build a flat grouped view with split_by (pivot) columns - no rollup rows."""
+    n = len(group_by)
+    split_col = split_by[0]
+    data_columns = [c for c in columns if c not in group_by and c not in split_by]
+    split_values = sorted(df[split_col].unique().to_list())
+
+    agg_exprs = []
+    for sv in split_values:
+        filter_expr = pl.col(split_col) == sv
+        for dc in data_columns:
+            agg_name = aggregates.get(dc, default_aggregate(dc, df))
+            col_name = f"{sv}_{col_alias(dc)}"
+            agg_exprs.append(
+                get_polars_agg_expr(dc, agg_name, filter_expr=filter_expr).alias(
+                    col_name
+                )
+            )
+
+    for dc in data_columns:
+        agg_name = aggregates.get(dc, default_aggregate(dc, df))
+        agg_exprs.append(get_polars_agg_expr(dc, agg_name).alias(f"__SORT_{dc}__"))
+
+    grouped = df.group_by(group_by, maintain_order=True).agg(agg_exprs)
+
+    for idx in range(n):
+        grouped = grouped.with_columns(
+            pl.col(group_by[idx]).alias(f"__ROW_PATH_{idx}__")
+        )
+
+    for gb_col in group_by:
+        if gb_col in grouped.columns:
+            grouped = grouped.drop(gb_col)
+
+    path_cols = [f"__ROW_PATH_{i}__" for i in range(n)]
+    data_col_names = []
+    for sv in split_values:
+        for dc in data_columns:
+            data_col_names.append(f"{sv}_{col_alias(dc)}")
+    sort_col_names = [f"__SORT_{dc}__" for dc in data_columns]
+    final_order = path_cols + data_col_names + sort_col_names
+    result = grouped.select([c for c in final_order if c in grouped.columns])
+    return result.sort(path_cols)
+
+
 def apply_sort_grouped(df, sort_config, group_by, col_alias):
     """Apply sort to a ROLLUP result DataFrame."""
     n = len(group_by)
@@ -412,6 +543,31 @@ def apply_sort_grouped(df, sort_config, group_by, col_alias):
     rest = df.filter(~is_total)
     rest = rest.sort(sort_cols, descending=sort_desc)
     return pl.concat([total_row, rest])
+
+
+def apply_sort_split_by_flat(df, sort_config, columns, group_by, split_by):
+    """Apply sort to a flat split_by grouped DataFrame using __SORT__ columns."""
+    data_columns = [c for c in columns if c not in group_by and c not in split_by]
+    sort_cols = []
+    sort_desc = []
+    for entry in sort_config:
+        col = entry[0]
+        direction = entry[1]
+        if direction != "none":
+            sort_name = f"__SORT_{col}__"
+            if sort_name in df.columns:
+                sort_cols.append(sort_name)
+                sort_desc.append(direction in ("desc", "col desc"))
+
+    if sort_cols:
+        df = df.sort(sort_cols, descending=sort_desc)
+
+    drop_cols = [
+        f"__SORT_{dc}__" for dc in data_columns if f"__SORT_{dc}__" in df.columns
+    ]
+    if drop_cols:
+        df = df.drop(drop_cols)
+    return df
 
 
 def apply_sort_flat(df, sort_config, col_alias):

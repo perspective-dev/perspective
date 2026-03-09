@@ -85,12 +85,15 @@ impl Component for PluginSelector {
 
                     let prev_metadata = renderer.metadata();
                     let requirements = metadata.as_ref().unwrap_or(&*prev_metadata);
+                    let rollup_features = session
+                        .metadata()
+                        .get_features()
+                        .map(|x| x.get_group_rollup_modes())
+                        .unwrap();
+
+                    let group_rollups = requirements.get_group_rollups(&rollup_features);
                     let mut update = ViewConfigUpdate {
-                        group_rollup_mode: requirements
-                            .group_rollups
-                            .as_ref()
-                            .and_then(|x| x.first())
-                            .cloned(),
+                        group_rollup_mode: group_rollups.first().cloned(),
                         ..ViewConfigUpdate::default()
                     };
 

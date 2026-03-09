@@ -571,7 +571,6 @@ const data = {
                 const json = await view.to_json();
                 expect(json).toStrictEqual([
                     {
-                        __ROW_PATH__: [],
                         "false|w": 22,
                         "false|x": 10,
                         "false|y": 4,

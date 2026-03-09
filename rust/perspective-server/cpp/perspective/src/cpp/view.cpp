@@ -74,7 +74,10 @@ View<CTX_T>::View(
     }
 
     // configure data window for `get_data` and `row_delta`
-    is_column_only() ? m_row_offset = 1 : m_row_offset = 0;
+    // Column-only views skip the grand total row (offset=1), but
+    // total_only mode needs to return exactly that row.
+    is_column_only() && !m_view_config->is_total_only() ? m_row_offset = 1
+                                                        : m_row_offset = 0;
 
     // TODO: make sure is 0 for column only - right now get_data returns row
     // path for everything
@@ -127,7 +130,7 @@ View<t_ctx2>::sides() const {
 template <typename CTX_T>
 std::int32_t
 View<CTX_T>::num_rows() const {
-    if (is_column_only()) {
+    if (is_column_only() && !m_view_config->is_total_only()) {
         return m_ctx->get_row_count() - 1;
     }
     return m_ctx->get_row_count();

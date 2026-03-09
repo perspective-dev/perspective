@@ -154,13 +154,20 @@ impl Component for ConfigSelector {
                 if ctx.props().session.get_view_config().group_rollup_mode == GroupRollupMode::Total
                 {
                     let requirements = ctx.props().renderer.metadata();
+
+                    let rollup_features = ctx
+                        .props()
+                        .session
+                        .metadata()
+                        .get_features()
+                        .map(|x| x.get_group_rollup_modes())
+                        .unwrap();
+
+                    let group_rollups = requirements.get_group_rollups(&rollup_features);
+
                     ctx.link()
                         .send_message(ConfigSelectorMsg::UpdateGroupRollupMode(
-                            requirements
-                                .group_rollups
-                                .as_ref()
-                                .and_then(|x| x.first().cloned())
-                                .unwrap_or_default(),
+                            group_rollups.first().cloned().unwrap(),
                         ));
                     false
                 } else {
@@ -489,19 +496,26 @@ impl Component for ConfigSelector {
             .link()
             .callback(ConfigSelectorMsg::UpdateGroupRollupMode);
 
+        let rollup_features = ctx
+            .props()
+            .session
+            .metadata()
+            .get_features()
+            .map(|x| x.get_group_rollup_modes())
+            .unwrap();
+
+        let group_rollups = requirements.get_group_rollups(&rollup_features);
+
         html! {
             <div slot="top_panel" id="top_panel" {class} ondragend={dragend}>
                 <LocalStyle href={css!("config-selector")} />
                 <div class="pivot_controls">
-                    if requirements.group_rollups.as_ref().map(|x| x.len()).unwrap_or_default() > 1 {
+                    if group_rollups.len() > 1 {
                         <Select<GroupRollupMode>
                             id="group_rollup_mode_selector"
                             wrapper_class="group_rollup_wrapper"
                             values={Rc::new(
-                                requirements
-                                    .group_rollups
-                                    .as_ref()
-                                    .unwrap()
+                                group_rollups
                                     .iter()
                                     .map(|x| SelectItem::Option(*x))
                                     .collect(),

@@ -204,7 +204,7 @@ impl VirtualDataSlice {
         if name.starts_with("__ROW_PATH_") {
             let group_by_index: u32 = name[11..name.len() - 2].parse()?;
             let max_grouping_id = 2_i32.pow((self.0.group_by.len() as u32) - group_by_index) - 1;
-            if grouping_id.map(|x| x as i32).unwrap_or(i32::MAX) < max_grouping_id {
+            if grouping_id.map(|x| x as i32).unwrap_or(0) < max_grouping_id {
                 if !self.contains_key("__ROW_PATH__") {
                     self.insert(
                         "__ROW_PATH__".to_owned(),
