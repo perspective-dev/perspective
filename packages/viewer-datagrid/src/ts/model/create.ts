@@ -122,6 +122,9 @@ export async function createModel(
             }
         }
 
+        const group_rollup_mode_changed =
+            old.group_rollup_mode !== config.group_rollup_mode;
+
         this._reset_scroll_top = group_by_changed;
         this._reset_scroll_left = split_by_changed;
         this._reset_select =
@@ -132,6 +135,7 @@ export async function createModel(
             columns_changed;
 
         this._reset_column_size =
+            group_rollup_mode_changed ||
             split_by_changed ||
             group_by_changed ||
             columns_changed ||

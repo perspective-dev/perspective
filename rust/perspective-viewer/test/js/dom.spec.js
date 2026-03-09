@@ -77,6 +77,7 @@ const RESULT = {
     table: "load-viewer-csv",
     theme: "Pro Light",
     title: null,
+    group_rollup_mode: "rollup",
 };
 
 test.describe("DOM API", () => {

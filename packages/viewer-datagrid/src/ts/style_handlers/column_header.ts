@@ -97,9 +97,11 @@ export function styleColumnHeaderRow(
     regularTable: RegularTableElement,
     is_menu_row: boolean,
 ): void {
-    const header_depth = this._config.group_by.length;
-    const selectedColumn = this._column_settings_selected_column;
+    const header_depth =
+        this._config.group_by.length -
+        (this._config.group_rollup_mode === "flat" ? 1 : 0);
 
+    const selectedColumn = this._column_settings_selected_column;
     for (const { element: td, metadata } of headerRow.cells) {
         if (
             !metadata ||
@@ -110,14 +112,13 @@ export function styleColumnHeaderRow(
 
         const column_name =
             metadata.column_header?.[this._config.split_by.length];
+
         const sort = this._config.sort.find((x) => x[0] === column_name);
-        let needs_border =
-            metadata.type === "corner" &&
-            metadata.row_header_x === header_depth;
         const is_corner = typeof metadata.x === "undefined";
-        needs_border =
-            needs_border ||
-            (metadata.x !== undefined &&
+        const needs_border =
+            (metadata.type === "corner" &&
+                metadata.row_header_x === header_depth) ||
+            (!is_corner &&
                 (metadata.x + 1) % this._config.columns.length === 0);
 
         td.classList.toggle("psp-header-border", needs_border);

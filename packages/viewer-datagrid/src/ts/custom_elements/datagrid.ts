@@ -133,6 +133,10 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         return ["Columns"];
     }
 
+    get group_rollups(): string[] {
+        return ["rollup", "flat"];
+    }
+
     /**
      * Give the Datagrid a higher priority so it is loaded
      * over the default charts by default.
@@ -179,6 +183,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
             viewport?.start_row !== null
                 ? viewport.end_row - viewport.start_row
                 : await view.num_rows();
+
         let out = "";
         for (let ridx = 0; ridx < nrows; ridx++) {
             for (const col_name of cols) {

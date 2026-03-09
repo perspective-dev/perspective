@@ -57,7 +57,8 @@ public:
         const std::vector<std::vector<std::string>>& sort,
         const std::vector<std::shared_ptr<t_computed_expression>>& expressions,
         std::string filter_op,
-        bool column_only
+        bool column_only,
+        bool leaves_only = false
     );
 
     /**
@@ -118,6 +119,8 @@ public:
     t_filter_op get_filter_op() const;
 
     bool is_column_only() const;
+
+    bool is_leaves_only() const;
 
     std::int32_t get_row_pivot_depth() const;
     std::int32_t get_column_pivot_depth() const;
@@ -238,5 +241,6 @@ private:
      *
      */
     bool m_column_only;
+    bool m_leaves_only;
 };
 } // end namespace perspective

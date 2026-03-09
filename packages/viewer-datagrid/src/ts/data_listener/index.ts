@@ -13,6 +13,7 @@
 import { PRIVATE_PLUGIN_SYMBOL } from "../types.js";
 import { format_cell } from "./format_cell.js";
 import {
+    format_flat_header_row_path,
     format_tree_header,
     format_tree_header_row_path,
 } from "./format_tree_header.js";
@@ -207,9 +208,12 @@ export function createDataListener(
         }
 
         const is_row_path = columns.__ROW_PATH__ !== undefined;
+        const is_flat = this._config.group_rollup_mode === "flat";
         const row_headers = Array.from(
             (is_row_path
-                ? format_tree_header_row_path
+                ? is_flat
+                    ? format_flat_header_row_path
+                    : format_tree_header_row_path
                 : format_tree_header
             ).call(
                 this,

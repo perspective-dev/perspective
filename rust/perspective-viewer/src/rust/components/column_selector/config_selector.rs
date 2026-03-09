@@ -23,6 +23,7 @@ use super::filter_column::*;
 use super::pivot_column::*;
 use super::sort_column::*;
 use crate::components::containers::dragdrop_list::*;
+use crate::components::containers::select::{Select, SelectItem};
 use crate::components::style::LocalStyle;
 use crate::custom_elements::{ColumnDropDownElement, FilterDropDownElement};
 use crate::dragdrop::*;
@@ -32,7 +33,7 @@ use crate::session::*;
 use crate::utils::*;
 use crate::{PerspectiveProperties, css};
 
-#[derive(Properties, PerspectiveProperties!)]
+#[derive(Clone, Properties, PerspectiveProperties!)]
 pub struct ConfigSelectorProps {
     pub onselect: Callback<()>,
 
@@ -450,18 +451,55 @@ impl Component for ConfigSelector {
 
         let metadata = session.metadata();
         let features = metadata.get_features().unwrap();
+        let requirements = renderer.metadata();
+
+        let on_group_rollup_mode = Callback::from({
+            let props = ctx.props().clone();
+            move |x| {
+                let config = ViewConfigUpdate {
+                    group_rollup_mode: Some(x),
+                    ..ViewConfigUpdate::default()
+                };
+
+                props
+                    .update_and_render(config)
+                    .map(ApiFuture::spawn)
+                    .unwrap_or_log();
+            }
+        });
 
         html! {
             <div slot="top_panel" id="top_panel" {class} ondragend={dragend}>
                 <LocalStyle href={css!("config-selector")} />
-                if !config.group_by.is_empty() && config.split_by.is_empty() {
-                    <span
-                        id="transpose_button"
-                        class="rrow centered"
-                        title="Transpose Pivots"
-                        onmousedown={transpose.clone()}
-                    />
-                }
+                <div class="pivot_controls">
+                    if !config.group_by.is_empty() {
+                        if requirements.group_rollups.as_ref().map(|x| x.len()).unwrap_or_default() > 1 {
+                            <Select<GroupRollupMode>
+                                id="group_rollup_mode_selector"
+                                wrapper_class="group_rollup_wrapper"
+                                values={Rc::new(
+                                requirements
+                                    .group_rollups
+                                    .as_ref()
+                                    .unwrap()
+                                    .iter()
+                                    .map(|x| SelectItem::Option(*x))
+                                    .collect(),
+                            )}
+                                selected={config.group_rollup_mode}
+                                on_select={on_group_rollup_mode}
+                            />
+                        }
+                        if config.split_by.is_empty() {
+                            <span
+                                id="transpose_button"
+                                class="rrow centered"
+                                title="Transpose Pivots"
+                                onmousedown={transpose.clone()}
+                            />
+                        }
+                    }
+                </div>
                 if features.group_by {
                     <GroupBySelector
                         name="group_by"
@@ -486,12 +524,14 @@ impl Component for ConfigSelector {
                 }
                 if features.split_by {
                     if !config.split_by.is_empty() {
-                        <span
-                            id="transpose_button"
-                            class="rrow centered"
-                            title="Transpose Pivots"
-                            onmousedown={transpose}
-                        />
+                        <div class="pivot_controls">
+                            <span
+                                id="transpose_button"
+                                class="rrow centered"
+                                title="Transpose Pivots"
+                                onmousedown={transpose}
+                            />
+                        </div>
                     }
                     <SplitBySelector
                         name="split_by"
@@ -507,7 +547,7 @@ impl Component for ConfigSelector {
                                     action={ DragTarget::SplitBy }
                                     column={ split_by.clone() }
 
-                                     {dragdrop}
+                                    {dragdrop}
                                     {session}>
                                 </PivotColumn>
                             }

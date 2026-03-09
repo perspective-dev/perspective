@@ -130,7 +130,9 @@ make_context(
 
     auto pool = table->get_pool();
     auto gnode = table->get_gnode();
-    if (row_pivot_depth > -1) {
+    if (view_config->is_leaves_only()) {
+        ctx1->set_leaves_only(true);
+    } else if (row_pivot_depth > -1) {
         ctx1->set_depth(row_pivot_depth - 1);
     } else {
         ctx1->set_depth(row_pivots.size());
@@ -193,7 +195,9 @@ make_context(
         ctx2->column_sort_by(col_sortspec);
     }
 
-    if (row_pivot_depth > -1) {
+    if (view_config->is_leaves_only() && !column_only) {
+        ctx2->set_leaves_only(true);
+    } else if (row_pivot_depth > -1) {
         ctx2->set_depth(t_header::HEADER_ROW, row_pivot_depth - 1);
     } else {
         ctx2->set_depth(t_header::HEADER_ROW, row_pivots.size());
@@ -2091,6 +2095,9 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
 
             LOG_DEBUG("FILTER_OP: " << filter_op);
 
+            bool leaves_only =
+                cfg.has_group_rollup_mode() ? cfg.group_rollup_mode() == 1 : false;
+
             auto config = std::make_shared<t_view_config>(
                 vocab,
                 row_pivots,
@@ -2101,7 +2108,8 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 sort_str,
                 expressions,
                 filter_op,
-                column_only
+                column_only,
+                leaves_only
             );
             config->init(schema);
 
@@ -2406,6 +2414,14 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 );
             }
 
+            if (view_config->is_leaves_only()) {
+                const auto mode = proto::ViewConfig_GroupRollupMode::ViewConfig_GroupRollupMode_FLAT;
+                view_config_proto->set_group_rollup_mode(mode);
+            } else {
+                const auto mode = proto::ViewConfig_GroupRollupMode::ViewConfig_GroupRollupMode_ROLLUP;
+                view_config_proto->set_group_rollup_mode(mode);
+            }
+
             for (const auto& expr : view_config->get_expressions()) {
                 auto* proto_exprs = view_config_proto->mutable_expressions();
                 (*proto_exprs)[expr->get_expression_alias()] =
@@ -2486,7 +2502,6 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 r.formatted(),
                 r.index(),
                 r.id(),
-                r.leaves_only(),
                 view->sides(),
                 view->sides() > 0 && !config->is_column_only(),
                 nidx,
@@ -2525,7 +2540,6 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 r.formatted(),
                 r.index(),
                 r.id(),
-                r.leaves_only(),
                 view->sides(),
                 view->sides() > 0 && !config->is_column_only(),
                 nidx,
@@ -2565,7 +2579,6 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 r.formatted(),
                 r.index(),
                 r.id(),
-                r.leaves_only(),
                 view->sides(),
                 view->sides() > 0 && !config->is_column_only(),
                 nidx,

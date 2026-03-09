@@ -132,9 +132,23 @@ public:
     void populate_root_children(const t_stnode_vec& rchildren);
     void populate_root_children(const std::shared_ptr<const t_stree>& tree);
 
+    void set_leaves_only(bool enabled, t_uindex leaf_depth);
+    bool is_leaves_only() const;
+    void rebuild_from_leaves(const std::vector<t_sortspec>& sortby);
+
 private:
+    void collect_leaves(
+        t_uindex tnid,
+        t_uindex current_depth,
+        const std::vector<t_sortspec>& sortby,
+        const std::vector<t_index>& sortby_agg_indices,
+        const std::vector<t_sorttype>& sort_orders
+    );
+
     std::shared_ptr<const t_stree> m_tree;
     std::shared_ptr<std::vector<t_tvnode>> m_nodes;
+    bool m_leaves_only = false;
+    t_uindex m_leaf_depth = 0;
 };
 
 /**

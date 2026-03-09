@@ -37,6 +37,7 @@ export async function draw(
     const drawPromise = this.regular_table.draw({
         invalid_columns: true,
     } as any);
+
     if (this._reset_scroll_top) {
         this.regular_table.scrollTop = 0;
         this._reset_scroll_top = false;

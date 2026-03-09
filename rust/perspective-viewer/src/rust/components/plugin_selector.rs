@@ -83,11 +83,18 @@ impl Component for PluginSelector {
                     let metadata =
                         renderer.get_next_plugin_metadata(&PluginUpdate::Update(plugin_name));
 
-                    let mut update = ViewConfigUpdate::default();
-                    session.set_update_column_defaults(
-                        &mut update,
-                        metadata.as_ref().unwrap_or(&*renderer.metadata()),
-                    );
+                    let prev_metadata = renderer.metadata();
+                    let requirements = metadata.as_ref().unwrap_or(&*prev_metadata);
+                    let mut update = ViewConfigUpdate {
+                        group_rollup_mode: requirements
+                            .group_rollups
+                            .as_ref()
+                            .and_then(|x| x.first())
+                            .cloned(),
+                        ..ViewConfigUpdate::default()
+                    };
+
+                    session.set_update_column_defaults(&mut update, requirements);
 
                     if let Ok(task) = ctx.props().update_and_render(update) {
                         ApiFuture::spawn(task);
