@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/viewer-d3fc",
-    "version": "4.2.0",
+    "version": "4.3.0",
     "description": "Perspective.js D3FC Plugin",
     "unpkg": "./dist/cdn/perspective-viewer-d3fc.js",
     "jsdelivr": "./dist/cdn/perspective-viewer-d3fc.js",

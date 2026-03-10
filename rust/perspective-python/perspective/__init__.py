@@ -10,7 +10,7 @@
 #  ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-__version__ = "4.2.0"
+__version__ = "4.3.0"
 __all__ = [
     "_jupyter_labextension_paths",
     "Server",

@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/viewer",
-    "version": "4.2.0",
+    "version": "4.3.0",
     "description": "The `<perspective-viewer>` Custom Element, frontend for Perspective.js",
     "repository": {
         "type": "git",

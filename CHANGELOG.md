@@ -1,6 +1,34 @@
+# [v4.3.0](https://github.com/perspective-dev/perspective/releases/tag/v4.3.0)
+
+_10 March 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.3.0...v4.3.0))
+
+**Breaking**
+
+- Add `removeConfigs` to `perspective-select` for explicit filter removal [#3133](https://github.com/finos/perspective/pull/3133)
+- Add `group_rollup_mode` [#3132](https://github.com/finos/perspective/pull/3132)
+
+Features
+
+- `polars` Virtual Server [#3125](https://github.com/finos/perspective/pull/3125)
+- Fix `split_by` support for rollups in generic SQL [#3127](https://github.com/finos/perspective/pull/3127)
+- Support for `group_rollup_mode` Virtual Server and `total` variant. [#3135](https://github.com/finos/perspective/pull/3135)
+
+Fixes
+
+- Fix datagrid scroll position shift when sorting [#3136](https://github.com/finos/perspective/pull/3136)
+- Fix view conflation test timeout [#3126](https://github.com/finos/perspective/pull/3126)
+
+Misc
+
+- Fix Python sdist tests in CI [#3134](https://github.com/finos/perspective/pull/3134)
+- Add virtual server docs [#3124](https://github.com/finos/perspective/pull/3124)
+- Relax React version [#3131](https://github.com/finos/perspective/pull/3131)
+- ci: Revert to mainline actions-setup-cmake [#3130](https://github.com/finos/perspective/pull/3130)
+- Move to Windows 2025 CI [#3123](https://github.com/finos/perspective/pull/3123)
+
 # [v4.2.0](https://github.com/perspective-dev/perspective/releases/tag/v4.2.0)
 
-_15 February 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.2.0...v4.2.0))
+_14 February 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.1.1...v4.2.0))
 
 **Breaking**
 

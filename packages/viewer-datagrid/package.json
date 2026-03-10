@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/viewer-datagrid",
-    "version": "4.2.0",
+    "version": "4.3.0",
     "description": "Perspective datagrid plugin based on `regular-table`",
     "unpkg": "dist/cdn/perspective-viewer-datagrid.js",
     "jsdelivr": "dist/cdn/perspective-viewer-datagrid.js",

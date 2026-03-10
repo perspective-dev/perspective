@@ -44,7 +44,7 @@ starlette = ["starlette<1"]
 
 [tool.maturin]
 module-name = "perspective"
-data = "perspective_python-4.2.0.data"
+data = "perspective_python-4.3.0.data"
 features = ["pyo3/extension-module"]
 include = [
     { path = "perspective/*libpsp.so", format = "wheel" },
