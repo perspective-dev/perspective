@@ -24,7 +24,7 @@ import type {
     Schema,
 } from "../types.js";
 import type { CellScalar, DataResponse } from "regular-table/dist/esm/types.js";
-import { ViewWindow } from "@perspective-dev/client";
+import { ViewConfig, ViewWindow } from "@perspective-dev/client";
 
 interface ColumnData {
     __ROW_PATH__?: unknown[][];
@@ -192,8 +192,10 @@ export function createDataListener(
             column_paths.push(path);
         }
 
+        const is_dim_call = x1 - x0 > 0 && y1 - y0 > 0;
+
         // Only update the last state if this is not a "phantom" call.
-        if (x1 - x0 > 0 && y1 - y0 > 0) {
+        if (is_dim_call) {
             this.last_column_paths = last_column_paths;
             this.last_meta = last_meta;
             this.last_ids = last_ids;
@@ -223,7 +225,9 @@ export function createDataListener(
             ),
         ) as (string | HTMLElement)[][];
 
-        const num_row_headers = row_headers[0]?.length;
+        const num_row_headers = !is_dim_call
+            ? row_header_depth(this._config)
+            : row_headers[0]?.length;
 
         const result: DataResponse = {
             num_column_headers:
@@ -243,4 +247,16 @@ export function createDataListener(
 
         return result;
     };
+}
+
+function row_header_depth(config: ViewConfig) {
+    if (config.group_rollup_mode === "flat") {
+        return config.group_by.length;
+    } else if (config.group_rollup_mode === "total") {
+        return 0;
+    } else if (config.group_by.length === 0) {
+        return 0;
+    } else {
+        return config.group_by.length + 1;
+    }
 }

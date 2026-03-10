@@ -87,21 +87,21 @@ export async function createModel(
         }
 
         let split_by_changed = old.split_by.length !== config.split_by.length;
-        if (split_by_changed) {
+        if (!split_by_changed) {
             for (const lvl in old.split_by) {
                 split_by_changed ||= config.split_by[lvl] !== old.split_by[lvl];
             }
         }
 
         let columns_changed = old.columns.length !== config.columns.length;
-        if (columns_changed) {
+        if (!columns_changed) {
             for (const lvl in old.columns) {
                 columns_changed ||= config.columns[lvl] !== old.columns[lvl];
             }
         }
 
         let filter_changed = old.filter.length !== config.filter.length;
-        if (filter_changed) {
+        if (!filter_changed) {
             for (const lvl in old.filter) {
                 for (const i in config.filter[lvl]) {
                     filter_changed ||=
@@ -112,7 +112,7 @@ export async function createModel(
         }
 
         let sort_changed = old.sort.length !== config.sort.length;
-        if (sort_changed) {
+        if (!sort_changed) {
             for (const lvl in old.sort) {
                 for (const i in config.sort[lvl]) {
                     sort_changed ||=
