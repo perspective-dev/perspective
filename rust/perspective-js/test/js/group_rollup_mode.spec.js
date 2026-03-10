@@ -585,6 +585,23 @@ const data = {
                 table.delete();
             });
 
+            test("with split_by schema", async function () {
+                const table = await perspective.table(data);
+                const view = await table.view({
+                    split_by: ["z"],
+                    group_rollup_mode: "total",
+                });
+                const schema = await view.schema();
+                expect(schema).toStrictEqual({
+                    w: "float",
+                    x: "integer",
+                    y: "integer",
+                    z: "integer",
+                });
+                view.delete();
+                table.delete();
+            });
+
             test("updates after table.update()", async function () {
                 const table = await perspective.table(data);
                 const view = await table.view({

@@ -28,13 +28,13 @@ const ROW_SORT_ORDER: SortRotationOrder = {
 
 const ROW_COL_SORT_ORDER: SortRotationOrder = {
     desc: "asc",
-    asc: "col desc",
+    asc: undefined,
     "desc abs": "asc abs",
-    "asc abs": "col desc abs",
-    "col desc": "col asc",
-    "col asc": undefined,
-    "col desc abs": "col asc abs",
-    "col asc abs": undefined,
+    "asc abs": undefined,
+    // "col desc": "col asc",
+    // "col asc": undefined,
+    // "col desc abs": "col asc abs",
+    // "col asc abs": undefined,
 };
 
 export async function sortHandler(
@@ -49,7 +49,7 @@ export async function sortHandler(
     const column_name = meta.column_header[this._config.split_by.length];
     const sort_method =
         event.ctrlKey ||
-        (event as MouseEvent & { metaKet?: boolean }).metaKet ||
+        (event as MouseEvent & { metaKey?: boolean }).metaKey ||
         event.altKey
             ? append_sort
             : override_sort;
@@ -97,6 +97,7 @@ export function override_sort(
             return sort ? [sort] : [];
         }
     }
+
     return [[column_name, abs ? "desc abs" : "desc"]];
 }
 
@@ -111,8 +112,10 @@ export function create_sort(
     const inc_sort_dir: SortDir | undefined = sort_dir
         ? order[sort_dir]
         : "desc";
+
     if (inc_sort_dir) {
         return [column_name, inc_sort_dir];
     }
+
     return undefined;
 }
