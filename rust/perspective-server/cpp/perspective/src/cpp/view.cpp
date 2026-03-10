@@ -461,7 +461,7 @@ View<CTX_T>::schema() const {
         std::string type_string = dtype_to_str(types[agg_name]);
         new_schema[agg_name] = type_string;
 
-        if ((!m_row_pivots.empty() || m_view_config->is_total_only()) && !is_column_only()) {
+        if ((!m_row_pivots.empty() || m_view_config->is_total_only()) && (!is_column_only() || m_view_config->is_total_only())) {
             new_schema[agg_name] =
                 _map_aggregate_types(agg_name, new_schema[agg_name]);
         }
@@ -540,7 +540,7 @@ View<CTX_T>::expression_schema() const {
         const std::string& expression_alias = expr->get_expression_alias();
         new_schema[expression_alias] = dtype_to_str(expr->get_dtype());
 
-        if ((!m_row_pivots.empty() || m_view_config->is_total_only()) && !is_column_only()) {
+        if ((!m_row_pivots.empty() || m_view_config->is_total_only()) && (!is_column_only() || m_view_config->is_total_only())) {
             new_schema[expression_alias] = _map_aggregate_types(
                 expression_alias, new_schema[expression_alias]
             );
