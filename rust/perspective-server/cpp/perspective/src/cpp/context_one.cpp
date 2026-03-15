@@ -120,7 +120,7 @@ t_ctx1::get_min_max(const std::string& colname) const {
     auto rval = std::make_pair(mknone(), mknone());
     auto* aggtable = m_tree->get_aggtable();
     t_schema aggschema = aggtable->get_schema();
-    const auto* col = aggtable->get_const_column(colname).get();
+    const auto* col = aggtable->_get_const_column(colname);
     auto colidx = aggschema.get_colidx(colname);
     auto depth = m_config.get_num_rpivots();
     const std::vector<t_aggspec>& aggspecs = m_config.get_aggregates();
@@ -175,7 +175,6 @@ t_ctx1::get_data(
     t_index nrows = ext.m_erow - ext.m_srow;
     t_index stride = ext.m_ecol - ext.m_scol;
 
-    std::vector<t_tscalar> tmpvalues(nrows * ncols);
     std::vector<t_tscalar> values(nrows * stride);
 
     std::vector<const t_column*> aggcols(m_config.get_num_aggregates());
@@ -187,7 +186,7 @@ t_ctx1::get_data(
     for (t_uindex aggidx = 0, loop_end = aggcols.size(); aggidx < loop_end;
          ++aggidx) {
         const std::string& aggname = aggschema.m_columns[aggidx];
-        aggcols[aggidx] = aggtable->get_const_column(aggname).get();
+        aggcols[aggidx] = aggtable->_get_const_column(aggname);
     }
 
     const std::vector<t_aggspec>& aggspecs = m_config.get_aggregates();
@@ -200,28 +199,29 @@ t_ctx1::get_data(
         t_index agg_pridx =
             pnidx == INVALID_INDEX ? INVALID_INDEX : m_tree->get_aggidx(pnidx);
 
-        t_tscalar tree_value = m_tree->get_value(nidx);
-        tmpvalues[(ridx - ext.m_srow) * ncols] = tree_value;
+        t_index row_off = (ridx - ext.m_srow) * stride;
+
+        if (ext.m_scol == 0) {
+            t_tscalar tree_value = m_tree->get_value(nidx);
+            values[row_off] = tree_value;
+        }
 
         for (t_index aggidx = 0, loop_end = aggcols.size(); aggidx < loop_end;
              ++aggidx) {
+            t_index col = 1 + aggidx;
+            if (col < ext.m_scol || col >= ext.m_ecol) {
+                continue;
+            }
             t_tscalar value = extract_aggregate(
                 aggspecs[aggidx], aggcols[aggidx], agg_ridx, agg_pridx
             );
             if (!value.is_valid()) {
-                value.set(none); // todo: fix null handling
+                value.set(none);
             }
-            tmpvalues[(ridx - ext.m_srow) * ncols + 1 + aggidx].set(value);
+            values[row_off + col - ext.m_scol].set(value);
         }
     }
 
-    for (auto ridx = ext.m_srow; ridx < ext.m_erow; ++ridx) {
-        for (auto cidx = ext.m_scol; cidx < ext.m_ecol; ++cidx) {
-            auto insert_idx = (ridx - ext.m_srow) * stride + cidx - ext.m_scol;
-            auto src_idx = (ridx - ext.m_srow) * ncols + cidx;
-            values[insert_idx].set(tmpvalues[src_idx]);
-        }
-    }
     return values;
 }
 
@@ -232,7 +232,6 @@ t_ctx1::get_data(const std::vector<t_uindex>& rows) const {
     t_uindex nrows = rows.size();
     t_uindex ncols = get_column_count();
 
-    std::vector<t_tscalar> tmpvalues(nrows * ncols);
     std::vector<t_tscalar> values(nrows * ncols);
 
     std::vector<const t_column*> aggcols(m_config.get_num_aggregates());
@@ -244,13 +243,11 @@ t_ctx1::get_data(const std::vector<t_uindex>& rows) const {
     for (t_uindex aggidx = 0, loop_end = aggcols.size(); aggidx < loop_end;
          ++aggidx) {
         const std::string& aggname = aggschema.m_columns[aggidx];
-        aggcols[aggidx] = aggtable->get_const_column(aggname).get();
+        aggcols[aggidx] = aggtable->_get_const_column(aggname);
     }
 
     const std::vector<t_aggspec>& aggspecs = m_config.get_aggregates();
 
-    // access data for changed rows, but write them into the slice as if we
-    // start from 0
     for (t_uindex idx = 0; idx < nrows; ++idx) {
         t_uindex ridx = rows[idx];
         t_index nidx = m_traversal->get_tree_index(ridx);
@@ -261,7 +258,7 @@ t_ctx1::get_data(const std::vector<t_uindex>& rows) const {
             pnidx == INVALID_INDEX ? INVALID_INDEX : m_tree->get_aggidx(pnidx);
 
         t_tscalar tree_value = m_tree->get_value(nidx);
-        tmpvalues[idx * ncols] = tree_value;
+        values[idx * ncols] = tree_value;
 
         for (t_index aggidx = 0, loop_end = aggcols.size(); aggidx < loop_end;
              ++aggidx) {
@@ -269,16 +266,9 @@ t_ctx1::get_data(const std::vector<t_uindex>& rows) const {
                 aggspecs[aggidx], aggcols[aggidx], agg_ridx, agg_pridx
             );
             if (!value.is_valid()) {
-                value.set(none); // todo: fix null handling
+                value.set(none);
             }
-            tmpvalues[idx * ncols + 1 + aggidx].set(value);
-        }
-    }
-
-    for (t_uindex ridx = 0; ridx < nrows; ++ridx) {
-        for (t_uindex cidx = 0; cidx < ncols; ++cidx) {
-            t_uindex idx = ridx * ncols + cidx;
-            values[idx].set(tmpvalues[idx]);
+            values[idx * ncols + 1 + aggidx].set(value);
         }
     }
 
@@ -632,7 +622,7 @@ t_ctx1::pprint() const {
     for (t_uindex aggidx = 0, loop_end = aggcols.size(); aggidx < loop_end;
          ++aggidx) {
         const std::string& aggname = aggschema.m_columns[aggidx];
-        aggcols[aggidx] = aggtable->get_const_column(aggname).get();
+        aggcols[aggidx] = aggtable->_get_const_column(aggname);
     }
 
     const std::vector<t_aggspec>& aggspecs = m_config.get_aggregates();

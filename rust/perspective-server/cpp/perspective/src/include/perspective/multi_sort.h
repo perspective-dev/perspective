@@ -16,21 +16,56 @@
 #include <perspective/scalar.h>
 #include <perspective/exports.h>
 #include <perspective/comparators.h>
+#include <array>
 #include <vector>
 
 namespace perspective {
+
+// Inline fixed-capacity vector for sort rows, avoiding heap allocation.
+// Max 8 sort columns covers all practical use cases.
+struct PERSPECTIVE_EXPORT t_sortrow_vec {
+    static constexpr std::size_t MAX_CAPACITY = 8;
+
+    t_sortrow_vec() : m_size(0) {}
+
+    t_sortrow_vec(const std::vector<t_tscalar>& v) : m_size(v.size()) {
+        for (std::size_t i = 0; i < m_size; ++i) {
+            m_data[i] = v[i];
+        }
+    }
+
+    t_sortrow_vec(const t_sortrow_vec&) = default;
+    t_sortrow_vec& operator=(const t_sortrow_vec&) = default;
+    t_sortrow_vec(t_sortrow_vec&&) = default;
+    t_sortrow_vec& operator=(t_sortrow_vec&&) = default;
+
+    void reserve(std::size_t) {}
+
+    void push_back(const t_tscalar& v) { m_data[m_size++] = v; }
+
+    const t_tscalar& operator[](std::size_t i) const { return m_data[i]; }
+    t_tscalar& operator[](std::size_t i) { return m_data[i]; }
+
+    std::size_t size() const { return m_size; }
+
+    const t_tscalar* begin() const { return m_data.data(); }
+    const t_tscalar* end() const { return m_data.data() + m_size; }
+
+    std::array<t_tscalar, MAX_CAPACITY> m_data;
+    std::uint8_t m_size;
+};
 
 struct PERSPECTIVE_EXPORT t_mselem {
     t_mselem();
     t_mselem(const std::vector<t_tscalar>& row);
     t_mselem(const std::vector<t_tscalar>& row, t_uindex order);
     t_mselem(const t_tscalar& pkey, const std::vector<t_tscalar>& row);
-    t_mselem(const t_mselem& other);
-    t_mselem(t_mselem&& other) noexcept;
-    t_mselem& operator=(const t_mselem& other);
-    t_mselem& operator=(t_mselem&& other) noexcept;
+    t_mselem(const t_mselem& other) = default;
+    t_mselem(t_mselem&& other) noexcept = default;
+    t_mselem& operator=(const t_mselem& other) = default;
+    t_mselem& operator=(t_mselem&& other) noexcept = default;
 
-    std::vector<t_tscalar> m_row;
+    t_sortrow_vec m_row;
     t_tscalar m_pkey;
     t_uindex m_order;
     bool m_deleted;
@@ -40,6 +75,19 @@ struct PERSPECTIVE_EXPORT t_mselem {
 } // end namespace perspective
 
 namespace std {
+
+inline std::ostream&
+operator<<(std::ostream& os, const perspective::t_sortrow_vec& v) {
+    os << "[";
+    for (std::size_t i = 0; i < v.size(); ++i) {
+        if (i > 0) {
+            os << ", ";
+        }
+        os << v[i];
+    }
+    os << "]";
+    return os;
+}
 
 inline std::ostream&
 operator<<(std::ostream& os, const perspective::t_mselem& t) {
@@ -107,20 +155,22 @@ cmp_mselem(
 
         t_sorttype order = sort_order[idx];
 
-        t_nancmp nancmp = nan_compare(order, first, second);
+        if (first.is_floating_point() || second.is_floating_point()) {
+            t_nancmp nancmp = nan_compare(order, first, second);
 
-        if (first.is_floating_point() && nancmp.m_active) {
-            switch (nancmp.m_cmpval) {
-                case CMP_OP_LT: {
-                    return true;
-                } break;
-                case CMP_OP_GT: {
-                    return false;
-                } break;
-                case CMP_OP_EQ:
-                default: {
-                    continue;
-                } break;
+            if (nancmp.m_active) {
+                switch (nancmp.m_cmpval) {
+                    case CMP_OP_LT: {
+                        return true;
+                    } break;
+                    case CMP_OP_GT: {
+                        return false;
+                    } break;
+                    case CMP_OP_EQ:
+                    default: {
+                        continue;
+                    } break;
+                }
             }
         }
 

@@ -215,11 +215,11 @@ t_gnode::_process_mask_existed_rows(t_process_state& process_state) {
     auto flattened_num_rows = process_state.m_flattened_data_table->num_rows();
     process_state.m_existed_data_table->set_size(flattened_num_rows);
 
-    std::shared_ptr<t_column> op_col =
-        process_state.m_flattened_data_table->get_column("psp_op");
+    t_column* op_col =
+        process_state.m_flattened_data_table->_get_column("psp_op");
     process_state.m_op_base = op_col->get_nth<std::uint8_t>(0);
     t_column* pkey_col =
-        process_state.m_flattened_data_table->get_column("psp_pkey").get();
+        process_state.m_flattened_data_table->_get_column("psp_pkey");
 
     process_state.m_added_offset.resize(flattened_num_rows);
     process_state.m_prev_pkey_eq_vec.resize(flattened_num_rows);
@@ -230,7 +230,7 @@ t_gnode::_process_mask_existed_rows(t_process_state& process_state) {
     prev_pkey.clear();
 
     t_column* existed_column =
-        process_state.m_existed_data_table->get_column("psp_existed").get();
+        process_state.m_existed_data_table->_get_column("psp_existed");
 
     for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
         t_tscalar pkey = pkey_col->get_scalar(idx);
@@ -306,7 +306,7 @@ t_gnode::_process_table(t_uindex port_id) {
     t_uindex flattened_num_rows = flattened->num_rows();
 
     std::vector<t_rlookup> row_lookup(flattened_num_rows);
-    t_column* pkey_col = flattened->get_column("psp_pkey").get();
+    t_column* pkey_col = flattened->_get_column("psp_pkey");
 
     for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
         // See if each primary key in flattened already exist in the dataset
@@ -377,18 +377,17 @@ t_gnode::_process_table(t_uindex port_id) {
         [&_process_state, &column_names, this](int colidx) {
             const std::string& cname = column_names[colidx];
             auto* fcolumn =
-                _process_state.m_flattened_data_table->get_column(cname).get();
+                _process_state.m_flattened_data_table->_get_column(cname);
             auto* scolumn =
-                _process_state.m_state_data_table->get_column(cname).get();
+                _process_state.m_state_data_table->_get_column(cname);
             auto* dcolumn =
-                _process_state.m_delta_data_table->get_column(cname).get();
+                _process_state.m_delta_data_table->_get_column(cname);
             auto* pcolumn =
-                _process_state.m_prev_data_table->get_column(cname).get();
+                _process_state.m_prev_data_table->_get_column(cname);
             auto* ccolumn =
-                _process_state.m_current_data_table->get_column(cname).get();
+                _process_state.m_current_data_table->_get_column(cname);
             auto* tcolumn =
-                _process_state.m_transitions_data_table->get_column(cname).get(
-                );
+                _process_state.m_transitions_data_table->_get_column(cname);
 
             t_dtype col_dtype = fcolumn->get_dtype();
 

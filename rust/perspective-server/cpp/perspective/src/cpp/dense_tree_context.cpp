@@ -128,7 +128,7 @@ t_dtree_ctx::pprint(const t_filter& fltr) const {
 
     t_uindex ncols = 0;
     for (const std::string& colname : m_aggregates->get_schema().m_columns) {
-        aggcols.push_back(m_aggregates->get_const_column(colname).get());
+        aggcols.push_back(m_aggregates->_get_const_column(colname));
         std::cout << colname << ", ";
         ++ncols;
     }
@@ -184,8 +184,8 @@ void
 t_dtree_ctx::pprint_strands() const {
     std::vector<const t_column*> columns;
     const auto* scount_col =
-        m_strand_deltas->get_const_column("psp_strand_count").get();
-    const auto* pkey_col = m_strands->get_const_column("psp_pkey").get();
+        m_strand_deltas->_get_const_column("psp_strand_count");
+    const auto* pkey_col = m_strands->_get_const_column("psp_pkey");
     auto strand_schema = m_strands->get_schema();
 
     t_uindex width = 18;
@@ -193,7 +193,7 @@ t_dtree_ctx::pprint_strands() const {
     std::vector<std::string> colnames = {"psp_pkey", "psp_strand_count"};
 
     for (const auto& colname : strand_schema.m_columns) {
-        const auto* col = m_strands->get_const_column(colname).get();
+        const auto* col = m_strands->_get_const_column(colname);
         if (col != pkey_col) {
             columns.push_back(col);
             colnames.push_back(colname);
@@ -202,7 +202,7 @@ t_dtree_ctx::pprint_strands() const {
 
     auto strand_delta_schema = m_strand_deltas->get_schema();
     for (const auto& colname : strand_delta_schema.m_columns) {
-        const auto* col = m_strand_deltas->get_const_column(colname).get();
+        const auto* col = m_strand_deltas->_get_const_column(colname);
         if (col != scount_col) {
             columns.push_back(col);
             std::stringstream ss;
@@ -246,17 +246,17 @@ t_dtree_ctx::pprint_strands_tree() const {
     std::vector<t_colname_cptr_pair> columns;
 
     columns.emplace_back(
-        "psp_pkey", m_strands->get_const_column("psp_pkey").get()
+        "psp_pkey", m_strands->_get_const_column("psp_pkey")
     );
 
     columns.emplace_back(
         "psp_strand_count",
-        m_strand_deltas->get_const_column("psp_strand_count").get()
+        m_strand_deltas->_get_const_column("psp_strand_count")
     );
 
     for (const auto& piv : m_tree.get_pivots()) {
         columns.emplace_back(
-            piv.colname(), m_strands->get_const_column(piv.colname()).get()
+            piv.colname(), m_strands->_get_const_column(piv.colname())
         );
     }
 

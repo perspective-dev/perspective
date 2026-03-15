@@ -115,12 +115,12 @@ t_schema::add_column(const std::string& colname, t_dtype dtype) {
     m_colidx_map[colname] = idx;
     m_coldt_map[colname] = dtype;
 
-    if (colname == std::string("psp_pkey")) {
+    if (colname == "psp_pkey") {
         m_pkeyidx = idx;
         m_is_pkey = true;
     }
 
-    if (colname == std::string("psp_op")) {
+    if (colname == "psp_op") {
         m_opidx = idx;
         m_is_pkey = true;
     }
@@ -128,8 +128,8 @@ t_schema::add_column(const std::string& colname, t_dtype dtype) {
 
 void
 t_schema::retype_column(const std::string& colname, t_dtype dtype) {
-    if (colname == std::string("psp_pkey")
-        || colname == std::string("psp_op")) {
+    if (colname == "psp_pkey"
+        || colname == "psp_op") {
         PSP_COMPLAIN_AND_ABORT("Cannot retype primary key or operation columns."
         );
     }

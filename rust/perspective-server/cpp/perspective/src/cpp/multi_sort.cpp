@@ -47,34 +47,6 @@ t_mselem::t_mselem(const t_tscalar& pkey, const std::vector<t_tscalar>& row) :
     m_deleted(false),
     m_updated(false) {}
 
-t_mselem::t_mselem(const t_mselem& other) {
-    m_pkey = other.m_pkey;
-    m_row = other.m_row;
-    m_deleted = other.m_deleted;
-    m_updated = other.m_updated;
-    m_order = other.m_order;
-}
-
-t_mselem::t_mselem(t_mselem&& other) noexcept {
-    m_pkey = other.m_pkey;
-    m_row = std::move(other.m_row);
-    m_deleted = other.m_deleted;
-    m_updated = other.m_updated;
-    m_order = other.m_order;
-}
-
-t_mselem& t_mselem::operator=(const t_mselem& other) = default;
-
-t_mselem&
-t_mselem::operator=(t_mselem&& other) noexcept {
-    m_pkey = other.m_pkey;
-    m_row = std::move(other.m_row);
-    m_deleted = other.m_deleted;
-    m_updated = other.m_updated;
-    m_order = other.m_order;
-    return *this;
-}
-
 t_minmax_idx::t_minmax_idx(t_index mn, t_index mx) : m_min(mn), m_max(mx) {}
 
 // Given a vector return the indices of the
@@ -112,19 +84,21 @@ get_minmax_idx(const std::vector<t_tscalar>& vec, t_sorttype stype) {
         } break;
         case SORTTYPE_ASCENDING_ABS:
         case SORTTYPE_DESCENDING_ABS: {
-            for (t_index idx = 0, loop_end = vec.size(); idx < loop_end;
+            double mindbl = std::abs(vec[0].to_double());
+            double maxdbl = mindbl;
+            rval.m_min = 0;
+            rval.m_max = 0;
+            for (t_index idx = 1, loop_end = vec.size(); idx < loop_end;
                  ++idx) {
                 double val = std::abs(vec[idx].to_double());
-                double mindbl = std::abs(double(min_max.first.as_bool()));
-                double maxdbl = std::abs(double(min_max.second.as_bool()));
 
                 if (val <= mindbl) {
-                    min_max.first.set(val);
+                    mindbl = val;
                     rval.m_min = idx;
                 }
 
                 if (val >= maxdbl) {
-                    min_max.second.set(val);
+                    maxdbl = val;
                     rval.m_max = idx;
                 }
             }
@@ -215,7 +189,7 @@ t_multisorter::t_multisorter(
     const std::vector<t_sorttype>& order
 ) :
     m_sort_order(order),
-    m_elems(std::move(std::move(elems))) {}
+    m_elems(std::move(elems)) {}
 
 bool
 t_multisorter::operator()(const t_mselem& a, const t_mselem& b) const {

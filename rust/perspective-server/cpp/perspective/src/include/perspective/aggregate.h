@@ -46,15 +46,23 @@ public:
 
     ROLLING_T
     reduce(const RAW_DATA_T* biter, const RAW_DATA_T* eiter) {
-        ROLLING_T value =
-            std::accumulate(biter, eiter, static_cast<ROLLING_T>(0));
+        ROLLING_T value = static_cast<ROLLING_T>(0);
+        auto n = eiter - biter;
+#pragma omp simd reduction(+ : value)
+        for (decltype(n) i = 0; i < n; ++i) {
+            value += static_cast<ROLLING_T>(biter[i]);
+        }
         return value;
     }
 
     ROLLING_T
     roll_up(const ROLLING_T* biter, const ROLLING_T* eiter) {
-        ROLLING_T value =
-            std::accumulate(biter, eiter, static_cast<ROLLING_T>(0));
+        ROLLING_T value = static_cast<ROLLING_T>(0);
+        auto n = eiter - biter;
+#pragma omp simd reduction(+ : value)
+        for (decltype(n) i = 0; i < n; ++i) {
+            value += biter[i];
+        }
         return value;
     }
 };
@@ -119,27 +127,29 @@ public:
 
     ROLLING_T
     reduce(const RAW_DATA_T* biter, const RAW_DATA_T* eiter) {
+        double sum = 0.0;
+        auto n = eiter - biter;
+#pragma omp simd reduction(+ : sum)
+        for (decltype(n) i = 0; i < n; ++i) {
+            sum += static_cast<double>(biter[i]);
+        }
 
-        double sum = std::accumulate(biter, eiter, static_cast<double>(0));
-
-        double count = eiter - biter;
-
+        double count = static_cast<double>(n);
         return ROLLING_T(sum, count);
     }
 
     ROLLING_T
     roll_up(const ROLLING_T* biter, const ROLLING_T* eiter) {
+        double sum = 0.0;
+        double count = 0.0;
+        auto niter = eiter - biter;
 
-        ROLLING_T value(0, 0);
-        t_uindex niter = eiter - biter;
-
-        for (t_uindex idx = 0; idx < niter; ++idx) {
-            const ROLLING_T* tmp = biter + idx;
-            value.first += tmp->first;
-            value.second += tmp->second;
+        for (decltype(niter) idx = 0; idx < niter; ++idx) {
+            sum += biter[idx].first;
+            count += biter[idx].second;
         }
 
-        return value;
+        return ROLLING_T(sum, count);
     }
 };
 
@@ -225,8 +235,9 @@ build_aggregate_helper(
     t_index nidx
 ) {
     typedef typename AGGIMPL_T::t_rolling t_rolling;
-    const t_rolling* biter = ocolumn->get_nth<t_rolling>(bcidx);
-    const t_rolling* eiter = ocolumn->get_nth<t_rolling>(ecidx);
+    const t_rolling* base = ocolumn->get_nth_base<t_rolling>();
+    const t_rolling* biter = base + bcidx;
+    const t_rolling* eiter = base + ecidx;
     t_rolling rolling = aggimpl.roll_up(biter, eiter);
     ocolumn->set_nth<t_rolling>(nidx, rolling);
 }
@@ -287,9 +298,11 @@ t_aggregate::build_aggregate() {
         return;
     }
 
-    std::vector<t_raw_data> buffer(icptr_size);
     const t_column* lcptr = m_tree.get_leaf_cptr();
     const t_uindex* base_lcptr = lcptr->get<const t_uindex>(0);
+
+    // Lazily sized buffer — allocated to max leaf range, not entire column.
+    std::vector<t_raw_data> buffer;
 
     for (t_index level_idx = n_levels; level_idx > -1; level_idx--) {
         std::pair<t_index, t_index> markers =
@@ -307,10 +320,15 @@ t_aggregate::build_aggregate() {
 
                 PSP_VERBOSE_ASSERT(elptr > blptr, "Unexpected pointers");
 
+                t_uindex leaf_count = elptr - blptr;
+                if (buffer.size() < leaf_count) {
+                    buffer.resize(leaf_count);
+                }
+
                 icptr->fill(buffer, blptr, elptr);
 
                 t_raw_data* biter = &buffer[0];
-                t_raw_data* eiter = biter + (elptr - blptr);
+                t_raw_data* eiter = biter + leaf_count;
                 auto tmp = aggimpl.reduce(biter, eiter);
                 ocolumn->set_nth<t_rolling>(nidx, tmp);
             }

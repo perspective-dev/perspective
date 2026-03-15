@@ -106,6 +106,14 @@ public:
     template <typename T>
     const T* get_nth(t_uindex idx) const;
 
+    // Returns a raw pointer to the beginning of the typed data array.
+    // Use for sequential/batched access to avoid per-element get_nth calls.
+    template <typename T>
+    const T* get_nth_base() const;
+
+    template <typename T>
+    T* get_nth_base();
+
     // idx is in items
     const t_status* get_nth_status(t_uindex idx) const;
 
@@ -300,6 +308,18 @@ const T*
 t_column::get_nth(t_uindex idx) const {
     COLUMN_CHECK_ACCESS(idx);
     return m_data->get_nth<T>(idx);
+}
+
+template <typename T>
+const T*
+t_column::get_nth_base() const {
+    return m_data->get_nth<T>(0);
+}
+
+template <typename T>
+T*
+t_column::get_nth_base() {
+    return m_data->get_nth<T>(0);
 }
 
 template <typename T>

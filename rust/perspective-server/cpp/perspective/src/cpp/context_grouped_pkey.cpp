@@ -155,7 +155,7 @@ t_ctx_grouped_pkey::get_data(
     for (t_uindex aggidx = 0, loop_end = aggcols.size(); aggidx < loop_end;
          ++aggidx) {
         const std::string& aggname = aggschema.m_columns[aggidx];
-        aggcols[aggidx] = aggtable->get_const_column(aggname).get();
+        aggcols[aggidx] = aggtable->_get_const_column(aggname);
     }
 
     const std::vector<t_aggspec>& aggspecs = m_config.get_aggregates();
@@ -520,12 +520,12 @@ t_ctx_grouped_pkey::rebuild() {
     };
 
     const auto* sortby_col =
-        tbl->get_const_column(m_config.get_sort_by(child_col_name)).get();
+        tbl->_get_const_column(m_config.get_sort_by(child_col_name));
 
     const auto* parent_col =
-        tbl->get_const_column(m_config.get_parent_pkey_column()).get();
+        tbl->_get_const_column(m_config.get_parent_pkey_column());
 
-    const auto* pkey_col = tbl->get_const_column("psp_pkey").get();
+    const auto* pkey_col = tbl->_get_const_column("psp_pkey");
 
     std::vector<t_datum> data(nrows);
     tsl::hopscotch_map<t_tscalar, t_uindex> child_ridx_map;
@@ -651,9 +651,9 @@ t_ctx_grouped_pkey::rebuild() {
             const t_aggspec& spec = aggspecs[aggnum];
             if (spec.agg() == AGGTYPE_IDENTITY) {
                 auto* scol =
-                    aggtable->get_column(spec.get_first_depname()).get();
+                    aggtable->_get_column(spec.get_first_depname());
                 scol->copy(
-                    tbl->get_const_column(spec.get_first_depname()).get(),
+                    tbl->_get_const_column(spec.get_first_depname()),
                     aggindices,
                     1
                 );

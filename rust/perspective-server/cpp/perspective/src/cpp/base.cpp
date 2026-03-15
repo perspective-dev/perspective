@@ -707,7 +707,7 @@ root_pidx() {
 
 bool
 is_internal_colname(const std::string& c) {
-    return c == std::string("psp_");
+    return c == "psp_";
 }
 
 template <typename T>

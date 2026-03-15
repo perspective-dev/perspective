@@ -1239,6 +1239,18 @@ importers:
       perspective-3-8-0:
         specifier: npm:@finos/perspective@3.8.0
         version: '@finos/perspective@3.8.0'
+      perspective-4-0-0:
+        specifier: npm:@perspective-dev/client@4.0.0
+        version: '@perspective-dev/client@4.0.0'
+      perspective-4-1-0:
+        specifier: npm:@perspective-dev/client@4.1.0
+        version: '@perspective-dev/client@4.1.0'
+      perspective-4-2-0:
+        specifier: npm:@perspective-dev/client@4.2.0
+        version: '@perspective-dev/client@4.2.0'
+      perspective-4-3-0:
+        specifier: npm:@perspective-dev/client@4.3.0
+        version: '@perspective-dev/client@4.3.0'
     devDependencies:
       '@perspective-dev/client':
         specifier: 'workspace:'
@@ -3330,6 +3342,21 @@ packages:
   '@opentelemetry/api@1.9.0':
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
     engines: {node: '>=8.0.0'}
+
+  '@perspective-dev/client@4.0.0':
+    resolution: {integrity: sha512-n3IHMIU+WeraAxAcyBMG/Wipegm8PBcDL3+haZecriBvV4v+7EzNvZd8l6pQNbYa+ah5eD2BCgmvZ8Mg/dxUug==}
+
+  '@perspective-dev/client@4.1.0':
+    resolution: {integrity: sha512-23VTzOmmBo1KynLTygFuM/RuOszSgIbvG68I3MNCS/w5BOoG4XGt+4WuZWTr13c93b+n3dGK18E4YF7hy82nwg==}
+
+  '@perspective-dev/client@4.2.0':
+    resolution: {integrity: sha512-Gb9RFOoKnGAJDR0rZA9OBC8CY3Sv3zsEJfrmUhmnFWC21erk66DhppFXKYm3ggU2ob/yhCNA/yWMUv4n8OBqVQ==}
+
+  '@perspective-dev/client@4.3.0':
+    resolution: {integrity: sha512-LhVDyYzZrSmtuU04qX+MzpnA1BKPEW9nMi4RPE6y3KiGAWwFFqEFgZKF233U8/Fx3v2URCijcwmXn0qTVfoPMQ==}
+
+  '@perspective-dev/server@4.3.0':
+    resolution: {integrity: sha512-UH3ADscynozVx42RF07DTBmPE/0PUwH+SS0cgvMLuLfBjtvnPm6msfOU0tHlgFnNZOHJO0q6RZ9WI5fD6wF07A==}
 
   '@playwright/experimental-ct-core@1.52.0':
     resolution: {integrity: sha512-DiDEammXxt8OIFDfoNitoOZyHFJAu6aYi0abmHl0IZgOQHxccP6UX50aTEnSTTUWCfwUWB0Vd8TKJ6w122WJEw==}
@@ -12469,6 +12496,56 @@ snapshots:
       aggregate-error: 3.1.0
 
   '@opentelemetry/api@1.9.0': {}
+
+  '@perspective-dev/client@4.0.0':
+    dependencies:
+      '@perspective-dev/server': 4.3.0
+      pro_self_extracting_wasm: 0.0.9
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
+  '@perspective-dev/client@4.1.0':
+    dependencies:
+      '@perspective-dev/server': 4.3.0
+      pro_self_extracting_wasm: 0.0.9
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
+  '@perspective-dev/client@4.2.0':
+    dependencies:
+      '@perspective-dev/server': 4.3.0
+      pro_self_extracting_wasm: 0.0.9
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
+  '@perspective-dev/client@4.3.0':
+    dependencies:
+      '@perspective-dev/server': 4.3.0
+      pro_self_extracting_wasm: 0.0.9
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
+  '@perspective-dev/server@4.3.0': {}
 
   '@playwright/experimental-ct-core@1.52.0(@types/node@24.9.1)(jiti@1.21.7)(less@4.4.2)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)':
     dependencies:

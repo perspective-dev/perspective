@@ -68,6 +68,10 @@ protected:
     resolve_cells(const std::vector<std::pair<t_uindex, t_uindex>>& cells
     ) const;
 
+    std::vector<t_cellinfo>
+    resolve_cells(t_uindex srow, t_uindex erow, t_uindex scol, t_uindex ecol
+    ) const;
+
     std::shared_ptr<t_stree> rtree();
     std::shared_ptr<const t_stree> rtree() const;
 

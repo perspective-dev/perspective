@@ -44,27 +44,22 @@ get_dominant(std::vector<t_tscalar>& values) {
         return mknone();
     }
 
-    std::sort(values.begin(), values.end());
+    // Single-pass O(n) frequency count using hash map instead of O(n log n)
+    // sort.
+    tsl::hopscotch_map<t_tscalar, t_index> freq;
+    freq.reserve(values.size());
 
     t_tscalar delem = values[0];
-    t_index dcount = 1;
-    t_index count = 1;
+    t_index dcount = 0;
 
-    for (t_index idx = 1, loop_end = values.size(); idx < loop_end; ++idx) {
-        const t_tscalar& prev = values[idx - 1];
-        const t_tscalar& curr = values[idx];
-
-        if (curr == prev && curr.is_valid()) {
-            ++count;
+    for (const auto& val : values) {
+        if (!val.is_valid()) {
+            continue;
         }
-
-        if ((idx + 1) == static_cast<t_index>(values.size()) || curr != prev) {
-            if (count > dcount) {
-                delem = prev;
-                dcount = count;
-            }
-
-            count = 1;
+        t_index count = ++freq[val];
+        if (count > dcount) {
+            dcount = count;
+            delem = val;
         }
     }
 
@@ -146,7 +141,7 @@ t_stree::init() {
     m_aggcols = std::vector<const t_column*>(columns.size());
 
     for (t_uindex idx = 0, loop_end = columns.size(); idx < loop_end; ++idx) {
-        m_aggcols[idx] = m_aggregates->get_const_column(columns[idx]).get();
+        m_aggcols[idx] = m_aggregates->_get_const_column(columns[idx]);
     }
 
     m_deltas = std::make_shared<t_tcdeltas>();
@@ -194,7 +189,7 @@ t_stree::build_strand_table_phase_1(
     const std::vector<std::string>& pivot_like
 ) const {
     pivots_neq = false;
-    std::set<std::string> pivmap;
+    tsl::hopscotch_set<std::string> pivmap;
 
     // if a row has been changed (value change, validity change, removed, etc.),
     // will be false.
@@ -281,7 +276,7 @@ t_stree::build_strand_table_phase_2(
     t_uindex& insert_count,
     const std::vector<std::string>& pivot_like
 ) const {
-    std::set<std::string> pivmap;
+    tsl::hopscotch_set<std::string> pivmap;
 
     // For each column, insert the prev value to the strand
     for (t_uindex pidx = 0, ploop_end = pivot_like.size(); pidx < ploop_end;
@@ -432,10 +427,10 @@ t_stree::build_strand_table(
     // the construction method.
     for (t_uindex pidx = 0; pidx < npivotlike; ++pidx) {
         const std::string& piv = metadata.m_strand_schema.m_columns[pidx];
-        piv_pcols[pidx] = prev.get_const_column(piv).get();
-        piv_ccols[pidx] = current.get_const_column(piv).get();
-        piv_tcols[pidx] = transitions.get_const_column(piv).get();
-        piv_scols[pidx] = strands->get_column(piv).get();
+        piv_pcols[pidx] = prev._get_const_column(piv);
+        piv_ccols[pidx] = current._get_const_column(piv);
+        piv_tcols[pidx] = transitions._get_const_column(piv);
+        piv_scols[pidx] = strands->_get_column(piv);
     }
 
     t_uindex aggcolsize = metadata.m_aggschema.m_columns.size();
@@ -454,17 +449,17 @@ t_stree::build_strand_table(
             agg_pcols[aggidx] = nullptr;
             strand_count_idx = aggidx;
         } else {
-            agg_dcols[aggidx] = delta.get_const_column(aggcol).get();
-            agg_ccols[aggidx] = current.get_const_column(aggcol).get();
-            agg_pcols[aggidx] = prev.get_const_column(aggcol).get();
+            agg_dcols[aggidx] = delta._get_const_column(aggcol);
+            agg_ccols[aggidx] = current._get_const_column(aggcol);
+            agg_pcols[aggidx] = prev._get_const_column(aggcol);
         }
 
-        agg_acols[aggidx] = aggs->get_column(aggcol).get();
+        agg_acols[aggidx] = aggs->_get_column(aggcol);
     }
 
-    t_column* agg_scount = aggs->get_column("psp_strand_count").get();
+    t_column* agg_scount = aggs->_get_column("psp_strand_count");
 
-    t_column* spkey = strands->get_column("psp_pkey").get();
+    t_column* spkey = strands->_get_column("psp_pkey");
 
     t_mask msk_prev;
     t_mask msk_curr;
@@ -475,6 +470,7 @@ t_stree::build_strand_table(
     }
 
     bool has_filters = config.has_filters();
+    const std::uint8_t* op_base = op_col->get_nth_base<std::uint8_t>();
 
     if (has_filters) {
         for (t_uindex idx = 0, loop_end = flattened.size(); idx < loop_end;
@@ -483,7 +479,7 @@ t_stree::build_strand_table(
             bool filter_curr = msk_curr.get(idx);
 
             t_tscalar pkey = pkey_col->get_scalar(idx);
-            std::uint8_t op_ = *(op_col->get_nth<std::uint8_t>(idx));
+            std::uint8_t op_ = op_base[idx];
             t_op op = static_cast<t_op>(op_);
             bool pivots_neq;
 
@@ -579,7 +575,7 @@ t_stree::build_strand_table(
              ++idx) {
 
             t_tscalar pkey = pkey_col->get_scalar(idx);
-            std::uint8_t op_ = *(op_col->get_nth<std::uint8_t>(idx));
+            std::uint8_t op_ = op_base[idx];
             t_op op = static_cast<t_op>(op_);
             bool pivots_neq;
 
@@ -685,8 +681,8 @@ t_stree::build_strand_table(
     t_uindex insert_count = 0;
     for (t_uindex pidx = 0; pidx < npivotlike; ++pidx) {
         const std::string& piv = metadata.m_strand_schema.m_columns[pidx];
-        piv_fcols[pidx] = flattened.get_const_column(piv).get();
-        piv_scols[pidx] = strands->get_column(piv).get();
+        piv_fcols[pidx] = flattened._get_const_column(piv);
+        piv_scols[pidx] = strands->_get_column(piv);
     }
 
     t_uindex aggcolsize = metadata.m_aggschema.m_columns.size();
@@ -699,14 +695,14 @@ t_stree::build_strand_table(
             agg_fcols[aggidx] = nullptr;
             strand_count_idx = aggidx;
         } else {
-            agg_fcols[aggidx] = flattened.get_const_column(aggcol).get();
+            agg_fcols[aggidx] = flattened._get_const_column(aggcol);
         }
 
-        agg_acols[aggidx] = aggs->get_column(aggcol).get();
+        agg_acols[aggidx] = aggs->_get_column(aggcol);
     }
 
-    t_column* agg_scount = aggs->get_column("psp_strand_count").get();
-    t_column* spkey = strands->get_column("psp_pkey").get();
+    t_column* agg_scount = aggs->_get_column("psp_strand_count");
+    t_column* spkey = strands->_get_column("psp_pkey");
     t_mask msk;
     if (config.has_filters()) {
         msk = filter_table_for_config(flattened, config);
@@ -716,6 +712,7 @@ t_stree::build_strand_table(
     const t_uindex loop_end = flattened.size();
     const t_uindex size = loop_end - msk.count();
     const t_uindex ploop_end = metadata.m_pivot_like_columns.size();
+    const std::uint8_t* op_base = op_col->get_nth_base<std::uint8_t>();
     parallel_for(int(aggcolsize + 1), [&](int aggidx) {
         // This over-allocates for `OP_DELETE`, as it only accounts for
         // filtered count.
@@ -736,7 +733,7 @@ t_stree::build_strand_table(
                 continue;
             }
 
-            std::uint8_t op_ = *(op_col->get_nth<std::uint8_t>(idx));
+            std::uint8_t op_ = op_base[idx];
             t_op op = static_cast<t_op>(op_);
             if (op == OP_DELETE) {
                 continue;
@@ -798,7 +795,7 @@ t_stree::populate_pkey_idx(
             auto pkey =
                 m_symtable.get_interned_tscalar(pkey_col->get_scalar(lfidx));
             auto strand_count =
-                *(strand_count_col->get_nth<std::int8_t>(lfidx));
+                strand_count_col->get_nth_base<std::int8_t>()[lfidx];
 
             // Checks the strand count and adds a new primary key if it's
             // increased.
@@ -982,9 +979,9 @@ t_stree::update_aggs_from_static(
 
     for (const auto& colname : aggschema.m_columns) {
         agg_update_info.m_src.push_back(
-            src_aggtable.get_const_column(colname).get()
+            src_aggtable._get_const_column(colname)
         );
-        agg_update_info.m_dst.push_back(m_aggregates->get_column(colname).get()
+        agg_update_info.m_dst.push_back(m_aggregates->_get_column(colname)
         );
         agg_update_info.m_aggspecs.push_back(ctx.get_aggspec(colname));
     }
@@ -2428,7 +2425,7 @@ t_stree::get_aggregate(t_index idx, t_index aggnum) const {
     }
 
     auto aggtable = get_aggtable();
-    const auto* c = aggtable->get_const_column(aggnum).get();
+    const auto* c = aggtable->_get_const_column(aggnum);
     auto agg_ridx = get_aggidx(idx);
 
     t_index pidx = get_parent_idx(idx);

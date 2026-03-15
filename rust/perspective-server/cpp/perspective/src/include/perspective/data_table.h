@@ -126,6 +126,9 @@ public:
     void set_table_size(t_uindex size);
 
     t_column* _get_column(std::string_view colname);
+    const t_column* _get_const_column(std::string_view colname) const;
+    const t_column* _get_const_column_safe(std::string_view colname) const;
+    const t_column* _get_const_column(t_uindex idx) const;
 
     std::shared_ptr<t_data_table> flatten() const;
 
@@ -367,16 +370,16 @@ t_data_table::flatten_helper_1(FLATTENED_T flattened) const {
 
     for (const auto& colname : m_schema.m_columns) {
         if (colname != "psp_pkey" && colname != "psp_op") {
-            s_columns.push_back(get_const_column(colname).get());
-            d_columns.push_back(flattened->get_column(colname).get());
+            s_columns.push_back(_get_const_column(colname));
+            d_columns.push_back(flattened->_get_column(colname));
         }
     }
 
-    const t_column* s_pkey_col = get_const_column("psp_pkey").get();
-    const t_column* s_op_col = get_const_column("psp_op").get();
+    const t_column* s_pkey_col = _get_const_column("psp_pkey");
+    const t_column* s_op_col = _get_const_column("psp_op");
 
-    t_column* d_pkey_col = flattened->get_column("psp_pkey").get();
-    t_column* d_op_col = flattened->get_column("psp_op").get();
+    t_column* d_pkey_col = flattened->_get_column("psp_pkey");
+    t_column* d_op_col = flattened->_get_column("psp_op");
 
     typedef std::vector<t_rowpack<PKEY_T>> t_rpvec;
 
@@ -554,7 +557,7 @@ t_data_table::flatten_helper_1(FLATTENED_T flattened) const {
         int(m_schema.get_num_columns()),
         [&flattened, this](int colidx) {
             const auto& colname = this->m_schema.m_columns[colidx];
-            auto col = get_const_column(colname).get();
+            auto col = _get_const_column(colname);
             if (col->get_dtype() == DTYPE_STR) {
                 flattened->get_column(colname)->copy_vocabulary(col);
             }

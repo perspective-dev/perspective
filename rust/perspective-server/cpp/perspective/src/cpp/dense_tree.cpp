@@ -18,6 +18,7 @@
 #include <perspective/sort_specification.h>
 #include <perspective/data_table.h>
 
+#include <numeric>
 #include <utility>
 
 namespace perspective {
@@ -28,7 +29,7 @@ t_dtree::t_dtree(
     const std::vector<std::pair<std::string, std::string>>& sortby_colvec
 ) :
     m_levels_pivoted(0),
-    m_ds(std::move(std::move(ds))),
+    m_ds(std::move(ds)),
     m_pivots(pivots),
     m_nidx(0),
     m_backing_store(BACKING_STORE_MEMORY),
@@ -55,7 +56,7 @@ t_dtree::t_dtree(
 ) :
     m_dirname(std::move(dirname)),
     m_levels_pivoted(0),
-    m_ds(std::move(std::move(ds))),
+    m_ds(std::move(ds)),
     m_pivots(pivots),
     m_nidx(0),
     m_backing_store(backing_store),
@@ -185,10 +186,7 @@ t_dtree::pivot(const t_filter& filter, t_uindex level) {
     if (m_levels_pivoted == 0) {
         m_leaves.extend<t_uindex>(nrows);
         auto* leaves = m_leaves.get_nth<t_uindex>(0);
-
-        for (t_uindex idx = 0; idx < nrows; idx++) {
-            leaves[idx] = idx;
-        }
+        std::iota(leaves, leaves + nrows, t_uindex(0));
 
         nbidx = 0;
         neidx = 1;
@@ -209,7 +207,7 @@ t_dtree::pivot(const t_filter& filter, t_uindex level) {
         } else {
             const t_pivot& pivot = m_pivots[pidx - 1];
             std::string pivot_colname = pivot.colname();
-            pivcol = m_ds->get_const_column(pivot_colname).get();
+            pivcol = m_ds->_get_const_column(pivot_colname);
             t_dtype piv_dtype = pivcol->get_dtype();
 
             t_uindex next_neidx = 0;

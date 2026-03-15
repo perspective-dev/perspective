@@ -38,30 +38,34 @@ t_argsort_comparator::t_argsort_comparator(
 
 bool
 t_argsort_comparator::operator()(t_index a, t_index b) const {
-    const t_tscalar& first = m_v[a];
-    const t_tscalar& second = m_v[b];
-
     switch (m_sort_type) {
-        case SORTTYPE_ASCENDING: {
-            return (first < second);
-        } break;
-        case SORTTYPE_DESCENDING: {
-            return (first > second);
-        } break;
-        case SORTTYPE_ASCENDING_ABS: {
-            return std::abs(first.to_double()) < std::abs(second.to_double());
-        } break;
-        case SORTTYPE_DESCENDING_ABS: {
-
-            return std::abs(first.to_double()) > std::abs(second.to_double());
-        } break;
-        case SORTTYPE_NONE: {
-            return a < b;
-        }
+        case SORTTYPE_ASCENDING:
+            return t_argsort_comparator_impl<SORTTYPE_ASCENDING>(m_v)(a, b);
+        case SORTTYPE_DESCENDING:
+            return t_argsort_comparator_impl<SORTTYPE_DESCENDING>(m_v)(a, b);
+        case SORTTYPE_ASCENDING_ABS:
+            return t_argsort_comparator_impl<SORTTYPE_ASCENDING_ABS>(m_v)(a, b);
+        case SORTTYPE_DESCENDING_ABS:
+            return t_argsort_comparator_impl<SORTTYPE_DESCENDING_ABS>(m_v)(
+                a, b
+            );
+        case SORTTYPE_NONE:
+            return t_argsort_comparator_impl<SORTTYPE_NONE>(m_v)(a, b);
     }
 
     return a < b;
 }
+
+namespace {
+
+void
+init_output(std::vector<t_index>& output) {
+    for (t_index i = 0, loop_end = output.size(); i != loop_end; ++i) {
+        output[i] = i;
+    }
+}
+
+} // anonymous namespace
 
 void
 simple_argsort(
@@ -69,13 +73,41 @@ simple_argsort(
     std::vector<t_index>& output,
     const t_sorttype& sort_type
 ) {
-    // Output should be the same size is v
-    for (t_index i = 0, loop_end = output.size(); i != loop_end; ++i) {
-        output[i] = i;
-    }
-    t_argsort_comparator cmp(v, sort_type);
+    init_output(output);
 
-    std::sort(output.begin(), output.end(), cmp);
+    switch (sort_type) {
+        case SORTTYPE_ASCENDING: {
+            std::sort(
+                output.begin(),
+                output.end(),
+                t_argsort_comparator_impl<SORTTYPE_ASCENDING>(v)
+            );
+        } break;
+        case SORTTYPE_DESCENDING: {
+            std::sort(
+                output.begin(),
+                output.end(),
+                t_argsort_comparator_impl<SORTTYPE_DESCENDING>(v)
+            );
+        } break;
+        case SORTTYPE_ASCENDING_ABS: {
+            std::sort(
+                output.begin(),
+                output.end(),
+                t_argsort_comparator_impl<SORTTYPE_ASCENDING_ABS>(v)
+            );
+        } break;
+        case SORTTYPE_DESCENDING_ABS: {
+            std::sort(
+                output.begin(),
+                output.end(),
+                t_argsort_comparator_impl<SORTTYPE_DESCENDING_ABS>(v)
+            );
+        } break;
+        case SORTTYPE_NONE: {
+            // output is already identity-initialized
+        } break;
+    }
 }
 
 } // namespace perspective

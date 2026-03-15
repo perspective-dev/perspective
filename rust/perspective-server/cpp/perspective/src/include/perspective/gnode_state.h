@@ -104,6 +104,11 @@ public:
     // a `t_data_table` - usually a pointer to the gnode state's master
     // table or the expression table from the context.
 
+    void resolve_pkeys(
+        const std::vector<t_tscalar>& pkeys,
+        std::vector<t_uindex>& out_row_indices
+    ) const;
+
     t_tscalar read_by_pkey(
         const t_data_table& table, const std::string& colname, t_tscalar& pkey
     ) const;

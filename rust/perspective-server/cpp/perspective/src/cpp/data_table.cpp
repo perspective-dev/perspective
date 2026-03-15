@@ -311,6 +311,32 @@ t_data_table::_get_column(std::string_view colname) {
     return m_columns[idx].get();
 }
 
+const t_column*
+t_data_table::_get_const_column(std::string_view colname) const {
+    PSP_TRACE_SENTINEL();
+    PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+    t_uindex idx = m_schema.get_colidx(colname.data());
+    return m_columns[idx].get();
+}
+
+const t_column*
+t_data_table::_get_const_column(t_uindex idx) const {
+    PSP_TRACE_SENTINEL();
+    PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+    return m_columns[idx].get();
+}
+
+const t_column*
+t_data_table::_get_const_column_safe(std::string_view colname) const {
+    PSP_TRACE_SENTINEL();
+    PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+    t_uindex idx = m_schema.get_colidx_safe(colname.data());
+    if (idx == t_uindex(-1)) {
+        return nullptr;
+    }
+    return m_columns[idx].get();
+}
+
 const t_schema&
 t_data_table::get_schema() const {
     PSP_TRACE_SENTINEL();
@@ -445,8 +471,8 @@ t_data_table::append(const t_data_table& other) {
             std::cout << ss.str();
             PSP_COMPLAIN_AND_ABORT(ss.str())
         }
-        src_cols.push_back(other.get_const_column(cname).get());
-        dst_cols.push_back(get_column(cname).get());
+        src_cols.push_back(other._get_const_column(cname));
+        dst_cols.push_back(_get_column(cname));
         incoming.insert(cname);
     }
     t_uindex other_size = other.num_rows();
@@ -489,7 +515,7 @@ t_data_table::filter_cpp(
 
     for (t_uindex idx = 0; idx < fterm_size; ++idx) {
         indices[idx] = m_schema.get_colidx(fterms[idx].m_colname);
-        columns[idx] = get_const_column(fterms[idx].m_colname).get();
+        columns[idx] = _get_const_column(fterms[idx].m_colname);
         fterms[idx].coerce_numeric(columns[idx]->get_dtype());
         if (fterms[idx].m_use_interned) {
             t_tscalar& thr = fterms[idx].m_threshold;
@@ -866,6 +892,7 @@ t_data_table::get_scalvec() const {
     auto cols = get_const_columns();
     auto ncols = cols.size();
     std::vector<t_tscalar> rv;
+    rv.reserve(nrows * ncols);
     for (t_uindex idx = 0; idx < nrows; ++idx) {
         for (t_uindex cidx = 0; cidx < ncols; ++cidx) {
             rv.push_back(cols[cidx]->get_scalar(idx));

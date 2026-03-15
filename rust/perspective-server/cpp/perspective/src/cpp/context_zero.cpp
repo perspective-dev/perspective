@@ -97,35 +97,30 @@ t_ctx0::notify(
 ) {
 
     t_uindex nrecs = flattened.size();
-    std::shared_ptr<const t_column> pkey_sptr =
-        flattened.get_const_column("psp_pkey");
-    std::shared_ptr<const t_column> op_sptr =
-        flattened.get_const_column("psp_op");
-    const t_column* pkey_col = pkey_sptr.get();
-    const t_column* op_col = op_sptr.get();
-
-    std::shared_ptr<const t_column> existed_sptr =
-        existed.get_const_column("psp_existed");
-    const t_column* existed_col = existed_sptr.get();
+    const t_column* pkey_col = flattened._get_const_column("psp_pkey");
+    const t_column* op_col = flattened._get_const_column("psp_op");
+    const t_column* existed_col = existed._get_const_column("psp_existed");
 
     bool delete_encountered = false;
+    bool has_filters = m_config.has_filters();
+    t_mask msk_prev, msk_curr;
+    if (has_filters) {
+        msk_prev = filter_table_for_config(prev, m_config);
+        msk_curr = filter_table_for_config(curr, m_config);
+    }
 
-    if (m_config.has_filters()) {
-        t_mask msk_prev = filter_table_for_config(prev, m_config);
-        t_mask msk_curr = filter_table_for_config(curr, m_config);
+    for (t_uindex idx = 0; idx < nrecs; ++idx) {
+        t_tscalar pkey =
+            m_symtable.get_interned_tscalar(pkey_col->get_scalar(idx));
+        std::uint8_t op_ = *(op_col->get_nth<std::uint8_t>(idx));
+        t_op op = static_cast<t_op>(op_);
+        bool row_existed = *(existed_col->get_nth<bool>(idx));
 
-        for (t_uindex idx = 0; idx < nrecs; ++idx) {
-            t_tscalar pkey =
-                m_symtable.get_interned_tscalar(pkey_col->get_scalar(idx));
-
-            std::uint8_t op_ = *(op_col->get_nth<std::uint8_t>(idx));
-            t_op op = static_cast<t_op>(op_);
-            bool existed = *(existed_col->get_nth<bool>(idx));
-
-            switch (op) {
-                case OP_INSERT: {
+        switch (op) {
+            case OP_INSERT: {
+                if (has_filters) {
                     bool filter_curr = msk_curr.get(idx);
-                    bool filter_prev = msk_prev.get(idx) && existed;
+                    bool filter_prev = msk_prev.get(idx) && row_existed;
 
                     if (filter_prev) {
                         if (filter_curr) {
@@ -148,49 +143,22 @@ t_ctx0::notify(
                             );
                         }
                     }
-                } break;
-                case OP_DELETE: {
-                    m_traversal->delete_row(pkey);
-                    delete_encountered = true;
-                } break;
-                default: {
-                    PSP_COMPLAIN_AND_ABORT("Unexpected OP");
-                } break;
-            }
-
-            // add the pkey for row delta
-            add_delta_pkey(pkey);
-        }
-        m_has_delta =
-            !m_deltas->empty() || !m_delta_pkeys.empty() || delete_encountered;
-
-        return;
-    }
-
-    // Context does not have filters applied
-    for (t_uindex idx = 0; idx < nrecs; ++idx) {
-        t_tscalar pkey =
-            m_symtable.get_interned_tscalar(pkey_col->get_scalar(idx));
-        std::uint8_t op_ = *(op_col->get_nth<std::uint8_t>(idx));
-        t_op op = static_cast<t_op>(op_);
-        bool existed = *(existed_col->get_nth<bool>(idx));
-
-        switch (op) {
-            case OP_INSERT: {
-                if (existed) {
-                    m_traversal->update_row(
-                        *m_gstate,
-                        *(m_expression_tables->m_master),
-                        m_config,
-                        pkey
-                    );
                 } else {
-                    m_traversal->add_row(
-                        *m_gstate,
-                        *(m_expression_tables->m_master),
-                        m_config,
-                        pkey
-                    );
+                    if (row_existed) {
+                        m_traversal->update_row(
+                            *m_gstate,
+                            *(m_expression_tables->m_master),
+                            m_config,
+                            pkey
+                        );
+                    } else {
+                        m_traversal->add_row(
+                            *m_gstate,
+                            *(m_expression_tables->m_master),
+                            m_config,
+                            pkey
+                        );
+                    }
                 }
             } break;
             case OP_DELETE: {
@@ -202,7 +170,6 @@ t_ctx0::notify(
             } break;
         }
 
-        // add the pkey for row delta
         add_delta_pkey(pkey);
     }
 
@@ -343,20 +310,35 @@ t_ctx0::get_data(
         m_traversal->get_pkeys(ext.m_srow, ext.m_erow);
     auto none = mknone();
 
+    std::vector<t_uindex> row_indices;
+    m_gstate->resolve_pkeys(pkeys, row_indices);
+
+    std::shared_ptr<t_data_table> master_table = m_gstate->get_table();
+    t_index col_count = ext.m_ecol - ext.m_scol;
+    std::vector<const t_column*> columns(col_count);
     for (t_index cidx = ext.m_scol; cidx < ext.m_ecol; ++cidx) {
-        std::vector<t_tscalar> out_data(pkeys.size());
         const std::string& colname = m_config.col_at(cidx);
-        read_column_from_gstate(colname, pkeys, out_data);
+        if (is_expression_column(colname)) {
+            columns[cidx - ext.m_scol] =
+                m_expression_tables->m_master->_get_const_column(colname);
+        } else {
+            columns[cidx - ext.m_scol] =
+                master_table->_get_const_column(colname);
+        }
+    }
 
-        for (t_index ridx = ext.m_srow; ridx < ext.m_erow; ++ridx) {
-            auto v = out_data[ridx - ext.m_srow];
-
-            // todo: fix null handling
+    constexpr t_uindex INVALID_ROW = t_uindex(-1);
+    for (t_index ridx = 0; ridx < nrows; ++ridx) {
+        t_uindex row_idx = row_indices[ridx];
+        if (row_idx == INVALID_ROW) {
+            continue;
+        }
+        for (t_index cidx = 0; cidx < col_count; ++cidx) {
+            auto v = columns[cidx]->get_scalar(row_idx);
             if (!v.is_valid()) {
                 v.set(none);
             }
-
-            values[(ridx - ext.m_srow) * stride + (cidx - ext.m_scol)] = v;
+            values[ridx * stride + cidx] = v;
         }
     }
 
@@ -377,19 +359,34 @@ t_ctx0::get_data(const std::vector<t_uindex>& rows) const {
     std::vector<t_tscalar> pkeys = m_traversal->get_pkeys(rows);
 
     auto none = mknone();
+
+    std::vector<t_uindex> row_indices;
+    m_gstate->resolve_pkeys(pkeys, row_indices);
+
+    std::shared_ptr<t_data_table> master_table = m_gstate->get_table();
+    std::vector<const t_column*> columns(stride);
     for (t_uindex cidx = 0; cidx < stride; ++cidx) {
-        std::vector<t_tscalar> out_data(rows.size());
         const std::string& colname = m_config.col_at(cidx);
-        read_column_from_gstate(colname, pkeys, out_data);
+        if (is_expression_column(colname)) {
+            columns[cidx] =
+                m_expression_tables->m_master->_get_const_column(colname);
+        } else {
+            columns[cidx] = master_table->_get_const_column(colname);
+        }
+    }
 
-        for (t_uindex ridx = 0; ridx < rows.size(); ++ridx) {
-            auto v = out_data[ridx];
-
+    constexpr t_uindex INVALID_ROW = t_uindex(-1);
+    for (t_uindex ridx = 0; ridx < rows.size(); ++ridx) {
+        t_uindex row_idx = row_indices[ridx];
+        if (row_idx == INVALID_ROW) {
+            continue;
+        }
+        for (t_uindex cidx = 0; cidx < stride; ++cidx) {
+            auto v = columns[cidx]->get_scalar(row_idx);
             if (!v.is_valid()) {
                 v.set(none);
             }
-
-            values[(ridx)*stride + (cidx)] = v;
+            values[ridx * stride + cidx] = v;
         }
     }
 
@@ -506,13 +503,13 @@ t_ctx0::calc_step_delta(const t_data_table& flattened) {
     // data for the first time, so every single row is a new delta.
     t_uindex nrows = flattened.size();
     const auto& column_names = m_config.get_column_names();
-    const t_column* pkey_col = flattened.get_const_column("psp_pkey").get();
+    const t_column* pkey_col = flattened._get_const_column("psp_pkey");
 
     // Add every row and every column to the delta
     for (const auto& name : column_names) {
         auto cidx = m_config.get_colidx(name);
         const t_column* flattened_column =
-            flattened.get_const_column(name).get();
+            flattened._get_const_column(name);
 
         for (t_uindex ridx = 0; ridx < nrows; ++ridx) {
             m_deltas->insert(t_zcdelta(
@@ -539,15 +536,15 @@ t_ctx0::calc_step_delta(
     PSP_VERBOSE_ASSERT(prev.size() == nrows, "Shape violation detected");
     PSP_VERBOSE_ASSERT(curr.size() == nrows, "Shape violation detected");
 
-    const t_column* pkey_col = flattened.get_const_column("psp_pkey").get();
+    const t_column* pkey_col = flattened._get_const_column("psp_pkey");
 
     const auto& column_names = m_config.get_column_names();
 
     for (const auto& name : column_names) {
         auto cidx = m_config.get_colidx(name);
-        const t_column* tcol = transitions.get_const_column(name).get();
-        const t_column* pcol = prev.get_const_column(name).get();
-        const t_column* ccol = curr.get_const_column(name).get();
+        const t_column* tcol = transitions._get_const_column(name);
+        const t_column* pcol = prev._get_const_column(name);
+        const t_column* ccol = curr._get_const_column(name);
 
         for (t_uindex ridx = 0; ridx < nrows; ++ridx) {
             const auto* trans_ = tcol->get_nth<std::uint8_t>(ridx);

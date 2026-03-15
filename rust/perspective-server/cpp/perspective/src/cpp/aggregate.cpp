@@ -25,8 +25,8 @@ t_aggregate::t_aggregate(
 ) :
     m_tree(tree),
     m_aggtype(aggtype),
-    m_icolumns(std::move(std::move(icolumns))),
-    m_ocolumn(std::move(std::move(ocolumn))) {}
+    m_icolumns(std::move(icolumns)),
+    m_ocolumn(std::move(ocolumn)) {}
 
 void
 t_aggregate::init() {

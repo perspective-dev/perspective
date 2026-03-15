@@ -250,9 +250,16 @@ if(PSP_WASM_BUILD)
             ")
         endif()
     else()
-        set(OPT_FLAGS " -O3 -g${DEBUG_LEVEL} ")
+        set(OPT_FLAGS " \
+            -O3 -g${DEBUG_LEVEL} \
+            -mbulk-memory \
+            -msimd128 \
+            -mrelaxed-simd \
+            -flto \
+            --emit-tsd=perspective-server.d.ts \
+        ")
         if (PSP_WASM_EXCEPTIONS)
-            set(OPT_FLAGS "${OPT_FLAGS} -fwasm-exceptions -flto --emit-tsd=perspective-server.d.ts ")
+            set(OPT_FLAGS "${OPT_FLAGS} -fwasm-exceptions ")
         endif()
     endif()
 elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
@@ -295,6 +302,9 @@ elseif(PSP_CPP_BUILD OR PSP_PYTHON_BUILD)
                 -O3 \
                 -fexceptions \
                 -g1 \
+                -march=native \
+                -fopenmp-simd \
+                -flto \
                 ")
             if (PSP_WASM_EXCEPTIONS)
                 set(OPT_FLAGS "${OPT_FLAGS} -fwasm-exceptions ")
@@ -335,15 +345,9 @@ endif()
 
 if (PSP_WASM64)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} \
-        -mbulk-memory \
-        -msimd128 \
-        -mrelaxed-simd \
         -s MEMORY64=1 \
     ")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
-        -mbulk-memory \
-        -msimd128 \
-        -mrelaxed-simd \
         -s MEMORY64=1 \
     ")
 endif()

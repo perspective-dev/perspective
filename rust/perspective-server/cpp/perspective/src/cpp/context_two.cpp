@@ -241,27 +241,17 @@ t_ctx2::get_min_max(const std::string& colname) const {
     auto rval = std::make_pair(mknone(), mknone());
     t_uindex scol =
         m_trees[0]->get_aggtable()->get_schema().get_colidx(colname);
-    std::vector<std::pair<t_uindex, t_uindex>> cells;
-    for (t_index ridx = 0; ridx < ctx_nrows; ++ridx) {
-        for (t_index cidx = 0; cidx < ctx_ncols; ++cidx) {
-            cells.emplace_back(std::pair<t_index, t_index>(ridx, cidx));
-        }
-    }
-
-    auto cells_info = resolve_cells(cells);
-    typedef std::pair<t_uindex, t_uindex> t_aggpair;
-    std::map<t_aggpair, const t_column*> aggmap;
+    auto cells_info = resolve_cells(0, ctx_nrows, 0, ctx_ncols);
     auto n_aggs = m_config.get_num_aggregates();
-    for (t_uindex treeidx = 0, tree_loop_end = m_trees.size();
-         treeidx < tree_loop_end;
-         ++treeidx) {
+    t_uindex ntrees = m_trees.size();
+    std::vector<const t_column*> aggcols(ntrees * n_aggs);
+    for (t_uindex treeidx = 0; treeidx < ntrees; ++treeidx) {
         auto* aggtable = m_trees[treeidx]->get_aggtable();
         t_schema aggschema = aggtable->get_schema();
-        for (t_uindex aggidx = 0, agg_loop_end = n_aggs; aggidx < agg_loop_end;
-             ++aggidx) {
+        for (t_uindex aggidx = 0; aggidx < t_uindex(n_aggs); ++aggidx) {
             const std::string& aggname = aggschema.m_columns[aggidx];
-            aggmap[t_aggpair(treeidx, aggidx)] =
-                aggtable->get_const_column(aggname).get();
+            aggcols[treeidx * n_aggs + aggidx] =
+                aggtable->_get_const_column(aggname);
         }
     }
 
@@ -286,7 +276,7 @@ t_ctx2::get_min_max(const std::string& colname) const {
             }
 
             const auto* aggcol =
-                aggmap[t_aggpair(cinfo.m_treenum, cinfo.m_agg_index)];
+                aggcols[cinfo.m_treenum * n_aggs + cinfo.m_agg_index];
             t_index p_idx =
                 m_trees[cinfo.m_treenum]->get_parent_idx(cinfo.m_idx);
             t_uindex agg_ridx =
@@ -329,14 +319,7 @@ t_ctx2::get_data(
         ctx_nrows, ctx_ncols, start_row, end_row, start_col, end_col
     );
 
-    std::vector<std::pair<t_uindex, t_uindex>> cells;
-    for (t_index ridx = ext.m_srow; ridx < ext.m_erow; ++ridx) {
-        for (t_index cidx = ext.m_scol; cidx < ext.m_ecol; ++cidx) {
-            cells.emplace_back(std::pair<t_index, t_index>(ridx, cidx));
-        }
-    }
-
-    auto cells_info = resolve_cells(cells);
+    auto cells_info = resolve_cells(ext.m_srow, ext.m_erow, ext.m_scol, ext.m_ecol);
 
     t_index nrows = ext.m_erow - ext.m_srow;
     t_index stride = ext.m_ecol - ext.m_scol;
@@ -344,22 +327,18 @@ t_ctx2::get_data(
 
     t_tscalar empty = mknone();
 
-    typedef std::pair<t_uindex, t_uindex> t_aggpair;
-    std::map<t_aggpair, const t_column*> aggmap;
+    t_uindex ntrees = m_trees.size();
+    t_uindex naggs = m_config.get_num_aggregates();
+    std::vector<const t_column*> aggcols(ntrees * naggs);
 
-    for (t_uindex treeidx = 0, tree_loop_end = m_trees.size();
-         treeidx < tree_loop_end;
-         ++treeidx) {
+    for (t_uindex treeidx = 0; treeidx < ntrees; ++treeidx) {
         auto* aggtable = m_trees[treeidx]->get_aggtable();
         t_schema aggschema = aggtable->get_schema();
 
-        for (t_uindex aggidx = 0, agg_loop_end = m_config.get_num_aggregates();
-             aggidx < agg_loop_end;
-             ++aggidx) {
+        for (t_uindex aggidx = 0; aggidx < naggs; ++aggidx) {
             const std::string& aggname = aggschema.m_columns[aggidx];
-
-            aggmap[t_aggpair(treeidx, aggidx)] =
-                aggtable->get_const_column(aggname).get();
+            aggcols[treeidx * naggs + aggidx] =
+                aggtable->_get_const_column(aggname);
         }
     }
 
@@ -382,7 +361,7 @@ t_ctx2::get_data(
                 retval[insert_idx].set(empty);
             } else {
                 const auto* aggcol =
-                    aggmap[t_aggpair(cinfo.m_treenum, cinfo.m_agg_index)];
+                    aggcols[cinfo.m_treenum * naggs + cinfo.m_agg_index];
 
                 t_index p_idx =
                     m_trees[cinfo.m_treenum]->get_parent_idx(cinfo.m_idx);
@@ -449,31 +428,24 @@ t_ctx2::get_data(const std::vector<t_uindex>& rows) const {
 
     t_tscalar empty = mknone();
 
-    typedef std::pair<t_uindex, t_uindex> t_aggpair;
-    std::map<t_aggpair, const t_column*> aggmap;
+    t_uindex ntrees = m_trees.size();
+    t_uindex naggs = m_config.get_num_aggregates();
+    std::vector<const t_column*> aggcols(ntrees * naggs);
 
-    for (t_uindex treeidx = 0, tree_loop_end = m_trees.size();
-         treeidx < tree_loop_end;
-         ++treeidx) {
+    for (t_uindex treeidx = 0; treeidx < ntrees; ++treeidx) {
         auto* aggtable = m_trees[treeidx]->get_aggtable();
         t_schema aggschema = aggtable->get_schema();
 
-        for (t_uindex aggidx = 0, agg_loop_end = m_config.get_num_aggregates();
-             aggidx < agg_loop_end;
-             ++aggidx) {
+        for (t_uindex aggidx = 0; aggidx < naggs; ++aggidx) {
             const std::string& aggname = aggschema.m_columns[aggidx];
-
-            aggmap[t_aggpair(treeidx, aggidx)] =
-                aggtable->get_const_column(aggname).get();
+            aggcols[treeidx * naggs + aggidx] =
+                aggtable->_get_const_column(aggname);
         }
     }
 
     const std::vector<t_aggspec>& aggspecs = m_config.get_aggregates();
 
-    // // Write each row sequentially starting from 0
     for (t_uindex ridx = 0; ridx < nrows; ++ridx) {
-
-        // Write each column starting from 1 in order to skip __ROW_PATH__.
         for (t_uindex cidx = 1; cidx < ncols; ++cidx) {
             t_uindex insert_idx = ridx * ncols + cidx;
             const t_cellinfo& cinfo = cells_info[insert_idx];
@@ -482,7 +454,7 @@ t_ctx2::get_data(const std::vector<t_uindex>& rows) const {
                 rval[insert_idx].set(empty);
             } else {
                 const auto* aggcol =
-                    aggmap[t_aggpair(cinfo.m_treenum, cinfo.m_agg_index)];
+                    aggcols[cinfo.m_treenum * naggs + cinfo.m_agg_index];
 
                 t_index p_idx =
                     m_trees[cinfo.m_treenum]->get_parent_idx(cinfo.m_idx);
@@ -764,6 +736,102 @@ t_ctx2::resolve_cells(const std::vector<std::pair<t_uindex, t_uindex>>& cells
                 } else {
                     rval[idx].m_idx =
                         m_trees[tree_idx]->resolve_path(path_ptidx, c_path);
+                }
+            }
+        }
+    }
+
+    return rval;
+}
+
+std::vector<t_cellinfo>
+t_ctx2::resolve_cells(
+    t_uindex srow, t_uindex erow, t_uindex scol, t_uindex ecol
+) const {
+    t_uindex nrows = erow - srow;
+    t_uindex ncols_range = ecol - scol;
+    std::vector<t_cellinfo> rval(nrows * ncols_range);
+
+    t_index n_aggs = m_config.get_num_aggregates();
+    std::vector<t_index> c_tvindices = get_ctraversal_indices();
+
+    std::vector<std::vector<t_tscalar>> col_paths(m_ctraversal->size());
+
+    for (t_index cidx = 0, loop_end = c_tvindices.size(); cidx < loop_end;
+         ++cidx) {
+        auto translated = c_tvindices[cidx];
+        const t_tvnode& c_tvnode = m_ctraversal->get_node(translated);
+        col_paths[cidx].reserve(m_config.get_num_cpivots());
+        col_paths[cidx] = get_column_path(c_tvnode);
+    }
+
+    t_uindex view_ncols = get_num_view_columns();
+
+    for (t_uindex ridx = srow; ridx < erow; ++ridx) {
+        bool row_valid = ridx < m_rtraversal->size();
+        t_index r_ptidx = 0;
+        t_depth r_depth = 0;
+        std::vector<t_tscalar> r_path;
+        if (row_valid) {
+            const t_tvnode& r_tvnode = m_rtraversal->get_node(ridx);
+            r_ptidx = r_tvnode.m_tnid;
+            r_depth = r_tvnode.m_depth;
+            r_path = get_row_path(r_tvnode);
+        }
+
+        for (t_uindex cidx = scol; cidx < ecol; ++cidx) {
+            t_uindex out_idx = (ridx - srow) * ncols_range + (cidx - scol);
+
+            if (!row_valid || cidx == 0 || cidx >= view_ncols) {
+                rval[out_idx].m_idx = INVALID_INDEX;
+                continue;
+            }
+
+            t_index agg_idx = (cidx - 1) % n_aggs;
+            t_uindex translated_cidx = calc_translated_colidx(n_aggs, cidx);
+            if (translated_cidx >= c_tvindices.size()) {
+                rval[out_idx].m_idx = INVALID_INDEX;
+                continue;
+            }
+
+            t_index c_tvidx = c_tvindices[translated_cidx];
+
+            rval[out_idx].m_ridx = ridx;
+            rval[out_idx].m_cidx = cidx;
+
+            if (c_tvidx >= t_index(m_ctraversal->size())) {
+                rval[out_idx].m_idx = INVALID_INDEX;
+                continue;
+            }
+
+            const t_tvnode& c_tvnode = m_ctraversal->get_node(c_tvidx);
+            t_index c_ptidx = c_tvnode.m_tnid;
+            const std::vector<t_tscalar>& c_path = col_paths[translated_cidx];
+
+            rval[out_idx].m_agg_index = agg_idx;
+
+            if (ridx == 0 && !m_leaves_only) {
+                rval[out_idx].m_idx = c_ptidx;
+                rval[out_idx].m_treenum = 0;
+            } else if (c_path.empty()) {
+                rval[out_idx].m_idx = r_ptidx;
+                rval[out_idx].m_treenum = m_trees.size() - 1;
+            } else {
+                t_index tree_idx = r_depth;
+                rval[out_idx].m_treenum = tree_idx;
+
+                if (r_depth + 1 == static_cast<t_depth>(m_trees.size())) {
+                    rval[out_idx].m_idx =
+                        m_trees[tree_idx]->resolve_path(r_ptidx, c_path);
+                } else {
+                    t_index path_ptidx =
+                        m_trees[tree_idx]->resolve_path(0, r_path);
+                    if (path_ptidx < 0) {
+                        rval[out_idx].m_idx = INVALID_INDEX;
+                    } else {
+                        rval[out_idx].m_idx =
+                            m_trees[tree_idx]->resolve_path(path_ptidx, c_path);
+                    }
                 }
             }
         }

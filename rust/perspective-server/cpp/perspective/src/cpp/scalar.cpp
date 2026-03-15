@@ -43,6 +43,20 @@ operator>(const std::size_t& lhs, const t_tscalar& rhs) {
     if (!other.is_valid() || !is_valid()) {                                    \
         return rval;                                                           \
     }                                                                          \
+    if (m_type == DTYPE_FLOAT64 && other.m_type == DTYPE_FLOAT64) {            \
+        rval.set(m_data.m_float64 OP other.m_data.m_float64);                 \
+        return rval;                                                           \
+    }                                                                          \
+    if (m_type == DTYPE_INT64 && other.m_type == DTYPE_INT64) {                \
+        rval.set(static_cast<double>(                                          \
+            m_data.m_int64 OP other.m_data.m_int64));                          \
+        return rval;                                                           \
+    }                                                                          \
+    if (m_type == DTYPE_INT32 && other.m_type == DTYPE_INT32) {                \
+        rval.set(static_cast<double>(                                          \
+            m_data.m_int32 OP other.m_data.m_int32));                          \
+        return rval;                                                           \
+    }                                                                          \
     rval.set(to_double() OP other.to_double());                                \
     return rval;
 
