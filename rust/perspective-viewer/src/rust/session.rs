@@ -10,10 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-mod column_defaults_update;
-mod drag_drop_update;
+pub(crate) mod column_defaults_update;
+pub(crate) mod drag_drop_update;
 mod metadata;
-mod replace_expression_update;
+pub(crate) mod replace_expression_update;
 mod view_subscription;
 
 use std::cell::{Ref, RefCell};
@@ -30,12 +30,13 @@ use wasm_bindgen::prelude::*;
 use yew::html::ImplicitClone;
 use yew::prelude::*;
 
-pub use self::metadata::MetadataRef;
 use self::metadata::*;
+pub use self::metadata::{MetadataRef, SessionMetadata};
 use self::replace_expression_update::*;
 pub use self::view_subscription::ViewStats;
 use self::view_subscription::*;
 use crate::js::plugin::*;
+use crate::state::SessionProps;
 use crate::utils::*;
 
 /// Immutable state for `Session`.
@@ -78,6 +79,38 @@ pub struct SessionData {
 
 #[derive(Clone)]
 pub struct TableErrorState(ApiError, Option<ReconnectCallback>);
+
+impl PartialEq for TableErrorState {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.to_string() == other.0.to_string()
+    }
+}
+
+impl std::fmt::Debug for TableErrorState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("TableErrorState")
+            .field(&self.0.to_string())
+            .finish()
+    }
+}
+
+impl TableErrorState {
+    pub fn message(&self) -> String {
+        self.0.message()
+    }
+
+    pub fn stacktrace(&self) -> String {
+        self.0.stacktrace()
+    }
+
+    pub fn kind(&self) -> &'static str {
+        self.0.kind()
+    }
+
+    pub fn is_reconnect(&self) -> bool {
+        self.1.is_some()
+    }
+}
 
 /// Options for [`Session::reset`]
 #[derive(Default)]
@@ -125,11 +158,11 @@ impl Session {
         Self(Rc::default())
     }
 
-    pub fn metadata(&self) -> MetadataRef<'_> {
+    pub(crate) fn metadata(&self) -> MetadataRef<'_> {
         std::cell::Ref::map(self.borrow(), |x| &x.metadata)
     }
 
-    pub fn metadata_mut(&self) -> MetadataMutRef<'_> {
+    pub(crate) fn metadata_mut(&self) -> MetadataMutRef<'_> {
         std::cell::RefMut::map(self.borrow_mut(), |x| &mut x.metadata)
     }
 
@@ -780,6 +813,21 @@ impl Session {
         let mut is_clean = true;
         std::mem::swap(&mut is_clean, &mut self.0.borrow_mut().is_clean);
         is_clean
+    }
+
+    /// Snapshot the current session state as a [`SessionProps`] value suitable
+    /// for passing as a Yew prop.  Called by the root component whenever a
+    /// session-related PubSub event fires.
+    pub fn to_props(&self) -> SessionProps {
+        let data = self.borrow();
+        SessionProps {
+            config: data.config.clone(),
+            stats: data.stats.clone(),
+            has_table: data.table.is_some(),
+            error: data.error.clone(),
+            title: data.title.clone(),
+            metadata: data.metadata.clone(),
+        }
     }
 }
 

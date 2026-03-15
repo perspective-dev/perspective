@@ -18,7 +18,7 @@ use yew::prelude::*;
 use super::containers::dropdown_menu::*;
 use super::modal::{ModalLink, SetModalLink};
 use super::style::StyleProvider;
-use crate::model::*;
+use crate::tasks::*;
 use crate::renderer::*;
 use crate::utils::*;
 use crate::*;
@@ -49,7 +49,6 @@ pub enum ExportDropDownMenuMsg {
 #[derive(Default)]
 pub struct ExportDropDownMenu {
     title: String,
-    _sub: Option<Subscription>,
     input_ref: NodeRef,
     invalid: bool,
 }
@@ -98,20 +97,12 @@ impl Component for ExportDropDownMenu {
 
     fn create(ctx: &Context<Self>) -> Self {
         ctx.set_modal_link();
-        let _sub = Some(
-            ctx.props()
-                .renderer
-                .plugin_changed
-                .add_listener(ctx.link().callback(|_| ExportDropDownMenuMsg::TitleChange)),
-        );
-
         Self {
             title: ctx
                 .props()
                 .session
                 .get_title()
                 .unwrap_or_else(|| "untitled".to_owned()),
-            _sub,
             ..Default::default()
         }
     }

@@ -11,469 +11,163 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { test, expect } from "@perspective-dev/test";
-// import {
-//
-//     compareSVGContentsToSnapshot,
-//     getSvgContentString,
-//     SUPERSTORE_CSV_PATH,
-// } from "@perspective-dev/test";
-// import path from "path";
 
-// async function get_contents(page) {
-//     return await page.evaluate(async () => {
-//         // @ts-ignore
-//         const viewer = document
-//             .querySelector("perspective-viewer")
-//             .shadowRoot.querySelector("#app_panel");
-//         return viewer ? viewer.innerHTML : "MISSING";
-//     });
-// }
+/**
+ * Triggers an HTML5 drag-and-drop sequence between two elements inside the
+ * viewer's shadow DOM and waits for the resulting `perspective-config-update`
+ * event.  Returns the updated viewer config detail.
+ *
+ * The event listener is registered *before* the drag events are dispatched so
+ * there is no race between the drag completing and the listener attaching.
+ *
+ * Key sequencing: the DragDrop state machine requires:
+ *   dragstart → DragInProgress (set synchronously)
+ *   dragenter on an active-column slot → DragOverInProgress
+ *   drop on the container → drop_received PubSub emitted → config update
+ *
+ * Firing dragenter on the #active-columns container itself does NOT advance
+ * the state (the container's dragenter handler is just a Safari workaround).
+ * We must fire it on a [data-index] slot element inside the container.
+ */
+async function shadowDragAndDropWaitForConfig(
+    page,
+    originSelector: string,
+    containerSelector: string,
+) {
+    return await page.evaluate(
+        async ({ originSelector, containerSelector }) => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            const shadow = viewer.shadowRoot!;
 
-// async function restore_viewer(page, config) {
-//     await page.evaluate(async (config) => {
-//         const viewer = document.querySelector("perspective-viewer");
-//         // @ts-ignore
-//         await viewer.getTable();
-//         // @ts-ignore
-//         await viewer.restore(config);
-//     }, config);
-// }
+            const origin = shadow.querySelector(
+                originSelector,
+            ) as HTMLElement;
+            const container = shadow.querySelector(
+                containerSelector,
+            ) as HTMLElement;
 
-// async function shadow_elem(page, selector) {
-//     return await page.evaluateHandle(async (selector) => {
-//         const viewer = document.querySelector("perspective-viewer");
-//         // @ts-ignore
-//         return viewer.shadowRoot.querySelector(selector);
-//     }, selector);
-// }
+            if (!origin || !container) {
+                throw new Error(
+                    `Shadow selectors not found: ${originSelector}, ${containerSelector}`,
+                );
+            }
 
-// async function drag_and_drop(page, origin, target, skip = false) {
-//     page.setDragInterception(true);
-//     if (!skip) {
-//         await page.evaluate(async () => {
-//             const viewer = document.querySelector("perspective-viewer");
-//             // @ts-ignore
-//             window._dragdrop_finished = false;
-//             // @ts-ignore
-//             viewer.addEventListener("perspective-config-update", () => {
-//                 // @ts-ignore
-//                 window._dragdrop_finished = true;
-//             });
-//         });
-//     }
-//     await origin.dragAndDrop(target);
-//     if (!skip) {
-//         // @ts-ignore
-//         await page.waitForFunction(() => window._dragdrop_finished);
-//     } else {
-//         await page.waitFor(300);
-//     }
+            // Register listener BEFORE the drag so we cannot miss the event.
+            const configPromise = new Promise<any>((resolve) => {
+                viewer.addEventListener(
+                    "perspective-config-update",
+                    (e: any) => resolve(e.detail),
+                    { once: true },
+                );
+            });
 
-//     await page.evaluate(async () => {
-//         // @ts-ignore
-//         window._dragdrop_finished = false;
-//         const viewer = document.querySelector("perspective-viewer");
-//         // @ts-ignore
-//         await viewer.flush();
-//     });
-// }
+            const dt = new DataTransfer();
 
-// async function drag(page, origin, target) {
-//     page.setDragInterception(true);
-//     origin.drop();
-//     await page.waitFor(100);
-//     origin.dragAndDrop(target, { delay: 100000 });
-//     await page.waitFor(100);
-// }
+            // 1. Start drag on the inactive column draggable handle.
+            origin.dispatchEvent(
+                new DragEvent("dragstart", { bubbles: true, dataTransfer: dt }),
+            );
+
+            // 2. Wait for requestAnimationFrame so notify_drag_start completes
+            //    and DragInProgress state is fully set.
+            await new Promise((r) => requestAnimationFrame(r));
+
+            // 3. Fire dragenter on an active column slot ([data-index] element)
+            //    inside the container.  This calls notify_drag_enter which
+            //    transitions the state to DragOverInProgress – required for
+            //    notify_drop to emit drop_received.
+            const activeSlot = container.querySelector(
+                "[data-index]",
+            ) as HTMLElement | null;
+            if (activeSlot) {
+                activeSlot.dispatchEvent(
+                    new DragEvent("dragenter", {
+                        bubbles: true,
+                        dataTransfer: dt,
+                    }),
+                );
+                await new Promise((r) => requestAnimationFrame(r));
+            }
+
+            // 4. Drop on the container – notify_drop reads DragOverInProgress
+            //    and emits drop_received.
+            container.dispatchEvent(
+                new DragEvent("drop", { bubbles: true, dataTransfer: dt }),
+            );
+
+            // 5. End the drag.
+            origin.dispatchEvent(
+                new DragEvent("dragend", { bubbles: true, dataTransfer: dt }),
+            );
+
+            // Wait for perspective-config-update with a local timeout so the
+            // test error message is more informative than the Playwright default.
+            return await Promise.race([
+                configPromise,
+                new Promise<never>((_, reject) =>
+                    setTimeout(
+                        () =>
+                            reject(
+                                new Error(
+                                    "perspective-config-update timeout",
+                                ),
+                            ),
+                        8000,
+                    ),
+                ),
+            ]);
+        },
+        { originSelector, containerSelector },
+    );
+}
 
 test.describe("Drag and drop", () => {
-    test("Drag and Drop tests file is being reach, but all tests are currently skipped", async ({
+    test.beforeEach(async ({ page }) => {
+        await page.goto(
+            "/rust/perspective-viewer/test/html/superstore.html",
+        );
+        await page.evaluate(async () => {
+            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+                await new Promise((x) => setTimeout(x, 10));
+            }
+        });
+
+        await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer");
+            await viewer!.getTable();
+            await viewer!.restore({
+                plugin: "Debug",
+                settings: true,
+                columns: ["Sales", "Profit"],
+            });
+        });
+    });
+
+    test("dragging inactive column to active list adds the column", async ({
         page,
     }) => {
-        expect(1).toBe(1);
+        // Drag the first inactive column into the active columns list and
+        // wait for the config-update event.
+        const config = await shadowDragAndDropWaitForConfig(
+            page,
+            "#sub-columns [data-index='0'] .column-selector-draggable",
+            "#active-columns",
+        );
+
+        // The active column list should now be longer than the initial 2.
+        expect(config.columns.length).toBeGreaterThan(2);
+    });
+
+    test("drag-and-drop preserves existing active columns", async ({
+        page,
+    }) => {
+        const saved = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer");
+            return await viewer!.save();
+        });
+
+        // Original two active columns must still be present.
+        expect(saved.columns).toContain("Sales");
+        expect(saved.columns).toContain("Profit");
     });
 });
-
-// utils.with_server({}, () => {
-//     describe("dragdrop", () => {
-//         describe.page(
-//             "superstore.html",
-//             () => {
-//                 describe("drop", () => {
-//                     test.skip("from inactive to active should add", async (page) => {
-//                         await restore_viewer(page, {
-//                             settings: true,
-//                             group_by: ["State"],
-//                             columns: ["Profit", "Sales"],
-//                         });
-
-//                         const origin = await shadow_elem(
-//                             page,
-//                             `#sub-columns [data-index="3"] .column-selector-draggable`
-//                         );
-
-//                         const target = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="1"]`
-//                         );
-
-//                         await drag_and_drop(page, origin, target);
-//                         return await get_contents(page);
-//                     });
-
-//                     test.skip("from active to active should swap", async (page) => {
-//                         await restore_viewer(page, {
-//                             settings: true,
-//                             group_by: ["State"],
-//                             columns: ["Profit", "Sales"],
-//                         });
-
-//                         const origin = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="0"] .column-selector-draggable`
-//                         );
-
-//                         const target = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="1"]`
-//                         );
-
-//                         await drag_and_drop(page, origin, target);
-//                         return await get_contents(page);
-//                     });
-//                 });
-//             },
-//             { root: path.join(__dirname, "..", "..") }
-//         );
-
-//         describe.page(
-//             "column-selector-modes.html",
-//             () => {
-//                 describe("drop", () => {
-//                     test.skip("from inactive to required column should add", async (page) => {
-//                         await restore_viewer(page, {
-//                             settings: true,
-//                             plugin: "test chart",
-//                             group_by: ["State"],
-//                             columns: ["Profit", "Sales"],
-//                         });
-
-//                         const origin = await shadow_elem(
-//                             page,
-//                             `#sub-columns [data-index="1"] .column-selector-draggable`
-//                         );
-
-//                         const target = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="1"]`
-//                         );
-
-//                         await drag_and_drop(page, origin, target);
-//                         return await get_contents(page);
-//                     });
-
-//                     test.skip("from required to required should swap", async (page) => {
-//                         await restore_viewer(page, {
-//                             settings: true,
-//                             group_by: ["State"],
-//                             columns: [
-//                                 "Profit",
-//                                 "Sales",
-//                                 null,
-//                                 "Quantity",
-//                                 "Discount",
-//                             ],
-//                         });
-
-//                         const origin = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="0"] .column-selector-draggable`
-//                         );
-
-//                         const target = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="1"]`
-//                         );
-
-//                         await drag_and_drop(page, origin, target);
-//                         return await get_contents(page);
-//                     });
-
-//                     test.skip("from required to empty column should fail", async (page) => {
-//                         await restore_viewer(page, {
-//                             settings: true,
-//                             group_by: ["State"],
-//                             columns: ["Profit", "Sales"],
-//                         });
-
-//                         const origin = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="0"] .column-selector-draggable`
-//                         );
-
-//                         const target = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="3"]`
-//                         );
-
-//                         await drag_and_drop(page, origin, target, true);
-//                         return await get_contents(page);
-//                     });
-
-//                     test.skip("from inactive to empty should add", async (page) => {
-//                         await restore_viewer(page, {
-//                             settings: true,
-//                             plugin: "test chart",
-//                             group_by: ["State"],
-//                             columns: ["Profit", "Sales"],
-//                         });
-
-//                         const origin = await shadow_elem(
-//                             page,
-//                             `#sub-columns [data-index="1"] .column-selector-draggable`
-//                         );
-
-//                         const target = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="3"]`
-//                         );
-
-//                         await drag_and_drop(page, origin, target);
-//                         return await get_contents(page);
-//                     });
-
-//                     test.skip("from named to required should swap", async (page) => {
-//                         await restore_viewer(page, {
-//                             settings: true,
-//                             group_by: ["State"],
-//                             columns: [
-//                                 "Profit",
-//                                 "Sales",
-//                                 null,
-//                                 "Quantity",
-//                                 "Discount",
-//                             ],
-//                         });
-
-//                         const origin = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="3"] .column-selector-draggable`
-//                         );
-
-//                         const target = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="1"]`
-//                         );
-
-//                         await drag_and_drop(page, origin, target);
-//                         return await get_contents(page);
-//                     });
-
-//                     test.skip("from optional to empty columns should move", async (page) => {
-//                         await restore_viewer(page, {
-//                             settings: true,
-//                             group_by: ["State"],
-//                             columns: [
-//                                 "Profit",
-//                                 "Sales",
-//                                 null,
-//                                 null,
-//                                 "Quantity",
-//                                 "Discount",
-//                                 "Category",
-//                             ],
-//                         });
-
-//                         const origin = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="4"] .column-selector-draggable`
-//                         );
-
-//                         const target = await shadow_elem(
-//                             page,
-//                             `#active-columns [data-index="2"]`
-//                         );
-
-//                         await drag_and_drop(page, origin, target);
-//                         return await get_contents(page);
-//                     });
-//                 });
-
-//                 describe("dragover", () => {
-//                     test.skip(
-//                         "from named to required columns should swap",
-//                         async (page) => {
-//                             await restore_viewer(page, {
-//                                 settings: true,
-//                                 group_by: ["State"],
-//                                 columns: [
-//                                     "Profit",
-//                                     "Sales",
-//                                     null,
-//                                     "Quantity",
-//                                     "Discount",
-//                                 ],
-//                             });
-
-//                             const origin = await shadow_elem(
-//                                 page,
-//                                 `#active-columns [data-index="3"] .column-selector-draggable`
-//                             );
-
-//                             const target = await shadow_elem(
-//                                 page,
-//                                 `#active-columns [data-index="1"]`
-//                             );
-
-//                             await drag(page, origin, target);
-//                             return await get_contents(page);
-//                         },
-//                         { reload_page: true }
-//                     );
-
-//                     test.skip(
-//                         "from optional to empty columns should move",
-//                         async (page) => {
-//                             await restore_viewer(page, {
-//                                 settings: true,
-//                                 group_by: ["State"],
-//                                 columns: [
-//                                     "Profit",
-//                                     "Sales",
-//                                     null,
-//                                     null,
-//                                     "Quantity",
-//                                     "Discount",
-//                                     "Category",
-//                                 ],
-//                             });
-
-//                             const origin = await shadow_elem(
-//                                 page,
-//                                 `#active-columns [data-index="5"] .column-selector-draggable`
-//                             );
-
-//                             const target = await shadow_elem(
-//                                 page,
-//                                 `#active-columns [data-index="2"]`
-//                             );
-
-//                             await drag(page, origin, target);
-//                             return await get_contents(page);
-//                         },
-//                         { reload_page: true }
-//                     );
-
-//                     test.skip(
-//                         "from optional to required columns should swap",
-//                         async (page) => {
-//                             await restore_viewer(page, {
-//                                 settings: true,
-//                                 group_by: ["State"],
-//                                 columns: [
-//                                     "Profit",
-//                                     "Sales",
-//                                     null,
-//                                     null,
-//                                     "Quantity",
-//                                     "Discount",
-//                                     "Category",
-//                                 ],
-//                             });
-
-//                             const origin = await shadow_elem(
-//                                 page,
-//                                 `#active-columns [data-index="5"] .column-selector-draggable`
-//                             );
-
-//                             const target = await shadow_elem(
-//                                 page,
-//                                 `#active-columns [data-index="1"]`
-//                             );
-
-//                             await drag(page, origin, target);
-//                             return await get_contents(page);
-//                         },
-//                         { reload_page: true }
-//                     );
-//                     test.skip(
-//                         "filter in should work",
-//                         async (page) => {
-//                             await restore_viewer(page, {
-//                                 settings: true,
-//                                 group_by: [],
-//                                 columns: [
-//                                     "Order ID",
-//                                     "City",
-//                                     null,
-//                                     null,
-//                                     "Category",
-//                                 ],
-//                             });
-//                             const origin = await shadow_elem(
-//                                 page,
-//                                 `#active-columns [data-index="1"] .column-selector-draggable`
-//                             );
-//                             const target = await shadow_elem(page, "#filter");
-//                             await drag_and_drop(page, origin, target);
-//                             await page.evaluateHandle(async () => {
-//                                 const mouseEvent =
-//                                     document.createEvent("MouseEvents");
-//                                 mouseEvent.initEvent("focus", true, true);
-//                                 const input = document
-//                                     .querySelector("perspective-viewer")
-//                                     .shadowRoot.querySelector(
-//                                         '[placeholder="Value"]'
-//                                     );
-//                                 input.dispatchEvent(mouseEvent);
-//                             });
-//                             await page.evaluateHandle(async () => {
-//                                 const op = document
-//                                     .querySelector("perspective-viewer")
-//                                     .shadowRoot.querySelector(
-//                                         ".filterop-selector"
-//                                     );
-//                                 op.value = "in";
-//                                 const input = document
-//                                     .querySelector("perspective-viewer")
-//                                     .shadowRoot.querySelector(
-//                                         '[placeholder="Value"]'
-//                                     );
-//                                 input.dispatchEvent(
-//                                     new Event("change", {
-//                                         bubbles: true,
-//                                         cancelable: true,
-//                                     })
-//                                 );
-//                             });
-//                             await page.evaluateHandle(async () => {
-//                                 await sleep(500);
-//                                 const input = document
-//                                     .querySelector("perspective-viewer")
-//                                     .shadowRoot.querySelector(
-//                                         '[placeholder="Value"]'
-//                                     );
-//                                 input.value = "a,Ch";
-//                                 input.dispatchEvent(
-//                                     new Event("input", {
-//                                         bubbles: true,
-//                                         cancelable: true,
-//                                     })
-//                                 );
-//                                 function sleep(time) {
-//                                     return new Promise((resolve) =>
-//                                         setTimeout(resolve, time)
-//                                     );
-//                                 }
-//                                 await sleep(500);
-//                             });
-//                             return await get_contents(page);
-//                         },
-//                         { reload_page: true }
-//                     );
-//                 });
-//             },
-//             { root: path.join(__dirname, "..", "..") }
-//         );
-//     });
-// });

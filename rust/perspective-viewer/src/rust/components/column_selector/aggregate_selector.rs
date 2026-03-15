@@ -14,24 +14,28 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use perspective_client::config::*;
-use perspective_client::utils::PerspectiveResultExt;
 use perspective_js::utils::ApiFuture;
 use yew::prelude::*;
 
 use crate::components::containers::select::*;
 use crate::components::style::LocalStyle;
-use crate::model::*;
 use crate::renderer::*;
 use crate::session::*;
-use crate::{PerspectiveProperties, css};
+use crate::css;
 
-#[derive(Properties, PerspectiveProperties!)]
+#[derive(Properties)]
 pub struct AggregateSelectorProps {
     /// The name of this aggregate.
     pub column: String,
 
     /// Which aggregate is currently selected.
     pub aggregate: Option<Aggregate>,
+
+    /// Session metadata snapshot — threaded from `SessionProps`.
+    pub metadata: SessionMetadata,
+
+    /// View config snapshot — threaded from parent as a value prop.
+    pub view_config: ViewConfig,
 
     // State
     pub renderer: Renderer,
@@ -40,7 +44,10 @@ pub struct AggregateSelectorProps {
 
 impl PartialEq for AggregateSelectorProps {
     fn eq(&self, rhs: &Self) -> bool {
-        self.column == rhs.column && self.aggregate == rhs.aggregate
+        self.column == rhs.column
+            && self.aggregate == rhs.aggregate
+            && self.metadata == rhs.metadata
+            && self.view_config == rhs.view_config
     }
 }
 
@@ -89,11 +96,10 @@ impl Component for AggregateSelector {
             .clone()
             .or_else(|| {
                 ctx.props()
-                    .session
-                    .metadata()
+                    .metadata
                     .get_column_table_type(&ctx.props().column)
                     .and_then(|x| {
-                        ctx.props().session.metadata().get_features().and_then(|y| {
+                        ctx.props().metadata.get_features().and_then(|y| {
                             y.aggregates.get(&(x as u32)).and_then(|z| {
                                 z.aggregates
                                     .first()
@@ -130,24 +136,27 @@ impl Component for AggregateSelector {
 impl AggregateSelector {
     pub fn set_aggregate(&mut self, ctx: &Context<Self>, aggregate: Aggregate) {
         self.aggregate = Some(aggregate.clone());
-        let mut aggregates = ctx.props().session.get_view_config().aggregates.clone();
+        let mut aggregates = ctx.props().view_config.aggregates.clone();
         aggregates.insert(ctx.props().column.clone(), aggregate);
         let config = ViewConfigUpdate {
             aggregates: Some(aggregates),
             ..ViewConfigUpdate::default()
         };
 
-        ctx.props()
-            .update_and_render(config)
-            .map(ApiFuture::spawn)
-            .unwrap_or_log();
+        let session = ctx.props().session.clone();
+        let renderer = ctx.props().renderer.clone();
+        if session.update_view_config(config).is_ok() {
+            ApiFuture::spawn(async move {
+                renderer.apply_pending_plugin()?;
+                renderer.draw(session.validate().await?.create_view()).await
+            });
+        }
     }
 
     pub fn get_dropdown_aggregates(&self, ctx: &Context<Self>) -> Vec<SelectItem<Aggregate>> {
         let aggregates = ctx
             .props()
-            .session
-            .metadata()
+            .metadata
             .get_column_aggregates(&ctx.props().column)
             .map(|x| x.collect::<Vec<_>>())
             .unwrap_or_default();

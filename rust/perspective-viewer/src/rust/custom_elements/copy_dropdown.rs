@@ -23,7 +23,7 @@ use super::modal::*;
 use super::viewer::PerspectiveViewerElement;
 use crate::components::copy_dropdown::{CopyDropDownMenu, CopyDropDownMenuProps};
 use crate::js::*;
-use crate::model::*;
+use crate::tasks::*;
 use crate::utils::*;
 
 #[wasm_bindgen]

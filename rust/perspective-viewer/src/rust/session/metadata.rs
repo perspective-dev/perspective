@@ -19,6 +19,7 @@ use perspective_js::apierror;
 
 use crate::*;
 
+#[derive(Clone, PartialEq)]
 struct SessionViewExpressionMetadata {
     edited: HashMap<String, String>,
     expressions: perspective_client::ExprValidationResult,
@@ -28,8 +29,14 @@ struct SessionViewExpressionMetadata {
 /// do so without `async`.  It must be recreated by any `async` method which
 /// changes the `View` and may temporarily be out-of-sync with the
 /// `View`/`ViewConfig`.
-#[derive(Default)]
+#[derive(Clone, Default, PartialEq)]
 pub struct SessionMetadata(Option<SessionMetadataState>);
+
+impl std::fmt::Debug for SessionMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SessionMetadata { .. }")
+    }
+}
 
 impl Deref for SessionMetadata {
     type Target = Option<SessionMetadataState>;
@@ -50,7 +57,7 @@ pub type MetadataMutRef<'a> = std::cell::RefMut<'a, SessionMetadata>;
 
 /// TODO the multiple `Option` types could probably be merged since they are
 /// populated within an async lock
-#[derive(Default)]
+#[derive(Clone, Default, PartialEq)]
 pub struct SessionMetadataState {
     features: perspective_client::Features,
     column_names: Vec<String>,
@@ -118,6 +125,10 @@ impl SessionMetadata {
 
     /// Returns the unique column names in this session that are expression
     /// columns.
+    pub fn get_expression_schema(&self) -> Option<&HashMap<String, ColumnType>> {
+        Some(&self.as_ref()?.expr_meta.as_ref()?.expressions.expression_schema)
+    }
+
     pub fn get_expression_columns(&self) -> impl Iterator<Item = &'_ String> {
         maybe!(Some(
             self.as_ref()?

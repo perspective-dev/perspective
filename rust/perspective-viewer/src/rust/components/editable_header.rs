@@ -18,10 +18,10 @@ use yew::{Callback, Component, Html, NodeRef, Properties, TargetCast, classes, h
 
 use super::type_icon::TypeIconType;
 use crate::components::type_icon::TypeIcon;
-use crate::session::Session;
-use crate::*;
+use crate::maybe;
+use crate::session::{Session, SessionMetadata};
 
-#[derive(Clone, PartialEq, Properties, PerspectiveProperties!)]
+#[derive(Clone, PartialEq, Properties)]
 pub struct EditableHeaderProps {
     pub icon_type: Option<TypeIconType>,
     pub on_change: Callback<(Option<String>, bool)>,
@@ -31,6 +31,9 @@ pub struct EditableHeaderProps {
 
     #[prop_or_default]
     pub reset_count: u8,
+
+    /// Session metadata snapshot — threaded from `SessionProps`.
+    pub metadata: SessionMetadata,
 
     // State
     pub session: Session,
@@ -111,7 +114,7 @@ impl Component for EditableHeader {
                     if !self.edited {
                         return Some(true);
                     }
-                    let metadata = ctx.props().session.metadata();
+                    let metadata = &ctx.props().metadata;
                     let expressions = metadata.get_expression_columns();
                     let found = metadata
                         .get_table_columns()?

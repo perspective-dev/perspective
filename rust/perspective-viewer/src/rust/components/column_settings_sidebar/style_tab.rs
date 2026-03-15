@@ -26,17 +26,25 @@ use crate::components::number_column_style::NumberColumnStyle;
 use crate::components::string_column_style::StringColumnStyle;
 use crate::components::style_controls::CustomNumberFormat;
 use crate::custom_events::CustomEvents;
-use crate::model::*;
+use crate::tasks::{
+    get_column_style_control_options, HasCustomEvents, HasPresentation, HasRenderer, HasSession,
+    SendPluginConfig,
+};
 use crate::presentation::Presentation;
 use crate::renderer::Renderer;
 use crate::session::Session;
-use crate::*;
 
-#[derive(Clone, PartialEq, Properties, PerspectiveProperties!)]
+#[derive(Clone, PartialEq, Properties)]
 pub struct StyleTabProps {
     pub ty: Option<ColumnType>,
     pub column_name: String,
     pub group_by_depth: u32,
+
+    /// View config snapshot — threaded from parent.
+    pub view_config: perspective_client::config::ViewConfig,
+
+    /// Session metadata snapshot — threaded from parent.
+    pub metadata: crate::session::SessionMetadata,
 
     // State
     pub custom_events: CustomEvents,
@@ -45,21 +53,49 @@ pub struct StyleTabProps {
     pub session: Session,
 }
 
+impl HasCustomEvents for StyleTabProps {
+    fn custom_events(&self) -> &CustomEvents {
+        &self.custom_events
+    }
+}
+
+impl HasPresentation for StyleTabProps {
+    fn presentation(&self) -> &Presentation {
+        &self.presentation
+    }
+}
+
+impl HasRenderer for StyleTabProps {
+    fn renderer(&self) -> &Renderer {
+        &self.renderer
+    }
+}
+
+impl HasSession for StyleTabProps {
+    fn session(&self) -> &Session {
+        &self.session
+    }
+}
+
 #[function_component]
 pub fn StyleTab(props: &StyleTabProps) -> Html {
-    let config = props.presentation().get_columns_config(&props.column_name);
+    let config = props.presentation.get_columns_config(&props.column_name);
     let on_change = yew::use_callback(
-        (props.clone_state(), props.column_name.clone()),
+        (props.clone(), props.column_name.clone()),
         |config, (state, column_name)| {
             state.send_plugin_config(column_name, config);
         },
     );
 
-    let components = props
-        .get_column_style_control_options(&props.column_name)
+    let components = get_column_style_control_options(
+        &props.renderer,
+        &props.view_config,
+        &props.metadata,
+        &props.column_name,
+    )
         .map(|opts| {
             let mut components = vec![];
-            if !props.session().get_view_config().group_by.is_empty() {
+            if !props.view_config.group_by.is_empty() {
                 let aggregate_depth = config.as_ref().map(|x| x.aggregate_depth as f64);
                 components.push(("Aggregate Depth", html! {
                     <AggregateDepthSelector
@@ -82,7 +118,7 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                         {config}
                         {default_config}
                         on_change={on_change.clone()}
-                        session={props.session()}
+                        session={props.session.clone()}
                     />
                 }));
             }
@@ -124,7 +160,7 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                         {restored_config}
                         on_change={on_change.clone()}
                         column_name={props.column_name.clone()}
-                        session={props.session().clone()}
+                        session={props.session.clone()}
                     />
                 }))
             }

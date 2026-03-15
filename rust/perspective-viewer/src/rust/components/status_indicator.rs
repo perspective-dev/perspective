@@ -16,18 +16,28 @@ use wasm_bindgen::JsValue;
 use web_sys::*;
 use yew::prelude::*;
 
-use crate::PerspectiveProperties;
 use crate::custom_events::CustomEvents;
-use crate::model::*;
-use crate::renderer::*;
-use crate::session::*;
+use crate::renderer::Renderer;
+use crate::session::{Session, TableErrorState, ViewStats};
 use crate::utils::*;
 
-#[derive(PartialEq, Properties, PerspectiveProperties!)]
+/// Value-prop version: no PubSub subscriptions, no reducer.
+/// The parent (`StatusBar`) re-renders this component whenever
+/// `update_count`, `error`, or `stats` change (via root's `IncrementUpdateCount`
+/// / `DecrementUpdateCount` / `UpdateSession` messages).
+#[derive(PartialEq, Properties)]
 pub struct StatusIndicatorProps {
     pub custom_events: CustomEvents,
     pub renderer: Renderer,
     pub session: Session,
+    /// Number of in-flight renders (>0 → "updating" spinner).
+    pub update_count: u32,
+    /// Full error state (if any), used for the error dialog and reconnect.
+    pub error: Option<TableErrorState>,
+    /// Whether a table has been loaded.
+    pub has_table: bool,
+    /// Row/column statistics — used to distinguish "loading" from "connected".
+    pub stats: Option<ViewStats>,
 }
 
 /// An indicator component which displays the current status of the perspective
@@ -35,67 +45,69 @@ pub struct StatusIndicatorProps {
 /// reconnect callback when in an error state.
 #[function_component]
 pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
-    let state = use_reducer_eq(|| {
-        if let Some(err) = props.session.get_error() {
-            StatusIconState::Errored(err.message(), err.stacktrace(), err.kind())
-        } else {
-            StatusIconState::Normal
-        }
-    });
+    // Derive the icon state directly from value props — no subscriptions needed.
+    //
+    // The precedence matches master's `Reducible` implementation:
+    // - Error always wins.
+    // - "Loading" is sticky: once stats lack `num_table_cells`, neither
+    //   increment nor decrement can leave `Loading`.  This matters when
+    //   `load()` is called with the same `Table` (no `create_view()`, so
+    //   `view_created` never fires and `update_count` never decrements).
+    // - "Updating" only shows when stats already have cells (normal operation).
+    let has_table_cells = props
+        .stats
+        .as_ref()
+        .and_then(|s| s.num_table_cells)
+        .is_some();
 
-    use_effect_with(
-        (props.session.clone(), state.dispatcher()),
-        |(session, set_state)| {
-            let subs = [
-                session
-                    .table_errored
-                    .add_listener(set_state.callback(StatusIconStateAction::SetError)),
-                session
-                    .stats_changed
-                    .add_listener(set_state.callback(StatusIconStateAction::Load)),
-                session
-                    .view_config_changed
-                    .add_listener(set_state.callback(|_| StatusIconStateAction::Increment)),
-                session
-                    .view_created
-                    .add_listener(set_state.callback(|_| StatusIconStateAction::Decrement)),
-            ];
+    let state = if let Some(err) = &props.error {
+        StatusIconState::Errored(
+            err.message(),
+            err.stacktrace(),
+            err.kind(),
+            err.is_reconnect(),
+        )
+    } else if !has_table_cells && props.has_table {
+        StatusIconState::Loading
+    } else if props.update_count > 0 {
+        StatusIconState::Updating
+    } else if has_table_cells {
+        StatusIconState::Normal
+    } else {
+        StatusIconState::Uninitialized
+    };
 
-            move || drop(subs)
-        },
-    );
-
-    let class_name = match (&*state, props.session.is_reconnect()) {
-        (StatusIconState::Errored(..), true) => "errored",
-        (StatusIconState::Errored(..), false) => "errored disabled",
-        (StatusIconState::Normal, _) => "connected",
-        (StatusIconState::Updating(_), _) => "updating",
-        (StatusIconState::Loading, _) => "loading",
-        (StatusIconState::Unititialized, _) => "uninitialized",
+    let class_name = match &state {
+        StatusIconState::Errored(_, _, _, true) => "errored",
+        StatusIconState::Errored(_, _, _, false) => "errored disabled",
+        StatusIconState::Normal => "connected",
+        StatusIconState::Updating => "updating",
+        StatusIconState::Loading => "loading",
+        StatusIconState::Uninitialized => "uninitialized",
     };
 
     let onclick = use_async_callback(
-        (props.clone_state(), state.clone()),
-        async move |_: MouseEvent, (props, state)| {
-            match &**state {
+        (
+            props.session.clone(),
+            props.renderer.clone(),
+            props.custom_events.clone(),
+            state.clone(),
+        ),
+        async move |_: MouseEvent, (session, renderer, custom_events, state)| {
+            match &state {
                 StatusIconState::Errored(..) => {
-                    props.session.reconnect().await?;
+                    session.reconnect().await?;
                     let cfg = ViewConfigUpdate::default();
-                    props.update_and_render(cfg)?.await?;
+                    session.update_view_config(cfg)?;
+                    renderer.apply_pending_plugin()?;
+                    renderer.draw(session.validate().await?.create_view()).await?;
                 },
                 StatusIconState::Normal => {
-                    props
-                        .custom_events
+                    custom_events
                         .dispatch_event("status-indicator-click", JsValue::UNDEFINED)?;
                 },
                 _ => {},
             };
-
-            // if let StatusIconState::Errored(..) = &**state {
-            //     props.session.reconnect().await?;
-            //     let cfg = ViewConfigUpdate::default();
-            //     props.update_and_render(cfg)?.await?;
-            // }
 
             Ok::<_, ApiError>(())
         },
@@ -108,7 +120,7 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
                     <span id="status" class={class_name} />
                     <span id="status_updating" class={class_name} />
                 </div>
-                if let StatusIconState::Errored(err, stack, kind) = &*state {
+                if let StatusIconState::Errored(err, stack, kind, _) = &state {
                     <div class="error-dialog">
                         <div class="error-dialog-message">{ format!("{} {}", kind, err) }</div>
                         <div class="error-dialog-stack">{ stack }</div>
@@ -119,65 +131,11 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
     }
 }
 
-#[derive(Clone, Default, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum StatusIconState {
     Loading,
-    Updating(u32),
-    Errored(String, String, &'static str),
+    Updating,
+    Errored(String, String, &'static str, bool),
     Normal,
-
-    #[default]
-    Unititialized,
-}
-
-#[derive(Clone, Debug)]
-enum StatusIconStateAction {
-    Increment,
-    Decrement,
-    Load(Option<ViewStats>),
-    SetError(ApiError),
-}
-
-impl Reducible for StatusIconState {
-    type Action = StatusIconStateAction;
-
-    fn reduce(self: std::rc::Rc<Self>, action: Self::Action) -> std::rc::Rc<Self> {
-        let new_status = match (&*self, action.clone()) {
-            (StatusIconState::Updating(x), StatusIconStateAction::Increment) => {
-                Self::Updating(x + 1)
-            },
-            (StatusIconState::Updating(x), StatusIconStateAction::Decrement) if *x > 1 => {
-                Self::Updating(x - 1)
-            },
-            (_, StatusIconStateAction::Load(stats)) => {
-                if stats.and_then(|x| x.num_table_cells).is_some() {
-                    StatusIconState::Normal
-                } else {
-                    Self::Loading
-                }
-            },
-            (_, StatusIconStateAction::SetError(e)) => {
-                Self::Errored(e.message(), e.stacktrace(), e.kind())
-            },
-            (
-                StatusIconState::Loading,
-                StatusIconStateAction::Increment | StatusIconStateAction::Decrement,
-            ) => StatusIconState::Loading,
-            (_, StatusIconStateAction::Increment) => Self::Updating(1),
-            (StatusIconState::Errored(x, y, z), _) => {
-                StatusIconState::Errored(x.clone(), y.clone(), z)
-            },
-            (_, StatusIconStateAction::Decrement) => StatusIconState::Normal,
-        };
-
-        new_status.into()
-    }
-}
-
-#[extend::ext]
-impl<T: Reducible + 'static> UseReducerDispatcher<T> {
-    fn callback<U>(&self, action: impl Fn(U) -> T::Action + 'static) -> Callback<U> {
-        let dispatcher = self.clone();
-        Callback::from(move |event| dispatcher.dispatch(action(event)))
-    }
+    Uninitialized,
 }

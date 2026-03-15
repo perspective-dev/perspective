@@ -10,42 +10,43 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_js::utils::*;
+//! Async tasks and model traits for coordinating state between `Session`,
+//! `Renderer`, `Presentation`, and `DragDrop` singletons.
+//!
+//! Complex operations that span more than one state object are expressed as
+//! traits whose bounds name exactly the state objects they require (e.g.
+//! `UpdateAndRender: HasSession + HasRenderer`).  Blanket impls apply the
+//! trait to any struct that holds those fields and provides `Has*` accessors.
 
-use crate::config::ColumnConfigValueUpdate;
-use crate::model::*;
+mod column_locator;
+mod columns_iter_set;
+mod copy_export;
+mod edit_expression;
+mod eject;
+mod export_app;
+mod export_method;
+mod get_viewer_config;
+mod intersection_observer;
+mod is_invalid_drop;
+mod plugin_column_styles;
+mod resize_observer;
+mod restore_and_render;
+mod send_plugin_config;
+mod structural;
+mod update_and_render;
 
-pub trait SendPluginConfig {
-    /// Update te urrent plugin with a [`ColumnonfigValueUpdate`]
-    fn send_plugin_config(&self, column_name: &str, update: ColumnConfigValueUpdate);
-}
-
-impl<A> SendPluginConfig for A
-where
-    A: Clone + HasCustomEvents + HasPresentation + HasRenderer + HasSession + 'static,
-{
-    fn send_plugin_config(&self, column_name: &str, update: ColumnConfigValueUpdate) {
-        let name = column_name.to_string();
-        let props = self.clone();
-        ApiFuture::spawn(async move {
-            props
-                .presentation()
-                .update_columns_config_value(name.clone(), update);
-
-            let columns_configs = props.presentation().all_columns_configs();
-            let plugin_config = props.renderer().get_active_plugin()?.save()?;
-            props
-                .renderer()
-                .get_active_plugin()?
-                .restore(&plugin_config, Some(&columns_configs))?;
-
-            props.renderer().update(props.session().get_view()).await?;
-            let detail = serde_wasm_bindgen::to_value(&columns_configs).unwrap();
-            props
-                .custom_events()
-                .dispatch_column_style_changed(&detail)?;
-
-            Ok(())
-        })
-    }
-}
+pub use self::column_locator::*;
+pub use self::columns_iter_set::*;
+pub use self::copy_export::*;
+pub use self::edit_expression::*;
+pub use self::eject::*;
+pub use self::export_method::*;
+pub use self::get_viewer_config::*;
+pub use self::intersection_observer::*;
+pub use self::is_invalid_drop::is_invalid_columns_column;
+pub use self::plugin_column_styles::*;
+pub use self::resize_observer::*;
+pub use self::restore_and_render::*;
+pub use self::send_plugin_config::*;
+pub use self::structural::*;
+pub use self::update_and_render::*;

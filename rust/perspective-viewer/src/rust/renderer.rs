@@ -47,6 +47,7 @@ use self::render_timer::*;
 use crate::config::*;
 use crate::js::plugin::*;
 use crate::presentation::ColumnConfigMap;
+use crate::state::RendererProps;
 use crate::utils::*;
 
 /// Immutable state
@@ -70,7 +71,7 @@ pub struct RendererMutData {
     pending_plugin: Option<usize>,
 }
 
-type RenderLimits = (usize, usize, Option<usize>, Option<usize>);
+pub type RenderLimits = (usize, usize, Option<usize>, Option<usize>);
 
 /// The state object responsible for the active [`JsPerspectiveViewerPlugin`].
 #[derive(Clone)]
@@ -476,4 +477,47 @@ fn make_short_name(name: &str) -> String {
         .chars()
         .filter(|x| x.is_alphabetic())
         .collect()
+}
+
+impl Renderer {
+    /// Snapshot the current renderer state as a [`RendererProps`] value
+    /// suitable for passing as a Yew prop.  Called by the root component
+    /// whenever a renderer-related PubSub event fires.
+    pub fn to_props(
+        &self,
+        render_limits: Option<(bool, RenderLimits)>,
+    ) -> RendererProps {
+        // Guard: don't touch the PluginStore if no plugin has been explicitly
+        // selected yet.  Calling `get_active_plugin()` or `get_all_plugins()`
+        // triggers `PluginStore::init_lazy()`, which snapshots the
+        // PLUGIN_REGISTRY.  If this happens during component `create()` —
+        // before JavaScript has called `registerPlugin()` — the cache will
+        // only contain the default Debug plugin and custom plugins registered
+        // later will never be found.
+        let has_plugin = self.0.borrow().plugins_idx.is_some();
+        if has_plugin {
+            let plugin_name = self.get_active_plugin().ok().map(|p| p.name());
+            let requirements = self.metadata().clone();
+            let available_plugins = self
+                .get_all_plugins()
+                .into_iter()
+                .map(|p| p.name())
+                .collect::<Vec<_>>()
+                .into();
+
+            RendererProps {
+                plugin_name,
+                requirements,
+                render_limits,
+                available_plugins,
+            }
+        } else {
+            RendererProps {
+                plugin_name: None,
+                requirements: ViewConfigRequirements::default(),
+                render_limits,
+                available_plugins: Rc::new(vec![]),
+            }
+        }
+    }
 }

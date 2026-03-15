@@ -15,10 +15,10 @@ use std::collections::HashSet;
 use itertools::Itertools;
 use perspective_client::config::*;
 
-use super::{HasRenderer, HasSession, IsInvalidDrop};
+use super::is_invalid_columns_column;
 use crate::dragdrop::*;
 use crate::renderer::*;
-use crate::session::*;
+use crate::session::SessionMetadata;
 use crate::utils::DragTarget;
 use crate::*;
 
@@ -65,28 +65,16 @@ type Label = Option<String>;
 /// iterator returning functions `active()`, `inactive()` and `expression()`.
 pub struct ColumnsIteratorSet<'a> {
     config: &'a ViewConfig,
-    session: &'a Session,
     renderer: &'a Renderer,
-    metadata: MetadataRef<'a>,
+    metadata: &'a SessionMetadata,
     is_dragover_column: Option<(usize, String)>,
     named_columns: Vec<String>,
-}
-
-impl HasRenderer for ColumnsIteratorSet<'_> {
-    fn renderer(&self) -> &'_ Renderer {
-        self.renderer
-    }
-}
-impl HasSession for ColumnsIteratorSet<'_> {
-    fn session(&self) -> &'_ Session {
-        self.session
-    }
 }
 
 impl<'a> ColumnsIteratorSet<'a> {
     pub fn new(
         config: &'a ViewConfig,
-        session: &'a Session,
+        metadata: &'a SessionMetadata,
         renderer: &'a Renderer,
         dragdrop: &DragDrop,
     ) -> ColumnsIteratorSet<'a> {
@@ -94,9 +82,8 @@ impl<'a> ColumnsIteratorSet<'a> {
         let named_columns = renderer.metadata().names.clone().unwrap_or_default();
         ColumnsIteratorSet {
             config,
-            session,
             renderer,
-            metadata: session.metadata(),
+            metadata,
             is_dragover_column,
             named_columns,
         }
@@ -117,10 +104,9 @@ impl<'a> ColumnsIteratorSet<'a> {
             || self.config.columns.len() < self.named_columns.len()
             || self.config.columns.iter().filter(|x| x.is_some()).count()
                 == self
-                    .session
-                    .metadata()
+                    .metadata
                     .get_table_columns()
-                    .map(|x| x.len())
+                    .map(|x: &Vec<String>| x.len())
                     .unwrap_or_default()
                     + self.config.expressions.len();
 
@@ -143,7 +129,8 @@ impl<'a> ColumnsIteratorSet<'a> {
                     .map(|x| self.renderer.metadata().is_swap(x))
                     .unwrap_or_default();
 
-                let is_swap_invalid = self.is_invalid_columns_column(from_column, *to_index);
+                let is_swap_invalid =
+                    is_invalid_columns_column(self.config, self.renderer.metadata().min, from_column, *to_index);
                 let is_dragover_after_last = *to_index == self.config.columns.len();
                 if is_swap_invalid {
                     let all_columns = self.config.columns.iter().map(|x| x.into());
@@ -299,7 +286,7 @@ impl<'a> ColumnsIteratorSet<'a> {
         };
 
         if !is_active || is_swap_over.unwrap_or_default() {
-            let col_type = self.session.metadata().get_column_table_type(name)?;
+            let col_type = self.metadata.get_column_table_type(name)?;
             let is_visible = dragover_col.is_none_or(|(_, x)| x != name);
             Some(OrderedColumn {
                 is_visible,

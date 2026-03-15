@@ -10,27 +10,27 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use super::{HasRenderer, HasSession};
+use perspective_client::config::ViewConfig;
 
-pub trait IsInvalidDrop: HasRenderer + HasSession {
-    fn is_invalid_columns_column(&self, from_column: &String, to_index: usize) -> bool {
-        let config = self.session().get_view_config();
-        let from_index = config
-            .columns
-            .iter()
-            .position(|x| x.as_ref() == Some(from_column));
+/// Checks whether dropping `from_column` at `to_index` in the active columns
+/// list would be invalid (i.e. removing a required column to an empty slot).
+pub fn is_invalid_columns_column(
+    config: &ViewConfig,
+    min: Option<usize>,
+    from_column: &String,
+    to_index: usize,
+) -> bool {
+    let from_index = config
+        .columns
+        .iter()
+        .position(|x| x.as_ref() == Some(from_column));
 
-        let min_cols = self.renderer().metadata().min;
-        let is_to_empty = !config
-            .columns
-            .get(to_index)
-            .map(|x| x.is_some())
-            .unwrap_or_default();
-        min_cols
-            .and_then(|x| from_index.map(|from_index| from_index < x))
-            .unwrap_or_default()
-            && is_to_empty
-    }
+    let is_to_empty = !config
+        .columns
+        .get(to_index)
+        .map(|x| x.is_some())
+        .unwrap_or_default();
+    min.and_then(|x| from_index.map(|from_index| from_index < x))
+        .unwrap_or_default()
+        && is_to_empty
 }
-
-impl<T: HasRenderer + HasSession> IsInvalidDrop for T {}

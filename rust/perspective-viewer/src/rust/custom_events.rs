@@ -22,7 +22,7 @@ use yew::html::ImplicitClone;
 
 use crate::config::*;
 use crate::js::JsPerspectiveViewerPlugin;
-use crate::model::*;
+use crate::tasks::*;
 use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::Session;
@@ -55,13 +55,30 @@ impl Deref for CustomEventsDataRc {
     }
 }
 
-#[derive(PerspectiveProperties!)]
 struct CustomEventsData {
     elem: HtmlElement,
     session: Session,
     renderer: Renderer,
     presentation: Presentation,
     last_dispatched: RefCell<Option<ViewerConfig>>,
+}
+
+impl HasPresentation for CustomEventsData {
+    fn presentation(&self) -> &Presentation {
+        &self.presentation
+    }
+}
+
+impl HasRenderer for CustomEventsData {
+    fn renderer(&self) -> &Renderer {
+        &self.renderer
+    }
+}
+
+impl HasSession for CustomEventsData {
+    fn session(&self) -> &Session {
+        &self.session
+    }
 }
 
 impl CustomEvents {

@@ -65,8 +65,10 @@ impl ModalLink<NumberColumnStyle> for NumberColumnStyleProps {
 }
 
 impl PartialEq for NumberColumnStyleProps {
-    fn eq(&self, _other: &Self) -> bool {
-        false
+    fn eq(&self, other: &Self) -> bool {
+        self.config == other.config
+            && self.default_config == other.default_config
+            && self.column_name == other.column_name
     }
 }
 

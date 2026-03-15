@@ -16,7 +16,7 @@ use web_sys::*;
 
 use crate::config::ViewerConfigUpdate;
 use crate::js::*;
-use crate::model::*;
+use crate::tasks::*;
 use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::Session;
@@ -71,18 +71,34 @@ impl Drop for IntersectionObserverHandle {
     }
 }
 
-#[derive(PerspectiveProperties!)]
 struct IntersectionObserverState {
     session: Session,
     renderer: Renderer,
     presentation: Presentation,
 }
 
+impl HasPresentation for IntersectionObserverState {
+    fn presentation(&self) -> &Presentation {
+        &self.presentation
+    }
+}
+
+impl HasRenderer for IntersectionObserverState {
+    fn renderer(&self) -> &Renderer {
+        &self.renderer
+    }
+}
+
+impl HasSession for IntersectionObserverState {
+    fn session(&self) -> &Session {
+        &self.session
+    }
+}
+
 impl IntersectionObserverState {
     async fn set_pause(self, intersect: bool) -> ApiResult<()> {
         if intersect {
             if self.session.set_pause(false) {
-                self.presentation.visibility_changed.emit(intersect);
                 self.restore_and_render(ViewerConfigUpdate::default(), async move { Ok(()) })
                     .await?;
             }

@@ -40,8 +40,8 @@ impl ModalLink<DatetimeStyleCustom> for DatetimeStyleCustomProps {
 }
 
 impl PartialEq for DatetimeStyleCustomProps {
-    fn eq(&self, _other: &Self) -> bool {
-        false
+    fn eq(&self, other: &Self) -> bool {
+        self.enable_time_config == other.enable_time_config && self.config == other.config
     }
 }
 

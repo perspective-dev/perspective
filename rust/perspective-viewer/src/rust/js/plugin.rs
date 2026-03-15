@@ -141,7 +141,7 @@ impl ColumnSelectMode {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ViewConfigRequirements {
     pub min: Option<usize>,
     pub names: Option<Vec<String>>,

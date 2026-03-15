@@ -22,14 +22,13 @@ use crate::components::status_bar_counter::StatusBarRowsCounter;
 use crate::custom_elements::copy_dropdown::*;
 use crate::custom_elements::export_dropdown::*;
 use crate::custom_events::CustomEvents;
-use crate::model::*;
+use crate::tasks::*;
 use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::*;
-use crate::utils::*;
 use crate::*;
 
-#[derive(Properties, PerspectiveProperties!)]
+#[derive(Clone, Properties)]
 pub struct StatusBarProps {
     // DOM Attribute
     pub id: String,
@@ -41,6 +40,24 @@ pub struct StatusBarProps {
     #[prop_or_default]
     pub on_settings: Option<Callback<()>>,
 
+    // Value props threaded from the root's `SessionProps`.
+    // Using these avoids PubSub subscriptions for table_loaded / table_errored.
+    pub has_table: bool,
+    pub is_errored: bool,
+    pub stats: Option<ViewStats>,
+    /// In-flight render counter and full error, threaded to `StatusIndicator`.
+    pub update_count: u32,
+    pub error: Option<TableErrorState>,
+    /// Title string from session — threaded to avoid title_changed subscription.
+    pub title: Option<String>,
+    /// Theme state from presentation — threaded to avoid theme_config_updated /
+    /// visibility_changed subscriptions.
+    pub is_settings_open: bool,
+    pub selected_theme: Option<String>,
+    pub available_themes: Rc<Vec<String>>,
+    /// Whether this viewer is hosted inside a `<perspective-workspace>`.
+    pub is_workspace: bool,
+
     // State
     pub custom_events: CustomEvents,
     pub session: Session,
@@ -51,6 +68,47 @@ pub struct StatusBarProps {
 impl PartialEq for StatusBarProps {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
+            && self.has_table == other.has_table
+            && self.is_errored == other.is_errored
+            && self.stats == other.stats
+            && self.update_count == other.update_count
+            && self.error == other.error
+            && self.title == other.title
+            && self.is_settings_open == other.is_settings_open
+            && self.selected_theme == other.selected_theme
+            && self.available_themes == other.available_themes
+            && self.is_workspace == other.is_workspace
+    }
+}
+
+impl HasCustomEvents for StatusBarProps {
+    fn custom_events(&self) -> &CustomEvents {
+        &self.custom_events
+    }
+}
+
+impl HasPresentation for StatusBarProps {
+    fn presentation(&self) -> &Presentation {
+        &self.presentation
+    }
+}
+
+impl HasRenderer for StatusBarProps {
+    fn renderer(&self) -> &Renderer {
+        &self.renderer
+    }
+}
+
+impl HasSession for StatusBarProps {
+    fn session(&self) -> &Session {
+        &self.session
+    }
+}
+
+impl StateProvider for StatusBarProps {
+    type State = StatusBarProps;
+    fn clone_state(&self) -> Self::State {
+        self.clone()
     }
 }
 
@@ -60,7 +118,6 @@ pub enum StatusBarMsg {
     Copy,
     Noop,
     Eject,
-    SetThemeConfig((Rc<Vec<String>>, Option<usize>)),
     SetTheme(String),
     ResetTheme,
     PointerEvent(web_sys::PointerEvent),
@@ -70,13 +127,12 @@ pub enum StatusBarMsg {
 
 /// A toolbar with buttons, and `Table` & `View` status information.
 pub struct StatusBar {
-    _subscriptions: [Subscription; 5],
     copy_ref: NodeRef,
     export_ref: NodeRef,
     input_ref: NodeRef,
     statusbar_ref: NodeRef,
-    theme: Option<String>,
-    themes: Rc<Vec<String>>,
+    /// Local title tracks the live `<input>` value before the user commits the
+    /// change (blur / Enter).  Reset to the prop value whenever the prop changes.
     title: Option<String>,
 }
 
@@ -85,21 +141,24 @@ impl Component for StatusBar {
     type Properties = StatusBarProps;
 
     fn create(ctx: &Context<Self>) -> Self {
-        fetch_initial_theme(ctx);
         Self {
-            _subscriptions: register_listeners(ctx),
             copy_ref: NodeRef::default(),
             export_ref: NodeRef::default(),
             input_ref: NodeRef::default(),
             statusbar_ref: NodeRef::default(),
-            theme: None,
-            themes: vec![].into(),
-            title: ctx.props().session().get_title().clone(),
+            title: ctx.props().title.clone(),
         }
     }
 
-    fn changed(&mut self, ctx: &Context<Self>, _old_props: &Self::Properties) -> bool {
-        self._subscriptions = register_listeners(ctx);
+    fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
+        // Keep the local title in sync with the prop whenever the session title
+        // changes externally (e.g. restore() call) or the settings panel opens /
+        // closes (which resets the input element).
+        if ctx.props().title != old_props.title
+            || ctx.props().is_settings_open != old_props.is_settings_open
+        {
+            self.title = ctx.props().title.clone();
+        }
         true
     }
 
@@ -111,27 +170,24 @@ impl Component for StatusBar {
                 false
             },
             StatusBarMsg::ResetTheme => {
-                let state = ctx.props().clone_state();
+                let presentation = ctx.props().presentation.clone();
+                let session = ctx.props().session.clone();
+                let renderer = ctx.props().renderer.clone();
                 ApiFuture::spawn(async move {
-                    state.presentation.reset_theme().await?;
-                    let view = state.session.get_view().into_apierror()?;
-                    state.renderer.restyle_all(&view).await
+                    presentation.reset_theme().await?;
+                    let view = session.get_view().into_apierror()?;
+                    renderer.restyle_all(&view).await
                 });
                 true
             },
-            StatusBarMsg::SetThemeConfig((themes, index)) => {
-                let new_theme = index.and_then(|x| themes.get(x)).cloned();
-                let should_render = new_theme != self.theme || self.themes != themes;
-                self.theme = new_theme;
-                self.themes = themes;
-                should_render
-            },
             StatusBarMsg::SetTheme(theme_name) => {
-                let state = ctx.props().clone_state();
+                let presentation = ctx.props().presentation.clone();
+                let session = ctx.props().session.clone();
+                let renderer = ctx.props().renderer.clone();
                 ApiFuture::spawn(async move {
-                    state.presentation.set_theme_name(Some(&theme_name)).await?;
-                    let view = state.session.get_view().into_apierror()?;
-                    state.renderer.restyle_all(&view).await
+                    presentation.set_theme_name(Some(&theme_name)).await?;
+                    let view = session.get_view().into_apierror()?;
+                    renderer.restyle_all(&view).await
                 });
 
                 false
@@ -151,7 +207,7 @@ impl Component for StatusBar {
                 false
             },
             StatusBarMsg::Noop => {
-                self.title = ctx.props().session().get_title();
+                self.title = ctx.props().title.clone();
                 true
             },
             StatusBarMsg::TitleInputEvent => {
@@ -201,16 +257,21 @@ impl Component for StatusBar {
             ..
         } = ctx.props();
 
+        let has_table = ctx.props().has_table;
+        let is_errored = ctx.props().is_errored;
+        let is_settings_open = ctx.props().is_settings_open;
+        let title = &ctx.props().title;
+
         let mut is_updating_class_name = classes!();
-        if session.get_title().is_some() {
+        if title.is_some() {
             is_updating_class_name.push("titled");
         };
 
-        if !presentation.is_settings_open() {
+        if !is_settings_open {
             is_updating_class_name.push(["settings-closed", "titled"]);
         };
 
-        if !session.has_table() {
+        if !has_table {
             is_updating_class_name.push("updating");
         }
 
@@ -229,18 +290,18 @@ impl Component for StatusBar {
             .link()
             .callback(|_: InputEvent| StatusBarMsg::TitleInputEvent);
 
-        let is_menu = session.has_table() && ctx.props().on_settings.as_ref().is_none();
+        let is_menu = has_table && ctx.props().on_settings.as_ref().is_none();
         let is_title = is_menu
-            || presentation.get_is_workspace()
-            || session.get_title().is_some()
-            || session.is_errored()
+            || ctx.props().is_workspace
+            || title.is_some()
+            || is_errored
             || presentation.is_active(&self.input_ref.cast::<Element>());
 
-        let is_settings = session.get_title().is_some()
-            || presentation.get_is_workspace()
-            || !session.has_table()
-            || session.is_errored()
-            || presentation.is_settings_open()
+        let is_settings = title.is_some()
+            || ctx.props().is_workspace
+            || !has_table
+            || is_errored
+            || is_settings_open
             || presentation.is_active(&self.input_ref.cast::<Element>());
 
         if is_settings {
@@ -253,7 +314,15 @@ impl Component for StatusBar {
                         class={is_updating_class_name}
                         {onpointerdown}
                     >
-                        <StatusIndicator {custom_events} {renderer} {session} />
+                        <StatusIndicator
+                            {custom_events}
+                            {renderer}
+                            {session}
+                            update_count={ctx.props().update_count}
+                            error={ctx.props().error.clone()}
+                            has_table={ctx.props().has_table}
+                            stats={ctx.props().stats.clone()}
+                        />
                         if is_title {
                             <label
                                 class="input-sizer"
@@ -272,14 +341,14 @@ impl Component for StatusBar {
                             </label>
                         }
                         if is_title {
-                            <StatusBarRowsCounter {session} />
+                            <StatusBarRowsCounter stats={ctx.props().stats.clone()} />
                         }
                         <div id="spacer" />
                         if is_menu {
                             <div id="menu-bar" class="section">
                                 <ThemeSelector
-                                    theme={self.theme.clone()}
-                                    themes={self.themes.clone()}
+                                    theme={ctx.props().selected_theme.clone()}
+                                    themes={ctx.props().available_themes.clone()}
                                     on_change={ctx.link().callback(StatusBarMsg::SetTheme)}
                                     on_reset={ctx.link().callback(|_| StatusBarMsg::ResetTheme)}
                                 />
@@ -330,41 +399,6 @@ impl Component for StatusBar {
     }
 }
 
-fn register_listeners(ctx: &Context<StatusBar>) -> [Subscription; 5] {
-    [
-        ctx.props()
-            .presentation()
-            .theme_config_updated
-            .add_listener(ctx.link().callback(StatusBarMsg::SetThemeConfig)),
-        ctx.props()
-            .presentation()
-            .visibility_changed
-            .add_listener(ctx.link().callback(|_| StatusBarMsg::Noop)),
-        ctx.props()
-            .session()
-            .title_changed
-            .add_listener(ctx.link().callback(|_| StatusBarMsg::Noop)),
-        ctx.props()
-            .session()
-            .table_loaded
-            .add_listener(ctx.link().callback(|_| StatusBarMsg::Noop)),
-        ctx.props()
-            .session()
-            .table_errored
-            .add_listener(ctx.link().callback(|_| StatusBarMsg::Noop)),
-    ]
-}
-
-fn fetch_initial_theme(ctx: &Context<StatusBar>) {
-    ApiFuture::spawn({
-        let on_theme = ctx.link().callback(StatusBarMsg::SetThemeConfig);
-        clone!(ctx.props().presentation());
-        async move {
-            on_theme.emit(presentation.get_selected_theme_config().await?);
-            Ok(())
-        }
-    });
-}
 
 #[derive(Properties, PartialEq)]
 struct ThemeSelectorProps {

@@ -13,7 +13,6 @@
 use std::collections::HashSet;
 
 use perspective_client::config::*;
-use perspective_client::utils::PerspectiveResultExt;
 use perspective_js::utils::ApiFuture;
 use web_sys::*;
 use yew::prelude::*;
@@ -21,19 +20,18 @@ use yew::prelude::*;
 use super::InPlaceColumn;
 use super::aggregate_selector::*;
 use super::expr_edit_button::*;
-use crate::PerspectiveProperties;
 use crate::components::column_selector::{EmptyColumn, InvalidColumn};
 use crate::components::type_icon::TypeIcon;
 use crate::custom_elements::ColumnDropDownElement;
 use crate::dragdrop::*;
 use crate::js::plugin::*;
-use crate::model::*;
+use crate::tasks::*;
 use crate::presentation::ColumnLocator;
 use crate::renderer::*;
 use crate::session::*;
 use crate::utils::*;
 
-#[derive(Clone, Properties, PerspectiveProperties!)]
+#[derive(Clone, Properties)]
 pub struct ActiveColumnProps {
     /// The column's index in the list.
     pub idx: usize,
@@ -64,6 +62,27 @@ pub struct ActiveColumnProps {
     /// Is this column's expression/config side panel open?
     pub is_editing: bool,
 
+    /// Whether this column is an expression column.  Computed by the parent
+    /// so that changes to session metadata trigger a re-render via prop diff.
+    #[prop_or_default]
+    pub is_expression: bool,
+
+    /// Whether the expression/config edit button should be shown.  Computed
+    /// by the parent (`is_expression || can_render_column_styles`).
+    #[prop_or_default]
+    pub show_edit_btn: bool,
+
+    /// The resolved table column type, if available.  Computed by the parent
+    /// from session metadata so that metadata updates trigger re-renders.
+    #[prop_or_default]
+    pub col_type: Option<ColumnType>,
+
+    /// Session metadata snapshot — threaded from `SessionProps`.
+    pub metadata: SessionMetadata,
+
+    /// View config snapshot — threaded from parent as a value prop.
+    pub view_config: ViewConfig,
+
     /// State
     pub session: Session,
     pub dragdrop: DragDrop,
@@ -71,8 +90,16 @@ pub struct ActiveColumnProps {
 }
 
 impl PartialEq for ActiveColumnProps {
-    fn eq(&self, _rhs: &Self) -> bool {
-        false
+    fn eq(&self, rhs: &Self) -> bool {
+        self.idx == rhs.idx
+            && self.name == rhs.name
+            && self.is_aggregated == rhs.is_aggregated
+            && self.is_editing == rhs.is_editing
+            && self.is_expression == rhs.is_expression
+            && self.show_edit_btn == rhs.show_edit_btn
+            && self.col_type == rhs.col_type
+            && self.metadata == rhs.metadata
+            && self.view_config == rhs.view_config
     }
 }
 
@@ -121,7 +148,7 @@ impl Component for ActiveColumn {
                 is_render
             },
             New(InPlaceColumn::Column(col)) => {
-                let mut view_config = ctx.props().session.get_view_config().clone();
+                let mut view_config = ctx.props().view_config.clone();
                 if ctx.props().idx >= view_config.columns.len() {
                     view_config.columns.push(Some(col));
                 } else {
@@ -133,15 +160,21 @@ impl Component for ActiveColumn {
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 true
             },
             New(InPlaceColumn::Expression(col)) => {
-                let mut view_config = ctx.props().session.get_view_config().clone();
+                let mut view_config = ctx.props().view_config.clone();
                 if ctx.props().idx >= view_config.columns.len() {
                     view_config.columns.push(Some(col.name.as_ref().to_owned()));
                 } else {
@@ -155,10 +188,16 @@ impl Component for ActiveColumn {
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 true
             },
@@ -234,7 +273,7 @@ impl Component for ActiveColumn {
             })
             .collect();
 
-        let col_type = ctx.props().get_table_type(&ctx.props().name);
+        let col_type = ctx.props().col_type;
         match (name, col_type) {
             ((label, ColumnState::Empty), _) => {
                 classes.push("empty-named");
@@ -242,8 +281,7 @@ impl Component for ActiveColumn {
                 let on_select = ctx.link().callback(ActiveColumnMsg::New);
                 let exclude = ctx
                     .props()
-                    .session
-                    .get_view_config()
+                    .view_config
                     .columns
                     .iter()
                     .flatten()
@@ -312,17 +350,12 @@ impl Component for ActiveColumn {
                     .link()
                     .callback(|event: MouseEvent| MouseEnter(event.which() == 0));
 
-                let is_expression = ctx.props().session.metadata().is_column_expression(&name);
+                let is_expression = ctx.props().is_expression;
+                let show_edit_btn = ctx.props().show_edit_btn;
                 let mut class = ctx.props().renderer.metadata().mode.css();
                 if is_required {
                     class.push("required");
                 };
-
-                let can_render_styles = ctx
-                    .props()
-                    .can_render_column_styles(&name)
-                    .unwrap_or_default();
-                let show_edit_btn = is_expression || can_render_styles;
                 html! {
                     <div
                         class={outer_classes}
@@ -347,6 +380,8 @@ impl Component for ActiveColumn {
                                     <AggregateSelector
                                         column={name.clone()}
                                         aggregate={ctx.props().get_aggregate(&name)}
+                                        view_config={ctx.props().view_config.clone()}
+                                        metadata={ctx.props().metadata.clone()}
                                         renderer={&ctx.props().renderer}
                                         session={&ctx.props().session}
                                     />
@@ -390,27 +425,6 @@ impl Component for ActiveColumn {
 }
 
 impl ActiveColumnProps {
-    fn get_name(&self, defn: &ActiveColumnState) -> Option<String> {
-        match &defn.state {
-            ActiveColumnStateData::DragOver => Some(self.dragdrop.get_drag_column().unwrap()),
-            ActiveColumnStateData::Column(name) => Some(name.to_owned()),
-            ActiveColumnStateData::Required => None,
-            ActiveColumnStateData::Invalid => None,
-        }
-    }
-
-    fn get_table_type(&self, defn: &ActiveColumnState) -> Option<ColumnType> {
-        self.get_name(defn)
-            .as_ref()
-            .and_then(|x| self.session.metadata().get_column_table_type(x))
-    }
-
-    fn _get_view_type(&self, defn: &ActiveColumnState) -> Option<ColumnType> {
-        self.get_name(defn)
-            .as_ref()
-            .and_then(|x| self.session.metadata().get_column_view_type(x))
-    }
-
     /// Remove an active column from `columns`, or alternatively make this
     /// column the only column in `columns` if the shift key is set (via the
     /// `shift` flag).
@@ -420,7 +434,7 @@ impl ActiveColumnProps {
     ///   with respect to `columns`.
     /// - `shift` whether to toggle or select this column.
     fn deactivate_column(&self, name: String, shift: bool) {
-        let mut columns = self.session.get_view_config().columns.clone();
+        let mut columns = self.view_config.columns.clone();
         let max_cols = self
             .renderer
             .metadata()
@@ -457,7 +471,7 @@ impl ActiveColumnProps {
     }
 
     fn get_aggregate(&self, name: &str) -> Option<Aggregate> {
-        self.session.get_view_config().aggregates.get(name).cloned()
+        self.view_config.aggregates.get(name).cloned()
     }
 
     fn apply_columns(&self, columns: Vec<Option<String>>) {
@@ -466,8 +480,13 @@ impl ActiveColumnProps {
             ..ViewConfigUpdate::default()
         };
 
-        self.update_and_render(config)
-            .map(ApiFuture::spawn)
-            .unwrap_or_log();
+        if self.session.update_view_config(config).is_ok() {
+            let session = self.session.clone();
+            let renderer = self.renderer.clone();
+            ApiFuture::spawn(async move {
+                renderer.apply_pending_plugin()?;
+                renderer.draw(session.validate().await?.create_view()).await
+            });
+        }
     }
 }

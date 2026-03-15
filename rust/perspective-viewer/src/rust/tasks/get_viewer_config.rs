@@ -10,9 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_client::config::ViewConfig;
-
-use super::columns_iter_set::*;
 use super::structural::*;
 use crate::config::*;
 use crate::*;
@@ -51,11 +48,3 @@ pub trait GetViewerConfigModel: HasSession + HasRenderer + HasPresentation {
 }
 
 impl<T: HasRenderer + HasSession + HasPresentation> GetViewerConfigModel for T {}
-
-pub trait ColumnIteratorModel: HasSession + HasRenderer + HasDragDrop {
-    fn column_selector_iter_set<'a>(&'a self, config: &'a ViewConfig) -> ColumnsIteratorSet<'a> {
-        ColumnsIteratorSet::new(config, self.session(), self.renderer(), self.dragdrop())
-    }
-}
-
-impl<T: HasSession + HasRenderer + HasDragDrop> ColumnIteratorModel for T {}

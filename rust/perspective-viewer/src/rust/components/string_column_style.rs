@@ -40,8 +40,8 @@ impl ModalLink<StringColumnStyle> for StringColumnStyleProps {
 }
 
 impl PartialEq for StringColumnStyleProps {
-    fn eq(&self, _other: &Self) -> bool {
-        false
+    fn eq(&self, other: &Self) -> bool {
+        self.config == other.config && self.default_config == other.default_config
     }
 }
 

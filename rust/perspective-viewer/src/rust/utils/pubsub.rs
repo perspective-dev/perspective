@@ -116,6 +116,14 @@ impl<T: Clone + 'static> PubSub<T> {
         Callback::from(move |val: T| internal.emit(val))
     }
 
+    /// Subscribe a `Callback<()>` that fires whenever this PubSub emits,
+    /// discarding the emitted value.  Useful when the subscriber only
+    /// needs a "something changed" notification.
+    pub fn add_notify_listener(&self, cb: &Callback<()>) -> Subscription {
+        let cb = cb.clone();
+        self.add_listener(move |_: T| cb.emit(()))
+    }
+
     /// Convert [`PubSub::emit`] to a `Box<dyn Fn(T)>`.
     #[must_use]
     pub fn as_boxfn(&self) -> Box<dyn Fn(T) + 'static> {

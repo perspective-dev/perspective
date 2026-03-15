@@ -21,18 +21,36 @@ use crate::components::containers::trap_door_panel::TrapDoorPanel;
 use crate::components::form::code_editor::CodeEditor;
 use crate::components::style::LocalStyle;
 use crate::js::{MimeType, copy_to_clipboard, paste_from_clipboard};
-use crate::model::*;
+use crate::tasks::*;
 use crate::presentation::*;
 use crate::renderer::*;
 use crate::session::*;
 use crate::utils::*;
-use crate::{PerspectiveProperties, css};
+use crate::css;
 
-#[derive(PartialEq, Properties, PerspectiveProperties!)]
+#[derive(Clone, PartialEq, Properties)]
 pub struct DebugPanelProps {
     pub presentation: Presentation,
     pub renderer: Renderer,
     pub session: Session,
+}
+
+impl HasPresentation for DebugPanelProps {
+    fn presentation(&self) -> &Presentation {
+        &self.presentation
+    }
+}
+
+impl HasRenderer for DebugPanelProps {
+    fn renderer(&self) -> &Renderer {
+        &self.renderer
+    }
+}
+
+impl HasSession for DebugPanelProps {
+    fn session(&self) -> &Session {
+        &self.session
+    }
 }
 
 #[function_component(DebugPanel)]
@@ -42,7 +60,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
     let select_all = use_memo((), |()| PubSub::default());
     let modified = use_state_eq(|| false);
 
-    use_effect_with((expr.setter(), props.clone_state()), {
+    use_effect_with((expr.setter(), props.clone()), {
         clone!(error, modified);
         move |(text, state)| {
             state.set_text(text.clone());
@@ -57,7 +75,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                 ));
 
             let sub2 = state
-                .renderer()
+                .renderer
                 .reset_changed
                 .add_listener(state.reset_callback(
                     text.clone(),
@@ -66,7 +84,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                 ));
 
             let sub3 = state
-                .session()
+                .session
                 .view_config_changed
                 .add_listener(state.reset_callback(
                     text.clone(),
@@ -90,7 +108,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
         }
     });
 
-    let onsave = use_callback((expr.clone(), error.clone(), props.clone_state()), {
+    let onsave = use_callback((expr.clone(), error.clone(), props.clone()), {
         clone!(modified);
         move |_, (text, error, props)| props.on_save(text, error, &modified)
     });
@@ -111,12 +129,12 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
         },
     );
 
-    let onapply = use_callback((expr.clone(), error.clone(), props.clone_state()), {
+    let onapply = use_callback((expr.clone(), error.clone(), props.clone()), {
         clone!(modified);
         move |_, (text, error, props)| props.on_save(text, error, &modified)
     });
 
-    let onreset = use_callback((expr.setter(), error.clone(), props.clone_state()), {
+    let onreset = use_callback((expr.setter(), error.clone(), props.clone()), {
         clone!(modified);
         move |_, (text, error, props)| {
             props.set_text(text.clone());
@@ -125,7 +143,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
         }
     });
 
-    let onpaste = use_callback((expr.clone(), error.clone(), props.clone_state()), {
+    let onpaste = use_callback((expr.clone(), error.clone(), props.clone()), {
         clone!(modified);
         move |_, (text, error, props)| {
             clone!(text, error, props, modified);
@@ -181,12 +199,11 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
     }
 }
 
-impl DebugPanelPropsState {
+impl DebugPanelProps {
     fn set_text(&self, setter: UseStateSetter<Rc<String>>) {
         let props = self.clone();
         ApiFuture::spawn(async move {
-            let task = props.get_viewer_config();
-            let config = task.await?;
+            let config = props.get_viewer_config().await?;
             let json = JsValue::from_serde_ext(&config)?;
             let js_string =
                 js_sys::JSON::stringify_with_replacer_and_space(&json, &JsValue::NULL, &2.into())?;

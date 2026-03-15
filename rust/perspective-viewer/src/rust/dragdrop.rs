@@ -80,6 +80,15 @@ impl PartialEq for DragDrop {
 impl ImplicitClone for DragDrop {}
 
 impl DragDrop {
+    /// Snapshot the drag state as a [`DragDropProps`] value for threading
+    /// through the component tree without PubSub subscriptions.
+    pub fn to_props(&self) -> crate::state::DragDropProps {
+        use crate::state::DragDropProps;
+        DragDropProps {
+            column: self.get_drag_column(),
+        }
+    }
+
     /// Get the column name currently being drag/dropped.
     pub fn get_drag_column(&self) -> Option<String> {
         match *self.drag_state.borrow() {

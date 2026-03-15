@@ -19,11 +19,29 @@ use crate::renderer::Renderer;
 use crate::session::Session;
 use crate::*;
 
-#[derive(PartialEq, PerspectiveProperties!)]
+#[derive(Clone, PartialEq)]
 pub struct ExpressionUpdater {
     presentation: Presentation,
     renderer: Renderer,
     session: Session,
+}
+
+impl HasPresentation for ExpressionUpdater {
+    fn presentation(&self) -> &Presentation {
+        &self.presentation
+    }
+}
+
+impl HasRenderer for ExpressionUpdater {
+    fn renderer(&self) -> &Renderer {
+        &self.renderer
+    }
+}
+
+impl HasSession for ExpressionUpdater {
+    fn session(&self) -> &Session {
+        &self.session
+    }
 }
 
 pub trait EditExpression: HasPresentation + HasRenderer + HasSession + UpdateAndRender {

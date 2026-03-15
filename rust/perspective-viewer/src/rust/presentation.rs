@@ -20,12 +20,12 @@ use std::rc::Rc;
 
 use async_lock::Mutex;
 use perspective_js::utils::{ApiFuture, ApiResult};
-use wasm_bindgen::prelude::*;
 use web_sys::*;
 use yew::html::ImplicitClone;
 
 pub use self::column_locator::{ColumnLocator, ColumnSettingsTab, ColumnTab, OpenColumnSettings};
 use crate::config::{ColumnConfigUpdate, ColumnConfigValueUpdate, ColumnConfigValues};
+use crate::state::PresentationProps;
 use crate::utils::*;
 
 pub type ColumnConfigMap = HashMap<String, ColumnConfigValues>;
@@ -50,9 +50,7 @@ pub struct PresentationHandle {
     pub settings_open_changed: PubSub<bool>,
     pub settings_before_open_changed: PubSub<bool>,
     pub column_settings_open_changed: PubSub<(bool, Option<String>)>,
-    pub column_settings_updated: PubSub<JsValue>,
     pub theme_config_updated: PubSub<(Rc<Vec<String>>, Option<usize>)>,
-    pub visibility_changed: PubSub<bool>,
     pub on_eject: PubSub<()>,
 }
 
@@ -86,13 +84,11 @@ impl Presentation {
             settings_open_changed: Default::default(),
             settings_before_open_changed: Default::default(),
             column_settings_open_changed: Default::default(),
-            column_settings_updated: Default::default(),
             columns_config: Default::default(),
             is_settings_open: Default::default(),
             open_column_settings: Default::default(),
             theme_config_updated: PubSub::default(),
             on_eject: PubSub::default(),
-            visibility_changed: PubSub::default(),
         }));
 
         ApiFuture::spawn(theme.clone().init());
@@ -306,6 +302,26 @@ impl Presentation {
         let update = value.update(update);
         if !update.is_empty() {
             config.insert(column_name, update);
+        }
+    }
+
+    /// Snapshot the current presentation state as a [`PresentationProps`]
+    /// value suitable for passing as a Yew prop.  Called by the root component
+    /// whenever a presentation-related PubSub event fires.
+    ///
+    /// `available_themes` must be provided by the caller because theme
+    /// detection is async and therefore not available synchronously here.
+    pub fn to_props(&self, available_themes: Rc<Vec<String>>) -> PresentationProps {
+        let theme_attr = self.0.viewer_elem.get_attribute("theme");
+        let selected_theme = theme_attr
+            .as_deref()
+            .and_then(|name| available_themes.iter().find(|x| x.as_str() == name).cloned());
+        PresentationProps {
+            is_settings_open: self.is_settings_open(),
+            available_themes,
+            selected_theme,
+            open_column_settings: self.get_open_column_settings(),
+            is_workspace: self.get_is_workspace(),
         }
     }
 }

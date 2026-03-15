@@ -17,7 +17,7 @@ use yew::prelude::*;
 use super::containers::dropdown_menu::*;
 use super::modal::*;
 use super::style::StyleProvider;
-use crate::model::*;
+use crate::tasks::*;
 use crate::renderer::*;
 use crate::utils::*;
 
@@ -39,9 +39,7 @@ impl ModalLink<CopyDropDownMenu> for CopyDropDownMenuProps {
     }
 }
 
-pub struct CopyDropDownMenu {
-    _sub: Subscription,
-}
+pub struct CopyDropDownMenu {}
 
 impl Component for CopyDropDownMenu {
     type Message = ();
@@ -49,13 +47,7 @@ impl Component for CopyDropDownMenu {
 
     fn create(ctx: &Context<Self>) -> Self {
         ctx.set_modal_link();
-        let _sub = ctx
-            .props()
-            .renderer
-            .plugin_changed
-            .add_listener(ctx.link().callback(|_| ()));
-
-        Self { _sub }
+        Self {}
     }
 
     fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {

@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use derivative::Derivative;
 use itertools::Itertools;
-use perspective_client::config::{ColumnType, Expression};
+use perspective_client::config::{ColumnType, Expression, ViewConfig};
 use perspective_client::utils::PerspectiveResultExt;
 use yew::{Callback, Component, Html, Properties, html, props};
 
@@ -34,14 +34,16 @@ use crate::components::expression_editor::ExpressionEditorProps;
 use crate::components::style::LocalStyle;
 use crate::components::type_icon::TypeIconType;
 use crate::custom_events::CustomEvents;
-use crate::model::*;
+use crate::tasks::{
+    can_render_column_styles, locator_name_or_default, locator_view_type, EditExpression,
+    HasCustomEvents, HasPresentation, HasRenderer, HasSession,
+};
 use crate::presentation::{ColumnLocator, ColumnSettingsTab, Presentation};
 use crate::renderer::Renderer;
-use crate::session::Session;
-use crate::utils::*;
+use crate::session::{Session, SessionMetadata};
 use crate::*;
 
-#[derive(Clone, Derivative, Properties, PerspectiveProperties!)]
+#[derive(Clone, Derivative, Properties)]
 #[derivative(Debug)]
 pub struct ColumnSettingsPanelProps {
     pub selected_column: ColumnLocator,
@@ -49,6 +51,17 @@ pub struct ColumnSettingsPanelProps {
     pub on_close: Callback<()>,
     pub width_override: Option<i32>,
     pub on_select_tab: Callback<ColumnSettingsTab>,
+
+    /// Active plugin name threaded as a value prop so that plugin changes
+    /// trigger re-initialization via `changed()` rather than a PubSub
+    /// `render_limits_changed` subscription.
+    pub plugin_name: Option<String>,
+
+    /// Session metadata snapshot — threaded from `SessionProps`.
+    pub metadata: SessionMetadata,
+
+    /// View config snapshot — threaded from `SessionProps`.
+    pub view_config: ViewConfig,
 
     // State
     #[derivative(Debug = "ignore")]
@@ -66,7 +79,35 @@ pub struct ColumnSettingsPanelProps {
 
 impl PartialEq for ColumnSettingsPanelProps {
     fn eq(&self, other: &Self) -> bool {
-        self.selected_column == other.selected_column && self.selected_tab == other.selected_tab
+        self.selected_column == other.selected_column
+            && self.selected_tab == other.selected_tab
+            && self.plugin_name == other.plugin_name
+            && self.metadata == other.metadata
+            && self.view_config == other.view_config
+    }
+}
+
+impl HasCustomEvents for ColumnSettingsPanelProps {
+    fn custom_events(&self) -> &CustomEvents {
+        &self.custom_events
+    }
+}
+
+impl HasPresentation for ColumnSettingsPanelProps {
+    fn presentation(&self) -> &Presentation {
+        &self.presentation
+    }
+}
+
+impl HasRenderer for ColumnSettingsPanelProps {
+    fn renderer(&self) -> &Renderer {
+        &self.renderer
+    }
+}
+
+impl HasSession for ColumnSettingsPanelProps {
+    fn session(&self) -> &Session {
+        &self.session
     }
 }
 
@@ -80,7 +121,6 @@ pub enum ColumnSettingsPanelMsg {
     OnSaveAttributes(()),
     OnResetAttributes(()),
     OnDelete(()),
-    SessionUpdated(bool),
 }
 
 #[derive(Derivative)]
@@ -102,9 +142,6 @@ pub struct ColumnSettingsPanel {
     save_count: u8,
     save_enabled: bool,
     tabs: Vec<ColumnSettingsTab>,
-
-    #[derivative(Debug = "ignore")]
-    _session_sub: Option<Subscription>,
 }
 
 impl Component for ColumnSettingsPanel {
@@ -112,18 +149,7 @@ impl Component for ColumnSettingsPanel {
     type Properties = ColumnSettingsPanelProps;
 
     fn create(ctx: &yew::prelude::Context<Self>) -> Self {
-        let session_cb = ctx
-            .link()
-            .callback(|(is_update, _)| ColumnSettingsPanelMsg::SessionUpdated(is_update));
-
-        let session_sub = ctx
-            .props()
-            .renderer
-            .render_limits_changed
-            .add_listener(session_cb);
-
         let mut this = Self {
-            _session_sub: Some(session_sub),
             initial_expr_value: Rc::default(),
             expr_value: Rc::default(),
             expr_valid: false,
@@ -233,14 +259,6 @@ impl Component for ColumnSettingsPanel {
                 ctx.props().on_close.emit(());
                 true
             },
-            ColumnSettingsPanelMsg::SessionUpdated(is_update) => {
-                if !is_update {
-                    self.initialize(ctx);
-                    true
-                } else {
-                    false
-                }
-            },
         }
     }
 
@@ -264,6 +282,7 @@ impl Component for ColumnSettingsPanel {
                     ColumnSettingsPanelMsg::SetHeaderValid(valid),
                 ]
             }),
+            metadata: ctx.props().metadata.clone(),
             session: &ctx.props().session
         });
 
@@ -274,13 +293,24 @@ impl Component for ColumnSettingsPanel {
             alias: ctx.props().selected_column.name().cloned(),
             disabled: !ctx.props().selected_column.is_expr(),
             reset_count: self.reset_count,
+            metadata: ctx.props().metadata.clone(),
             session: &ctx.props().session
         });
 
         let disable_delete = ctx
             .props()
-            .session
-            .is_locator_active(&ctx.props().selected_column);
+            .selected_column
+            .name()
+            .map(|name| {
+                let config = &ctx.props().view_config;
+                config.columns.iter().any(|maybe_col| {
+                    maybe_col.as_ref().map(|col| col == name).unwrap_or_default()
+                }) || config.group_by.iter().any(|col| col == name)
+                    || config.split_by.iter().any(|col| col == name)
+                    || config.filter.iter().any(|col| col.column() == name)
+                    || config.sort.iter().any(|col| &col.0 == name)
+            })
+            .unwrap_or_default();
 
         let save_section = SaveSettingsProps {
             save_enabled: self.save_enabled,
@@ -302,15 +332,17 @@ impl Component for ColumnSettingsPanel {
             save_section,
         };
 
-        let style_tab = props!(StyleTabProps {
+        let style_tab = StyleTabProps {
             ty: self.maybe_ty,
             column_name: self.column_name.clone(),
-            group_by_depth: ctx.props().session.get_view_config().group_by.len() as u32,
-            custom_events: ctx.props().custom_events(),
-            presentation: ctx.props().presentation(),
-            renderer: ctx.props().renderer(),
-            session: ctx.props().session()
-        });
+            group_by_depth: ctx.props().view_config.group_by.len() as u32,
+            view_config: ctx.props().view_config.clone(),
+            metadata: ctx.props().metadata.clone(),
+            custom_events: ctx.props().custom_events.clone(),
+            presentation: ctx.props().presentation.clone(),
+            renderer: ctx.props().renderer.clone(),
+            session: ctx.props().session.clone(),
+        };
 
         let tab_children = self.tabs.iter().map(|tab| match tab {
             ColumnSettingsTab::Attributes => html! { <AttributesTab ..attrs_tab.clone() /> },
@@ -356,15 +388,14 @@ impl ColumnSettingsPanel {
     }
 
     fn initialize(&mut self, ctx: &yew::prelude::Context<Self>) {
-        let column_name = ctx
-            .props()
-            .session
-            .locator_name_or_default(&ctx.props().selected_column);
+        let column_name = locator_name_or_default(
+            &ctx.props().metadata,
+            &ctx.props().selected_column,
+        );
 
         let initial_expr_value = ctx
             .props()
-            .session
-            .metadata()
+            .metadata
             .get_expression_by_alias(&column_name)
             .unwrap_or_default();
 
@@ -372,19 +403,22 @@ impl ColumnSettingsPanel {
         let initial_header_value =
             (*initial_expr_value != column_name).then_some(column_name.clone());
 
-        let maybe_ty = ctx
-            .props()
-            .session()
-            .locator_view_type(&ctx.props().selected_column);
+        let maybe_ty = locator_view_type(
+            &ctx.props().metadata,
+            &ctx.props().selected_column,
+        );
 
         let tabs = {
             let mut tabs = vec![];
             let is_new_expr = ctx.props().selected_column.is_new_expr();
             let show_styles = !is_new_expr
-                && ctx
-                    .props()
-                    .can_render_column_styles(&column_name)
-                    .unwrap_or_default();
+                && can_render_column_styles(
+                    &ctx.props().renderer,
+                    &ctx.props().view_config,
+                    &ctx.props().metadata,
+                    &column_name,
+                )
+                .unwrap_or_default();
 
             if !is_new_expr && show_styles {
                 tabs.push(ColumnSettingsTab::Style);
@@ -414,7 +448,6 @@ impl ColumnSettingsPanel {
             on_input,
             on_save,
             on_validate,
-            _session_sub: self._session_sub.take(),
             ..*self
         }
     }

@@ -13,25 +13,16 @@
 use yew::prelude::*;
 
 use super::style::LocalStyle;
-use crate::model::*;
-use crate::renderer::*;
-use crate::session::*;
-use crate::*;
+use crate::css;
 
-#[derive(Properties, PerspectiveProperties!)]
+#[derive(Properties, PartialEq)]
 pub struct RenderWarningProps {
     // Current dimensions
     pub dimensions: Option<(usize, usize, Option<usize>, Option<usize>)>,
 
-    // State
-    pub renderer: Renderer,
-    pub session: Session,
-}
-
-impl PartialEq for RenderWarningProps {
-    fn eq(&self, other: &Self) -> bool {
-        self.dimensions == other.dimensions
-    }
+    /// Called when the user clicks "Render all points".  The parent disables
+    /// the render warning on the active plugin and re-draws.
+    pub on_dismiss: Callback<()>,
 }
 
 pub enum RenderWarningMsg {
@@ -82,12 +73,7 @@ impl Component for RenderWarning {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             RenderWarningMsg::DismissWarning => {
-                let state = ctx.props().clone_state();
-                ApiFuture::spawn(async move {
-                    state.renderer().disable_active_plugin_render_warning();
-                    let view_task = state.session().get_view();
-                    state.renderer().update(view_task).await
-                });
+                ctx.props().on_dismiss.emit(());
             },
         };
         true

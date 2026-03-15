@@ -10,23 +10,47 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use futures::channel::oneshot::*;
 use perspective_js::utils::*;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
 use super::render_warning::RenderWarning;
 use super::status_bar::StatusBar;
-use crate::PerspectiveProperties;
 use crate::custom_events::CustomEvents;
 use crate::presentation::Presentation;
 use crate::renderer::*;
-use crate::session::*;
+use crate::session::{Session, TableErrorState, ViewStats};
+
+use std::rc::Rc;
 use crate::utils::*;
 
-#[derive(Clone, Properties, PerspectiveProperties!)]
+#[derive(Clone, Properties)]
 pub struct MainPanelProps {
     pub on_settings: Callback<()>,
+
+    /// Reset callback forwarded from the root component.  Fired when the user
+    /// clicks the reset button; `bool` is `true` for a full reset (expressions
+    /// + column configs), `false` for config-only.
+    pub on_reset: Callback<bool>,
+
+    /// Render-limit dimensions forwarded from the root's `RendererProps`.
+    /// `Some` when the active plugin is capping the rendered row/column count;
+    /// `None` when no limits are active (e.g. after a plugin change).
+    pub render_limits: Option<(usize, usize, Option<usize>, Option<usize>)>,
+
+    /// Value props from root's `SessionProps`, threaded to `StatusBar` / `StatusIndicator`.
+    pub has_table: bool,
+    pub is_errored: bool,
+    pub stats: Option<ViewStats>,
+    pub update_count: u32,
+    pub error: Option<TableErrorState>,
+    pub title: Option<String>,
+
+    /// Value props from root's `PresentationProps`, threaded to `StatusBar`.
+    pub is_settings_open: bool,
+    pub selected_theme: Option<String>,
+    pub available_themes: Rc<Vec<String>>,
+    pub is_workspace: bool,
 
     /// State
     pub custom_events: CustomEvents,
@@ -36,28 +60,33 @@ pub struct MainPanelProps {
 }
 
 impl PartialEq for MainPanelProps {
-    fn eq(&self, _rhs: &Self) -> bool {
-        false
+    fn eq(&self, rhs: &Self) -> bool {
+        self.has_table == rhs.has_table
+            && self.is_errored == rhs.is_errored
+            && self.stats == rhs.stats
+            && self.update_count == rhs.update_count
+            && self.error == rhs.error
+            && self.title == rhs.title
+            && self.is_settings_open == rhs.is_settings_open
+            && self.selected_theme == rhs.selected_theme
+            && self.available_themes == rhs.available_themes
+            && self.is_workspace == rhs.is_workspace
+            && self.render_limits == rhs.render_limits
     }
 }
 
 impl MainPanelProps {
     fn is_title(&self) -> bool {
-        self.session.get_title().is_some()
+        self.title.is_some()
     }
 }
 
 #[derive(Debug)]
 pub enum MainPanelMsg {
-    Reset(bool, Option<Sender<()>>),
-    RenderLimits(Option<(usize, usize, Option<usize>, Option<usize>)>),
     PointerEvent(web_sys::PointerEvent),
-    Error,
 }
 
 pub struct MainPanel {
-    _subscriptions: [Subscription; 2],
-    dimensions: Option<(usize, usize, Option<usize>, Option<usize>)>,
     main_panel_ref: NodeRef,
 }
 
@@ -65,85 +94,14 @@ impl Component for MainPanel {
     type Message = MainPanelMsg;
     type Properties = MainPanelProps;
 
-    fn create(ctx: &Context<Self>) -> Self {
-        let session_sub = {
-            let callback = ctx.link().callback(move |(_, render_limits)| {
-                MainPanelMsg::RenderLimits(Some(render_limits))
-            });
-
-            ctx.props()
-                .renderer
-                .render_limits_changed
-                .add_listener(callback)
-        };
-
-        let error_sub = ctx
-            .props()
-            .session
-            .table_errored
-            .add_listener(ctx.link().callback(|_| MainPanelMsg::Error));
-
+    fn create(_ctx: &Context<Self>) -> Self {
         Self {
-            _subscriptions: [session_sub, error_sub],
-            dimensions: None,
             main_panel_ref: NodeRef::default(),
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            MainPanelMsg::Error => true,
-            MainPanelMsg::Reset(all, sender) => {
-                ctx.props().presentation.set_open_column_settings(None);
-
-                clone!(
-                    ctx.props().renderer,
-                    ctx.props().session,
-                    ctx.props().presentation
-                );
-
-                ApiFuture::spawn(async move {
-                    session
-                        .reset(ResetOptions {
-                            config: true,
-                            expressions: all,
-                            ..ResetOptions::default()
-                        })
-                        .await?;
-                    let columns_config = if all {
-                        presentation.reset_columns_configs();
-                        None
-                    } else {
-                        Some(presentation.all_columns_configs())
-                    };
-
-                    renderer.reset(columns_config.as_ref()).await?;
-                    presentation.reset_available_themes(None).await;
-                    if all {
-                        presentation.reset_theme().await?;
-                    }
-
-                    let result = renderer.draw(session.validate().await?.create_view()).await;
-                    if let Some(sender) = sender {
-                        sender.send(()).unwrap();
-                    }
-
-                    renderer.reset_changed.emit(());
-                    result
-                });
-
-                false
-            },
-
-            MainPanelMsg::RenderLimits(dimensions) => {
-                if self.dimensions != dimensions {
-                    self.dimensions = dimensions;
-                    true
-                } else {
-                    false
-                }
-            },
-
             MainPanelMsg::PointerEvent(event) => {
                 if event.target().map(JsValue::from)
                     == self
@@ -175,8 +133,7 @@ impl Component for MainPanel {
             ..
         } = ctx.props();
 
-        let is_settings_open =
-            ctx.props().presentation.is_settings_open() && ctx.props().session.has_table();
+        let is_settings_open = ctx.props().is_settings_open && ctx.props().has_table;
 
         let on_settings = (!is_settings_open).then(|| ctx.props().on_settings.clone());
 
@@ -189,14 +146,34 @@ impl Component for MainPanel {
             class.push("titled");
         }
 
-        let on_reset = ctx.link().callback(|all| MainPanelMsg::Reset(all, None));
         let pointerdown = ctx.link().callback(MainPanelMsg::PointerEvent);
+        let on_dismiss_warning = {
+            clone!(renderer, session);
+            Callback::from(move |_: ()| {
+                clone!(renderer, session);
+                ApiFuture::spawn(async move {
+                    renderer.disable_active_plugin_render_warning();
+                    let view_task = session.get_view();
+                    renderer.update(view_task).await
+                });
+            })
+        };
         html! {
             <div id="main_column">
                 <StatusBar
                     id="status_bar"
                     {on_settings}
-                    on_reset={on_reset.clone()}
+                    on_reset={ctx.props().on_reset.clone()}
+                    has_table={ctx.props().has_table}
+                    is_errored={ctx.props().is_errored}
+                    stats={ctx.props().stats.clone()}
+                    update_count={ctx.props().update_count}
+                    error={ctx.props().error.clone()}
+                    title={ctx.props().title.clone()}
+                    is_settings_open={ctx.props().is_settings_open}
+                    selected_theme={ctx.props().selected_theme.clone()}
+                    available_themes={ctx.props().available_themes.clone()}
+                    is_workspace={ctx.props().is_workspace}
                     {custom_events}
                     {presentation}
                     {renderer}
@@ -208,7 +185,10 @@ impl Component for MainPanel {
                     {class}
                     onpointerdown={pointerdown}
                 >
-                    <RenderWarning {renderer} {session} dimensions={self.dimensions} />
+                    <RenderWarning
+                        on_dismiss={on_dismiss_warning}
+                        dimensions={ctx.props().render_limits}
+                    />
                     <slot />
                 </div>
             </div>

@@ -152,7 +152,7 @@ pub struct UpdateOptions {
 
 /// Result of a call to [`Table::validate_expressions`], containing a schema
 /// for valid expressions and error messages for invalid ones.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ExprValidationResult {
     pub expression_schema: Schema,
     pub errors: HashMap<String, table_validate_expr_resp::ExprValidationError>,

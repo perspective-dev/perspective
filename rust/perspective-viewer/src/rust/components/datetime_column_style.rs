@@ -56,8 +56,10 @@ impl ModalLink<DatetimeColumnStyle> for DatetimeColumnStyleProps {
 }
 
 impl PartialEq for DatetimeColumnStyleProps {
-    fn eq(&self, _other: &Self) -> bool {
-        false
+    fn eq(&self, other: &Self) -> bool {
+        self.enable_time_config == other.enable_time_config
+            && self.config == other.config
+            && self.default_config == other.default_config
     }
 }
 

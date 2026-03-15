@@ -10,35 +10,23 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_client::*;
 use yew::prelude::*;
 
-use crate::PerspectiveProperties;
-use crate::session::{Session, ViewStats};
-use crate::utils::{AddListener, u32Ext};
+use crate::session::ViewStats;
+use crate::utils::u32Ext;
 
-#[derive(PartialEq, Properties, PerspectiveProperties!)]
+/// Props are now pure value types: no `Session` handle, no PubSub
+/// subscriptions.  The parent passes an updated `stats` whenever the
+/// underlying data changes (driven by the root's `UpdateSession` message).
+#[derive(PartialEq, Properties)]
 pub struct StatusBarRowsCounterProps {
-    pub session: Session,
+    pub stats: Option<ViewStats>,
 }
 
 /// A component to show the current [`Table`]'s dimensions.
 #[function_component]
 pub fn StatusBarRowsCounter(props: &StatusBarRowsCounterProps) -> Html {
-    let stats = use_state_eq(|| props.session.get_table_stats());
-    use_effect_with(
-        (props.session.clone(), stats.setter()),
-        |(session, set_stats)| {
-            let sub = session.stats_changed.add_listener({
-                clone!(session, set_stats);
-                move |_| set_stats.set(session.get_table_stats())
-            });
-
-            || drop(sub)
-        },
-    );
-
-    match props.session.get_table_stats() {
+    match props.stats {
         Some(
             ViewStats {
                 num_table_cells: Some((tr, tc)),

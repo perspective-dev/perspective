@@ -10,35 +10,19 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-//! `components` contains all Yew `Component` types, but only exports the 4
-//! necessary for public Custom Elements.  The rest are internal components of
-//! these 4.
+//! Engine-handle types for the four major state singletons.
+//!
+//! These are the async-machinery halves of the engine/value split described in
+//! `state.rs`.  They own JS object handles, draw locks, async subscriptions,
+//! and PubSub channels — i.e. anything that cannot be cheaply cloned into a
+//! plain `PartialEq` prop.
+//!
+//! **Current status (Step 3 of the migration):** Each `*Engine` type is a thin
+//! type alias for the existing `Rc<*Handle>` wrapper.  They will be replaced
+//! with true struct types in later migration steps once the component tree has
+//! been updated to consume [`crate::state`] props instead of the old handles.
 
-pub mod column_dropdown;
-pub mod column_selector;
-pub mod column_settings_sidebar;
-pub mod containers;
-pub mod copy_dropdown;
-pub mod datetime_column_style;
-pub mod editable_header;
-pub mod empty_row;
-pub mod export_dropdown;
-pub mod expression_editor;
-pub mod filter_dropdown;
-pub mod font_loader;
-pub mod form;
-pub mod function_dropdown;
-pub mod main_panel;
-pub mod modal;
-pub mod number_column_style;
-pub mod plugin_selector;
-pub mod render_warning;
-pub mod settings_panel;
-pub mod status_bar;
-pub mod status_bar_counter;
-pub mod status_indicator;
-pub mod string_column_style;
-pub mod style;
-pub mod style_controls;
-pub mod type_icon;
-pub mod viewer;
+pub use crate::dragdrop::DragDrop as DragDropEngine;
+pub use crate::presentation::Presentation as PresentationEngine;
+pub use crate::renderer::Renderer as RendererEngine;
+pub use crate::session::Session as SessionEngine;

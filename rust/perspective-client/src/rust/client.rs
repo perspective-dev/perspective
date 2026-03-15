@@ -88,7 +88,7 @@ impl<U: Copy + 'static> SystemInfo<U> {
 
 /// Metadata about what features are supported by the `Server` to which this
 /// [`Client`] connects.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Features(Arc<GetFeaturesResp>);
 
 impl Features {

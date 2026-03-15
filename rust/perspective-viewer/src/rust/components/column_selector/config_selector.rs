@@ -14,9 +14,10 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use perspective_client::config::*;
-use perspective_client::utils::PerspectiveResultExt;
 use perspective_js::utils::ApiFuture;
 use yew::prelude::*;
+
+use perspective_client::config::ViewConfig;
 
 use super::InPlaceColumn;
 use super::filter_column::*;
@@ -27,18 +28,28 @@ use crate::components::containers::select::{Select, SelectItem};
 use crate::components::style::LocalStyle;
 use crate::custom_elements::{ColumnDropDownElement, FilterDropDownElement};
 use crate::dragdrop::*;
-use crate::model::*;
 use crate::renderer::*;
 use crate::session::*;
+use crate::session::drag_drop_update::*;
 use crate::utils::*;
-use crate::{PerspectiveProperties, css};
+use crate::css;
 
-#[derive(Clone, Properties, PerspectiveProperties!)]
+#[derive(Clone, Properties)]
 pub struct ConfigSelectorProps {
     pub onselect: Callback<()>,
 
     #[prop_or_default]
     pub ondragenter: Callback<()>,
+
+    /// Current view config threaded as a value prop so that config changes
+    /// (group_by, sort, filter, etc.) trigger re-renders via normal prop diffing
+    /// rather than a PubSub `view_created` subscription.
+    pub view_config: ViewConfig,
+    /// Column currently being dragged — threaded to show `dragdrop-highlight`
+    /// without subscribing to `dragstart_received`/`dragend_received`.
+    pub drag_column: Option<String>,
+    /// Session metadata snapshot — threaded from `SessionProps`.
+    pub metadata: SessionMetadata,
 
     // State
     pub session: Session,
@@ -47,22 +58,21 @@ pub struct ConfigSelectorProps {
 }
 
 impl PartialEq for ConfigSelectorProps {
-    fn eq(&self, _other: &Self) -> bool {
-        false
+    fn eq(&self, other: &Self) -> bool {
+        self.view_config == other.view_config
+            && self.drag_column == other.drag_column
+            && self.metadata == other.metadata
     }
 }
 
 #[derive(Debug)]
 pub enum ConfigSelectorMsg {
-    DragStart,
-    DragEnd,
     DragOver(usize, DragTarget),
     DragLeave(DragTarget),
     Drop(String, DragTarget, DragEffect, usize),
     Close(usize, DragTarget),
     SetFilterValue(usize, String),
     TransposePivots,
-    ViewCreated,
     New(DragTarget, InPlaceColumn),
     UpdateGroupRollupMode(GroupRollupMode),
 }
@@ -71,7 +81,7 @@ pub enum ConfigSelectorMsg {
 pub struct ConfigSelector {
     filter_dropdown: FilterDropDownElement,
     column_dropdown: ColumnDropDownElement,
-    _subscriptions: [Rc<Subscription>; 4],
+    _subscriptions: [Rc<Subscription>; 1],
 }
 
 impl Component for ConfigSelector {
@@ -79,12 +89,6 @@ impl Component for ConfigSelector {
     type Properties = ConfigSelectorProps;
 
     fn create(ctx: &Context<Self>) -> Self {
-        let cb = ctx.link().callback(|_| ConfigSelectorMsg::DragStart);
-        let drag_sub = Rc::new(ctx.props().dragdrop.dragstart_received.add_listener(cb));
-
-        let cb = ctx.link().callback(|_| ConfigSelectorMsg::DragEnd);
-        let dragend_sub = Rc::new(ctx.props().dragdrop.dragend_received.add_listener(cb));
-
         let cb = ctx
             .link()
             .callback(|x: (String, DragTarget, DragEffect, usize)| {
@@ -92,12 +96,9 @@ impl Component for ConfigSelector {
             });
         let drop_sub = Rc::new(ctx.props().dragdrop.drop_received.add_listener(cb));
 
-        let cb = ctx.link().callback(|_| ConfigSelectorMsg::ViewCreated);
-        let view_sub = Rc::new(ctx.props().session.view_created.add_listener(cb));
-
         let filter_dropdown = FilterDropDownElement::new(ctx.props().session.clone());
         let column_dropdown = ColumnDropDownElement::new(ctx.props().session.clone());
-        let _subscriptions = [drop_sub, view_sub, drag_sub, dragend_sub];
+        let _subscriptions = [drop_sub];
         Self {
             filter_dropdown,
             column_dropdown,
@@ -107,8 +108,6 @@ impl Component for ConfigSelector {
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            ConfigSelectorMsg::DragStart | ConfigSelectorMsg::ViewCreated => true,
-            ConfigSelectorMsg::DragEnd => true,
             ConfigSelectorMsg::DragOver(index, action) => {
                 let should_render = ctx.props().dragdrop.notify_drag_enter(action, index);
                 if should_render {
@@ -121,7 +120,7 @@ impl Component for ConfigSelector {
                 true
             },
             ConfigSelectorMsg::Close(index, DragTarget::Sort) => {
-                let mut sort = ctx.props().session.get_view_config().sort.clone();
+                let mut sort = ctx.props().view_config.sort.clone();
                 sort.remove(index);
                 let sort = Some(sort);
                 let config = ViewConfigUpdate {
@@ -129,10 +128,16 @@ impl Component for ConfigSelector {
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(config)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(config).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 ctx.props().onselect.emit(());
                 false
@@ -143,22 +148,27 @@ impl Component for ConfigSelector {
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(config)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(config).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 false
             },
             ConfigSelectorMsg::Close(index, DragTarget::GroupBy) => {
-                if ctx.props().session.get_view_config().group_rollup_mode == GroupRollupMode::Total
+                if ctx.props().view_config.group_rollup_mode == GroupRollupMode::Total
                 {
                     let requirements = ctx.props().renderer.metadata();
 
                     let rollup_features = ctx
                         .props()
-                        .session
-                        .metadata()
+                        .metadata
                         .get_features()
                         .map(|x| x.get_group_rollup_modes())
                         .unwrap();
@@ -171,51 +181,69 @@ impl Component for ConfigSelector {
                         ));
                     false
                 } else {
-                    let mut group_by = ctx.props().session.get_view_config().group_by.clone();
+                    let mut group_by = ctx.props().view_config.group_by.clone();
                     group_by.remove(index);
                     let config = ViewConfigUpdate {
                         group_by: Some(group_by),
                         ..ViewConfigUpdate::default()
                     };
 
-                    ctx.props()
-                        .update_and_render(config)
-                        .map(ApiFuture::spawn)
-                        .unwrap_or_log();
+                    {
+                        let session = ctx.props().session.clone();
+                        let renderer = ctx.props().renderer.clone();
+                        if session.update_view_config(config).is_ok() {
+                            ApiFuture::spawn(async move {
+                                renderer.apply_pending_plugin()?;
+                                renderer.draw(session.validate().await?.create_view()).await
+                            });
+                        }
+                    }
 
                     ctx.props().onselect.emit(());
                     false
                 }
             },
             ConfigSelectorMsg::Close(index, DragTarget::SplitBy) => {
-                let mut split_by = ctx.props().session.get_view_config().split_by.clone();
+                let mut split_by = ctx.props().view_config.split_by.clone();
                 split_by.remove(index);
                 let config = ViewConfigUpdate {
                     split_by: Some(split_by),
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(config)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(config).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 ctx.props().onselect.emit(());
                 false
             },
             ConfigSelectorMsg::Close(index, DragTarget::Filter) => {
                 self.filter_dropdown.hide().unwrap();
-                let mut filter = ctx.props().session.get_view_config().filter.clone();
+                let mut filter = ctx.props().view_config.filter.clone();
                 filter.remove(index);
                 let config = ViewConfigUpdate {
                     filter: Some(filter),
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(config)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(config).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 ctx.props().onselect.emit(());
                 false
@@ -224,18 +252,29 @@ impl Component for ConfigSelector {
             ConfigSelectorMsg::Drop(column, action, effect, index)
                 if action != DragTarget::Active =>
             {
-                let update = ctx.props().session.create_drag_drop_update(
+                let col_type = ctx.props().metadata
+                    .get_column_table_type(column.as_str())
+                    .unwrap();
+                let update = ctx.props().view_config.create_drag_drop_update(
                     column,
+                    col_type,
                     index,
                     action,
                     effect,
                     &ctx.props().renderer.metadata(),
+                    ctx.props().metadata.get_features().unwrap(),
                 );
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 ctx.props().onselect.emit(());
                 false
@@ -247,7 +286,7 @@ impl Component for ConfigSelector {
             },
             ConfigSelectorMsg::Drop(..) => false,
             ConfigSelectorMsg::TransposePivots => {
-                let mut view_config = ctx.props().session.get_view_config().clone();
+                let mut view_config = ctx.props().view_config.clone();
                 std::mem::swap(&mut view_config.group_by, &mut view_config.split_by);
 
                 let update = ViewConfigUpdate {
@@ -256,16 +295,22 @@ impl Component for ConfigSelector {
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
                 ctx.props().onselect.emit(());
                 false
             },
 
             ConfigSelectorMsg::SetFilterValue(index, input) => {
-                let mut filter = ctx.props().session.get_view_config().filter.clone();
+                let mut filter = ctx.props().view_config.filter.clone();
 
                 // TODO Can't special case these - need to make this part of the
                 // Features API.
@@ -295,47 +340,65 @@ impl Component for ConfigSelector {
                     }
                 };
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 false
             },
             ConfigSelectorMsg::New(DragTarget::GroupBy, InPlaceColumn::Column(col)) => {
-                let mut view_config = ctx.props().session.get_view_config().clone();
+                let mut view_config = ctx.props().view_config.clone();
                 view_config.group_by.push(col);
                 let update = ViewConfigUpdate {
                     group_by: Some(view_config.group_by),
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 ctx.props().onselect.emit(());
                 false
             },
             ConfigSelectorMsg::New(DragTarget::SplitBy, InPlaceColumn::Column(col)) => {
-                let mut view_config = ctx.props().session.get_view_config().clone();
+                let mut view_config = ctx.props().view_config.clone();
                 view_config.split_by.push(col);
                 let update = ViewConfigUpdate {
                     split_by: Some(view_config.split_by),
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 ctx.props().onselect.emit(());
                 false
             },
             ConfigSelectorMsg::New(DragTarget::Filter, InPlaceColumn::Column(column)) => {
-                let mut view_config = ctx.props().session.get_view_config().clone();
+                let mut view_config = ctx.props().view_config.clone();
                 let op = ctx.props().default_op(column.as_str()).unwrap_or_default();
                 view_config.filter.push(Filter::new(
                     &column,
@@ -348,32 +411,44 @@ impl Component for ConfigSelector {
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 ctx.props().onselect.emit(());
                 false
             },
             ConfigSelectorMsg::New(DragTarget::Sort, InPlaceColumn::Column(col)) => {
-                let mut view_config = ctx.props().session.get_view_config().clone();
+                let mut view_config = ctx.props().view_config.clone();
                 view_config.sort.push(Sort(col, SortDir::Asc));
                 let update = ViewConfigUpdate {
                     sort: Some(view_config.sort),
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 ctx.props().onselect.emit(());
                 false
             },
             ConfigSelectorMsg::New(DragTarget::GroupBy, InPlaceColumn::Expression(col)) => {
-                let mut view_config = ctx.props().session.get_view_config().clone();
+                let mut view_config = ctx.props().view_config.clone();
                 view_config.group_by.push(col.name.as_ref().to_owned());
                 view_config.expressions.insert(&col);
                 let update = ViewConfigUpdate {
@@ -382,16 +457,22 @@ impl Component for ConfigSelector {
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 ctx.props().onselect.emit(());
                 false
             },
             ConfigSelectorMsg::New(DragTarget::SplitBy, InPlaceColumn::Expression(col)) => {
-                let mut view_config = ctx.props().session.get_view_config().clone();
+                let mut view_config = ctx.props().view_config.clone();
                 view_config.split_by.push(col.name.as_ref().to_owned());
                 view_config.expressions.insert(&col);
                 let update = ViewConfigUpdate {
@@ -400,16 +481,22 @@ impl Component for ConfigSelector {
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 ctx.props().onselect.emit(());
                 false
             },
             ConfigSelectorMsg::New(DragTarget::Filter, InPlaceColumn::Expression(col)) => {
-                let mut view_config = ctx.props().session.get_view_config().clone();
+                let mut view_config = ctx.props().view_config.clone();
                 let column = col.name.as_ref();
                 view_config.filter.push(Filter::new(
                     column,
@@ -426,16 +513,22 @@ impl Component for ConfigSelector {
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 ctx.props().onselect.emit(());
                 false
             },
             ConfigSelectorMsg::New(DragTarget::Sort, InPlaceColumn::Expression(col)) => {
-                let mut view_config = ctx.props().session.get_view_config().clone();
+                let mut view_config = ctx.props().view_config.clone();
                 view_config
                     .sort
                     .push(Sort(col.name.as_ref().to_owned(), SortDir::Asc));
@@ -446,10 +539,16 @@ impl Component for ConfigSelector {
                     ..ViewConfigUpdate::default()
                 };
 
-                ctx.props()
-                    .update_and_render(update)
-                    .map(ApiFuture::spawn)
-                    .unwrap_or_log();
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if session.update_view_config(update).is_ok() {
+                        ApiFuture::spawn(async move {
+                            renderer.apply_pending_plugin()?;
+                            renderer.draw(session.validate().await?.create_view()).await
+                        });
+                    }
+                }
 
                 ctx.props().onselect.emit(());
                 false
@@ -471,12 +570,12 @@ impl Component for ConfigSelector {
             session,
             ..
         } = ctx.props();
-        let config = session.get_view_config();
+        let config = &ctx.props().view_config;
         let transpose = ctx.link().callback(|_| ConfigSelectorMsg::TransposePivots);
         let column_dropdown = self.column_dropdown.clone();
         let mut class = classes!();
 
-        if dragdrop.get_drag_column().is_some() {
+        if ctx.props().drag_column.is_some() {
             class.push("dragdrop-highlight");
         }
 
@@ -489,17 +588,14 @@ impl Component for ConfigSelector {
             move |_event| dragdrop.notify_drag_end()
         });
 
-        let metadata = session.metadata();
+        let metadata = &ctx.props().metadata;
         let features = metadata.get_features().unwrap();
         let requirements = renderer.metadata();
         let on_group_rollup_mode = ctx
             .link()
             .callback(ConfigSelectorMsg::UpdateGroupRollupMode);
 
-        let rollup_features = ctx
-            .props()
-            .session
-            .metadata()
+        let rollup_features = metadata
             .get_features()
             .map(|x| x.get_group_rollup_modes())
             .unwrap();
@@ -548,6 +644,7 @@ impl Component for ConfigSelector {
                                     <PivotColumn
                                         action={DragTarget::GroupBy}
                                         column={group_by.clone()}
+                                        metadata={metadata.clone()}
                                         {dragdrop}
                                         opt_session={session}
                                     >
@@ -580,6 +677,7 @@ impl Component for ConfigSelector {
                                 <PivotColumn
                                     action={ DragTarget::SplitBy }
                                     column={ split_by.clone() }
+                                    metadata={metadata.clone()}
                                     {dragdrop}
                                     opt_session={session}>
                                 </PivotColumn>
@@ -604,6 +702,8 @@ impl Component for ConfigSelector {
                                 <SortColumn
                                     idx={ idx }
                                     sort={ sort.clone() }
+                                    view_config={config.clone()}
+                                    metadata={metadata.clone()}
                                     {dragdrop}
                                     {renderer}
                                     {session}>
@@ -634,6 +734,8 @@ impl Component for ConfigSelector {
                                         filter_dropdown={ &self.filter_dropdown }
                                         filter={ filter.clone() }
                                         on_keydown={ filter_keydown }
+                                        view_config={config.clone()}
+                                        metadata={metadata.clone()}
                                         {dragdrop}
                                         {renderer}
                                         {session}>
@@ -649,9 +751,8 @@ impl Component for ConfigSelector {
 
 impl ConfigSelectorProps {
     fn default_op(&self, column: &str) -> Option<String> {
-        let metadata = self.session.metadata();
-        let features = metadata.get_features()?;
-        let col_type = metadata.get_column_table_type(column)?;
+        let features = self.metadata.get_features()?;
+        let col_type = self.metadata.get_column_table_type(column)?;
         let first = features.default_op(col_type)?;
         Some(first.to_string())
     }

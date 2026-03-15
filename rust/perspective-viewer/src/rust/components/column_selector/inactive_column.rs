@@ -12,7 +12,6 @@
 
 use itertools::Itertools;
 use perspective_client::config::*;
-use perspective_client::utils::PerspectiveResultExt;
 use perspective_js::utils::ApiFuture;
 use web_sys::*;
 use yew::prelude::*;
@@ -21,14 +20,12 @@ use super::expr_edit_button::*;
 use crate::components::type_icon::TypeIcon;
 use crate::dragdrop::*;
 use crate::js::plugin::*;
-use crate::model::*;
 use crate::presentation::ColumnLocator;
 use crate::renderer::*;
 use crate::session::*;
 use crate::utils::*;
-use crate::*;
 
-#[derive(Clone, Properties, PerspectiveProperties!)]
+#[derive(Clone, Properties)]
 pub struct InactiveColumnProps {
     /// This column's index in its list.
     pub idx: usize,
@@ -41,6 +38,18 @@ pub struct InactiveColumnProps {
 
     /// Is the expression/config panel open for this column?
     pub is_editing: bool,
+
+    /// Whether this column is an expression column.  Computed by the parent
+    /// so that changes to session metadata trigger a re-render via prop diff.
+    #[prop_or_default]
+    pub is_expression: bool,
+
+    /// Session metadata snapshot — threaded from `SessionProps`.
+    pub metadata: SessionMetadata,
+
+    /// View config snapshot — threaded from parent so we avoid
+    /// `session.get_view_config()` calls.
+    pub view_config: ViewConfig,
 
     /// `dragend` event`.
     pub ondragend: Callback<()>,
@@ -58,11 +67,14 @@ pub struct InactiveColumnProps {
 }
 
 impl PartialEq for InactiveColumnProps {
-    /// Equality for `InactiveColumnProps` determines when it should re-render,
-    /// which is only when it has changed.
-    /// TODO Aggregates
-    fn eq(&self, _rhs: &Self) -> bool {
-        false
+    fn eq(&self, rhs: &Self) -> bool {
+        self.idx == rhs.idx
+            && self.visible == rhs.visible
+            && self.name == rhs.name
+            && self.is_editing == rhs.is_editing
+            && self.is_expression == rhs.is_expression
+            && self.metadata == rhs.metadata
+            && self.view_config == rhs.view_config
     }
 }
 
@@ -112,8 +124,7 @@ impl Component for InactiveColumn {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let col_type = ctx
             .props()
-            .session
-            .metadata()
+            .metadata
             .get_column_table_type(&ctx.props().name)
             .unwrap_or(ColumnType::String);
 
@@ -137,11 +148,7 @@ impl Component for InactiveColumn {
             .link()
             .callback(|event: MouseEvent| MouseEnter(event.which() == 0));
 
-        let is_expression = ctx
-            .props()
-            .session
-            .metadata()
-            .is_column_expression(&ctx.props().name);
+        let is_expression = ctx.props().is_expression;
 
         let is_active_class = ctx.props().renderer.metadata().mode.css();
         let mut class = classes!("column-selector-column");
@@ -191,7 +198,7 @@ impl InactiveColumnProps {
     ///   with respect to `columns`.
     /// - `shift` whether to toggle or select this column.
     pub fn activate_column(&self, name: String, shift: bool) {
-        let mut columns = self.session.get_view_config().columns.clone();
+        let mut columns = self.view_config.columns.clone();
         let max_cols = self
             .renderer
             .metadata()
@@ -229,8 +236,13 @@ impl InactiveColumnProps {
             ..ViewConfigUpdate::default()
         };
 
-        self.update_and_render(config)
-            .map(ApiFuture::spawn)
-            .unwrap_or_log();
+        if self.session.update_view_config(config).is_ok() {
+            let session = self.session.clone();
+            let renderer = self.renderer.clone();
+            ApiFuture::spawn(async move {
+                renderer.apply_pending_plugin()?;
+                renderer.draw(session.validate().await?.create_view()).await
+            });
+        }
     }
 }

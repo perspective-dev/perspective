@@ -16,10 +16,9 @@ use wasm_bindgen::prelude::*;
 use web_sys::*;
 use yew::prelude::*;
 
-use crate::PerspectiveProperties;
 use crate::components::viewer::{PerspectiveViewer, PerspectiveViewerMsg};
 use crate::js::*;
-use crate::model::*;
+use crate::tasks::*;
 use crate::renderer::*;
 use crate::root::Root;
 use crate::session::Session;
@@ -70,7 +69,7 @@ impl Drop for ResizeObserverHandle {
     }
 }
 
-#[derive(PerspectiveProperties!)]
+#[derive(Clone)]
 struct ResizeObserverState {
     elem: HtmlElement,
     renderer: Renderer,
@@ -78,6 +77,25 @@ struct ResizeObserverState {
     width: i32,
     height: i32,
     on_resize: Callback<()>,
+}
+
+impl HasRenderer for ResizeObserverState {
+    fn renderer(&self) -> &Renderer {
+        &self.renderer
+    }
+}
+
+impl HasSession for ResizeObserverState {
+    fn session(&self) -> &Session {
+        &self.session
+    }
+}
+
+impl StateProvider for ResizeObserverState {
+    type State = ResizeObserverState;
+    fn clone_state(&self) -> Self::State {
+        self.clone()
+    }
 }
 
 impl ResizeObserverState {

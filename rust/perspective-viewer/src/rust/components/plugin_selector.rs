@@ -10,106 +10,53 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_client::config::ViewConfigUpdate;
-use perspective_js::utils::ApiFuture;
+use std::rc::Rc;
+
 use yew::prelude::*;
 
-use super::containers::select::*;
 use super::style::LocalStyle;
-use crate::config::*;
-use crate::js::*;
-use crate::model::*;
-use crate::presentation::Presentation;
-use crate::renderer::*;
-use crate::session::*;
-use crate::utils::*;
-use crate::{css, *};
+use crate::css;
 
-#[derive(Properties, PartialEq, PerspectiveProperties!)]
+/// Pure value props — no engine handles, no PubSub subscriptions.
+/// The parent passes updated values whenever the renderer state changes.
+#[derive(Properties, PartialEq)]
 pub struct PluginSelectorProps {
-    pub presentation: Presentation,
-    pub renderer: Renderer,
-    pub session: Session,
+    /// Name of the currently active plugin.
+    pub plugin_name: Option<String>,
+
+    /// Flat list of all registered plugin names (all categories merged).
+    pub available_plugins: Rc<Vec<String>>,
+
+    /// Called when the user selects a different plugin.
+    pub on_select_plugin: Callback<String>,
 }
 
 #[derive(Debug)]
 pub enum PluginSelectorMsg {
     ComponentSelectPlugin(String),
-    RendererSelectPlugin(String),
     OpenMenu,
 }
 
 use PluginSelectorMsg::*;
 
 pub struct PluginSelector {
-    options: Vec<SelectItem<String>>,
     is_open: bool,
-    _plugin_sub: Subscription,
 }
 
 impl Component for PluginSelector {
     type Message = PluginSelectorMsg;
     type Properties = PluginSelectorProps;
 
-    fn create(ctx: &Context<Self>) -> Self {
-        let PluginSelectorProps { renderer, .. } = ctx.props();
-        let options = generate_plugin_optgroups(renderer);
-        let _plugin_sub = renderer.plugin_changed.add_listener({
-            let link = ctx.link().clone();
-            move |plugin: JsPerspectiveViewerPlugin| {
-                let name = plugin.name();
-                link.send_message(PluginSelectorMsg::RendererSelectPlugin(name))
-            }
-        });
-
-        Self {
-            options,
-            is_open: false,
-            _plugin_sub,
-        }
+    fn create(_ctx: &Context<Self>) -> Self {
+        Self { is_open: false }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
-        let PluginSelectorProps {
-            presentation,
-            renderer,
-            session,
-            ..
-        } = ctx.props();
         match msg {
-            RendererSelectPlugin(_plugin_name) => true,
             ComponentSelectPlugin(plugin_name) => {
-                if !session.is_errored() {
-                    let metadata =
-                        renderer.get_next_plugin_metadata(&PluginUpdate::Update(plugin_name));
-
-                    let prev_metadata = renderer.metadata();
-                    let requirements = metadata.as_ref().unwrap_or(&*prev_metadata);
-                    let rollup_features = session
-                        .metadata()
-                        .get_features()
-                        .map(|x| x.get_group_rollup_modes())
-                        .unwrap();
-
-                    let group_rollups = requirements.get_group_rollups(&rollup_features);
-                    let mut update = ViewConfigUpdate {
-                        group_rollup_mode: group_rollups.first().cloned(),
-                        ..ViewConfigUpdate::default()
-                    };
-
-                    session.set_update_column_defaults(&mut update, requirements);
-
-                    if let Ok(task) = ctx.props().update_and_render(update) {
-                        ApiFuture::spawn(task);
-                    }
-
-                    presentation.set_open_column_settings(None);
-                    self.is_open = false;
-                    false
-                } else {
-                    self.is_open = false;
-                    true
-                }
+                ctx.props().on_select_plugin.emit(plugin_name);
+                self.is_open = false;
+                false
             },
             OpenMenu => {
                 self.is_open = !self.is_open;
@@ -124,22 +71,26 @@ impl Component for PluginSelector {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let callback = ctx.link().callback(|_| OpenMenu);
-        let plugin_name = ctx.props().renderer.get_active_plugin().unwrap().name();
+        let plugin_name = ctx
+            .props()
+            .plugin_name
+            .clone()
+            .unwrap_or_default();
         let plugin_name2 = plugin_name.clone();
         let class = if self.is_open { "open" } else { "" };
-        let items = self.options.iter().map(|item| match item {
-            SelectItem::OptGroup(_cat, items) => html! {
-                items.iter().filter(|x| *x != &plugin_name2).map(|x| {
-                    let callback = ctx.link().callback(ComponentSelectPlugin);
-                    html! {
-                        <PluginSelect
-                            name={ x.to_owned() }
-                            on_click={ callback } />
-                    }
-                }).collect::<Html>()
-            },
-            SelectItem::Option(_item) => html! {},
-        });
+        let items = ctx
+            .props()
+            .available_plugins
+            .iter()
+            .filter(|x| x.as_str() != plugin_name2.as_str())
+            .map(|x| {
+                let callback = ctx.link().callback(ComponentSelectPlugin);
+                html! {
+                    <PluginSelect
+                        name={ x.to_owned() }
+                        on_click={ callback } />
+                }
+            });
 
         html! {
             <>
@@ -154,19 +105,6 @@ impl Component for PluginSelector {
             </>
         }
     }
-}
-
-/// Generate the opt groups for the plugin selector by collecting by category
-/// then sorting.
-fn generate_plugin_optgroups(renderer: &Renderer) -> Vec<SelectItem<String>> {
-    let mut options = renderer
-        .get_all_plugin_categories()
-        .into_iter()
-        .map(|(category, value)| SelectItem::OptGroup(category.into(), value))
-        .collect::<Vec<_>>();
-
-    options.sort_by_key(|x| x.name());
-    options
 }
 
 #[derive(Properties, PartialEq)]

@@ -24,7 +24,7 @@ use crate::proto::{ColumnType, GetFeaturesResp};
 /// This struct is returned by
 /// [`VirtualServerHandler::get_features`](super::VirtualServerHandler::get_features)
 /// to inform clients about which operations are available.
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Features<'a> {
     /// Whether group-by aggregation is supported.
     #[serde(default)]
@@ -63,7 +63,7 @@ pub struct Features<'a> {
 ///
 /// Aggregates can either take no additional arguments ([`AggSpec::Single`])
 /// or require column type arguments ([`AggSpec::Multiple`]).
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum AggSpec<'a> {
     /// An aggregate function with no additional arguments.

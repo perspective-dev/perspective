@@ -22,7 +22,7 @@ use yew::*;
 use super::viewer::PerspectiveViewerElement;
 use crate::components::export_dropdown::*;
 use crate::custom_elements::modal::*;
-use crate::model::*;
+use crate::tasks::*;
 use crate::utils::*;
 use crate::*;
 

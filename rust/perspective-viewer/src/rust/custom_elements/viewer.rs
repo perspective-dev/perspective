@@ -31,7 +31,7 @@ use crate::config::*;
 use crate::custom_events::*;
 use crate::dragdrop::*;
 use crate::js::*;
-use crate::model::*;
+use crate::tasks::*;
 use crate::presentation::*;
 use crate::renderer::*;
 use crate::root::Root;
@@ -63,7 +63,7 @@ use crate::*;
 /// await viewer.load(worker);
 /// await viewer.restore({table: "table_one"});
 /// ```
-#[derive(Clone, PerspectiveProperties!)]
+#[derive(Clone)]
 #[wasm_bindgen]
 pub struct PerspectiveViewerElement {
     elem: HtmlElement,
@@ -75,6 +75,37 @@ pub struct PerspectiveViewerElement {
     presentation: Presentation,
     custom_events: CustomEvents,
     _subscriptions: Rc<[Subscription; 2]>,
+}
+
+impl HasCustomEvents for PerspectiveViewerElement {
+    fn custom_events(&self) -> &CustomEvents {
+        &self.custom_events
+    }
+}
+
+impl HasPresentation for PerspectiveViewerElement {
+    fn presentation(&self) -> &Presentation {
+        &self.presentation
+    }
+}
+
+impl HasRenderer for PerspectiveViewerElement {
+    fn renderer(&self) -> &Renderer {
+        &self.renderer
+    }
+}
+
+impl HasSession for PerspectiveViewerElement {
+    fn session(&self) -> &Session {
+        &self.session
+    }
+}
+
+impl StateProvider for PerspectiveViewerElement {
+    type State = PerspectiveViewerElement;
+    fn clone_state(&self) -> Self::State {
+        self.clone()
+    }
 }
 
 impl CustomElementMetadata for PerspectiveViewerElement {
@@ -326,7 +357,7 @@ impl PerspectiveViewerElement {
     /// await viewer.delete();
     /// ```
     pub fn delete(self) -> ApiFuture<()> {
-        self.delete_all(self.root())
+        self.delete_all(&self.root)
     }
 
     /// Restart this `<perspective-viewer>` to its initial state, before
