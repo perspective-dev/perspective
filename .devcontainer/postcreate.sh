@@ -18,3 +18,6 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Repo setup
 pnpm install
+
+# Install Playwright browsers with system dependencies
+npx playwright install --with-deps

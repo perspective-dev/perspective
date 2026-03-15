@@ -11,11 +11,18 @@
 			]
 		}
 	},
-
 	"features": {
 		"ghcr.io/devcontainers/features/rust:1": {},
-		"ghcr.io/devcontainers-extra/features/pnpm:2": {}
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "22"
+		},
+		"ghcr.io/devcontainers-extra/features/pnpm:2": {},
+		"ghcr.io/devcontainers/features/python:1": {
+			"version": "3.14"
+		},
+		"ghcr.io/devcontainers/features/java:1": {
+			"jdkDistro": "ms"
+		}
 	},
-
 	"postCreateCommand": "./.devcontainer/postcreate.sh"
 }

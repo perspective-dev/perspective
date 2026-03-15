@@ -31,6 +31,7 @@ export const LAYOUTS = {
                 fg_gradient: 17.4,
             },
         },
+        group_rollup_mode: "rollup",
         settings: true,
         title: "Market Monitor",
         group_by: ["name"],
@@ -52,6 +53,7 @@ export const LAYOUTS = {
         plugin: "datagrid",
         title: "Blotter",
         columns: ["ask", "bid", "chg"],
+        group_rollup_mode: "rollup",
         sort: [
             ["name", "desc"],
             ["lastUpdate", "desc"],
@@ -63,6 +65,7 @@ export const LAYOUTS = {
     },
     "x bar": {
         title: "Px (Δ)",
+        group_rollup_mode: "flat",
         columns: ["chg"],
         plugin: "X Bar",
         sort: [["chg", "asc"]],
@@ -71,6 +74,7 @@ export const LAYOUTS = {
     },
     "y line": {
         title: "Time Series (Px)",
+        group_rollup_mode: "flat",
         plugin: "Y Line",
         group_by: ["lastUpdate"],
         split_by: [],
@@ -81,6 +85,7 @@ export const LAYOUTS = {
     },
     "xy scatter": {
         title: "Spread Scatter",
+        group_rollup_mode: "flat",
         plugin: "X/Y Scatter",
         group_by: ["name"],
         split_by: [],
@@ -90,6 +95,7 @@ export const LAYOUTS = {
     },
     treemap: {
         plugin: "Treemap",
+        group_rollup_mode: "flat",
         title: "Volume Map",
         group_by: ["name", "client"],
         split_by: [],
@@ -101,6 +107,7 @@ export const LAYOUTS = {
         ],
     },
     heatmap: {
+        group_rollup_mode: "flat",
         title: "Spread Heatmap",
         columns: ["name"],
         plugin: "Heatmap",

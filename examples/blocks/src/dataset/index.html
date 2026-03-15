@@ -175,13 +175,10 @@
             const make_run_click_callback = (state) => async () => {
                 state.table?.delete?.({ lazy: true });
                 state.table = gen_data();
-                await window.psp_workspace.addTable("superstore", state.table);
             };
 
             const make_del_click_callback = (state) => async () => {
                 if (state.table) {
-                    // await viewer.eject();
-                    await window.psp_workspace.removeTable("superstore");
                     await state.table.then((x) => x.delete({ lazy: true }));
                     state.table = undefined;
                 }
