@@ -74,6 +74,7 @@ const DEVICE_OPTIONS = {
             ],
         },
     },
+    Firefox: {},
 };
 
 const BROWSER_PACKAGES = [
