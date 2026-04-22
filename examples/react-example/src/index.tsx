@@ -23,7 +23,7 @@ import perspective_viewer from "@perspective-dev/viewer";
 import perspective_workspace from "@perspective-dev/workspace";
 import "@perspective-dev/workspace";
 import "@perspective-dev/viewer-datagrid";
-import "@perspective-dev/viewer-d3fc";
+import "@perspective-dev/viewer-charts";
 
 import * as React from "react";
 import { createRoot } from "react-dom/client";

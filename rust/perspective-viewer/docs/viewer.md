@@ -19,7 +19,7 @@ for use within your site's regular HTML:
 ```javascript
 import "@perspective-dev/viewer";
 import "@perspective-dev/viewer-datagrid";
-import "@perspective-dev/viewer-d3fc";
+import "@perspective-dev/viewer-charts";
 ```
 
 Once imported, the `<perspective-viewer>` Web Component will be available in any

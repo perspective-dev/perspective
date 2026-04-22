@@ -711,7 +711,7 @@ impl PerspectiveViewerElement {
     ///
     /// This method is only really useful for the `"plugin"` method, which
     /// will use the configured plugin's export (e.g. PNG for
-    /// `@perspective-dev/viewer-d3fc`). Otherwise, prefer to call the
+    /// `@perspective-dev/viewer-charts`). Otherwise, prefer to call the
     /// equivalent method on the underlying [`View`] directly.
     ///
     /// # Arguments

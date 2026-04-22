@@ -32,7 +32,7 @@ const IS_PLAYWRIGHT = get_scope().reduce(
             "react",
             "viewer",
             "viewer-datagrid",
-            "viewer-d3fc",
+            "viewer-charts",
             "viewer-openlayers",
             "viewer-workspace",
             "workspace",

@@ -27,7 +27,7 @@ export * from "./view";
 export * from "./widget";
 
 import "@perspective-dev/viewer-datagrid";
-import "@perspective-dev/viewer-d3fc";
+import "@perspective-dev/viewer-charts";
 import "@perspective-dev/viewer-openlayers";
 
 // NOTE: only expose the widget here

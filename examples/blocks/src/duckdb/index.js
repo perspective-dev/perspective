@@ -12,7 +12,7 @@
 
 import "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
 import "/node_modules/@perspective-dev/viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js";
-import "/node_modules/@perspective-dev/viewer-d3fc/dist/cdn/perspective-viewer-d3fc.js";
+import "/node_modules/@perspective-dev/viewer-charts/dist/cdn/perspective-viewer-charts.js";
 
 import perspective from "/node_modules/@perspective-dev/client/dist/cdn/perspective.js";
 import { DuckDBHandler } from "/node_modules/@perspective-dev/client/dist/esm/virtual_servers/duckdb.js";

@@ -25,7 +25,7 @@ static variants if you know the element name (you can e.g. look this up in your
 browser's DOM inspector):
 
 ```javascript
-const plugin = customElements.get("perspective-viewer-d3fc-treemap");
+const plugin = customElements.get("perspective-viewer-charts-treemap");
 plugin.max_cells = 1_000_000;
 plugin.max_columns = 1000;
 ```

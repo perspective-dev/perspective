@@ -326,7 +326,7 @@ class PerspectiveWidget(DOMWidget, PerspectiveViewer):
                 psp_cdn_perspective_viewer_datagrid=psp_cdn(
                     "perspective-viewer-datagrid"
                 ),
-                psp_cdn_perspective_viewer_d3fc=psp_cdn("perspective-viewer-d3fc"),
+                psp_cdn_perspective_viewer_d3fc=psp_cdn("perspective-viewer-charts"),
                 psp_cdn_perspective_viewer_themes=psp_cdn(
                     "perspective-viewer-themes", "css/themes.css"
                 ),

@@ -20,7 +20,7 @@ and must be imported individually.
 - `@perspective-dev/viewer-datagrid`
   A custom high-performance data-grid component based on HTML `<table>`.
 
-- `@perspective-dev/viewer-d3fc`
+- `@perspective-dev/viewer-charts`
   A `<perspective-viewer>` plugin for the [d3fc](https://d3fc.io) charting
   library.
 
@@ -44,7 +44,7 @@ installed separately. All Plugins are optional - but a `<perspective-viewer>`
 without Plugins would be rather boring!
 
 ```bash
-$ npm add @perspective-dev/viewer-d3fc @perspective-dev/viewer-datagrid @perspective-dev/viewer-openlayers
+$ npm add @perspective-dev/viewer-charts @perspective-dev/viewer-datagrid @perspective-dev/viewer-openlayers
 ```
 
 ## Node.js

@@ -11,7 +11,7 @@
         "mdbook": "docker compose run --rm mdbook build"
     },
     "dependencies": {
-        "@perspective-dev/viewer-d3fc": "workspace:",
+        "@perspective-dev/viewer-charts": "workspace:",
         "@perspective-dev/viewer-datagrid": "workspace:",
         "@perspective-dev/viewer": "workspace:",
         "@perspective-dev/client": "workspace:",

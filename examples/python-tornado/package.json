@@ -11,7 +11,7 @@
     "dependencies": {
         "@perspective-dev/client": "workspace:",
         "@perspective-dev/viewer": "workspace:",
-        "@perspective-dev/viewer-d3fc": "workspace:",
+        "@perspective-dev/viewer-charts": "workspace:",
         "@perspective-dev/viewer-datagrid": "workspace:",
         "@perspective-dev/workspace": "workspace:",
         "superstore-arrow": "^3.2.0"

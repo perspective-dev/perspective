@@ -152,7 +152,7 @@ jobs:
             - name: WebAssembly Build
               run: pnpm run build --ci
               env:
-                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-d3fc,viewer-openlayers,workspace,react"
+                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,viewer-openlayers,workspace,react"
                   # PSP_USE_CCACHE: 1
 
             - uses: actions/upload-artifact@v4
@@ -164,7 +164,7 @@ jobs:
                       rust/perspective-server/dist
                       rust/perspective-viewer/dist
                       rust/perspective-viewer/src
-                      packages/viewer-d3fc/dist
+                      packages/viewer-charts/dist
                       packages/viewer-datagrid/dist
                       packages/viewer-openlayers/dist
                       packages/workspace/dist
@@ -648,7 +648,7 @@ jobs:
             - name: Run Tests
               run: pnpm run test
               env:
-                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-d3fc,viewer-openlayers,workspace,react"
+                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,viewer-openlayers,workspace,react"
                   # PSP_USE_CCACHE: 1
 
     # ,--,--'      .   .-,--.     .  .
@@ -1012,7 +1012,7 @@ jobs:
               working-directory: ./packages/viewer-datagrid
 
             - run: pnpm pack --pack-destination=../..
-              working-directory: ./packages/viewer-d3fc
+              working-directory: ./packages/viewer-charts
 
             - run: pnpm pack --pack-destination=../..
               working-directory: ./packages/viewer-openlayers

@@ -16,7 +16,7 @@ import superstore from "superstore-arrow/superstore.lz4.arrow";
 import "@perspective-dev/viewer/dist/css/themes.css";
 
 import "@perspective-dev/viewer-datagrid";
-import "@perspective-dev/viewer-d3fc/bar";
+import "@perspective-dev/viewer-charts/bar";
 import perspective from "@perspective-dev/client";
 import perspective_viewer from "@perspective-dev/viewer";
 

@@ -169,9 +169,9 @@ async function focus_package() {
             value: "viewer-datagrid",
         },
         {
-            key: "d",
-            name: "@perspective-dev/viewer-d3fc",
-            value: "viewer-d3fc",
+            key: "g",
+            name: "@perspective-dev/viewer-charts",
+            value: "viewer-charts",
         },
         {
             key: "i",
@@ -182,11 +182,6 @@ async function focus_package() {
             key: "o",
             name: "@perspective-dev/viewer-openlayers",
             value: "viewer-openlayers",
-        },
-        {
-            key: "g",
-            name: "@perspective-dev/viewer-webgl",
-            value: "viewer-webgl",
         },
         {
             key: "w",

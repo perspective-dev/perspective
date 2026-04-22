@@ -45,6 +45,9 @@ test.describe("Perspective React", () => {
         await expect(viewer).toHaveCount(3);
         await toggleMount.click();
         await workspace.waitFor({ state: "detached" });
+
+        // TODO: This test gets stuck in CI
+        await page.waitForTimeout(10);
         await toggleMount.click();
         await workspace.waitFor();
         await page.waitForFunction(
@@ -73,6 +76,7 @@ test.describe("Perspective React", () => {
                 document.querySelector("perspective-workspace")!.children
                     .length === 2,
         );
+
         expect(await viewer.count()).toBe(2);
         await settingsBtn.first().click();
         const settingsPanel = viewer.locator("#settings_panel");

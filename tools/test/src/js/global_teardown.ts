@@ -50,6 +50,10 @@ export default async function run() {
             [
                 ...glob.sync("dist/snapshots/**/*.txt", { cwd }),
                 ...glob.sync("dist/snapshots/**/*.html", { cwd }),
+                // Image baselines for visual-regression specs. Without
+                // these, CI has no Playwright PNG comparison target and
+                // every `toHaveScreenshot` call fails.
+                ...glob.sync("dist/snapshots/**/*.png", { cwd }),
             ],
             x,
         ),

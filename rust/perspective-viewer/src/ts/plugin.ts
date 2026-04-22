@@ -196,7 +196,7 @@ export interface IPerspectiveViewerPlugin {
      *
      * `save()` should be used for user-persistent settings that are
      * data-agnostic, so the user can have persistent view during refresh or
-     * reload.  For example, `@perspective-dev/viewer-d3fc` uses
+     * reload.  For example, `@perspective-dev/viewer-charts` uses
      * `plugin_config` to remember the user-repositionable legend coordinates.
      */
     save(): any;

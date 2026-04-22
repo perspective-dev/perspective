@@ -61,7 +61,7 @@ export async function initDemo(container: HTMLElement) {
         import("../data/worker.js"),
         import("@perspective-dev/viewer"),
         import("@perspective-dev/viewer-datagrid"),
-        import("@perspective-dev/viewer-d3fc"),
+        import("@perspective-dev/viewer-charts"),
     ]);
 
     const wrapper = document.createElement("div");
@@ -105,14 +105,15 @@ export async function initDemo(container: HTMLElement) {
     const slider = document.createElement("input");
     slider.type = "range";
     slider.className = "demo__freq-slider";
-    slider.setAttribute("aria-label", "Demo update rate in messages per second");
+    slider.setAttribute(
+        "aria-label",
+        "Demo update rate in messages per second",
+    );
     slider.value = String(Math.round((FREQ - 190) * (5 / -9)));
     slider.addEventListener("input", () => {
         FREQ = (-9 / 5) * Number(slider.value) + 190;
         freqLabel.textContent =
-            FREQ >= 189
-                ? "paused"
-                : `${((1000 / FREQ) * 10).toFixed(0)} msg/s`;
+            FREQ >= 189 ? "paused" : `${((1000 / FREQ) * 10).toFixed(0)} msg/s`;
     });
     timeControls.appendChild(slider);
 

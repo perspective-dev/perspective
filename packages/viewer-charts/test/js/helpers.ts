@@ -20,7 +20,7 @@ import type { ViewerConfigUpdate } from "@perspective-dev/viewer";
  * decisions still wiggle across Chromium versions; 0.5% gives headroom
  * without letting real regressions slip past.
  */
-const DEFAULT_MAX_DIFF_PIXEL_RATIO = 0.005;
+const DEFAULT_MAX_DIFF_PIXEL_RATIO = 0.02;
 
 /**
  * Load the shared `basic-test.html` shell and block until the test

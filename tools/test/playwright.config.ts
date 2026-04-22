@@ -99,10 +99,6 @@ const BROWSER_PACKAGES = [
         testDir: "packages/viewer-datagrid/test/js",
     },
     {
-        packageName: "viewer-d3fc",
-        testDir: "packages/viewer-d3fc/test/js",
-    },
-    {
         packageName: "viewer-charts",
         testDir: "packages/viewer-charts/test/js",
     },

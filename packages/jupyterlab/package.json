@@ -23,7 +23,7 @@
         "test:jupyter:build": "node ./build.mjs --test"
     },
     "dependencies": {
-        "@perspective-dev/viewer-d3fc": "workspace:",
+        "@perspective-dev/viewer-charts": "workspace:",
         "@perspective-dev/viewer-datagrid": "workspace:",
         "@perspective-dev/viewer-openlayers": "workspace:",
         "@perspective-dev/viewer": "workspace:",
