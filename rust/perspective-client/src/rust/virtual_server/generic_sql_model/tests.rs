@@ -311,6 +311,7 @@ fn test_view_get_data_col_sort_ascending() {
         end_row: Some(100),
         start_col: Some(0),
         end_col: None,
+        ..ViewPort::default()
     };
 
     let mut schema = IndexMap::new();
@@ -341,6 +342,7 @@ fn test_view_get_data_col_sort_descending() {
         end_row: Some(100),
         start_col: Some(0),
         end_col: None,
+        ..ViewPort::default()
     };
 
     let mut schema = IndexMap::new();
@@ -370,6 +372,7 @@ fn test_view_get_data() {
         end_row: Some(100),
         start_col: Some(0),
         end_col: Some(5),
+        ..ViewPort::default()
     };
 
     let mut schema = IndexMap::new();
@@ -536,6 +539,7 @@ fn test_view_get_data_flat_no_grouping_id() {
         end_row: Some(100),
         start_col: Some(0),
         end_col: None,
+        ..ViewPort::default()
     };
 
     let mut schema = IndexMap::new();

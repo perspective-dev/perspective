@@ -17,7 +17,7 @@ import {
 } from "./src/js/superstore.mjs";
 
 export async function join_suite(perspective, metadata) {
-    if (check_version_gte(metadata.version, "4.3.0")) {
+    if (check_version_gte(metadata.version, "4.4.0")) {
         async function before_all() {
             const left = await perspective.table(
                 new_superstore_table(metadata),

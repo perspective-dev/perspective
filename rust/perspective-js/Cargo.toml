@@ -64,6 +64,9 @@ wasm-bindgen-test = "0.3.13"
 
 [dependencies]
 perspective-client = { version = "4.4.1", features = ["sendable"] }
+arrow-array = { version = "57.3.0", default-features = false }
+arrow-ipc = { version = "57.3.0", default-features = false }
+arrow-schema = { version = "57.3.0", default-features = false }
 bytes = "1.10.1"
 chrono = "0.4"
 derivative = "2.2.0"

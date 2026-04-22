@@ -35,6 +35,7 @@ use perspective_client::{
     ColumnWindow, DeleteOptions, JoinOptions, OnUpdateData, OnUpdateOptions, SystemInfo,
     TableInitOptions, UpdateOptions, ViewWindow,
 };
+use perspective_js::TypedArrayWindow;
 use perspective_viewer::config::{ViewerConfig, ViewerConfigUpdate};
 use ts_rs::TS;
 
@@ -67,17 +68,18 @@ pub fn generate_type_bindings_js() -> Result<(), Box<dyn Error>> {
     let path = std::env::current_dir()?.join("../perspective-js/src/ts/ts-rs");
     ColumnType::export_all_to(&path)?;
     ColumnWindow::export_all_to(&path)?;
-    ViewWindow::export_all_to(&path)?;
-    TableInitOptions::export_all_to(&path)?;
-    ViewConfigUpdate::export_all_to(&path)?;
+    DeleteOptions::export_all_to(&path)?;
+    JoinOptions::export_all_to(&path)?;
     OnUpdateData::export_all_to(&path)?;
     OnUpdateOptions::export_all_to(&path)?;
-    JoinOptions::export_all_to(&path)?;
-    UpdateOptions::export_all_to(&path)?;
-    DeleteOptions::export_all_to(&path)?;
-    ViewWindow::export_all_to(&path)?;
     SystemInfo::<f64>::export_all_to(&path)?;
+    TableInitOptions::export_all_to(&path)?;
+    TypedArrayWindow::export_all_to(&path)?;
+    UpdateOptions::export_all_to(&path)?;
     ViewConfig::export_all_to(&path)?;
+    ViewConfigUpdate::export_all_to(&path)?;
+    ViewWindow::export_all_to(&path)?;
+    ViewWindow::export_all_to(&path)?;
     Ok(())
 }
 

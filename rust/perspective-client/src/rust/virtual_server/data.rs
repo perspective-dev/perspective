@@ -14,12 +14,15 @@ use std::error::Error;
 use std::sync::Arc;
 
 use arrow_array::builder::{
-    BooleanBuilder, Float64Builder, Int32Builder, StringBuilder, TimestampMillisecondBuilder,
+    BooleanBuilder, Float64Builder, Int32Builder, StringDictionaryBuilder,
+    TimestampMillisecondBuilder,
 };
+use arrow_array::cast::AsArray;
+use arrow_array::types::Int32Type;
 use arrow_array::{
-    Array, ArrayRef, BooleanArray, Date32Array, Date64Array, Decimal128Array, Float32Array,
-    Float64Array, Int8Array, Int16Array, Int32Array, Int64Array, LargeStringArray, RecordBatch,
-    StringArray, Time32MillisecondArray, Time32SecondArray, Time64MicrosecondArray,
+    Array, ArrayAccessor, ArrayRef, BooleanArray, Date32Array, Date64Array, Decimal128Array,
+    Float32Array, Float64Array, Int8Array, Int16Array, Int32Array, Int64Array, LargeStringArray,
+    RecordBatch, StringArray, Time32MillisecondArray, Time32SecondArray, Time64MicrosecondArray,
     Time64NanosecondArray, TimestampMicrosecondArray, TimestampMillisecondArray,
     TimestampNanosecondArray, TimestampSecondArray, UInt8Array, UInt16Array, UInt32Array,
     UInt64Array,
@@ -36,10 +39,14 @@ use crate::config::{GroupRollupMode, Scalar, ViewConfig};
 /// [`VirtualDataSlice`].
 pub enum ColumnBuilder {
     Boolean(BooleanBuilder),
-    String(StringBuilder),
+    String(StringDictionaryBuilder<Int32Type>),
     Float(Float64Builder),
     Integer(Int32Builder),
     Datetime(TimestampMillisecondBuilder),
+}
+
+fn dict_data_type() -> DataType {
+    DataType::Dictionary(Box::new(DataType::Int32), Box::new(DataType::Utf8))
 }
 
 /// A single cell value in a row-oriented data representation.
@@ -90,7 +97,7 @@ impl SetVirtualDataColumn for Option<String> {
     }
 
     fn new_builder() -> ColumnBuilder {
-        ColumnBuilder::String(StringBuilder::new())
+        ColumnBuilder::String(StringDictionaryBuilder::new())
     }
 
     fn to_scalar(self) -> Scalar {
@@ -277,6 +284,11 @@ fn extract_scalar(array: &ArrayRef, row_idx: usize) -> Scalar {
             let arr = array.as_any().downcast_ref::<StringArray>().unwrap();
             Scalar::String(arr.value(row_idx).to_string())
         },
+        DataType::Dictionary(..) => {
+            let dict = array.as_dictionary::<Int32Type>();
+            let values = dict.downcast_dict::<StringArray>().unwrap();
+            Scalar::String(values.value(row_idx).to_string())
+        },
         DataType::Float64 => {
             let arr = array.as_any().downcast_ref::<Float64Array>().unwrap();
             Scalar::Float(arr.value(row_idx))
@@ -350,14 +362,26 @@ fn coerce_column(
     array: &ArrayRef,
 ) -> Result<(Field, ArrayRef), Box<dyn Error>> {
     match field.data_type() {
-        DataType::Boolean
-        | DataType::Utf8
-        | DataType::Float64
-        | DataType::Int32
-        | DataType::Date32 => Ok((
+        DataType::Boolean | DataType::Float64 | DataType::Int32 | DataType::Date32 => Ok((
             Field::new(name, field.data_type().clone(), true),
             array.clone(),
         )),
+        DataType::Dictionary(..) => Ok((Field::new(name, dict_data_type(), true), array.clone())),
+        DataType::Utf8 => {
+            let arr = array.as_any().downcast_ref::<StringArray>().unwrap();
+            let mut builder = StringDictionaryBuilder::<Int32Type>::new();
+            for i in 0..arr.len() {
+                if arr.is_null(i) {
+                    builder.append_null();
+                } else {
+                    builder.append_value(arr.value(i));
+                }
+            }
+            Ok((
+                Field::new(name, dict_data_type(), true),
+                Arc::new(builder.finish()) as ArrayRef,
+            ))
+        },
         DataType::Timestamp(TimeUnit::Millisecond, _) => Ok((
             Field::new(name, DataType::Timestamp(TimeUnit::Millisecond, None), true),
             array.clone(),
@@ -502,20 +526,27 @@ fn coerce_column(
         },
         DataType::LargeUtf8 => {
             let arr = array.as_any().downcast_ref::<LargeStringArray>().unwrap();
-            let result: StringArray = arr.iter().map(|v| v.map(|v| v.to_string())).collect();
+            let mut builder = StringDictionaryBuilder::<Int32Type>::new();
+            for i in 0..arr.len() {
+                if arr.is_null(i) {
+                    builder.append_null();
+                } else {
+                    builder.append_value(arr.value(i));
+                }
+            }
             Ok((
-                Field::new(name, DataType::Utf8, true),
-                Arc::new(result) as ArrayRef,
+                Field::new(name, dict_data_type(), true),
+                Arc::new(builder.finish()) as ArrayRef,
             ))
         },
         dt => {
             tracing::warn!(
-                "Coercing unknown Arrow type {} to Utf8 for column '{}'",
+                "Coercing unknown Arrow type {} to Dictionary for column '{}'",
                 dt,
                 name
             );
             let num_rows = array.len();
-            let mut builder = StringBuilder::new();
+            let mut builder = StringDictionaryBuilder::<Int32Type>::new();
             for i in 0..num_rows {
                 if array.is_null(i) {
                     builder.append_null();
@@ -525,7 +556,7 @@ fn coerce_column(
                 }
             }
             Ok((
-                Field::new(name, DataType::Utf8, true),
+                Field::new(name, dict_data_type(), true),
                 Arc::new(builder.finish()) as ArrayRef,
             ))
         },
@@ -667,9 +698,10 @@ impl VirtualDataSlice {
                         Field::new(name, DataType::Boolean, true),
                         Arc::new(b.finish()),
                     ),
-                    ColumnBuilder::String(b) => {
-                        (Field::new(name, DataType::Utf8, true), Arc::new(b.finish()))
-                    },
+                    ColumnBuilder::String(b) => (
+                        Field::new(name, dict_data_type(), true),
+                        Arc::new(b.finish()),
+                    ),
                     ColumnBuilder::Float(b) => (
                         Field::new(name, DataType::Float64, true),
                         Arc::new(b.finish()),
@@ -736,7 +768,9 @@ impl VirtualDataSlice {
                     let cell = if col.is_null(row_idx) {
                         match field.data_type() {
                             DataType::Boolean => VirtualDataCell::Boolean(None),
-                            DataType::Utf8 => VirtualDataCell::String(None),
+                            DataType::Utf8 | DataType::Dictionary(..) => {
+                                VirtualDataCell::String(None)
+                            },
                             DataType::Float64 => VirtualDataCell::Float(None),
                             DataType::Int32 => VirtualDataCell::Integer(None),
                             DataType::Timestamp(TimeUnit::Millisecond, _) => {
@@ -753,6 +787,11 @@ impl VirtualDataSlice {
                             DataType::Utf8 => {
                                 let arr = col.as_any().downcast_ref::<StringArray>().unwrap();
                                 VirtualDataCell::String(Some(arr.value(row_idx).to_string()))
+                            },
+                            DataType::Dictionary(..) => {
+                                let dict = col.as_dictionary::<Int32Type>();
+                                let values = dict.downcast_dict::<StringArray>().unwrap();
+                                VirtualDataCell::String(Some(values.value(row_idx).to_string()))
                             },
                             DataType::Float64 => {
                                 let arr = col.as_any().downcast_ref::<Float64Array>().unwrap();
@@ -827,6 +866,21 @@ impl VirtualDataSlice {
                                     None
                                 } else {
                                     Some(arr.value(i))
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    )?
+                },
+                DataType::Dictionary(..) => {
+                    let dict = col.as_dictionary::<Int32Type>();
+                    let values = dict.downcast_dict::<StringArray>().unwrap();
+                    serde_json::to_value(
+                        (0..num_rows)
+                            .map(|i| {
+                                if col.is_null(i) {
+                                    None
+                                } else {
+                                    Some(values.value(i))
                                 }
                             })
                             .collect::<Vec<_>>(),

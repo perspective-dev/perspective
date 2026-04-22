@@ -86,6 +86,7 @@ message ViewPort {
     optional uint32 start_col = 2;
     optional uint32 end_row = 3;
     optional uint32 end_col = 4;
+    optional bool emit_legacy_row_path_names = 5;
 //   optional bool id = 5;
 //   optional bool index = 3;
 //   optional bool formatted = 6;

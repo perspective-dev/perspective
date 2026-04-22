@@ -2121,6 +2121,9 @@ name = "perspective-js"
 version = "4.4.1"
 dependencies = [
  "anyhow",
+ "arrow-array",
+ "arrow-ipc",
+ "arrow-schema",
  "bytes",
  "chrono",
  "derivative",

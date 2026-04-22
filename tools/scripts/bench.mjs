@@ -12,13 +12,14 @@
 
 import * as dotenv from "dotenv";
 import { get_scope } from "./sh_perspective.mjs";
+import { execSync } from "node:child_process";
 
 import "zx/globals";
 
 dotenv.config({ path: "./.perspectiverc", quiet: true });
 const scope = get_scope();
 if (scope.includes("client")) {
-    $.sync`pnpm run --recursive --filter bench bench_js`;
+    await $`pnpm run --recursive --filter bench bench_js`.pipe(process.stdout);
 } else if (scope.includes("python")) {
     $.sync`pnpm run --recursive --filter bench bench_python`;
 }

@@ -247,6 +247,35 @@ impl View {
         Ok(self.0.to_csv(window.unwrap_or_default()).await?)
     }
 
+    /// Fetches columns from the [`View`] in Arrow format, decodes them, and
+    /// passes typed array views to `callback`. All arrays are only valid for
+    /// the duration of the callback.
+    ///
+    /// # Arguments
+    ///
+    /// - `window` - Optional [`TypedArrayWindow`] controlling row/column
+    ///   windowing and output options (e.g., `float32` mode).
+    /// - `callback` - A JS function called with `(names: string[], values:
+    ///   TypedArray[], validities: (Uint8Array|null)[], dictionaries:
+    ///   (string[]|null)[])`.
+    #[wasm_bindgen]
+    pub async fn with_typed_arrays(
+        &self,
+        window: Option<crate::typed_array::JsTypedArrayWindow>,
+        callback: Function,
+    ) -> ApiResult<()> {
+        let opts: crate::typed_array::TypedArrayWindow = window
+            .into_serde_ext::<Option<crate::typed_array::TypedArrayWindow>>()?
+            .unwrap_or_default();
+
+        let float32 = opts.float32;
+        let mut view_window: ViewWindow = opts.into();
+        view_window.emit_legacy_row_path_names = Some(false);
+        let arrow = self.0.to_arrow(view_window).await?;
+        crate::typed_array::decode_and_call(&arrow, float32, &callback)?;
+        Ok(())
+    }
+
     /// Register a callback with this [`View`]. Whenever the view's underlying
     /// table emits an update, this callback will be invoked with an object
     /// containing `port_id`, indicating which port the update fired on, and

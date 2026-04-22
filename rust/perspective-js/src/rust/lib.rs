@@ -29,6 +29,7 @@ mod client;
 mod generic_sql_model;
 mod table;
 mod table_data;
+mod typed_array;
 pub mod utils;
 mod view;
 mod virtual_server;
@@ -40,6 +41,7 @@ pub use crate::client::Client;
 pub use crate::generic_sql_model::*;
 pub use crate::table::*;
 pub use crate::table_data::*;
+pub use crate::typed_array::*;
 pub use crate::virtual_server::*;
 
 #[cfg(feature = "export-init")]
@@ -61,10 +63,12 @@ export type * from "../../src/ts/ts-rs/Filter.d.ts";
 export type * from "../../src/ts/ts-rs/ViewConfig.d.ts";
 export type * from "../../src/ts/ts-rs/JoinOptions.ts";
 export type * from "../../src/ts/ts-rs/JoinType.ts";
+export type * from "../../src/ts/ts-rs/TypedArrayWindow.ts";
 
 import type {ColumnWindow} from "../../src/ts/ts-rs/ColumnWindow.d.ts";
 import type {ColumnType} from "../../src/ts/ts-rs/ColumnType.d.ts";
 import type {ViewWindow} from "../../src/ts/ts-rs/ViewWindow.d.ts";
+import type {TypedArrayWindow} from "../../src/ts/ts-rs/TypedArrayWindow.ts";
 import type {TableInitOptions} from "../../src/ts/ts-rs/TableInitOptions.d.ts";
 import type {JoinOptions} from "../../src/ts/ts-rs/JoinOptions.ts";
 import type {JoinType} from "../../src/ts/ts-rs/JoinType.ts";

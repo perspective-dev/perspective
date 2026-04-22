@@ -234,8 +234,8 @@ async function decode_api_responses(
                       messages.getInt32(i * 16 + 12, true),
                   ]
                 : [
-                      messages.getInt32(i * 12, true),
-                      messages.getInt32(i * 12 + 4, true),
+                      messages.getUint32(i * 12, true),
+                      messages.getUint32(i * 12 + 4, true),
                       messages.getInt32(i * 12 + 8, true),
                   ];
 

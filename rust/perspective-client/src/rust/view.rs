@@ -109,6 +109,13 @@ pub struct ViewWindow {
     #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compression: Option<String>,
+
+    /// When `true`, group-by columns use legacy `"colname (Group by N)"`
+    /// naming. When `false`, they use `__ROW_PATH_N__` naming consistent
+    /// with the SQL backend. Defaults to `true` for backwards compatibility.
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub emit_legacy_row_path_names: Option<bool>,
 }
 
 impl From<ViewWindow> for ViewPort {
@@ -118,6 +125,7 @@ impl From<ViewWindow> for ViewPort {
             start_col: window.start_col.map(|x| x.floor() as u32),
             end_row: window.end_row.map(|x| x.ceil() as u32),
             end_col: window.end_col.map(|x| x.ceil() as u32),
+            emit_legacy_row_path_names: window.emit_legacy_row_path_names,
         }
     }
 }
@@ -129,6 +137,7 @@ impl From<ViewPort> for ViewWindow {
             start_col: window.start_col.map(|x| x as f64),
             end_row: window.end_row.map(|x| x as f64),
             end_col: window.end_col.map(|x| x as f64),
+            emit_legacy_row_path_names: window.emit_legacy_row_path_names,
             ..ViewWindow::default()
         }
     }
