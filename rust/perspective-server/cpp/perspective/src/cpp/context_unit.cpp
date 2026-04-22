@@ -111,13 +111,20 @@ t_ctxunit::notify(
  * @param flattened
  */
 void
-t_ctxunit::notify(const t_data_table& flattened) {
+t_ctxunit::notify(const t_data_table& flattened, bool is_registration) {
     t_uindex nrecs = flattened.size();
     std::shared_ptr<const t_column> pkey_sptr =
         flattened.get_const_column("psp_pkey");
     const t_column* pkey_col = pkey_sptr.get();
 
     m_has_delta = true;
+
+    // During `_register_context`, no subscriber exists yet — skip the
+    // hopscotch_set insertions no observer can see. A unit context has no
+    // traversal/sort state to build either, so this is effectively O(1).
+    if (is_registration) {
+        return;
+    }
 
     // TODO: pkey and idx are equal, except idx is not a t_tscalar. I don't
     // think there is a difference between accessing the pkey column and

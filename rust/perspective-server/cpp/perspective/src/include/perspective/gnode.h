@@ -109,6 +109,21 @@ public:
     void send(t_uindex port_id, const t_data_table& fragments);
 
     /**
+     * @brief Bulk-initialize an empty gnode directly from `data_table`,
+     * bypassing the input port, `flatten()`, and `update_master_table()`
+     * pipeline.
+     *
+     * The caller must guarantee that (a) the gnode's gstate is empty,
+     * (b) all rows are `OP_INSERT`, and (c) `psp_pkey` contains no
+     * duplicates (e.g. an implicit row-index primary key). Columns of
+     * `data_table` are aliased into the master table instead of being
+     * copied.
+     *
+     * @param data_table
+     */
+    void init_bulk(const std::shared_ptr<t_data_table>& data_table);
+
+    /**
      * @brief Given a port_id, call `process_table` on the port's data table,
      * reconciling all queued calls to `update` and `remove` on that port.
      * Returns a boolean indicating whether the update was valid and whether
@@ -254,7 +269,8 @@ protected:
     void update_context_from_state(
         CTX_T* ctx,
         const std::string& name,
-        std::shared_ptr<t_data_table> flattened
+        std::shared_ptr<t_data_table> flattened,
+        bool is_registration
     );
 
     /**
@@ -484,7 +500,10 @@ t_gnode::notify_context(
 template <typename CTX_T>
 void
 t_gnode::update_context_from_state(
-    CTX_T* ctx, const std::string& name, std::shared_ptr<t_data_table> flattened
+    CTX_T* ctx,
+    const std::string& name,
+    std::shared_ptr<t_data_table> flattened,
+    bool is_registration
 ) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
@@ -503,9 +522,14 @@ t_gnode::update_context_from_state(
     //
     // 1. when a new context is created and it needs to get the current state
     //  of the gstate master table in order to calculate aggregates, etc.
+    //  `is_registration` is `true` in this case — no subscriber can observe
+    //  deltas populated during this initial notify, so we skip populating
+    //  `m_delta_pkeys` to save O(N) allocations.
     //
     // 2. when a table created from schema (0 rows) gets data and now needs
-    //  to update its registered contexts with the new data.
+    //  to update its registered contexts with the new data. `is_registration`
+    //  is `false` here — a subscriber may have attached between context
+    //  creation and the first update, and expects to see all rows as deltas.
     if (ctx->num_expressions() > 0) {
         // If the context has expression columns, it has already been computed
         // in `process_table` and we can join the "real" and expression columns
@@ -514,10 +538,10 @@ t_gnode::update_context_from_state(
             ctx->get_expression_tables();
         std::shared_ptr<t_data_table> joined_flattened =
             flattened->join(ctx_expression_tables->m_flattened);
-        ctx->notify(*joined_flattened);
+        ctx->notify(*joined_flattened, is_registration);
     } else {
         // Just use the table from the gnode
-        ctx->notify(*flattened);
+        ctx->notify(*flattened, is_registration);
     }
 
     ctx->step_end();

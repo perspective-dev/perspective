@@ -509,7 +509,7 @@ t_ctx2::reset_sortby() {
 }
 
 void
-t_ctx2::notify(const t_data_table& flattened) {
+t_ctx2::notify(const t_data_table& flattened, bool /* is_registration */) {
     for (t_uindex tree_idx = 0, loop_end = m_trees.size(); tree_idx < loop_end;
          ++tree_idx) {
         if (is_rtree_idx(tree_idx) != 0U) {

@@ -277,7 +277,8 @@ public:
         std::int32_t start_col,
         std::int32_t end_col,
         bool emit_group_by,
-        bool compress
+        bool compress,
+        bool emit_legacy_row_path_names = true
     ) const;
 
     /**
@@ -312,7 +313,8 @@ public:
     std::shared_ptr<std::string> data_slice_to_arrow(
         std::shared_ptr<t_data_slice<CTX_T>> data_slice,
         bool emit_group_b,
-        bool compress
+        bool compress,
+        bool emit_legacy_row_path_names = true
     ) const;
 
     /**
@@ -427,7 +429,8 @@ private:
         std::shared_ptr<arrow::Schema>,
         std::shared_ptr<arrow::RecordBatch>>
     data_slice_to_batches(
-        bool emit_group_by, std::shared_ptr<t_data_slice<CTX_T>> data_slice
+        bool emit_group_by, std::shared_ptr<t_data_slice<CTX_T>> data_slice,
+        bool emit_legacy_row_path_names = true
     ) const;
 
     void _find_hidden_sort(const std::vector<t_sortspec>& sort);

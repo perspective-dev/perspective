@@ -184,7 +184,7 @@ t_ctx0::notify(
  * @param flattened
  */
 void
-t_ctx0::notify(const t_data_table& flattened) {
+t_ctx0::notify(const t_data_table& flattened, bool is_registration) {
     t_uindex nrecs = flattened.size();
     std::shared_ptr<const t_column> pkey_sptr =
         flattened.get_const_column("psp_pkey");
@@ -194,6 +194,40 @@ t_ctx0::notify(const t_data_table& flattened) {
     const t_column* op_col = op_sptr.get();
 
     m_has_delta = true;
+
+    // During `_register_context`, no subscriber exists yet to observe the
+    // delta set produced here — skip populating `m_delta_pkeys` so we don't
+    // allocate one hopscotch_set entry per row. The first real update goes
+    // through the 6-arg `notify` which tracks deltas normally.
+    const bool track_deltas = !is_registration;
+
+    // Fast path: unsorted, unfiltered, empty traversal (i.e. initial
+    // registration of a pass-through ctx0). Skip the `m_new_elems`
+    // hopscotch_map round-trip and the subsequent `step_end` rebuild of
+    // `m_index`; append pkeys directly into `m_index`, then finalize
+    // (pkey-sort + `m_pkeyidx` population). This matches the row order
+    // the existing `add_row`/`step_end` path produces for an empty sort.
+    const bool can_bulk_load = !m_config.has_filters()
+        && m_traversal->empty_sort_by() && m_traversal->size() == 0;
+    if (can_bulk_load) {
+        m_traversal->bulk_load_reserve(nrecs);
+        if (track_deltas) {
+            m_delta_pkeys.reserve(nrecs);
+        }
+        for (t_uindex idx = 0; idx < nrecs; ++idx) {
+            t_tscalar pkey =
+                m_symtable.get_interned_tscalar(pkey_col->get_scalar(idx));
+            std::uint8_t op_ = *(op_col->get_nth<std::uint8_t>(idx));
+            if (static_cast<t_op>(op_) == OP_INSERT) {
+                m_traversal->bulk_load_append(pkey);
+            }
+            if (track_deltas) {
+                add_delta_pkey(pkey);
+            }
+        }
+        m_traversal->bulk_load_finalize();
+        return;
+    }
 
     if (m_config.has_filters()) {
         t_mask msk = filter_table_for_config(flattened, m_config);
@@ -219,8 +253,9 @@ t_ctx0::notify(const t_data_table& flattened) {
                     break;
             }
 
-            // Add primary key to track row delta
-            add_delta_pkey(pkey);
+            if (track_deltas) {
+                add_delta_pkey(pkey);
+            }
         }
 
         return;
@@ -242,8 +277,9 @@ t_ctx0::notify(const t_data_table& flattened) {
                 break;
         }
 
-        // Add primary key to track row delta
-        add_delta_pkey(pkey);
+        if (track_deltas) {
+            add_delta_pkey(pkey);
+        }
     }
 }
 

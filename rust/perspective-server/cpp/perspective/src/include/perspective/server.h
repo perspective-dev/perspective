@@ -159,7 +159,8 @@ namespace server {
             t_uindex start_col,
             t_uindex end_col,
             bool emit_group_by = true,
-            bool compress = true
+            bool compress = true,
+            bool emit_legacy_row_path_names = true
         ) const = 0;
 
         [[nodiscard]]
@@ -291,10 +292,11 @@ namespace server {
             t_uindex start_col,
             t_uindex end_col,
             bool emit_group_by = true,
-            bool compress = true
+            bool compress = true,
+            bool emit_legacy_row_path_names = true
         ) const override {
             return m_view->to_arrow(
-                start_row, end_row, start_col, end_col, emit_group_by, compress
+                start_row, end_row, start_col, end_col, emit_group_by, compress, emit_legacy_row_path_names
             );
         }
 

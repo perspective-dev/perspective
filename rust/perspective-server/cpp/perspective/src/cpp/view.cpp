@@ -755,14 +755,15 @@ View<CTX_T>::to_arrow(
     std::int32_t start_col,
     std::int32_t end_col,
     bool emit_group_by,
-    bool compress
+    bool compress,
+    bool emit_legacy_row_path_names
 ) const {
     PSP_GIL_UNLOCK();
     PSP_READ_LOCK(*get_lock());
 
     std::shared_ptr<t_data_slice<CTX_T>> data_slice =
         get_data(start_row, end_row, start_col, end_col);
-    return data_slice_to_arrow(data_slice, emit_group_by, compress);
+    return data_slice_to_arrow(data_slice, emit_group_by, compress, emit_legacy_row_path_names);
 };
 
 template <>
@@ -826,7 +827,8 @@ View<CTX_T>::to_csv(
 template <typename CTX_T>
 std::pair<std::shared_ptr<arrow::Schema>, std::shared_ptr<arrow::RecordBatch>>
 View<CTX_T>::data_slice_to_batches(
-    bool emit_group_by, std::shared_ptr<t_data_slice<CTX_T>> data_slice
+    bool emit_group_by, std::shared_ptr<t_data_slice<CTX_T>> data_slice,
+    bool emit_legacy_row_path_names
 ) const {
     // From the data slice, get all the metadata we need
     t_get_data_extents extents = data_slice->get_data_extents();
@@ -856,10 +858,17 @@ View<CTX_T>::data_slice_to_batches(
         auto schema = m_table->get_schema();
         for (auto rpidx = 0; rpidx < num_row_paths; ++rpidx) {
             std::string column_name = row_pivots.at(rpidx);
-            std::string row_path_name = column_name;
-            row_path_name += " (Group by ";
-            row_path_name += std::to_string(rpidx + 1);
-            row_path_name += ")";
+            std::string row_path_name;
+            if (emit_legacy_row_path_names) {
+                row_path_name = column_name;
+                row_path_name += " (Group by ";
+                row_path_name += std::to_string(rpidx + 1);
+                row_path_name += ")";
+            } else {
+                row_path_name = "__ROW_PATH_";
+                row_path_name += std::to_string(rpidx);
+                row_path_name += "__";
+            }
 
             // Get the "table" type for this column, as row_pivots are not in
             // the view schema.
@@ -1344,12 +1353,13 @@ std::shared_ptr<std::string>
 View<CTX_T>::data_slice_to_arrow(
     std::shared_ptr<t_data_slice<CTX_T>> data_slice,
     bool emit_group_by,
-    bool compress
+    bool compress,
+    bool emit_legacy_row_path_names
 ) const {
     std::pair<
         std::shared_ptr<arrow::Schema>,
         std::shared_ptr<arrow::RecordBatch>>
-        pairs = data_slice_to_batches(emit_group_by, data_slice);
+        pairs = data_slice_to_batches(emit_group_by, data_slice, emit_legacy_row_path_names);
     std::shared_ptr<arrow::RecordBatch> batches = pairs.second;
     std::shared_ptr<arrow::Schema> arrow_schema = pairs.first;
     arrow::Result<std::shared_ptr<arrow::ResizableBuffer>> allocated =

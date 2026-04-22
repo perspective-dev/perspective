@@ -83,6 +83,28 @@ Table::init(
     m_init = true;
 }
 
+void
+Table::init_bulk(
+    const std::shared_ptr<t_data_table>& data_table,
+    std::uint32_t row_count
+) {
+    PSP_VERBOSE_ASSERT(
+        !m_gnode_set,
+        "`init_bulk` can only be used for the initial load of a `Table`."
+    );
+
+    process_op_column(*data_table, t_op::OP_INSERT);
+    calculate_offset(row_count);
+
+    auto new_gnode = make_gnode(data_table->get_schema());
+    set_gnode(new_gnode);
+    m_pool->register_gnode(m_gnode.get());
+
+    m_gnode->init_bulk(data_table);
+
+    m_init = true;
+}
+
 t_uindex
 Table::size() const {
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
@@ -368,16 +390,19 @@ Table::from_csv(
     apachearrow::ArrowLoader arrow_loader;
     arrow_loader.init_csv(data, false, map);
 
-    std::vector<std::string> column_names;
-    std::vector<t_dtype> data_types;
+    // Arrow has materialized the CSV into its own buffers at this point; drop
+    // the raw CSV string so it does not live concurrently with the Arrow table
+    // and the `t_data_table`.
+    { auto _ = std::move(data); }
 
-    column_names = arrow_loader.names();
-    data_types = arrow_loader.types();
+    std::vector<std::string> column_names = arrow_loader.names();
+    std::vector<t_dtype> data_types = arrow_loader.types();
     t_schema input_schema(column_names, data_types);
     auto implicit_index_it =
         std::find(column_names.begin(), column_names.end(), "__INDEX__");
+    const bool has_index_column = implicit_index_it != column_names.end();
 
-    if (implicit_index_it != column_names.end()) {
+    if (has_index_column) {
         auto idx = std::distance(column_names.begin(), implicit_index_it);
         // position of the column is at the same index in both vectors
         column_names.erase(column_names.begin() + idx);
@@ -385,26 +410,34 @@ Table::from_csv(
     }
 
     t_schema output_schema(column_names, data_types);
-    std::uint32_t row_count = 0;
-    row_count = arrow_loader.row_count();
+    std::uint32_t row_count = arrow_loader.row_count();
 
     auto data_table = std::make_shared<t_data_table>(output_schema);
     data_table->init();
 
     {
-        auto _ = std::move(data);
         auto loader = std::move(arrow_loader);
         data_table->extend(row_count);
         loader.fill_table(*data_table, input_schema, index, 0, false);
     }
+
     auto pool = std::make_shared<t_pool>();
     pool->init();
     auto tbl =
         std::make_shared<Table>(pool, column_names, data_types, limit, index);
 
-    tbl->init(*data_table, row_count, t_op::OP_INSERT, 0);
-    data_table.reset();
-    pool->_process();
+    // `psp_pkey` is guaranteed unique only when the index is implicit (a
+    // generated row-number). Explicit indexes or `__INDEX__` columns can
+    // contain duplicates, which must be deduplicated via the `flatten()`
+    // path.
+    const bool can_bulk_init = index.empty() && !has_index_column;
+    if (can_bulk_init) {
+        tbl->init_bulk(data_table, row_count);
+    } else {
+        tbl->init(*data_table, row_count, t_op::OP_INSERT, 0);
+        data_table.reset();
+        pool->_process();
+    }
     return tbl;
 }
 

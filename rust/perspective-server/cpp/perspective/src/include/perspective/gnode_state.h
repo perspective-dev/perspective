@@ -67,9 +67,13 @@ public:
     /**
      * @brief If the master table has 0 rows, fill it using `flattened`.
      *
+     * Aliases `flattened`'s column `shared_ptr`s into the master table instead
+     * of memcpy-cloning them; callers that still hold references to
+     * `flattened` must not mutate it after this call.
+     *
      * @param flattened
      */
-    void fill_master_table(const t_data_table* flattened);
+    void fill_master_table(const std::shared_ptr<t_data_table>& flattened);
 
     /**
      * @brief Update the master `t_data_table` with the flattened and masked
@@ -78,7 +82,19 @@ public:
      *
      * @param flattened
      */
-    void update_master_table(const t_data_table* flattened);
+    void update_master_table(const std::shared_ptr<t_data_table>& flattened);
+
+    /**
+     * @brief Bulk-initialize the master table directly from `source`, bypassing
+     * the flatten/merge pipeline.
+     *
+     * Requires the master table to be empty, all rows in `source` to be
+     * `OP_INSERT`, and the `psp_pkey` column of `source` to contain no
+     * duplicates. Column `shared_ptr`s are aliased into the master table.
+     *
+     * @param source
+     */
+    void init_from_table(const std::shared_ptr<t_data_table>& source);
 
     /**
      * @brief Given a column in the master data table and the corresponding

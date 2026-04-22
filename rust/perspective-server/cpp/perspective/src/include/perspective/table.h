@@ -72,6 +72,26 @@ public:
     );
 
     /**
+     * @brief Fast-path `init` for the initial bulk load of an empty `Table`.
+     *
+     * Aliases `data_table`'s columns directly into the gnode's master table,
+     * skipping the input port append + `flatten()` copies that `init` would
+     * otherwise perform. Only valid when the gnode has not yet been created
+     * (no prior data) and the caller can guarantee that `psp_pkey` contains
+     * no duplicates -- e.g. `from_csv` with an implicit row-index pkey.
+     *
+     * Also skips the subsequent `pool->_process()` call, since nothing is
+     * queued on the input port.
+     *
+     * @param data_table
+     * @param row_count
+     */
+    void init_bulk(
+        const std::shared_ptr<t_data_table>& data_table,
+        std::uint32_t row_count
+    );
+
+    /**
      * @brief The size of the underlying `t_data_table`, i.e. a row count
      *
      * @return t_uindex

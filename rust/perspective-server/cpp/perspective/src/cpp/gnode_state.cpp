@@ -119,7 +119,7 @@ t_gstate::lookup_or_create(const t_tscalar& pkey) {
 }
 
 void
-t_gstate::fill_master_table(const t_data_table* flattened) {
+t_gstate::fill_master_table(const std::shared_ptr<t_data_table>& flattened) {
     // insert into empty `m_table`
     m_free.clear();
     m_mapping.clear();
@@ -137,16 +137,14 @@ t_gstate::fill_master_table(const t_data_table* flattened) {
     parallel_for(
         int(ncols),
         [&master_table, &master_table_schema, &flattened](int idx) {
-            // Clone each column from flattened into `m_table`
+            // Alias each column `shared_ptr` from flattened into `m_table`
+            // rather than deep-cloning.
             const std::string& column_name = master_table_schema.m_columns[idx];
-            // No need for safe lookup as master_table schema == flattened
-            // schema
-            const t_column* flattened_column =
-                flattened->_get_const_column_safe(column_name);
+            auto flattened_column = flattened->get_column_safe(column_name);
             if (!flattened_column) {
                 return;
             }
-            master_table->set_column(idx, flattened_column->clone());
+            master_table->set_column(idx, std::move(flattened_column));
         }
     );
 
@@ -187,7 +185,54 @@ t_gstate::fill_master_table(const t_data_table* flattened) {
 }
 
 void
-t_gstate::update_master_table(const t_data_table* flattened) {
+t_gstate::init_from_table(const std::shared_ptr<t_data_table>& source) {
+    // Bulk-init the master table directly from `source`. Assumes:
+    //   - master table is empty
+    //   - all rows are `OP_INSERT`
+    //   - `psp_pkey` has no duplicates
+    //
+    // Column `shared_ptr`s are aliased rather than deep-cloned.
+    m_free.clear();
+    m_mapping.clear();
+
+    const t_schema& master_table_schema = m_table->get_schema();
+    t_uindex ncols = m_table->num_columns();
+    auto* master_table = m_table.get();
+
+    parallel_for(
+        int(ncols),
+        [&master_table, &master_table_schema, &source](int idx) {
+            const std::string& column_name = master_table_schema.m_columns[idx];
+            auto src_col = source->get_column_safe(column_name);
+            if (!src_col) {
+                return;
+            }
+            master_table->set_column(idx, std::move(src_col));
+        }
+    );
+
+    m_pkcol = master_table->get_column("psp_pkey");
+    m_opcol = master_table->get_column("psp_op");
+
+    master_table->set_capacity(source->get_capacity());
+    master_table->set_size(source->size());
+
+    const t_column* pkey_col = master_table->_get_const_column("psp_pkey");
+    for (t_uindex idx = 0, loop_end = source->num_rows(); idx < loop_end;
+         ++idx) {
+        t_tscalar pkey = pkey_col->get_scalar(idx);
+        m_mapping.emplace(m_symtable.get_interned_tscalar(pkey), idx);
+    }
+
+#ifdef PSP_TABLE_VERIFY
+    master_table->verify();
+#endif
+}
+
+void
+t_gstate::update_master_table(
+    const std::shared_ptr<t_data_table>& flattened
+) {
     if (num_rows() == 0) {
         fill_master_table(flattened);
         return;

@@ -276,7 +276,7 @@ t_ctx1::get_data(const std::vector<t_uindex>& rows) const {
 }
 
 void
-t_ctx1::notify(const t_data_table& flattened) {
+t_ctx1::notify(const t_data_table& flattened, bool /* is_registration */) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
 

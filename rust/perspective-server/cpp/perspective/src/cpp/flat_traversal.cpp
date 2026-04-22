@@ -17,6 +17,8 @@
 #include <perspective/scalar.h>
 #include <perspective/schema.h>
 
+#include <algorithm>
+
 namespace perspective {
 
 t_ftrav::t_ftrav() : m_step_deletes(0), m_step_inserts(0) {
@@ -279,6 +281,14 @@ t_ftrav::step_begin() {
 
 void
 t_ftrav::step_end() {
+    // Fast path: if no incremental work happened this step, `m_index` and
+    // `m_pkeyidx` are already in their final shape (either unchanged, or
+    // populated directly via `bulk_load_append`). Skip the O(N) rebuild.
+    if (m_step_inserts == 0 && m_step_deletes == 0) {
+        m_new_elems.clear();
+        return;
+    }
+
     // The new number of rows in this traversal
     t_index new_size = m_index->size() + m_step_inserts - m_step_deletes;
 
@@ -445,6 +455,44 @@ t_ftrav::get_from_gstate(
     }
     std::shared_ptr<t_data_table> master_table = gstate.get_table();
     return gstate.get(*master_table, colname, pkey);
+}
+
+void
+t_ftrav::bulk_load_reserve(t_uindex n) {
+    m_index->reserve(n);
+    m_pkeyidx.reserve(n);
+}
+
+void
+t_ftrav::bulk_load_append(t_tscalar pkey) {
+    // Pre-condition: `empty_sort_by()` and the caller has ownership of
+    // step framing (i.e. we're inside a `step_begin`/`step_end` pair for
+    // an initial registration). `m_step_inserts` is intentionally NOT
+    // incremented so that `step_end` takes its short-circuit path.
+    // `m_pkeyidx` is populated in `bulk_load_finalize` after sorting,
+    // not here — the pkey-to-index mapping only has meaning once the
+    // final sort order is determined.
+    m_index->emplace_back();
+    m_index->back().m_pkey = pkey;
+}
+
+void
+t_ftrav::bulk_load_finalize() {
+    // Match the order the existing `add_row`/`step_end` path would
+    // produce for an empty sort spec: `cmp_mselem` with zero sort
+    // columns falls through to `a.m_pkey < b.m_pkey`, so sort
+    // `m_index` by pkey and then rebuild `m_pkeyidx` against the final
+    // row positions.
+    std::sort(
+        m_index->begin(),
+        m_index->end(),
+        [](const t_mselem& a, const t_mselem& b) {
+            return a.m_pkey < b.m_pkey;
+        }
+    );
+    for (t_uindex i = 0, loop_end = m_index->size(); i < loop_end; ++i) {
+        m_pkeyidx[(*m_index)[i].m_pkey] = i;
+    }
 }
 
 } // end namespace perspective

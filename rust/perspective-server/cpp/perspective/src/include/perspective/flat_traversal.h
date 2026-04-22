@@ -120,6 +120,22 @@ public:
     std::vector<t_sortspec> get_sort_by() const;
     bool empty_sort_by() const;
 
+    // Fast-path initialization for unsorted traversals: append pkeys
+    // directly to `m_index` in one shot, skipping the `m_new_elems`
+    // hopscotch_map round-trip and the `new_rows` intermediate vector
+    // that a normal `add_row` / `step_end` pair would incur. Only valid
+    // when `empty_sort_by()` is true and the traversal is otherwise empty
+    // (i.e. during initial registration of a ctx0 without a sort).
+    //
+    // Call `bulk_load_reserve(n)` first, then `bulk_load_append(pkey)`
+    // once per pkey, then `bulk_load_finalize()` to sort by pkey (the
+    // implicit order used by `cmp_mselem` with an empty sort spec) and
+    // build `m_pkeyidx`. After finalize, `step_end` short-circuits
+    // because `m_step_inserts` remains 0.
+    void bulk_load_reserve(t_uindex n);
+    void bulk_load_append(t_tscalar pkey);
+    void bulk_load_finalize();
+
     void reset_step_state();
 
     t_uindex lower_bound_row_idx(

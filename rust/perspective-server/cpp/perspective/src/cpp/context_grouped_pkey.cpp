@@ -676,7 +676,9 @@ t_ctx_grouped_pkey::pprint() const {
 }
 
 void
-t_ctx_grouped_pkey::notify(const t_data_table& flattened) {
+t_ctx_grouped_pkey::notify(
+    const t_data_table& flattened, bool /* is_registration */
+) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
 

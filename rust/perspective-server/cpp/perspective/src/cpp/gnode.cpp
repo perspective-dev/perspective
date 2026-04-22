@@ -26,6 +26,7 @@
 #include <perspective/parallel_for.h>
 #include <perspective/pyutils.h>
 
+#include <algorithm>
 #include <utility>
 
 namespace perspective {
@@ -316,7 +317,7 @@ t_gnode::_process_table(t_uindex port_id) {
 
     // first update - master table is empty
     if (m_gstate->mapping_size() == 0) {
-        m_gstate->update_master_table(flattened.get());
+        m_gstate->update_master_table(flattened);
         m_oports[PSP_PORT_FLATTENED]->set_table(flattened);
 
         _compute_expressions(flattened);
@@ -582,7 +583,7 @@ t_gnode::_process_table(t_uindex port_id) {
     }
 #endif
 
-    m_gstate->update_master_table(flattened_masked.get());
+    m_gstate->update_master_table(flattened_masked);
 
 #ifdef PSP_GNODE_VERIFY
     {
@@ -721,6 +722,34 @@ t_gnode::send(t_uindex port_id, const t_data_table& fragments) {
     input_port->send(fragments);
 }
 
+void
+t_gnode::init_bulk(const std::shared_ptr<t_data_table>& data_table) {
+    PSP_TRACE_SENTINEL();
+    PSP_VERBOSE_ASSERT(m_init, "Cannot `init_bulk` on an uninited gnode.");
+    PSP_VERBOSE_ASSERT(
+        m_gstate->mapping_size() == 0,
+        "`init_bulk` requires an empty gnode state."
+    );
+    PSP_GIL_UNLOCK();
+    PSP_WRITE_LOCK(*m_lock);
+
+    PSP_GNODE_VERIFY_TABLE(data_table);
+
+    m_was_updated = true;
+
+    m_gstate->init_from_table(data_table);
+
+    PSP_GNODE_VERIFY_TABLE(get_table_sptr());
+
+    // Registered contexts / expressions: on a freshly-constructed `Table`
+    // these collections are empty and the calls are no-ops, but keep them
+    // for parity with `_process_table`'s first-update path so a context
+    // registered between `Table` construction and `init_bulk` is still
+    // notified.
+    _compute_expressions(data_table);
+    _update_contexts_from_state(m_gstate->get_pkeyed_table());
+}
+
 bool
 t_gnode::process(t_uindex port_id) {
     PSP_TRACE_SENTINEL();
@@ -833,7 +862,8 @@ void
 t_gnode::update_context_from_state(
     t_ctxunit* ctx,
     const std::string& name,
-    std::shared_ptr<t_data_table> flattened
+    std::shared_ptr<t_data_table> flattened,
+    bool is_registration
 ) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
@@ -851,7 +881,7 @@ t_gnode::update_context_from_state(
     const auto& const_flattened = const_cast<const t_data_table&>(*flattened);
 
     ctx->step_begin();
-    ctx->notify(const_flattened);
+    ctx->notify(const_flattened, is_registration);
     ctx->step_end();
 }
 
@@ -881,33 +911,39 @@ t_gnode::_update_contexts_from_state(std::shared_ptr<t_data_table> tbl) {
         const std::string& name = context_names[ctx_idx];
         const t_ctx_handle& ctxh = context_handles[ctx_idx];
 
+        // This is the first-update-to-previously-empty-table path; a client
+        // may have subscribed between context creation and this update and
+        // expects to observe all rows as deltas, so we pass
+        // `is_registration = false`.
         switch (ctxh.get_type()) {
             case TWO_SIDED_CONTEXT: {
                 auto* ctx = static_cast<t_ctx2*>(ctxh.m_ctx);
                 // Do not reset the expression tables on the context,
                 // as they've already been computed.
                 ctx->reset(false);
-                update_context_from_state<t_ctx2>(ctx, name, tbl);
+                update_context_from_state<t_ctx2>(ctx, name, tbl, false);
             } break;
             case ONE_SIDED_CONTEXT: {
                 auto* ctx = static_cast<t_ctx1*>(ctxh.m_ctx);
                 ctx->reset(false);
-                update_context_from_state<t_ctx1>(ctx, name, tbl);
+                update_context_from_state<t_ctx1>(ctx, name, tbl, false);
             } break;
             case ZERO_SIDED_CONTEXT: {
                 auto* ctx = static_cast<t_ctx0*>(ctxh.m_ctx);
                 ctx->reset(false);
-                update_context_from_state<t_ctx0>(ctx, name, tbl);
+                update_context_from_state<t_ctx0>(ctx, name, tbl, false);
             } break;
             case UNIT_CONTEXT: {
                 auto* ctx = static_cast<t_ctxunit*>(ctxh.m_ctx);
                 ctx->reset();
-                update_context_from_state<t_ctxunit>(ctx, name, tbl);
+                update_context_from_state<t_ctxunit>(ctx, name, tbl, false);
             } break;
             case GROUPED_PKEY_CONTEXT: {
                 auto* ctx = static_cast<t_ctx_grouped_pkey*>(ctxh.m_ctx);
                 ctx->reset(false);
-                update_context_from_state<t_ctx_grouped_pkey>(ctx, name, tbl);
+                update_context_from_state<t_ctx_grouped_pkey>(
+                    ctx, name, tbl, false
+                );
             } break;
             default: {
                 PSP_COMPLAIN_AND_ABORT("Unexpected context type");
@@ -1001,6 +1037,42 @@ t_gnode::get_registered_contexts() const {
     return rval;
 }
 
+namespace {
+
+// Build a `t_schema` containing only `psp_pkey`, `psp_op`, and any columns
+// from `extra_cols` that exist in `input_schema`. Used to narrow the schema
+// passed to `t_gstate::get_pkeyed_table()` so that when rows have been
+// deleted (triggering the mask-and-clone branch), only columns the target
+// context actually reads from the flattened table are cloned — rather than
+// every column in the master table.
+t_schema
+make_minimal_pkeyed_schema(
+    const t_schema& input_schema,
+    const std::vector<std::string>& extra_cols
+) {
+    std::vector<std::string> cols{"psp_pkey", "psp_op"};
+    std::vector<t_dtype> types{
+        input_schema.get_dtype("psp_pkey"),
+        input_schema.get_dtype("psp_op")
+    };
+    for (const std::string& colname : extra_cols) {
+        if (colname == "psp_pkey" || colname == "psp_op") {
+            continue;
+        }
+        if (!input_schema.has_column(colname)) {
+            continue;
+        }
+        if (std::find(cols.begin(), cols.end(), colname) != cols.end()) {
+            continue;
+        }
+        cols.push_back(colname);
+        types.push_back(input_schema.get_dtype(colname));
+    }
+    return {cols, types};
+}
+
+} // anonymous namespace
+
 void
 t_gnode::_register_context(
     const std::string& name, t_ctx_type type, std::uintptr_t ptr
@@ -1012,11 +1084,6 @@ t_gnode::_register_context(
     m_contexts[name] = ch;
 
     bool should_update = m_gstate->mapping_size() > 0;
-    std::shared_ptr<t_data_table> pkeyed_table;
-
-    if (should_update) {
-        pkeyed_table = m_gstate->get_pkeyed_table();
-    }
 
     t_expression_vocab& expression_vocab = *(m_expression_vocab);
     t_regex_mapping& expression_regex_mapping = *(m_expression_regex_mapping);
@@ -1041,7 +1108,9 @@ t_gnode::_register_context(
                     )
                 );
 
-                update_context_from_state<t_ctx2>(ctx, name, pkeyed_table);
+                update_context_from_state<t_ctx2>(
+                    ctx, name, m_gstate->get_pkeyed_table(), true
+                );
             }
         } break;
         case ONE_SIDED_CONTEXT: {
@@ -1062,7 +1131,9 @@ t_gnode::_register_context(
                     )
                 );
 
-                update_context_from_state<t_ctx1>(ctx, name, pkeyed_table);
+                update_context_from_state<t_ctx1>(
+                    ctx, name, m_gstate->get_pkeyed_table(), true
+                );
             }
         } break;
         case ZERO_SIDED_CONTEXT: {
@@ -1083,7 +1154,33 @@ t_gnode::_register_context(
                     )
                 );
 
-                update_context_from_state<t_ctx0>(ctx, name, pkeyed_table);
+                // `t_ctx0::notify` only reads `psp_pkey`, `psp_op`, and
+                // non-expression filter columns from the flattened table.
+                // Expression filter columns are supplied by the expression
+                // table that `update_context_from_state` joins in.
+                const t_config& config = ctx->get_config();
+                const t_schema& expr_schema =
+                    ctx->get_expression_tables()->m_master->get_schema();
+                std::vector<std::string> extra_cols;
+                if (config.has_filters()) {
+                    for (const t_fterm& fterm : config.get_fterms()) {
+                        if (expr_schema.has_column(fterm.m_colname)) {
+                            continue;
+                        }
+                        extra_cols.push_back(fterm.m_colname);
+                    }
+                }
+                t_schema narrow_schema = make_minimal_pkeyed_schema(
+                    m_gstate->get_input_schema(), extra_cols
+                );
+                update_context_from_state<t_ctx0>(
+                    ctx,
+                    name,
+                    m_gstate->get_pkeyed_table(
+                        narrow_schema, m_gstate->get_table()
+                    ),
+                    true
+                );
             }
         } break;
         case UNIT_CONTEXT: {
@@ -1093,7 +1190,20 @@ t_gnode::_register_context(
 
             // No expressions here to deal with
             if (should_update) {
-                update_context_from_state<t_ctxunit>(ctx, name, pkeyed_table);
+                // `t_ctxunit::notify` only reads `psp_pkey` from the
+                // flattened table, so narrow the pkeyed table to the
+                // identifying columns only.
+                t_schema narrow_schema = make_minimal_pkeyed_schema(
+                    m_gstate->get_input_schema(), {}
+                );
+                update_context_from_state<t_ctxunit>(
+                    ctx,
+                    name,
+                    m_gstate->get_pkeyed_table(
+                        narrow_schema, m_gstate->get_table()
+                    ),
+                    true
+                );
             }
         } break;
         case GROUPED_PKEY_CONTEXT: {
@@ -1116,7 +1226,7 @@ t_gnode::_register_context(
                 );
 
                 update_context_from_state<t_ctx_grouped_pkey>(
-                    ctx, name, pkeyed_table
+                    ctx, name, m_gstate->get_pkeyed_table(), true
                 );
             }
         } break;

@@ -2892,13 +2892,17 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
 
             proto::Response resp;
             auto* arrow = resp.mutable_view_to_arrow_resp()->mutable_arrow();
+            bool legacy_names = r.viewport().has_emit_legacy_row_path_names()
+                ? r.viewport().emit_legacy_row_path_names()
+                : true;
             *arrow = *view->to_arrow(
                 dims.start_row,
                 dims.end_row,
                 dims.start_col,
                 dims.end_col,
                 true,
-                r.compression() == "lz4"
+                r.compression() == "lz4",
+                legacy_names
             );
 
             push_resp(std::move(resp));

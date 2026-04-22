@@ -67,8 +67,12 @@ public:
 
     std::vector<t_tscalar> get_data(const std::vector<t_tscalar>& pkeys) const;
 
-    // will only work on empty contexts
-    void notify(const t_data_table& flattened);
+    // will only work on empty contexts. `is_registration` is `true` when
+    // this call is part of `_register_context` (no subscriber yet) and
+    // `false` when it is the first update to a previously-empty table.
+    // When `true`, per-row delta tracking is skipped to avoid O(N)
+    // allocations no observer can see.
+    void notify(const t_data_table& flattened, bool is_registration);
 
     void notify(
         const t_data_table& flattened,
