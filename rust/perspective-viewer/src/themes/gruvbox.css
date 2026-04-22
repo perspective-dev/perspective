@@ -59,34 +59,22 @@ perspective-viewer[theme="Gruvbox Light"] {
     --psp-datagrid--pos-cell--color: var(--theme-blue);
     --psp-datagrid--neg-cell--color: var(--theme-red);
 
-    /* perspective-viewer-gruvbox-light--d3fc */
-    --psp-d3fc--axis-ticks--color: var(--theme-fg1);
-    --psp-d3fc--gridline--color: var(--theme-bg2);
-    --psp-d3fc--series--color: var(--theme-blue);
-    --psp-d3fc--series-1--color: var(--theme-blue);
-    --psp-d3fc--series-2--color: var(--theme-red);
-    --psp-d3fc--series-3--color: var(--theme-green);
-    --psp-d3fc--series-4--color: var(--theme-purple);
-    --psp-d3fc--series-5--color: var(--theme-aqua);
-    --psp-d3fc--series-6--color: var(--theme-alt-blue);
-    --psp-d3fc--series-7--color: var(--theme-alt-red);
-    --psp-d3fc--series-8--color: var(--theme-alt-green);
-    --psp-d3fc--series-9--color: var(--theme-alt-purple);
-    --psp-d3fc--series-10--color: var(--theme-alt-aqua);
+    /* perspective-viewer-gruvbox-light--webgl */
+    --psp-webgl--axis-ticks--color: var(--theme-fg1);
+    --psp-webgl--gridline--color: var(--theme-bg2);
+    --psp-webgl--series--color: var(--theme-blue);
+    --psp-webgl--series-1--color: var(--theme-blue);
+    --psp-webgl--series-2--color: var(--theme-red);
+    --psp-webgl--series-3--color: var(--theme-green);
+    --psp-webgl--series-4--color: var(--theme-purple);
+    --psp-webgl--series-5--color: var(--theme-aqua);
+    --psp-webgl--series-6--color: var(--theme-alt-blue);
+    --psp-webgl--series-7--color: var(--theme-alt-red);
+    --psp-webgl--series-8--color: var(--theme-alt-green);
+    --psp-webgl--series-9--color: var(--theme-alt-purple);
+    --psp-webgl--series-10--color: var(--theme-alt-aqua);
 
-    --psp-d3fc--neg-gradient--background: linear-gradient(
-        var(--theme-bg1),
-        var(--theme-red),
-        var(--theme-alt-red)
-    ) !important;
-
-    --psp-d3fc--pos-gradient--background: linear-gradient(
-        var(--theme-bg1),
-        var(--theme-blue),
-        var(--theme-alt-blue)
-    ) !important;
-
-    --psp-d3fc--full-gradient--background: linear-gradient(
+    --psp-webgl--gradient--background: linear-gradient(
         var(--theme-alt-red),
         var(--theme-red),
         var(--theme-bg1),

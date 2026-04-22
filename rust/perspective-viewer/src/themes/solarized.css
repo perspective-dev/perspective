@@ -40,31 +40,21 @@ perspective-viewer[theme="Solarized"] {
     --psp-datagrid--hover--border-color: #ccc;
     --psp-datagrid--border-color: #93a1a1;
 
-    /* perspective-viewer-solarized--d3fc */
-    --psp-d3fc--treemap--labels: black;
-    --psp-d3fc--treemap--hover-highlight: black;
+    /* perspective-viewer-solarized--webgl */
+    --psp-webgl--treemap--labels: black;
+    --psp-webgl--treemap--hover-highlight: black;
 
-    --psp-d3fc--axis-ticks--color: #586e75;
-    --psp-d3fc--gridline--color: #eee8d5;
-    --psp-d3fc--series--color: #268bd2;
-    --psp-d3fc--series-1--color: #268bd2;
-    --psp-d3fc--series-2--color: #cb4b16;
-    --psp-d3fc--series-3--color: #b58900;
-    --psp-d3fc--series-4--color: #859900;
-    --psp-d3fc--series-5--color: #2aa198;
+    --psp-webgl--axis-ticks--color: #586e75;
+    --psp-webgl--gridline--color: #eee8d5;
+    --psp-webgl--series--color: #268bd2;
+    --psp-webgl--series-1--color: #268bd2;
+    --psp-webgl--series-2--color: #cb4b16;
+    --psp-webgl--series-3--color: #b58900;
+    --psp-webgl--series-4--color: #859900;
+    --psp-webgl--series-5--color: #2aa198;
 
-    --psp-d3fc--series-6--color: #6c71c4;
-    --psp-d3fc--series-7--color: #d33682;
-
-    --psp-d3fc--pos-gradient--background: linear-gradient(
-        #268bd2 0%,
-        #2aa198,
-        #859900,
-        #b58900,
-        #cb4b16,
-        #dc322f,
-        #d33682 100%
-    );
+    --psp-webgl--series-6--color: #6c71c4;
+    --psp-webgl--series-7--color: #d33682;
 }
 
 x {

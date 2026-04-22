@@ -15,7 +15,7 @@ mod stub;
 mod symbol;
 
 use itertools::Itertools;
-use perspective_client::config::ColumnType;
+use perspective_client::config::{ColumnType, GroupRollupMode};
 use yew::{Html, Properties, function_component, html};
 
 use self::agg_depth_selector::*;
@@ -23,6 +23,7 @@ use crate::components::column_settings_sidebar::style_tab::stub::Stub;
 use crate::components::column_settings_sidebar::style_tab::symbol::SymbolStyle;
 use crate::components::datetime_column_style::DatetimeColumnStyle;
 use crate::components::number_column_style::NumberColumnStyle;
+use crate::components::number_series_style::NumberSeriesStyle;
 use crate::components::string_column_style::StringColumnStyle;
 use crate::components::style_controls::CustomNumberFormat;
 use crate::custom_events::CustomEvents;
@@ -99,7 +100,13 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
     )
     .map(|opts| {
         let mut components = vec![];
-        if !props.view_config.group_by.is_empty() {
+        // Aggregate Depth only applies when group_rollup_mode is Rollup —
+        // Flat emits only leaves (depth == group_by.len()) and Total emits
+        // only the grand-total (depth 0), so no depth is selectable. The
+        // stored value persists in ColumnConfigValues across mode changes
+        // and resurfaces when the user returns to Rollup.
+        let is_rollup = props.view_config.group_rollup_mode == GroupRollupMode::Rollup;
+        if !props.view_config.group_by.is_empty() && is_rollup {
             let aggregate_depth = config.as_ref().map(|x| x.aggregate_depth as f64);
             components.push(("Aggregate Depth", html! {
                 <AggregateDepthSelector
@@ -124,6 +131,15 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                     on_change={on_change.clone()}
                     session={props.session.clone()}
                 />
+            }));
+        }
+        if let Some(default_config) = opts.number_series_style {
+            let config = config
+                .as_ref()
+                .map(|config| config.number_series_style.clone());
+
+            components.push(("Chart Type", html! {
+                <NumberSeriesStyle {config} {default_config} on_change={on_change.clone()} />
             }));
         }
         if let Some(default_config) = opts.datagrid_string_style {

@@ -55,43 +55,34 @@ perspective-viewer[theme="Pro Dark"] {
     --psp-datagrid--pos-cell--color: #7dc3f0;
     --psp-datagrid--neg-cell--color: #ff9485;
 
-    /* perspective-viewer-pro-dark--d3fc (overrides) */
-    --psp-d3fc--legend--color: #c5c9d0;
-    --psp-d3fc--treemap--labels: white;
-    --psp-d3fc--treemap--hover-highlight: white;
-    --psp-d3fc--tooltip--color: white;
-    --psp-d3fc--axis-ticks--color: #c5c9d0;
-    --psp-d3fc--axis-lines--color: #61656e;
-    --psp-d3fc--gridline--color: #3b3f46;
-    --psp-d3fc--tooltip--background: rgba(42, 44, 47, 1);
-    --psp-d3fc--tooltip--border-color: #242526;
-    --psp-d3fc--legend--background: var(--psp--background-color);
+    /* perspective-viewer-pro-dark--webgl (overrides) */
+    --psp-webgl--legend--color: #c5c9d0;
+    --psp-webgl--treemap--labels: white;
+    --psp-webgl--treemap--hover-highlight: white;
+    --psp-webgl--tooltip--color: white;
+    --psp-webgl--axis-ticks--color: #c5c9d0;
+    --psp-webgl--axis-lines--color: #61656e;
+    --psp-webgl--gridline--color: #3b3f46;
+    --psp-webgl--tooltip--background: rgba(42, 44, 47, 1);
+    --psp-webgl--tooltip--border-color: #242526;
+    --psp-webgl--legend--background: var(--psp--background-color);
 
-    --psp-d3fc--series--color: rgb(71, 120, 194);
-    --psp-d3fc--series-1--color: rgb(71, 120, 194);
-    --psp-d3fc--series-2--color: rgb(204, 120, 48);
-    --psp-d3fc--series-3--color: rgb(158, 84, 192);
-    --psp-d3fc--series-4--color: rgb(51, 150, 153);
-    --psp-d3fc--series-5--color: rgb(102, 114, 143);
-    --psp-d3fc--series-6--color: rgb(211, 103, 189);
-    --psp-d3fc--series-7--color: rgb(109, 124, 77);
-    --psp-d3fc--series-8--color: rgb(221, 99, 103);
-    --psp-d3fc--series-9--color: rgb(120, 104, 206);
-    --psp-d3fc--series-10--color: rgb(23, 166, 123);
+    --psp-webgl--series--color: rgb(71, 120, 194);
+    --psp-webgl--series-1--color: rgb(71, 120, 194);
+    --psp-webgl--series-2--color: rgb(204, 120, 48);
+    --psp-webgl--series-3--color: rgb(158, 84, 192);
+    --psp-webgl--series-4--color: rgb(51, 150, 153);
+    --psp-webgl--series-5--color: rgb(102, 114, 143);
+    --psp-webgl--series-6--color: rgb(211, 103, 189);
+    --psp-webgl--series-7--color: rgb(109, 124, 77);
+    --psp-webgl--series-8--color: rgb(221, 99, 103);
+    --psp-webgl--series-9--color: rgb(120, 104, 206);
+    --psp-webgl--series-10--color: rgb(23, 166, 123);
 
-    --psp-d3fc--full-gradient--background: linear-gradient(
+    --psp-webgl--gradient--background: linear-gradient(
         #dd6367 0%,
         #242526 50%,
         #3289c8 100%
-    );
-
-    --psp-d3fc--pos-gradient--background: linear-gradient(
-        #242526 0%,
-        #3289c8 100%
-    );
-    --psp-d3fc--neg-gradient--background: linear-gradient(
-        #dd6367 0%,
-        #242526 100%
     );
 
     /* perspective-viewer-pro-dark--openlayers (overrides) */

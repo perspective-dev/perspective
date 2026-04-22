@@ -55,43 +55,34 @@ perspective-viewer[theme="Botanical"] {
     --psp-datagrid--pos-cell--color: #7bc96f;
     --psp-datagrid--neg-cell--color: #ebac21;
 
-    /* perspective-viewer-botanical--d3fc */
-    --psp-d3fc--legend--color: #b8c9ad;
-    --psp-d3fc--treemap--labels: #e0ead8;
-    --psp-d3fc--treemap--hover-highlight: #e0ead8;
-    --psp-d3fc--tooltip--color: #e0ead8;
-    --psp-d3fc--axis-ticks--color: #b8c9ad;
-    --psp-d3fc--axis-lines--color: #526b4a;
-    --psp-d3fc--gridline--color: #2a4228;
-    --psp-d3fc--tooltip--background: rgba(30, 52, 32, 1);
-    --psp-d3fc--tooltip--border-color: #1a2e1a;
-    --psp-d3fc--legend--background: var(--psp--background-color);
+    /* perspective-viewer-botanical--webgl */
+    --psp-webgl--legend--color: #b8c9ad;
+    --psp-webgl--treemap--labels: #e0ead8;
+    --psp-webgl--treemap--hover-highlight: #e0ead8;
+    --psp-webgl--tooltip--color: #e0ead8;
+    --psp-webgl--axis-ticks--color: #b8c9ad;
+    --psp-webgl--axis-lines--color: #526b4a;
+    --psp-webgl--gridline--color: #2a4228;
+    --psp-webgl--tooltip--background: rgba(30, 52, 32, 1);
+    --psp-webgl--tooltip--border-color: #1a2e1a;
+    --psp-webgl--legend--background: var(--psp--background-color);
 
-    --psp-d3fc--series--color: rgb(90, 158, 75);
-    --psp-d3fc--series-1--color: rgb(90, 158, 75);
-    --psp-d3fc--series-2--color: rgb(206, 176, 104);
-    --psp-d3fc--series-3--color: rgb(160, 110, 180);
-    --psp-d3fc--series-4--color: rgb(80, 170, 150);
-    --psp-d3fc--series-5--color: rgb(140, 170, 90);
-    --psp-d3fc--series-6--color: rgb(200, 120, 140);
-    --psp-d3fc--series-7--color: rgb(100, 150, 190);
-    --psp-d3fc--series-8--color: rgb(210, 140, 80);
-    --psp-d3fc--series-9--color: rgb(130, 120, 190);
-    --psp-d3fc--series-10--color: rgb(170, 200, 110);
+    --psp-webgl--series--color: rgb(90, 158, 75);
+    --psp-webgl--series-1--color: rgb(90, 158, 75);
+    --psp-webgl--series-2--color: rgb(206, 176, 104);
+    --psp-webgl--series-3--color: rgb(160, 110, 180);
+    --psp-webgl--series-4--color: rgb(80, 170, 150);
+    --psp-webgl--series-5--color: rgb(140, 170, 90);
+    --psp-webgl--series-6--color: rgb(200, 120, 140);
+    --psp-webgl--series-7--color: rgb(100, 150, 190);
+    --psp-webgl--series-8--color: rgb(210, 140, 80);
+    --psp-webgl--series-9--color: rgb(130, 120, 190);
+    --psp-webgl--series-10--color: rgb(170, 200, 110);
 
-    --psp-d3fc--full-gradient--background: linear-gradient(
+    --psp-webgl--gradient--background: linear-gradient(
         #e8836a 0%,
         #1a2e1a 50%,
         #5a9e4b 100%
-    );
-
-    --psp-d3fc--pos-gradient--background: linear-gradient(
-        #1a2e1a 0%,
-        #5a9e4b 100%
-    );
-    --psp-d3fc--neg-gradient--background: linear-gradient(
-        #e8836a 0%,
-        #1a2e1a 100%
     );
 
     /* perspective-viewer-botanical--openlayers */

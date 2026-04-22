@@ -63,9 +63,10 @@ use crate::utils::define_web_component;
 const TS_APPEND_CONTENT: &'static str = r#"
 import type {
     ColumnType,
-    TableInitOptions, 
+    TableInitOptions,
     ColumnWindow,
-    ViewWindow, 
+    ViewWindow,
+    TypedArrayWindow,
     OnUpdateOptions,
     JoinOptions,
     UpdateOptions,

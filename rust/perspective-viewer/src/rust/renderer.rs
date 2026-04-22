@@ -76,7 +76,6 @@ pub struct RendererMutData {
     timer: MovingWindowRenderTimer,
     selection: Option<ViewWindow>,
     pending_plugin: Option<usize>,
-    active_streaming_handle: Option<JsStreamingRenderHandle>,
 }
 
 /// The state object responsible for the active [`JsPerspectiveViewerPlugin`].
@@ -124,7 +123,6 @@ impl Renderer {
                 selection: None,
                 timer: MovingWindowRenderTimer::default(),
                 pending_plugin: None,
-                active_streaming_handle: None,
             }),
             draw_lock: Default::default(),
             plugin_changed: Default::default(),
@@ -407,78 +405,16 @@ impl Renderer {
         }
 
         let viewer_elem = &self.0.borrow().viewer_elem.clone();
-
-        if plugin.supports_streaming() {
-            // Cancel any in-flight streaming render from a prior draw.
-            if let Some(old_handle) = self.0.borrow_mut().active_streaming_handle.take() {
-                old_handle.cancel();
-            }
-
-            // Append the plugin to the DOM (with opacity 0) before calling
-            // draw_streaming so that the element has layout dimensions when
-            // the first chunk renders.  activate_plugin normally does this,
-            // but streaming plugins need it earlier.
-            let html_plugin = plugin.unchecked_ref::<HtmlElement>();
-            if html_plugin.parent_node().is_none() {
-                html_plugin.style().set_property("opacity", "0.5")?;
-                viewer_elem.append_child(html_plugin)?;
-            }
-
-            let handle = if is_update {
-                plugin.update_streaming(view.clone().into(), limits.max_cols, limits.max_rows)?
-            } else {
-                plugin.draw_streaming(view.clone().into(), limits.max_cols, limits.max_rows)?
-            };
-
-            // Store the handle so it can be cancelled if a new draw arrives.
-            self.0.borrow_mut().active_streaming_handle = Some(handle.clone());
-
-            // Render the first chunk, then reveal (opacity transition).
-            let first_result = handle.next().await?;
-            html_plugin.style().set_property("opacity", "1")?;
-
-            // Render remaining chunks if the first was not complete.
-            if !first_result.is_falsy() {
-                let is_complete = js_sys::Reflect::get(&first_result, &"isComplete".into())
-                    .unwrap_or(JsValue::FALSE)
-                    .as_bool()
-                    .unwrap_or(false);
-
-                if !is_complete {
-                    loop {
-                        let chunk = handle.next().await?;
-                        if chunk.is_null() || chunk.is_undefined() {
-                            break;
-                        }
-
-                        let done = js_sys::Reflect::get(&chunk, &"isComplete".into())
-                            .unwrap_or(JsValue::FALSE)
-                            .as_bool()
-                            .unwrap_or(false);
-
-                        if done {
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Clear the stored handle now that streaming is complete.
-            self.0.borrow_mut().active_streaming_handle = None;
+        let result = if is_update {
+            let task = plugin.update(view.clone().into(), limits.max_cols, limits.max_rows, false);
+            activate_plugin(viewer_elem, &plugin, task).await
         } else {
-            let result = if is_update {
-                let task =
-                    plugin.update(view.clone().into(), limits.max_cols, limits.max_rows, false);
-                activate_plugin(viewer_elem, &plugin, task).await
-            } else {
-                let task =
-                    plugin.draw(view.clone().into(), limits.max_cols, limits.max_rows, false);
-                activate_plugin(viewer_elem, &plugin, task).await
-            };
+            let task = plugin.draw(view.clone().into(), limits.max_cols, limits.max_rows, false);
+            activate_plugin(viewer_elem, &plugin, task).await
+        };
 
-            if let Err(error) = result.ignore_view_delete() {
-                tracing::warn!("{}", error);
-            }
+        if let Err(error) = result.ignore_view_delete() {
+            tracing::warn!("{}", error);
         }
 
         remove_inactive_plugin(
@@ -565,12 +501,17 @@ impl Renderer {
 
     fn find_plugin_idx(&self, name: &str) -> Option<usize> {
         let short_name = make_short_name(name);
-        self.0
-            .borrow_mut()
-            .plugin_store
-            .plugins()
-            .iter()
-            .position(|elem| make_short_name(&elem.name()).contains(&short_name))
+        let mut borrowed = self.0.borrow_mut();
+        let plugins = borrowed.plugin_store.plugins();
+        // Prefer an exact (normalised) match so e.g. `"Y Line"` doesn't
+        // substring-resolve to `"X/Y Line"` just because it was registered
+        // first. Falls back to `contains` so short/abbreviated names
+        // (`restore({ plugin: "scat" })` → `"scatter"`) still work.
+        let short_names: Vec<String> = plugins.iter().map(|e| make_short_name(&e.name())).collect();
+        if let Some(i) = short_names.iter().position(|n| n == &short_name) {
+            return Some(i);
+        }
+        short_names.iter().position(|n| n.contains(&short_name))
     }
 }
 

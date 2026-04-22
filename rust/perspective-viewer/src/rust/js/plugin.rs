@@ -111,34 +111,6 @@ extern "C" {
     #[wasm_bindgen(method, catch)]
     pub async fn resize(this: &JsPerspectiveViewerPlugin) -> ApiResult<JsValue>;
 
-    #[wasm_bindgen(method, getter)]
-    pub fn supports_streaming(this: &JsPerspectiveViewerPlugin) -> bool;
-
-    #[wasm_bindgen(method, catch)]
-    pub fn draw_streaming(
-        this: &JsPerspectiveViewerPlugin,
-        view: perspective_js::View,
-        column_limit: Option<usize>,
-        row_limit: Option<usize>,
-    ) -> ApiResult<JsStreamingRenderHandle>;
-
-    #[wasm_bindgen(method, catch)]
-    pub fn update_streaming(
-        this: &JsPerspectiveViewerPlugin,
-        view: perspective_js::View,
-        column_limit: Option<usize>,
-        row_limit: Option<usize>,
-    ) -> ApiResult<JsStreamingRenderHandle>;
-
-    #[derive(Clone)]
-    pub type JsStreamingRenderHandle;
-
-    #[wasm_bindgen(method, catch)]
-    pub async fn next(this: &JsStreamingRenderHandle) -> ApiResult<JsValue>;
-
-    #[wasm_bindgen(method)]
-    pub fn cancel(this: &JsStreamingRenderHandle);
-
 }
 
 impl JsPerspectiveViewerPlugin {

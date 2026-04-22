@@ -33,7 +33,6 @@
 
 export { IPerspectiveViewerPlugin } from "./plugin";
 export { HTMLPerspectiveViewerPluginElement } from "./plugin";
-export type { StreamingRenderHandle, RenderChunk } from "./plugin";
 
 export type * from "./extensions.ts";
 export { PerspectiveSelectDetail } from "./extensions.ts";

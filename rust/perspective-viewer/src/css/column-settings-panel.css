@@ -139,6 +139,14 @@
         content: var(--psp-label--background--content, "Background");
     }
 
+    label#chart-type-label:before {
+        content: var(--psp-label--chart-type--content, "Chart Type");
+    }
+
+    label#stack-label:before {
+        content: var(--psp-label--stack--content, "Stack");
+    }
+
     label#series-label:before {
         content: var(--psp-label--series--content, "Series");
     }

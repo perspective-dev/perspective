@@ -209,38 +209,7 @@ export interface IPerspectiveViewerPlugin {
     /**
      * Free any resources acquired by this plugin and prepare to be deleted.
      */
-    delete(): Promise<void>;
-
-    /**
-     * Whether this plugin supports the streaming render protocol.
-     * When true, the renderer will call `drawStreaming()` / `updateStreaming()`
-     * instead of `draw()` / `update()`.
-     */
-    get supports_streaming(): boolean;
-
-    /**
-     * Optional streaming draw. Returns a handle that the renderer uses to
-     * drive chunk iteration and cancel in-flight work.  The renderer calls
-     * `next()` repeatedly; after the first chunk resolves the plugin becomes
-     * visible (opacity transition).  If not implemented, the renderer falls
-     * back to `draw()`.
-     */
-    draw_streaming?(
-        view: View,
-        end_col?: number,
-        end_row?: number,
-    ): StreamingRenderHandle;
-
-    /**
-     * Streaming variant of `update()`.  Same semantics as `draw_streaming()`
-     * but called when only the underlying data has changed (not the
-     * `ViewConfig`).
-     */
-    update_streaming?(
-        view: View,
-        end_col?: number,
-        end_row?: number,
-    ): StreamingRenderHandle;
+    delete(): void;
 }
 
 /**

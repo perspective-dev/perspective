@@ -77,38 +77,29 @@ perspective-viewer[theme="Phosphor"] {
     --psp-datagrid--pos-cell--color: var(--theme-green-bright);
     --psp-datagrid--neg-cell--color: var(--theme-red);
 
-    /* perspective-viewer-phosphor--d3fc */
-    --psp-d3fc--legend--color: var(--theme-green-mid);
-    --psp-d3fc--treemap--labels: var(--theme-green-mid);
-    --psp-d3fc--treemap--hover-highlight: #ff6600;
-    --psp-d3fc--tooltip--color: var(--theme-green-mid);
-    --psp-d3fc--axis-ticks--color: var(--theme-green-mid);
-    --psp-d3fc--axis-lines--color: var(--theme-green-dim);
-    --psp-d3fc--gridline--color: var(--theme-green-dark);
-    --psp-d3fc--tooltip--background: var(--theme-green-dark);
-    --psp-d3fc--tooltip--border-color: var(--theme-green-bright);
-    --psp-d3fc--legend--background: var(--psp--background-color);
+    /* perspective-viewer-phosphor--webgl */
+    --psp-webgl--legend--color: var(--theme-green-mid);
+    --psp-webgl--treemap--labels: var(--theme-green-mid);
+    --psp-webgl--treemap--hover-highlight: #ff6600;
+    --psp-webgl--tooltip--color: var(--theme-green-mid);
+    --psp-webgl--axis-ticks--color: var(--theme-green-mid);
+    --psp-webgl--axis-lines--color: var(--theme-green-dim);
+    --psp-webgl--gridline--color: var(--theme-green-dark);
+    --psp-webgl--tooltip--background: var(--theme-green-dark);
+    --psp-webgl--tooltip--border-color: var(--theme-green-bright);
+    --psp-webgl--legend--background: var(--psp--background-color);
 
-    --psp-d3fc--series--color: #00ff41;
-    --psp-d3fc--series-1--color: #00ff41;
-    --psp-d3fc--series-2--color: #00bfff;
-    --psp-d3fc--series-3--color: #ff0055;
-    --psp-d3fc--series-4--color: #ffd700;
-    --psp-d3fc--series-5--color: #7fffd4;
+    --psp-webgl--series--color: #00ff41;
+    --psp-webgl--series-1--color: #00ff41;
+    --psp-webgl--series-2--color: #00bfff;
+    --psp-webgl--series-3--color: #ff0055;
+    --psp-webgl--series-4--color: #ffd700;
+    --psp-webgl--series-5--color: #7fffd4;
 
-    --psp-d3fc--full-gradient--background: linear-gradient(
+    --psp-webgl--gradient--background: linear-gradient(
         #ff3333 0%,
         #1a1a2e 50%,
         #00cc66 100%
-    );
-
-    --psp-d3fc--pos-gradient--background: linear-gradient(
-        #1a1a2e 0%,
-        #00cc66 100%
-    );
-    --psp-d3fc--neg-gradient--background: linear-gradient(
-        #ff3333 0%,
-        #1a1a2e 100%
     );
 
     /* OpenLayers */

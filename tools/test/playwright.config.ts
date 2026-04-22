@@ -59,6 +59,10 @@ if (package_venn.include.length === 0) {
 
 const DEVICE_OPTIONS = {
     "Desktop Chrome": {
+        // Lock DPR to 1 so WebGL viewport / canvas backing sizes are
+        // identical across host machines (matters for pixel snapshots).
+        // This also overrides the `devices["Desktop Chrome"]` default of 2.
+        deviceScaleFactor: 1,
         launchOptions: {
             args: [
                 // "--disable-accelerated-2d-canvas",
@@ -71,6 +75,11 @@ const DEVICE_OPTIONS = {
                 "--proxy-bypass-list=*",
                 "--js-flags=--expose-gc",
                 "--enable-precise-memory-info",
+                // Use the software WebGL backend so GPU/driver differences
+                // between machines don't leak into snapshot pixels. The
+                // 2× perf hit is under budget for the test suite.
+                "--use-gl=swiftshader",
+                "--use-angle=swiftshader",
             ],
         },
     },
@@ -92,6 +101,10 @@ const BROWSER_PACKAGES = [
     {
         packageName: "viewer-d3fc",
         testDir: "packages/viewer-d3fc/test/js",
+    },
+    {
+        packageName: "viewer-charts",
+        testDir: "packages/viewer-charts/test/js",
     },
     {
         packageName: "viewer-openlayers",

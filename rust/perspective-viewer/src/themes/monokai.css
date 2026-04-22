@@ -53,40 +53,32 @@ perspective-viewer[theme="Monokai"] {
     --psp-datagrid--pos-cell--color: #7dc3f0;
     --psp-datagrid--neg-cell--color: #ff9485;
 
-    /* perspective-viewer-pro-dark--d3fc (overrides) */
-    --psp-d3fc--legend--color: #c5c9d0;
-    --psp-d3fc--treemap--labels: white;
-    --psp-d3fc--treemap--hover-highlight: white;
-    --psp-d3fc--tooltip--color: white;
-    --psp-d3fc--axis-ticks--color: #c5c9d0;
-    --psp-d3fc--axis-lines--color: #61656e;
-    --psp-d3fc--gridline--color: #3b3f46;
-    --psp-d3fc--tooltip--background: rgba(42, 44, 47, 1);
-    --psp-d3fc--tooltip--border-color: #242526;
-    --psp-d3fc--legend--background: var(--psp--background-color);
-    --psp-d3fc--series--color: rgb(71, 120, 194);
-    --psp-d3fc--series-1--color: rgb(71, 120, 194);
-    --psp-d3fc--series-2--color: rgb(204, 120, 48);
-    --psp-d3fc--series-3--color: rgb(158, 84, 192);
-    --psp-d3fc--series-4--color: rgb(51, 150, 153);
-    --psp-d3fc--series-5--color: rgb(102, 114, 143);
-    --psp-d3fc--series-6--color: rgb(211, 103, 189);
-    --psp-d3fc--series-7--color: rgb(109, 124, 77);
-    --psp-d3fc--series-8--color: rgb(221, 99, 103);
-    --psp-d3fc--series-9--color: rgb(120, 104, 206);
-    --psp-d3fc--series-10--color: rgb(23, 166, 123);
-    --psp-d3fc--full-gradient--background: linear-gradient(
+    /* perspective-viewer-pro-dark--webgl (overrides) */
+    --psp-webgl--legend--color: #c5c9d0;
+    --psp-webgl--treemap--labels: white;
+    --psp-webgl--treemap--hover-highlight: white;
+    --psp-webgl--tooltip--color: white;
+    --psp-webgl--axis-ticks--color: #c5c9d0;
+    --psp-webgl--axis-lines--color: #61656e;
+    --psp-webgl--gridline--color: #3b3f46;
+    --psp-webgl--tooltip--background: rgba(42, 44, 47, 1);
+    --psp-webgl--tooltip--border-color: #242526;
+    --psp-webgl--legend--background: var(--psp--background-color);
+    --psp-webgl--series--color: rgb(71, 120, 194);
+    --psp-webgl--series-1--color: rgb(71, 120, 194);
+    --psp-webgl--series-2--color: rgb(204, 120, 48);
+    --psp-webgl--series-3--color: rgb(158, 84, 192);
+    --psp-webgl--series-4--color: rgb(51, 150, 153);
+    --psp-webgl--series-5--color: rgb(102, 114, 143);
+    --psp-webgl--series-6--color: rgb(211, 103, 189);
+    --psp-webgl--series-7--color: rgb(109, 124, 77);
+    --psp-webgl--series-8--color: rgb(221, 99, 103);
+    --psp-webgl--series-9--color: rgb(120, 104, 206);
+    --psp-webgl--series-10--color: rgb(23, 166, 123);
+    --psp-webgl--gradient--background: linear-gradient(
         #dd6367 0%,
         #242526 50%,
         #3289c8 100%
-    );
-    --psp-d3fc--pos-gradient--background: linear-gradient(
-        #242526 0%,
-        #3289c8 100%
-    );
-    --psp-d3fc--neg-gradient--background: linear-gradient(
-        #dd6367 0%,
-        #242526 100%
     );
 
     /* perspective-viewer-pro-dark--openlayers (overrides) */
@@ -142,36 +134,28 @@ perspective-viewer[theme="Monokai"] {
         );
     }
 
-    /* perspective-viewer-monokai--d3fc */
-    --psp-d3fc--treemap--labels: #d6d6d6;
-    --psp-d3fc--treemap--hover-highlight: #2d2a2e;
+    /* perspective-viewer-monokai--webgl */
+    --psp-webgl--treemap--labels: #d6d6d6;
+    --psp-webgl--treemap--hover-highlight: #2d2a2e;
 
-    --psp-d3fc--axis-ticks--color: #d6d6d6;
-    --psp-d3fc--gridline--color: #444444;
-    --psp-d3fc--series--color: #78dce8;
-    --psp-d3fc--series-1--color: #78dce8;
-    --psp-d3fc--series-2--color: #ff6188;
-    --psp-d3fc--series-3--color: #fc9867;
-    --psp-d3fc--series-4--color: #ffd866;
-    --psp-d3fc--series-5--color: #a9dc76;
+    --psp-webgl--axis-ticks--color: #d6d6d6;
+    --psp-webgl--gridline--color: #444444;
+    --psp-webgl--series--color: #78dce8;
+    --psp-webgl--series-1--color: #78dce8;
+    --psp-webgl--series-2--color: #ff6188;
+    --psp-webgl--series-3--color: #fc9867;
+    --psp-webgl--series-4--color: #ffd866;
+    --psp-webgl--series-5--color: #a9dc76;
 
-    --psp-d3fc--series-6--color: #ab9df2;
-    --psp-d3fc--series-7--color: #66d9ef;
-    --psp-d3fc--series-8--color: #f92672;
-    --psp-d3fc--series-9--color: #fd971f;
-    --psp-d3fc--series-10--color: #e6db74;
-    --psp-d3fc--series-11--color: #a6e22e;
-    --psp-d3fc--series-12--color: #ae81ff;
+    --psp-webgl--series-6--color: #ab9df2;
+    --psp-webgl--series-7--color: #66d9ef;
+    --psp-webgl--series-8--color: #f92672;
+    --psp-webgl--series-9--color: #fd971f;
+    --psp-webgl--series-10--color: #e6db74;
+    --psp-webgl--series-11--color: #a6e22e;
+    --psp-webgl--series-12--color: #ae81ff;
 
-    --psp-d3fc--neg-gradient--background: linear-gradient(
-        #272822 0%,
-        #ff6188 100%
-    );
-    --psp-d3fc--pos-gradient--background: linear-gradient(
-        #272822 0%,
-        #78dce8 100%
-    );
-    --psp-d3fc--full-gradient--background: linear-gradient(
+    --psp-webgl--gradient--background: linear-gradient(
         #ff6188 0%,
         #272822 50%,
         #78dce8 100%

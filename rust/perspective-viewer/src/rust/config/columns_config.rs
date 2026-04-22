@@ -17,8 +17,8 @@ use ts_rs::TS;
 
 use super::{
     CustomNumberFormatConfig, DatetimeColumnStyleConfig, DatetimeColumnStyleDefaultConfig,
-    NumberColumnStyleConfig, NumberColumnStyleDefaultConfig, StringColumnStyleConfig,
-    StringColumnStyleDefaultConfig,
+    NumberColumnStyleConfig, NumberColumnStyleDefaultConfig, NumberSeriesStyleConfig,
+    NumberSeriesStyleDefaultConfig, StringColumnStyleConfig, StringColumnStyleDefaultConfig,
 };
 
 fn is_zero(x: &u32) -> bool {
@@ -42,6 +42,12 @@ pub struct ColumnConfigValues {
     #[serde(flatten)]
     pub datagrid_datetime_style: DatetimeColumnStyleConfig,
 
+    /// Per-column render-glyph config consumed by the Y Bar plugin's
+    /// `columns_config["<agg>"].chart_type` router. Flattened at the
+    /// JSON boundary; default `{ chart_type: Bar }` serializes empty.
+    #[serde(flatten)]
+    pub number_series_style: NumberSeriesStyleConfig,
+
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub number_format: Option<CustomNumberFormatConfig>,
@@ -59,6 +65,7 @@ pub enum ColumnConfigValueUpdate {
     Symbols(Option<HashMap<String, String>>),
     CustomNumberStringFormat(Option<CustomNumberFormatConfig>),
     AggregateDepth(u32),
+    NumberSeriesStyle(Option<NumberSeriesStyleConfig>),
 }
 
 impl ColumnConfigValues {
@@ -88,6 +95,10 @@ impl ColumnConfigValues {
                 aggregate_depth,
                 ..self
             },
+            ColumnConfigValueUpdate::NumberSeriesStyle(update) => Self {
+                number_series_style: update.unwrap_or_default(),
+                ..self
+            },
         }
     }
 
@@ -108,6 +119,10 @@ pub struct ColumnStyleOpts {
     pub datagrid_datetime_style: Option<DatetimeColumnStyleDefaultConfig>,
     pub symbols: Option<KeyValueOpts>,
     pub number_string_format: Option<bool>,
+
+    /// Y-series render-glyph picker (Chart Type). Populated by the Y Bar
+    /// plugin for numeric aggregate columns.
+    pub number_series_style: Option<NumberSeriesStyleDefaultConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
