@@ -87,6 +87,8 @@ export function renderCartesianFrame(
     const facetMode = chart._facetConfig.facet_mode;
     const useGrid = hasSplits && facetMode === "grid";
 
+    chart.computeEffectiveFacetFlags();
+
     // Legend appears only when the user wired a color column with a
     // non-degenerate range. `split_by` alone no longer forces a
     // legend — faceting is the axis of splitting, not coloring.

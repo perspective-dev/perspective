@@ -64,6 +64,21 @@ pub enum VirtualDataCell {
     RowPath(Vec<Scalar>),
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum RowPathStyle {
+    /// Legacy: emit a single `__ROW_PATH__` sidecar (per-row nested
+    /// array in `render_to_rows`, array-of-arrays in
+    /// `render_to_columns_json`). `__ROW_PATH_N__` per-level columns
+    /// are filtered out. Matches the native engine's `to_json` /
+    /// `to_columns` shape.
+    Sidecar,
+
+    /// Native: emit per-level `__ROW_PATH_0__`, `__ROW_PATH_1__`, …
+    /// columns directly. No `__ROW_PATH__` sidecar. Matches the native
+    /// engine's Arrow IPC, CSV, and NDJSON shapes.
+    PerLevel,
+}
+
 /// Trait for types that can be written to a [`ColumnBuilder`] which
 /// enforces sequential construction.
 ///
@@ -593,14 +608,16 @@ impl VirtualDataSlice {
     /// to Perspective-compatible types.
     pub fn from_arrow_ipc(&mut self, ipc: &[u8]) -> Result<(), Box<dyn Error>> {
         let cursor = std::io::Cursor::new(ipc);
-        let batch = if &ipc[0..6] == "ARROW1".as_bytes() {
-            FileReader::try_new(cursor, None)?
-                .next()
-                .ok_or("Arrow IPC stream contained no record batches")??
+        let batches: Vec<RecordBatch> = if &ipc[0..6] == "ARROW1".as_bytes() {
+            FileReader::try_new(cursor, None)?.collect::<Result<Vec<_>, _>>()?
         } else {
-            StreamReader::try_new(cursor, None)?
-                .next()
-                .ok_or("Arrow IPC stream contained no record batches")??
+            StreamReader::try_new(cursor, None)?.collect::<Result<Vec<_>, _>>()?
+        };
+
+        let batch = match batches.len() {
+            0 => return Err("Arrow IPC stream contained no record batches".into()),
+            1 => batches.into_iter().next().unwrap(),
+            _ => arrow_select::concat::concat_batches(&batches[0].schema(), &batches)?,
         };
 
         let has_group_by = !self.config.group_by.is_empty();
@@ -764,7 +781,15 @@ impl VirtualDataSlice {
 
     /// Converts the columnar data to a row-oriented representation for JSON
     /// serialization.
-    pub(crate) fn render_to_rows(&mut self) -> Vec<IndexMap<String, VirtualDataCell>> {
+    ///
+    /// `style` selects between the legacy `__ROW_PATH__` sidecar
+    /// (`Sidecar`, used by `to_json`) and the native per-level
+    /// `__ROW_PATH_N__` columns (`PerLevel`, used by `to_csv` /
+    /// `to_ndjson`). See [`RowPathStyle`] for the deprecation plan.
+    pub(crate) fn render_to_rows(
+        &mut self,
+        style: RowPathStyle,
+    ) -> Vec<IndexMap<String, VirtualDataCell>> {
         let batch = self.freeze().clone();
         let num_rows = batch.num_rows();
         let schema = batch.schema();
@@ -772,9 +797,8 @@ impl VirtualDataSlice {
         (0..num_rows)
             .map(|row_idx| {
                 let mut row = IndexMap::new();
-
-                // Add RowPath column first if present
-                if let Some(ref rp) = self.row_path
+                if style == RowPathStyle::Sidecar
+                    && let Some(ref rp) = self.row_path
                     && row_idx < rp.len()
                 {
                     row.insert(
@@ -783,8 +807,11 @@ impl VirtualDataSlice {
                     );
                 }
 
-                // Add Arrow columns
                 for (col_idx, field) in schema.fields().iter().enumerate() {
+                    if style == RowPathStyle::Sidecar && field.name().starts_with("__ROW_PATH_") {
+                        continue;
+                    }
+
                     let col = batch.column(col_idx);
                     let cell = if col.is_null(row_idx) {
                         match field.data_type() {
@@ -869,17 +896,31 @@ impl VirtualDataSlice {
     }
 
     /// Serializes the data to a column-oriented JSON string.
-    pub fn render_to_columns_json(&mut self) -> Result<String, Box<dyn Error>> {
+    ///
+    /// `style` selects between the legacy `__ROW_PATH__` sidecar
+    /// (`Sidecar`, used by `to_columns`) and the native per-level
+    /// `__ROW_PATH_N__` columns (`PerLevel`, currently unused — reserved
+    /// for the future deprecation of `__ROW_PATH__`). See
+    /// [`RowPathStyle`] for context.
+    pub fn render_to_columns_json(
+        &mut self,
+        style: RowPathStyle,
+    ) -> Result<String, Box<dyn Error>> {
         let batch = self.freeze().clone();
         let schema = batch.schema();
         let mut map = serde_json::Map::new();
 
-        // Add RowPath if present
-        if let Some(ref rp) = self.row_path {
+        if style == RowPathStyle::Sidecar
+            && let Some(ref rp) = self.row_path
+        {
             map.insert("__ROW_PATH__".to_string(), serde_json::to_value(rp)?);
         }
 
         for (col_idx, field) in schema.fields().iter().enumerate() {
+            if style == RowPathStyle::Sidecar && field.name().starts_with("__ROW_PATH_") {
+                continue;
+            }
+
             let col = batch.column(col_idx);
             let num_rows = col.len();
             let values: serde_json::Value = match field.data_type() {
