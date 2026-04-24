@@ -56,12 +56,23 @@ function playwright(pkg, is_jlab) {
     console.log(`-- Running ${pkg_name}Playwright test suite`);
     const args = process.argv
         .slice(2)
-        .filter((x) => x !== "--ci" && x !== "--jupyter");
+        .filter(
+            (x) =>
+                x !== "--ci" && x !== "--jupyter" && x !== "--fetch-snapshots",
+        );
 
     const env = { ...process.env, TZ: "UTC" };
     if (is_jlab) {
         env.PSP_JUPYTERLAB_TESTS = "1";
         env.__JUPYTERLAB_PORT__ = "6538";
+    }
+
+    if (getarg("--fetch-snapshots")) {
+        env.PSP_FETCH_SNAPSHOTS = "1";
+    }
+
+    if (getarg("--update-snapshots")) {
+        env.PSP_UPDATE_SNAPSHOTS = "1";
     }
 
     if (IS_CI) {

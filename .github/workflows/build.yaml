@@ -646,9 +646,12 @@ jobs:
                   path: .
 
             - name: Run Tests
-              run: pnpm run test
+              run: pnpm run test -- --fetch-snapshots
               env:
                   PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,viewer-openlayers,workspace,react"
+                  PSP_SNAPSHOT_REPO: ${{ vars.PSP_SNAPSHOT_REPO }}
+                  PSP_SNAPSHOT_TOKEN: ${{ secrets.PSP_SNAPSHOT_TOKEN }}
+                  PSP_SNAPSHOT_REF: ${{ github.head_ref || github.ref_name }}
                   # PSP_USE_CCACHE: 1
 
     # ,--,--'      .   .-,--.     .  .

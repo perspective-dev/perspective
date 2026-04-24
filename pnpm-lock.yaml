@@ -1248,9 +1248,6 @@ importers:
       superstore-arrow:
         specifier: 'catalog:'
         version: 3.2.0
-      tar:
-        specifier: 'catalog:'
-        version: 7.5.1
       tsx:
         specifier: 'catalog:'
         version: 4.20.6

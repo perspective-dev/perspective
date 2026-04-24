@@ -10,19 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import * as tar from "tar";
-import fs from "node:fs";
-import path from "node:path";
-import url from "node:url";
-
-const __filename = url.fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { fetchSnapshots } from "./snapshot-sync.js";
 
 export default async function run() {
-    const RESULTS_PATH = path.join(__dirname, "../../results.tar.gz");
-    const cwd = path.join(__dirname, "..", "..");
-    if (fs.existsSync(RESULTS_PATH)) {
-        console.log("Using results.tar.gz");
-        await tar.extract({ file: RESULTS_PATH, gzip: true, cwd });
+    if (process.env.PSP_FETCH_SNAPSHOTS) {
+        await fetchSnapshots();
     }
 }
