@@ -8,7 +8,10 @@
         "rootDir": "./src/ts",
         "moduleResolution": "bundler",
         "skipLibCheck": true,
-        "resolveJsonModule": true
+        "resolveJsonModule": true,
+        "strict": true,
+        "noImplicitAny": true,
+        "esModuleInterop": true
     },
     "include": ["./src/ts/**/*", "./types.d.ts"]
 }

@@ -11,16 +11,23 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 // Per-instance attributes (advance once per segment via divisor=1).
-// Both `a_start`/`a_end` and `a_series_start`/`a_series_end` are read
-// from the same flat buffers using overlapping offsets: instance i reads
-// vertex[i] into `*_start` and vertex[i+1] into `*_end`. The single big
-// draw call covers all series; segments whose endpoints straddle a
-// series boundary (or land in unused slots) are collapsed to degenerate
-// quads by the discard branch below.
+// Both `a_start`/`a_end` and `a_color_start`/`a_color_end` read from
+// the same flat buffers using overlapping offsets: instance i reads
+// vertex[i] into `*_start` and vertex[i+1] into `*_end`. Each per-
+// series draw call binds into its own slot range, so segments never
+// cross series boundaries — the CPU-side rebinding in `drawLineSeries`
+// is the safeguard, so the shader contains no discard branch.
+//
+// `a_color_start` / `a_color_end` carry the segment endpoints' raw
+// color values (numeric data value for gradient, dictionary index for
+// categorical). The gradient LUT is sampled using the same mapping the
+// scatter shader uses — `(v - cmin) / (cmax - cmin)` with sign-aware
+// handling for zero-crossing domains. The two endpoints' colors are
+// averaged so the segment reads as a single chord in gradient space.
 attribute vec2 a_start;
 attribute vec2 a_end;
-attribute float a_series_start;
-attribute float a_series_end;
+attribute float a_color_start;
+attribute float a_color_end;
 
 // Per-vertex attribute (advance every vertex, divisor=0)
 // 0 = start+left, 1 = start+right, 2 = end+left, 3 = end+right
@@ -29,28 +36,30 @@ attribute float a_corner;
 uniform mat4 u_projection;
 uniform vec2 u_resolution;
 uniform float u_line_width;
-uniform float u_series_count;
+uniform vec2 u_color_range;
 uniform sampler2D u_gradient_lut;
 
 varying float v_edge_dist;
 varying vec3 v_color;
 
-void main() {
-    // Cross-series segment or unused slot (sentinel series_id = -1).
-    // Collapse to a degenerate quad outside clip space so the rasterizer
-    // emits nothing.
-    if(a_series_start != a_series_end || a_series_start < 0.0) {
-        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-        v_edge_dist = 0.0;
-        v_color = vec3(0.0);
-        return;
+float colorT(float v, float cmin, float cmax) {
+    if(cmax <= cmin) {
+        return 0.5;
+    } else if(cmin < 0.0 && cmax > 0.0) {
+        float denom = max(-cmin, cmax);
+        return clamp(0.5 + 0.5 * (v / denom), 0.0, 1.0);
     }
+    return clamp((v - cmin) / (cmax - cmin), 0.0, 1.0);
+}
 
-    // Sample the theme gradient at evenly-spaced offsets across series,
-    // matching the CPU `interpolatePalette` used by bar and by the prior
-    // per-series uniform path.
-    float denom = u_series_count - 1.0;
-    float t = denom > 0.0 ? a_series_start / denom : 0.5;
+void main() {
+    // Average the two endpoints so the segment takes one color — keeps
+    // the fragment shader cheap (no interpolated t sample) and matches
+    // the single-tone feel of the old per-series palette.
+    float cmin = u_color_range.x;
+    float cmax = u_color_range.y;
+    float avgVal = 0.5 * (a_color_start + a_color_end);
+    float t = colorT(avgVal, cmin, cmax);
     v_color = texture2D(u_gradient_lut, vec2(t, 0.5)).rgb;
 
     vec4 clipStart = u_projection * vec4(a_start, 0.0, 1.0);

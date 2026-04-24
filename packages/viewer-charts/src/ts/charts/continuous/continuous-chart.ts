@@ -64,7 +64,6 @@ export class ContinuousChart extends AbstractChart {
     _glyphCache: any = null;
 
     // ── Column roles ──────────────────────────────────────────────────────
-    _allColumns: string[] = [];
     _xName = "";
     _yName = "";
     _xLabel = "";
@@ -73,7 +72,6 @@ export class ContinuousChart extends AbstractChart {
     _colorName = "";
     _sizeName = "";
     _colorIsString = false;
-    _tooltipColumns: string[] = [];
     _splitGroups: SplitGroup[] = [];
 
     // ── Data extents ──────────────────────────────────────────────────────
@@ -100,10 +98,32 @@ export class ContinuousChart extends AbstractChart {
     _xData: Float32Array | null = null;
     _yData: Float32Array | null = null;
     _colorData: Float32Array | null = null;
-    _numericRowData: Map<string, Float32Array> = new Map();
-    _stringRowData: Map<string, string[]> = new Map();
+    /**
+     * Source view row index for each slot in `_xData` / `_yData`,
+     * sized and laid out identically. Split expansion duplicates the
+     * same arrow source row across every series; this sidecar stores
+     * that source index so lazy tooltip fetches can retrieve the
+     * original row. Int32 for compactness — at 1M points this is
+     * ~4 MB, a small fraction of the ~70 MB that the prior eager
+     * row-data buffers cost.
+     */
+    _rowIndexData: Int32Array | null = null;
     _dataCount = 0;
     _uniqueColorLabels: Map<string, number> = new Map();
+
+    /**
+     * Hovered / pinned tooltip lines, filled in asynchronously when a
+     * lazy row fetch resolves. `null` means "not yet available" — the
+     * chrome overlay skips the tooltip box entirely in that state (it
+     * still paints the crosshair + highlight ring from geometry data
+     * so the hover cue is immediate). Each hover change bumps
+     * `_hoveredTooltipSerial`; resolutions that observe a stale serial
+     * are discarded so rapid mouse motion doesn't paint out-of-date
+     * data.
+     */
+    _hoveredTooltipLines: string[] | null = null;
+    _hoveredTooltipSerial = 0;
+    _pinnedTooltipSerial = 0;
 
     // ── Staging scratch (reused across chunks) ───────────────────────────
     _stagingPositions: Float32Array | null = null;
@@ -116,6 +136,14 @@ export class ContinuousChart extends AbstractChart {
     _lastLayout: PlotLayout | null = null;
     _hoveredIndex = -1;
     _pinnedIndex = -1;
+    /**
+     * Source facet for the current hover (`-1` when not over any facet).
+     * Drives coordinated hover indicator painting in other facets.
+     */
+    _hoveredFacet = -1;
+
+    // ── Facet state (set when rendering in grid mode) ────────────────────
+    _facetGrid: import("../../layout/facet-grid").FacetGrid | null = null;
 
     // ── Last-frame cache (for chrome overlay-only redraws) ────────────────
     _lastXDomain: AxisDomain | null = null;
@@ -198,12 +226,11 @@ export class ContinuousChart extends AbstractChart {
         this.glyph.destroy(this);
         this._glyphCache = null;
         this._gradientCache = null;
-        this._allColumns = [];
         this._xData = null;
         this._yData = null;
         this._colorData = null;
-        this._numericRowData.clear();
-        this._stringRowData.clear();
+        this._rowIndexData = null;
+        this._hoveredTooltipLines = null;
         this._uniqueColorLabels.clear();
         this._hitTest.clear();
         this._stagingPositions = null;

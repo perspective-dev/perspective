@@ -15,9 +15,34 @@ import { ChartTypeConfig } from "./charts";
 import style from "../../css/perspective-viewer-charts.css";
 import { WebGLContextManager } from "../webgl/context-manager";
 import { viewToColumnDataMap, ColumnDataMap } from "../data/view-reader";
-import { ChartImplementation } from "../charts/chart";
+import {
+    ChartImplementation,
+    DEFAULT_FACET_CONFIG,
+    type FacetConfig,
+} from "../charts/chart";
 import { ZoomController } from "../interaction/zoom-controller";
+import { ZoomRouter } from "../interaction/zoom-router";
 import { PlotLayout } from "../layout/plot-layout";
+
+/**
+ * Compile-time facet configuration. Baked in at module load for now —
+ * flip values here + rebuild to toggle small-multiples behavior. When
+ * the UI wires `columns_config` through `restore`, this const seeds
+ * the default and per-column overrides win.
+ */
+const FACET_CONFIG: FacetConfig = {
+    ...DEFAULT_FACET_CONFIG,
+    // Flip to "overlay" to fall back to the pre-facet single-plot
+    // rendering of split_by (all splits drawn in one plot rect,
+    // differentiated by color).
+    facet_mode: "grid",
+    shared_x_axis: true,
+    shared_y_axis: true,
+    coordinated_tooltip: false,
+    // "independent" routes wheel/pan to the facet under the cursor and
+    // each facet draws its own viewport.
+    zoom_mode: "shared",
+};
 
 const GLOBAL_STYLES = (() => {
     const sheet = new CSSStyleSheet();
@@ -26,16 +51,17 @@ const GLOBAL_STYLES = (() => {
 })();
 
 export class HTMLPerspectiveViewerWebGLPluginElement extends HTMLElement {
-    _chartType: ChartTypeConfig;
-    static _chartType: ChartTypeConfig;
+    declare _chartType: ChartTypeConfig;
+    declare static _chartType: ChartTypeConfig;
 
     private _initialized = false;
-    private _glCanvas: HTMLCanvasElement;
-    private _gridlineCanvas: HTMLCanvasElement;
-    private _chromeCanvas: HTMLCanvasElement;
+    private _glCanvas!: HTMLCanvasElement;
+    private _gridlineCanvas!: HTMLCanvasElement;
+    private _chromeCanvas!: HTMLCanvasElement;
     private _glManager: WebGLContextManager | null = null;
     private _chartImpl: ChartImplementation | null = null;
     private _zoomController: ZoomController | null = null;
+    private _zoomRouter: ZoomRouter | null = null;
     private _generation = 0;
 
     connectedCallback() {
@@ -45,16 +71,17 @@ export class HTMLPerspectiveViewerWebGLPluginElement extends HTMLElement {
                 this.shadowRoot!.adoptedStyleSheets.push(sheet);
             }
 
-            this.shadowRoot!.innerHTML = `
-                <div class="webgl-container">
-                    <canvas class="webgl-gridlines"></canvas>
-                    <canvas class="webgl-canvas"></canvas>
-                    <canvas class="webgl-chrome"></canvas>
-                    <div class="zoom-controls">
-                        <button class="zoom-reset">Reset Zoom</button>
-                    </div>
-                </div>
-            `;
+            const zoom_button = `<button class="zoom-reset">Reset Zoom</button>`;
+            const canvas_stack =
+                `<canvas class="webgl-gridlines"></canvas>` +
+                `<canvas class="webgl-canvas"></canvas>` +
+                `<canvas class="webgl-chrome"></canvas>` +
+                `<div class="zoom-controls">` +
+                zoom_button +
+                `</div>`;
+
+            this.shadowRoot!.innerHTML =
+                `<div class="webgl-container">` + canvas_stack + `</div>`;
 
             this._glCanvas =
                 this.shadowRoot!.querySelector<HTMLCanvasElement>(
@@ -108,61 +135,145 @@ export class HTMLPerspectiveViewerWebGLPluginElement extends HTMLElement {
             );
         }
 
-        // Create and wire zoom controller
+        // Seed the facet config. Currently a compile-time const; when UI
+        // wiring lands, `restore` merges viewer-provided overrides on
+        // top of this default so call order is "set default → restore
+        // override".
+        if (this._chartImpl.setFacetConfig) {
+            this._chartImpl.setFacetConfig(FACET_CONFIG);
+        }
+
+        // Create and wire zoom controller(s)
         if (this._chartImpl.setZoomController && !this._zoomController) {
             this._zoomController = new ZoomController();
             this._chartImpl.setZoomController(this._zoomController);
-
-            // Create a dummy layout for initial attachment; it will be
-            // updated on each render via scatter's _fullRender.
-            const rect = this._glCanvas.getBoundingClientRect();
-            const layout = new PlotLayout(
-                rect.width || 100,
-                rect.height || 100,
-                {
-                    hasXLabel: true,
-                    hasYLabel: true,
-                    hasLegend: false,
-                },
-            );
-
-            const zoomControls = this.shadowRoot!.querySelector(
-                ".zoom-controls",
-            ) as HTMLDivElement;
-
-            this._zoomController.attach(this._glCanvas, layout, () => {
-                if (this._chartImpl && this._glManager) {
-                    this._chartImpl.redraw(this._glManager);
-                }
-                // Show reset button when zoomed/panned
-                if (zoomControls && this._zoomController) {
-                    zoomControls.classList.toggle(
-                        "visible",
-                        !this._zoomController.isDefault(),
-                    );
-                }
-            });
-
-            // Wire reset button
-            const resetBtn = this.shadowRoot!.querySelector(".zoom-reset");
-            if (resetBtn) {
-                resetBtn.addEventListener("click", () => {
-                    if (this._zoomController) {
-                        this._zoomController.reset();
-                        if (zoomControls) {
-                            zoomControls.classList.remove("visible");
-                        }
-                        if (this._chartImpl && this._glManager) {
-                            this._chartImpl.redraw(this._glManager);
-                        }
-                    }
-                });
-            }
+            this._setupZoomRouter();
         }
 
         // Attach tooltip
         if (this._chartImpl.attachTooltip) {
             this._chartImpl.attachTooltip(this._glCanvas);
+        }
+    }
+
+    /**
+     * Wire the `ZoomRouter` to the GL canvas with a resolver that
+     * dispatches events to the facet under the cursor. In shared-zoom
+     * mode the resolver always returns the single `_zoomController`
+     * with the facet's own layout (so data/pixel math uses the right
+     * plot rect). In independent-zoom mode the resolver walks the
+     * chart's facet grid and routes to the per-facet controller.
+     */
+    private _setupZoomRouter(): void {
+        if (!this._zoomController || this._zoomRouter) return;
+
+        this._zoomRouter = new ZoomRouter();
+        const router = this._zoomRouter;
+        const zoomControls = this.shadowRoot!.querySelector(
+            ".zoom-controls",
+        ) as HTMLDivElement | null;
+
+        // Dummy seed layout — replaced per-frame via the chart's
+        // `updateLayout` call inside its render paths. Also used by the
+        // shared-mode resolver as a fallback when no facet grid exists.
+        const rect = this._glCanvas.getBoundingClientRect();
+        const seedLayout = new PlotLayout(
+            rect.width || 100,
+            rect.height || 100,
+            {
+                hasXLabel: true,
+                hasYLabel: true,
+                hasLegend: false,
+            },
+        );
+
+        router.attach(
+            this._glCanvas,
+            (mx, my) => {
+                const chart = this._chartImpl as any;
+                const facetGrid = chart?._facetGrid;
+                if (facetGrid) {
+                    for (let i = 0; i < facetGrid.cells.length; i++) {
+                        const cell = facetGrid.cells[i];
+                        const plot = cell.layout.plotRect;
+                        if (
+                            mx >= plot.x &&
+                            mx <= plot.x + plot.width &&
+                            my >= plot.y &&
+                            my <= plot.y + plot.height
+                        ) {
+                            const zc =
+                                chart.getZoomControllerForFacet?.(i) ??
+                                this._zoomController!;
+                            return { controller: zc, layout: cell.layout };
+                        }
+                    }
+                    return null;
+                }
+                // Non-facet chart: consult the single controller, using
+                // the chart's current layout (or seed) for pixel math.
+                const layout = chart?._lastLayout ?? seedLayout;
+                const plot = layout.plotRect;
+                if (
+                    mx < plot.x ||
+                    mx > plot.x + plot.width ||
+                    my < plot.y ||
+                    my > plot.y + plot.height
+                ) {
+                    return null;
+                }
+                return {
+                    controller: this._zoomController!,
+                    layout,
+                };
+            },
+            () => {
+                if (this._chartImpl && this._glManager) {
+                    this._chartImpl.redraw(this._glManager);
+                }
+                if (zoomControls) {
+                    zoomControls.classList.toggle(
+                        "visible",
+                        !this._allZoomsDefault(),
+                    );
+                }
+            },
+        );
+
+        const resetBtn = this.shadowRoot!.querySelector(".zoom-reset");
+        if (resetBtn) {
+            resetBtn.addEventListener("click", () => {
+                this._resetAllZooms();
+                if (zoomControls) {
+                    zoomControls.classList.remove("visible");
+                }
+                if (this._chartImpl && this._glManager) {
+                    this._chartImpl.redraw(this._glManager);
+                }
+            });
+        }
+    }
+
+    private _allZoomsDefault(): boolean {
+        if (this._zoomController && !this._zoomController.isDefault()) {
+            return false;
+        }
+        const chart = this._chartImpl as any;
+        if (chart?._facetZoomControllers) {
+            for (const zc of chart._facetZoomControllers) {
+                if (zc && !zc.isDefault()) return false;
+            }
+        }
+        return true;
+    }
+
+    private _resetAllZooms(): void {
+        this._zoomController?.reset();
+        const chart = this._chartImpl as any;
+        if (chart?._facetZoomControllers) {
+            for (const zc of chart._facetZoomControllers) {
+                zc?.reset();
+            }
         }
     }
 
@@ -245,6 +356,13 @@ export class HTMLPerspectiveViewerWebGLPluginElement extends HTMLElement {
         ]);
 
         if (this._generation !== gen) return;
+        // Install the current View on the chart so it can make
+        // on-demand per-row queries for lazy tooltip lookups.
+        // Called before any chunk processing so the first hover after
+        // a (slow) upload completes can already dispatch a fetch.
+        if (this._chartImpl?.setView) {
+            this._chartImpl.setView(view);
+        }
         const groupBy: string[] = viewerConfig?.group_by ?? [];
         const splitBy: string[] = viewerConfig?.split_by ?? [];
         if (this._chartImpl?.setViewPivots) {
@@ -325,6 +443,7 @@ export class HTMLPerspectiveViewerWebGLPluginElement extends HTMLElement {
         if (config?.zoom && this._zoomController) {
             this._zoomController.restore(config.zoom);
         }
+
         if (this._chartImpl?.setColumnsConfig) {
             this._chartImpl.setColumnsConfig(columns_config ?? {});
         }
@@ -337,10 +456,11 @@ export class HTMLPerspectiveViewerWebGLPluginElement extends HTMLElement {
             this._chartImpl.destroy();
             this._chartImpl = null;
         }
-        if (this._zoomController) {
-            this._zoomController.detach();
-            this._zoomController = null;
+        if (this._zoomRouter) {
+            this._zoomRouter.detach();
+            this._zoomRouter = null;
         }
+        this._zoomController = null;
         if (this._glManager) {
             this._glManager.destroy();
             this._glManager = null;

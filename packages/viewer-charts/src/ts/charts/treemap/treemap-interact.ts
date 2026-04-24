@@ -30,6 +30,10 @@ interface HitResult {
  * Find the smallest leaf AND deepest branch at `(mx, my)`. Walks the
  * (already LOD-filtered) `_visibleNodeIds` — at 2M total nodes this is
  * still a small linear scan because LOD keeps visible count bounded.
+ *
+ * In faceted mode `chart._visibleRootIds[i]` names the drill root that
+ * owns node `i`, so the "skip the root itself" check works regardless
+ * of which facet the node belongs to.
  */
 function hitTest(chart: TreemapChart, mx: number, my: number): HitResult {
     const store = chart._nodeStore;
@@ -41,13 +45,14 @@ function hitTest(chart: TreemapChart, mx: number, my: number): HitResult {
     const firstChild = store.firstChild;
     const ids = chart._visibleNodeIds;
     const n = chart._visibleNodeCount;
+    const baseArr = chart._visibleBaseDepths;
+    const rootArr = chart._visibleRootIds;
 
     let bestLeafId = NULL_NODE;
     let bestLeafArea = Infinity;
     let bestBranchId = NULL_NODE;
     let bestBranchArea = Infinity;
     let labelBranchId = NULL_NODE;
-    const baseDepth = depth[chart._currentRootId];
 
     if (!ids) {
         return { leafId: NULL_NODE, branchId: NULL_NODE, inHeader: false };
@@ -55,7 +60,8 @@ function hitTest(chart: TreemapChart, mx: number, my: number): HitResult {
 
     for (let i = 0; i < n; i++) {
         const id = ids[i];
-        if (id === chart._currentRootId) continue;
+        const rootId = rootArr ? rootArr[i] : chart._currentRootId;
+        if (id === rootId) continue;
         if (!(mx >= x0[id] && mx <= x1[id] && my >= y0[id] && my <= y1[id]))
             continue;
 
@@ -65,6 +71,9 @@ function hitTest(chart: TreemapChart, mx: number, my: number): HitResult {
                 bestBranchArea = area;
                 bestBranchId = id;
             }
+            const baseDepth = baseArr
+                ? baseArr[i]
+                : depth[chart._currentRootId];
             const relDepth = depth[id] - baseDepth;
             if (relDepth === 1 && my <= y0[id] + PADDING_LABEL) {
                 labelBranchId = id;
@@ -127,9 +136,23 @@ export function handleTreemapHover(
 
     if (best !== chart._hoveredNodeId) {
         chart._hoveredNodeId = best;
+        chart._hoveredTooltipLines = null;
+        chart._hoveredTooltipNodeId = best;
+        const serial = ++chart._hoveredTooltipSerial;
         if (chart._glCanvas) {
             chart._glCanvas.style.cursor =
                 branchId !== NULL_NODE ? "pointer" : "default";
+        }
+        if (best !== NULL_NODE) {
+            // Kick off the lazy tooltip build for hover; re-render
+            // the chrome overlay once lines resolve. Stale results
+            // (mouse moved elsewhere, new view) are dropped via the
+            // serial check.
+            buildTreemapTooltipLines(chart, best).then((lines) => {
+                if (serial !== chart._hoveredTooltipSerial) return;
+                chart._hoveredTooltipLines = lines;
+                renderTreemapChromeOverlay(chart);
+            });
         }
         renderTreemapChromeOverlay(chart);
     }
@@ -197,7 +220,33 @@ export function handleTreemapDblClick(
     }
 }
 
+/**
+ * Drill the current facet (or the whole chart in non-facet mode).
+ *
+ * In faceted mode, walks up the ancestor chain of `nodeId` until the
+ * facet root (a top-level child of `_rootId`) is found, then sets
+ * `_facetDrillRoots[facetLabel] = nodeId` so only that facet's
+ * subtree re-layouts. Non-facet mode keeps the existing single-
+ * `_currentRootId` behavior and rebuilds the breadcrumb trail.
+ */
 function drillTo(chart: TreemapChart, nodeId: number): void {
+    const store = chart._nodeStore;
+    if (chart._splitBy.length > 0 && chart._facetConfig.facet_mode === "grid") {
+        // Walk up to find the facet-root ancestor (top-level child of
+        // `_rootId`). Guard against drills that target the synthetic
+        // root or a facet root itself — those would un-drill the facet.
+        let p = nodeId;
+        while (p !== NULL_NODE && store.parent[p] !== chart._rootId) {
+            p = store.parent[p];
+        }
+        if (p !== NULL_NODE) {
+            const label = store.name[p];
+            chart._facetDrillRoots.set(label, nodeId);
+        }
+        chart._hoveredNodeId = NULL_NODE;
+        if (chart._glManager) renderTreemapFrame(chart, chart._glManager);
+        return;
+    }
     chart._currentRootId = nodeId;
     rebuildBreadcrumbs(chart, nodeId);
     chart._hoveredNodeId = NULL_NODE;
@@ -215,9 +264,6 @@ export function showTreemapPinnedTooltip(
     if (!themeEl) return;
     const theme = resolveTheme(themeEl);
 
-    const lines = buildTreemapTooltipLines(chart, nodeId);
-    if (lines.length === 0) return;
-
     const parent = chart._glCanvas?.parentElement;
     if (!parent) return;
 
@@ -228,13 +274,21 @@ export function showTreemapPinnedTooltip(
     const cssWidth = (chart._glCanvas?.width || 100) / dpr;
     const cssHeight = (chart._glCanvas?.height || 100) / dpr;
 
-    chart._tooltip.showPinned(
-        parent,
-        lines,
-        { px: cx, py: cy },
-        { cssWidth, cssHeight },
-        theme,
-    );
+    // Tooltip columns are fetched lazily from the view — the tree
+    // itself only retains ancestor names + aggregated value + color.
+    // If the user dismisses or re-pins between click and resolve, the
+    // `_pinnedNodeId` check discards the stale result.
+    buildTreemapTooltipLines(chart, nodeId).then((lines) => {
+        if (chart._pinnedNodeId !== nodeId) return;
+        if (lines.length === 0) return;
+        chart._tooltip.showPinned(
+            parent,
+            lines,
+            { px: cx, py: cy },
+            { cssWidth, cssHeight },
+            theme,
+        );
+    });
 
     chart._hoveredNodeId = NULL_NODE;
     renderTreemapChromeOverlay(chart);
@@ -250,10 +304,10 @@ export function dismissTreemapPinnedTooltip(chart: TreemapChart): void {
  * value are derived from the tree; per-row tooltip columns come from
  * the `leafRowIdx` → column-buffer lookup (no per-node `Map`).
  */
-export function buildTreemapTooltipLines(
+export async function buildTreemapTooltipLines(
     chart: TreemapChart,
     nodeId: number,
-): string[] {
+): Promise<string[]> {
     const store = chart._nodeStore;
     const lines: string[] = [];
 
@@ -273,49 +327,34 @@ export function buildTreemapTooltipLines(
 
     lines.push(`Value: ${formatTickValue(store.value[nodeId])}`);
 
+    // Color value (numeric branch): stored on the node at insert
+    // time, so it's always available without a view fetch.
+    if (chart._colorName && !isNaN(store.colorValue[nodeId])) {
+        lines.push(
+            `${chart._colorName}: ${formatTickValue(store.colorValue[nodeId])}`,
+        );
+    }
+
     const rowIdx = store.leafRowIdx[nodeId];
     const isLeaf =
         store.firstChild[nodeId] === NULL_NODE && rowIdx !== NULL_NODE;
 
-    // Size column value, from leaf's source row if available.
-    if (isLeaf && chart._sizeName) {
-        const numeric = chart._numericRowData.get(chart._sizeName);
-        if (numeric) {
-            lines.push(
-                `${chart._sizeName}: ${formatTickValue(numeric[rowIdx])}`,
-            );
-        } else {
-            const str = chart._stringRowData.get(chart._sizeName);
-            if (str && str[rowIdx] !== undefined) {
-                lines.push(`${chart._sizeName}: ${str[rowIdx]}`);
+    // Extra tooltip columns come from the source view row, fetched on
+    // demand via `_lazyRows`. Only leaves correspond to a single view
+    // row; branch nodes aggregate rows and don't carry extra columns.
+    if (isLeaf && chart._lazyRows) {
+        const row = await chart._lazyRows.fetchRow(rowIdx);
+        for (const [name, value] of row) {
+            if (value === null || value === undefined) continue;
+            if (name === chart._colorName && !isNaN(store.colorValue[nodeId])) {
+                // Already emitted from the retained tree state above.
+                continue;
             }
-        }
-    }
-
-    // Color column value / label.
-    if (chart._colorName) {
-        if (!isNaN(store.colorValue[nodeId])) {
-            lines.push(
-                `${chart._colorName}: ${formatTickValue(store.colorValue[nodeId])}`,
-            );
-        } else if (isLeaf) {
-            const str = chart._stringRowData.get(chart._colorName);
-            if (str && str[rowIdx] !== undefined) {
-                lines.push(`${chart._colorName}: ${str[rowIdx]}`);
+            if (typeof value === "number") {
+                lines.push(`${name}: ${formatTickValue(value)}`);
+            } else {
+                lines.push(`${name}: ${value}`);
             }
-        }
-    }
-
-    // Extra tooltip columns (leaf-only).
-    if (isLeaf) {
-        for (const [name, arr] of chart._numericRowData) {
-            if (name === chart._sizeName || name === chart._colorName) continue;
-            lines.push(`${name}: ${formatTickValue(arr[rowIdx])}`);
-        }
-        for (const [name, arr] of chart._stringRowData) {
-            if (name === chart._sizeName || name === chart._colorName) continue;
-            const v = arr[rowIdx];
-            if (v !== undefined) lines.push(`${name}: ${v}`);
         }
     }
 

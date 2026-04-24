@@ -115,6 +115,10 @@ function duckdbTypeToPsp(name: string): ColumnType {
         return "string";
     }
 
+    if (name.startsWith("time")) {
+        return "float";
+    }
+
     console.warn(`Unknown type '${name}'`);
     return "string";
 }

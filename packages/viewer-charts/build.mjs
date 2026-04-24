@@ -12,7 +12,59 @@
 
 import { NodeModulesExternal } from "@perspective-dev/esbuild-plugin/external.js";
 import { build } from "@perspective-dev/esbuild-plugin/build.js";
+import { transform as transformCss } from "lightningcss";
 import { execSync } from "node:child_process";
+import * as fs from "node:fs/promises";
+
+// TODO: if shader payload ever becomes a measured bottleneck, swap this
+// regex minifier for an AST-based tool (e.g. `glsl-minifier`) to get
+// identifier mangling on locals/varyings. Uniform/attribute names are
+// resolved by string from JS via `getUniformLocation` / `getAttribLocation`,
+// so only locals are safe to rename.
+const GlslMinify = () => ({
+    name: "glsl-minify",
+    setup(build) {
+        build.onLoad({ filter: /\.glsl$/ }, async (args) => {
+            const src = await fs.readFile(args.path, "utf8");
+            if (process.env.PSP_DEBUG) {
+                return { contents: src, loader: "text" };
+            }
+            const min = src
+                .replace(/\/\*[\s\S]*?\*\//g, "")
+                .replace(/\/\/[^\n]*/g, "")
+                .replace(/\s+/g, " ")
+                .replace(/\s*([;,(){}\[\]=+\-*/<>!&|^~?])\s*/g, "$1")
+                .trim();
+            return { contents: min, loader: "text" };
+        });
+    },
+});
+
+// CSS is imported via `import style from "...css"` + the `.css: text`
+// loader, so the final bundle embeds the source verbatim as a JS
+// string literal — esbuild's own minifier doesn't touch string
+// contents. Route `.css` loads through lightningcss so the embedded
+// CSS is minified (whitespace collapse, selector shortening, value
+// normalisation).
+//
+// Skipped in `PSP_DEBUG` builds to keep source maps useful.
+const LightningCssMinify = () => ({
+    name: "lightningcss-minify",
+    setup(build) {
+        build.onLoad({ filter: /\.css$/ }, async (args) => {
+            const src = await fs.readFile(args.path);
+            if (process.env.PSP_DEBUG) {
+                return { contents: src.toString("utf8"), loader: "text" };
+            }
+            const { code } = transformCss({
+                filename: args.path,
+                code: src,
+                minify: true,
+            });
+            return { contents: code.toString("utf8"), loader: "text" };
+        });
+    },
+});
 
 const BUILD = [
     {
@@ -20,7 +72,7 @@ const BUILD = [
         define: {
             global: "window",
         },
-        plugins: [NodeModulesExternal()],
+        plugins: [NodeModulesExternal(), GlslMinify(), LightningCssMinify()],
         format: "esm",
         loader: {
             ".css": "text",
@@ -33,7 +85,10 @@ const BUILD = [
         define: {
             global: "window",
         },
-        plugins: [],
+        plugins: [GlslMinify(), LightningCssMinify()],
+        minifyWhitespace: !process.env.PSP_DEBUG,
+        minifyIdentifiers: !process.env.PSP_DEBUG,
+        mangleProps: process.env.PSP_DEBUG ? false : /^[_#]/,
         format: "esm",
         loader: {
             ".css": "text",

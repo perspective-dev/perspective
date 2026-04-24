@@ -174,6 +174,35 @@ export function buildHeatmapPipeline(
 }
 
 /**
+ * Partition a `ColumnDataMap` into one sub-map per user column. Every
+ * arrow value column is assigned to the partition whose user column name
+ * matches its terminal segment (everything after the last `|`, which
+ * equals the whole name when there's no `split_by`). `__ROW_PATH_N__`
+ * and `__GROUPING_ID__` metadata columns are copied into every partition
+ * since they describe the shared X axis.
+ *
+ * Used to render one heatmap per user column in a facet grid.
+ */
+export function partitionColumnsPerFacet(
+    columns: ColumnDataMap,
+    userColumns: string[],
+): Array<{ label: string; columns: ColumnDataMap }> {
+    return userColumns.map((userCol) => {
+        const partition: ColumnDataMap = new Map();
+        for (const [name, col] of columns) {
+            if (name.startsWith("__ROW_PATH_") || name === "__GROUPING_ID__") {
+                partition.set(name, col);
+                continue;
+            }
+            const pipeIdx = name.lastIndexOf("|");
+            const leaf = pipeIdx === -1 ? name : name.slice(pipeIdx + 1);
+            if (leaf === userCol) partition.set(name, col);
+        }
+        return { label: userCol, columns: partition };
+    });
+}
+
+/**
  * Split each column name on `|` → hierarchical levels. Outermost segment
  * is index 0; leaf (terminal) segment is `levels.length - 1`. Runs of
  * identical consecutive outer tokens naturally coalesce later during

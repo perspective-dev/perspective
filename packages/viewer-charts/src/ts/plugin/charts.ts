@@ -31,16 +31,6 @@ export interface ChartTypeConfig {
     };
     max_cells: number;
     max_columns: number;
-
-    /**
-     * Default render glyph. For bar-family plugins (Y Bar / Y Line / Y
-     * Scatter / Y Area) this is the fallback glyph when a column has no
-     * explicit `chart_type` in `columns_config`. For candlestick-family
-     * plugins (Y Candlestick / Y OHLC) it selects between the two
-     * candlestick glyph modes. Presence of the field surfaces the
-     * Chart Type picker in the column-settings sidebar for bar-family
-     * plugins.
-     */
     default_chart_type?: PluginChartType;
 }
 

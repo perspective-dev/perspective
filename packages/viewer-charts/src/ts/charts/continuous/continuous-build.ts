@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColumnDataMap } from "../../data/view-reader";
+import type { ColumnDataMap, ColumnData } from "../../data/view-reader";
 import { buildSplitGroups } from "../../data/split-groups";
 import type { WebGLContextManager } from "../../webgl/context-manager";
 import type { ContinuousChart, SplitGroup } from "./continuous-chart";
@@ -51,9 +51,6 @@ export function initContinuousPipeline(
 ): void {
     chart.glyph.ensureProgram(chart, glManager);
 
-    chart._allColumns = Array.from(columns.keys()).filter(
-        (k) => !k.startsWith("__"),
-    );
     chart._xMin = Infinity;
     chart._xMax = -Infinity;
     chart._yMin = Infinity;
@@ -63,8 +60,6 @@ export function initContinuousPipeline(
     chart._sizeMin = Infinity;
     chart._sizeMax = -Infinity;
     chart._dataCount = 0;
-    chart._numericRowData = new Map();
-    chart._stringRowData = new Map();
     chart._uniqueColorLabels = new Map();
     chart._hitTest.clear();
     chart._maxSeriesUploaded = 0;
@@ -101,20 +96,27 @@ export function initContinuousPipeline(
             chart._seriesUploadedCounts = [];
             return;
         }
-        chart._colorIsString = true;
+        // Split mode: per-point columns live under `${prefix}|${base}`.
+        // The `_*Name` fields hold the base names so downstream code
+        // (render labels, tooltip lookup) can present them as one
+        // logical column. The per-facet resolution happens inside
+        // `processContinuousChunk` via `_splitGroups[i].*ColName`.
         chart._xName = chart._splitGroups[0].xColName;
         chart._yName = chart._splitGroups[0].yColName;
-        chart._colorName = "";
-        chart._sizeName = "";
+        chart._colorName = colorBase;
+        chart._sizeName = sizeBase;
+        // Infer dtype from any split's color column — all splits
+        // share the same underlying column type.
+        chart._colorIsString = false;
+        if (colorBase) {
+            const firstColorCol = columns.get(
+                chart._splitGroups[0].colorColName,
+            );
+            chart._colorIsString = firstColorCol?.type === "string";
+        }
         glManager.ensureBufferCapacity(
             rowsPerSeries * chart._splitGroups.length,
         );
-        const baseNames = new Set<string>();
-        for (const key of chart._allColumns) {
-            const pipeIdx = key.lastIndexOf("|");
-            baseNames.add(pipeIdx === -1 ? key : key.substring(pipeIdx + 1));
-        }
-        chart._tooltipColumns = ["Split", ...baseNames];
     } else {
         chart._splitGroups = [];
         chart._xName = xBase;
@@ -127,7 +129,6 @@ export function initContinuousPipeline(
             const colorCol = columns.get(chart._colorName);
             chart._colorIsString = colorCol?.type === "string";
         }
-        chart._tooltipColumns = chart._allColumns.slice(0);
     }
 
     const numSeries = Math.max(1, chart._splitGroups.length);
@@ -138,6 +139,7 @@ export function initContinuousPipeline(
     chart._xData = new Float32Array(cpuCap);
     chart._yData = new Float32Array(cpuCap);
     chart._colorData = new Float32Array(cpuCap);
+    chart._rowIndexData = new Int32Array(cpuCap);
 }
 
 /**
@@ -160,12 +162,18 @@ export function processContinuousChunk(
 
     const hasSplits = chart._splitGroups.length > 0;
 
+    // Per-series data source. `colorCol` is the facet's color column
+    // reference — in split mode each series has its own
+    // `${prefix}|${colorBase}`, in non-split mode the single series
+    // carries the user's selected color column. The color-resolution
+    // logic in the inner loop reads uniformly from `ser.colorCol`
+    // across both modes.
     type SeriesSrc = {
         xCol: Float32Array | Int32Array | null;
         yCol: Float32Array | Int32Array;
         xValid: Uint8Array | undefined;
         yValid: Uint8Array | undefined;
-        colorLabel: string;
+        colorCol: ColumnData | null;
         sizeCol: (Float32Array | Int32Array) | null;
     };
     const series: SeriesSrc[] = [];
@@ -176,12 +184,15 @@ export function processContinuousChunk(
             const yc = columns.get(sg.yColName);
             if (!yc?.values) continue;
             const sc = sg.sizeColName ? columns.get(sg.sizeColName) : null;
+            const cc = sg.colorColName
+                ? (columns.get(sg.colorColName) ?? null)
+                : null;
             series.push({
                 xCol: xc?.values ?? null,
                 yCol: yc.values,
                 xValid: xc?.valid,
                 yValid: yc.valid,
-                colorLabel: sg.prefix,
+                colorCol: cc,
                 sizeCol: sc?.values ?? null,
             });
         }
@@ -189,19 +200,20 @@ export function processContinuousChunk(
         const xc = chart._xName ? columns.get(chart._xName) : null;
         const yc = chart._yName ? columns.get(chart._yName) : null;
         if (!yc?.values) return;
+        const cc = chart._colorName
+            ? (columns.get(chart._colorName) ?? null)
+            : null;
         series.push({
             xCol: xc?.values ?? null,
             yCol: yc.values,
             xValid: xc?.valid,
             yValid: yc?.valid,
-            colorLabel: "",
+            colorCol: cc,
             sizeCol: null,
         });
     }
 
     if (series.length === 0) return;
-
-    const totalCapacity = chart._seriesCapacity * series.length;
 
     if (chart._stagingChunkSize < sourceLength) {
         chart._stagingPositions = new Float32Array(sourceLength * 2);
@@ -213,73 +225,44 @@ export function processContinuousChunk(
     const colorValues = chart._stagingColors!;
     const sizeValues = chart._stagingSizes!;
 
-    // Aggregated row-path (for tooltips) when group_by is active. Resolve
-    // the `__ROW_PATH_N__` columns once per chunk; the inner row loop
-    // only indexes into these arrays.
-    let rowPathArr: string[] | null = null;
-    let rowPathCols: { indices: Int32Array; dictionary: string[] }[] | null =
-        null;
-    if (chart._groupBy.length > 0) {
-        const rpCols: { indices: Int32Array; dictionary: string[] }[] = [];
-        for (let n = 0; ; n++) {
-            const rp = columns.get(`__ROW_PATH_${n}__`);
-            if (!rp || rp.type !== "string" || !rp.indices || !rp.dictionary)
-                break;
-            rpCols.push({ indices: rp.indices, dictionary: rp.dictionary });
-        }
-        if (rpCols.length > 0) {
-            if (!chart._stringRowData.has("__ROW_PATH__")) {
-                chart._stringRowData.set(
-                    "__ROW_PATH__",
-                    new Array(totalCapacity),
-                );
-            }
-            rowPathArr = chart._stringRowData.get("__ROW_PATH__")!;
-            rowPathCols = rpCols;
-        }
-    }
-
-    // Split-series bookkeeping: numeric X/Y per base name + split label.
-    let splitLabelArr: string[] | null = null;
-    let splitXArr: Float32Array | null = null;
-    let splitYArr: Float32Array | null = null;
-    if (hasSplits) {
-        if (!chart._stringRowData.has("Split")) {
-            chart._stringRowData.set("Split", new Array(totalCapacity));
-        }
-        splitLabelArr = chart._stringRowData.get("Split")!;
-        if (chart._xLabel && !chart._numericRowData.has(chart._xLabel)) {
-            chart._numericRowData.set(
-                chart._xLabel,
-                new Float32Array(totalCapacity),
-            );
-        }
-        if (chart._yLabel && !chart._numericRowData.has(chart._yLabel)) {
-            chart._numericRowData.set(
-                chart._yLabel,
-                new Float32Array(totalCapacity),
-            );
-        }
-        splitXArr = chart._xLabel
-            ? chart._numericRowData.get(chart._xLabel)!
-            : null;
-        splitYArr = chart._yLabel
-            ? chart._numericRowData.get(chart._yLabel)!
-            : null;
-    }
-
-    const colorCol =
-        !hasSplits && chart._colorName ? columns.get(chart._colorName) : null;
-
     // Non-split size column: resolve once; inner loop reads values[i].
     const nonSplitSizeValues =
         !hasSplits && chart._sizeName
             ? (columns.get(chart._sizeName)?.values ?? null)
             : null;
 
-    // Snapshot pre-chunk counts so tooltip-column capture can use them
-    // without depending on post-loop state.
-    const preChunkCounts = chart._seriesUploadedCounts.slice();
+    // Seed `_uniqueColorLabels` from the color column's dictionary in
+    // index order. For a stable single dictionary this makes
+    // `palette[_uniqueColorLabels.get(label)] === palette[dictIdx %
+    // N]`. For splits (distinct dictionaries per facet) values that
+    // appear in multiple splits are inserted once — later splits
+    // extend the map without disturbing earlier indices, so the
+    // same string has the same color in every facet.
+    //
+    // Also pin `_colorMin` / `_colorMax` to the full palette-index
+    // domain. If the row loop only encountered a subset of indices
+    // we'd otherwise set a narrower range and the shader's
+    // `(v - min) / (max - min)` mapping would land on the wrong
+    // palette stop.
+    if (chart._colorIsString && chart._colorName) {
+        for (const ser of series) {
+            const dict = ser.colorCol?.dictionary;
+            if (!dict) continue;
+            for (let i = 0; i < dict.length; i++) {
+                const s = dict[i];
+                if (!chart._uniqueColorLabels.has(s)) {
+                    chart._uniqueColorLabels.set(
+                        s,
+                        chart._uniqueColorLabels.size,
+                    );
+                }
+            }
+        }
+        if (chart._uniqueColorLabels.size > 0) {
+            chart._colorMin = 0;
+            chart._colorMax = chart._uniqueColorLabels.size - 1;
+        }
+    }
 
     for (let s = 0; s < series.length; s++) {
         const ser = series[s];
@@ -311,47 +294,52 @@ export function processContinuousChunk(
             const flatIdx = slotBase + prevCount + writeIdx;
             chart._xData![flatIdx] = x;
             chart._yData![flatIdx] = y;
+            // Remember the source arrow row this slot came from so
+            // lazy tooltip fetches can resolve columns on demand. In
+            // split mode each series duplicates the same arrow row
+            // into its own slot, so `startRow + i` is the right view
+            // row regardless of `s`.
+            chart._rowIndexData![flatIdx] = startRow + i;
 
             positions[writeIdx * 2] = x;
             positions[writeIdx * 2 + 1] = y;
 
-            // ── Color: raw numeric, or discrete label index.
-            if (hasSplits) {
-                if (!chart._uniqueColorLabels.has(ser.colorLabel)) {
-                    chart._uniqueColorLabels.set(
-                        ser.colorLabel,
-                        chart._uniqueColorLabels.size,
-                    );
-                }
-                const idx = chart._uniqueColorLabels.get(ser.colorLabel)!;
-                colorValues[writeIdx] = idx;
-                chart._colorData![flatIdx] = idx;
-                if (idx < chart._colorMin) chart._colorMin = idx;
-                if (idx > chart._colorMax) chart._colorMax = idx;
-            } else if (colorCol && !chart._colorIsString && colorCol.values) {
-                const v = colorCol.values[i] as number;
+            // ── Color: unified resolution for split + non-split.
+            // Read from this series' own color column (facet-specific
+            // in split mode, the chart-wide column otherwise). Scales
+            // (`_colorMin/_colorMax` and `_uniqueColorLabels`) are
+            // shared across every series so identical values render
+            // as identical colors in every facet.
+            const cc = ser.colorCol;
+            if (cc && !chart._colorIsString && cc.values) {
+                const v = cc.values[i] as number;
                 colorValues[writeIdx] = v;
                 chart._colorData![flatIdx] = v;
                 if (v < chart._colorMin) chart._colorMin = v;
                 if (v > chart._colorMax) chart._colorMax = v;
             } else if (
-                colorCol &&
+                cc &&
                 chart._colorIsString &&
-                colorCol.indices &&
-                colorCol.dictionary
+                cc.indices &&
+                cc.dictionary
             ) {
-                const label = colorCol.dictionary[colorCol.indices[i]];
+                const label = cc.dictionary[cc.indices[i]];
+                // Dict-seeding above ensures this label is already
+                // in `_uniqueColorLabels`; defensive insert for any
+                // value that appears in data but not the dictionary
+                // (shouldn't happen for Arrow dict columns).
                 if (!chart._uniqueColorLabels.has(label)) {
                     chart._uniqueColorLabels.set(
                         label,
                         chart._uniqueColorLabels.size,
                     );
+                    chart._colorMax = chart._uniqueColorLabels.size - 1;
                 }
                 const idx = chart._uniqueColorLabels.get(label)!;
                 colorValues[writeIdx] = idx;
                 chart._colorData![flatIdx] = idx;
-                if (idx < chart._colorMin) chart._colorMin = idx;
-                if (idx > chart._colorMax) chart._colorMax = idx;
+                // Skip min/max updates — they were pinned to the full
+                // palette-index domain during seeding.
             } else {
                 colorValues[writeIdx] = 0.5;
                 chart._colorData![flatIdx] = 0.5;
@@ -370,25 +358,6 @@ export function processContinuousChunk(
                 if (v > chart._sizeMax) chart._sizeMax = v;
             } else {
                 sizeValues[writeIdx] = 0;
-            }
-
-            if (splitLabelArr) {
-                splitLabelArr[flatIdx] = ser.colorLabel;
-                if (splitXArr) splitXArr[flatIdx] = x;
-                if (splitYArr) splitYArr[flatIdx] = y;
-            }
-
-            if (rowPathArr && rowPathCols && s === 0) {
-                // Row-path is shared across all series for a given row;
-                // capture once during series 0. Columns are resolved
-                // above; build the composite string from cached refs.
-                let path = "";
-                for (let n = 0; n < rowPathCols.length; n++) {
-                    const rp = rowPathCols[n];
-                    const part = rp.dictionary[rp.indices[i]] ?? "";
-                    path = n === 0 ? part : `${path} / ${part}`;
-                }
-                rowPathArr[flatIdx] = path;
             }
 
             writeIdx++;
@@ -426,38 +395,6 @@ export function processContinuousChunk(
         }
     }
 
-    // Tooltip-column capture: non-split case copies one arrow row per
-    // source index j, keyed by `slot0Base + preCount0 + j`. This matches
-    // the behavior scatter had before the unification.
-    if (!hasSplits) {
-        const base = 0 + (preChunkCounts[0] ?? 0);
-        for (const [name, col] of columns) {
-            if (name.startsWith("__")) continue;
-            if (col.type === "string") {
-                if (!chart._stringRowData.has(name)) {
-                    chart._stringRowData.set(name, new Array(totalCapacity));
-                }
-                const arr = chart._stringRowData.get(name)!;
-                const indices = col.indices!;
-                const dictionary = col.dictionary!;
-                for (let j = 0; j < sourceLength; j++) {
-                    arr[base + j] = dictionary[indices[j]];
-                }
-            } else if (col.values) {
-                if (!chart._numericRowData.has(name)) {
-                    chart._numericRowData.set(
-                        name,
-                        new Float32Array(totalCapacity),
-                    );
-                }
-                const arr = chart._numericRowData.get(name)!;
-                // TypedArray.set does the element copy + int→float coerce
-                // in one native call; much faster than a JS for-loop.
-                arr.set(col.values.subarray(0, sourceLength), base);
-            }
-        }
-    }
-
     // Total dataCount = sum of all series' uploaded counts.
     let total = 0;
     for (const c of chart._seriesUploadedCounts) total += c;
@@ -465,8 +402,8 @@ export function processContinuousChunk(
     glManager.uploadedCount = total;
     chart._hitTest.markDirty();
 
-    if (chart._zoomController && isFinite(chart._xMin)) {
-        chart._zoomController.setBaseDomain(
+    if (isFinite(chart._xMin)) {
+        chart.setZoomBaseDomain(
             chart._xMin,
             chart._xMax,
             chart._yMin,

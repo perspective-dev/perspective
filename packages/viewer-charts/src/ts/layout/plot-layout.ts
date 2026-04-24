@@ -42,6 +42,34 @@ export interface PlotLayoutOptions {
      * is preserved.
      */
     leftExtra?: number;
+
+    /**
+     * Total CSS-pixel width reserved at the right of the plot. Overrides
+     * the default (`80` when `hasLegend`, else `16`). Faceted cells
+     * without axes (treemap / sunburst in grid mode) pass `0` to make
+     * adjacent cell plot rects flush; axis-bearing charts leave it
+     * unset to keep the default breathing-room margin.
+     */
+    rightExtra?: number;
+
+    /**
+     * Absolute canvas-coordinate offset for this layout's plot origin.
+     * When set, `cssWidth` / `cssHeight` describe the *outer* canvas, and
+     * `originX` / `originY` name the top-left corner of the cell this
+     * layout represents. The cell's own width/height come from
+     * `cellWidth` / `cellHeight`. `margins` are computed relative to the
+     * cell then shifted into canvas-absolute space so projection
+     * matrices, scissor, and `dataToPixel` all operate in full-canvas
+     * coordinates without branching per-facet.
+     *
+     * When any of these fields is unset, the layout is single-plot: the
+     * cell occupies the whole canvas and `originX` / `originY` default
+     * to 0.
+     */
+    originX?: number;
+    originY?: number;
+    cellWidth?: number;
+    cellHeight?: number;
 }
 
 /**
@@ -73,15 +101,41 @@ export class PlotLayout {
         const left = baseLeft + (options.hasYLabel ? 16 : 0);
         const baseBottom = options.bottomExtra ?? 24;
         const bottom = baseBottom + (options.hasXLabel ? 18 : 0);
-        const top = 12;
-        const right = options.hasLegend ? 80 : 16;
+        const top = 0;
+        const right =
+            options.rightExtra ?? (options.hasLegend ? 80 : 16);
 
-        this.margins = { top, right, bottom, left };
+        // Facet cells: the sub-plot lives at `(originX, originY)` within a
+        // larger canvas of size `(cssWidth, cssHeight)`. Its own bounds are
+        // `cellWidth × cellHeight`. The gutters above are then interpreted
+        // inside that cell, and `margins` / `plotRect` are shifted into
+        // canvas-absolute coordinates. Single-plot layouts leave these
+        // unset, in which case `originX / originY = 0` and the cell
+        // occupies the whole canvas — identical to pre-facet semantics.
+        const originX = options.originX ?? 0;
+        const originY = options.originY ?? 0;
+        const cellW = options.cellWidth ?? cssWidth;
+        const cellH = options.cellHeight ?? cssHeight;
+
+        const marginLeftAbs = originX + left;
+        const marginTopAbs = originY + top;
+        const plotW = Math.max(1, cellW - left - right);
+        const plotH = Math.max(1, cellH - top - bottom);
+        const marginRightAbs = cssWidth - (marginLeftAbs + plotW);
+        const marginBottomAbs = cssHeight - (marginTopAbs + plotH);
+
+        this.margins = {
+            top: marginTopAbs,
+            right: marginRightAbs,
+            bottom: marginBottomAbs,
+            left: marginLeftAbs,
+        };
+
         this.plotRect = {
-            x: left,
-            y: top,
-            width: Math.max(1, cssWidth - left - right),
-            height: Math.max(1, cssHeight - top - bottom),
+            x: marginLeftAbs,
+            y: marginTopAbs,
+            width: plotW,
+            height: plotH,
         };
     }
 

@@ -36,8 +36,33 @@ export interface Glyph {
         projection: Float32Array,
     ): void;
 
-    /** Per-hover tooltip content for the point at `flatIdx`. */
-    buildTooltipLines(chart: ContinuousChart, flatIdx: number): string[];
+    /**
+     * Issue draw calls for a single series' slice only. Used by
+     * faceted rendering: one facet per split, each facet's scissor
+     * clips to its plot rect and only that series rasterizes inside.
+     *
+     * Implementations should bind uniforms/buffers once (same as
+     * `draw`) and dispatch only the drawArrays call(s) for
+     * `seriesIdx`.
+     */
+    drawSeries(
+        chart: ContinuousChart,
+        glManager: WebGLContextManager,
+        projection: Float32Array,
+        seriesIdx: number,
+    ): void;
+
+    /**
+     * Per-hover tooltip content for the point at `flatIdx`. Returns a
+     * Promise because some glyphs (notably `PointGlyph`) need to fetch
+     * the source row from the view on demand for extra-column lookups.
+     * Glyphs whose tooltip is geometry-only (e.g. `LineGlyph`) return
+     * a microtask-resolved promise.
+     */
+    buildTooltipLines(
+        chart: ContinuousChart,
+        flatIdx: number,
+    ): Promise<string[]>;
 
     /** Hover-overlay options (crosshair, highlight radius). */
     tooltipOptions(): { crosshair: boolean; highlightRadius: number };

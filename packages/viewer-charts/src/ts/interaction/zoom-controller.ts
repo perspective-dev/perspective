@@ -32,8 +32,8 @@ export interface ZoomConfig {
     lockAxis?: "x" | "y" | null;
 }
 
-const MAX_ZOOM = 100_000;
-const MIN_ZOOM = 1;
+export const MAX_ZOOM = 100_000;
+export const MIN_ZOOM = 1;
 
 export class ZoomController {
     private _scaleX = 1;
@@ -61,6 +61,43 @@ export class ZoomController {
     private _onPointerDown: ((e: PointerEvent) => void) | null = null;
     private _onPointerMove: ((e: PointerEvent) => void) | null = null;
     private _onPointerUp: ((e: PointerEvent) => void) | null = null;
+
+    // Per-controller mutators used by `ZoomRouter` to apply wheel/pan
+    // events without going through `attach`. Live below under "Router
+    // helpers" for the facet-aware zoom path.
+    get lockedAxis(): "x" | "y" | null {
+        return this._lockAxis;
+    }
+    get scaleX(): number {
+        return this._scaleX;
+    }
+    get scaleY(): number {
+        return this._scaleY;
+    }
+    set scaleX(v: number) {
+        this._scaleX = v;
+    }
+    set scaleY(v: number) {
+        this._scaleY = v;
+    }
+    get normTranslateX(): number {
+        return this._normTX;
+    }
+    get normTranslateY(): number {
+        return this._normTY;
+    }
+    set normTranslateX(v: number) {
+        this._normTX = v;
+    }
+    set normTranslateY(v: number) {
+        this._normTY = v;
+    }
+    get baseXRange(): number {
+        return this._baseXMax - this._baseXMin;
+    }
+    get baseYRange(): number {
+        return this._baseYMax - this._baseYMin;
+    }
 
     setBaseDomain(
         xMin: number,

@@ -35,6 +35,18 @@ export interface TreemapLocations {
 }
 
 /**
+ * Sentinel fallback for the Size slot when the user hasn't picked one:
+ * use the first non-metadata column in the incoming view. Treemap
+ * still needs *some* numeric-ish column to size rects.
+ */
+function firstNonMetadataColumn(columns: ColumnDataMap): string {
+    for (const k of columns.keys()) {
+        if (!k.startsWith("__")) return k;
+    }
+    return "";
+}
+
+/**
  * Treemap chart. Shares tree storage + streaming-pipeline + color-mode
  * state with `TreeChartBase`; adds rectangular layout + WebGL quad
  * rendering + drill / tooltip interactions.
@@ -51,9 +63,52 @@ export class TreemapChart extends TreeChartBase {
     _pinnedNodeId: number = NULL_NODE;
     _breadcrumbRegions: BreadcrumbRegion[] = [];
     _dblClickHandler: ((e: MouseEvent) => void) | null = null;
-
     _chromeCache: ImageBitmap | null = null;
     _chromeCacheDirty = true;
+
+    /**
+     * Monotonic generation counter bumped every time the static chrome
+     * content changes (a new `drawStaticChrome` call). The async
+     * `createImageBitmap` callback captures the current gen at kickoff
+     * and only installs the resulting bitmap if its gen is still the
+     * most-recent one. Without this, out-of-order bitmap resolutions
+     * can store a stale bitmap in `_chromeCache` — any subsequent
+     * hover-only overlay call then blits that stale snapshot over the
+     * fresh chart, producing "leftover labels / cells" artefacts.
+     */
+    _chromeCacheGen = 0;
+
+    // ── Faceted state ────────────────────────────────────────────────────
+    /**
+     * Per-facet drill roots in split_by mode. Key is the facet label
+     * (the top-level child of `_rootId`); value is the currently drilled
+     * node inside that facet's subtree. Missing keys mean the facet
+     * shows its full subtree.
+     */
+    _facetDrillRoots: Map<string, number> = new Map();
+    _facetGrid: import("../../layout/facet-grid").FacetGrid | null = null;
+
+    /** When `false`, branch nodes at relDepth=1 render as a centered
+     *  overlay (same style as relDepth=2) and no top-of-rect label
+     *  reservation is made in `squarify`. Default `true` preserves the
+     *  legacy title-bar look. */
+    _showBranchHeader = false;
+
+    /**
+     * Parallel to `_visibleNodeIds`. Each entry stores the depth of the
+     * drill root that owns the corresponding visible node, so render
+     * paths can compute `relDepth` uniformly without knowing whether
+     * faceting is active. Populated in `renderTreemapFrame` during
+     * layout.
+     */
+    _visibleBaseDepths: Int32Array | null = null;
+    /**
+     * Parallel to `_visibleNodeIds`. The drill-root node id that owns
+     * each visible node (= `_currentRootId` in non-facet mode, per-
+     * facet drill root in facet mode). Used by hit-testing and chrome
+     * to skip the drill-root itself without a separate equality check.
+     */
+    _visibleRootIds: Int32Array | null = null;
 
     attachTooltip(glCanvas: HTMLCanvasElement): void {
         this._glCanvas = glCanvas;
@@ -95,12 +150,8 @@ export class TreemapChart extends TreeChartBase {
         if (startRow === 0) {
             this._cancelScheduledRender();
 
-            this._allColumns = Array.from(columns.keys()).filter(
-                (k) => !k.startsWith("__"),
-            );
-
             const slots = this._columnSlots;
-            this._sizeName = slots[0] || this._allColumns[0] || "";
+            this._sizeName = slots[0] || firstNonMetadataColumn(columns) || "";
             this._colorName = slots[1] || "";
             if (!this._colorName) {
                 this._colorMode = "empty";
@@ -113,6 +164,27 @@ export class TreemapChart extends TreeChartBase {
                     t === "datetime";
                 this._colorMode = isNumeric ? "numeric" : "series";
             }
+
+            // Clear per-draw state that's tied to the OLD tree. Node
+            // IDs from the previous render don't map to anything in
+            // the fresh tree; leaving them around lets stale drill
+            // roots, hovered/pinned IDs, breadcrumb regions, and the
+            // cached chrome bitmap bleed into the new render as ghost
+            // rects / labels / hit targets. See tree-data.ts's
+            // `resetTreeState` for the shared fields; everything below
+            // is treemap-specific.
+            this._hoveredNodeId = NULL_NODE;
+            this._pinnedNodeId = NULL_NODE;
+            this._breadcrumbRegions = [];
+            this._facetDrillRoots.clear();
+            this._facetGrid = null;
+            this._visibleBaseDepths = null;
+            this._visibleRootIds = null;
+            dismissTreemapPinnedTooltip(this);
+            this._chromeCache?.close();
+            this._chromeCache = null;
+            this._chromeCacheDirty = true;
+            this._chromeCacheGen++;
 
             resetTreemapState(this);
         }
@@ -155,10 +227,12 @@ export class TreemapChart extends TreeChartBase {
         this._currentRootId = NULL_NODE;
         this._breadcrumbIds = [];
         this._childLookup.clear();
-        this._numericRowData.clear();
-        this._stringRowData.clear();
         this._visibleNodeIds = null;
         this._visibleNodeCount = 0;
         this._breadcrumbRegions = [];
+        this._facetDrillRoots.clear();
+        this._facetGrid = null;
+        this._visibleBaseDepths = null;
+        this._visibleRootIds = null;
     }
 }

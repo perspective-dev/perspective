@@ -24,7 +24,6 @@ import { NodeStore, NULL_NODE } from "./node-store";
  */
 export abstract class TreeChartBase extends AbstractChart {
     // ── Shared column-slot resolution ────────────────────────────────────
-    _allColumns: string[] = [];
     _sizeName = "";
     _colorName = "";
 
@@ -50,11 +49,11 @@ export abstract class TreeChartBase extends AbstractChart {
      */
     _childLookup: Map<number, Map<string, number>> = new Map();
 
-    // ── Row-data column buffers (per-leaf tooltip lookup) ────────────────
+    // ── Streaming-insert row counter ─────────────────────────────────────
+    // Source-view row offset tracked across chunks so `leafRowIdx` on
+    // each leaf points back to the correct view row for lazy tooltip
+    // fetches via `AbstractChart._lazyRows`.
     _rowCount = 0;
-    _rowCapacity = 0;
-    _numericRowData: Map<string, Float32Array> = new Map();
-    _stringRowData: Map<string, string[]> = new Map();
 
     // ── Color extents / categorical key table ───────────────────────────
     _colorMin = Infinity;
@@ -64,4 +63,17 @@ export abstract class TreeChartBase extends AbstractChart {
     // ── Visible-node cache (populated per frame by layout/collect) ──────
     _visibleNodeIds: Int32Array | null = null;
     _visibleNodeCount = 0;
+
+    /**
+     * Cached hover-tooltip lines, filled in asynchronously when a
+     * lazy row fetch resolves. `null` means "not yet available" — the
+     * chrome overlay skips the in-chart tooltip box in that state.
+     * `_hoveredTooltipNodeId` records the node the cached lines are
+     * for so the render path can tell stale cache entries apart from
+     * fresh ones.
+     */
+    _hoveredTooltipLines: string[] | null = null;
+    _hoveredTooltipNodeId: number = -1;
+    _hoveredTooltipSerial = 0;
+    _pinnedTooltipSerial = 0;
 }

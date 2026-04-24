@@ -28,9 +28,11 @@ import { getInstancing } from "../../webgl/instanced-attrs";
 import {
     partitionSunburst,
     collectVisibleArcs,
+    collectVisibleArcsAppend,
     INNER_RING_PX,
 } from "./sunburst-layout";
-import { buildSunburstTooltipLines } from "./sunburst-interact";
+import { buildFacetGrid } from "../../layout/facet-grid";
+import { renderCategoricalLegendAt } from "../../chrome/legend";
 
 /**
  * Triangle-strip template resolution. `N_STEPS` angular samples × 2
@@ -73,6 +75,24 @@ function leafColor(
     return palette[idx % palette.length] ?? [0, 0, 0];
 }
 
+/**
+ * `leafColor` + alpha: arcs whose source-row size was negative dim
+ * to `negativeAlpha` so they read as "magnitude with inverse sign"
+ * rather than disappearing. Mirrors the treemap helper.
+ */
+function leafRGBA(
+    chart: SunburstChart,
+    nodeId: number,
+    stops: GradientStop[],
+    palette: Vec3[],
+    negativeAlpha: number,
+): [number, number, number, number] {
+    const rgb = leafColor(chart, nodeId, stops, palette);
+    const alpha =
+        chart._nodeStore.sizeSign[nodeId] < 0 ? negativeAlpha : 1.0;
+    return [rgb[0], rgb[1], rgb[2], alpha];
+}
+
 /** Full-frame render: layout → WebGL arcs → chrome overlay. */
 export function renderSunburstFrame(
     chart: SunburstChart,
@@ -87,22 +107,35 @@ export function renderSunburstFrame(
         .height;
     if (cssWidth <= 0 || cssHeight <= 0) return;
 
+    const hasSplits =
+        chart._splitBy.length > 0 && chart._facetConfig.facet_mode === "grid";
     const hasLegend =
         chart._colorMode === "series"
             ? chart._uniqueColorLabels.size > 1
             : chart._colorMode === "numeric" &&
               chart._colorMin < chart._colorMax;
-    const breadcrumbH = chart._breadcrumbIds.length > 1 ? BREADCRUMB_H : 0;
+    const breadcrumbH =
+        !hasSplits && chart._breadcrumbIds.length > 1 ? BREADCRUMB_H : 0;
     const legendW = hasLegend ? LEGEND_W : 0;
 
-    const plotW = cssWidth - legendW;
-    const plotH = cssHeight - breadcrumbH;
-    chart._centerX = plotW / 2;
-    chart._centerY = breadcrumbH + plotH / 2;
-    chart._maxRadius = Math.max(0, Math.min(plotW, plotH) / 2 - 4);
+    if (hasSplits) {
+        layoutFacetedSunburst(chart, cssWidth, cssHeight, legendW);
+    } else {
+        chart._facetGrid = null;
+        chart._facets = [];
+        const plotW = cssWidth - legendW;
+        const plotH = cssHeight - breadcrumbH;
+        chart._centerX = plotW / 2;
+        chart._centerY = breadcrumbH + plotH / 2;
+        chart._maxRadius = Math.max(0, Math.min(plotW, plotH) / 2 - 4);
 
-    partitionSunburst(chart._nodeStore, chart._currentRootId, chart._maxRadius);
-    collectVisibleArcs(chart, chart._currentRootId);
+        partitionSunburst(
+            chart._nodeStore,
+            chart._currentRootId,
+            chart._maxRadius,
+        );
+        collectVisibleArcs(chart, chart._currentRootId);
+    }
 
     ensureProgram(chart, glManager);
 
@@ -128,7 +161,7 @@ export function renderSunburstFrame(
     }
 
     chart._chromeCacheDirty = true;
-    uploadArcInstances(chart, gl, stops, palette);
+    uploadArcInstances(chart, gl, stops, palette, theme.areaOpacity);
 
     const dpr = window.devicePixelRatio || 1;
     gl.clearColor(0, 0, 0, 0);
@@ -138,7 +171,6 @@ export function renderSunburstFrame(
     gl.useProgram(chart._program!);
 
     const loc = chart._locations!;
-    gl.uniform2f(loc.u_center, chart._centerX * dpr, chart._centerY * dpr);
     gl.uniform2f(
         loc.u_resolution,
         (gl.canvas as HTMLCanvasElement).width,
@@ -146,9 +178,113 @@ export function renderSunburstFrame(
     );
     gl.uniform1f(loc.u_border_px, theme.sunburstGapPx * dpr);
 
-    drawArcs(chart, gl, glManager);
+    if (chart._facets.length > 0) {
+        // Faceted: one dispatch per facet with the matching `u_center`
+        // and instance range. Instance attribs are rebound per facet so
+        // instance 0 of each dispatch is the facet's first arc.
+        for (const facet of chart._facets) {
+            if (facet.instanceCount === 0) continue;
+            gl.uniform2f(
+                loc.u_center,
+                facet.centerX * dpr,
+                facet.centerY * dpr,
+            );
+            drawArcs(
+                chart,
+                gl,
+                glManager,
+                facet.instanceStart,
+                facet.instanceCount,
+            );
+        }
+    } else {
+        gl.uniform2f(loc.u_center, chart._centerX * dpr, chart._centerY * dpr);
+        drawArcs(chart, gl, glManager, 0, chart._instanceCount);
+    }
 
     renderSunburstChromeOverlay(chart);
+}
+
+/**
+ * Allocate the facet grid and compute per-facet (center, radius, drill
+ * root) triples. Also runs `partitionSunburst` + `collectVisibleArcs`
+ * per facet so the combined visible list is in `_visibleNodeIds` with
+ * facets in cell order (instance uploads walk this list).
+ */
+function layoutFacetedSunburst(
+    chart: SunburstChart,
+    cssWidth: number,
+    cssHeight: number,
+    legendW: number,
+): void {
+    const store = chart._nodeStore;
+    const facetIds: number[] = [];
+    const labels: string[] = [];
+    for (
+        let c = store.firstChild[chart._rootId];
+        c !== NULL_NODE;
+        c = store.nextSibling[c]
+    ) {
+        if (store.value[c] <= 0) continue;
+        facetIds.push(c);
+        labels.push(store.name[c]);
+    }
+
+    const gridWidth = Math.max(1, cssWidth - legendW);
+    const grid = buildFacetGrid(labels, {
+        cssWidth: gridWidth,
+        cssHeight,
+        hasLegend: false,
+        // Sunburst has no X/Y axes — no per-cell gutter reservation.
+        xAxis: "none",
+        yAxis: "none",
+        gap: chart._facetConfig.facet_padding,
+    });
+    chart._facetGrid = grid;
+
+    const facets: SunburstChart["_facets"] = [];
+    let outIdx = 0;
+    for (let i = 0; i < facetIds.length; i++) {
+        const facetId = facetIds[i];
+        const cell = grid.cells[i];
+        if (!cell) continue;
+        const label = store.name[facetId];
+        const drillRoot = chart._facetDrillRoots.get(label) ?? facetId;
+        const plot = cell.layout.plotRect;
+        const centerX = plot.x + plot.width / 2;
+        const centerY = plot.y + plot.height / 2;
+        const maxRadius = Math.max(
+            0,
+            Math.min(plot.width, plot.height) / 2 - 4,
+        );
+
+        partitionSunburst(store, drillRoot, maxRadius);
+        const nextIdx = collectVisibleArcsAppend(chart, drillRoot, outIdx);
+        const instanceStart = outIdx;
+        const instanceCount = nextIdx - outIdx;
+
+        facets.push({
+            label,
+            centerX,
+            centerY,
+            maxRadius,
+            drillRoot,
+            instanceStart,
+            instanceCount,
+        });
+        outIdx = nextIdx;
+    }
+    chart._visibleNodeCount = outIdx;
+    chart._facets = facets;
+
+    // Publish the first facet's center/radius to the legacy fields so
+    // chrome code paths that still read them (e.g. non-faceted label
+    // placement) pick sensible values.
+    if (facets.length > 0) {
+        chart._centerX = facets[0].centerX;
+        chart._centerY = facets[0].centerY;
+        chart._maxRadius = facets[0].maxRadius;
+    }
 }
 
 function ensureProgram(
@@ -198,49 +334,95 @@ function uploadArcInstances(
     gl: WebGL2RenderingContext | WebGLRenderingContext,
     stops: GradientStop[],
     palette: Vec3[],
+    negativeAlpha: number,
 ): void {
     const store = chart._nodeStore;
     const ids = chart._visibleNodeIds!;
-    const n = chart._visibleNodeCount;
     const dpr = window.devicePixelRatio || 1;
+    const faceted = chart._facets.length > 0;
 
-    // 7 floats per instance: [a0, a1, r0, r1, r, g, b].
-    const data = new Float32Array(n * 7);
+    // Walk each facet's pre-upload visible range (instanceStart and
+    // instanceCount as set by `layoutFacetedSunburst`), skip the facet's
+    // drill root + any zero-width arcs, and emit one contiguous run per
+    // facet. Update `(instanceStart, instanceCount)` to the post-skip
+    // values so draw dispatch can offset into the shared buffer.
+    //
+    // 8 floats per instance: [a0, a1, r0, r1, r, g, b, a]. Alpha = 1
+    // for positive-size arcs, `negativeAlpha` for arcs whose raw size
+    // column value was negative (keeps the arc visible but dimmer).
+    const totalCap = faceted
+        ? chart._facets.reduce((a, f) => a + f.instanceCount, 0)
+        : chart._visibleNodeCount;
+    const data = new Float32Array(totalCap * 8);
     let instance = 0;
-    for (let i = 0; i < n; i++) {
-        const id = ids[i];
-        if (id === chart._currentRootId) continue; // center disc drawn below
-        const a0 = store.a0[id];
-        const a1 = store.a1[id];
-        const r0 = store.r0[id];
-        const r1 = store.r1[id];
-        if (a1 <= a0 || r1 <= r0) continue;
-        const color = leafColor(chart, id, stops, palette);
-        const o = instance * 7;
-        data[o + 0] = a0;
-        data[o + 1] = a1;
-        data[o + 2] = r0 * dpr;
-        data[o + 3] = r1 * dpr;
-        data[o + 4] = color[0];
-        data[o + 5] = color[1];
-        data[o + 6] = color[2];
-        instance++;
+
+    const emitRange = (start: number, end: number, drillRoot: number) => {
+        const rangeStart = instance;
+        for (let i = start; i < end; i++) {
+            const id = ids[i];
+            if (id === drillRoot) continue;
+            const a0 = store.a0[id];
+            const a1 = store.a1[id];
+            const r0 = store.r0[id];
+            const r1 = store.r1[id];
+            if (a1 <= a0 || r1 <= r0) continue;
+            const color = leafRGBA(chart, id, stops, palette, negativeAlpha);
+            const o = instance * 8;
+            data[o + 0] = a0;
+            data[o + 1] = a1;
+            data[o + 2] = r0 * dpr;
+            data[o + 3] = r1 * dpr;
+            data[o + 4] = color[0];
+            data[o + 5] = color[1];
+            data[o + 6] = color[2];
+            data[o + 7] = color[3];
+            instance++;
+        }
+        return { rangeStart, rangeCount: instance - rangeStart };
+    };
+
+    if (faceted) {
+        for (const facet of chart._facets) {
+            const preStart = facet.instanceStart;
+            const preEnd = preStart + facet.instanceCount;
+            const { rangeStart, rangeCount } = emitRange(
+                preStart,
+                preEnd,
+                facet.drillRoot,
+            );
+            facet.instanceStart = rangeStart;
+            facet.instanceCount = rangeCount;
+        }
+    } else {
+        emitRange(0, chart._visibleNodeCount, chart._currentRootId);
     }
+
     chart._instanceCount = instance;
     gl.bindBuffer(gl.ARRAY_BUFFER, chart._instanceBuffer);
     gl.bufferData(
         gl.ARRAY_BUFFER,
-        data.subarray(0, instance * 7),
+        data.subarray(0, instance * 8),
         gl.DYNAMIC_DRAW,
     );
 }
 
+/**
+ * Dispatch one instanced draw over `[instanceStart, instanceStart+count)`
+ * of the shared arc instance buffer. In single-plot mode the range is
+ * the whole buffer; in faceted mode the caller dispatches once per
+ * facet with the matching `u_center` uniform.
+ *
+ * Instance attribute pointers are rebound with a byte offset per call
+ * so instance 0 of the draw is the facet's first arc.
+ */
 function drawArcs(
     chart: SunburstChart,
     gl: WebGL2RenderingContext | WebGLRenderingContext,
     glManager: WebGLContextManager,
+    instanceStart: number,
+    instanceCount: number,
 ): void {
-    if (chart._instanceCount === 0) return;
+    if (instanceCount === 0) return;
     const loc = chart._locations!;
 
     // Static strip: per-vertex (strip_t, side).
@@ -263,25 +445,44 @@ function drawArcs(
     setDivisor(loc.a_strip_t, 0);
     setDivisor(loc.a_side, 0);
 
-    // Per-instance interleaved buffer.
+    // Per-instance interleaved buffer (rebind with byte offset so
+    // instance 0 of the draw is slot `instanceStart`). Layout:
+    //   [0..1] a_angles (a0, a1)
+    //   [2..3] a_radii  (r0, r1)
+    //   [4..7] a_color  (r, g, b, a)
     gl.bindBuffer(gl.ARRAY_BUFFER, chart._instanceBuffer!);
-    const instStride = 7 * Float32Array.BYTES_PER_ELEMENT;
+    const instStride = 8 * Float32Array.BYTES_PER_ELEMENT;
     const f = Float32Array.BYTES_PER_ELEMENT;
+    const base = instanceStart * instStride;
     gl.enableVertexAttribArray(loc.a_angles);
-    gl.vertexAttribPointer(loc.a_angles, 2, gl.FLOAT, false, instStride, 0);
+    gl.vertexAttribPointer(loc.a_angles, 2, gl.FLOAT, false, instStride, base);
     setDivisor(loc.a_angles, 1);
     gl.enableVertexAttribArray(loc.a_radii);
-    gl.vertexAttribPointer(loc.a_radii, 2, gl.FLOAT, false, instStride, 2 * f);
+    gl.vertexAttribPointer(
+        loc.a_radii,
+        2,
+        gl.FLOAT,
+        false,
+        instStride,
+        base + 2 * f,
+    );
     setDivisor(loc.a_radii, 1);
     gl.enableVertexAttribArray(loc.a_color);
-    gl.vertexAttribPointer(loc.a_color, 3, gl.FLOAT, false, instStride, 4 * f);
+    gl.vertexAttribPointer(
+        loc.a_color,
+        4,
+        gl.FLOAT,
+        false,
+        instStride,
+        base + 4 * f,
+    );
     setDivisor(loc.a_color, 1);
 
     instancing.drawArraysInstanced(
         gl.TRIANGLE_STRIP,
         0,
         2 * (N_STEPS + 1),
-        chart._instanceCount,
+        instanceCount,
     );
 
     setDivisor(loc.a_angles, 0);
@@ -315,10 +516,14 @@ export function renderSunburstChromeOverlay(chart: SunburstChart): void {
         chart._chromeCache?.close();
         chart._chromeCache = null;
         chart._chromeCacheDirty = false;
+        // Bump gen so in-flight `createImageBitmap` calls from prior
+        // static draws see a mismatch and discard their snapshot.
+        const gen = ++chart._chromeCacheGen;
         drawStaticChrome(chart, ctx, dpr, cssWidth, cssHeight);
 
         createImageBitmap(canvas).then((bmp) => {
-            if (!chart._chromeCacheDirty) {
+            if (chart._chromeCacheGen === gen) {
+                chart._chromeCache?.close();
                 chart._chromeCache = bmp;
             } else {
                 bmp.close();
@@ -369,39 +574,116 @@ function drawStaticChrome(
     const store = chart._nodeStore;
     const ids = chart._visibleNodeIds!;
     const n = chart._visibleNodeCount;
+    const faceted = chart._facets.length > 0;
+    const drillRoots = faceted
+        ? new Set<number>(chart._facets.map((f) => f.drillRoot))
+        : null;
 
-    // Arc labels.
+    // Arc labels — skip the facet's own drill root (its label is the
+    // center text / facet title, handled below).
     for (let i = 0; i < n; i++) {
         const id = ids[i];
-        if (id === chart._currentRootId) continue;
+        if (faceted) {
+            if (drillRoots!.has(id)) continue;
+        } else if (id === chart._currentRootId) {
+            continue;
+        }
         renderArcLabel(chart, ctx, id, fontFamily, stops, palette);
     }
 
-    // Inner drill-up circle. Shrunk by half the border so the
-    // disc-to-first-ring gap matches the inter-ring gap (the first
-    // arc ring's shader inset eats the other half).
+    // Inner drill-up circle(s). One per facet in faceted mode so each
+    // facet has its own center hit target.
     const innerDiscR = Math.max(0, INNER_RING_PX - theme.sunburstGapPx * 0.5);
-    ctx.beginPath();
     ctx.fillStyle = tooltipBg;
-    ctx.arc(chart._centerX, chart._centerY, innerDiscR, 0, 2 * Math.PI);
-    ctx.fill();
-    ctx.fillStyle = textColor;
-    ctx.font = `bold 11px ${fontFamily}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(
-        store.name[chart._currentRootId],
-        chart._centerX,
-        chart._centerY,
-    );
 
-    // Breadcrumbs.
-    if (chart._breadcrumbIds.length > 1) {
+    if (faceted) {
+        for (const facet of chart._facets) {
+            ctx.beginPath();
+            ctx.fillStyle = tooltipBg;
+            ctx.arc(facet.centerX, facet.centerY, innerDiscR, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillStyle = textColor;
+            ctx.font = `11px ${fontFamily}`;
+            ctx.fillText(
+                store.name[facet.drillRoot],
+                facet.centerX,
+                facet.centerY,
+            );
+            // Facet title band above the arcs.
+            if (chart._facetGrid) {
+                const cell = chart._facetGrid.cells.find(
+                    (c) => c.label === facet.label,
+                );
+                if (cell?.titleRect) {
+                    ctx.fillStyle = textColor;
+                    ctx.font = `11px ${fontFamily}`;
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(
+                        facet.label,
+                        cell.titleRect.x + cell.titleRect.width / 2,
+                        cell.titleRect.y + cell.titleRect.height / 2,
+                    );
+                }
+            }
+        }
+    } else {
+        ctx.beginPath();
+        ctx.arc(chart._centerX, chart._centerY, innerDiscR, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = textColor;
+        ctx.font = `11px ${fontFamily}`;
+        ctx.fillText(
+            store.name[chart._currentRootId],
+            chart._centerX,
+            chart._centerY,
+        );
+    }
+
+    // Breadcrumbs (non-facet only — per-facet drill is tracked through
+    // the per-facet drill root's label, not a global breadcrumb trail).
+    if (!faceted && chart._breadcrumbIds.length > 1) {
         renderBreadcrumbs(chart, ctx, cssWidth, fontFamily, textColor);
     }
 
-    // Legend.
-    if (chart._colorMode === "series" && chart._uniqueColorLabels.size > 1) {
+    // Legend. In faceted mode use the grid's explicit rect; otherwise
+    // derive from a synthetic single-plot layout.
+    if (faceted && chart._facetGrid?.legendRect) {
+        if (
+            chart._colorMode === "series" &&
+            chart._uniqueColorLabels.size > 1
+        ) {
+            renderCategoricalLegendAt(
+                canvas,
+                chart._facetGrid.legendRect,
+                chart._uniqueColorLabels,
+                palette,
+            );
+        } else if (
+            chart._colorMode === "numeric" &&
+            chart._colorMin < chart._colorMax
+        ) {
+            const legendLayout = new PlotLayout(cssWidth, cssHeight, {
+                hasXLabel: false,
+                hasYLabel: false,
+                hasLegend: true,
+            });
+            renderLegend(
+                canvas,
+                legendLayout,
+                {
+                    min: chart._colorMin,
+                    max: chart._colorMax,
+                    label: chart._colorName,
+                },
+                stops,
+            );
+        }
+    } else if (
+        chart._colorMode === "series" &&
+        chart._uniqueColorLabels.size > 1
+    ) {
         const legendLayout = new PlotLayout(cssWidth, cssHeight, {
             hasXLabel: false,
             hasYLabel: false,
@@ -545,7 +827,7 @@ function renderBreadcrumbs(
         const label = store.name[crumbId];
 
         ctx.fillStyle = textColor;
-        ctx.font = isLast ? `bold 11px ${fontFamily}` : `11px ${fontFamily}`;
+        ctx.font = isLast ? `11px ${fontFamily}` : `11px ${fontFamily}`;
         const textW = ctx.measureText(label).width;
         ctx.fillText(label, x, y);
 
@@ -597,7 +879,12 @@ function renderSunburstTooltip(
     const theme = resolveTheme(chart._chromeCanvas!);
     const { tooltipBg, tooltipText, tooltipBorder } = theme;
 
-    const lines = buildSunburstTooltipLines(chart, nodeId);
+    // Lines come from the async lazy tooltip fetch in
+    // `handleSunburstHover`; empty while in flight.
+    const lines =
+        chart._hoveredTooltipNodeId === nodeId
+            ? (chart._hoveredTooltipLines ?? [])
+            : [];
     if (lines.length === 0) return;
 
     ctx.font = `11px ${fontFamily}`;

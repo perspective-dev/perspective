@@ -587,14 +587,16 @@ impl VirtualDataSlice {
     /// to Perspective-compatible types.
     pub fn from_arrow_ipc(&mut self, ipc: &[u8]) -> Result<(), Box<dyn Error>> {
         let cursor = std::io::Cursor::new(ipc);
-        let batch = if &ipc[0..6] == "ARROW1".as_bytes() {
-            FileReader::try_new(cursor, None)?
-                .next()
-                .ok_or("Arrow IPC stream contained no record batches")??
+        let batches: Vec<RecordBatch> = if &ipc[0..6] == "ARROW1".as_bytes() {
+            FileReader::try_new(cursor, None)?.collect::<Result<Vec<_>, _>>()?
         } else {
-            StreamReader::try_new(cursor, None)?
-                .next()
-                .ok_or("Arrow IPC stream contained no record batches")??
+            StreamReader::try_new(cursor, None)?.collect::<Result<Vec<_>, _>>()?
+        };
+
+        let batch = match batches.len() {
+            0 => return Err("Arrow IPC stream contained no record batches".into()),
+            1 => batches.into_iter().next().unwrap(),
+            _ => arrow_select::concat::concat_batches(&batches[0].schema(), &batches)?,
         };
 
         let has_group_by = !self.config.group_by.is_empty();
@@ -801,6 +803,25 @@ impl VirtualDataSlice {
                                 let arr = col.as_any().downcast_ref::<Int32Array>().unwrap();
                                 VirtualDataCell::Integer(Some(arr.value(row_idx)))
                             },
+                            DataType::Int64 => {
+                                // TODO ????
+                                let arr = col.as_any().downcast_ref::<Int64Array>().unwrap();
+                                VirtualDataCell::Float(Some(arr.value(row_idx) as f64))
+                            },
+                            DataType::Time64(TimeUnit::Microsecond) => {
+                                let arr = col
+                                    .as_any()
+                                    .downcast_ref::<Time64MicrosecondArray>()
+                                    .unwrap();
+                                VirtualDataCell::Float(Some(arr.value(row_idx) as f64))
+                            },
+                            DataType::Timestamp(TimeUnit::Microsecond, _) => {
+                                let arr = col
+                                    .as_any()
+                                    .downcast_ref::<Time64MicrosecondArray>()
+                                    .unwrap();
+                                VirtualDataCell::Datetime(Some(arr.value(row_idx) * 1000))
+                            },
                             DataType::Timestamp(TimeUnit::Millisecond, _) => {
                                 let arr = col
                                     .as_any()
@@ -914,6 +935,20 @@ impl VirtualDataSlice {
                             .collect::<Vec<_>>(),
                     )?
                 },
+                DataType::Int64 => {
+                    let arr = col.as_any().downcast_ref::<Int64Array>().unwrap();
+                    serde_json::to_value(
+                        (0..num_rows)
+                            .map(|i| {
+                                if arr.is_null(i) {
+                                    None
+                                } else {
+                                    Some(arr.value(i) as f64)
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    )?
+                },
                 DataType::Timestamp(TimeUnit::Millisecond, _) => {
                     let arr = col
                         .as_any()
@@ -926,6 +961,23 @@ impl VirtualDataSlice {
                                     None
                                 } else {
                                     Some(arr.value(i))
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    )?
+                },
+                DataType::Time64(TimeUnit::Microsecond) => {
+                    let arr = col
+                        .as_any()
+                        .downcast_ref::<Time64MicrosecondArray>()
+                        .unwrap();
+                    serde_json::to_value(
+                        (0..num_rows)
+                            .map(|i| {
+                                if arr.is_null(i) {
+                                    None
+                                } else {
+                                    Some(arr.value(i) as f64)
                                 }
                             })
                             .collect::<Vec<_>>(),

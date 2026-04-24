@@ -13,7 +13,11 @@
 import type { WebGLContextManager } from "../../webgl/context-manager";
 import type { TreemapChart } from "./treemap";
 import { NULL_NODE } from "../common/node-store";
-import { squarify, collectVisible } from "./treemap-layout";
+import {
+    squarify,
+    collectVisible,
+    collectVisibleAppend,
+} from "./treemap-layout";
 import { resolveTheme, readSeriesPalette } from "../../theme/theme";
 import { resolvePalette, type Vec3 } from "../../theme/palette";
 import {
@@ -21,11 +25,15 @@ import {
     sampleGradient,
     type GradientStop,
 } from "../../theme/gradient";
-import { renderLegend, renderCategoricalLegend } from "../../chrome/legend";
+import {
+    renderLegend,
+    renderCategoricalLegend,
+    renderCategoricalLegendAt,
+} from "../../chrome/legend";
 import { PlotLayout } from "../../layout/plot-layout";
+import { buildFacetGrid } from "../../layout/facet-grid";
 import treemapVert from "../../shaders/treemap.vert.glsl";
 import treemapFrag from "../../shaders/treemap.frag.glsl";
-import { buildTreemapTooltipLines } from "./treemap-interact";
 
 type GL = WebGL2RenderingContext | WebGLRenderingContext;
 
@@ -44,6 +52,10 @@ function sampleRGB(stops: GradientStop[], t: number): [number, number, number] {
  *   - `"series"` / `"empty"` — discrete palette lookup keyed by the
  *     node's `colorLabel` (composite of group_by levels in series mode;
  *     `""` in empty mode, which maps to `palette[0]`).
+ *
+ * Returns RGB only; the alpha channel is applied separately by
+ * `leafRGBA` using `negativeAlpha` for leaves whose raw size was
+ * negative.
  */
 function leafColor(
     chart: TreemapChart,
@@ -68,7 +80,30 @@ function leafColor(
 }
 
 /**
+ * `leafColor` + an alpha channel. Negative-size leaves receive
+ * `negativeAlpha` (mirrors `theme.areaOpacity` for area charts) so
+ * they stay visually distinguishable from positive leaves without
+ * disappearing.
+ */
+function leafRGBA(
+    chart: TreemapChart,
+    nodeId: number,
+    stops: GradientStop[],
+    palette: Vec3[],
+    negativeAlpha: number,
+): [number, number, number, number] {
+    const rgb = leafColor(chart, nodeId, stops, palette);
+    const alpha = chart._nodeStore.sizeSign[nodeId] < 0 ? negativeAlpha : 1.0;
+    return [rgb[0], rgb[1], rgb[2], alpha];
+}
+
+/**
  * Full-frame treemap render: layout → WebGL rects → chrome overlay.
+ *
+ * When `_splitBy` is populated the top-level children of `_rootId`
+ * become facet roots; each is squarified into its own cell rect via
+ * {@link buildFacetGrid}. The visible-node list is concatenated across
+ * facets so a single vertex buffer + draw call covers the whole scene.
  */
 export function renderTreemapFrame(
     chart: TreemapChart,
@@ -84,7 +119,8 @@ export function renderTreemapFrame(
     if (cssWidth <= 0 || cssHeight <= 0) return;
 
     const store = chart._nodeStore;
-    const baseDepth = store.depth[chart._currentRootId];
+    const hasSplits =
+        chart._splitBy.length > 0 && chart._facetConfig.facet_mode === "grid";
 
     const breadcrumbH = chart._breadcrumbIds.length > 1 ? 28 : 0;
     const hasLegend =
@@ -99,18 +135,38 @@ export function renderTreemapFrame(
     // visible-id buffer as scratch when large enough.
     const scratch = new Int32Array(Math.max(store.count, 64));
 
-    squarify(
-        store,
-        chart._currentRootId,
-        0,
-        breadcrumbH,
-        cssWidth - legendW,
-        cssHeight,
-        baseDepth,
-        scratch,
-    );
-
-    collectVisible(chart, chart._currentRootId, 100, baseDepth);
+    if (hasSplits) {
+        layoutFaceted(
+            chart,
+            scratch,
+            cssWidth,
+            cssHeight,
+            breadcrumbH,
+            legendW,
+        );
+    } else {
+        chart._facetGrid = null;
+        const baseDepth = store.depth[chart._currentRootId];
+        squarify(
+            store,
+            chart._currentRootId,
+            0,
+            breadcrumbH,
+            cssWidth - legendW,
+            cssHeight,
+            baseDepth,
+            scratch,
+            chart._showBranchHeader,
+        );
+        collectVisible(chart, chart._currentRootId, 100, baseDepth);
+        ensureVisibleMetadata(chart);
+        const baseArr = chart._visibleBaseDepths!;
+        const rootArr = chart._visibleRootIds!;
+        for (let k = 0; k < chart._visibleNodeCount; k++) {
+            baseArr[k] = baseDepth;
+            rootArr[k] = chart._currentRootId;
+        }
+    }
 
     if (!chart._program) {
         chart._program = glManager.shaders.getOrCreate(
@@ -148,7 +204,7 @@ export function renderTreemapFrame(
 
     chart._chromeCacheDirty = true;
 
-    generateAndUploadTreemap(chart, gl, stops, palette);
+    generateAndUploadTreemap(chart, gl, stops, palette, theme.areaOpacity);
 
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -170,11 +226,118 @@ export function renderTreemapFrame(
 
     gl.bindBuffer(gl.ARRAY_BUFFER, chart._colorBuffer);
     gl.enableVertexAttribArray(chart._locations!.a_color);
-    gl.vertexAttribPointer(chart._locations!.a_color, 3, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(chart._locations!.a_color, 4, gl.FLOAT, false, 0, 0);
 
     gl.drawArrays(gl.TRIANGLES, 0, chart._vertexCount);
 
     renderTreemapChromeOverlay(chart);
+}
+
+/**
+ * Faceted layout: each top-level child of `_rootId` is one facet.
+ * Squarify per cell into the cell's rect and concatenate visible
+ * nodes, so downstream rendering and hit-testing treat the scene as
+ * one flat visible list.
+ *
+ * `_visibleBaseDepths` and `_visibleRootIds` are filled in parallel so
+ * render code can compute the relative depth of each node without
+ * knowing its owning facet. Non-facet callers leave these as copies of
+ * the single `_currentRootId` depth.
+ */
+function layoutFaceted(
+    chart: TreemapChart,
+    scratch: Int32Array,
+    cssWidth: number,
+    cssHeight: number,
+    breadcrumbH: number,
+    legendW: number,
+): void {
+    const store = chart._nodeStore;
+    // Collect the facet roots in declaration order (= top-level children
+    // of the synthetic root). Skip zero-value facets.
+    const facetIds: number[] = [];
+    const labels: string[] = [];
+    for (
+        let c = store.firstChild[chart._rootId];
+        c !== NULL_NODE;
+        c = store.nextSibling[c]
+    ) {
+        if (store.value[c] <= 0) continue;
+        facetIds.push(c);
+        labels.push(store.name[c]);
+    }
+
+    const gridHeight = Math.max(1, cssHeight - breadcrumbH);
+    const gridWidth = Math.max(1, cssWidth - legendW);
+    const grid = buildFacetGrid(labels, {
+        cssWidth: gridWidth,
+        cssHeight: gridHeight,
+        hasLegend: false, // legend rect handled separately by the chrome
+        // Treemap has no X/Y axes — skip the per-cell axis gutters and
+        // let adjacent cell plot rects sit flush.
+        xAxis: "none",
+        yAxis: "none",
+        gap: chart._facetConfig.facet_padding,
+    });
+    chart._facetGrid = grid;
+
+    ensureVisibleMetadata(chart);
+    const baseArr = chart._visibleBaseDepths!;
+    const rootArr = chart._visibleRootIds!;
+
+    let outIdx = 0;
+    for (let i = 0; i < facetIds.length; i++) {
+        const facetId = facetIds[i];
+        const cell = grid.cells[i];
+        if (!cell) continue;
+        const label = store.name[facetId];
+        const drillRoot = chart._facetDrillRoots.get(label) ?? facetId;
+        const baseDepth = store.depth[drillRoot];
+        const plot = cell.layout.plotRect;
+        // Shift by breadcrumb band — `buildFacetGrid` works in a
+        // local coord system starting at (0,0), but we need absolute
+        // canvas coords for squarify's rect.
+        squarify(
+            store,
+            drillRoot,
+            plot.x,
+            plot.y + breadcrumbH,
+            plot.x + plot.width,
+            plot.y + breadcrumbH + plot.height,
+            baseDepth,
+            scratch,
+            chart._showBranchHeader,
+        );
+        const nextIdx = collectVisibleAppend(
+            chart,
+            drillRoot,
+            100,
+            baseDepth,
+            outIdx,
+        );
+        // Ensure metadata arrays are wide enough after the append.
+        if (baseArr.length < nextIdx) {
+            ensureVisibleMetadata(chart);
+        }
+        const baseArr2 = chart._visibleBaseDepths!;
+        const rootArr2 = chart._visibleRootIds!;
+        for (let k = outIdx; k < nextIdx; k++) {
+            baseArr2[k] = baseDepth;
+            rootArr2[k] = drillRoot;
+        }
+        outIdx = nextIdx;
+    }
+    chart._visibleNodeCount = outIdx;
+}
+
+function ensureVisibleMetadata(chart: TreemapChart): void {
+    const need = chart._visibleNodeIds?.length ?? chart._nodeStore.count;
+    if (!chart._visibleBaseDepths || chart._visibleBaseDepths.length < need) {
+        chart._visibleBaseDepths = new Int32Array(need);
+    }
+    if (!chart._visibleRootIds || chart._visibleRootIds.length < need) {
+        chart._visibleRootIds = new Int32Array(need);
+    }
 }
 
 function generateAndUploadTreemap(
@@ -182,34 +345,43 @@ function generateAndUploadTreemap(
     gl: GL,
     stops: GradientStop[],
     palette: Vec3[],
+    negativeAlpha: number,
 ): void {
     const store = chart._nodeStore;
     const ids = chart._visibleNodeIds!;
     const n = chart._visibleNodeCount;
-    const baseDepth = store.depth[chart._currentRootId];
+    const baseArr = chart._visibleBaseDepths;
+    const rootArr = chart._visibleRootIds;
+
+    const baseDepthOf = (i: number): number =>
+        baseArr ? baseArr[i] : store.depth[chart._currentRootId];
+    const rootOf = (i: number): number =>
+        rootArr ? rootArr[i] : chart._currentRootId;
 
     // Count the rects we'll emit so we can size the buffers exactly.
     let rectCount = 0;
     for (let i = 0; i < n; i++) {
         const id = ids[i];
-        if (id === chart._currentRootId) continue;
+        if (id === rootOf(i)) continue;
         const w = store.x1[id] - store.x0[id];
         const h = store.y1[id] - store.y0[id];
         if (w < 1 || h < 1) continue;
         if (store.firstChild[id] === NULL_NODE) {
             rectCount++;
-        } else if (store.depth[id] - baseDepth === 1) {
+        } else if (store.depth[id] - baseDepthOf(i) === 1) {
             rectCount += 2;
         }
     }
 
     const positions = new Float32Array(rectCount * 6 * 2);
-    const colors = new Float32Array(rectCount * 6 * 3);
+    // 4 floats per vertex (RGBA) — negative-size leaves emit with a
+    // reduced alpha (= `theme.areaOpacity`); everything else is opaque.
+    const colors = new Float32Array(rectCount * 6 * 4);
     let vi = 0;
 
     for (let i = 0; i < n; i++) {
         const id = ids[i];
-        if (id === chart._currentRootId) continue;
+        if (id === rootOf(i)) continue;
         const sx0 = store.x0[id];
         const sy0 = store.y0[id];
         const sx1 = store.x1[id];
@@ -219,7 +391,7 @@ function generateAndUploadTreemap(
         if (w < 1 || h < 1) continue;
 
         if (store.firstChild[id] === NULL_NODE) {
-            const color = leafColor(chart, id, stops, palette);
+            const color = leafRGBA(chart, id, stops, palette, negativeAlpha);
             vi = emitRect(
                 positions,
                 colors,
@@ -231,10 +403,11 @@ function generateAndUploadTreemap(
                 color,
             );
         } else {
-            const relDepth = store.depth[id] - baseDepth;
+            const relDepth = store.depth[id] - baseDepthOf(i);
             if (relDepth === 1) {
-                const borderColor: [number, number, number] = [
-                    0.25, 0.25, 0.25,
+                // Branch borders are structural; always opaque.
+                const borderColor: [number, number, number, number] = [
+                    0.25, 0.25, 0.25, 1.0,
                 ];
                 vi = emitRect(
                     positions,
@@ -272,7 +445,7 @@ function generateAndUploadTreemap(
 
     if (!chart._colorBuffer) chart._colorBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, chart._colorBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, colors.subarray(0, vi * 3), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, colors.subarray(0, vi * 4), gl.DYNAMIC_DRAW);
 }
 
 function emitRect(
@@ -283,10 +456,10 @@ function emitRect(
     y0: number,
     x1: number,
     y1: number,
-    color: [number, number, number],
+    color: [number, number, number, number],
 ): number {
     const pi = vi * 2;
-    const ci = vi * 3;
+    const ci = vi * 4;
 
     positions[pi + 0] = x0;
     positions[pi + 1] = y0;
@@ -303,9 +476,10 @@ function emitRect(
     positions[pi + 11] = y1;
 
     for (let v = 0; v < 6; v++) {
-        colors[ci + v * 3 + 0] = color[0];
-        colors[ci + v * 3 + 1] = color[1];
-        colors[ci + v * 3 + 2] = color[2];
+        colors[ci + v * 4 + 0] = color[0];
+        colors[ci + v * 4 + 1] = color[1];
+        colors[ci + v * 4 + 2] = color[2];
+        colors[ci + v * 4 + 3] = color[3];
     }
 
     return vi + 6;
@@ -341,10 +515,17 @@ export function renderTreemapChromeOverlay(chart: TreemapChart): void {
         chart._chromeCache?.close();
         chart._chromeCache = null;
         chart._chromeCacheDirty = false;
+        // Bump the generation so any in-flight `createImageBitmap`
+        // for a previous static draw (including one from a prior
+        // dataset) resolves into the stale branch below.
+        const gen = ++chart._chromeCacheGen;
         drawStaticChrome(chart, ctx, dpr, cssWidth, cssHeight);
 
         createImageBitmap(canvas).then((bmp) => {
-            if (!chart._chromeCacheDirty) {
+            if (chart._chromeCacheGen === gen) {
+                // Newer draw already landed — discard our snapshot
+                // rather than overwriting whatever is current.
+                chart._chromeCache?.close();
                 chart._chromeCache = bmp;
             } else {
                 bmp.close();
@@ -368,18 +549,19 @@ export function renderTreemapChromeOverlay(chart: TreemapChart): void {
 
         renderHoverHighlight(ctx, store, highlightId);
 
-        const baseDepth = store.depth[chart._currentRootId];
         const ids = chart._visibleNodeIds!;
         const n = chart._visibleNodeCount;
+        const baseArr = chart._visibleBaseDepths;
+        const rootArr = chart._visibleRootIds;
         for (let i = 0; i < n; i++) {
             const id = ids[i];
-            if (
-                id === chart._currentRootId ||
-                store.firstChild[id] === NULL_NODE
-            )
-                continue;
+            const rootId = rootArr ? rootArr[i] : chart._currentRootId;
+            if (id === rootId || store.firstChild[id] === NULL_NODE) continue;
             const nw = store.x1[id] - store.x0[id];
             const nh = store.y1[id] - store.y0[id];
+            const baseDepth = baseArr
+                ? baseArr[i]
+                : store.depth[chart._currentRootId];
             const relDepth = store.depth[id] - baseDepth;
             if (relDepth === 1) {
                 renderBranchLabel(
@@ -390,7 +572,7 @@ export function renderTreemapChromeOverlay(chart: TreemapChart): void {
                     nh,
                     fontFamily,
                     textColor,
-                    false,
+                    !chart._showBranchHeader,
                 );
             } else if (relDepth === 2) {
                 renderBranchLabel(
@@ -471,24 +653,28 @@ function drawStaticChrome(
     );
 
     const store = chart._nodeStore;
-    const baseDepth = store.depth[chart._currentRootId];
     const ids = chart._visibleNodeIds!;
     const n = chart._visibleNodeCount;
+    const baseArr = chart._visibleBaseDepths;
+    const rootArr = chart._visibleRootIds;
 
     for (let i = 0; i < n; i++) {
         const id = ids[i];
-        if (id === chart._currentRootId || store.firstChild[id] !== NULL_NODE)
-            continue;
+        const rootId = rootArr ? rootArr[i] : chart._currentRootId;
+        if (id === rootId || store.firstChild[id] !== NULL_NODE) continue;
         const w = store.x1[id] - store.x0[id];
         const h = store.y1[id] - store.y0[id];
         renderNodeLabel(chart, ctx, id, w, h, fontFamily, stops, palette);
     }
     for (let i = 0; i < n; i++) {
         const id = ids[i];
-        if (id === chart._currentRootId || store.firstChild[id] === NULL_NODE)
-            continue;
+        const rootId = rootArr ? rootArr[i] : chart._currentRootId;
+        if (id === rootId || store.firstChild[id] === NULL_NODE) continue;
         const w = store.x1[id] - store.x0[id];
         const h = store.y1[id] - store.y0[id];
+        const baseDepth = baseArr
+            ? baseArr[i]
+            : store.depth[chart._currentRootId];
         const relDepth = store.depth[id] - baseDepth;
         if (relDepth === 1) {
             renderBranchLabel(
@@ -499,7 +685,7 @@ function drawStaticChrome(
                 h,
                 fontFamily,
                 textColor,
-                false,
+                !chart._showBranchHeader,
             );
         } else if (relDepth === 2) {
             renderBranchLabel(
@@ -553,6 +739,19 @@ function drawStaticChrome(
             },
             stops,
         );
+    }
+
+    // Per-facet titles (rendered over the layout; painted in the static
+    // chrome bitmap so they appear alongside leaf labels).
+    if (chart._facetGrid) {
+        ctx.font = `11px ${fontFamily}`;
+        ctx.fillStyle = textColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        for (const cell of chart._facetGrid.cells) {
+            const plot = cell.layout.plotRect;
+            ctx.fillText(cell.label, plot.x + plot.width / 2, plot.y - 14);
+        }
     }
 
     ctx.restore();
@@ -690,7 +889,7 @@ function renderBranchLabel(
         if (w < 60 || h < 30) return;
 
         const fontSize = 12;
-        ctx.font = `bold ${fontSize}px ${fontFamily}`;
+        ctx.font = `${fontSize}px ${fontFamily}`;
 
         let text = name;
         const maxW = w - 16;
@@ -727,7 +926,7 @@ function renderBranchLabel(
         if (w < 40 || h < 22) return;
 
         const fontSize = 11;
-        ctx.font = `bold ${fontSize}px ${fontFamily}`;
+        ctx.font = `${fontSize}px ${fontFamily}`;
 
         let text = name;
         const maxW = w - 10;
@@ -779,7 +978,7 @@ function renderBreadcrumbs(
         const label = store.name[crumbId];
 
         ctx.fillStyle = textColor;
-        ctx.font = isLast ? `bold 11px ${fontFamily}` : `11px ${fontFamily}`;
+        ctx.font = isLast ? `11px ${fontFamily}` : `11px ${fontFamily}`;
 
         const textW = ctx.measureText(label).width;
         ctx.fillText(label, x, y);
@@ -830,7 +1029,14 @@ function renderTreemapTooltip(
     const theme = resolveTheme(chart._chromeCanvas!);
     const { tooltipBg, tooltipText, tooltipBorder } = theme;
 
-    const lines = buildTreemapTooltipLines(chart, nodeId);
+    // Lines come from the async lazy tooltip fetch kicked off in
+    // `handleTreemapHover`. While a fetch is in flight (or for the
+    // wrong node) this is empty; the tooltip box is skipped until
+    // fresh lines land.
+    const lines =
+        chart._hoveredTooltipNodeId === nodeId
+            ? (chart._hoveredTooltipLines ?? [])
+            : [];
     if (lines.length === 0) return;
 
     ctx.font = `11px ${fontFamily}`;

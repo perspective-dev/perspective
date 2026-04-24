@@ -19,13 +19,13 @@ attribute float a_side;
 // Per-instance (divisor=1) arc geometry.
 attribute vec2 a_angles;  // (a0, a1)  in radians
 attribute vec2 a_radii;   // (r0, r1)  inner / outer pixel radius
-attribute vec3 a_color;
+attribute vec4 a_color;
 
 uniform vec2 u_center;      // chart center in pixel space
 uniform vec2 u_resolution;  // viewport size in device pixels
 uniform float u_border_px;   // symmetric inset, in device pixels
 
-varying vec3 v_color;
+varying vec4 v_color;
 varying vec2 v_edge;         // (angular t, radial t)  for optional AA fringe
 
 void main() {
@@ -51,7 +51,7 @@ void main() {
     if(adjR1 <= adjR0) {
         // Arc thinner than the border radially — nothing to draw.
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-        v_color = vec3(0.0);
+        v_color = vec4(0.0);
         v_edge = vec2(0.0);
         return;
     }

@@ -28,38 +28,98 @@ export interface SunburstBreadcrumbRegion {
     y1: number;
 }
 
+interface FacetHitContext {
+    centerX: number;
+    centerY: number;
+    drillRoot: number;
+    /** Pre-upload visible range for this facet; undefined in non-facet mode. */
+    range?: { start: number; end: number };
+}
+
+/** Resolve the facet under cursor; returns single-plot defaults outside facet mode. */
+function facetUnderCursor(
+    chart: SunburstChart,
+    mx: number,
+    my: number,
+): FacetHitContext | null {
+    if (chart._facets.length === 0) {
+        return {
+            centerX: chart._centerX,
+            centerY: chart._centerY,
+            drillRoot: chart._currentRootId,
+        };
+    }
+    for (const facet of chart._facets) {
+        // Post-upload `instanceStart` / `instanceCount` are scan-index
+        // ranges into `_visibleNodeIds` — we need the *pre-upload*
+        // range to hit-test all arcs (including zero-width ones we
+        // skipped for draw). Walk the IDs and match by drill root
+        // ancestry instead.
+        const dx = mx - facet.centerX;
+        const dy = my - facet.centerY;
+        const r = Math.sqrt(dx * dx + dy * dy);
+        if (r > facet.maxRadius + 4) continue;
+        return {
+            centerX: facet.centerX,
+            centerY: facet.centerY,
+            drillRoot: facet.drillRoot,
+        };
+    }
+    return null;
+}
+
+/**
+ * Walk the ancestor chain from `id` up to (but not including) the
+ * synthetic `_rootId`, returning true if any step equals `anc`.
+ * Used to filter hit-test candidates to arcs that belong to a given
+ * facet's drill subtree.
+ */
+function isDescendantOf(
+    chart: SunburstChart,
+    id: number,
+    anc: number,
+): boolean {
+    const store = chart._nodeStore;
+    let p = id;
+    while (p !== NULL_NODE) {
+        if (p === anc) return true;
+        p = store.parent[p];
+    }
+    return false;
+}
+
 /** Convert `(mx, my)` to polar and find the containing visible arc. */
 function polarHitTest(chart: SunburstChart, mx: number, my: number): number {
+    const ctx = facetUnderCursor(chart, mx, my);
+    if (!ctx) return NULL_NODE;
     const store = chart._nodeStore;
     const ids = chart._visibleNodeIds;
     const n = chart._visibleNodeCount;
     if (!ids) return NULL_NODE;
 
-    const dx = mx - chart._centerX;
-    const dy = my - chart._centerY;
+    const dx = mx - ctx.centerX;
+    const dy = my - ctx.centerY;
     const r = Math.sqrt(dx * dx + dy * dy);
     let theta = Math.atan2(dy, dx);
     if (theta < 0) theta += 2 * Math.PI;
 
-    // Center-circle hit — lets the user drill up by clicking the center.
+    // Center-circle hit — drill-up target.
     if (r < store.r1[chart._rootId] + 0.001) {
-        // Use `_rootId`'s r1 as the INNER_RING_PX boundary.
-        if (chart._currentRootId !== chart._rootId) {
-            // Inside the inner circle = drill-up target.
-            return chart._currentRootId;
+        if (ctx.drillRoot !== chart._rootId) {
+            return ctx.drillRoot;
         }
     }
 
-    // Linear scan (post-LOD, bounded).
+    const faceted = chart._facets.length > 0;
     for (let i = 0; i < n; i++) {
         const id = ids[i];
-        if (id === chart._currentRootId) continue;
+        if (id === ctx.drillRoot) continue;
+        if (faceted && !isDescendantOf(chart, id, ctx.drillRoot)) continue;
         const a0 = store.a0[id];
         const a1 = store.a1[id];
         const r0 = store.r0[id];
         const r1 = store.r1[id];
         if (r < r0 || r > r1) continue;
-        // Angular containment accounts for wrap-around by normalizing.
         if (theta < a0 || theta > a1) continue;
         return id;
     }
@@ -101,6 +161,16 @@ export function handleSunburstHover(
 
     if (hit !== chart._hoveredNodeId) {
         chart._hoveredNodeId = hit;
+        chart._hoveredTooltipLines = null;
+        chart._hoveredTooltipNodeId = hit;
+        const serial = ++chart._hoveredTooltipSerial;
+        if (hit !== NULL_NODE) {
+            buildSunburstTooltipLines(chart, hit).then((lines) => {
+                if (serial !== chart._hoveredTooltipSerial) return;
+                chart._hoveredTooltipLines = lines;
+                renderSunburstChromeOverlay(chart);
+            });
+        }
         renderSunburstChromeOverlay(chart);
     }
 }
@@ -132,15 +202,27 @@ export function handleSunburstClick(
 
     // Center-circle click = drill up one level (parent of current root).
     const store = chart._nodeStore;
-    const dx = mx - chart._centerX;
-    const dy = my - chart._centerY;
-    const r = Math.sqrt(dx * dx + dy * dy);
-    if (r < store.r1[chart._rootId] + 0.001) {
-        const parent = store.parent[chart._currentRootId];
-        if (parent !== NULL_NODE) {
-            drillTo(chart, parent);
+    const ctx = facetUnderCursor(chart, mx, my);
+    if (ctx) {
+        const dx = mx - ctx.centerX;
+        const dy = my - ctx.centerY;
+        const r = Math.sqrt(dx * dx + dy * dy);
+        if (r < store.r1[chart._rootId] + 0.001) {
+            const parent = store.parent[ctx.drillRoot];
+            if (parent !== NULL_NODE && parent !== chart._rootId) {
+                drillTo(chart, parent);
+            } else if (chart._facets.length > 0) {
+                // Already at the facet root: reset this facet's drill.
+                const facet = chart._facets.find(
+                    (f) => f.drillRoot === ctx.drillRoot,
+                );
+                if (facet) chart._facetDrillRoots.delete(facet.label);
+                if (chart._glManager) {
+                    renderSunburstFrame(chart, chart._glManager);
+                }
+            }
+            return;
         }
-        return;
     }
 
     const hit = polarHitTest(chart, mx, my);
@@ -153,7 +235,26 @@ export function handleSunburstClick(
     }
 }
 
+/**
+ * Drill the clicked facet (or the whole chart in non-facet mode).
+ * Faceted drill walks up to the facet root (top-level child of
+ * `_rootId`), records the new drill node under that facet's label,
+ * and re-renders.
+ */
 function drillTo(chart: SunburstChart, nodeId: number): void {
+    const store = chart._nodeStore;
+    if (chart._splitBy.length > 0 && chart._facetConfig.facet_mode === "grid") {
+        let p = nodeId;
+        while (p !== NULL_NODE && store.parent[p] !== chart._rootId) {
+            p = store.parent[p];
+        }
+        if (p !== NULL_NODE) {
+            chart._facetDrillRoots.set(store.name[p], nodeId);
+        }
+        chart._hoveredNodeId = NULL_NODE;
+        if (chart._glManager) renderSunburstFrame(chart, chart._glManager);
+        return;
+    }
     chart._currentRootId = nodeId;
     rebuildBreadcrumbs(chart, nodeId);
     chart._hoveredNodeId = NULL_NODE;
@@ -171,29 +272,55 @@ export function showSunburstPinnedTooltip(
     if (!themeEl) return;
     const theme = resolveTheme(themeEl);
 
-    const lines = buildSunburstTooltipLines(chart, nodeId);
-    if (lines.length === 0) return;
-
     const parent = chart._glCanvas?.parentElement;
     if (!parent) return;
 
     const store = chart._nodeStore;
     const midA = (store.a0[nodeId] + store.a1[nodeId]) / 2;
     const midR = (store.r0[nodeId] + store.r1[nodeId]) / 2;
-    const cx = chart._centerX + Math.cos(midA) * midR;
-    const cy = chart._centerY + Math.sin(midA) * midR;
+    // In faceted mode resolve which facet owns this node so the
+    // tooltip anchors to the correct sub-chart's center.
+    let anchorX = chart._centerX;
+    let anchorY = chart._centerY;
+    if (chart._facets.length > 0) {
+        for (const facet of chart._facets) {
+            let p = nodeId;
+            let owned = false;
+            while (p !== NULL_NODE) {
+                if (p === facet.drillRoot) {
+                    owned = true;
+                    break;
+                }
+                p = store.parent[p];
+            }
+            if (owned) {
+                anchorX = facet.centerX;
+                anchorY = facet.centerY;
+                break;
+            }
+        }
+    }
+    const cx = anchorX + Math.cos(midA) * midR;
+    const cy = anchorY + Math.sin(midA) * midR;
 
     const dpr = window.devicePixelRatio || 1;
     const cssWidth = (chart._glCanvas?.width || 100) / dpr;
     const cssHeight = (chart._glCanvas?.height || 100) / dpr;
 
-    chart._tooltip.showPinned(
-        parent,
-        lines,
-        { px: cx, py: cy },
-        { cssWidth, cssHeight },
-        theme,
-    );
+    // Tooltip columns are fetched lazily from the view — the tree
+    // itself only retains ancestor names + aggregated value + color.
+    // Stale resolutions are discarded via the `_pinnedNodeId` check.
+    buildSunburstTooltipLines(chart, nodeId).then((lines) => {
+        if (chart._pinnedNodeId !== nodeId) return;
+        if (lines.length === 0) return;
+        chart._tooltip.showPinned(
+            parent,
+            lines,
+            { px: cx, py: cy },
+            { cssWidth, cssHeight },
+            theme,
+        );
+    });
 
     chart._hoveredNodeId = NULL_NODE;
     renderSunburstChromeOverlay(chart);
@@ -204,10 +331,10 @@ export function dismissSunburstPinnedTooltip(chart: SunburstChart): void {
     chart._pinnedNodeId = NULL_NODE;
 }
 
-export function buildSunburstTooltipLines(
+export async function buildSunburstTooltipLines(
     chart: SunburstChart,
     nodeId: number,
-): string[] {
+): Promise<string[]> {
     const store = chart._nodeStore;
     const lines: string[] = [];
 
@@ -227,40 +354,32 @@ export function buildSunburstTooltipLines(
 
     lines.push(`Value: ${formatTickValue(store.value[nodeId])}`);
 
+    // Color value (numeric branch): stored on the node at insert
+    // time, so it's always available without a view fetch.
+    if (chart._colorName && !isNaN(store.colorValue[nodeId])) {
+        lines.push(
+            `${chart._colorName}: ${formatTickValue(store.colorValue[nodeId])}`,
+        );
+    }
+
     const rowIdx = store.leafRowIdx[nodeId];
     const isLeaf =
         store.firstChild[nodeId] === NULL_NODE && rowIdx !== NULL_NODE;
 
-    if (isLeaf && chart._sizeName) {
-        const numeric = chart._numericRowData.get(chart._sizeName);
-        if (numeric) {
-            lines.push(
-                `${chart._sizeName}: ${formatTickValue(numeric[rowIdx])}`,
-            );
-        }
-    }
-    if (chart._colorName) {
-        if (!isNaN(store.colorValue[nodeId])) {
-            lines.push(
-                `${chart._colorName}: ${formatTickValue(store.colorValue[nodeId])}`,
-            );
-        } else if (isLeaf) {
-            const str = chart._stringRowData.get(chart._colorName);
-            if (str && str[rowIdx] !== undefined) {
-                lines.push(`${chart._colorName}: ${str[rowIdx]}`);
+    // Extra tooltip columns fetched on demand — see the treemap
+    // counterpart for the same pattern.
+    if (isLeaf && chart._lazyRows) {
+        const row = await chart._lazyRows.fetchRow(rowIdx);
+        for (const [name, value] of row) {
+            if (value === null || value === undefined) continue;
+            if (name === chart._colorName && !isNaN(store.colorValue[nodeId])) {
+                continue;
             }
-        }
-    }
-
-    if (isLeaf) {
-        for (const [name, arr] of chart._numericRowData) {
-            if (name === chart._sizeName || name === chart._colorName) continue;
-            lines.push(`${name}: ${formatTickValue(arr[rowIdx])}`);
-        }
-        for (const [name, arr] of chart._stringRowData) {
-            if (name === chart._sizeName || name === chart._colorName) continue;
-            const v = arr[rowIdx];
-            if (v !== undefined) lines.push(`${name}: ${v}`);
+            if (typeof value === "number") {
+                lines.push(`${name}: ${formatTickValue(value)}`);
+            } else {
+                lines.push(`${name}: ${value}`);
+            }
         }
     }
 

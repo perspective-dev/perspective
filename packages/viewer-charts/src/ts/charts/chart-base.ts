@@ -10,13 +10,19 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+import type { View } from "@perspective-dev/client";
 import type { ColumnDataMap } from "../data/view-reader";
+import { LazyRowFetcher } from "../data/lazy-row";
 import type { WebGLContextManager } from "../webgl/context-manager";
-import type {
-    ZoomConfig,
+import {
     ZoomController,
+    type ZoomConfig,
 } from "../interaction/zoom-controller";
-import type { ChartImplementation } from "./chart";
+import {
+    DEFAULT_FACET_CONFIG,
+    type ChartImplementation,
+    type FacetConfig,
+} from "./chart";
 import { TooltipController } from "../interaction/tooltip-controller";
 
 /**
@@ -76,6 +82,15 @@ export abstract class AbstractChart implements ChartImplementation {
     _gridlineCanvas: HTMLCanvasElement | null = null;
     _chromeCanvas: HTMLCanvasElement | null = null;
     _zoomController: ZoomController | null = null;
+    /**
+     * Per-facet zoom controllers. Populated when `zoom_mode ===
+     * "independent"` and the chart enters faceted mode; each facet's
+     * render path reads its own viewport from the matching entry.
+     *
+     * Shared-zoom mode leaves this empty; `_zoomController` is the
+     * single domain used for every facet.
+     */
+    _facetZoomControllers: ZoomController[] = [];
     _glCanvas: HTMLCanvasElement | null = null;
 
     _columnSlots: (string | null)[] = [];
@@ -84,8 +99,21 @@ export abstract class AbstractChart implements ChartImplementation {
     _columnTypes: Record<string, string> = {};
     _columnsConfig: Record<string, any> = {};
     _defaultChartType: string | undefined = undefined;
+    _facetConfig: FacetConfig = { ...DEFAULT_FACET_CONFIG };
 
     _tooltip = new TooltipController();
+
+    /**
+     * On-demand single-row fetcher used by lazy tooltip column
+     * lookups. Reset on every `setView` call; subclasses read
+     * `_lazyRows.fetchRow(rowIdx)` from their hover/pin paths and
+     * compare a captured serial against the current hovered/pinned
+     * state at resolution time, so stale fetches never paint.
+     *
+     * Can be `null` on chart types that don't surface the View
+     * (unit-tested charts) or before the first `draw`.
+     */
+    _lazyRows: LazyRowFetcher | null = null;
 
     private _renderScheduled = false;
     private _renderRAFId = 0;
@@ -103,6 +131,47 @@ export abstract class AbstractChart implements ChartImplementation {
     setZoomController(zc: ZoomController): void {
         this._zoomController = zc;
         zc.configure(this.getZoomConfig());
+    }
+
+    /**
+     * Resolve the zoom controller that owns facet `idx`. In shared-zoom
+     * mode (default) this is always the chart's single `_zoomController`.
+     * In independent-zoom mode the router provisions one controller per
+     * facet; this returns the matching entry, allocating on demand so
+     * the render path never has to check `zoom_mode` itself.
+     */
+    getZoomControllerForFacet(idx: number): ZoomController | null {
+        if (this._facetConfig.zoom_mode === "shared") {
+            return this._zoomController;
+        }
+        if (!this._zoomController) return null;
+        let zc = this._facetZoomControllers[idx];
+        if (!zc) {
+            zc = new ZoomController();
+            zc.configure(this.getZoomConfig());
+            this._facetZoomControllers[idx] = zc;
+        }
+        return zc;
+    }
+
+    /**
+     * Seed base domain on every zoom controller owned by this chart.
+     * Build paths call this once per load with the accumulated data
+     * extents; independent-zoom facets share the same base so visual
+     * zoom levels stay comparable across facets.
+     */
+    setZoomBaseDomain(
+        xMin: number,
+        xMax: number,
+        yMin: number,
+        yMax: number,
+    ): void {
+        if (this._zoomController) {
+            this._zoomController.setBaseDomain(xMin, xMax, yMin, yMax);
+        }
+        for (const zc of this._facetZoomControllers) {
+            if (zc) zc.setBaseDomain(xMin, xMax, yMin, yMax);
+        }
     }
 
     /**
@@ -135,6 +204,28 @@ export abstract class AbstractChart implements ChartImplementation {
         this._defaultChartType = chartType;
     }
 
+    setFacetConfig(cfg: FacetConfig): void {
+        this._facetConfig = { ...cfg };
+    }
+
+    /**
+     * Install a new view for lazy row fetches. Disposes any prior
+     * fetcher and dismisses the pinned tooltip — the prior pinned
+     * row index has no guaranteed correspondence in the new view
+     * (pivot / filter / sort changes can all reshuffle rows).
+     *
+     * TODO: future work will keep pinned tooltips visible with their
+     * last-resolved lines until the user explicitly dismisses them,
+     * so a mid-session view update doesn't blow away focused context.
+     */
+    setView(view: View): void {
+        if (this._lazyRows) {
+            this._lazyRows.dispose();
+        }
+        this._lazyRows = new LazyRowFetcher(view);
+        this._tooltip.dismissPinned();
+    }
+
     // ── Render batching ────────────────────────────────────────────────────
 
     /** Schedule one `_fullRender` on the next animation frame (idempotent). */
@@ -163,6 +254,10 @@ export abstract class AbstractChart implements ChartImplementation {
         this._tooltip.detach();
         this._tooltip.dismissPinned();
         this._cancelScheduledRender();
+        if (this._lazyRows) {
+            this._lazyRows.dispose();
+            this._lazyRows = null;
+        }
         this.destroyInternal();
     }
 

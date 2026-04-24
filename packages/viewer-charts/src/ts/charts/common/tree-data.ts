@@ -13,13 +13,32 @@
 /**
  * Streaming tree pipeline shared by treemap and sunburst. Rows arrive
  * incrementally; each chunk inserts its rows directly into the SOA
- * tree and appends to per-column row-data buffers for tooltip lookup.
+ * tree. Per-leaf tooltip columns are fetched lazily on pin via the
+ * chart's `_lazyRows`; the tree only retains `leafRowIdx` per leaf
+ * (small, O(leaves)) as the handle back to the source view row.
  * After a chunk is processed, `finalizeTree` recomputes `value`
- * bottom-up and (in series mode) materializes `colorLabel` from the
- * ancestor-name composite.
+ * bottom-up.
+ *
+ * Color mode:
+ *   - `"numeric"` — `readColor` reads the row's numeric value; the
+ *     render path maps it through the continuous gradient.
+ *   - `"series"` — `readColor` reads the row's string value from the
+ *     color column's dictionary, and `seedColorLabels` pre-populates
+ *     `_uniqueColorLabels` in dictionary-index order. Render picks
+ *     `palette[dictIdx % paletteSize]`.
+ *   - `"empty"` — no color column; every leaf gets `palette[0]`.
+ *
+ * When `_splitBy` is populated, every row is duplicated — one insertion
+ * per split prefix, with that prefix pushed as the top-level path
+ * segment so the top-level children of the synthetic root become
+ * facet roots. The per-prefix `size` / `color` columns (named
+ * `${prefix}|${base}`) feed the facet's values. `seedColorLabels`
+ * runs once per split so every split's dictionary contributes to the
+ * shared legend.
  */
 
 import type { ColumnDataMap, ColumnData } from "../../data/view-reader";
+import { buildSplitGroups } from "../../data/split-groups";
 import { NULL_NODE } from "./node-store";
 import type { TreeChartBase } from "./tree-chart";
 
@@ -45,9 +64,6 @@ export function resetTreeState(chart: TreeChartBase): void {
     chart._breadcrumbIds = [rootId];
 
     chart._rowCount = 0;
-    chart._rowCapacity = 0;
-    chart._numericRowData.clear();
-    chart._stringRowData.clear();
 
     chart._colorMin = Infinity;
     chart._colorMax = -Infinity;
@@ -55,75 +71,6 @@ export function resetTreeState(chart: TreeChartBase): void {
 
     chart._visibleNodeIds = null;
     chart._visibleNodeCount = 0;
-}
-
-// ── Row-data buffer growth ───────────────────────────────────────────────
-
-function ensureRowCapacity(chart: TreeChartBase, needed: number): void {
-    if (needed <= chart._rowCapacity) return;
-    const newCap = Math.max(needed, chart._rowCapacity * 2 || 1024);
-    for (const [name, old] of chart._numericRowData) {
-        const next = new Float32Array(newCap);
-        next.set(old);
-        chart._numericRowData.set(name, next);
-    }
-    for (const [, old] of chart._stringRowData) {
-        old.length = newCap;
-    }
-    chart._rowCapacity = newCap;
-}
-
-function ensureNumericCol(chart: TreeChartBase, name: string): Float32Array {
-    let arr = chart._numericRowData.get(name);
-    if (!arr) {
-        arr = new Float32Array(chart._rowCapacity);
-        chart._numericRowData.set(name, arr);
-    } else if (arr.length < chart._rowCapacity) {
-        const next = new Float32Array(chart._rowCapacity);
-        next.set(arr);
-        chart._numericRowData.set(name, next);
-        arr = next;
-    }
-    return arr;
-}
-
-function ensureStringCol(chart: TreeChartBase, name: string): string[] {
-    let arr = chart._stringRowData.get(name);
-    if (!arr) {
-        arr = new Array(chart._rowCapacity);
-        chart._stringRowData.set(name, arr);
-    }
-    return arr;
-}
-
-/**
- * Capture every non-`__` column's value at row `base + j` for
- * `j` in `[0, sourceLength)`. Enables O(1) tooltip lookup without
- * per-node `Map` allocations.
- */
-function captureRowData(
-    chart: TreeChartBase,
-    columns: ColumnDataMap,
-    base: number,
-    sourceLength: number,
-): void {
-    for (const [name, col] of columns) {
-        if (name.startsWith("__")) continue;
-        if (col.type === "string" && col.indices && col.dictionary) {
-            const arr = ensureStringCol(chart, name);
-            const ind = col.indices;
-            const dict = col.dictionary;
-            for (let j = 0; j < sourceLength; j++) {
-                arr[base + j] = dict[ind[j]];
-            }
-        } else if (col.values) {
-            const arr = ensureNumericCol(chart, name);
-            const vals = col.values;
-            for (let j = 0; j < sourceLength; j++) {
-                arr[base + j] = vals[j] as number;
-            }
-        }
-    }
 }
 
 // ── Tree insertion ───────────────────────────────────────────────────────
@@ -171,7 +118,12 @@ function insertRow(
 
         if (d === depth - 1) {
             if (groupByLen === 0 || depth === groupByLen) {
-                chart._nodeStore.size[childId] = Math.max(0, sizeValue);
+                // Store `|size|` for layout; remember the sign so
+                // render can dim negative leaves (matches the area
+                // chart's `theme.areaOpacity`).
+                chart._nodeStore.size[childId] = Math.abs(sizeValue);
+                chart._nodeStore.sizeSign[childId] =
+                    sizeValue < 0 ? -1 : 1;
                 chart._nodeStore.leafRowIdx[childId] = rowIdx;
             }
             if (!isNaN(colorValue)) {
@@ -200,17 +152,80 @@ function readColor(
     rowIdx: number,
 ): { colorValue: number; colorLabel: string } {
     let colorValue = NaN;
-    const colorLabel = "";
+    let colorLabel = "";
     if (!colorCol) return { colorValue, colorLabel };
     if (chart._colorMode === "numeric" && colorCol.values) {
         colorValue = colorCol.values[rowIdx] as number;
+    } else if (
+        chart._colorMode === "series" &&
+        colorCol.indices &&
+        colorCol.dictionary
+    ) {
+        // Read the dictionary-decoded string for this row. The palette
+        // index that render uses is `_uniqueColorLabels.get(label)`,
+        // which `seedColorLabels` seeds in dictionary-index order so
+        // the end result is `palette[dictIdx % paletteSize]`.
+        colorLabel = colorCol.dictionary[colorCol.indices[rowIdx]];
     }
-    // Series-mode colorLabel is populated in finalizeTree (post-pass)
-    // from the group-by path, so readColor just returns empty.
     return { colorValue, colorLabel };
 }
 
+/**
+ * Seed `_uniqueColorLabels` with the color column's dictionary in
+ * index order. Using insertion-order-guarded `.set` means later
+ * chunks (or later splits in split_by mode) append new entries
+ * without disturbing already-assigned indices; for a single stable
+ * dictionary this yields `_uniqueColorLabels.get(dict[i]) === i`.
+ *
+ * No-op outside `"series"` mode or when the column lacks a
+ * dictionary.
+ */
+function seedColorLabels(
+    chart: TreeChartBase,
+    colorCol: ColumnData | null | undefined,
+): void {
+    if (chart._colorMode !== "series") return;
+    if (!colorCol?.dictionary) return;
+    const dict = colorCol.dictionary;
+    for (let i = 0; i < dict.length; i++) {
+        const s = dict[i];
+        if (!chart._uniqueColorLabels.has(s)) {
+            chart._uniqueColorLabels.set(s, chart._uniqueColorLabels.size);
+        }
+    }
+}
+
 // ── Chunk processor ──────────────────────────────────────────────────────
+
+interface SplitSource {
+    prefix: string;
+    sizeCol: ColumnData | null;
+    colorCol: ColumnData | null;
+}
+
+/**
+ * Resolve the per-split size / color columns. Returns `null` when
+ * `_splitBy` is empty — callers then take the non-split fast path.
+ */
+function resolveSplitSources(
+    chart: TreeChartBase,
+    columns: ColumnDataMap,
+): SplitSource[] | null {
+    if (chart._splitBy.length === 0) return null;
+    const required: string[] = chart._sizeName ? [chart._sizeName] : [];
+    const optional: string[] = chart._colorName ? [chart._colorName] : [];
+    const groups = buildSplitGroups(columns, required, optional);
+    if (groups.length === 0) return null;
+    return groups.map((g) => ({
+        prefix: g.prefix,
+        sizeCol: chart._sizeName
+            ? (columns.get(`${g.prefix}|${chart._sizeName}`) ?? null)
+            : null,
+        colorCol: chart._colorName
+            ? (columns.get(`${g.prefix}|${chart._colorName}`) ?? null)
+            : null,
+    }));
+}
 
 /**
  * Process one incoming chunk: grow row-data buffers, walk every row,
@@ -229,18 +244,41 @@ export function processTreeChunk(
 
     const hasGroupBy = rpCols.length > 0;
     const groupByLen = chart._groupBy.length;
+    const splitSources = resolveSplitSources(chart, columns);
+    const hasSplits = splitSources !== null;
 
     const sizeCol = chart._sizeName ? columns.get(chart._sizeName) : null;
     const colorCol = chart._colorName ? columns.get(chart._colorName) : null;
 
+    const firstSizeCol = hasSplits ? splitSources![0].sizeCol : sizeCol;
     const numRows = hasGroupBy
         ? rpCols[0].indices.length
-        : (sizeCol?.values?.length ?? 0);
+        : (firstSizeCol?.values?.length ?? 0);
     if (numRows === 0) return;
 
+    // Seed palette label indices from the color column's dictionary
+    // BEFORE inserting rows, so the first row doesn't assign label 0
+    // to whichever dict value it happens to reference. For splits we
+    // seed once per split's own color column so every dict value is
+    // known to the shared legend.
+    if (hasSplits) {
+        for (const src of splitSources!) seedColorLabels(chart, src.colorCol);
+    } else {
+        seedColorLabels(chart, colorCol);
+    }
+
+    // `base` is the source-view row offset the tree should tag its
+    // leaves with. `_rowCount` tracks how many rows prior chunks
+    // occupied so `leafRowIdx[childId] = base + i` still points back
+    // to the correct view row after multiple chunk arrivals.
     const base = chart._rowCount;
-    ensureRowCapacity(chart, base + numRows);
-    captureRowData(chart, columns, base, numRows);
+
+    // The split expansion inserts the same row under N different path
+    // prefixes. `groupByLen + 1` (or just 1 in non-group-by mode) is
+    // passed as the `groupByLen` override so `insertRow` treats the
+    // correct depth as the leaf; this keeps per-leaf `size` / `color`
+    // aligned with each facet's source column.
+    const effectiveGroupLen = hasSplits ? groupByLen + 1 : groupByLen;
 
     if (!hasGroupBy) {
         // Flat fallback: synthesize a single-segment path per row from
@@ -255,55 +293,113 @@ export function processTreeChunk(
             }
         }
 
+        const sources = hasSplits ? splitSources! : null;
         for (let i = 0; i < numRows; i++) {
             const label =
                 labelCol?.indices && labelCol?.dictionary
                     ? labelCol.dictionary[labelCol.indices[i]]
                     : `Row ${base + i}`;
-            const sizeValue = sizeCol?.values
-                ? Math.max(0, sizeCol.values[i] as number)
-                : 1;
-            const { colorValue, colorLabel } = readColor(chart, colorCol, i);
-            insertRow(
-                chart,
-                [label],
-                sizeValue,
-                colorValue,
-                colorLabel,
-                base + i,
-                groupByLen,
-            );
+
+            if (sources) {
+                for (const src of sources) {
+                    // Pass the signed value through; `insertRow` stores
+                    // `|size|` and `sizeSign` separately so the
+                    // render pass can dim negative leaves.
+                    const sizeValue = src.sizeCol?.values
+                        ? (src.sizeCol.values[i] as number)
+                        : 1;
+                    const { colorValue, colorLabel } = readColor(
+                        chart,
+                        src.colorCol,
+                        i,
+                    );
+                    insertRow(
+                        chart,
+                        [src.prefix, label],
+                        sizeValue,
+                        colorValue,
+                        colorLabel,
+                        base + i,
+                        effectiveGroupLen,
+                    );
+                }
+            } else {
+                const sizeValue = sizeCol?.values
+                    ? (sizeCol.values[i] as number)
+                    : 1;
+                const { colorValue, colorLabel } = readColor(
+                    chart,
+                    colorCol,
+                    i,
+                );
+                insertRow(
+                    chart,
+                    [label],
+                    sizeValue,
+                    colorValue,
+                    colorLabel,
+                    base + i,
+                    effectiveGroupLen,
+                );
+            }
         }
         chart._rowCount = base + numRows;
         return;
     }
 
     // Hierarchical (group_by present): reuse a scratch path buffer
-    // across rows to avoid per-row array allocation.
-    const pathScratch: string[] = new Array(rpCols.length);
+    // across rows to avoid per-row array allocation. When splits are
+    // active the scratch is one slot longer to hold the leading prefix.
+    const extra = hasSplits ? 1 : 0;
+    const pathScratch: string[] = new Array(rpCols.length + extra);
     for (let i = 0; i < numRows; i++) {
         let pathLen = 0;
         for (let d = 0; d < rpCols.length; d++) {
             const rp = rpCols[d];
             const label = rp.dictionary[rp.indices[i]];
             if (!label && label !== "0") break;
-            pathScratch[pathLen++] = label;
+            pathScratch[extra + pathLen++] = label;
         }
         if (pathLen === 0) continue; // skip total row
 
-        const rowPath = pathScratch.slice(0, pathLen);
-        const sizeValue = sizeCol?.values ? (sizeCol.values[i] as number) : 1;
-        const { colorValue, colorLabel } = readColor(chart, colorCol, i);
-
-        insertRow(
-            chart,
-            rowPath,
-            sizeValue,
-            colorValue,
-            colorLabel,
-            base + i,
-            groupByLen,
-        );
+        if (hasSplits) {
+            for (const src of splitSources!) {
+                pathScratch[0] = src.prefix;
+                const rowPath = pathScratch.slice(0, pathLen + 1);
+                const sizeValue = src.sizeCol?.values
+                    ? (src.sizeCol.values[i] as number)
+                    : 1;
+                const { colorValue, colorLabel } = readColor(
+                    chart,
+                    src.colorCol,
+                    i,
+                );
+                insertRow(
+                    chart,
+                    rowPath,
+                    sizeValue,
+                    colorValue,
+                    colorLabel,
+                    base + i,
+                    effectiveGroupLen,
+                );
+            }
+        } else {
+            const rowPath = pathScratch.slice(0, pathLen);
+            const sizeValue = sizeCol?.values
+                ? (sizeCol.values[i] as number)
+                : 1;
+            const { colorValue, colorLabel } = readColor(chart, colorCol, i);
+            insertRow(
+                chart,
+                rowPath,
+                sizeValue,
+                colorValue,
+                colorLabel,
+                base + i,
+                effectiveGroupLen,
+            );
+        }
     }
     chart._rowCount = base + numRows;
 }
@@ -314,10 +410,12 @@ export function processTreeChunk(
  * Post-chunk finalization.
  *   1. Recompute `value` bottom-up from `size` via an iterative
  *      post-order walk.
- *   2. In series mode, materialize each leaf's `colorLabel` from its
- *      ancestor-name composite.
- *   3. Re-resolve `_currentRootId` from the breadcrumb name-path so
+ *   2. Re-resolve `_currentRootId` from the breadcrumb name-path so
  *      drill state survives incremental chunk arrivals.
+ *
+ * `colorLabel` is set at insert time (`readColor`) and needs no
+ * post-pass: in `"series"` mode it comes from the color column's
+ * dictionary, and in `"numeric"` / `"empty"` modes it's unused.
  */
 export function finalizeTree(chart: TreeChartBase): void {
     const store = chart._nodeStore;
@@ -325,7 +423,6 @@ export function finalizeTree(chart: TreeChartBase): void {
     const size = store.size;
     const firstChild = store.firstChild;
     const nextSibling = store.nextSibling;
-    const parent = store.parent;
 
     // Iterative post-order. Stack holds `(id, state)` pairs; state
     // 0 = pre-visit, 1 = post-visit.
@@ -367,33 +464,6 @@ export function finalizeTree(chart: TreeChartBase): void {
                     sum += value[c];
                 }
                 value[id] = sum;
-            }
-        }
-    }
-
-    // Series-mode colorLabel: composite of ancestor names (excluding
-    // the synthetic root). Walk only leaves; reuse a short path buffer.
-    if (chart._colorMode === "series") {
-        const pathBuf: string[] = [];
-        const colorLabels = store.colorLabel;
-        const name = store.name;
-        for (let id = 0; id < store.count; id++) {
-            if (firstChild[id] !== NULL_NODE) continue;
-            if (id === chart._rootId) continue;
-            pathBuf.length = 0;
-            let p = id;
-            while (parent[p] !== NULL_NODE) {
-                pathBuf.push(name[p]);
-                p = parent[p];
-            }
-            pathBuf.reverse();
-            const key = pathBuf.join("");
-            colorLabels[id] = key;
-            if (!chart._uniqueColorLabels.has(key)) {
-                chart._uniqueColorLabels.set(
-                    key,
-                    chart._uniqueColorLabels.size,
-                );
             }
         }
     }

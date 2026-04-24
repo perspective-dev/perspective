@@ -43,6 +43,17 @@ export interface SunburstLocations {
 }
 
 /**
+ * Sentinel fallback for the Size slot when the user hasn't picked one:
+ * use the first non-metadata column in the incoming view.
+ */
+function firstNonMetadataColumn(columns: ColumnDataMap): string {
+    for (const k of columns.keys()) {
+        if (!k.startsWith("__")) return k;
+    }
+    return "";
+}
+
+/**
  * Sunburst chart. Shares tree storage + streaming pipeline + color
  * mode with `TreeChartBase`; adds polar layout + instanced-arc WebGL
  * rendering + drill / tooltip interactions.
@@ -74,6 +85,29 @@ export class SunburstChart extends TreeChartBase {
 
     _chromeCache: ImageBitmap | null = null;
     _chromeCacheDirty = true;
+    /** See `TreemapChart._chromeCacheGen` — same race, same fix. */
+    _chromeCacheGen = 0;
+
+    // ── Faceted state ────────────────────────────────────────────────────
+    _facetGrid: import("../../layout/facet-grid").FacetGrid | null = null;
+    /** Per-facet drill roots — mirrors `TreemapChart._facetDrillRoots`. */
+    _facetDrillRoots: Map<string, number> = new Map();
+    /**
+     * Per-facet rendering state. `index` matches the facet grid cell;
+     * `centerX`, `centerY`, `maxRadius` are used for layout + hit test;
+     * `drillRoot` is the sub-root the facet is currently showing;
+     * `instanceStart`, `instanceCount` index into the shared instance
+     * buffer for draw dispatch.
+     */
+    _facets: {
+        label: string;
+        centerX: number;
+        centerY: number;
+        maxRadius: number;
+        drillRoot: number;
+        instanceStart: number;
+        instanceCount: number;
+    }[] = [];
 
     attachTooltip(glCanvas: HTMLCanvasElement): void {
         this._glCanvas = glCanvas;
@@ -106,12 +140,8 @@ export class SunburstChart extends TreeChartBase {
         if (startRow === 0) {
             this._cancelScheduledRender();
 
-            this._allColumns = Array.from(columns.keys()).filter(
-                (k) => !k.startsWith("__"),
-            );
-
             const slots = this._columnSlots;
-            this._sizeName = slots[0] || this._allColumns[0] || "";
+            this._sizeName = slots[0] || firstNonMetadataColumn(columns) || "";
             this._colorName = slots[1] || "";
             if (!this._colorName) {
                 this._colorMode = "empty";
@@ -124,6 +154,21 @@ export class SunburstChart extends TreeChartBase {
                     t === "datetime";
                 this._colorMode = isNumeric ? "numeric" : "series";
             }
+
+            // Clear per-draw state tied to the old tree — see
+            // `TreemapChart.uploadAndRender` for the same pattern and
+            // rationale.
+            this._hoveredNodeId = NULL_NODE;
+            this._pinnedNodeId = NULL_NODE;
+            this._breadcrumbRegions = [];
+            this._facetDrillRoots.clear();
+            this._facetGrid = null;
+            this._facets = [];
+            dismissSunburstPinnedTooltip(this);
+            this._chromeCache?.close();
+            this._chromeCache = null;
+            this._chromeCacheDirty = true;
+            this._chromeCacheGen++;
 
             resetTreeState(this);
         }
@@ -159,10 +204,11 @@ export class SunburstChart extends TreeChartBase {
         this._currentRootId = NULL_NODE;
         this._breadcrumbIds = [];
         this._childLookup.clear();
-        this._numericRowData.clear();
-        this._stringRowData.clear();
         this._visibleNodeIds = null;
         this._visibleNodeCount = 0;
         this._breadcrumbRegions = [];
+        this._facetGrid = null;
+        this._facetDrillRoots.clear();
+        this._facets = [];
     }
 }

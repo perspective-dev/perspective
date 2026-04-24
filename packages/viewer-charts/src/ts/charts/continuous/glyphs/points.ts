@@ -78,51 +78,15 @@ export class PointGlyph implements Glyph {
         glManager: WebGLContextManager,
         projection: Float32Array,
     ): void {
-        const gl = glManager.gl;
         const cache = chart._glyphCache as PointCache | null;
         if (!cache) return;
-
-        gl.useProgram(cache.program);
-        setUniforms(cache, gl, projection, chart);
-        bindGradientTexture(
-            glManager,
-            chart._gradientCache!.texture,
-            cache.u_gradient_lut,
-            0,
-        );
-
-        const posBuf = glManager.bufferPool.getOrCreate(
-            "a_position",
-            2,
-            Float32Array.BYTES_PER_ELEMENT,
-        );
-        const colorBuf = glManager.bufferPool.getOrCreate(
-            "a_color_value",
-            1,
-            Float32Array.BYTES_PER_ELEMENT,
-        );
-        const sizeBuf = glManager.bufferPool.getOrCreate(
-            "a_size_value",
-            1,
-            Float32Array.BYTES_PER_ELEMENT,
-        );
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, posBuf.buffer);
-        gl.enableVertexAttribArray(cache.a_position);
-        gl.vertexAttribPointer(cache.a_position, 2, gl.FLOAT, false, 0, 0);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, colorBuf.buffer);
-        gl.enableVertexAttribArray(cache.a_color_value);
-        gl.vertexAttribPointer(cache.a_color_value, 1, gl.FLOAT, false, 0, 0);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuf.buffer);
-        gl.enableVertexAttribArray(cache.a_size_value);
-        gl.vertexAttribPointer(cache.a_size_value, 1, gl.FLOAT, false, 0, 0);
+        if (!bindPointState(cache, chart, glManager, projection)) return;
 
         // Per-series tight draws: each series `s` occupies slots
         // `[s*cap, s*cap + count[s])`. Dispatching `count[s]` avoids
         // rasterizing unused tail slots. All attribs have divisor=0 so
         // `first` shifts them together.
+        const gl = glManager.gl;
         const numSeries = Math.max(1, chart._splitGroups.length);
         const cap = chart._seriesCapacity;
         for (let s = 0; s < numSeries; s++) {
@@ -132,26 +96,82 @@ export class PointGlyph implements Glyph {
         }
     }
 
-    buildTooltipLines(chart: ContinuousChart, flatIdx: number): string[] {
+    drawSeries(
+        chart: ContinuousChart,
+        glManager: WebGLContextManager,
+        projection: Float32Array,
+        seriesIdx: number,
+    ): void {
+        const cache = chart._glyphCache as PointCache | null;
+        if (!cache) return;
+        if (!bindPointState(cache, chart, glManager, projection)) return;
+
+        const count = chart._seriesUploadedCounts[seriesIdx] ?? 0;
+        if (count <= 0) return;
+        const gl = glManager.gl;
+        const cap = chart._seriesCapacity;
+        gl.drawArrays(gl.POINTS, seriesIdx * cap, count);
+    }
+
+    async buildTooltipLines(
+        chart: ContinuousChart,
+        flatIdx: number,
+    ): Promise<string[]> {
         const lines: string[] = [];
-        const rowPath = chart._stringRowData.get("__ROW_PATH__");
-        if (rowPath && rowPath[flatIdx] != null) {
-            lines.push(String(rowPath[flatIdx]));
+        if (!chart._rowIndexData || !chart._lazyRows) return lines;
+        const rowIdx = chart._rowIndexData[flatIdx];
+        if (rowIdx < 0) return lines;
+
+        // In split mode, the row the user hovered corresponds to one
+        // series — so surface the split prefix as the first line so
+        // the user can tell which facet's data this is.
+        if (chart._splitGroups.length > 0 && chart._seriesCapacity > 0) {
+            const seriesIdx = Math.floor(flatIdx / chart._seriesCapacity);
+            const sg = chart._splitGroups[seriesIdx];
+            if (sg?.prefix) lines.push(sg.prefix);
         }
-        for (const colName of chart._tooltipColumns) {
-            const strData = chart._stringRowData.get(colName);
-            if (strData && strData[flatIdx] != null) {
-                lines.push(`${colName}: ${strData[flatIdx]}`);
+
+        const row = await chart._lazyRows.fetchRow(rowIdx);
+
+        // Row-path (group_by): the view emits `__ROW_PATH_0__` …
+        // `__ROW_PATH_N__` dictionary columns. `LazyRowFetcher`
+        // filters out `__` columns, so fetch the row-path from the
+        // levels we know: iterate the view schema via `_columnTypes`
+        // is costly; instead, reuse the column-type map to infer only
+        // the non-metadata columns. Row-path columns are metadata; we
+        // skip them here and the visual hierarchy is instead conveyed
+        // by the aggregated view already surfacing grouped columns.
+        //
+        // In split mode we only have per-split columns like
+        // `A|price`. Filter to the prefix the user hovered on so
+        // the tooltip shows only relevant facet values.
+        const prefixFilter =
+            chart._splitGroups.length > 0 && chart._seriesCapacity > 0
+                ? (chart._splitGroups[Math.floor(flatIdx / chart._seriesCapacity)]
+                      ?.prefix ?? null)
+                : null;
+
+        for (const [colName, value] of row) {
+            if (value === null || value === undefined) continue;
+            let displayName = colName;
+            if (prefixFilter !== null) {
+                const expected = `${prefixFilter}|`;
+                if (!colName.startsWith(expected)) continue;
+                displayName = colName.substring(expected.length);
+            } else if (colName.includes("|")) {
+                // Non-split chart that somehow has pipe-prefixed
+                // columns (shouldn't happen, but defensively skip).
                 continue;
             }
-            const numData = chart._numericRowData.get(colName);
-            if (numData) {
+            if (typeof value === "number") {
                 const colType = chart._columnTypes[colName] || "";
                 const isDate = colType === "date" || colType === "datetime";
                 const formatted = isDate
-                    ? formatDateTickValue(numData[flatIdx])
-                    : formatTickValue(numData[flatIdx]);
-                lines.push(`${colName}: ${formatted}`);
+                    ? formatDateTickValue(value)
+                    : formatTickValue(value);
+                lines.push(`${displayName}: ${formatted}`);
+            } else {
+                lines.push(`${displayName}: ${value}`);
             }
         }
         return lines;
@@ -191,4 +211,58 @@ function setUniforms(
     }
 
     gl.uniform2f(cache.u_point_size_range, 2.0 * dpr, 16.0 * dpr);
+}
+
+/**
+ * Shared pre-draw state setup for `draw` and `drawSeries`. Binds the
+ * program, uploads uniforms + gradient texture, wires the three per-
+ * vertex attributes. Returns false if the gradient cache is missing.
+ */
+function bindPointState(
+    cache: PointCache,
+    chart: ContinuousChart,
+    glManager: WebGLContextManager,
+    projection: Float32Array,
+): boolean {
+    const gl = glManager.gl;
+    if (!chart._gradientCache) return false;
+
+    gl.useProgram(cache.program);
+    setUniforms(cache, gl, projection, chart);
+    bindGradientTexture(
+        glManager,
+        chart._gradientCache.texture,
+        cache.u_gradient_lut,
+        0,
+    );
+
+    const posBuf = glManager.bufferPool.getOrCreate(
+        "a_position",
+        2,
+        Float32Array.BYTES_PER_ELEMENT,
+    );
+    const colorBuf = glManager.bufferPool.getOrCreate(
+        "a_color_value",
+        1,
+        Float32Array.BYTES_PER_ELEMENT,
+    );
+    const sizeBuf = glManager.bufferPool.getOrCreate(
+        "a_size_value",
+        1,
+        Float32Array.BYTES_PER_ELEMENT,
+    );
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf.buffer);
+    gl.enableVertexAttribArray(cache.a_position);
+    gl.vertexAttribPointer(cache.a_position, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuf.buffer);
+    gl.enableVertexAttribArray(cache.a_color_value);
+    gl.vertexAttribPointer(cache.a_color_value, 1, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuf.buffer);
+    gl.enableVertexAttribArray(cache.a_size_value);
+    gl.vertexAttribPointer(cache.a_size_value, 1, gl.FLOAT, false, 0, 0);
+
+    return true;
 }

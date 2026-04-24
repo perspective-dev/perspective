@@ -15,7 +15,13 @@ import type { WebGLContextManager } from "../../webgl/context-manager";
 import { AbstractChart } from "../chart-base";
 import { PlotLayout } from "../../layout/plot-layout";
 import type { CategoricalLevel } from "../../chrome/categorical-axis";
-import { buildHeatmapPipeline, type HeatmapCell } from "./heatmap-build";
+import type { FacetGrid } from "../../layout/facet-grid";
+import {
+    buildHeatmapPipeline,
+    partitionColumnsPerFacet,
+    type HeatmapCell,
+    type HeatmapPipelineResult,
+} from "./heatmap-build";
 import {
     renderHeatmapFrame,
     renderHeatmapChromeOverlay,
@@ -24,10 +30,29 @@ import {
 import { handleHeatmapHover } from "./heatmap-interact";
 
 /**
+ * One heatmap in a facet-grid layout. Each facet corresponds to one
+ * user-selected column in the `Color` slot; its `pipeline` holds the
+ * cell data, and `layout` is the cell's `PlotLayout` from `buildFacetGrid`.
+ * `instanceStart`/`instanceCount` give the range of the packed
+ * cell/colorT buffers that belong to this facet.
+ */
+export interface HeatmapFacet {
+    label: string;
+    pipeline: HeatmapPipelineResult;
+    layout: PlotLayout;
+    instanceStart: number;
+    instanceCount: number;
+}
+
+/**
  * Heatmap chart. `yIdx` maps 1:1 to the arrow column iteration order
  * (after skipping `__ROW_PATH_N__` metadata). `xIdx` is the row index
- * post-`rowOffset`. The first column in the `Color` slot is the only one
- * consumed; additional columns are ignored (enforced externally).
+ * post-`rowOffset`.
+ *
+ * With one user column in the `Color` slot the chart renders a single
+ * heatmap filling the canvas. With more than one, each column becomes
+ * its own heatmap in a facet grid; all facets share a common color
+ * scale and a single legend.
  */
 export class HeatmapChart extends AbstractChart {
     _program: WebGLProgram | null = null;
@@ -54,6 +79,10 @@ export class HeatmapChart extends AbstractChart {
 
     _hoveredCell: HeatmapCell | null = null;
     _lastLayout: PlotLayout | null = null;
+
+    _facets: HeatmapFacet[] = [];
+    _facetGrid: FacetGrid | null = null;
+    _hoveredFacetIdx = -1;
 
     /** Bound accessor so the interact module can trigger a chrome redraw. */
     _renderChromeOverlay = () => renderHeatmapChromeOverlay(this);
@@ -86,31 +115,105 @@ export class HeatmapChart extends AbstractChart {
         }
         this._cancelScheduledRender();
 
-        const result = buildHeatmapPipeline({
-            columns,
-            numRows: endRow,
-            groupBy: this._groupBy,
-        });
+        const userColumns = this._columnSlots.filter(
+            (s): s is string => !!s,
+        );
 
-        this._xLevels = result.xLevels;
-        this._yLevels = result.yLevels;
-        this._yColumnNames = result.yColumnNames;
-        this._numX = result.numX;
-        this._numY = result.numY;
-        this._rowOffset = result.rowOffset;
-        this._cells = result.cells;
-        this._cells2D = result.cells2D;
-        this._colorMin = result.colorMin;
-        this._colorMax = result.colorMax;
-        this._aggName =
-            this._columnSlots.find((s): s is string => !!s) ?? "Color";
+        if (userColumns.length > 1) {
+            const partitions = partitionColumnsPerFacet(columns, userColumns);
+            const facets: HeatmapFacet[] = [];
+            const allCells: HeatmapCell[] = [];
+            let globalMin = Infinity;
+            let globalMax = -Infinity;
+            for (const part of partitions) {
+                const pipeline = buildHeatmapPipeline({
+                    columns: part.columns,
+                    numRows: endRow,
+                    groupBy: this._groupBy,
+                });
+                const instanceStart = allCells.length;
+                // Re-stamp each cell with its facet offset so the packed
+                // instance buffer can be drawn in one sweep; the facet's
+                // own `pipeline.cells` keeps its original indices for
+                // hit-testing via `cells2D`.
+                for (const c of pipeline.cells) {
+                    allCells.push({
+                        xIdx: c.xIdx,
+                        yIdx: c.yIdx,
+                        value: c.value,
+                    });
+                }
+                facets.push({
+                    label: part.label,
+                    pipeline,
+                    layout: new PlotLayout(1, 1, {
+                        hasXLabel: false,
+                        hasYLabel: false,
+                        hasLegend: false,
+                    }),
+                    instanceStart,
+                    instanceCount: pipeline.cells.length,
+                });
+                if (isFinite(pipeline.colorMin) && pipeline.colorMin < globalMin) {
+                    globalMin = pipeline.colorMin;
+                }
+                if (isFinite(pipeline.colorMax) && pipeline.colorMax > globalMax) {
+                    globalMax = pipeline.colorMax;
+                }
+            }
+            if (!isFinite(globalMin) || !isFinite(globalMax)) {
+                globalMin = 0;
+                globalMax = 1;
+            } else if (globalMin === globalMax) {
+                globalMax = globalMin + 1;
+            }
+
+            // Reset single-plot state so render-time dispatch on
+            // `_facets.length > 0` is unambiguous.
+            this._xLevels = [];
+            this._yLevels = [];
+            this._yColumnNames = [];
+            this._numX = 0;
+            this._numY = 0;
+            this._rowOffset = 0;
+            this._cells2D = [];
+            this._lastLayout = null;
+
+            this._facets = facets;
+            this._cells = allCells;
+            this._colorMin = globalMin;
+            this._colorMax = globalMax;
+            this._aggName = userColumns.join(", ");
+        } else {
+            const result = buildHeatmapPipeline({
+                columns,
+                numRows: endRow,
+                groupBy: this._groupBy,
+            });
+
+            this._facets = [];
+            this._facetGrid = null;
+            this._xLevels = result.xLevels;
+            this._yLevels = result.yLevels;
+            this._yColumnNames = result.yColumnNames;
+            this._numX = result.numX;
+            this._numY = result.numY;
+            this._rowOffset = result.rowOffset;
+            this._cells = result.cells;
+            this._cells2D = result.cells2D;
+            this._colorMin = result.colorMin;
+            this._colorMax = result.colorMax;
+            this._aggName = userColumns[0] ?? "Color";
+        }
 
         this._scheduleRender(glManager);
     }
 
     redraw(glManager: WebGLContextManager): void {
         this._glManager = glManager;
-        if (this._numX === 0 || this._numY === 0) return;
+        const hasSingle = this._numX > 0 && this._numY > 0;
+        const hasFacets = this._facets.length > 0;
+        if (!hasSingle && !hasFacets) return;
         this._fullRender(glManager);
     }
 
@@ -131,5 +234,8 @@ export class HeatmapChart extends AbstractChart {
         this._cells = [];
         this._cells2D = [];
         this._hoveredCell = null;
+        this._facets = [];
+        this._facetGrid = null;
+        this._hoveredFacetIdx = -1;
     }
 }

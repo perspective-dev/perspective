@@ -24,21 +24,34 @@ export function cssSize(gl: GL): { cssWidth: number; cssHeight: number } {
 }
 
 /**
- * Set up the plot-area scissor + clear + blend state, invoke `draw`, then
- * tear down scissor. Caller handles projection/uniforms/VBO bindings inside
- * `draw`. Used by scatter/line/bar; treemap does its own full-canvas draw
- * and does not use this helper.
+ * Clear the framebuffer + enable alpha blending. Call once per frame,
+ * before any per-plot-rect {@link withScissor} invocations. Faceted
+ * renderers call this once and then loop {@link withScissor} per cell
+ * so the inter-facet clears don't wipe each other's pixels.
  */
-export function renderInPlotFrame(
+export function clearAndSetupFrame(gl: GL): void {
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+}
+
+/**
+ * Scissor-constrain `draw` to `layout.plotRect`. Caller handles
+ * projection / uniforms / VBO bindings inside `draw`; this helper only
+ * manages the scissor enable/disable bracket.
+ *
+ * Unlike {@link renderInPlotFrame}, this does *not* clear the
+ * framebuffer — so it's safe to call repeatedly per frame (one per
+ * facet). Pair with {@link clearAndSetupFrame} at the start of each
+ * frame.
+ */
+export function withScissor(
     gl: GL,
     layout: PlotLayout,
     draw: () => void,
 ): void {
     const dpr = window.devicePixelRatio || 1;
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.SCISSOR_TEST);
     gl.scissor(
         Math.round(layout.margins.left * dpr),
@@ -51,4 +64,23 @@ export function renderInPlotFrame(
     } finally {
         gl.disable(gl.SCISSOR_TEST);
     }
+}
+
+/**
+ * One-shot convenience: clear + setup blend + scissor + draw. Used by
+ * single-plot callers (bar / heatmap / candlestick / scatter-without-
+ * splits) that only draw into one plot rect per frame.
+ *
+ * Faceted callers must use {@link clearAndSetupFrame} +
+ * {@link withScissor} instead; calling this helper in a per-facet loop
+ * would clear the framebuffer on each invocation and wipe out every
+ * previously-drawn facet.
+ */
+export function renderInPlotFrame(
+    gl: GL,
+    layout: PlotLayout,
+    draw: () => void,
+): void {
+    clearAndSetupFrame(gl);
+    withScissor(gl, layout, draw);
 }

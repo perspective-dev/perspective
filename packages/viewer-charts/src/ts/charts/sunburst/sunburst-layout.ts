@@ -149,11 +149,26 @@ function partitionChildren(
 /**
  * Walk from `startId` depth-first, emitting every descendant whose
  * arc area exceeds `MIN_VISIBLE_ARC_AREA`.
+ *
+ * The single-facet entry point; faceted rendering uses
+ * {@link collectVisibleArcsAppend} to concatenate across facets.
  */
 export function collectVisibleArcs(
     chart: SunburstChart,
     startId: number,
 ): void {
+    chart._visibleNodeCount = collectVisibleArcsAppend(chart, startId, 0);
+}
+
+/**
+ * Append visible arcs under `startId` to `_visibleNodeIds` starting at
+ * `startOffset`, returning the new length.
+ */
+export function collectVisibleArcsAppend(
+    chart: SunburstChart,
+    startId: number,
+    startOffset: number,
+): number {
     const store = chart._nodeStore;
     const a0 = store.a0;
     const a1 = store.a1;
@@ -167,7 +182,7 @@ export function collectVisibleArcs(
         chart._visibleNodeIds = new Int32Array(store.count);
     }
     const out = chart._visibleNodeIds;
-    let outIdx = 0;
+    let outIdx = startOffset;
 
     let stack = new Int32Array(128);
     stack[0] = startId;
@@ -196,7 +211,7 @@ export function collectVisibleArcs(
         }
     }
 
-    chart._visibleNodeCount = outIdx;
+    return outIdx;
 }
 
 export { INNER_RING_PX, MIN_VISIBLE_ARC_AREA };

@@ -42,6 +42,14 @@ export class NodeStore {
     size!: Float32Array;
     value!: Float32Array;
     colorValue!: Float32Array;
+    /**
+     * Sign of the leaf's raw size column value: `-1` when the source row
+     * was negative, `1` otherwise. `size` itself always stores the
+     * magnitude so layout code continues to treat negatives as positive
+     * area; render code uses `sizeSign` to apply a lower alpha on
+     * negative leaves. Always `1` for branches.
+     */
+    sizeSign!: Int8Array;
 
     // Rectangular layout (treemap).
     x0!: Float32Array;
@@ -105,6 +113,7 @@ export class NodeStore {
         this.size[id] = 0;
         this.value[id] = 0;
         this.colorValue[id] = NaN;
+        this.sizeSign[id] = 1;
         this.name[id] = "";
         this.colorLabel[id] = "";
         return id;
@@ -133,7 +142,7 @@ export class NodeStore {
     private _allocate(newCapacity: number): void {
         const cap = Math.max(newCapacity, 1024);
 
-        const grow = <T extends Float32Array | Int32Array>(
+        const grow = <T extends Float32Array | Int32Array | Int8Array>(
             old: T | undefined,
             ctor: { new (n: number): T },
         ): T => {
@@ -145,6 +154,7 @@ export class NodeStore {
         this.size = grow(this.size, Float32Array);
         this.value = grow(this.value, Float32Array);
         this.colorValue = grow(this.colorValue, Float32Array);
+        this.sizeSign = grow(this.sizeSign, Int8Array);
         this.x0 = grow(this.x0, Float32Array);
         this.y0 = grow(this.y0, Float32Array);
         this.x1 = grow(this.x1, Float32Array);

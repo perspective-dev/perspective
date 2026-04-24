@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { PlotLayout } from "../layout/plot-layout";
+import type { PlotLayout, PlotRect } from "../layout/plot-layout";
 import { formatTickValue } from "../layout/ticks";
 import {
     colorValueToT,
@@ -26,10 +26,37 @@ function rgbCss(c: [number, number, number, number]): string {
  * Render a vertical color gradient legend on the Canvas2D overlay.
  * Only call when a color column is active. When `colorDomain` crosses
  * zero the 50% stop (sign pivot) is annotated with a tick + `0` label.
+ *
+ * Per-facet wrapper; computes the anchor from `layout` and delegates
+ * to {@link renderLegendAt}. Facet grids render one shared gradient
+ * legend and pass an explicit rect to `renderLegendAt` directly.
  */
 export function renderLegend(
     canvas: HTMLCanvasElement,
     layout: PlotLayout,
+    colorDomain: { min: number; max: number; label: string },
+    stops: GradientStop[],
+): void {
+    const rect: PlotRect = {
+        x: layout.plotRect.x + layout.plotRect.width + 12,
+        y: layout.margins.top + 20,
+        width: Math.max(
+            1,
+            layout.cssWidth - layout.plotRect.x - layout.plotRect.width - 12,
+        ),
+        height: Math.max(1, layout.plotRect.height),
+    };
+    renderLegendAt(canvas, rect, colorDomain, stops);
+}
+
+/**
+ * Render a gradient legend at an explicit canvas-absolute rect.
+ * Used by facet grids that paint one legend for the whole grid and
+ * by single-plot charts through {@link renderLegend}.
+ */
+export function renderLegendAt(
+    canvas: HTMLCanvasElement,
+    rect: PlotRect,
     colorDomain: { min: number; max: number; label: string },
     stops: GradientStop[],
 ): void {
@@ -48,9 +75,9 @@ export function renderLegend(
         "monospace";
 
     const barWidth = 16;
-    const barHeight = Math.min(120, layout.plotRect.height * 0.4);
-    const x = layout.plotRect.x + layout.plotRect.width + 12;
-    const y = layout.margins.top + 20;
+    const barHeight = Math.min(120, rect.height * 0.4);
+    const x = rect.x;
+    const y = rect.y;
 
     ctx.fillStyle = textColor;
     ctx.font = `11px ${fontFamily}`;
@@ -113,10 +140,35 @@ export function renderLegend(
 /**
  * Render a categorical legend with discrete colored swatches.
  * Used when split_by or string color columns produce distinct categories.
+ *
+ * The per-facet wrapper; computes the anchor from `layout` and delegates
+ * to {@link renderCategoricalLegendAt}. Facet grids that render one
+ * shared legend pass an explicit rect to `renderCategoricalLegendAt`
+ * directly.
  */
 export function renderCategoricalLegend(
     canvas: HTMLCanvasElement,
     layout: PlotLayout,
+    labels: Map<string, number>,
+    palette: [number, number, number][],
+): void {
+    const rect: PlotRect = {
+        x: layout.plotRect.x + layout.plotRect.width + 12,
+        y: layout.margins.top + 10,
+        width: Math.max(1, layout.cssWidth - layout.plotRect.x - layout.plotRect.width - 12),
+        height: Math.max(1, layout.plotRect.height),
+    };
+    renderCategoricalLegendAt(canvas, rect, labels, palette);
+}
+
+/**
+ * Render a categorical legend at an explicit canvas-absolute rect.
+ * Used by facet grids that paint one legend for the whole grid and by
+ * single-plot charts through {@link renderCategoricalLegend}.
+ */
+export function renderCategoricalLegendAt(
+    canvas: HTMLCanvasElement,
+    rect: PlotRect,
     labels: Map<string, number>,
     palette: [number, number, number][],
 ): void {
@@ -134,14 +186,15 @@ export function renderCategoricalLegend(
 
     const swatchSize = 10;
     const lineHeight = 18;
-    const x = layout.plotRect.x + layout.plotRect.width + 12;
-    let y = layout.margins.top + 10;
+    const x = rect.x;
+    let y = rect.y + lineHeight / 2;
 
     ctx.font = `11px ${fontFamily}`;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
 
     for (const [label, idx] of labels) {
+        if (y + swatchSize / 2 > rect.y + rect.height) break;
         const color = palette[idx] ??
             palette[idx % palette.length] ?? [0, 0, 0];
         ctx.fillStyle = `rgb(${Math.round(color[0] * 255)},${Math.round(color[1] * 255)},${Math.round(color[2] * 255)})`;

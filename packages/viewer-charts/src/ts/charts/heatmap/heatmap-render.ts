@@ -11,12 +11,17 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { WebGLContextManager } from "../../webgl/context-manager";
-import type { HeatmapChart } from "./heatmap";
+import type { HeatmapChart, HeatmapFacet } from "./heatmap";
 import { PlotLayout } from "../../layout/plot-layout";
-import { resolveTheme } from "../../theme/theme";
-import { renderInPlotFrame } from "../../webgl/plot-frame";
+import { resolveTheme, type Theme } from "../../theme/theme";
+import {
+    renderInPlotFrame,
+    clearAndSetupFrame,
+    withScissor,
+} from "../../webgl/plot-frame";
 import { getInstancing } from "../../webgl/instanced-attrs";
 import { initCanvas } from "../../chrome/canvas";
+import { buildFacetGrid } from "../../layout/facet-grid";
 import {
     measureCategoricalAxisHeight,
     renderCategoricalXTicks,
@@ -35,7 +40,7 @@ import {
 const HEATMAP_Y_AXIS_OPTS: CategoricalYAxisOptions = {
     skipLeafLevel: true,
 };
-import { renderLegend } from "../../chrome/legend";
+import { renderLegend, renderLegendAt } from "../../chrome/legend";
 import heatmapVert from "../../shaders/heatmap.vert.glsl";
 import heatmapFrag from "../../shaders/heatmap.frag.glsl";
 import { colorValueToT } from "../../theme/gradient";
@@ -64,6 +69,12 @@ export function renderHeatmapFrame(
     const cssWidth = gl.canvas.width / dpr;
     const cssHeight = gl.canvas.height / dpr;
     if (cssWidth <= 0 || cssHeight <= 0) return;
+
+    if (chart._facets.length > 0) {
+        renderFacetedHeatmap(chart, glManager, cssWidth, cssHeight);
+        return;
+    }
+
     if (chart._numX === 0 || chart._numY === 0) return;
 
     const themeEl = (chart._gridlineCanvas!.getRootNode() as ShadowRoot).host;
@@ -168,7 +179,7 @@ export function renderHeatmapFrame(
             loc.u_gradient_lut,
             0,
         );
-        drawCellsInstanced(chart, gl, glManager);
+        drawCellsInstanced(chart, gl, glManager, 0, chart._uploadedCells);
     });
 
     renderHeatmapChromeOverlay(chart);
@@ -233,11 +244,14 @@ function drawCellsInstanced(
     chart: HeatmapChart,
     gl: WebGL2RenderingContext | WebGLRenderingContext,
     glManager: WebGLContextManager,
+    instanceStart: number,
+    instanceCount: number,
 ): void {
-    if (chart._uploadedCells === 0) return;
+    if (instanceCount === 0) return;
     const loc = chart._locations!;
     const instancing = getInstancing(glManager);
     const { setDivisor } = instancing;
+    const f = Float32Array.BYTES_PER_ELEMENT;
 
     // Per-vertex corner buffer.
     gl.bindBuffer(gl.ARRAY_BUFFER, chart._cornerBuffer!);
@@ -245,32 +259,43 @@ function drawCellsInstanced(
     gl.vertexAttribPointer(loc.a_corner, 2, gl.FLOAT, false, 0, 0);
     setDivisor(loc.a_corner, 0);
 
-    // Per-instance cell position.
+    // Per-instance cell position. Byte offset into the packed buffer
+    // advances instance 0 of this draw to slot `instanceStart`.
     const cellBuf = glManager.bufferPool.getOrCreate(
         "heatmap_cell",
         2,
-        Float32Array.BYTES_PER_ELEMENT,
+        f,
     );
     gl.bindBuffer(gl.ARRAY_BUFFER, cellBuf.buffer);
     gl.enableVertexAttribArray(loc.a_cell);
-    gl.vertexAttribPointer(loc.a_cell, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(
+        loc.a_cell,
+        2,
+        gl.FLOAT,
+        false,
+        0,
+        instanceStart * 2 * f,
+    );
     setDivisor(loc.a_cell, 1);
 
-    const tBuf = glManager.bufferPool.getOrCreate(
-        "heatmap_t",
-        1,
-        Float32Array.BYTES_PER_ELEMENT,
-    );
+    const tBuf = glManager.bufferPool.getOrCreate("heatmap_t", 1, f);
     gl.bindBuffer(gl.ARRAY_BUFFER, tBuf.buffer);
     gl.enableVertexAttribArray(loc.a_color_t);
-    gl.vertexAttribPointer(loc.a_color_t, 1, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(
+        loc.a_color_t,
+        1,
+        gl.FLOAT,
+        false,
+        0,
+        instanceStart * f,
+    );
     setDivisor(loc.a_color_t, 1);
 
     instancing.drawArraysInstanced(
         gl.TRIANGLE_STRIP,
         0,
         4,
-        chart._uploadedCells,
+        instanceCount,
     );
 
     setDivisor(loc.a_cell, 0);
@@ -279,7 +304,12 @@ function drawCellsInstanced(
 
 /** Chrome overlay: X axis + Y axis + color legend + (optional) tooltip. */
 export function renderHeatmapChromeOverlay(chart: HeatmapChart): void {
-    if (!chart._chromeCanvas || !chart._lastLayout) return;
+    if (!chart._chromeCanvas) return;
+    if (chart._facets.length > 0) {
+        renderFacetedHeatmapChromeOverlay(chart);
+        return;
+    }
+    if (!chart._lastLayout) return;
     const layout = chart._lastLayout;
     const theme = resolveTheme(chart._chromeCanvas);
 
@@ -327,4 +357,200 @@ export function renderHeatmapChromeOverlay(chart: HeatmapChart): void {
     if (chart._hoveredCell) {
         renderHeatmapTooltip(chart);
     }
+}
+
+/** Multi-facet WebGL render. Packs all facets' cells into one instance
+ *  buffer and dispatches once per facet with a rebound pointer offset,
+ *  matching projection, and scissor to the facet's plot rect. */
+function renderFacetedHeatmap(
+    chart: HeatmapChart,
+    glManager: WebGLContextManager,
+    cssWidth: number,
+    cssHeight: number,
+): void {
+    const gl = glManager.gl;
+    const themeEl = (chart._gridlineCanvas!.getRootNode() as ShadowRoot).host;
+    const theme = resolveTheme(themeEl);
+
+    const grid = buildFacetGrid(
+        chart._facets.map((f) => f.label),
+        {
+            cssWidth,
+            cssHeight,
+            xAxis: "cell",
+            yAxis: "cell",
+            hasLegend: true,
+            hasXLabel: chart._groupBy.length > 0,
+            hasYLabel: false,
+            gap: 8,
+        },
+    );
+    chart._facetGrid = grid;
+
+    for (let i = 0; i < chart._facets.length; i++) {
+        const cell = grid.cells[i];
+        if (cell) chart._facets[i].layout = cell.layout;
+    }
+
+    ensureProgram(chart, glManager);
+    uploadInstanceBuffers(chart, glManager);
+    chart._gradientCache = ensureGradientTexture(
+        glManager,
+        chart._gradientCache,
+        theme.gradientStops,
+    );
+
+    gl.useProgram(chart._program!);
+    const loc = chart._locations!;
+    bindGradientTexture(
+        glManager,
+        chart._gradientCache!.texture,
+        loc.u_gradient_lut,
+        0,
+    );
+
+    // One clear for the whole frame; per-facet scissor keeps each
+    // facet's draw confined to its plot rect without wiping its
+    // neighbours.
+    clearAndSetupFrame(gl);
+
+    for (let i = 0; i < chart._facets.length; i++) {
+        const facet = chart._facets[i];
+        if (facet.instanceCount === 0) continue;
+        const { numX, numY } = facet.pipeline;
+        if (numX === 0 || numY === 0) continue;
+
+        const layout = facet.layout;
+        const xDomainMin = -0.5;
+        const xDomainMax = numX - 0.5;
+        const yDomainMin = -0.5;
+        const yDomainMax = numY - 0.5;
+        const projection = layout.buildProjectionMatrix(
+            xDomainMin,
+            xDomainMax,
+            yDomainMin,
+            yDomainMax,
+        );
+
+        const plot = layout.plotRect;
+        const pxPerDataX = plot.width / (xDomainMax - xDomainMin);
+        const pxPerDataY = plot.height / (yDomainMax - yDomainMin);
+        const halfGap = theme.heatmapGapPx * 0.5;
+        const insetX = Math.min(0.5, pxPerDataX > 0 ? halfGap / pxPerDataX : 0);
+        const insetY = Math.min(0.5, pxPerDataY > 0 ? halfGap / pxPerDataY : 0);
+
+        withScissor(gl, layout, () => {
+            gl.uniformMatrix4fv(loc.u_projection, false, projection);
+            gl.uniform2f(loc.u_cell_inset, insetX, insetY);
+            drawCellsInstanced(
+                chart,
+                gl,
+                glManager,
+                facet.instanceStart,
+                facet.instanceCount,
+            );
+        });
+    }
+
+    renderHeatmapChromeOverlay(chart);
+}
+
+/** Multi-facet chrome: per-facet X/Y axis + title, one shared legend. */
+function renderFacetedHeatmapChromeOverlay(chart: HeatmapChart): void {
+    if (!chart._chromeCanvas || !chart._facetGrid) return;
+    const theme = resolveTheme(chart._chromeCanvas);
+    // `initCanvas` wants a `PlotLayout` to sync DPR-aware sizing. The
+    // first facet's layout is canvas-sized (cssWidth/cssHeight match
+    // the element), so either facet works for the DPR handshake.
+    const ctx = initCanvas(chart._chromeCanvas, chart._facets[0].layout);
+    if (!ctx) return;
+
+    for (const facet of chart._facets) {
+        const layout = facet.layout;
+        const plot = layout.plotRect;
+
+        ctx.strokeStyle = theme.gridlineColor;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(plot.x, plot.y);
+        ctx.lineTo(plot.x, plot.y + plot.height);
+        ctx.lineTo(plot.x + plot.width, plot.y + plot.height);
+        ctx.stroke();
+
+        const xDomain: CategoricalDomain = {
+            levels: facet.pipeline.xLevels,
+            numRows: facet.pipeline.numX,
+            levelLabels: chart._groupBy.slice(),
+        };
+        const yDomain: CategoricalDomain = {
+            levels: facet.pipeline.yLevels,
+            numRows: facet.pipeline.numY,
+            levelLabels: [],
+        };
+
+        renderCategoricalXTicks(ctx, layout, xDomain, theme);
+        renderCategoricalYTicks(
+            ctx,
+            layout,
+            yDomain,
+            theme,
+            HEATMAP_Y_AXIS_OPTS,
+        );
+    }
+
+    // Per-facet titles sit in the grid cell's titleRect — one strip per
+    // facet, above the plot rect. The grid's cells and the chart's
+    // facets are parallel arrays by construction.
+    const grid = chart._facetGrid;
+    for (let i = 0; i < grid.cells.length; i++) {
+        const cell = grid.cells[i];
+        const facet = chart._facets[i];
+        if (!facet || !cell.titleRect) continue;
+        drawFacetTitle(chart._chromeCanvas, facet.label, cell.titleRect, theme);
+    }
+
+    // Shared colorbar at `grid.legendRect`. No meaningful single label —
+    // the facet titles already name each column, and a combined label
+    // would be ambiguous when columns differ.
+    if (grid.legendRect) {
+        renderLegendAt(
+            chart._chromeCanvas,
+            {
+                x: grid.legendRect.x,
+                y: grid.legendRect.y + 20,
+                width: grid.legendRect.width,
+                height: Math.max(1, grid.legendRect.height - 20),
+            },
+            {
+                min: chart._colorMin,
+                max: chart._colorMax,
+                label: "",
+            },
+            theme.gradientStops,
+        );
+    }
+
+    if (chart._hoveredCell) {
+        renderHeatmapTooltip(chart);
+    }
+}
+
+function drawFacetTitle(
+    canvas: HTMLCanvasElement,
+    label: string,
+    rect: { x: number; y: number; width: number; height: number },
+    theme: Theme,
+): void {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+    ctx.font = `11px ${theme.fontFamily}`;
+    ctx.fillStyle = theme.labelColor;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, rect.x + rect.width / 2, rect.y + rect.height / 2);
+    ctx.restore();
 }

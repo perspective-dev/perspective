@@ -185,6 +185,9 @@ convert_type(const std::string& src) {
     if (src == "timestamp") {
         return DTYPE_TIME;
     }
+    if (src == "time32" || src == "time64" || src == "time32[s]" ) {
+        return DTYPE_UINT32;
+    }
     if (src == "date32" || src == "date64") {
         return DTYPE_DATE;
     }
@@ -776,6 +779,17 @@ copy_array(
                 dest->set_valid(i, false);
             }
         } break;
+        case arrow::Time32Type::type_id: {
+            auto scol = std::static_pointer_cast<arrow::Time32Array>(src);
+            std::memcpy(
+                dest->get_nth<std::uint64_t>(offset),
+                (void*)scol->raw_values(),
+                len * 8
+            );
+        } break;
+        // case arrow::Type {
+            
+        // } break;
         default: {
             std::stringstream ss;
             std::string arrow_type = src->type()->ToString();

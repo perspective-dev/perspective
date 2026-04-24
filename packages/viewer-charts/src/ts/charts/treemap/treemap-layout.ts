@@ -56,6 +56,7 @@ export function squarify(
     y1: number,
     baseDepth: number,
     scratch: Int32Array,
+    showBranchHeader: boolean,
 ): void {
     store.x0[id] = Math.round(x0);
     store.y0[id] = Math.round(y0);
@@ -68,7 +69,10 @@ export function squarify(
     if (area < MIN_VISIBLE_AREA) return;
 
     const relDepth = store.depth[id] - baseDepth;
-    const showHeader = relDepth === 1 && store.firstChild[id] !== NULL_NODE;
+    const showHeader =
+        showBranchHeader &&
+        relDepth === 1 &&
+        store.firstChild[id] !== NULL_NODE;
     const padTop = showHeader ? PADDING_LABEL : PADDING_INNER;
     const padOuter = showHeader ? PADDING_OUTER : PADDING_INNER;
 
@@ -101,6 +105,7 @@ export function squarify(
         iy1,
         baseDepth,
         scratch.subarray(activeCount),
+        showBranchHeader,
     );
 }
 
@@ -115,11 +120,22 @@ function layoutOrdered(
     y1: number,
     baseDepth: number,
     childScratch: Int32Array,
+    showBranchHeader: boolean,
 ): void {
     const n = hi - lo;
     if (n === 0) return;
     if (n === 1) {
-        squarify(store, nodes[lo], x0, y0, x1, y1, baseDepth, childScratch);
+        squarify(
+            store,
+            nodes[lo],
+            x0,
+            y0,
+            x1,
+            y1,
+            baseDepth,
+            childScratch,
+            showBranchHeader,
+        );
         return;
     }
 
@@ -158,6 +174,7 @@ function layoutOrdered(
             y1,
             baseDepth,
             childScratch,
+            showBranchHeader,
         );
         layoutOrdered(
             store,
@@ -170,6 +187,7 @@ function layoutOrdered(
             y1,
             baseDepth,
             childScratch,
+            showBranchHeader,
         );
     } else {
         const splitY = Math.round(y0 + rh * fraction);
@@ -184,6 +202,7 @@ function layoutOrdered(
             splitY,
             baseDepth,
             childScratch,
+            showBranchHeader,
         );
         layoutOrdered(
             store,
@@ -196,6 +215,7 @@ function layoutOrdered(
             y1,
             baseDepth,
             childScratch,
+            showBranchHeader,
         );
     }
 }
@@ -205,6 +225,10 @@ function layoutOrdered(
 /**
  * Walk from `startId` depth-first, emitting every descendant whose rect
  * area is above `MIN_VISIBLE_AREA`. O(visible), not O(total).
+ *
+ * Faceted render paths call {@link collectVisibleAppend} once per facet
+ * and do the final `_visibleNodeCount` bookkeeping themselves; this
+ * single-facet entry point wraps that for non-split trees.
  */
 export function collectVisible(
     chart: TreemapChart,
@@ -212,6 +236,28 @@ export function collectVisible(
     maxDepth: number,
     baseDepth: number,
 ): void {
+    chart._visibleNodeCount = collectVisibleAppend(
+        chart,
+        startId,
+        maxDepth,
+        baseDepth,
+        0,
+    );
+}
+
+/**
+ * Append the visible-node IDs below `startId` into `_visibleNodeIds`
+ * starting at `startOffset`. Returns the new length. Used by faceted
+ * treemap rendering to concatenate per-facet visibility without doing
+ * a second pass.
+ */
+export function collectVisibleAppend(
+    chart: TreemapChart,
+    startId: number,
+    maxDepth: number,
+    baseDepth: number,
+    startOffset: number,
+): number {
     const store = chart._nodeStore;
     const x0 = store.x0;
     const y0 = store.y0;
@@ -227,7 +273,7 @@ export function collectVisible(
     }
     const out = chart._visibleNodeIds;
 
-    let outIdx = 0;
+    let outIdx = startOffset;
 
     let stack = new Int32Array(128);
     stack[0] = startId;
@@ -258,5 +304,5 @@ export function collectVisible(
         }
     }
 
-    chart._visibleNodeCount = outIdx;
+    return outIdx;
 }
