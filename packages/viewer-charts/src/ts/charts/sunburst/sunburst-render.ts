@@ -88,8 +88,7 @@ function leafRGBA(
     negativeAlpha: number,
 ): [number, number, number, number] {
     const rgb = leafColor(chart, nodeId, stops, palette);
-    const alpha =
-        chart._nodeStore.sizeSign[nodeId] < 0 ? negativeAlpha : 1.0;
+    const alpha = chart._nodeStore.sizeSign[nodeId] < 0 ? negativeAlpha : 1.0;
     return [rgb[0], rgb[1], rgb[2], alpha];
 }
 

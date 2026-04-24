@@ -12,7 +12,6 @@
 
 import type { BarChart } from "./bar";
 import type { BarRecord } from "./bar-build";
-import { resolveTheme } from "../../theme/theme";
 import { formatTickValue } from "../../layout/ticks";
 import {
     renderBarFrame,
@@ -357,6 +356,7 @@ export function buildBarTooltipLines(chart: BarChart, b: BarRecord): string[] {
         lines.push(`Base: ${formatTickValue(b.y0)}`);
         lines.push(`Top: ${formatTickValue(b.y1)}`);
     }
+
     return lines;
 }
 
@@ -368,7 +368,7 @@ export function formatBarCategoryPath(chart: BarChart, catIdx: number): string {
     if (chart._rowPaths.length === 0) return "";
     const parts: string[] = [];
     for (const rp of chart._rowPaths) {
-        const s = rp.dictionary[rp.indices[catIdx]];
+        const s = rp.labels[catIdx];
         if (s != null && s !== "") parts.push(s);
     }
     return parts.join(" / ");
@@ -409,13 +409,9 @@ function pinTooltip(chart: BarChart, b: BarRecord): void {
     const lines = buildBarTooltipLines(chart, b);
     if (lines.length === 0) return;
 
-    const themeEl = chart._gridlineCanvas || chart._chromeCanvas;
-    if (!themeEl) return;
-    const theme = resolveTheme(themeEl);
-
     const parent = chart._glCanvas?.parentElement;
     if (!parent) return;
-    chart._tooltip.showPinned(parent, lines, pos, layout, theme);
+    chart._tooltip.showPinned(parent, lines, pos, layout);
 
     chart._hoveredBarIdx = -1;
     chart._hoveredSample = null;

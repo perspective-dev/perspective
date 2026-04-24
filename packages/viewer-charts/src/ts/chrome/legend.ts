@@ -155,7 +155,10 @@ export function renderCategoricalLegend(
     const rect: PlotRect = {
         x: layout.plotRect.x + layout.plotRect.width + 12,
         y: layout.margins.top + 10,
-        width: Math.max(1, layout.cssWidth - layout.plotRect.x - layout.plotRect.width - 12),
+        width: Math.max(
+            1,
+            layout.cssWidth - layout.plotRect.x - layout.plotRect.width - 12,
+        ),
         height: Math.max(1, layout.plotRect.height),
     };
     renderCategoricalLegendAt(canvas, rect, labels, palette);

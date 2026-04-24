@@ -19,24 +19,27 @@
 
 /**
  * One run of consecutive equal dictionary indices in a level's `indices`
- * array. Used by the outer-level bracket renderer to coalesce a span of
- * contiguous cells into a single labelled group.
+ * array, with the label pre-resolved. Used by the outer-level bracket
+ * renderer to coalesce a span of contiguous cells into a single labelled
+ * group.
  */
 export interface GroupRun {
     startIdx: number;
     /** Inclusive. */
     endIdx: number;
-    dictIdx: number;
+    label: string;
 }
 
 /**
- * Single-pass run-length encoding of `indices[startRow..endRow)`. Relies
- * on perspective's guarantee that rows sharing an outer-level dictionary
- * entry are emitted contiguously in traversal order — equal neighbours
- * always belong to the same span.
+ * Single-pass run-length encoding of `indices[startRow..endRow)` keyed
+ * by `dictionary`. Relies on perspective's guarantee that rows sharing
+ * an outer-level dictionary entry are emitted contiguously in traversal
+ * order — equal neighbours always belong to the same span. The emitted
+ * `label` is a direct reference into `dictionary` (no per-row copy).
  */
 export function buildGroupRuns(
-    indices: Int32Array,
+    indices: Int32Array | ArrayLike<number>,
+    dictionary: string[],
     startRow: number,
     endRow: number,
 ): GroupRun[] {
@@ -50,13 +53,17 @@ export function buildGroupRuns(
             runs.push({
                 startIdx: runStart,
                 endIdx: r - 1,
-                dictIdx: runDict,
+                label: dictionary[runDict] ?? "",
             });
             runStart = r;
             runDict = d;
         }
     }
-    runs.push({ startIdx: runStart, endIdx: endRow - 1, dictIdx: runDict });
+    runs.push({
+        startIdx: runStart,
+        endIdx: endRow - 1,
+        label: dictionary[runDict] ?? "",
+    });
     return runs;
 }
 
@@ -71,4 +78,31 @@ export function maxDictLength(dictionary: string[]): number {
         if (s != null && s.length > m) m = s.length;
     }
     return m;
+}
+
+/**
+ * Filter a precomputed `runs` array to those whose index range
+ * intersects `[visMin, visMax]` (inclusive on both sides). Runs that
+ * straddle an endpoint are clipped so the caller sees `startIdx`/
+ * `endIdx` pinned to the visible slice — this matches the legacy
+ * `buildGroupRuns(indices, visMin, visMax + 1)` return shape.
+ */
+export function runsInRange(
+    runs: GroupRun[],
+    visMin: number,
+    visMax: number,
+): GroupRun[] {
+    if (visMax < visMin) return [];
+    const out: GroupRun[] = [];
+    for (const run of runs) {
+        if (run.endIdx < visMin || run.startIdx > visMax) continue;
+        const startIdx = run.startIdx < visMin ? visMin : run.startIdx;
+        const endIdx = run.endIdx > visMax ? visMax : run.endIdx;
+        if (startIdx === run.startIdx && endIdx === run.endIdx) {
+            out.push(run);
+        } else {
+            out.push({ startIdx, endIdx, label: run.label });
+        }
+    }
+    return out;
 }

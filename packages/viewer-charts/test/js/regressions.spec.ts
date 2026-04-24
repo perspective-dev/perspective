@@ -32,28 +32,20 @@ test.describe("Regressions", () => {
     // rendered. Fix: draw count is `numSeries * seriesCapacity` with
     // sentinel discard in the shader.
     test("scatter split_by renders every series", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Scatter",
-                columns: ["Quantity", "Profit"],
-                split_by: ["Region"],
-            },
-            "scatter-split-all-series.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit"],
+            split_by: ["Region"],
+        });
     });
 
     test("line split_by renders every series", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Line",
-                columns: ["Order Date", "Profit"],
-                group_by: ["Order Date"],
-                split_by: ["Region"],
-            },
-            "line-split-all-series.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Line",
+            columns: ["Order Date", "Profit"],
+            group_by: ["Order Date"],
+            split_by: ["Region"],
+        });
     });
 
     // ── scatter categorical colors match legend ─────────────────────────
@@ -63,14 +55,10 @@ test.describe("Regressions", () => {
     // legend sampled evenly across `[0, 1]`. Fix: shader uses linear
     // mapping for single-sign domains; sign-aware only when crossing 0.
     test("scatter string color matches legend swatches", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Scatter",
-                columns: ["Quantity", "Profit", "Category"],
-            },
-            "scatter-categorical-color-match.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit", "Category"],
+        });
     });
 
     // ── Y Line shows series colors (not all-black) ──────────────────────
@@ -80,16 +68,12 @@ test.describe("Regressions", () => {
     // fragment fetched `(0, 0, 0, 1)`. Fix: dedicated uniform-color
     // shader pair (line-uniform.vert/frag.glsl) for the bar line glyph.
     test("Y Line shows series palette colors", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Y Line",
-                columns: ["Sales"],
-                group_by: ["Category"],
-                split_by: ["Region"],
-            },
-            "y-line-series-colors.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Y Line",
+            columns: ["Sales"],
+            group_by: ["Category"],
+            split_by: ["Region"],
+        });
     });
 
     // ── Treemap transparent background ──────────────────────────────────
@@ -97,15 +81,11 @@ test.describe("Regressions", () => {
     // transparent, so themed hosts got an opaque backdrop under the
     // chart.
     test("Treemap background is transparent", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Treemap",
-                columns: ["Sales"],
-                group_by: ["Region"],
-            },
-            "treemap-transparent-bg.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Treemap",
+            columns: ["Sales"],
+            group_by: ["Region"],
+        });
     });
 
     // ── Treemap color-mode: date/datetime → numeric gradient ────────────
@@ -115,14 +95,10 @@ test.describe("Regressions", () => {
     // "series" instead of "numeric". Fix: use `_columnTypes` (view types
     // `float`/`integer`/`date`/`datetime`) with explicit numeric list.
     test("Treemap with date Color uses gradient mode", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Treemap",
-                columns: ["Sales", "Order Date"],
-                group_by: ["Region", "Category"],
-            },
-            "treemap-date-color-gradient.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Treemap",
+            columns: ["Sales", "Order Date"],
+            group_by: ["Region", "Category"],
+        });
     });
 });

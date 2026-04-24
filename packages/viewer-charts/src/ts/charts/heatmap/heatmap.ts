@@ -115,9 +115,7 @@ export class HeatmapChart extends AbstractChart {
         }
         this._cancelScheduledRender();
 
-        const userColumns = this._columnSlots.filter(
-            (s): s is string => !!s,
-        );
+        const userColumns = this._columnSlots.filter((s): s is string => !!s);
 
         if (userColumns.length > 1) {
             const partitions = partitionColumnsPerFacet(columns, userColumns);
@@ -154,10 +152,16 @@ export class HeatmapChart extends AbstractChart {
                     instanceStart,
                     instanceCount: pipeline.cells.length,
                 });
-                if (isFinite(pipeline.colorMin) && pipeline.colorMin < globalMin) {
+                if (
+                    isFinite(pipeline.colorMin) &&
+                    pipeline.colorMin < globalMin
+                ) {
                     globalMin = pipeline.colorMin;
                 }
-                if (isFinite(pipeline.colorMax) && pipeline.colorMax > globalMax) {
+                if (
+                    isFinite(pipeline.colorMax) &&
+                    pipeline.colorMax > globalMax
+                ) {
                     globalMax = pipeline.colorMax;
                 }
             }

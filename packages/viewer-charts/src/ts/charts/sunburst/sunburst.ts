@@ -164,6 +164,14 @@ export class SunburstChart extends TreeChartBase {
             this._facetDrillRoots.clear();
             this._facetGrid = null;
             this._facets = [];
+            // Invalidate the instance buffer so a render that fires
+            // before the fresh upload draws zero arcs.
+            this._instanceCount = 0;
+            // Drop any in-flight hover tooltip promise (see treemap).
+            this._hoveredTooltipLines = null;
+            this._hoveredTooltipNodeId = -1;
+            this._hoveredTooltipSerial++;
+            this._pinnedTooltipSerial++;
             dismissSunburstPinnedTooltip(this);
             this._chromeCache?.close();
             this._chromeCache = null;

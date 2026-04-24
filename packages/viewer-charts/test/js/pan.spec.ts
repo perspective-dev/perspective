@@ -11,52 +11,35 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { test } from "@perspective-dev/test";
-import { gotoBasic, renderAndCapture } from "./helpers";
+import {
+    expectViewerScreenshot,
+    gotoBasic,
+    restoreChart,
+    waitOneFrame,
+} from "./helpers";
 
-test.describe("Y Candlestick", () => {
+const PLOT_CX = 640;
+const PLOT_CY = 360;
+
+test.describe("Pan", () => {
     test.beforeEach(async ({ page }) => {
         await gotoBasic(page);
     });
 
-    test("open-only falls back to next-row open for close", async ({
-        page,
-    }) => {
-        // Exercises the d3fc-inherited fallback path: close = next row's
-        // open; high = max(open, close); low = min(open, close).
-        await renderAndCapture(page, {
-            plugin: "Candlestick",
-            columns: ["Sales"],
-            group_by: ["Order Date"],
+    test("drag pans after wheel zoom", async ({ page }) => {
+        await restoreChart(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit"],
         });
-    });
+        // Zoom in first so the pan offset is visible in the frame.
+        await page.mouse.move(PLOT_CX, PLOT_CY);
+        await page.mouse.wheel(0, -500);
+        await waitOneFrame(page);
 
-    test("full OHLC four-column layout", async ({ page }) => {
-        await renderAndCapture(page, {
-            plugin: "Candlestick",
-            columns: ["Sales", "Profit", "Quantity", "Discount"],
-            group_by: ["Order Date"],
-        });
-    });
-
-    test("up/down colors sampled from gradient extremes", async ({ page }) => {
-        // With Profit as Close and Sales as Open, positive Profit rows
-        // (Close > Open) render at the gradient top; negative rows at
-        // the bottom. Pins the bichromatic rendering.
-        await renderAndCapture(page, {
-            plugin: "Candlestick",
-            columns: ["Sales", "Profit"],
-            group_by: ["Category"],
-        });
-    });
-
-    test("with split_by — side-by-side candles per category", async ({
-        page,
-    }) => {
-        await renderAndCapture(page, {
-            plugin: "Candlestick",
-            columns: ["Sales"],
-            group_by: ["Category"],
-            split_by: ["Region"],
-        });
+        await page.mouse.down();
+        await page.mouse.move(PLOT_CX - 150, PLOT_CY - 80);
+        await page.mouse.up();
+        await waitOneFrame(page);
+        await expectViewerScreenshot(page);
     });
 });

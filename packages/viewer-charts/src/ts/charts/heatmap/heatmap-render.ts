@@ -261,11 +261,7 @@ function drawCellsInstanced(
 
     // Per-instance cell position. Byte offset into the packed buffer
     // advances instance 0 of this draw to slot `instanceStart`.
-    const cellBuf = glManager.bufferPool.getOrCreate(
-        "heatmap_cell",
-        2,
-        f,
-    );
+    const cellBuf = glManager.bufferPool.getOrCreate("heatmap_cell", 2, f);
     gl.bindBuffer(gl.ARRAY_BUFFER, cellBuf.buffer);
     gl.enableVertexAttribArray(loc.a_cell);
     gl.vertexAttribPointer(
@@ -291,12 +287,7 @@ function drawCellsInstanced(
     );
     setDivisor(loc.a_color_t, 1);
 
-    instancing.drawArraysInstanced(
-        gl.TRIANGLE_STRIP,
-        0,
-        4,
-        instanceCount,
-    );
+    instancing.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, instanceCount);
 
     setDivisor(loc.a_cell, 0);
     setDivisor(loc.a_color_t, 0);

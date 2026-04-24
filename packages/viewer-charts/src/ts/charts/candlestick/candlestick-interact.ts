@@ -12,7 +12,6 @@
 
 import type { CandlestickChart } from "./candlestick";
 import type { CandleRecord } from "./candlestick-build";
-import { resolveTheme } from "../../theme/theme";
 import { formatTickValue } from "../../layout/ticks";
 import {
     renderCandlestickChromeOverlay,
@@ -86,10 +85,6 @@ export function showCandlestickPinnedTooltip(
     const candle = chart._candles[idx];
     if (!candle || !chart._lastLayout) return;
 
-    const themeEl = chart._gridlineCanvas || chart._chromeCanvas;
-    if (!themeEl) return;
-    const theme = resolveTheme(themeEl);
-
     const lines = buildCandlestickTooltipLines(chart, candle);
     if (lines.length === 0) return;
 
@@ -104,13 +99,7 @@ export function showCandlestickPinnedTooltip(
     const cssWidth = (chart._glCanvas?.width || 100) / dpr;
     const cssHeight = (chart._glCanvas?.height || 100) / dpr;
 
-    chart._tooltip.showPinned(
-        parent,
-        lines,
-        pos,
-        { cssWidth, cssHeight },
-        theme,
-    );
+    chart._tooltip.showPinned(parent, lines, pos, { cssWidth, cssHeight });
 
     chart._hoveredIdx = -1;
     if (chart._glManager) renderCandlestickFrame(chart, chart._glManager);
@@ -131,7 +120,7 @@ export function buildCandlestickTooltipLines(
     if (chart._rowPaths.length > 0) {
         const parts: string[] = [];
         for (const rp of chart._rowPaths) {
-            const s = rp.dictionary[rp.indices[candle.catIdx]] ?? "";
+            const s = rp.labels[candle.catIdx] ?? "";
             if (s) parts.push(s);
         }
         if (parts.length > 0) lines.push(parts.join(" › "));

@@ -19,39 +19,27 @@ test.describe("Y OHLC", () => {
     });
 
     test("basic four-column OHLC", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "OHLC",
-                columns: ["Sales", "Profit", "Quantity", "Discount"],
-                group_by: ["Order Date"],
-            },
-            "basic.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "OHLC",
+            columns: ["Sales", "Profit", "Quantity", "Discount"],
+            group_by: ["Order Date"],
+        });
     });
 
     test("open-only falls back to next-row open", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "OHLC",
-                columns: ["Sales"],
-                group_by: ["Order Date"],
-            },
-            "open-only.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "OHLC",
+            columns: ["Sales"],
+            group_by: ["Order Date"],
+        });
     });
 
     test("with split_by", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "OHLC",
-                columns: ["Sales"],
-                group_by: ["Category"],
-                split_by: ["Region"],
-            },
-            "split_by.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "OHLC",
+            columns: ["Sales"],
+            group_by: ["Category"],
+            split_by: ["Region"],
+        });
     });
 });

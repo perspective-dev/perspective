@@ -17,6 +17,12 @@ import {
     formatDateTickValue,
 } from "../layout/ticks";
 import { getScaledContext } from "./canvas";
+import {
+    drawGridlinesX,
+    drawGridlinesY,
+    drawXTickRow,
+    drawYTickColumn,
+} from "./axis-primitives";
 import type { Theme } from "../theme/theme";
 
 export interface AxisDomain {
@@ -30,8 +36,6 @@ export interface TickResult {
     xTicks: number[];
     yTicks: number[];
 }
-
-const TICK_SIZE = 5;
 
 /**
  * Compute tick positions for both axes of a numeric plot.
@@ -70,29 +74,10 @@ export function renderGridlines(
     if (!ctx) return;
 
     const { plotRect: plot } = layout;
-    const xToPixel = (val: number) => layout.dataToPixel(val, 0).px;
-    const yToPixel = (val: number) => layout.dataToPixel(0, val).py;
-
     ctx.strokeStyle = theme.gridlineColor;
     ctx.lineWidth = 1;
-
-    for (const tick of xTicks) {
-        const px = Math.round(xToPixel(tick)) + 0.5;
-        if (px < plot.x || px > plot.x + plot.width) continue;
-        ctx.beginPath();
-        ctx.moveTo(px, plot.y);
-        ctx.lineTo(px, plot.y + plot.height);
-        ctx.stroke();
-    }
-
-    for (const tick of yTicks) {
-        const py = Math.round(yToPixel(tick)) + 0.5;
-        if (py < plot.y || py > plot.y + plot.height) continue;
-        ctx.beginPath();
-        ctx.moveTo(plot.x, py);
-        ctx.lineTo(plot.x + plot.width, py);
-        ctx.stroke();
-    }
+    drawGridlinesX(ctx, plot, xTicks, (v) => layout.dataToPixel(v, 0).px);
+    drawGridlinesY(ctx, plot, yTicks, (v) => layout.dataToPixel(0, v).py);
 }
 
 /**
@@ -114,9 +99,12 @@ export function renderCellXAxis(
     if (!ctx) return;
 
     const { plotRect: plot } = layout;
-    const { tickColor, labelColor, gridlineColor: lineColor, fontFamily } =
-        theme;
-    const xToPixel = (val: number) => layout.dataToPixel(val, 0).px;
+    const {
+        tickColor,
+        labelColor,
+        gridlineColor: lineColor,
+        fontFamily,
+    } = theme;
     const xStep = xTicks.length > 1 ? xTicks[1] - xTicks[0] : 0;
     const fmtX = xDomain.isDate
         ? (v: number) => formatDateTickValue(v, xStep)
@@ -130,21 +118,18 @@ export function renderCellXAxis(
     ctx.lineTo(plot.x + plot.width, plot.y + plot.height);
     ctx.stroke();
 
-    // Ticks
     ctx.fillStyle = tickColor;
     ctx.strokeStyle = tickColor;
     ctx.font = `11px ${fontFamily}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    for (const tick of xTicks) {
-        const px = xToPixel(tick);
-        if (px < plot.x - 1 || px > plot.x + plot.width + 1) continue;
-        ctx.beginPath();
-        ctx.moveTo(px, plot.y + plot.height);
-        ctx.lineTo(px, plot.y + plot.height + TICK_SIZE);
-        ctx.stroke();
-        ctx.fillText(fmtX(tick), px, plot.y + plot.height + TICK_SIZE + 3);
-    }
+    drawXTickRow(
+        ctx,
+        plot,
+        xTicks,
+        plot.y + plot.height,
+        "bottom",
+        (v) => layout.dataToPixel(v, 0).px,
+        fmtX,
+    );
 
     if (hasLabel && xDomain.label) {
         ctx.fillStyle = labelColor;
@@ -178,9 +163,12 @@ export function renderCellYAxis(
     if (!ctx) return;
 
     const { plotRect: plot } = layout;
-    const { tickColor, labelColor, gridlineColor: lineColor, fontFamily } =
-        theme;
-    const yToPixel = (val: number) => layout.dataToPixel(0, val).py;
+    const {
+        tickColor,
+        labelColor,
+        gridlineColor: lineColor,
+        fontFamily,
+    } = theme;
     const yStep = yTicks.length > 1 ? yTicks[1] - yTicks[0] : 0;
     const fmtY = yDomain.isDate
         ? (v: number) => formatDateTickValue(v, yStep)
@@ -196,17 +184,15 @@ export function renderCellYAxis(
     ctx.fillStyle = tickColor;
     ctx.strokeStyle = tickColor;
     ctx.font = `11px ${fontFamily}`;
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    for (const tick of yTicks) {
-        const py = yToPixel(tick);
-        if (py < plot.y - 1 || py > plot.y + plot.height + 1) continue;
-        ctx.beginPath();
-        ctx.moveTo(plot.x - TICK_SIZE, py);
-        ctx.lineTo(plot.x, py);
-        ctx.stroke();
-        ctx.fillText(fmtY(tick), plot.x - TICK_SIZE - 3, py);
-    }
+    drawYTickColumn(
+        ctx,
+        plot,
+        yTicks,
+        plot.x,
+        "left",
+        (v) => layout.dataToPixel(0, v).py,
+        fmtY,
+    );
 
     if (hasLabel && yDomain.label) {
         ctx.fillStyle = labelColor;
@@ -270,8 +256,12 @@ export function renderOuterXAxis(
     const ctx = getScaledContext(canvas);
     if (!ctx) return;
 
-    const { tickColor, labelColor, gridlineColor: lineColor, fontFamily } =
-        theme;
+    const {
+        tickColor,
+        labelColor,
+        gridlineColor: lineColor,
+        fontFamily,
+    } = theme;
     const xStep = xTicks.length > 1 ? xTicks[1] - xTicks[0] : 0;
     const fmtX = xDomain.isDate
         ? (v: number) => formatDateTickValue(v, xStep)
@@ -293,21 +283,16 @@ export function renderOuterXAxis(
     ctx.fillStyle = tickColor;
     ctx.strokeStyle = tickColor;
     ctx.font = `11px ${fontFamily}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
     for (const layout of colLayouts) {
-        const colPlot = layout.plotRect;
-        const xToPixel = (v: number) => layout.dataToPixel(v, 0).px;
-        for (const tick of xTicks) {
-            const px = xToPixel(tick);
-            if (px < colPlot.x - 1 || px > colPlot.x + colPlot.width + 1)
-                continue;
-            ctx.beginPath();
-            ctx.moveTo(px, axisY);
-            ctx.lineTo(px, axisY + TICK_SIZE);
-            ctx.stroke();
-            ctx.fillText(fmtX(tick), px, axisY + TICK_SIZE + 3);
-        }
+        drawXTickRow(
+            ctx,
+            layout.plotRect,
+            xTicks,
+            axisY,
+            "bottom",
+            (v) => layout.dataToPixel(v, 0).px,
+            fmtX,
+        );
     }
 
     // Axis label once, centered across the full band.
@@ -343,8 +328,12 @@ export function renderOuterYAxis(
     const ctx = getScaledContext(canvas);
     if (!ctx) return;
 
-    const { tickColor, labelColor, gridlineColor: lineColor, fontFamily } =
-        theme;
+    const {
+        tickColor,
+        labelColor,
+        gridlineColor: lineColor,
+        fontFamily,
+    } = theme;
     const yStep = yTicks.length > 1 ? yTicks[1] - yTicks[0] : 0;
     const fmtY = yDomain.isDate
         ? (v: number) => formatDateTickValue(v, yStep)
@@ -362,21 +351,16 @@ export function renderOuterYAxis(
     ctx.fillStyle = tickColor;
     ctx.strokeStyle = tickColor;
     ctx.font = `11px ${fontFamily}`;
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
     for (const layout of rowLayouts) {
-        const rowPlot = layout.plotRect;
-        const yToPixel = (v: number) => layout.dataToPixel(0, v).py;
-        for (const tick of yTicks) {
-            const py = yToPixel(tick);
-            if (py < rowPlot.y - 1 || py > rowPlot.y + rowPlot.height + 1)
-                continue;
-            ctx.beginPath();
-            ctx.moveTo(axisX - TICK_SIZE, py);
-            ctx.lineTo(axisX, py);
-            ctx.stroke();
-            ctx.fillText(fmtY(tick), axisX - TICK_SIZE - 3, py);
-        }
+        drawYTickColumn(
+            ctx,
+            layout.plotRect,
+            yTicks,
+            axisX,
+            "left",
+            (v) => layout.dataToPixel(0, v).py,
+            fmtY,
+        );
     }
 
     if (hasLabel && yDomain.label) {

@@ -140,3 +140,18 @@
 .zoom-reset:hover {
     opacity: 1;
 }
+
+.webgl-tooltip {
+    position: absolute;
+    pointer-events: auto;
+    font: 11px var(--psp-webgl--font-family);
+    background: var(--psp-webgl--tooltip--background);
+    color: var(--psp-webgl--tooltip--color);
+    border: 1px solid var(--psp-webgl--tooltip--border-color);
+    border-radius: 3px;
+    padding: 3px;
+    overflow-y: auto;
+    white-space: pre;
+    z-index: 10;
+    line-height: 16px;
+}

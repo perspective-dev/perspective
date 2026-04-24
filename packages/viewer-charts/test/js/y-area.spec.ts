@@ -19,27 +19,19 @@ test.describe("Y Area", () => {
     });
 
     test("basic", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Y Area",
-                columns: ["Sales"],
-                group_by: ["Category"],
-            },
-            "basic.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Y Area",
+            columns: ["Sales"],
+            group_by: ["Category"],
+        });
     });
 
     test("split_by", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Y Area",
-                columns: ["Sales"],
-                group_by: ["Category"],
-                split_by: ["Region"],
-            },
-            "split_by.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Y Area",
+            columns: ["Sales"],
+            group_by: ["Category"],
+            split_by: ["Region"],
+        });
     });
 });

@@ -118,14 +118,14 @@ function setHovered(
     }
 }
 
-/** Format a hierarchical path from a dictionary-backed `CategoricalLevel` array. */
+/** Format a hierarchical path from a precomputed-label `CategoricalLevel` array. */
 export function formatHierarchicalPath(
     levels: CategoricalLevel[],
     idx: number,
 ): string {
     const parts: string[] = [];
     for (const lev of levels) {
-        const s = lev.dictionary[lev.indices[idx]];
+        const s = lev.labels[idx];
         if (s != null && s !== "") parts.push(s);
     }
     return parts.join(" / ");

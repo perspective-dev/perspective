@@ -122,8 +122,7 @@ function insertRow(
                 // render can dim negative leaves (matches the area
                 // chart's `theme.areaOpacity`).
                 chart._nodeStore.size[childId] = Math.abs(sizeValue);
-                chart._nodeStore.sizeSign[childId] =
-                    sizeValue < 0 ? -1 : 1;
+                chart._nodeStore.sizeSign[childId] = sizeValue < 0 ? -1 : 1;
                 chart._nodeStore.leafRowIdx[childId] = rowIdx;
             }
             if (!isNaN(colorValue)) {

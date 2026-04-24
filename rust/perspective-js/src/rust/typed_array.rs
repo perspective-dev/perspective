@@ -20,6 +20,7 @@ use arrow_schema::{DataType, TimeUnit};
 use js_sys::{Array, Function, JsString, Uint8Array};
 use perspective_client::ViewWindow;
 use ts_rs::TS;
+use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -52,9 +53,14 @@ impl From<TypedArrayWindow> for ViewWindow {
 ///
 /// Callback signature:
 /// ```js
-/// callback(names: string[], values: TypedArray[], validities: (Uint8Array|null)[], dictionaries: (string[]|null)[])
+/// callback(names: string[], values: TypedArray[], validities: (Uint8Array|null)[], dictionaries: (string[]|null)[]) => void | Promise<void>
 /// ```
-pub(crate) fn decode_and_call(
+///
+/// If the callback returns a `Promise`, it is awaited before the Arrow
+/// batch (and therefore the zero-copy typed-array views into it) is
+/// dropped. A synchronous callback returning `undefined` is supported
+/// with no promise-handling overhead.
+pub(crate) async fn decode_and_call(
     arrow: &[u8],
     float32: bool,
     callback: &Function,
@@ -224,7 +230,7 @@ pub(crate) fn decode_and_call(
         }
     }
 
-    callback.call4(
+    let ret = callback.call4(
         &JsValue::UNDEFINED,
         &js_names.into(),
         &js_values.into(),
@@ -232,7 +238,17 @@ pub(crate) fn decode_and_call(
         &js_dicts.into(),
     )?;
 
-    // Keep storage alive until after the callback returns.
+    // If the callback returned a Promise, await it before releasing the
+    // batch — zero-copy TypedArray views into `batch`/`f32_storage`/
+    // `f64_storage` must remain valid for the full lifetime of the
+    // awaited work.
+    if ret.is_instance_of::<js_sys::Promise>() {
+        let promise: js_sys::Promise = ret.unchecked_into();
+        wasm_bindgen_futures::JsFuture::from(promise).await?;
+    }
+
+    // Keep storage alive until after the callback (and its awaited
+    // promise, if any) returns.
     drop(f32_storage);
     drop(f64_storage);
 

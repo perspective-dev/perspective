@@ -618,10 +618,7 @@ function renderFacetedChromeOverlay(chart: ContinuousChart): void {
     // which `buildFacetGrid` populates when `hasLegend` was set.
     if (chart._lastHasColorCol && grid.legendRect) {
         const stops = chart._lastGradientStops ?? theme.gradientStops;
-        if (
-            chart._colorIsString &&
-            chart._uniqueColorLabels.size > 0
-        ) {
+        if (chart._colorIsString && chart._uniqueColorLabels.size > 0) {
             const seriesPalette =
                 chart._lastSeriesPalette ?? readSeriesPalette(canvas);
             const palette = resolvePalette(

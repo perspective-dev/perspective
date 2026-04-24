@@ -18,17 +18,30 @@ import {
     rotatedLabelsOverlap,
     truncateLabel,
 } from "./label-geometry";
-import { buildGroupRuns, maxDictLength } from "./categorical-axis-core";
+import { type GroupRun, runsInRange } from "./categorical-axis-core";
 import type { Theme } from "../theme/theme";
 
 /**
- * A level of the group_by hierarchy. The same shape as the string columns
- * in `ColumnDataMap`: `indices[r]` is the dictionary key for row `r`.
- * Levels are ordered outermost-first (level 0 = outermost, level N-1 = leaf).
+ * A level of the group_by hierarchy. Built once (inside the
+ * `with_typed_arrays` callback, while the WASM-backed index buffer is
+ * still valid) and then retained by the chart — all fields are plain JS
+ * and outlive the Arrow batch.
+ *
+ * - `labels[r]` is the pre-resolved string at row `r` (== the old
+ *   `dictionary[indices[r]]`).
+ * - `runs` is the full precomputed run-length encoding of the level;
+ *   outer-level brackets filter it by visible window at render time.
+ *   Empty for the leaf level, which reads `labels` per-row.
+ * - `maxLabelChars` caches `max(labels[r].length)` for axis-sizing
+ *   heuristics that previously scanned the dictionary.
+ *
+ * Levels are ordered outermost-first (level 0 = outermost, level N-1 =
+ * leaf).
  */
 export interface CategoricalLevel {
-    indices: Int32Array;
-    dictionary: string[];
+    labels: string[];
+    runs: GroupRun[];
+    maxLabelChars: number;
 }
 
 export interface CategoricalDomain {
@@ -90,9 +103,10 @@ export function measureCategoricalLevels(
     const result: LevelTickLayout[] = [];
     for (let l = 0; l < L; l++) {
         const lev = domain.levels[l];
-        const longest = maxDictLength(lev.dictionary);
         if (l === L - 1) {
-            result.push(leafLevelLayout(domain.numRows, longest, plotWidth));
+            result.push(
+                leafLevelLayout(domain.numRows, lev.maxLabelChars, plotWidth),
+            );
         } else {
             result.push({ size: OUTER_LEVEL_HEIGHT, rotation: 0 });
         }
@@ -142,7 +156,7 @@ function selectLeafTickIndices(
 }
 
 function getLeafText(level: CategoricalLevel, row: number): string {
-    return level.dictionary[level.indices[row]] ?? "";
+    return level.labels[row] ?? "";
 }
 
 /**
@@ -234,12 +248,13 @@ function renderLeafLevel(
 ): void {
     const { plotRect: plot } = layout;
 
-    // Estimate avg label width from the dictionary (cheap, one pass).
+    // Estimate avg label width from the precomputed longest-label
+    // length (filled in during level construction — see
+    // `resolveCategoryAxis`).
     const avgCharWidth = 6.2; // 11px monospace-ish heuristic
-    const longest = maxDictLength(level.dictionary);
     const avgLabelPx = Math.max(
         40,
-        Math.min(longest * avgCharWidth + 8, plot.width / 2),
+        Math.min(level.maxLabelChars * avgCharWidth + 8, plot.width / 2),
     );
 
     const tickRows =
@@ -311,7 +326,7 @@ function renderOuterLevel(
     tickColor: string,
 ): void {
     const { plotRect: plot } = layout;
-    const runs = buildGroupRuns(level.indices, visMin, visMax + 1);
+    const runs = runsInRange(level.runs, visMin, visMax);
     if (runs.length === 0) return;
 
     ctx.strokeStyle = tickColor;
@@ -361,7 +376,7 @@ function renderOuterLevel(
         if (xRight <= xLeft) continue;
         const cx = (xLeft + xRight) / 2;
 
-        const text = level.dictionary[run.dictIdx] ?? "";
+        const text = run.label;
         if (!text) continue;
 
         const available = xRight - xLeft - 4;
@@ -413,7 +428,7 @@ export function measureCategoricalLevelWidths(
     const charPx = 6.2;
     for (let l = 0; l < L; l++) {
         if (l === L - 1) {
-            const longest = maxDictLength(domain.levels[l].dictionary);
+            const longest = domain.levels[l].maxLabelChars;
             widths.push(
                 Math.max(
                     LEAF_LEVEL_WIDTH_MIN,
@@ -578,7 +593,7 @@ function renderOuterLevelY(
     tickColor: string,
 ): void {
     const { plotRect: plot } = layout;
-    const runs = buildGroupRuns(level.indices, visMin, visMax + 1);
+    const runs = runsInRange(level.runs, visMin, visMax);
     if (runs.length === 0) return;
 
     ctx.strokeStyle = tickColor;
@@ -614,7 +629,7 @@ function renderOuterLevelY(
         if (yBot <= yTop) continue;
         const cy = (yTop + yBot) / 2;
 
-        const text = level.dictionary[run.dictIdx] ?? "";
+        const text = run.label;
         if (!text) continue;
 
         const available = colWidth - 6;

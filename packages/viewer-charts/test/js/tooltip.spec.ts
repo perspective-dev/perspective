@@ -11,52 +11,41 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { test } from "@perspective-dev/test";
-import { gotoBasic, renderAndCapture } from "./helpers";
+import { expectViewerScreenshot, gotoBasic, restoreChart } from "./helpers";
 
-test.describe("Y Candlestick", () => {
+const PLOT_CX = 640;
+const PLOT_CY = 360;
+
+// Hover dispatches `onHover` from a RAF, and the tooltip text is built
+// via a `buildTooltipLines` Promise that repaints the chrome overlay
+// once the row fetch resolves. 200ms covers both hops reliably under
+// swiftshader without flaking on a slow CI machine.
+const TOOLTIP_SETTLE_MS = 200;
+
+test.describe("Tooltip", () => {
     test.beforeEach(async ({ page }) => {
         await gotoBasic(page);
     });
 
-    test("open-only falls back to next-row open for close", async ({
-        page,
-    }) => {
-        // Exercises the d3fc-inherited fallback path: close = next row's
-        // open; high = max(open, close); low = min(open, close).
-        await renderAndCapture(page, {
-            plugin: "Candlestick",
-            columns: ["Sales"],
-            group_by: ["Order Date"],
+    test("hover paints tooltip chrome", async ({ page }) => {
+        await restoreChart(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit"],
         });
+        await page.mouse.move(PLOT_CX, PLOT_CY);
+        await page.waitForTimeout(TOOLTIP_SETTLE_MS);
+        await expectViewerScreenshot(page, "scatter-hover.png");
     });
 
-    test("full OHLC four-column layout", async ({ page }) => {
-        await renderAndCapture(page, {
-            plugin: "Candlestick",
-            columns: ["Sales", "Profit", "Quantity", "Discount"],
-            group_by: ["Order Date"],
+    test("click pins tooltip", async ({ page }) => {
+        await restoreChart(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit"],
         });
-    });
-
-    test("up/down colors sampled from gradient extremes", async ({ page }) => {
-        // With Profit as Close and Sales as Open, positive Profit rows
-        // (Close > Open) render at the gradient top; negative rows at
-        // the bottom. Pins the bichromatic rendering.
-        await renderAndCapture(page, {
-            plugin: "Candlestick",
-            columns: ["Sales", "Profit"],
-            group_by: ["Category"],
-        });
-    });
-
-    test("with split_by — side-by-side candles per category", async ({
-        page,
-    }) => {
-        await renderAndCapture(page, {
-            plugin: "Candlestick",
-            columns: ["Sales"],
-            group_by: ["Category"],
-            split_by: ["Region"],
-        });
+        await page.mouse.move(PLOT_CX, PLOT_CY);
+        await page.waitForTimeout(TOOLTIP_SETTLE_MS);
+        await page.mouse.click(PLOT_CX, PLOT_CY);
+        await page.waitForTimeout(TOOLTIP_SETTLE_MS);
+        await expectViewerScreenshot(page, "scatter-pinned.png");
     });
 });

@@ -11,7 +11,6 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { ContinuousChart } from "./continuous-chart";
-import { resolveTheme } from "../../theme/theme";
 import { renderContinuousChromeOverlay } from "./continuous-render";
 
 const TOOLTIP_RADIUS_PX = 24;
@@ -145,7 +144,10 @@ function resolveHoverTarget(
     chart: ContinuousChart,
     mx: number,
     my: number,
-): { layout: import("../../layout/plot-layout").PlotLayout | null; facetIdx: number } {
+): {
+    layout: import("../../layout/plot-layout").PlotLayout | null;
+    facetIdx: number;
+} {
     if (chart._facetGrid) {
         const cells = chart._facetGrid.cells;
         for (let i = 0; i < cells.length; i++) {
@@ -265,9 +267,6 @@ export function showContinuousPinnedTooltip(
         chart._xData[pointIdx],
         chart._yData[pointIdx],
     );
-    const themeEl = chart._gridlineCanvas || chart._chromeCanvas;
-    if (!themeEl) return;
-    const theme = resolveTheme(themeEl);
 
     const parent = chart._glCanvas?.parentElement;
     if (!parent) return;
@@ -279,7 +278,7 @@ export function showContinuousPinnedTooltip(
         if (serial !== chart._pinnedTooltipSerial) return;
         if (chart._pinnedIndex !== pointIdx) return;
         if (lines.length === 0) return;
-        chart._tooltip.showPinned(parent, lines, pos, layout, theme);
+        chart._tooltip.showPinned(parent, lines, pos, layout);
     });
 
     chart._hoveredIndex = -1;

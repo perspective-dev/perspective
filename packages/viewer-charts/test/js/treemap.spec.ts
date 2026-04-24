@@ -19,66 +19,46 @@ test.describe("Treemap", () => {
     });
 
     test("basic hierarchy", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Treemap",
-                columns: ["Sales"],
-                group_by: ["Region", "Category"],
-            },
-            "basic.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Treemap",
+            columns: ["Sales"],
+            group_by: ["Region", "Category"],
+        });
     });
 
     test("no color slot → single-palette series mode", async ({ page }) => {
         // Regression: when Color is empty, _colorMode is "empty",
         // every leaf gets palette[0], and the legend is suppressed.
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Treemap",
-                columns: ["Sales"],
-                group_by: ["Region"],
-            },
-            "empty-color.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Treemap",
+            columns: ["Sales"],
+            group_by: ["Region"],
+        });
     });
 
     test("numeric color → gradient + gradient legend", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Treemap",
-                columns: ["Sales", "Profit"],
-                group_by: ["Region", "Category"],
-            },
-            "numeric-color.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Treemap",
+            columns: ["Sales", "Profit"],
+            group_by: ["Region", "Category"],
+        });
     });
 
     test("string color → series palette + categorical legend", async ({
         page,
     }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Treemap",
-                columns: ["Sales", "Ship Mode"],
-                group_by: ["Region", "Category"],
-            },
-            "string-color.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Treemap",
+            columns: ["Sales", "Ship Mode"],
+            group_by: ["Region", "Category"],
+        });
     });
 
     test("three-level group_by", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Treemap",
-                columns: ["Sales"],
-                group_by: ["Region", "Category", "Sub-Category"],
-            },
-            "three-level.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Treemap",
+            columns: ["Sales"],
+            group_by: ["Region", "Category", "Sub-Category"],
+        });
     });
 });

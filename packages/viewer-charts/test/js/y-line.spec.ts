@@ -19,15 +19,11 @@ test.describe("Y Line", () => {
     });
 
     test("basic", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Y Line",
-                columns: ["Sales"],
-                group_by: ["Category"],
-            },
-            "basic.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Y Line",
+            columns: ["Sales"],
+            group_by: ["Category"],
+        });
     });
 
     test("split_by shows distinct per-series colors (regression)", async ({
@@ -36,15 +32,11 @@ test.describe("Y Line", () => {
         // This spec pins the fix for the Y-Line-renders-all-black bug:
         // bar/glyphs/draw-lines.ts must use the uniform-color shader
         // variant and set u_color per series.
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Y Line",
-                columns: ["Sales"],
-                group_by: ["Category"],
-                split_by: ["Region"],
-            },
-            "split_by-colors.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Y Line",
+            columns: ["Sales"],
+            group_by: ["Category"],
+            split_by: ["Region"],
+        });
     });
 });

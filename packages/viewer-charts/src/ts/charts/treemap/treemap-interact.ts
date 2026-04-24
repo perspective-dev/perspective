@@ -13,7 +13,6 @@
 import type { TreemapChart } from "./treemap";
 import { NULL_NODE } from "../common/node-store";
 import { PADDING_LABEL, rebuildBreadcrumbs } from "./treemap-layout";
-import { resolveTheme } from "../../theme/theme";
 import { formatTickValue } from "../../layout/ticks";
 import {
     renderTreemapFrame,
@@ -260,10 +259,6 @@ export function showTreemapPinnedTooltip(
     chart._tooltip.dismissPinned();
     chart._pinnedNodeId = nodeId;
 
-    const themeEl = chart._gridlineCanvas || chart._chromeCanvas;
-    if (!themeEl) return;
-    const theme = resolveTheme(themeEl);
-
     const parent = chart._glCanvas?.parentElement;
     if (!parent) return;
 
@@ -286,7 +281,6 @@ export function showTreemapPinnedTooltip(
             lines,
             { px: cx, py: cy },
             { cssWidth, cssHeight },
-            theme,
         );
     });
 

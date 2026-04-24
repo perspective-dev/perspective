@@ -89,10 +89,29 @@ export class NodeStore {
     }
 
     reset(): void {
+        // Zero the layout typed arrays for slots that were occupied
+        // before. `squarify` / `partitionSunburst` overwrite visited
+        // nodes before any read, but early-bail branches (node area
+        // below `MIN_VISIBLE_AREA`) skip the recursion and leave
+        // descendants untouched. Re-using those slots in the next
+        // render with stale `x0/y0/x1/y1/a0/a1/r0/r1` leaks the
+        // previous render's rectangles / arcs through `collectVisible`
+        // into the new scene — the "leftover hoverable cells" bug.
+        //
+        // Fill only up to the prior `count` (the tree's logical size)
+        // — capacity can be much larger after growth and filling it
+        // whole is O(capacity) unnecessary work.
+        if (this.count > 0) {
+            this.x0.fill(0, 0, this.count);
+            this.y0.fill(0, 0, this.count);
+            this.x1.fill(0, 0, this.count);
+            this.y1.fill(0, 0, this.count);
+            this.a0.fill(0, 0, this.count);
+            this.a1.fill(0, 0, this.count);
+            this.r0.fill(0, 0, this.count);
+            this.r1.fill(0, 0, this.count);
+        }
         this.count = 0;
-        // Typed-array content doesn't need clearing — valid slots are
-        // always written before read. `name` / `colorLabel` get stale
-        // entries but `allocate()` clears them per-slot as reused.
     }
 
     /**

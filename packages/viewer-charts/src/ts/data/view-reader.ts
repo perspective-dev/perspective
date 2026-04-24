@@ -35,20 +35,23 @@ export interface TypedArrayWindowOptions {
 
 /**
  * Fetches all columns from a View using `with_typed_arrays` and
- * builds a `ColumnDataMap`. The callback receives zero-copy typed array
- * views; numeric data and validity bitmaps are used directly without
- * copying. String columns copy their indices and dictionary.
+ * builds a `ColumnDataMap`. The `values` typed arrays and `valid`
+ * bitmaps are zero-copy views into WASM memory and remain valid only
+ * for the duration of the `render` callback — if `render` returns a
+ * `Promise`, the underlying `with_typed_arrays` call awaits it before
+ * releasing the backing Arrow buffer. Callers must not retain any
+ * `ColumnData` reference past `render`'s resolution.
  */
 export async function viewToColumnDataMap(
     view: View,
-    render: (data: ColumnDataMap) => void,
+    render: (data: ColumnDataMap) => void | Promise<void>,
     options?: TypedArrayWindowOptions,
 ): Promise<void> {
     const result: ColumnDataMap = new Map();
 
     await (view as any).with_typed_arrays(
         options ?? {},
-        (
+        async (
             names: string[],
             values: ArrayLike<number>[],
             validities: (Uint8Array | null)[],
@@ -61,11 +64,10 @@ export async function viewToColumnDataMap(
                 const dict = dictionaries[i];
 
                 if (dict !== null) {
-                    // Dictionary (string) column — copy indices and dictionary
                     result.set(name, {
                         type: "string",
-                        indices: new Int32Array(vals as Int32Array),
-                        dictionary: Array.from(dict),
+                        indices: vals as Int32Array,
+                        dictionary: dict,
                         valid,
                     });
                 } else if (vals instanceof Float32Array) {
@@ -81,6 +83,7 @@ export async function viewToColumnDataMap(
                     });
                 } else {
                     // Fallback: treat as float32
+                    // TODO: Instance check if this needs a copy?
                     result.set(name, {
                         type: "float32",
                         values: new Float32Array(vals as any),
@@ -89,7 +92,7 @@ export async function viewToColumnDataMap(
                 }
             }
 
-            render(result);
+            await render(result);
         },
     );
 }

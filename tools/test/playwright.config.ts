@@ -80,6 +80,8 @@ const DEVICE_OPTIONS = {
                 // 2× perf hit is under budget for the test suite.
                 "--use-gl=swiftshader",
                 "--use-angle=swiftshader",
+                "--force-color-profile=srgb",
+                "--disable-lcd-text",
             ],
         },
     },

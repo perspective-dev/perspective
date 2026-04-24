@@ -19,51 +19,35 @@ test.describe("Y Bar", () => {
     });
 
     test("basic single series", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Y Bar",
-                columns: ["Sales"],
-                group_by: ["Category"],
-            },
-            "basic.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Y Bar",
+            columns: ["Sales"],
+            group_by: ["Category"],
+        });
     });
 
     test("split_by series colors", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Y Bar",
-                columns: ["Sales"],
-                group_by: ["Category"],
-                split_by: ["Region"],
-            },
-            "split_by.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Y Bar",
+            columns: ["Sales"],
+            group_by: ["Category"],
+            split_by: ["Region"],
+        });
     });
 
     test("multiple Y columns", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Y Bar",
-                columns: ["Sales", "Profit"],
-                group_by: ["Category"],
-            },
-            "multi-y.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Y Bar",
+            columns: ["Sales", "Profit"],
+            group_by: ["Category"],
+        });
     });
 
     test("nested group_by", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Y Bar",
-                columns: ["Sales"],
-                group_by: ["Region", "Category"],
-            },
-            "nested-group.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Y Bar",
+            columns: ["Sales"],
+            group_by: ["Region", "Category"],
+        });
     });
 });

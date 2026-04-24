@@ -19,81 +19,61 @@ test.describe("X/Y Scatter", () => {
     });
 
     test("basic x/y", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Scatter",
-                columns: ["Quantity", "Profit"],
-            },
-            "basic.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit"],
+        });
     });
 
     test("with numeric color", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Scatter",
-                columns: ["Quantity", "Profit", "Sales"],
-            },
-            "color-numeric.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit", "Sales"],
+        });
     });
 
     test("with string color", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Scatter",
-                columns: ["Quantity", "Profit", "Category"],
-            },
-            "color-string.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit", "Category"],
+        });
     });
 
     test("with size column", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Scatter",
-                columns: ["Quantity", "Profit", null, "Sales"],
-            },
-            "size.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit", null, "Sales"],
+        });
     });
 
     test("split_by produces distinct series", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Scatter",
-                columns: ["Quantity", "Profit"],
-                split_by: ["Category"],
-            },
-            "split_by.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit"],
+            split_by: ["Category"],
+        });
+    });
+
+    test("split_by respects color column", async ({ page }) => {
+        await renderAndCapture(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit", null, "Sales"],
+            split_by: ["Category"],
+        });
     });
 
     test("group_by aggregates points", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Scatter",
-                columns: ["Quantity", "Profit"],
-                group_by: ["State"],
-            },
-            "group_by.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit"],
+            group_by: ["State"],
+        });
     });
 
     test("date X axis", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Scatter",
-                columns: ["Order Date", "Profit"],
-            },
-            "date-x-axis.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Order Date", "Profit"],
+        });
     });
 });

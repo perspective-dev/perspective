@@ -14,6 +14,55 @@ import { test, expect } from "@perspective-dev/test";
 import perspective from "../perspective_client";
 
 test.describe("with_typed_arrays()", () => {
+    test("awaits promise returned by async callback before releasing the batch", async () => {
+        // The callback returns a Promise that only resolves after a
+        // microtask tick; the zero-copy views must remain valid for the
+        // full awaited duration. We copy *after* the tick to prove the
+        // backing WASM memory is still readable.
+        const table = await perspective.table({
+            x: ["a", "b", "a", "c"],
+        });
+        const view = await table.view();
+        let resolved: string[] | null = null;
+        await view.with_typed_arrays(
+            {},
+            async (
+                _n: string[],
+                vals: ArrayLike<number>[],
+                _valids: any[],
+                dicts: (string[] | null)[],
+            ) => {
+                const keys = vals[0] as Int32Array;
+                const dict = dicts[0]!;
+                // Yield twice to prove the Rust side is actually awaiting
+                // the returned promise rather than firing a sync call and
+                // dropping the batch immediately.
+                await new Promise((r) => setTimeout(r, 0));
+                await new Promise((r) => setTimeout(r, 0));
+                resolved = Array.from(keys).map((k) => dict[k]);
+            },
+        );
+        expect(resolved).toEqual(["a", "b", "a", "c"]);
+        await view.delete();
+        await table.delete();
+    });
+
+    test("rejected promise from async callback surfaces as a rejection", async () => {
+        const table = await perspective.table({ x: [1, 2, 3] });
+        const view = await table.view();
+        let caught: unknown = null;
+        try {
+            await view.with_typed_arrays({}, async () => {
+                throw new Error("callback boom");
+            });
+        } catch (e) {
+            caught = e;
+        }
+        expect(String(caught)).toContain("callback boom");
+        await view.delete();
+        await table.delete();
+    });
+
     test("returns all columns with names, values, validities, dictionaries", async () => {
         const table = await perspective.table({
             a: [1, 2, 3],

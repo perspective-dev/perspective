@@ -249,7 +249,10 @@ impl View {
 
     /// Fetches columns from the [`View`] in Arrow format, decodes them, and
     /// passes typed array views to `callback`. All arrays are only valid for
-    /// the duration of the callback.
+    /// the duration of the callback — if `callback` returns a `Promise`, it
+    /// is awaited before the backing Arrow buffer is released, so async
+    /// callbacks may use the views for the full duration of the awaited
+    /// work (e.g. across an `await requestAnimationFrame`-backed promise).
     ///
     /// # Arguments
     ///
@@ -257,7 +260,7 @@ impl View {
     ///   windowing and output options (e.g., `float32` mode).
     /// - `callback` - A JS function called with `(names: string[], values:
     ///   TypedArray[], validities: (Uint8Array|null)[], dictionaries:
-    ///   (string[]|null)[])`.
+    ///   (string[]|null)[]) => void | Promise<void>`.
     #[wasm_bindgen]
     pub async fn with_typed_arrays(
         &self,
@@ -272,7 +275,7 @@ impl View {
         let mut view_window: ViewWindow = opts.into();
         view_window.emit_legacy_row_path_names = Some(false);
         let arrow = self.0.to_arrow(view_window).await?;
-        crate::typed_array::decode_and_call(&arrow, float32, &callback)?;
+        crate::typed_array::decode_and_call(&arrow, float32, &callback).await?;
         Ok(())
     }
 

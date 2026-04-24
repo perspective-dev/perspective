@@ -102,8 +102,7 @@ export class PlotLayout {
         const baseBottom = options.bottomExtra ?? 24;
         const bottom = baseBottom + (options.hasXLabel ? 18 : 0);
         const top = 0;
-        const right =
-            options.rightExtra ?? (options.hasLegend ? 80 : 16);
+        const right = options.rightExtra ?? (options.hasLegend ? 80 : 16);
 
         // Facet cells: the sub-plot lives at `(originX, originY)` within a
         // larger canvas of size `(cssWidth, cssHeight)`. Its own bounds are

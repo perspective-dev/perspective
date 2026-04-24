@@ -19,27 +19,19 @@ test.describe("Y Scatter", () => {
     });
 
     test("basic", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Y Scatter",
-                columns: ["Sales"],
-                group_by: ["Category"],
-            },
-            "basic.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Y Scatter",
+            columns: ["Sales"],
+            group_by: ["Category"],
+        });
     });
 
     test("split_by", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "Y Scatter",
-                columns: ["Sales"],
-                group_by: ["Category"],
-                split_by: ["Region"],
-            },
-            "split_by.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "Y Scatter",
+            columns: ["Sales"],
+            group_by: ["Category"],
+            split_by: ["Region"],
+        });
     });
 });

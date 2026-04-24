@@ -16,10 +16,7 @@ import type {
     CategoricalDomain,
     CategoricalLevel,
 } from "../../chrome/categorical-axis";
-import {
-    buildGroupRuns,
-    maxDictLength,
-} from "../../chrome/categorical-axis-core";
+import { runsInRange } from "../../chrome/categorical-axis-core";
 import { truncateLabel } from "../../chrome/label-geometry";
 
 interface LevelTickLayout {
@@ -86,7 +83,7 @@ export function measureCategoricalYLevels(
     const L = levels.length;
     const result: LevelTickLayout[] = [];
     for (let l = 0; l < L; l++) {
-        const longest = maxDictLength(levels[l].dictionary);
+        const longest = levels[l].maxLabelChars;
         if (l === L - 1) {
             const w = Math.max(LEAF_LEVEL_WIDTH, longest * 6.5 + 16);
             result.push({ size: w });
@@ -116,7 +113,7 @@ export function measureCategoricalAxisWidth(
 }
 
 function getLeafText(level: CategoricalLevel, row: number): string {
-    return level.dictionary[level.indices[row]] ?? "";
+    return level.labels[row] ?? "";
 }
 
 /**
@@ -254,7 +251,7 @@ function renderOuterLevel(
     tickColor: string,
 ): void {
     const plot = layout.plotRect;
-    const runs = buildGroupRuns(level.indices, visMin, visMax + 1);
+    const runs = runsInRange(level.runs, visMin, visMax);
     if (runs.length === 0) return;
 
     ctx.strokeStyle = tickColor;
@@ -296,7 +293,7 @@ function renderOuterLevel(
         const cy = (clippedHi + clippedLo) / 2;
         const cx = bandLeft + (bandRight - bandLeft - 3) / 2;
 
-        const text = level.dictionary[run.dictIdx] ?? "";
+        const text = run.label;
         if (!text) continue;
         const span = clippedLo - clippedHi - 4;
         const truncated = truncateLabel(ctx, text, Math.max(0, span));

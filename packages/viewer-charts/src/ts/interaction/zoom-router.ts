@@ -165,12 +165,10 @@ function applyWheel(
     const newDomain = controller.getVisibleDomain();
     const newDataX =
         newDomain.xMin +
-        ((mouseX - plot.x) / plot.width) *
-            (newDomain.xMax - newDomain.xMin);
+        ((mouseX - plot.x) / plot.width) * (newDomain.xMax - newDomain.xMin);
     const newDataY =
         newDomain.yMax -
-        ((mouseY - plot.y) / plot.height) *
-            (newDomain.yMax - newDomain.yMin);
+        ((mouseY - plot.y) / plot.height) * (newDomain.yMax - newDomain.yMin);
 
     const bxRange = controller.baseXRange;
     const byRange = controller.baseYRange;

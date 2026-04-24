@@ -168,11 +168,11 @@ export class TreemapChart extends TreeChartBase {
             // Clear per-draw state that's tied to the OLD tree. Node
             // IDs from the previous render don't map to anything in
             // the fresh tree; leaving them around lets stale drill
-            // roots, hovered/pinned IDs, breadcrumb regions, and the
-            // cached chrome bitmap bleed into the new render as ghost
-            // rects / labels / hit targets. See tree-data.ts's
-            // `resetTreeState` for the shared fields; everything below
-            // is treemap-specific.
+            // roots, hovered/pinned IDs, breadcrumb regions, the
+            // cached chrome bitmap, or an old WebGL vertex count bleed
+            // into the new render as ghost rects / labels / hit
+            // targets. See tree-data.ts's `resetTreeState` for the
+            // shared fields; everything below is treemap-specific.
             this._hoveredNodeId = NULL_NODE;
             this._pinnedNodeId = NULL_NODE;
             this._breadcrumbRegions = [];
@@ -180,6 +180,19 @@ export class TreemapChart extends TreeChartBase {
             this._facetGrid = null;
             this._visibleBaseDepths = null;
             this._visibleRootIds = null;
+            // Invalidate the GPU buffer contents so any render that
+            // fires before `generateAndUploadTreemap` has refilled the
+            // buffers draws zero triangles instead of the previous
+            // tree's geometry.
+            this._vertexCount = 0;
+            // Drop any in-flight hover tooltip promise — its serial
+            // is captured by the caller, so bumping here makes stale
+            // resolutions no-ops rather than painting old lines on
+            // the new chart.
+            this._hoveredTooltipLines = null;
+            this._hoveredTooltipNodeId = -1;
+            this._hoveredTooltipSerial++;
+            this._pinnedTooltipSerial++;
             dismissTreemapPinnedTooltip(this);
             this._chromeCache?.close();
             this._chromeCache = null;

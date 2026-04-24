@@ -130,26 +130,17 @@ export class TooltipController {
         lines: string[],
         pos: { px: number; py: number },
         bounds: CssBounds,
-        theme: Theme,
     ): void {
         this.dismissPinned();
         if (lines.length === 0) return;
         const div = document.createElement("div");
-        div.style.cssText = [
-            "position:absolute",
-            "pointer-events:auto",
-            `font:11px ${theme.fontFamily}`,
-            `background:${theme.tooltipBg}`,
-            `color:${theme.tooltipText}`,
-            `border:1px solid ${theme.tooltipBorder}`,
-            "border-radius:3px",
-            "padding:3px",
-            "overflow-y:auto",
-            `max-height:${Math.round(bounds.cssHeight * 0.6)}px`,
-            "white-space:pre",
-            "z-index:10",
-            "line-height:16px",
-        ].join(";");
+        // Styling lives in the package's adopted stylesheet under
+        // `.webgl-tooltip` — keeps theme wiring in CSS (via
+        // `--psp-webgl--tooltip--*` custom properties) and reserves
+        // this path for the truly dynamic bits: the bounds-derived
+        // max-height and the post-measurement position.
+        div.className = "webgl-tooltip";
+        div.style.maxHeight = `${Math.round(bounds.cssHeight * 0.6)}px`;
 
         div.textContent = lines.join("\n");
 
@@ -210,7 +201,6 @@ export function renderCanvasTooltip(
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
-
     ctx.font = `11px ${theme.fontFamily}`;
     const lineHeight = 16;
     const padding = 8;
@@ -219,9 +209,9 @@ export function renderCanvasTooltip(
         const w = ctx.measureText(line).width;
         if (w > maxWidth) maxWidth = w;
     }
+
     const boxW = maxWidth + padding * 2;
     const boxH = lines.length * lineHeight + padding * 2 - 4;
-
     let tx = pos.px + 12;
     let ty = pos.py - boxH - 8;
     if (tx + boxW > layout.cssWidth) tx = pos.px - boxW - 12;

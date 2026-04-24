@@ -11,52 +11,71 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { test } from "@perspective-dev/test";
-import { gotoBasic, renderAndCapture } from "./helpers";
+import {
+    expectViewerScreenshot,
+    gotoBasic,
+    restoreChart,
+    waitOneFrame,
+} from "./helpers";
 
-test.describe("Y Candlestick", () => {
+// Plot center is well inside the layout's plotRect for the default
+// 1280×720 viewport — the layout leaves ~80px of gutter on every side.
+const PLOT_CX = 640;
+const PLOT_CY = 360;
+
+test.describe("Zoom", () => {
     test.beforeEach(async ({ page }) => {
         await gotoBasic(page);
     });
 
-    test("open-only falls back to next-row open for close", async ({
-        page,
-    }) => {
-        // Exercises the d3fc-inherited fallback path: close = next row's
-        // open; high = max(open, close); low = min(open, close).
-        await renderAndCapture(page, {
+    test("wheel zooms in on scatter", async ({ page }) => {
+        await restoreChart(page, {
+            plugin: "X/Y Scatter",
+            columns: ["Quantity", "Profit"],
+        });
+
+        await page.mouse.move(PLOT_CX, PLOT_CY);
+        await page.mouse.wheel(0, -500);
+        await waitOneFrame(page);
+        await expectViewerScreenshot(page, "scatter-wheel-in.png");
+    });
+
+    test("wheel zooms in on line with date axis", async ({ page }) => {
+        await restoreChart(page, {
+            plugin: "X/Y Line",
+            columns: ["Order Date", "Profit"],
+            group_by: ["Order Date"],
+        });
+
+        await page.mouse.move(PLOT_CX, PLOT_CY);
+        await page.mouse.wheel(0, -500);
+        await waitOneFrame(page);
+        await expectViewerScreenshot(page, "line-wheel-in.png");
+    });
+
+    test("wheel zooms in on Y Bar", async ({ page }) => {
+        await restoreChart(page, {
+            plugin: "Y Bar",
+            columns: ["Sales"],
+            group_by: ["State"],
+        });
+
+        await page.mouse.move(PLOT_CX, PLOT_CY);
+        await page.mouse.wheel(0, -500);
+        await waitOneFrame(page);
+        await expectViewerScreenshot(page, "bar-wheel-in.png");
+    });
+
+    test("wheel zooms in on Candlestick", async ({ page }) => {
+        await restoreChart(page, {
             plugin: "Candlestick",
             columns: ["Sales"],
             group_by: ["Order Date"],
         });
-    });
 
-    test("full OHLC four-column layout", async ({ page }) => {
-        await renderAndCapture(page, {
-            plugin: "Candlestick",
-            columns: ["Sales", "Profit", "Quantity", "Discount"],
-            group_by: ["Order Date"],
-        });
-    });
-
-    test("up/down colors sampled from gradient extremes", async ({ page }) => {
-        // With Profit as Close and Sales as Open, positive Profit rows
-        // (Close > Open) render at the gradient top; negative rows at
-        // the bottom. Pins the bichromatic rendering.
-        await renderAndCapture(page, {
-            plugin: "Candlestick",
-            columns: ["Sales", "Profit"],
-            group_by: ["Category"],
-        });
-    });
-
-    test("with split_by — side-by-side candles per category", async ({
-        page,
-    }) => {
-        await renderAndCapture(page, {
-            plugin: "Candlestick",
-            columns: ["Sales"],
-            group_by: ["Category"],
-            split_by: ["Region"],
-        });
+        await page.mouse.move(PLOT_CX, PLOT_CY);
+        await page.mouse.wheel(0, -500);
+        await waitOneFrame(page);
+        await expectViewerScreenshot(page, "candlestick-wheel-in.png");
     });
 });

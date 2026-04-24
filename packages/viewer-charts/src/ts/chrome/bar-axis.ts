@@ -18,6 +18,12 @@ import {
     renderCategoricalYTicks,
     type CategoricalDomain,
 } from "./categorical-axis";
+import {
+    drawGridlinesX,
+    drawGridlinesY,
+    drawXTickRow,
+    drawYTickColumn,
+} from "./axis-primitives";
 import type { AxisDomain } from "./numeric-axis";
 import type { Theme } from "../theme/theme";
 
@@ -30,53 +36,31 @@ function drawNumericXAxis(
     side: "top" | "bottom",
     theme: Theme,
 ): void {
-    const { tickColor, labelColor, fontFamily } = theme;
+    const { labelColor, fontFamily } = theme;
     const { plotRect: plot } = layout;
-    const TICK_SIZE = 5;
     const axisY = side === "bottom" ? plot.y + plot.height : plot.y;
-    const xToPixel = (val: number) => {
-        const t =
-            (val - layout.paddedXMin) / (layout.paddedXMax - layout.paddedXMin);
-        return plot.x + t * plot.width;
-    };
 
     ctx.fillStyle = labelColor;
     ctx.font = `11px ${fontFamily}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = side === "bottom" ? "top" : "bottom";
     ctx.lineWidth = 1;
+    drawXTickRow(
+        ctx,
+        plot,
+        ticks,
+        axisY,
+        side,
+        (v) => layout.dataToPixel(v, 0).px,
+        formatTickValue,
+    );
 
-    for (const tick of ticks) {
-        const px = xToPixel(tick);
-        if (px < plot.x - 1 || px > plot.x + plot.width + 1) continue;
-        ctx.beginPath();
-        if (side === "bottom") {
-            ctx.moveTo(px, axisY);
-            ctx.lineTo(px, axisY + TICK_SIZE);
-            ctx.stroke();
-            ctx.fillText(formatTickValue(tick), px, axisY + TICK_SIZE + 3);
-        } else {
-            ctx.moveTo(px, axisY - TICK_SIZE);
-            ctx.lineTo(px, axisY);
-            ctx.stroke();
-            ctx.fillText(formatTickValue(tick), px, axisY - TICK_SIZE - 3);
-        }
-    }
-
-    // Axis label
-    ctx.fillStyle = labelColor;
     ctx.font = `13px ${fontFamily}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    if (side === "bottom") {
-        ctx.fillText(
-            domain.label,
-            plot.x + plot.width / 2,
-            layout.cssHeight - 2,
-        );
-    } else {
-        ctx.fillText(domain.label, plot.x + plot.width / 2, 10);
-    }
+    ctx.fillText(
+        domain.label,
+        plot.x + plot.width / 2,
+        side === "bottom" ? layout.cssHeight - 2 : 10,
+    );
 }
 
 /**
@@ -92,42 +76,23 @@ function drawYAxis(
     side: "left" | "right",
     theme: Theme,
 ): void {
-    const { tickColor, labelColor, fontFamily } = theme;
-
+    const { labelColor, fontFamily } = theme;
     const { plotRect: plot } = layout;
-    const TICK_SIZE = 5;
     const axisX = side === "left" ? plot.x : plot.x + plot.width;
-    const yToPixel = (val: number) => {
-        const t =
-            (val - layout.paddedYMin) / (layout.paddedYMax - layout.paddedYMin);
-        return plot.y + (1 - t) * plot.height;
-    };
 
     ctx.fillStyle = labelColor;
     ctx.font = `11px ${fontFamily}`;
-    ctx.textAlign = side === "left" ? "right" : "left";
-    ctx.textBaseline = "middle";
     ctx.lineWidth = 1;
+    drawYTickColumn(
+        ctx,
+        plot,
+        ticks,
+        axisX,
+        side,
+        (v) => layout.dataToPixel(0, v).py,
+        formatTickValue,
+    );
 
-    for (const tick of ticks) {
-        const py = yToPixel(tick);
-        if (py < plot.y - 1 || py > plot.y + plot.height + 1) continue;
-        ctx.beginPath();
-        if (side === "left") {
-            ctx.moveTo(axisX - TICK_SIZE, py);
-            ctx.lineTo(axisX, py);
-            ctx.stroke();
-            ctx.fillText(formatTickValue(tick), axisX - TICK_SIZE - 3, py);
-        } else {
-            ctx.moveTo(axisX, py);
-            ctx.lineTo(axisX + TICK_SIZE, py);
-            ctx.stroke();
-            ctx.fillText(formatTickValue(tick), axisX + TICK_SIZE + 3, py);
-        }
-    }
-
-    // Axis label
-    ctx.fillStyle = labelColor;
     ctx.font = `13px ${fontFamily}`;
     ctx.save();
     if (side === "left") {
@@ -227,40 +192,21 @@ export function renderBarGridlines(
     const ctx = initCanvas(canvas, layout);
     if (!ctx) return;
 
-    const { plotRect: plot } = layout;
-
     ctx.strokeStyle = theme.gridlineColor;
     ctx.lineWidth = 1;
-
     if (isHorizontal) {
-        const xToPixel = (val: number) => {
-            const t =
-                (val - layout.paddedXMin) /
-                (layout.paddedXMax - layout.paddedXMin);
-            return plot.x + t * plot.width;
-        };
-        for (const tick of valueTicks) {
-            const px = Math.round(xToPixel(tick)) + 0.5;
-            if (px < plot.x || px > plot.x + plot.width) continue;
-            ctx.beginPath();
-            ctx.moveTo(px, plot.y);
-            ctx.lineTo(px, plot.y + plot.height);
-            ctx.stroke();
-        }
+        drawGridlinesX(
+            ctx,
+            layout.plotRect,
+            valueTicks,
+            (v) => layout.dataToPixel(v, 0).px,
+        );
     } else {
-        const yToPixel = (val: number) => {
-            const t =
-                (val - layout.paddedYMin) /
-                (layout.paddedYMax - layout.paddedYMin);
-            return plot.y + (1 - t) * plot.height;
-        };
-        for (const tick of valueTicks) {
-            const py = Math.round(yToPixel(tick)) + 0.5;
-            if (py < plot.y || py > plot.y + plot.height) continue;
-            ctx.beginPath();
-            ctx.moveTo(plot.x, py);
-            ctx.lineTo(plot.x + plot.width, py);
-            ctx.stroke();
-        }
+        drawGridlinesY(
+            ctx,
+            layout.plotRect,
+            valueTicks,
+            (v) => layout.dataToPixel(0, v).py,
+        );
     }
 }

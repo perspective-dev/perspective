@@ -147,8 +147,9 @@ export class PointGlyph implements Glyph {
         // the tooltip shows only relevant facet values.
         const prefixFilter =
             chart._splitGroups.length > 0 && chart._seriesCapacity > 0
-                ? (chart._splitGroups[Math.floor(flatIdx / chart._seriesCapacity)]
-                      ?.prefix ?? null)
+                ? (chart._splitGroups[
+                      Math.floor(flatIdx / chart._seriesCapacity)
+                  ]?.prefix ?? null)
                 : null;
 
         for (const [colName, value] of row) {

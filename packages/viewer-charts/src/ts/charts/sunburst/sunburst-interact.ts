@@ -13,7 +13,6 @@
 import type { SunburstChart } from "./sunburst";
 import { NULL_NODE } from "../common/node-store";
 import { rebuildBreadcrumbs } from "../common/tree-data";
-import { resolveTheme } from "../../theme/theme";
 import { formatTickValue } from "../../layout/ticks";
 import {
     renderSunburstFrame,
@@ -268,10 +267,6 @@ export function showSunburstPinnedTooltip(
     chart._tooltip.dismissPinned();
     chart._pinnedNodeId = nodeId;
 
-    const themeEl = chart._gridlineCanvas || chart._chromeCanvas;
-    if (!themeEl) return;
-    const theme = resolveTheme(themeEl);
-
     const parent = chart._glCanvas?.parentElement;
     if (!parent) return;
 
@@ -318,7 +313,6 @@ export function showSunburstPinnedTooltip(
             lines,
             { px: cx, py: cy },
             { cssWidth, cssHeight },
-            theme,
         );
     });
 

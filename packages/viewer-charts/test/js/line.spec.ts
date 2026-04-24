@@ -19,40 +19,28 @@ test.describe("X/Y Line", () => {
     });
 
     test("basic x/y", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Line",
-                columns: ["Order Date", "Profit"],
-                group_by: ["Order Date"],
-            },
-            "basic.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Line",
+            columns: ["Order Date", "Profit"],
+            group_by: ["Order Date"],
+        });
     });
 
     test("split_by produces distinct series colors", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Line",
-                columns: ["Order Date", "Profit"],
-                group_by: ["Order Date"],
-                split_by: ["Category"],
-            },
-            "split_by.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Line",
+            columns: ["Order Date", "Profit"],
+            group_by: ["Order Date"],
+            split_by: ["Category"],
+        });
     });
 
     test("date X axis with two splits", async ({ page }) => {
-        await renderAndCapture(
-            page,
-            {
-                plugin: "X/Y Line",
-                columns: ["Order Date", "Sales"],
-                group_by: ["Order Date"],
-                split_by: ["Region"],
-            },
-            "date-x-split.png",
-        );
+        await renderAndCapture(page, {
+            plugin: "X/Y Line",
+            columns: ["Order Date", "Sales"],
+            group_by: ["Order Date"],
+            split_by: ["Region"],
+        });
     });
 });
