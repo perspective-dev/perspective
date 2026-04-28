@@ -19,7 +19,7 @@ import type { ViewerConfigUpdate } from "@perspective-dev/viewer";
  * deterministic on a given machine, but a handful of sub-pixel AA
  * decisions still wiggle across Chromium versions.
  */
-const DEFAULT_MAX_DIFF_PIXEL_RATIO = 0.02;
+const DEFAULT_MAX_DIFF_PIXEL_RATIO = 0.0;
 const DEFAULT_THRESHOLD = 0;
 
 /**

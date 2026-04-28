@@ -92,7 +92,10 @@ export function resolveTheme(el: Element): Theme {
     const gradientStops = parseCssGradient(gradientSrc);
 
     return {
-        fontFamily: get("--psp-webgl--font-family", "monospace"),
+        fontFamily: get(
+            "--psp-webgl--font-family",
+            get("font-family", "monospace"),
+        ),
         tickColor: get(
             "--psp-webgl--axis-ticks--color",
             "rgba(160, 0, 0, 0.8)",

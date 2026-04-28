@@ -4,27 +4,10 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    font-family: var(
-        --psp-interface-monospace--font-family,
-        "ui-monospace",
-        "SFMono-Regular",
-        "SF Mono",
-        "Menlo",
-        "Consolas",
-        "Liberation Mono",
-        monospace
-    );
+    font-family: inherit;
+    /* font-family: var(--psp-interface-monospace--font-family, inherit); */
 
-    --psp-webgl--font-family: var(
-        --psp-interface-monospace--font-family,
-        "ui-monospace",
-        "SFMono-Regular",
-        "SF Mono",
-        "Menlo",
-        "Consolas",
-        "Liberation Mono",
-        monospace
-    );
+    /* --psp-webgl--font-family: var(font-family, inherit); */
     --psp-webgl--tooltip--color: var(--psp--color);
     --psp-webgl--tooltip--background: var(--psp--background-color);
     --psp-webgl--tooltip--border-color: var(--psp-inactive--border-color);
