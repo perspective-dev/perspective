@@ -59,6 +59,7 @@ private:
     // EXPRESSION_VOCAB_CAPACITY * 64 bytes, allocate a new page.
     // TODO: this leaves edge cases where we allocate new pages too eagerly,
     // or we aren't using the allocated space as efficiently as possible.
+    std::size_t m_initial_vocab_size;
     std::size_t m_max_vocab_size;
 
     std::size_t m_current_vocab_size;

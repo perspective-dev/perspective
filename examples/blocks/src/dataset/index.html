@@ -64,6 +64,10 @@
                     <input id="batch_delay" min="100" max="10000" type="number" placeholder="#" value="200" />
                 </div>
                 <div class="range">
+                    <span>Index</span>
+                    <input id="index" type="text" placeholder="#" value="" />
+                </div>
+                <div class="range">
                     <span>Float columns</span>
                     <input id="num_float" min="0" max="50" type="number" placeholder="#" value="5" />
                 </div>
@@ -147,15 +151,40 @@
             };
 
             const new_row = () => assign((name, x) => cell_args[name](x));
-            const gen_data = async () => {
+            let i = 0;
+            const gen_tbl = async () => {
+                const name = i == 0 ? `superstore` : `superstore_${i}`;
+                const opts = { name: name };
+                if (window["index"].value) {
+                    opts.index = window["index"].value;
+                }
+                const tbl = await client.table(new_schema(), opts);
+
+                if (i > 0) {
+                    const layout = await psp_workspace.save();
+                    for (const view of Object.values(layout['viewers'])) {
+                        if (view.table.startsWith('superstore')) {
+                            view.table = name;
+                        }
+                    }
+                    await psp_workspace.restore(layout);
+                }
+
+                i += 1;
+                return tbl;
+            };
+            const gen_data = async (state) => {
                 reset_strings_cache();
                 let nrows = num_rows.value;
                 let rows = [];
                 const batch_size = Math.floor(nrows / num_batches.value);
                 const batch_freq = batch_delay.value;
-                const tbl = await client.table(new_schema(), { name: "superstore" });
                 (function batch() {
                     while (nrows > 0) {
+                        const tbl = state.table;
+                        if (state.stop) {
+                            return;
+                        }
                         rows.push(new_row());
                         nrows--;
                         if (nrows % batch_size === 0) {
@@ -166,24 +195,26 @@
                         }
                     }
                 })();
-
-                return tbl;
             };
 
             // GUI
 
-            const make_run_click_callback = (state) => async () => {
+            const make_table = (state) => async () => {
                 state.table?.delete?.({ lazy: true });
-                state.table = gen_data();
-                // await window.psp_workspace.addTable("superstore", state.table);
+                state.table = await gen_tbl();
+                state.stop = false;
+            };
+
+            const make_run_click_callback = (state) => async () => {
+                if (state.stop) {
+                    await make_table(state)();
+                }
+                gen_data(state);
             };
 
             const make_del_click_callback = (state) => async () => {
                 if (state.table) {
-                    // await viewer.eject();
-                    // await window.psp_workspace.removeTable("superstore");
-                    await state.table.then((x) => x.delete({ lazy: true }));
-                    state.table = undefined;
+                    state.stop = true;
                 }
             };
 
@@ -192,7 +223,7 @@
             // Main
             run.addEventListener("click", make_run_click_callback(state));
             del.addEventListener("click", make_del_click_callback(state));
-            run.dispatchEvent(new Event("click"));
+            make_table(state)();
 
             const stats_table = await client.table(
                 {
