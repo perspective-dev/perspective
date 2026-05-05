@@ -17,6 +17,7 @@ const LUT_SIZE = 256;
 
 export interface GradientTextureCache {
     texture: WebGLTexture;
+
     // The `GradientStop[]` reference last uploaded. `resolveTheme` returns a
     // fresh object per render, so comparing the array reference is enough to
     // detect a theme change and skip the upload otherwise.
@@ -38,7 +39,9 @@ export function ensureGradientTexture(
     let texture: WebGLTexture;
     if (cache?.texture) {
         texture = cache.texture;
-        if (cache.lastStops === stops) return cache; // no-op fast path
+        if (cache.lastStops === stops) {
+            return cache;
+        } // no-op fast path
     } else {
         texture = gl.createTexture()!;
     }

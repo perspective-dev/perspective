@@ -28,13 +28,18 @@ function parse_hex(input: string): RGB | null {
         const r = parseInt(s[0] + s[0], 16);
         const g = parseInt(s[1] + s[1], 16);
         const b = parseInt(s[2] + s[2], 16);
-        if (!isNaN(r) && !isNaN(g) && !isNaN(b)) return [r, g, b];
+        if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+            return [r, g, b];
+        }
     } else if (s.length === 6 || s.length === 8) {
         const r = parseInt(s.slice(0, 2), 16);
         const g = parseInt(s.slice(2, 4), 16);
         const b = parseInt(s.slice(4, 6), 16);
-        if (!isNaN(r) && !isNaN(g) && !isNaN(b)) return [r, g, b];
+        if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+            return [r, g, b];
+        }
     }
+
     return null;
 }
 
@@ -43,7 +48,10 @@ function parse_rgb_fn(input: string): RGB | null {
     const m = input.match(
         /^rgba?\(\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*[, ]\s*([\d.]+)/i,
     );
-    if (!m) return null;
+    if (!m) {
+        return null;
+    }
+
     return [
         Math.round(parseFloat(m[1])),
         Math.round(parseFloat(m[2])),
@@ -58,7 +66,11 @@ function parse_via_canvas(input: string): RGB {
         canvas.width = canvas.height = 1;
         parse_ctx = canvas.getContext("2d");
     }
-    if (!parse_ctx) return [0, 0, 0];
+
+    if (!parse_ctx) {
+        return [0, 0, 0];
+    }
+
     parse_ctx.fillStyle = "#000";
     parse_ctx.fillStyle = input;
     const normalized = parse_ctx.fillStyle as string;
@@ -69,7 +81,10 @@ function parse_via_canvas(input: string): RGB {
 export function parseColor(input: string): RGB {
     const key = input.trim();
     const cached = parse_cache.get(key);
-    if (cached) return cached;
+    if (cached) {
+        return cached;
+    }
+
     const rgb = parse_hex(key) ?? parse_rgb_fn(key) ?? parse_via_canvas(key);
     parse_cache.set(key, rgb);
     return rgb;
@@ -99,10 +114,15 @@ export function rgbToHsl([r, g, b]: RGB): HSL {
     let s = 0;
     if (d !== 0) {
         s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        if (max === rn) h = ((gn - bn) / d + (gn < bn ? 6 : 0)) * 60;
-        else if (max === gn) h = ((bn - rn) / d + 2) * 60;
-        else h = ((rn - gn) / d + 4) * 60;
+        if (max === rn) {
+            h = ((gn - bn) / d + (gn < bn ? 6 : 0)) * 60;
+        } else if (max === gn) {
+            h = ((bn - rn) / d + 2) * 60;
+        } else {
+            h = ((rn - gn) / d + 4) * 60;
+        }
     }
+
     return [h, s, l];
 }
 
@@ -113,16 +133,33 @@ export function hslToRgb([h, s, l]: HSL): RGB {
         const v = Math.round(l * 255);
         return [v, v, v];
     }
+
     const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
     const p = 2 * l - q;
     const f = (t: number): number => {
-        if (t < 0) t += 1;
-        if (t > 1) t -= 1;
-        if (t < 1 / 6) return p + (q - p) * 6 * t;
-        if (t < 1 / 2) return q;
-        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        if (t < 0) {
+            t += 1;
+        }
+
+        if (t > 1) {
+            t -= 1;
+        }
+
+        if (t < 1 / 6) {
+            return p + (q - p) * 6 * t;
+        }
+
+        if (t < 1 / 2) {
+            return q;
+        }
+
+        if (t < 2 / 3) {
+            return p + (q - p) * (2 / 3 - t) * 6;
+        }
+
         return p;
     };
+
     return [
         Math.round(f(hn + 1 / 3) * 255),
         Math.round(f(hn) * 255),

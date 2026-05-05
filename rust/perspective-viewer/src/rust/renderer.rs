@@ -31,7 +31,7 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::rc::Rc;
 
-use futures::future::{join_all, select_all};
+use futures::future::select_all;
 use perspective_client::utils::*;
 use perspective_client::{View, ViewWindow};
 use perspective_js::json;
@@ -206,16 +206,16 @@ impl Renderer {
     }
 
     pub async fn restyle_all(&self, view: &perspective_client::View) -> ApiResult<JsValue> {
-        let plugins = self.get_all_plugins();
-        let tasks = plugins
-            .iter()
-            .map(|plugin| plugin.restyle(view.clone().into()));
+        let plugin = self.get_active_plugin()?;
+        let meta = self.metadata().clone();
+        plugin.restyle();
+        let mut limits = get_row_and_col_limits(view, &meta).await?;
+        limits.is_update = false;
+        plugin
+            .draw(view.clone().into(), limits.max_cols, limits.max_rows, false)
+            .await?;
 
-        join_all(tasks)
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()
-            .map(|_| JsValue::UNDEFINED)
+        Ok(JsValue::UNDEFINED)
     }
 
     pub fn set_throttle(&self, val: Option<f64>) {

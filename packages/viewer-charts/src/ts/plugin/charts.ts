@@ -12,12 +12,6 @@
 
 export type ChartType = "bar" | "line" | "scatter" | "area";
 
-/**
- * Chart-type identifiers plugins may pin via `default_chart_type`.
- * Extends `ChartType` with the candlestick/ohlc plugins' identifiers,
- * which own their own chart class — bar's `resolveChartType` never
- * sees these because they never flow through the bar pipeline.
- */
 export type PluginChartType = ChartType | "candlestick" | "ohlc";
 
 export interface ChartTypeConfig {
@@ -34,158 +28,90 @@ export interface ChartTypeConfig {
     default_chart_type?: PluginChartType;
 }
 
-const CHARTS = [
-    {
-        name: "X/Y Scatter",
-        tag: "scatter",
-        category: "Charts",
-        selectMode: "toggle",
-        initial: {
-            count: 2,
-            names: ["X Axis", "Y Axis", "Color", "Size", "Tooltip"],
-        },
-        max_cells: 10_000_000,
-        max_columns: 50,
-    },
-    {
-        name: "X/Y Line",
-        tag: "line",
-        category: "Charts",
-        selectMode: "select",
-        initial: {
-            count: 2,
-            names: ["X Axis", "Y Axis"],
-        },
-        max_cells: 10_000_000,
-        max_columns: 50,
-    },
-    {
-        name: "Treemap",
-        tag: "treemap",
-        category: "Charts",
-        selectMode: "toggle",
-        initial: {
-            count: 1,
-            names: ["Size", "Color", "Tooltip"],
-        },
-        max_cells: 10_000_000,
-        max_columns: 10,
-    },
-    {
-        name: "Sunburst",
-        tag: "sunburst",
-        category: "Charts",
-        selectMode: "toggle",
-        initial: {
-            count: 1,
-            names: ["Size", "Color", "Tooltip"],
-        },
-        max_cells: 10_000_000,
-        max_columns: 10,
-    },
-    {
-        name: "Y Bar",
-        tag: "y-bar",
-        category: "Charts",
-        selectMode: "select",
-        initial: {
-            count: 1,
-            names: ["Y Axis"],
-        },
-        max_cells: 10_000_000,
-        max_columns: 50,
+const SERIES = "Series Charts";
+const CART = "Cartesian Charts";
+const HIER = "Hierarchical Charts";
+const FIN = "Financial Charts";
+const X_AXIS = ["X Axis"];
+const Y_AXIS = ["Y Axis"];
+const SELECT = "select";
+const TOGGLE = "toggle";
+
+const DEFAULT_MAX_CELLS = 10_000_000;
+const DEFAULT_MAX_COLUMNS = 50;
+
+function make(
+    name: string,
+    tag: string,
+    category: string,
+    selectMode: "select" | "toggle",
+    count: number,
+    names: readonly string[],
+    overrides?: Partial<
+        Pick<
+            ChartTypeConfig,
+            "max_cells" | "max_columns" | "default_chart_type"
+        >
+    >,
+): ChartTypeConfig {
+    return {
+        name,
+        tag,
+        category,
+        selectMode,
+        initial: { count, names: names as string[] },
+        max_cells: overrides?.max_cells ?? DEFAULT_MAX_CELLS,
+        max_columns: overrides?.max_columns ?? DEFAULT_MAX_COLUMNS,
+        ...(overrides?.default_chart_type
+            ? { default_chart_type: overrides.default_chart_type }
+            : {}),
+    };
+}
+
+const FIN_NAMES = ["Open", "Close", "High", "Low", "Tooltip"];
+const HIER_NAMES = ["Size", "Color", "Tooltip"];
+
+const CHARTS: ChartTypeConfig[] = [
+    make("X Bar", "x-bar", SERIES, SELECT, 1, X_AXIS, {
         default_chart_type: "bar",
-    },
-    {
-        name: "X Bar",
-        tag: "x-bar",
-        category: "Charts",
-        selectMode: "select",
-        initial: {
-            count: 1,
-            names: ["X Axis"],
-        },
-        max_cells: 10_000_000,
-        max_columns: 50,
+    }),
+    make("Y Bar", "y-bar", SERIES, SELECT, 1, Y_AXIS, {
         default_chart_type: "bar",
-    },
-    {
-        name: "Y Line",
-        tag: "y-line",
-        category: "Charts",
-        selectMode: "select",
-        initial: {
-            count: 1,
-            names: ["Y Axis"],
-        },
-        max_cells: 10_000_000,
-        max_columns: 50,
+    }),
+    make("Y Line", "y-line", SERIES, SELECT, 1, Y_AXIS, {
         default_chart_type: "line",
-    },
-    {
-        name: "Y Scatter",
-        tag: "y-scatter",
-        category: "Charts",
-        selectMode: "select",
-        initial: {
-            count: 1,
-            names: ["Y Axis"],
-        },
-        max_cells: 10_000_000,
-        max_columns: 50,
+    }),
+    make("Y Scatter", "y-scatter", SERIES, SELECT, 1, Y_AXIS, {
         default_chart_type: "scatter",
-    },
-    {
-        name: "Y Area",
-        tag: "y-area",
-        category: "Charts",
-        selectMode: "select",
-        initial: {
-            count: 1,
-            names: ["Y Axis"],
-        },
-        max_cells: 10_000_000,
-        max_columns: 50,
+    }),
+    make("Y Area", "y-area", SERIES, SELECT, 1, Y_AXIS, {
         default_chart_type: "area",
-    },
-    {
-        name: "Candlestick",
-        tag: "candlestick",
-        category: "Charts",
-        selectMode: "toggle",
-        initial: {
-            count: 1,
-            names: ["Open", "Close", "High", "Low", "Tooltip"],
-        },
-        max_cells: 10_000_000,
-        max_columns: 50,
-        default_chart_type: "candlestick",
-    },
-    {
-        name: "OHLC",
-        tag: "ohlc",
-        category: "Charts",
-        selectMode: "toggle",
-        initial: {
-            count: 1,
-            names: ["Open", "Close", "High", "Low", "Tooltip"],
-        },
-        max_cells: 100_000,
-        max_columns: 50,
-        default_chart_type: "ohlc",
-    },
-    {
-        name: "Heatmap",
-        tag: "heatmap",
-        category: "Charts",
-        selectMode: "select",
-        initial: {
-            count: 1,
-            names: ["Color"],
-        },
-        max_cells: 10_000_000,
+    }),
+    make("X/Y Scatter", "scatter", CART, TOGGLE, 2, [
+        "X Axis",
+        "Y Axis",
+        "Color",
+        "Size",
+        "Label",
+        "Tooltip",
+    ]),
+    make("X/Y Line", "line", CART, SELECT, 2, ["X Axis", "Y Axis"]),
+    make("Treemap", "treemap", HIER, TOGGLE, 1, HIER_NAMES, {
+        max_columns: 10,
+    }),
+    make("Sunburst", "sunburst", HIER, TOGGLE, 1, HIER_NAMES, {
+        max_columns: 10,
+    }),
+    make("Heatmap", "heatmap", HIER, SELECT, 1, ["Color"], {
         max_columns: 500,
-    },
-] as const satisfies readonly ChartTypeConfig[];
+    }),
+    make("Candlestick", "candlestick", FIN, TOGGLE, 1, FIN_NAMES, {
+        default_chart_type: "candlestick",
+    }),
+    make("OHLC", "ohlc", FIN, TOGGLE, 1, FIN_NAMES, {
+        max_cells: 100_000,
+        default_chart_type: "ohlc",
+    }),
+];
 
 export default CHARTS;

@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { PRIVATE_PLUGIN_SYMBOL } from "../types.js";
+import { isMetaColumn } from "../model/meta_columns.js";
 import { format_cell } from "./format_cell.js";
 import {
     format_flat_header_row_path,
@@ -84,9 +85,14 @@ export function createDataListener(
             num_columns = z;
             columns = JSON.parse(x as string) as ColumnData;
             const y = Object.keys(columns);
-            const new_col_paths = y.filter(
-                (x) => x !== "__ROW_PATH__" && x !== "__ID__",
-            );
+            // `isMetaColumn` covers `__ROW_PATH__`, `__ID__`,
+            // `__GROUPING_ID__`, and the per-level `__ROW_PATH_<n>__`
+            // columns the DuckDB virtual server emits inline alongside
+            // the JSON sidecar. Exact-match against `__ROW_PATH__` /
+            // `__ID__` (the previous filter) misses the per-level
+            // form and the virtual server's columns leak into the
+            // visible grid.
+            const new_col_paths = y.filter((x) => !isMetaColumn(x));
 
             let changed_cols = false;
             for (let i = 0; i < new_col_paths.length; i++) {

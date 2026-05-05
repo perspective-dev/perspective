@@ -212,6 +212,7 @@ export function applyBodyCellStyles(
                     if (isEditable !== td.hasAttribute("contenteditable")) {
                         td.toggleAttribute("contenteditable", isEditable);
                     }
+
                     td.classList.toggle("boolean-editable", false);
                 }
             } else {

@@ -17,25 +17,25 @@ import { formatTickValue } from "../../layout/ticks";
 import {
     renderSunburstFrame,
     renderSunburstChromeOverlay,
+    facetCenterForNode,
 } from "./sunburst-render";
 
-export interface SunburstBreadcrumbRegion {
-    nodeId: number;
-    x0: number;
-    y0: number;
-    x1: number;
-    y1: number;
-}
+export type { BreadcrumbRegion as SunburstBreadcrumbRegion } from "../common/tree-chrome";
 
 interface FacetHitContext {
     centerX: number;
     centerY: number;
     drillRoot: number;
-    /** Pre-upload visible range for this facet; undefined in non-facet mode. */
+
+    /**
+     * Pre-upload visible range for this facet; undefined in non-facet mode.
+     */
     range?: { start: number; end: number };
 }
 
-/** Resolve the facet under cursor; returns single-plot defaults outside facet mode. */
+/**
+ * Resolve the facet under cursor; returns single-plot defaults outside facet mode.
+ */
 function facetUnderCursor(
     chart: SunburstChart,
     mx: number,
@@ -48,6 +48,7 @@ function facetUnderCursor(
             drillRoot: chart._currentRootId,
         };
     }
+
     for (const facet of chart._facets) {
         // Post-upload `instanceStart` / `instanceCount` are scan-index
         // ranges into `_visibleNodeIds` — we need the *pre-upload*
@@ -57,13 +58,17 @@ function facetUnderCursor(
         const dx = mx - facet.centerX;
         const dy = my - facet.centerY;
         const r = Math.sqrt(dx * dx + dy * dy);
-        if (r > facet.maxRadius + 4) continue;
+        if (r > facet.maxRadius + 4) {
+            continue;
+        }
+
         return {
             centerX: facet.centerX,
             centerY: facet.centerY,
             drillRoot: facet.drillRoot,
         };
     }
+
     return null;
 }
 
@@ -81,26 +86,39 @@ function isDescendantOf(
     const store = chart._nodeStore;
     let p = id;
     while (p !== NULL_NODE) {
-        if (p === anc) return true;
+        if (p === anc) {
+            return true;
+        }
+
         p = store.parent[p];
     }
+
     return false;
 }
 
-/** Convert `(mx, my)` to polar and find the containing visible arc. */
+/**
+ * Convert `(mx, my)` to polar and find the containing visible arc.
+ */
 function polarHitTest(chart: SunburstChart, mx: number, my: number): number {
     const ctx = facetUnderCursor(chart, mx, my);
-    if (!ctx) return NULL_NODE;
+    if (!ctx) {
+        return NULL_NODE;
+    }
+
     const store = chart._nodeStore;
     const ids = chart._visibleNodeIds;
     const n = chart._visibleNodeCount;
-    if (!ids) return NULL_NODE;
+    if (!ids) {
+        return NULL_NODE;
+    }
 
     const dx = mx - ctx.centerX;
     const dy = my - ctx.centerY;
     const r = Math.sqrt(dx * dx + dy * dy);
     let theta = Math.atan2(dy, dx);
-    if (theta < 0) theta += 2 * Math.PI;
+    if (theta < 0) {
+        theta += 2 * Math.PI;
+    }
 
     // Center-circle hit — drill-up target.
     if (r < store.r1[chart._rootId] + 0.001) {
@@ -112,16 +130,29 @@ function polarHitTest(chart: SunburstChart, mx: number, my: number): number {
     const faceted = chart._facets.length > 0;
     for (let i = 0; i < n; i++) {
         const id = ids[i];
-        if (id === ctx.drillRoot) continue;
-        if (faceted && !isDescendantOf(chart, id, ctx.drillRoot)) continue;
+        if (id === ctx.drillRoot) {
+            continue;
+        }
+
+        if (faceted && !isDescendantOf(chart, id, ctx.drillRoot)) {
+            continue;
+        }
+
         const a0 = store.a0[id];
         const a1 = store.a1[id];
         const r0 = store.r0[id];
         const r1 = store.r1[id];
-        if (r < r0 || r > r1) continue;
-        if (theta < a0 || theta > a1) continue;
+        if (r < r0 || r > r1) {
+            continue;
+        }
+
+        if (theta < a0 || theta > a1) {
+            continue;
+        }
+
         return id;
     }
+
     return NULL_NODE;
 }
 
@@ -130,7 +161,9 @@ export function handleSunburstHover(
     mx: number,
     my: number,
 ): void {
-    if (chart._pinnedNodeId !== NULL_NODE) return;
+    if (chart._pinnedNodeId !== NULL_NODE) {
+        return;
+    }
 
     // Breadcrumb region check first (they sit atop the chart area).
     for (const region of chart._breadcrumbRegions) {
@@ -140,36 +173,37 @@ export function handleSunburstHover(
             my >= region.y0 &&
             my <= region.y1
         ) {
-            if (chart._glCanvas) chart._glCanvas.style.cursor = "pointer";
+            chart._tooltip.setCursor("pointer");
             if (chart._hoveredNodeId !== NULL_NODE) {
                 chart._hoveredNodeId = NULL_NODE;
                 renderSunburstChromeOverlay(chart);
             }
+
             return;
         }
     }
 
     const hit = polarHitTest(chart, mx, my);
     const store = chart._nodeStore;
-    if (chart._glCanvas) {
-        chart._glCanvas.style.cursor =
-            hit !== NULL_NODE && store.firstChild[hit] !== NULL_NODE
-                ? "pointer"
-                : "default";
-    }
+    chart._tooltip.setCursor(
+        hit !== NULL_NODE && store.firstChild[hit] !== NULL_NODE
+            ? "pointer"
+            : "default",
+    );
 
     if (hit !== chart._hoveredNodeId) {
         chart._hoveredNodeId = hit;
-        chart._hoveredTooltipLines = null;
-        chart._hoveredTooltipNodeId = hit;
-        const serial = ++chart._hoveredTooltipSerial;
         if (hit !== NULL_NODE) {
+            const serial = chart._lazyTooltip.beginHover(hit);
             buildSunburstTooltipLines(chart, hit).then((lines) => {
-                if (serial !== chart._hoveredTooltipSerial) return;
-                chart._hoveredTooltipLines = lines;
-                renderSunburstChromeOverlay(chart);
+                if (chart._lazyTooltip.commitHover(serial, lines)) {
+                    renderSunburstChromeOverlay(chart);
+                }
             });
+        } else {
+            chart._lazyTooltip.clearHover();
         }
+
         renderSunburstChromeOverlay(chart);
     }
 }
@@ -195,6 +229,7 @@ export function handleSunburstClick(
             if (region.nodeId !== chart._currentRootId) {
                 drillTo(chart, region.nodeId);
             }
+
             return;
         }
     }
@@ -215,17 +250,23 @@ export function handleSunburstClick(
                 const facet = chart._facets.find(
                     (f) => f.drillRoot === ctx.drillRoot,
                 );
-                if (facet) chart._facetDrillRoots.delete(facet.label);
+                if (facet) {
+                    chart._facetDrillRoots.delete(facet.label);
+                }
+
                 if (chart._glManager) {
                     renderSunburstFrame(chart, chart._glManager);
                 }
             }
+
             return;
         }
     }
 
     const hit = polarHitTest(chart, mx, my);
-    if (hit === NULL_NODE) return;
+    if (hit === NULL_NODE) {
+        return;
+    }
 
     if (store.firstChild[hit] !== NULL_NODE) {
         drillTo(chart, hit);
@@ -247,73 +288,59 @@ function drillTo(chart: SunburstChart, nodeId: number): void {
         while (p !== NULL_NODE && store.parent[p] !== chart._rootId) {
             p = store.parent[p];
         }
+
         if (p !== NULL_NODE) {
             chart._facetDrillRoots.set(store.name[p], nodeId);
         }
+
         chart._hoveredNodeId = NULL_NODE;
-        if (chart._glManager) renderSunburstFrame(chart, chart._glManager);
+        if (chart._glManager) {
+            renderSunburstFrame(chart, chart._glManager);
+        }
+
         return;
     }
+
     chart._currentRootId = nodeId;
     rebuildBreadcrumbs(chart, nodeId);
     chart._hoveredNodeId = NULL_NODE;
-    if (chart._glManager) renderSunburstFrame(chart, chart._glManager);
+    if (chart._glManager) {
+        renderSunburstFrame(chart, chart._glManager);
+    }
 }
 
 export function showSunburstPinnedTooltip(
     chart: SunburstChart,
     nodeId: number,
 ): void {
-    chart._tooltip.dismissPinned();
+    chart._tooltip.dismiss();
     chart._pinnedNodeId = nodeId;
-
-    const parent = chart._glCanvas?.parentElement;
-    if (!parent) return;
 
     const store = chart._nodeStore;
     const midA = (store.a0[nodeId] + store.a1[nodeId]) / 2;
     const midR = (store.r0[nodeId] + store.r1[nodeId]) / 2;
-    // In faceted mode resolve which facet owns this node so the
-    // tooltip anchors to the correct sub-chart's center.
-    let anchorX = chart._centerX;
-    let anchorY = chart._centerY;
-    if (chart._facets.length > 0) {
-        for (const facet of chart._facets) {
-            let p = nodeId;
-            let owned = false;
-            while (p !== NULL_NODE) {
-                if (p === facet.drillRoot) {
-                    owned = true;
-                    break;
-                }
-                p = store.parent[p];
-            }
-            if (owned) {
-                anchorX = facet.centerX;
-                anchorY = facet.centerY;
-                break;
-            }
-        }
-    }
-    const cx = anchorX + Math.cos(midA) * midR;
-    const cy = anchorY + Math.sin(midA) * midR;
+    const { centerX, centerY } = facetCenterForNode(chart, nodeId);
+    const cx = centerX + Math.cos(midA) * midR;
+    const cy = centerY + Math.sin(midA) * midR;
 
-    const dpr = window.devicePixelRatio || 1;
-    const cssWidth = (chart._glCanvas?.width || 100) / dpr;
-    const cssHeight = (chart._glCanvas?.height || 100) / dpr;
+    // CSS bounds: prefer `glManager` (works in both local and worker
+    // modes, since the worker constructs its own context manager).
+    const cssWidth = chart._glManager?.cssWidth ?? 0;
+    const cssHeight = chart._glManager?.cssHeight ?? 0;
 
     // Tooltip columns are fetched lazily from the view — the tree
     // itself only retains ancestor names + aggregated value + color.
     // Stale resolutions are discarded via the `_pinnedNodeId` check.
     buildSunburstTooltipLines(chart, nodeId).then((lines) => {
-        if (chart._pinnedNodeId !== nodeId) return;
-        if (lines.length === 0) return;
-        chart._tooltip.showPinned(
-            parent,
-            lines,
-            { px: cx, py: cy },
-            { cssWidth, cssHeight },
-        );
+        if (chart._pinnedNodeId !== nodeId) {
+            return;
+        }
+
+        if (lines.length === 0) {
+            return;
+        }
+
+        chart._tooltip.pin(lines, { px: cx, py: cy }, { cssWidth, cssHeight });
     });
 
     chart._hoveredNodeId = NULL_NODE;
@@ -321,7 +348,7 @@ export function showSunburstPinnedTooltip(
 }
 
 export function dismissSunburstPinnedTooltip(chart: SunburstChart): void {
-    chart._tooltip.dismissPinned();
+    chart._tooltip.dismiss();
     chart._pinnedNodeId = NULL_NODE;
 }
 
@@ -339,6 +366,7 @@ export async function buildSunburstTooltipLines(
         pathNames.push(store.name[p]);
         p = store.parent[p];
     }
+
     pathNames.reverse();
     if (pathNames.length > 0) {
         lines.push(pathNames.join(" › "));
@@ -365,10 +393,14 @@ export async function buildSunburstTooltipLines(
     if (isLeaf && chart._lazyRows) {
         const row = await chart._lazyRows.fetchRow(rowIdx);
         for (const [name, value] of row) {
-            if (value === null || value === undefined) continue;
+            if (value === null || value === undefined) {
+                continue;
+            }
+
             if (name === chart._colorName && !isNaN(store.colorValue[nodeId])) {
                 continue;
             }
+
             if (typeof value === "number") {
                 lines.push(`${name}: ${formatTickValue(value)}`);
             } else {

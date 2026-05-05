@@ -16,9 +16,8 @@ use base64::prelude::*;
 use futures::join;
 use itertools::Itertools;
 use perspective_client::ViewWindow;
-use perspective_js::utils::ApiResult;
-use wasm_bindgen::{JsCast, JsValue, intern};
-use wasm_bindgen_futures::JsFuture;
+use perspective_js::utils::*;
+use wasm_bindgen::{JsCast, JsValue};
 
 use super::export_app;
 use super::export_method::*;
@@ -75,25 +74,28 @@ pub trait CopyExportModel:
     async fn png_as_jsvalue(&self) -> ApiResult<web_sys::Blob> {
         let renderer = self.renderer().clone();
         let plugin = renderer.get_active_plugin()?;
-        let render = js_sys::Reflect::get(&plugin, &intern("render").into())?;
-        let render_fun = render.unchecked_into::<js_sys::Function>();
-        let png = render_fun.call0(&plugin)?;
-        let result = JsFuture::from(png.unchecked_into::<js_sys::Promise>())
-            .await?
-            .unchecked_into();
-        Ok(result)
+        let view: perspective_client::View = self
+            .session()
+            .get_view()
+            .ok_or(ApiError::from(ApiErrorType::NoTableError))?;
+
+        let png = plugin.render(view.into(), None).await?;
+        Ok(png)
     }
 
     async fn txt_as_jsvalue(&self, viewport: Option<ViewWindow>) -> ApiResult<web_sys::Blob> {
         let renderer = self.renderer().clone();
         let plugin = renderer.get_active_plugin()?;
-        let render = js_sys::Reflect::get(&plugin, &intern("render").into())?;
-        let render_fun = render.unchecked_into::<js_sys::Function>();
-        let txt = render_fun.call1(&plugin, &serde_wasm_bindgen::to_value(&viewport)?)?;
-        let result = JsFuture::from(txt.unchecked_into::<js_sys::Promise>())
-            .await?
-            .unchecked_into();
-        Ok(result)
+        let view: perspective_client::View = self
+            .session()
+            .get_view()
+            .ok_or(ApiError::from(ApiErrorType::NoTableError))?;
+
+        let txt = plugin
+            .render(view.into(), viewport.map(|x| x.into()))
+            .await?;
+
+        Ok(txt)
     }
 
     /// Generate a result `Blob` for all types of `ExportMethod`.

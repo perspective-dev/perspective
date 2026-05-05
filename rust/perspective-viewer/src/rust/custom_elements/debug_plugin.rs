@@ -93,9 +93,7 @@ impl PerspectiveDebugPluginElement {
         ApiFuture::default()
     }
 
-    pub fn restyle(&self) -> ApiFuture<()> {
-        ApiFuture::default()
-    }
+    pub fn restyle(&self) {}
 
     pub fn save(&self) -> ApiResult<JsValue> {
         Ok(JsValue::null())

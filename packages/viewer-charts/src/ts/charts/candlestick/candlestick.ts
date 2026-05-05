@@ -15,10 +15,18 @@ import type { WebGLContextManager } from "../../webgl/context-manager";
 import { CategoricalYChart } from "../common/categorical-y-chart";
 import {
     buildCandlestickPipeline,
-    type CandleRecord,
+    emptyCandleColumns,
+    type CandleColumns,
     type CandleSeriesInfo,
+    type NumericCategoryDomain,
 } from "./candlestick-build";
-import { renderCandlestickFrame } from "./candlestick-render";
+import {
+    renderCandlestickFrame,
+    renderCandlestickChromeOverlay,
+    invalidateGlyphBuffers,
+    rebuildGlyphBuffers,
+    ensureUpDownColors,
+} from "./candlestick-render";
 import {
     handleCandlestickHover,
     showCandlestickPinnedTooltip,
@@ -55,22 +63,62 @@ export class CandlestickChart extends CategoricalYChart {
     // and `_lastYTicks` all live on `CategoricalYChart`.
     _splitPrefixes: string[] = [];
     _series: CandleSeriesInfo[] = [];
-    _candles: CandleRecord[] = [];
+
+    /**
+     * Columnar candle records. Indexed in `[0, _candles.count)`.
+     * Replaces the legacy `CandleRecord[]` to avoid per-record POJO
+     * allocation on data load.
+     */
+    _candles: CandleColumns = emptyCandleColumns();
 
     _yDomain: { min: number; max: number } = { min: 0, max: 1 };
 
-    /** Gradient-sampled colors for the up (close ≥ open) / down sides. */
+    /**
+     * Numeric category-axis state (single non-string group_by).
+     */
+    _categoryAxisMode: "category" | "numeric" = "category";
+    _numericCategoryDomain: NumericCategoryDomain | null = null;
+    _categoryPositions: Float64Array | null = null;
+    _lastCatTicks: number[] | null = null;
+
+    /**
+     * Origin used to rebase candle xCenters before f32 narrowing — see {@link SeriesChart._categoryOrigin}.
+     */
+    _categoryOrigin = 0;
+
+    /**
+     * Gradient-sampled colors for the up (close ≥ open) / down sides.
+     * Cached via `_upDownColorKey` — only `restyle()` (which clears the
+     * theme cache) or a data load forces re-sampling.
+     */
     _upColor: [number, number, number] = [0, 0.8, 0.4];
     _downColor: [number, number, number] = [0.8, 0.2, 0.2];
+
+    /**
+     * Identity of the gradient-stops reference last used to sample the
+     * up/down colors. When this matches the current `theme.gradientStops`
+     * reference, `ensureUpDownColors` short-circuits.
+     */
+    _upDownColorKey: unknown = null;
 
     _hoveredIdx = -1;
     _pinnedIdx = -1;
 
-    // Lazy glyph caches.
+    /**
+     * Lazy program / shared-resource cache. Each glyph (candlestick
+     * body, wick, OHLC) lazily attaches its program + corner buffers
+     * here on first use. Persistent vertex buffers (built once per
+     * data load) live on `_glyphBuffers` instead.
+     */
     _wickCache: unknown = undefined;
 
-    /** Uploaded instance count for the body shader. */
-    _uploadedBodies = 0;
+    /**
+     * Persistent per-glyph vertex buffer state — built in
+     * `rebuildGlyphBuffers` (called from `uploadAndRender`) and reused
+     * across pan/zoom frames. Eliminates the legacy per-frame
+     * `bufferData(DYNAMIC_DRAW)` of body / wick / OHLC vertex data.
+     */
+    _glyphBuffers: unknown = undefined;
 
     /**
      * Auto-fit the price (Y) axis to the `low`/`high` extent of
@@ -85,31 +133,31 @@ export class CandlestickChart extends CategoricalYChart {
      * Per-frame memo of the auto-fit Y extent keyed on the visible X
      * window. Hover-only redraws (X window unchanged) hit the cache.
      * Reset to null on data upload.
-     *
-     * TODO(perf): O(|_candles|) linear scan. `_candles` is ordered by
-     * `xCenter`, so a binary-search pair to find the visible slice
-     * would drop this to O(log N + K_visible). Deferred — the
-     * `max_cells = 100_000` cap keeps the scan within the frame budget.
      */
     _autoFitCache: {
         // Cache key — the categorical (X) window.
         xMin: number;
         xMax: number;
+
         // VisibleExtent payload — value axis min/max + hasFit flag.
         min: number;
         max: number;
         hasFit: boolean;
     } | null = null;
 
-    attachTooltip(glCanvas: HTMLCanvasElement): void {
-        this._glCanvas = glCanvas;
-        this._tooltip.attach(glCanvas, {
-            onHover: (mx, my) => handleCandlestickHover(this, mx, my),
+    protected override tooltipCallbacks() {
+        return {
+            onHover: (mx: number, my: number) =>
+                handleCandlestickHover(this, mx, my),
             onLeave: () => {
                 if (this._hoveredIdx !== -1) {
                     this._hoveredIdx = -1;
-                    if (this._glManager)
-                        renderCandlestickFrame(this, this._glManager);
+
+                    // Hover state only affects the chrome overlay
+                    // (tooltip box) — the WebGL pass is unchanged. Skip
+                    // the full repaint (which would rebuild glyph
+                    // buffers and shake out one more frame of latency).
+                    renderCandlestickChromeOverlay(this);
                 }
             },
             onPin: () => {
@@ -117,19 +165,27 @@ export class CandlestickChart extends CategoricalYChart {
                     showCandlestickPinnedTooltip(this, this._hoveredIdx);
                 }
             },
-        });
+        };
     }
 
-    uploadAndRender(
+    override invalidateTheme(): void {
+        super.invalidateTheme();
+
+        // Up/down colors are sampled from `theme.gradientStops`. Drop the
+        // identity key so the next render re-samples after a `restyle()`.
+        this._upDownColorKey = null;
+    }
+
+    async uploadAndRender(
         glManager: WebGLContextManager,
         columns: ColumnDataMap,
         startRow: number,
         endRow: number,
-    ): void {
+    ): Promise<void> {
         this._glManager = glManager;
-        if (startRow !== 0) return;
-
-        this._cancelScheduledRender();
+        if (startRow !== 0) {
+            return;
+        }
 
         const result = buildCandlestickPipeline({
             columns,
@@ -137,6 +193,8 @@ export class CandlestickChart extends CategoricalYChart {
             columnSlots: this._columnSlots,
             groupBy: this._groupBy,
             splitBy: this._splitBy,
+            groupByTypes: this._groupByTypes,
+            scratchCandles: this._candles,
         });
         this._rowPaths = result.rowPaths;
         this._numCategories = result.numCategories;
@@ -145,32 +203,104 @@ export class CandlestickChart extends CategoricalYChart {
         this._series = result.series;
         this._candles = result.candles;
         this._yDomain = result.yDomain;
-        // New candles invalidate any auto-fit extent memo.
+        this._categoryAxisMode = result.axisMode.mode;
+        this._numericCategoryDomain = result.numericCategoryDomain;
+        this._categoryPositions = result.categoryPositions;
+        this._categoryOrigin = result.numericCategoryDomain?.min ?? 0;
+
+        // New candles invalidate any auto-fit extent memo. Color key
+        // stays — gradient stops are theme-bound, not data-bound — but
+        // the persistent vertex buffers must be rebuilt to reflect the
+        // new candle set.
         this._autoFitCache = null;
 
-        this._scheduleRender(glManager);
+        // Resolve up/down colors (cheap on cache hit) before rebuilding
+        // glyph buffers so the persistent body buffer captures the
+        // correct per-candle RGB. Then rebuild buffers.
+        ensureUpDownColors(this);
+        invalidateGlyphBuffers(this);
+        rebuildGlyphBuffers(this, glManager);
+
+        await this.requestRender(glManager);
     }
 
-    redraw(glManager: WebGLContextManager): void {
+    _fullRender(glManager: WebGLContextManager): void {
         this._glManager = glManager;
-        this._fullRender(glManager);
-    }
-
-    protected _fullRender(glManager: WebGLContextManager): void {
         renderCandlestickFrame(this, glManager);
     }
 
     protected destroyInternal(): void {
-        if (this._cornerBuffer && this._glManager) {
-            this._glManager.gl.deleteBuffer(this._cornerBuffer);
+        if (this._glManager) {
+            const gl = this._glManager.gl;
+            if (this._cornerBuffer) {
+                gl.deleteBuffer(this._cornerBuffer);
+            }
+
+            // Free the persistent vertex buffers and the program-local
+            // GPU resources stashed on `_wickCache`. Without this each
+            // `delete()` would leak ~6 GL buffers per chart instance.
+            invalidateGlyphBuffers(this);
+            destroyWickCache(this);
         }
+
         this._program = null;
         this._locations = null;
         this._cornerBuffer = null;
         this._wickCache = undefined;
-        this._candles = [];
+        this._glyphBuffers = undefined;
+        this._candles = emptyCandleColumns();
         this._series = [];
         this._rowPaths = [];
         this._numCategories = 0;
+        this._upDownColorKey = null;
+    }
+}
+
+/**
+ * Free the program-local GPU buffers stashed on `_wickCache` (corner
+ * buffer + segment buffer for wick / OHLC, quad + instance buffer for
+ * the candlestick body shader). Programs themselves are owned by the
+ * `WebGLContextManager.shaders` cache and are not freed here.
+ */
+function destroyWickCache(chart: CandlestickChart): void {
+    if (!chart._glManager || !chart._wickCache) {
+        return;
+    }
+
+    const gl = chart._glManager.gl;
+    const cache = chart._wickCache as {
+        body?: { quadBuffer?: WebGLBuffer; instanceBuffer?: WebGLBuffer };
+        wick?: { cornerBuffer?: WebGLBuffer; segmentBuffer?: WebGLBuffer };
+        ohlc?: { cornerBuffer?: WebGLBuffer; segmentBuffer?: WebGLBuffer };
+    };
+
+    if (cache.body) {
+        if (cache.body.quadBuffer) {
+            gl.deleteBuffer(cache.body.quadBuffer);
+        }
+
+        if (cache.body.instanceBuffer) {
+            gl.deleteBuffer(cache.body.instanceBuffer);
+        }
+    }
+
+    if (cache.wick) {
+        if (cache.wick.cornerBuffer) {
+            gl.deleteBuffer(cache.wick.cornerBuffer);
+        }
+
+        if (cache.wick.segmentBuffer) {
+            gl.deleteBuffer(cache.wick.segmentBuffer);
+        }
+    }
+
+    if (cache.ohlc) {
+        if (cache.ohlc.cornerBuffer) {
+            gl.deleteBuffer(cache.ohlc.cornerBuffer);
+        }
+
+        if (cache.ohlc.segmentBuffer) {
+            gl.deleteBuffer(cache.ohlc.segmentBuffer);
+        }
     }
 }

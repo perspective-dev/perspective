@@ -39,12 +39,7 @@
         "split_by": ["if(\"status\"!='open'){\"status\"}else{\"side\"}"],
         "columns": ["price"],
         "filter": [],
-        "sort": [
-            [
-                "if(\"status\"=='closed'){1}else if(\"status\"=='expired'){2}else{0}",
-                "col desc"
-            ]
-        ],
+        "sort": [],
         "expressions": {
             "if(\"status\"=='closed'){1}else if(\"status\"=='expired'){2}else{0}": "if(\"status\"=='closed'){1}else if(\"status\"=='expired'){2}else{0}",
             "if(\"status\"!='open'){\"status\"}else{\"side\"}": "if(\"status\"!='open'){\"status\"}else{\"side\"}",
@@ -64,12 +59,7 @@
             "if(\"status\"!='open'){\"status\"}else{\"side\"}"
         ],
         "filter": [],
-        "sort": [
-            [
-                "if(\"status\"=='closed'){1}else if(\"status\"=='expired'){2}else{0}",
-                "desc"
-            ]
-        ],
+        "sort": [],
         "expressions": {
             "if(\"status\"!='open'){\"status\"}else{\"side\"}": "if(\"status\"!='open'){\"status\"}else{\"side\"}",
             "if(\"status\"=='closed'){1}else if(\"status\"=='expired'){2}else{0}": "if(\"status\"=='closed'){1}else if(\"status\"=='expired'){2}else{0}"

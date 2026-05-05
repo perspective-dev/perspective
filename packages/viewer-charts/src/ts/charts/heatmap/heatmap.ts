@@ -14,8 +14,12 @@ import type { ColumnDataMap } from "../../data/view-reader";
 import type { WebGLContextManager } from "../../webgl/context-manager";
 import { AbstractChart } from "../chart-base";
 import { PlotLayout } from "../../layout/plot-layout";
-import type { CategoricalLevel } from "../../chrome/categorical-axis";
+import type { CategoricalLevel } from "../../axis/categorical-axis";
 import type { FacetGrid } from "../../layout/facet-grid";
+import type {
+    AxisMode,
+    NumericCategoryDomain,
+} from "../common/category-axis-resolver";
 import {
     buildHeatmapPipeline,
     partitionColumnsPerFacet,
@@ -42,6 +46,16 @@ export interface HeatmapFacet {
     layout: PlotLayout;
     instanceStart: number;
     instanceCount: number;
+
+    /**
+     * Origins used to rebase cell positions before f32 narrowing —
+     * matches the per-axis convention in `SeriesChart._categoryOrigin`.
+     * `0` for non-numeric axes; for numeric (especially datetime) axes
+     * pinned to `xNumericDomain.min` / `yNumericDomain.min` so the
+     * shader's projection matrix can be built in rebased space.
+     */
+    xOrigin: number;
+    yOrigin: number;
 }
 
 /**
@@ -69,6 +83,24 @@ export class HeatmapChart extends AbstractChart {
     _numY = 0;
     _rowOffset = 0;
 
+    _xAxisMode: AxisMode = { mode: "category" };
+    _yAxisMode: AxisMode = { mode: "category" };
+    _xPositions: Float64Array | null = null;
+    _yPositions: Float64Array | null = null;
+    _xNumericDomain: NumericCategoryDomain | null = null;
+    _yNumericDomain: NumericCategoryDomain | null = null;
+
+    /**
+     * Single-plot rebase origins. Datetime numeric axes carry ~1.7e12
+     * timestamps which the f32 GPU pipeline cannot resolve below
+     * ~256ms; the cell upload subtracts these and the projection
+     * matrix is built with the same values so its `tx`/`ty` terms stay
+     * small enough for f32 cancellation in the shader. `0` for
+     * categorical or numeric-non-date axes.
+     */
+    _xOrigin = 0;
+    _yOrigin = 0;
+
     _cells: HeatmapCell[] = [];
     _cells2D: (HeatmapCell | null)[] = [];
     _uploadedCells = 0;
@@ -80,32 +112,44 @@ export class HeatmapChart extends AbstractChart {
     _hoveredCell: HeatmapCell | null = null;
     _lastLayout: PlotLayout | null = null;
 
+    /**
+     * Last cursor position (canvas-CSS pixels) recorded by
+     * `handleHeatmapHover`. Used as the tooltip anchor instead of the
+     * cell center so the hover label tracks the mouse — necessary
+     * because heatmap cells can be many pixels wide and a center-anchored
+     * tooltip drifts away from the cursor.
+     */
+    _hoveredMouseX = 0;
+    _hoveredMouseY = 0;
+
     _facets: HeatmapFacet[] = [];
     _facetGrid: FacetGrid | null = null;
     _hoveredFacetIdx = -1;
 
-    /** Bound accessor so the interact module can trigger a chrome redraw. */
+    /**
+     * Bound accessor so the interact module can trigger a chrome redraw.
+     */
     _renderChromeOverlay = () => renderHeatmapChromeOverlay(this);
 
-    attachTooltip(glCanvas: HTMLCanvasElement): void {
-        this._glCanvas = glCanvas;
-        this._tooltip.attach(glCanvas, {
-            onHover: (mx, my) => handleHeatmapHover(this, mx, my),
+    protected override tooltipCallbacks() {
+        return {
+            onHover: (mx: number, my: number) =>
+                handleHeatmapHover(this, mx, my),
             onLeave: () => {
                 if (this._hoveredCell) {
                     this._hoveredCell = null;
                     this._renderChromeOverlay();
                 }
             },
-        });
+        };
     }
 
-    uploadAndRender(
+    async uploadAndRender(
         glManager: WebGLContextManager,
         columns: ColumnDataMap,
         startRow: number,
         endRow: number,
-    ): void {
+    ): Promise<void> {
         this._glManager = glManager;
 
         if (startRow !== 0) {
@@ -113,7 +157,6 @@ export class HeatmapChart extends AbstractChart {
             // should not chunk this but guard defensively.
             return;
         }
-        this._cancelScheduledRender();
 
         const userColumns = this._columnSlots.filter((s): s is string => !!s);
 
@@ -128,8 +171,11 @@ export class HeatmapChart extends AbstractChart {
                     columns: part.columns,
                     numRows: endRow,
                     groupBy: this._groupBy,
+                    splitBy: this._splitBy,
+                    groupByTypes: this._groupByTypes,
                 });
                 const instanceStart = allCells.length;
+
                 // Re-stamp each cell with its facet offset so the packed
                 // instance buffer can be drawn in one sweep; the facet's
                 // own `pipeline.cells` keeps its original indices for
@@ -141,6 +187,7 @@ export class HeatmapChart extends AbstractChart {
                         value: c.value,
                     });
                 }
+
                 facets.push({
                     label: part.label,
                     pipeline,
@@ -151,6 +198,8 @@ export class HeatmapChart extends AbstractChart {
                     }),
                     instanceStart,
                     instanceCount: pipeline.cells.length,
+                    xOrigin: pipeline.xNumericDomain?.min ?? 0,
+                    yOrigin: pipeline.yNumericDomain?.min ?? 0,
                 });
                 if (
                     isFinite(pipeline.colorMin) &&
@@ -158,6 +207,7 @@ export class HeatmapChart extends AbstractChart {
                 ) {
                     globalMin = pipeline.colorMin;
                 }
+
                 if (
                     isFinite(pipeline.colorMax) &&
                     pipeline.colorMax > globalMax
@@ -165,6 +215,7 @@ export class HeatmapChart extends AbstractChart {
                     globalMax = pipeline.colorMax;
                 }
             }
+
             if (!isFinite(globalMin) || !isFinite(globalMax)) {
                 globalMin = 0;
                 globalMax = 1;
@@ -182,6 +233,14 @@ export class HeatmapChart extends AbstractChart {
             this._rowOffset = 0;
             this._cells2D = [];
             this._lastLayout = null;
+            this._xAxisMode = { mode: "category" };
+            this._yAxisMode = { mode: "category" };
+            this._xPositions = null;
+            this._yPositions = null;
+            this._xNumericDomain = null;
+            this._yNumericDomain = null;
+            this._xOrigin = 0;
+            this._yOrigin = 0;
 
             this._facets = facets;
             this._cells = allCells;
@@ -193,6 +252,8 @@ export class HeatmapChart extends AbstractChart {
                 columns,
                 numRows: endRow,
                 groupBy: this._groupBy,
+                splitBy: this._splitBy,
+                groupByTypes: this._groupByTypes,
             });
 
             this._facets = [];
@@ -208,20 +269,27 @@ export class HeatmapChart extends AbstractChart {
             this._colorMin = result.colorMin;
             this._colorMax = result.colorMax;
             this._aggName = userColumns[0] ?? "Color";
+            this._xAxisMode = result.xAxisMode;
+            this._yAxisMode = result.yAxisMode;
+            this._xPositions = result.xPositions;
+            this._yPositions = result.yPositions;
+            this._xNumericDomain = result.xNumericDomain;
+            this._yNumericDomain = result.yNumericDomain;
+            this._xOrigin = result.xNumericDomain?.min ?? 0;
+            this._yOrigin = result.yNumericDomain?.min ?? 0;
         }
 
-        this._scheduleRender(glManager);
+        await this.requestRender(glManager);
     }
 
-    redraw(glManager: WebGLContextManager): void {
+    _fullRender(glManager: WebGLContextManager): void {
         this._glManager = glManager;
         const hasSingle = this._numX > 0 && this._numY > 0;
         const hasFacets = this._facets.length > 0;
-        if (!hasSingle && !hasFacets) return;
-        this._fullRender(glManager);
-    }
+        if (!hasSingle && !hasFacets) {
+            return;
+        }
 
-    protected _fullRender(glManager: WebGLContextManager): void {
         renderHeatmapFrame(this, glManager);
     }
 
@@ -229,6 +297,7 @@ export class HeatmapChart extends AbstractChart {
         if (this._cornerBuffer && this._glManager) {
             this._glManager.gl.deleteBuffer(this._cornerBuffer);
         }
+
         this._program = null;
         this._locations = null;
         this._cornerBuffer = null;
@@ -241,5 +310,11 @@ export class HeatmapChart extends AbstractChart {
         this._facets = [];
         this._facetGrid = null;
         this._hoveredFacetIdx = -1;
+        this._xAxisMode = { mode: "category" };
+        this._yAxisMode = { mode: "category" };
+        this._xPositions = null;
+        this._yPositions = null;
+        this._xNumericDomain = null;
+        this._yNumericDomain = null;
     }
 }

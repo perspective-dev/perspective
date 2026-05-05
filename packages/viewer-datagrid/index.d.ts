@@ -23,9 +23,11 @@ declare global {
     }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 interface HTMLPerspectiveViewerDatagridPluginElement
     extends IPerspectiveViewerPlugin {}
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export declare class HTMLPerspectiveViewerDatagridPluginElement
     extends HTMLElement
     implements IPerspectiveViewerPlugin

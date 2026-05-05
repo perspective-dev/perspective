@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 use perspective_client::config::GroupRollupMode;
+use perspective_js::JsViewWindow;
 use perspective_js::utils::*;
 use serde::*;
 use wasm_bindgen::prelude::*;
@@ -81,11 +82,17 @@ extern "C" {
     #[wasm_bindgen(method)]
     pub fn delete(this: &JsPerspectiveViewerPlugin);
 
-    #[wasm_bindgen(method, catch)]
-    pub async fn restyle(
+    #[wasm_bindgen(method)]
+    pub fn restyle(
         this: &JsPerspectiveViewerPlugin,
-        view: perspective_js::View
-    ) -> ApiResult<JsValue>;
+    );
+
+    #[wasm_bindgen(method, catch)]
+    pub async fn render(
+        this: &JsPerspectiveViewerPlugin,
+        view: perspective_js::View,
+        viewport: Option<JsViewWindow>,
+    ) -> ApiResult<web_sys::Blob>;
 
     #[wasm_bindgen(method, catch)]
     pub async fn draw(

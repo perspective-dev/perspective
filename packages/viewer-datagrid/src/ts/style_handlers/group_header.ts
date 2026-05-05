@@ -28,12 +28,14 @@ export function applyGroupHeaderStyles(
     let marked = new Set<number>();
 
     for (let y = 0; y < headerRows.length; y++) {
-        const { row, cells } = headerRows[y];
+        const { cells } = headerRows[y];
         const tops = new Set<number>();
 
         for (let x = 0; x < cells.length; x++) {
             const { element: td, metadata } = cells[x];
-            if (!metadata) continue;
+            if (!metadata) {
+                continue;
+            }
 
             td.style.backgroundColor = "";
 
@@ -63,13 +65,17 @@ export function applyGroupHeaderStyles(
 
             // Calculate spanning for psp-is-top
             let xx = x;
-            for (; m[y] && m[y][xx]; ++xx);
+            for (; m[y] && m[y][xx]; ++xx) {}
+
             tops.add(xx);
 
             const cell = td;
             for (let tx = xx; tx < xx + cell.colSpan; ++tx) {
                 for (let ty = y; ty < y + cell.rowSpan; ++ty) {
-                    if (!m[ty]) m[ty] = [];
+                    if (!m[ty]) {
+                        m[ty] = [];
+                    }
+
                     m[ty][tx] = true;
                 }
             }

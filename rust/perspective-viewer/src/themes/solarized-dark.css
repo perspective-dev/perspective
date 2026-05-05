@@ -39,18 +39,18 @@ perspective-viewer[theme="Solarized Dark"] {
     --psp-datagrid--border-color: #93a1a1;
 
     /* perspective-viewer-solarized--webgl */
-    --psp-webgl--treemap--labels: black;
-    --psp-webgl--treemap--hover-highlight: black;
-    --psp-webgl--axis-ticks--color: #586e75;
-    --psp-webgl--gridline--color: #eee8d5;
-    --psp-webgl--series--color: #268bd2;
-    --psp-webgl--series-1--color: #268bd2;
-    --psp-webgl--series-2--color: #cb4b16;
-    --psp-webgl--series-3--color: #b58900;
-    --psp-webgl--series-4--color: #859900;
-    --psp-webgl--series-5--color: #2aa198;
-    --psp-webgl--series-6--color: #6c71c4;
-    --psp-webgl--series-7--color: #d33682;
+    --psp-charts--treemap--labels: black;
+    --psp-charts--treemap--hover-highlight: black;
+    --psp-charts--axis-ticks--color: #586e75;
+    --psp-charts--gridline--color: #eee8d5;
+    --psp-charts--series--color: #268bd2;
+    --psp-charts--series-1--color: #268bd2;
+    --psp-charts--series-2--color: #cb4b16;
+    --psp-charts--series-3--color: #b58900;
+    --psp-charts--series-4--color: #859900;
+    --psp-charts--series-5--color: #2aa198;
+    --psp-charts--series-6--color: #6c71c4;
+    --psp-charts--series-7--color: #d33682;
     /* perspective-viewer-solarized-dark--colors */
     color: #93a1a1;
     background-color: #002b36;
@@ -68,14 +68,14 @@ perspective-viewer[theme="Solarized Dark"] {
     );
 
     /* perspective-viewer-solarized-dark--webgl */
-    --psp-webgl--treemap--labels: white;
-    --psp-webgl--treemap--hover-highlight: white;
-    --psp-webgl--axis-ticks--color: #93a1a1;
-    --psp-webgl--axis-lines--color: #93a1a1;
-    --psp-webgl--gridline--color: #002b36;
-    --psp-webgl--legend--color: #93a1a1;
+    --psp-charts--treemap--labels: white;
+    --psp-charts--treemap--hover-highlight: white;
+    --psp-charts--axis-ticks--color: #93a1a1;
+    --psp-charts--axis-lines--color: #93a1a1;
+    --psp-charts--gridline--color: #002b36;
+    --psp-charts--legend--color: #93a1a1;
 
-    --psp-webgl--gradient--background: linear-gradient(
+    --psp-charts--gradient--background: linear-gradient(
         #cb4b16 0%,
         #073642 50%,
         #268bd2 100%

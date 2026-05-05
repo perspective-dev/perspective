@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { NodeModulesExternal } from "@perspective-dev/esbuild-plugin/external.js";
+import { WorkerPlugin } from "@perspective-dev/esbuild-plugin/worker.js";
 import { build } from "@perspective-dev/esbuild-plugin/build.js";
 import { transform as transformCss } from "lightningcss";
 import { execSync } from "node:child_process";
@@ -72,7 +73,30 @@ const BUILD = [
         define: {
             global: "window",
         },
-        plugins: [NodeModulesExternal(), GlslMinify(), LightningCssMinify()],
+        plugins: [
+            NodeModulesExternal(),
+            WorkerPlugin({
+                inline: !process.env.PSP_DEBUG,
+                plugins: [GlslMinify(), LightningCssMinify()],
+                loader: {
+                    ".css": "text",
+                    ".glsl": "text",
+                },
+                additionalOptions: {
+                    minifyWhitespace: !process.env.PSP_DEBUG,
+                    minifyIdentifiers: !process.env.PSP_DEBUG,
+                    mangleProps: process.env.PSP_DEBUG
+                        ? undefined
+                        : /^[_#]|^(plotRect|paddedX(?:Min|Max)|paddedY(?:Min|Max)|dataToPixel|tickColor|labelColor|axisLineColor|gridlineColor|legendText|legendBorder|tooltipBg|tooltipText|tooltipBorder|areaOpacity|heatmapGapPx|sunburstGapPx|gradientStops|seriesPalette|bufferPool)$/,
+                    reserveProps: /(handle_response|__unsafe_open_view)/,
+                },
+            }),
+            GlslMinify(),
+            LightningCssMinify(),
+        ],
+        // minifyWhitespace: !process.env.PSP_DEBUG,
+        // minifyIdentifiers: !process.env.PSP_DEBUG,
+        // mangleProps: process.env.PSP_DEBUG ? false : /^[_#]/,
         format: "esm",
         loader: {
             ".css": "text",
@@ -85,10 +109,35 @@ const BUILD = [
         define: {
             global: "window",
         },
-        plugins: [GlslMinify(), LightningCssMinify()],
-        minifyWhitespace: !process.env.PSP_DEBUG,
-        minifyIdentifiers: !process.env.PSP_DEBUG,
-        mangleProps: process.env.PSP_DEBUG ? false : /^[_#]/,
+        // minifyWhitespace: !process.env.PSP_DEBUG,
+        // minifyIdentifiers: !process.env.PSP_DEBUG,
+        // mangleProps: process.env.PSP_DEBUG ? false : /^[_#]/,
+        plugins: [
+            WorkerPlugin({
+                // Inline (Blob URL) for prod, file mode for debug —
+                // file mode preserves source maps + real paths in
+                // DevTools so worker breakpoints work.
+                inline: !process.env.PSP_DEBUG,
+                plugins: [GlslMinify(), LightningCssMinify()],
+                loader: {
+                    ".css": "text",
+                    ".glsl": "text",
+                },
+                additionalOptions: {
+                    minifyWhitespace: !process.env.PSP_DEBUG,
+                    minifyIdentifiers: !process.env.PSP_DEBUG,
+                    mangleProps: process.env.PSP_DEBUG
+                        ? undefined
+                        : /^[_#]|^(plotRect|paddedX(?:Min|Max)|paddedY(?:Min|Max)|dataToPixel|tickColor|labelColor|axisLineColor|gridlineColor|legendText|legendBorder|tooltipBg|tooltipText|tooltipBorder|areaOpacity|heatmapGapPx|sunburstGapPx|gradientStops|seriesPalette|bufferPool)$/,
+                    reserveProps: /(handle_response|__unsafe_open_view)/,
+                },
+            }),
+            GlslMinify(),
+            LightningCssMinify(),
+        ],
+        // minifyWhitespace: !process.env.PSP_DEBUG,
+        // minifyIdentifiers: !process.env.PSP_DEBUG,
+        // mangleProps: process.env.PSP_DEBUG ? false : /^[_#]/,
         format: "esm",
         loader: {
             ".css": "text",

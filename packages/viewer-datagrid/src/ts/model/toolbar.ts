@@ -26,7 +26,10 @@ export const EDIT_MODES: readonly EditMode[] = [
 ] as const;
 
 function isSelectRowTreeAvailable(model?: DatagridModel): boolean {
-    if (!model) return false;
+    if (!model) {
+        return false;
+    }
+
     return (
         model._config.group_by.length > 0 &&
         model._config.group_rollup_mode !== "flat"
@@ -45,6 +48,7 @@ export function toggle_edit_mode(
             EDIT_MODES[idx] === "SELECT_ROW_TREE" &&
             !isSelectRowTreeAvailable(this.model)
         );
+
         mode = EDIT_MODES[idx];
     }
 

@@ -89,24 +89,30 @@ export class FormatterCache {
             if (plugin.date_format?.year !== "disabled") {
                 options.year = plugin.date_format?.year ?? "2-digit";
             }
+
             if (plugin.date_format?.month !== "disabled") {
                 options.month = plugin.date_format?.month ?? "numeric";
             }
+
             if (plugin.date_format?.day !== "disabled") {
                 options.day = plugin.date_format?.day ?? "numeric";
             }
+
             if (
                 plugin.date_format?.weekday &&
                 plugin.date_format?.weekday !== "disabled"
             ) {
                 options.weekday = plugin.date_format.weekday;
             }
+
             if (plugin.date_format?.hour !== "disabled") {
                 options.hour = plugin.date_format?.hour ?? "numeric";
             }
+
             if (plugin.date_format?.minute !== "disabled") {
                 options.minute = plugin.date_format?.minute ?? "numeric";
             }
+
             if (plugin.date_format?.second !== "disabled") {
                 options.second = plugin.date_format?.second ?? "numeric";
             }

@@ -60,9 +60,13 @@ function hitTest(chart: TreemapChart, mx: number, my: number): HitResult {
     for (let i = 0; i < n; i++) {
         const id = ids[i];
         const rootId = rootArr ? rootArr[i] : chart._currentRootId;
-        if (id === rootId) continue;
-        if (!(mx >= x0[id] && mx <= x1[id] && my >= y0[id] && my <= y1[id]))
+        if (id === rootId) {
             continue;
+        }
+
+        if (!(mx >= x0[id] && mx <= x1[id] && my >= y0[id] && my <= y1[id])) {
+            continue;
+        }
 
         const area = (x1[id] - x0[id]) * (y1[id] - y0[id]);
         if (firstChild[id] !== NULL_NODE) {
@@ -70,6 +74,7 @@ function hitTest(chart: TreemapChart, mx: number, my: number): HitResult {
                 bestBranchArea = area;
                 bestBranchId = id;
             }
+
             const baseDepth = baseArr
                 ? baseArr[i]
                 : depth[chart._currentRootId];
@@ -77,6 +82,7 @@ function hitTest(chart: TreemapChart, mx: number, my: number): HitResult {
             if (relDepth === 1 && my <= y0[id] + PADDING_LABEL) {
                 labelBranchId = id;
             }
+
             if (relDepth === 2) {
                 const nw = x1[id] - x0[id];
                 const nh = y1[id] - y0[id];
@@ -102,6 +108,7 @@ function hitTest(chart: TreemapChart, mx: number, my: number): HitResult {
     if (labelBranchId !== NULL_NODE) {
         return { leafId: NULL_NODE, branchId: labelBranchId, inHeader: true };
     }
+
     return {
         leafId: bestLeafId,
         branchId: bestBranchId,
@@ -114,7 +121,9 @@ export function handleTreemapHover(
     mx: number,
     my: number,
 ): void {
-    if (chart._pinnedNodeId !== NULL_NODE) return;
+    if (chart._pinnedNodeId !== NULL_NODE) {
+        return;
+    }
 
     for (const region of chart._breadcrumbRegions) {
         if (
@@ -123,7 +132,7 @@ export function handleTreemapHover(
             my >= region.y0 &&
             my <= region.y1
         ) {
-            if (chart._glCanvas) chart._glCanvas.style.cursor = "pointer";
+            chart._tooltip.setCursor("pointer");
             chart._hoveredNodeId = NULL_NODE;
             renderTreemapChromeOverlay(chart);
             return;
@@ -135,24 +144,24 @@ export function handleTreemapHover(
 
     if (best !== chart._hoveredNodeId) {
         chart._hoveredNodeId = best;
-        chart._hoveredTooltipLines = null;
-        chart._hoveredTooltipNodeId = best;
-        const serial = ++chart._hoveredTooltipSerial;
-        if (chart._glCanvas) {
-            chart._glCanvas.style.cursor =
-                branchId !== NULL_NODE ? "pointer" : "default";
-        }
+        chart._tooltip.setCursor(
+            branchId !== NULL_NODE ? "pointer" : "default",
+        );
         if (best !== NULL_NODE) {
             // Kick off the lazy tooltip build for hover; re-render
             // the chrome overlay once lines resolve. Stale results
-            // (mouse moved elsewhere, new view) are dropped via the
-            // serial check.
+            // (mouse moved elsewhere, new view) are dropped by the
+            // controller's serial gate.
+            const serial = chart._lazyTooltip.beginHover(best);
             buildTreemapTooltipLines(chart, best).then((lines) => {
-                if (serial !== chart._hoveredTooltipSerial) return;
-                chart._hoveredTooltipLines = lines;
-                renderTreemapChromeOverlay(chart);
+                if (chart._lazyTooltip.commitHover(serial, lines)) {
+                    renderTreemapChromeOverlay(chart);
+                }
             });
+        } else {
+            chart._lazyTooltip.clearHover();
         }
+
         renderTreemapChromeOverlay(chart);
     }
 }
@@ -177,6 +186,7 @@ export function handleTreemapClick(
             if (region.nodeId !== chart._currentRootId) {
                 drillTo(chart, region.nodeId);
             }
+
             return;
         }
     }
@@ -207,6 +217,7 @@ export function handleTreemapDblClick(
             target = parent;
         }
     }
+
     if (
         target !== NULL_NODE &&
         target !== chart._currentRootId &&
@@ -238,50 +249,58 @@ function drillTo(chart: TreemapChart, nodeId: number): void {
         while (p !== NULL_NODE && store.parent[p] !== chart._rootId) {
             p = store.parent[p];
         }
+
         if (p !== NULL_NODE) {
             const label = store.name[p];
             chart._facetDrillRoots.set(label, nodeId);
         }
+
         chart._hoveredNodeId = NULL_NODE;
-        if (chart._glManager) renderTreemapFrame(chart, chart._glManager);
+        if (chart._glManager) {
+            renderTreemapFrame(chart, chart._glManager);
+        }
+
         return;
     }
+
     chart._currentRootId = nodeId;
     rebuildBreadcrumbs(chart, nodeId);
     chart._hoveredNodeId = NULL_NODE;
-    if (chart._glManager) renderTreemapFrame(chart, chart._glManager);
+    if (chart._glManager) {
+        renderTreemapFrame(chart, chart._glManager);
+    }
 }
 
 export function showTreemapPinnedTooltip(
     chart: TreemapChart,
     nodeId: number,
 ): void {
-    chart._tooltip.dismissPinned();
+    chart._tooltip.dismiss();
     chart._pinnedNodeId = nodeId;
-
-    const parent = chart._glCanvas?.parentElement;
-    if (!parent) return;
 
     const store = chart._nodeStore;
     const cx = (store.x0[nodeId] + store.x1[nodeId]) / 2;
     const cy = (store.y0[nodeId] + store.y1[nodeId]) / 2;
-    const dpr = window.devicePixelRatio || 1;
-    const cssWidth = (chart._glCanvas?.width || 100) / dpr;
-    const cssHeight = (chart._glCanvas?.height || 100) / dpr;
+
+    // CSS bounds: prefer `glManager` (works in both local and worker
+    // modes, since the worker constructs its own context manager).
+    const cssWidth = chart._glManager?.cssWidth ?? 0;
+    const cssHeight = chart._glManager?.cssHeight ?? 0;
 
     // Tooltip columns are fetched lazily from the view — the tree
     // itself only retains ancestor names + aggregated value + color.
     // If the user dismisses or re-pins between click and resolve, the
     // `_pinnedNodeId` check discards the stale result.
     buildTreemapTooltipLines(chart, nodeId).then((lines) => {
-        if (chart._pinnedNodeId !== nodeId) return;
-        if (lines.length === 0) return;
-        chart._tooltip.showPinned(
-            parent,
-            lines,
-            { px: cx, py: cy },
-            { cssWidth, cssHeight },
-        );
+        if (chart._pinnedNodeId !== nodeId) {
+            return;
+        }
+
+        if (lines.length === 0) {
+            return;
+        }
+
+        chart._tooltip.pin(lines, { px: cx, py: cy }, { cssWidth, cssHeight });
     });
 
     chart._hoveredNodeId = NULL_NODE;
@@ -289,7 +308,7 @@ export function showTreemapPinnedTooltip(
 }
 
 export function dismissTreemapPinnedTooltip(chart: TreemapChart): void {
-    chart._tooltip.dismissPinned();
+    chart._tooltip.dismiss();
     chart._pinnedNodeId = NULL_NODE;
 }
 
@@ -312,6 +331,7 @@ export async function buildTreemapTooltipLines(
         pathNames.push(store.name[p]);
         p = store.parent[p];
     }
+
     pathNames.reverse();
     if (pathNames.length > 0) {
         lines.push(pathNames.join(" \u203A "));
@@ -339,11 +359,15 @@ export async function buildTreemapTooltipLines(
     if (isLeaf && chart._lazyRows) {
         const row = await chart._lazyRows.fetchRow(rowIdx);
         for (const [name, value] of row) {
-            if (value === null || value === undefined) continue;
+            if (value === null || value === undefined) {
+                continue;
+            }
+
             if (name === chart._colorName && !isNaN(store.colorValue[nodeId])) {
                 // Already emitted from the retained tree state above.
                 continue;
             }
+
             if (typeof value === "number") {
                 lines.push(`${name}: ${formatTickValue(value)}`);
             } else {

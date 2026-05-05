@@ -85,7 +85,10 @@ const getMousedownListener =
             mouseEvent.button === 0 &&
             isSelectionMode(datagrid.model!._edit_mode)
         ) {
-            if (isSingleClickMode(datagrid.model!._edit_mode)) return;
+            if (isSingleClickMode(datagrid.model!._edit_mode)) {
+                return;
+            }
+
             datagrid.model!._selection_state.CURRENT_MOUSEDOWN_COORDINATES = {};
             const meta = table.getMeta(mouseEvent.target as HTMLElement);
             if (
@@ -199,7 +202,9 @@ const getMouseupListener =
         const mode = datagrid.model!._edit_mode;
         if (isSelectionMode(mode)) {
             const meta = table.getMeta(mouseEvent.target as HTMLElement);
-            if (!meta) return;
+            if (!meta) {
+                return;
+            }
 
             // For single-click modes (SELECT_ROW_TREE), handle toggle
             if (isSingleClickMode(mode)) {
@@ -423,11 +428,17 @@ const applyMouseAreaSelection = (
     className: string,
 ): void => {
     const predicate = SELECTION_PREDICATES[datagrid.model!._edit_mode];
-    if (!predicate || selected.length === 0) return;
+    if (!predicate || selected.length === 0) {
+        return;
+    }
+
     const tds = table.querySelectorAll("tbody td");
     for (const td of tds) {
         const meta = table.getMeta(td as HTMLElement);
-        if (!meta || meta.type !== "body") continue;
+        if (!meta || meta.type !== "body") {
+            continue;
+        }
+
         let rendered = false;
         for (const area of selected) {
             if (

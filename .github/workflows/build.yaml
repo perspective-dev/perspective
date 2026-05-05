@@ -649,6 +649,7 @@ jobs:
                   path: .
 
             - name: Run Tests
+              id: run_tests
               run: pnpm run test -- --fetch-snapshots
               env:
                   PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,viewer-openlayers,workspace,react"
@@ -656,6 +657,15 @@ jobs:
                   PSP_SNAPSHOT_TOKEN: ${{ secrets.PSP_SNAPSHOT_TOKEN }}
                   PSP_SNAPSHOT_REF: ${{ github.head_ref || github.ref_name }}
                   # PSP_USE_CCACHE: 1
+
+            - name: Upload Test Failures
+              if: ${{ failure() && steps.run_tests.outcome == 'failure' }}
+              uses: actions/upload-artifact@v4
+              with:
+                  name: perspective-js-test-results
+                  path: tools/test/dist/results
+                  if-no-files-found: ignore
+                  overwrite: true
 
     # ,--,--'      .   .-,--.     .  .
     # `- | ,-. ,-. |-   '|__/ . . |- |-. ,-. ,-.

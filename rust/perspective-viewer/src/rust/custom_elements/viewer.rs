@@ -131,7 +131,8 @@ impl StateProvider for PerspectiveViewerElement {
 
 impl CustomElementMetadata for PerspectiveViewerElement {
     const CUSTOM_ELEMENT_NAME: &'static str = "perspective-viewer";
-    const STATICS: &'static [&'static str] = ["registerPlugin"].as_slice();
+    const STATICS: &'static [&'static str] =
+        ["registerPlugin", "get_wasm_module", "get_worker_url"].as_slice();
 }
 
 #[wasm_bindgen]

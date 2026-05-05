@@ -55,6 +55,7 @@ export class SpatialHitTester {
             this._dirty = false;
             return;
         }
+
         const xRange = bounds.xMax - bounds.xMin || 1;
         const yRange = bounds.yMax - bounds.yMin || 1;
         const avgRange = (xRange + yRange) / 2;
@@ -71,7 +72,9 @@ export class SpatialHitTester {
         this._dirty = false;
     }
 
-    /** Query the nearest point within `radiusPx` of (dataX, dataY). */
+    /**
+     * Query the nearest point within `radiusPx` of (dataX, dataY).
+     */
     query(
         dataX: number,
         dataY: number,
@@ -81,7 +84,10 @@ export class SpatialHitTester {
         xData: Float32Array | null,
         yData: Float32Array | null,
     ): number {
-        if (!this._grid || !xData || !yData) return -1;
+        if (!this._grid || !xData || !yData) {
+            return -1;
+        }
+
         return this._grid.query(
             dataX,
             dataY,

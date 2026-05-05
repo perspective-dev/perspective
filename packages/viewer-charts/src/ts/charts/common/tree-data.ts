@@ -42,7 +42,7 @@ import { buildSplitGroups } from "../../data/split-groups";
 import { NULL_NODE } from "./node-store";
 import type { TreeChartBase } from "./tree-chart";
 
-// ── Reset ────────────────────────────────────────────────────────────────
+//  Reset
 
 /**
  * Reset the shared tree state. Called on the first chunk
@@ -73,7 +73,7 @@ export function resetTreeState(chart: TreeChartBase): void {
     chart._visibleNodeCount = 0;
 }
 
-// ── Tree insertion ───────────────────────────────────────────────────────
+//  Tree insertion
 
 /**
  * Find-or-create a child of `parentId` named `segment`. Uses a per-
@@ -89,8 +89,11 @@ function childByName(
         lookup = new Map();
         chart._childLookup.set(parentId, lookup);
     }
+
     const existing = lookup.get(segment);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) {
+        return existing;
+    }
 
     const childId = chart._nodeStore.allocate();
     chart._nodeStore.name[childId] = segment;
@@ -125,11 +128,18 @@ function insertRow(
                 chart._nodeStore.sizeSign[childId] = sizeValue < 0 ? -1 : 1;
                 chart._nodeStore.leafRowIdx[childId] = rowIdx;
             }
+
             if (!isNaN(colorValue)) {
                 chart._nodeStore.colorValue[childId] = colorValue;
-                if (colorValue < chart._colorMin) chart._colorMin = colorValue;
-                if (colorValue > chart._colorMax) chart._colorMax = colorValue;
+                if (colorValue < chart._colorMin) {
+                    chart._colorMin = colorValue;
+                }
+
+                if (colorValue > chart._colorMax) {
+                    chart._colorMax = colorValue;
+                }
             }
+
             if (colorLabel) {
                 chart._nodeStore.colorLabel[childId] = colorLabel;
                 if (!chart._uniqueColorLabels.has(colorLabel)) {
@@ -152,7 +162,10 @@ function readColor(
 ): { colorValue: number; colorLabel: string } {
     let colorValue = NaN;
     let colorLabel = "";
-    if (!colorCol) return { colorValue, colorLabel };
+    if (!colorCol) {
+        return { colorValue, colorLabel };
+    }
+
     if (chart._colorMode === "numeric" && colorCol.values) {
         colorValue = colorCol.values[rowIdx] as number;
     } else if (
@@ -166,6 +179,7 @@ function readColor(
         // the end result is `palette[dictIdx % paletteSize]`.
         colorLabel = colorCol.dictionary[colorCol.indices[rowIdx]];
     }
+
     return { colorValue, colorLabel };
 }
 
@@ -183,8 +197,14 @@ function seedColorLabels(
     chart: TreeChartBase,
     colorCol: ColumnData | null | undefined,
 ): void {
-    if (chart._colorMode !== "series") return;
-    if (!colorCol?.dictionary) return;
+    if (chart._colorMode !== "series") {
+        return;
+    }
+
+    if (!colorCol?.dictionary) {
+        return;
+    }
+
     const dict = colorCol.dictionary;
     for (let i = 0; i < dict.length; i++) {
         const s = dict[i];
@@ -194,7 +214,7 @@ function seedColorLabels(
     }
 }
 
-// ── Chunk processor ──────────────────────────────────────────────────────
+//  Chunk processor
 
 interface SplitSource {
     prefix: string;
@@ -210,11 +230,17 @@ function resolveSplitSources(
     chart: TreeChartBase,
     columns: ColumnDataMap,
 ): SplitSource[] | null {
-    if (chart._splitBy.length === 0) return null;
+    if (chart._splitBy.length === 0) {
+        return null;
+    }
+
     const required: string[] = chart._sizeName ? [chart._sizeName] : [];
     const optional: string[] = chart._colorName ? [chart._colorName] : [];
     const groups = buildSplitGroups(columns, required, optional);
-    if (groups.length === 0) return null;
+    if (groups.length === 0) {
+        return null;
+    }
+
     return groups.map((g) => ({
         prefix: g.prefix,
         sizeCol: chart._sizeName
@@ -237,7 +263,10 @@ export function processTreeChunk(
     const rpCols: { indices: Int32Array; dictionary: string[] }[] = [];
     for (let n = 0; ; n++) {
         const rp = columns.get(`__ROW_PATH_${n}__`);
-        if (!rp || rp.type !== "string" || !rp.indices || !rp.dictionary) break;
+        if (!rp || rp.type !== "string" || !rp.indices || !rp.dictionary) {
+            break;
+        }
+
         rpCols.push({ indices: rp.indices, dictionary: rp.dictionary });
     }
 
@@ -253,7 +282,9 @@ export function processTreeChunk(
     const numRows = hasGroupBy
         ? rpCols[0].indices.length
         : (firstSizeCol?.values?.length ?? 0);
-    if (numRows === 0) return;
+    if (numRows === 0) {
+        return;
+    }
 
     // Seed palette label indices from the color column's dictionary
     // BEFORE inserting rows, so the first row doesn't assign label 0
@@ -261,7 +292,9 @@ export function processTreeChunk(
     // seed once per split's own color column so every dict value is
     // known to the shared legend.
     if (hasSplits) {
-        for (const src of splitSources!) seedColorLabels(chart, src.colorCol);
+        for (const src of splitSources!) {
+            seedColorLabels(chart, src.colorCol);
+        }
     } else {
         seedColorLabels(chart, colorCol);
     }
@@ -272,20 +305,67 @@ export function processTreeChunk(
     // to the correct view row after multiple chunk arrivals.
     const base = chart._rowCount;
 
-    // The split expansion inserts the same row under N different path
-    // prefixes. `groupByLen + 1` (or just 1 in non-group-by mode) is
-    // passed as the `groupByLen` override so `insertRow` treats the
-    // correct depth as the leaf; this keeps per-leaf `size` / `color`
-    // aligned with each facet's source column.
-    const effectiveGroupLen = hasSplits ? groupByLen + 1 : groupByLen;
+    // The split expansion inserts every row under one extra leading
+    // path segment — the split prefix. When `group_by` is also active
+    // the path is `[prefix, ...groupByLevels]` (length `groupByLen + 1`)
+    // and the leaf store gate inside `insertRow` (`depth === groupByLen`)
+    // needs the `+1` to find the leaf. When `group_by` is empty we fall
+    // through the no-group-by branch below, which writes paths of the
+    // form `[prefix, label]`; that path's leaf is the row label, and
+    // sizing it relies on `insertRow`'s `groupByLen === 0`
+    // "every leaf gets sized" branch — passing `0` here lets that
+    // branch fire so each row's leaf actually receives a size. The
+    // historical `+1`-always form quietly produced an effective
+    // `groupByLen=1` against a depth-2 path, so the size store was
+    // skipped and treemap / sunburst rendered nothing.
+    const effectiveGroupLen =
+        hasSplits && hasGroupBy ? groupByLen + 1 : groupByLen;
 
     if (!hasGroupBy) {
         // Flat fallback: synthesize a single-segment path per row from
         // the first string column (or a "Row N" sentinel).
+        //
+        // In `split_by` mode every column the view emits is pivoted as
+        // `${splitPrefix}|${baseName}`, so two correctness traps need
+        // to be avoided here:
+        //
+        //   1. The size / color column the user picked appears under
+        //      its prefixed form (`First Class|Region`), so a literal
+        //      `name === chart._sizeName/_colorName` skip would miss
+        //      them and the loop would happily pick the color column
+        //      itself as the label source.
+        //   2. Reading a pivoted column by row index returns values
+        //      keyed to ONE specific split (the prefix that happened
+        //      to win the iteration order), not to that row's actual
+        //      split — so even a "different" pivoted dictionary column
+        //      isn't a legitimate per-row label. And once any pivoted
+        //      column is used as a label source, `childByName` collapses
+        //      every row sharing a `(prefix, label)` pair onto a single
+        //      node — last-write-wins for `size` — which truncates the
+        //      visible cell count to `cardinality(label) × cardinality(splits)`.
+        //
+        // The two checks below address both: compare base names (post-`|`)
+        // for the size/color skip, and reject any pivoted column outright
+        // in split mode. If nothing remains, `labelCol` stays undefined
+        // and the per-row loop falls through to the `Row N` sentinel,
+        // which gives every row a unique key.
         let labelCol: ColumnData | undefined;
         for (const [name, col] of columns) {
-            if (name.startsWith("__")) continue;
-            if (name === chart._sizeName || name === chart._colorName) continue;
+            if (name.startsWith("__")) {
+                continue;
+            }
+
+            if (hasSplits && name.includes("|")) {
+                continue;
+            }
+
+            const pipeIdx = name.lastIndexOf("|");
+            const baseName =
+                pipeIdx === -1 ? name : name.substring(pipeIdx + 1);
+            if (baseName === chart._sizeName || baseName === chart._colorName) {
+                continue;
+            }
+
             if (col.type === "string" && col.indices && col.dictionary) {
                 labelCol = col;
                 break;
@@ -342,6 +422,7 @@ export function processTreeChunk(
                 );
             }
         }
+
         chart._rowCount = base + numRows;
         return;
     }
@@ -356,10 +437,16 @@ export function processTreeChunk(
         for (let d = 0; d < rpCols.length; d++) {
             const rp = rpCols[d];
             const label = rp.dictionary[rp.indices[i]];
-            if (!label && label !== "0") break;
+            if (!label && label !== "0") {
+                break;
+            }
+
             pathScratch[extra + pathLen++] = label;
         }
-        if (pathLen === 0) continue; // skip total row
+
+        if (pathLen === 0) {
+            continue;
+        } // skip total row
 
         if (hasSplits) {
             for (const src of splitSources!) {
@@ -400,10 +487,11 @@ export function processTreeChunk(
             );
         }
     }
+
     chart._rowCount = base + numRows;
 }
 
-// ── Finalize ─────────────────────────────────────────────────────────────
+//  Finalize
 
 /**
  * Post-chunk finalization.
@@ -431,7 +519,9 @@ export function finalizeTree(chart: TreeChartBase): void {
     let sp = 1;
 
     // Reset value accumulators.
-    for (let i = 0; i < store.count; i++) value[i] = 0;
+    for (let i = 0; i < store.count; i++) {
+        value[i] = 0;
+    }
 
     while (sp > 0) {
         sp--;
@@ -446,6 +536,7 @@ export function finalizeTree(chart: TreeChartBase): void {
                     bigger.set(stack);
                     stack = bigger;
                 }
+
                 stack[sp * 2] = c;
                 stack[sp * 2 + 1] = 0;
                 sp++;
@@ -462,6 +553,7 @@ export function finalizeTree(chart: TreeChartBase): void {
                 ) {
                     sum += value[c];
                 }
+
                 value[id] = sum;
             }
         }
@@ -476,6 +568,7 @@ export function finalizeTree(chart: TreeChartBase): void {
         for (let i = 1; i < chart._breadcrumbIds.length; i++) {
             breadcrumbNames.push(store.name[chart._breadcrumbIds[i]]);
         }
+
         let node = chart._rootId;
         let valid = true;
         for (const seg of breadcrumbNames) {
@@ -485,21 +578,26 @@ export function finalizeTree(chart: TreeChartBase): void {
                 valid = false;
                 break;
             }
+
             node = next;
         }
+
         if (valid && store.firstChild[node] !== NULL_NODE) {
             chart._currentRootId = node;
             rebuildBreadcrumbs(chart, node);
             return;
         }
     }
+
     chart._currentRootId = chart._rootId;
     chart._breadcrumbIds = [chart._rootId];
 }
 
-// ── Breadcrumbs ──────────────────────────────────────────────────────────
+//  Breadcrumbs
 
-/** Rebuild `chart._breadcrumbIds` by walking up from `nodeId`. */
+/**
+ * Rebuild `chart._breadcrumbIds` by walking up from `nodeId`.
+ */
 export function rebuildBreadcrumbs(chart: TreeChartBase, nodeId: number): void {
     const ids: number[] = [];
     let n = nodeId;
@@ -507,5 +605,6 @@ export function rebuildBreadcrumbs(chart: TreeChartBase, nodeId: number): void {
         ids.unshift(n);
         n = chart._nodeStore.parent[n];
     }
+
     chart._breadcrumbIds = ids;
 }

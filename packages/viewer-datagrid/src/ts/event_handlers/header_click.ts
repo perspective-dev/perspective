@@ -38,7 +38,9 @@ export function createMousedownListener(
             }
         }
 
-        if (!target) return;
+        if (!target) {
+            return;
+        }
 
         if (target.classList.contains("psp-tree-label")) {
             if (model._edit_mode !== "SELECT_ROW_TREE") {
@@ -82,7 +84,9 @@ export function createDblclickListener(
             }
         }
 
-        if (!target) return;
+        if (!target) {
+            return;
+        }
 
         if (target.classList.contains("psp-tree-label")) {
             if (model._edit_mode === "SELECT_ROW_TREE") {
@@ -107,7 +111,9 @@ export function createClickListener(regularTable: RegularTable): EventListener {
             }
         }
 
-        if (!target) return;
+        if (!target) {
+            return;
+        }
 
         if (
             target.classList.contains("psp-tree-label") &&

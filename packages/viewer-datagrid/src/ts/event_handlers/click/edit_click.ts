@@ -28,6 +28,7 @@ export function write_cell(
     if (!meta) {
         return false;
     }
+
     const type = model._schema[model._column_paths[meta.x!]];
     let text: string | number | boolean | null = active_cell.textContent || "";
     const id = model._ids[meta.y! - meta.y0][0];
@@ -36,12 +37,14 @@ export function write_cell(
         if (isNaN(parsed)) {
             return false;
         }
+
         text = parsed;
     } else if (type === "date" || type === "datetime") {
         const parsed = Date.parse(text);
         if (isNaN(parsed)) {
             return false;
         }
+
         text = parsed;
     } else if (type === "boolean") {
         text = text === "true" ? false : text === "false" ? true : null;

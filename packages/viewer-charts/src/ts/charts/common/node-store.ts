@@ -42,6 +42,7 @@ export class NodeStore {
     size!: Float32Array;
     value!: Float32Array;
     colorValue!: Float32Array;
+
     /**
      * Sign of the leaf's raw size column value: `-1` when the source row
      * was negative, `1` otherwise. `size` itself always stores the
@@ -111,6 +112,7 @@ export class NodeStore {
             this.r0.fill(0, 0, this.count);
             this.r1.fill(0, 0, this.count);
         }
+
         this.count = 0;
     }
 
@@ -123,6 +125,7 @@ export class NodeStore {
         if (this.count === this.capacity) {
             this._allocate(this.capacity * 2);
         }
+
         const id = this.count++;
         this.firstChild[id] = NULL_NODE;
         this.nextSibling[id] = NULL_NODE;
@@ -138,7 +141,9 @@ export class NodeStore {
         return id;
     }
 
-    /** O(1) append `childId` as the last child of `parentId`. */
+    /**
+     * O(1) append `childId` as the last child of `parentId`.
+     */
     appendChild(parentId: number, childId: number): void {
         this.parent[childId] = parentId;
         this.depth[childId] = this.depth[parentId] + 1;
@@ -149,11 +154,14 @@ export class NodeStore {
         } else {
             this.nextSibling[last] = childId;
         }
+
         this.lastChild[parentId] = childId;
         this.childCount[parentId]++;
     }
 
-    /** `true` if the node has no children (branches set firstChild when they acquire one). */
+    /**
+     * `true` if the node has no children (branches set firstChild when they acquire one).
+     */
     isLeaf(id: number): boolean {
         return this.firstChild[id] === NULL_NODE;
     }
@@ -166,7 +174,10 @@ export class NodeStore {
             ctor: { new (n: number): T },
         ): T => {
             const next = new ctor(cap);
-            if (old && old.length > 0) next.set(old);
+            if (old && old.length > 0) {
+                next.set(old);
+            }
+
             return next;
         };
 
@@ -191,10 +202,17 @@ export class NodeStore {
         this.leafRowIdx = grow(this.leafRowIdx, Int32Array);
 
         // JS arrays: preserve existing, extend with empty slots.
-        if (!this.name) this.name = new Array(cap);
-        else this.name.length = cap;
-        if (!this.colorLabel) this.colorLabel = new Array(cap);
-        else this.colorLabel.length = cap;
+        if (!this.name) {
+            this.name = new Array(cap);
+        } else {
+            this.name.length = cap;
+        }
+
+        if (!this.colorLabel) {
+            this.colorLabel = new Array(cap);
+        } else {
+            this.colorLabel.length = cap;
+        }
 
         this.capacity = cap;
     }
@@ -212,5 +230,6 @@ export function ancestorNames(store: NodeStore, id: number): string[] {
         out.push(store.name[n]);
         n = store.parent[n];
     }
+
     return out.reverse();
 }

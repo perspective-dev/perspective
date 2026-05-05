@@ -23,7 +23,10 @@ export function createDispatchClickListener(
     return async (event: Event): Promise<void> => {
         const mouseEvent = event as MouseEvent;
         const meta = table.getMeta(mouseEvent.target as HTMLElement);
-        if (!meta || meta.type !== "body") return;
+        if (!meta || meta.type !== "body") {
+            return;
+        }
+
         const { x, y } = meta;
         const { row, column_names, config } = await getCellConfig(model, y, x);
         viewer.dispatchEvent(

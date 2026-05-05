@@ -14,9 +14,13 @@ import type { PlotLayout } from "../layout/plot-layout";
 
 type GL = WebGL2RenderingContext | WebGLRenderingContext;
 
-/** Return CSS-pixel dimensions of the GL canvas. */
-export function cssSize(gl: GL): { cssWidth: number; cssHeight: number } {
-    const dpr = window.devicePixelRatio || 1;
+/**
+ * Return CSS-pixel dimensions of the GL canvas.
+ */
+export function cssSize(
+    gl: GL,
+    dpr: number,
+): { cssWidth: number; cssHeight: number } {
     return {
         cssWidth: gl.canvas.width / dpr,
         cssHeight: gl.canvas.height / dpr,
@@ -49,9 +53,9 @@ export function clearAndSetupFrame(gl: GL): void {
 export function withScissor(
     gl: GL,
     layout: PlotLayout,
+    dpr: number,
     draw: () => void,
 ): void {
-    const dpr = window.devicePixelRatio || 1;
     gl.enable(gl.SCISSOR_TEST);
     gl.scissor(
         Math.round(layout.margins.left * dpr),
@@ -79,8 +83,9 @@ export function withScissor(
 export function renderInPlotFrame(
     gl: GL,
     layout: PlotLayout,
+    dpr: number,
     draw: () => void,
 ): void {
     clearAndSetupFrame(gl);
-    withScissor(gl, layout, draw);
+    withScissor(gl, layout, dpr, draw);
 }

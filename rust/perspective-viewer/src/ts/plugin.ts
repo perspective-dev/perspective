@@ -161,7 +161,7 @@ export interface IPerspectiveViewerPlugin {
      * Notify the plugin that the style environment has changed.  Useful for
      * plugins which read CSS styles via `window.getComputedStyle()`.
      */
-    restyle(view: View): Promise<void>;
+    restyle(): void;
 
     /**
      * Save this plugin's state to a JSON-serializable value.  While this value
@@ -259,7 +259,7 @@ export class HTMLPerspectiveViewerPluginElement
         // Not Implemented
     }
 
-    async restyle(view: View): Promise<void> {
+    restyle() {
         // Not Implemented
     }
 

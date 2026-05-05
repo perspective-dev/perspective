@@ -27,7 +27,7 @@ export function* format_tree_header_row_path(
 ): Generator<RowHeaderCell[]> {
     const plugins: ColumnsConfig =
         (regularTable as any)[PRIVATE_PLUGIN_SYMBOL] || {};
-    for (let path of paths) {
+    for (const path of paths) {
         const fullPath: unknown[] = ["TOTAL", ...path];
         const last = fullPath[fullPath.length - 1];
         let newPath: RowHeaderCell[] = fullPath
@@ -61,7 +61,7 @@ export function* format_flat_header_row_path(
     const plugins: ColumnsConfig =
         (regularTable as any)[PRIVATE_PLUGIN_SYMBOL] || {};
 
-    for (let path of paths) {
+    for (const path of paths) {
         yield path.map((part, i) =>
             format_cell.call(this, row_headers[i], part, plugins, true),
         ) as RowHeaderCell[];

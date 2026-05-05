@@ -12,6 +12,7 @@
 
 import { execSync } from "child_process";
 import { build } from "@perspective-dev/esbuild-plugin/build.js";
+import { WorkerPlugin } from "@perspective-dev/esbuild-plugin/worker.js";
 import { NodeModulesExternal } from "@perspective-dev/esbuild-plugin/external.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -60,6 +61,16 @@ export async function build_all() {
             format: "esm",
             loader: { ".wasm": "binary" },
             outfile: "dist/esm/perspective-viewer.inline.js",
+            plugins: [
+                WorkerPlugin({
+                    inline: !process.env.PSP_DEBUG,
+                    // plugins: [GlslMinify(), LightningCssMinify()],
+                    // loader: {
+                    //     ".css": "text",
+                    //     ".glsl": "text",
+                    // },
+                }),
+            ],
         },
         // No WASM assets inlined or linked.
         // {
@@ -73,6 +84,16 @@ export async function build_all() {
             format: "esm",
             external: ["*.wasm"],
             outdir: "dist/esm",
+            plugins: [
+                WorkerPlugin({
+                    inline: true,
+                    // plugins: [GlslMinify(), LightningCssMinify()],
+                    // loader: {
+                    //     ".css": "text",
+                    //     ".glsl": "text",
+                    // },
+                }),
+            ],
         },
         // WASM assets linked to relative path via `fetch()`. This efficiently
         // loading build is great for `<script>` tags but will give many
@@ -88,6 +109,16 @@ export async function build_all() {
             format: "esm",
             loader: { ".wasm": "file" },
             outfile: "dist/cdn/perspective-viewer.js",
+            plugins: [
+                WorkerPlugin({
+                    inline: true,
+                    // plugins: [GlslMinify(), LightningCssMinify()],
+                    // loader: {
+                    //     ".css": "text",
+                    //     ".glsl": "text",
+                    // },
+                }),
+            ],
         },
     ];
 

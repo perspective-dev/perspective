@@ -37,7 +37,10 @@ export async function sortHandler(
     target: HTMLElement,
 ): Promise<void> {
     const meta = regularTable.getMeta(target);
-    if (!meta?.column_header) return;
+    if (!meta?.column_header) {
+        return;
+    }
+
     const column_name = meta.column_header[model._config.split_by.length];
     const sort_method =
         event.ctrlKey ||

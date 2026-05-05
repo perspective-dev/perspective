@@ -62,7 +62,10 @@ export class ZoomRouter {
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
             const target = resolve(mouseX, mouseY);
-            if (!target) return;
+            if (!target) {
+                return;
+            }
+
             e.preventDefault();
             applyWheel(target, mouseX, mouseY, e.deltaY);
             onUpdate();
@@ -73,7 +76,10 @@ export class ZoomRouter {
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
             const target = resolve(mouseX, mouseY);
-            if (!target) return;
+            if (!target) {
+                return;
+            }
+
             this._pointerDown = true;
             this._pointerTarget = target;
             this._lastPointerX = e.clientX;
@@ -82,7 +88,10 @@ export class ZoomRouter {
         };
 
         this._onPointerMove = (e: PointerEvent) => {
-            if (!this._pointerDown || !this._pointerTarget) return;
+            if (!this._pointerDown || !this._pointerTarget) {
+                return;
+            }
+
             const dx = e.clientX - this._lastPointerX;
             const dy = e.clientY - this._lastPointerY;
             this._lastPointerX = e.clientX;
@@ -104,24 +113,32 @@ export class ZoomRouter {
 
     detach(): void {
         if (this._element) {
-            if (this._onWheel)
+            if (this._onWheel) {
                 this._element.removeEventListener("wheel", this._onWheel);
-            if (this._onPointerDown)
+            }
+
+            if (this._onPointerDown) {
                 this._element.removeEventListener(
                     "pointerdown",
                     this._onPointerDown,
                 );
-            if (this._onPointerMove)
+            }
+
+            if (this._onPointerMove) {
                 this._element.removeEventListener(
                     "pointermove",
                     this._onPointerMove,
                 );
-            if (this._onPointerUp)
+            }
+
+            if (this._onPointerUp) {
                 this._element.removeEventListener(
                     "pointerup",
                     this._onPointerUp,
                 );
+            }
         }
+
         this._element = null;
         this._resolve = null;
         this._onUpdate = null;
@@ -130,7 +147,13 @@ export class ZoomRouter {
     }
 }
 
-function applyWheel(
+/**
+ * Apply a wheel-zoom delta to the resolved target. Exported for
+ * re-use inside the worker, where the renderer dispatches interaction
+ * events forwarded from the host's `RawEventForwarder` instead of
+ * receiving DOM events directly.
+ */
+export function applyWheel(
     target: ZoomTarget,
     mouseX: number,
     mouseY: number,
@@ -155,6 +178,7 @@ function applyWheel(
             Math.min(MAX_ZOOM, controller.scaleX * factor),
         );
     }
+
     if (locked !== "y") {
         controller.scaleY = Math.max(
             MIN_ZOOM,
@@ -175,12 +199,18 @@ function applyWheel(
     if (locked !== "x" && bxRange > 0) {
         controller.normTranslateX += (dataX - newDataX) / bxRange;
     }
+
     if (locked !== "y" && byRange > 0) {
         controller.normTranslateY += (dataY - newDataY) / byRange;
     }
 }
 
-function applyPan(target: ZoomTarget, dx: number, dy: number): void {
+/**
+ * Apply a drag-pan delta to the resolved target. Exported for the
+ * same reason as {@link applyWheel}: worker-mode interaction
+ * dispatch reuses the math without owning DOM listeners.
+ */
+export function applyPan(target: ZoomTarget, dx: number, dy: number): void {
     const { controller, layout } = target;
     const domain = controller.getVisibleDomain();
     const plot = layout.plotRect;
@@ -193,6 +223,7 @@ function applyPan(target: ZoomTarget, dx: number, dy: number): void {
     if (locked !== "x" && bxRange > 0) {
         controller.normTranslateX -= (dx * dataPerPixelX) / bxRange;
     }
+
     if (locked !== "y" && byRange > 0) {
         controller.normTranslateY += (dy * dataPerPixelY) / byRange;
     }

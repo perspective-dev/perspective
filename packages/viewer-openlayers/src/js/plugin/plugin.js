@@ -49,7 +49,7 @@ views.forEach(async (plugin) => {
                 return "OpenStreetMap";
             }
 
-            async restyle(view) {
+            restyle() {
                 mapView.restyle(this.shadowRoot.children[1]);
             }
 

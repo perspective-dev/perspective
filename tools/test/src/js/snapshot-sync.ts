@@ -60,6 +60,7 @@ function mirrorSnapshots(srcRoot: string, dest: string) {
     fs.rmSync(dest, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.cpSync(srcSnapshots, dest, { recursive: true });
+    fs.rmSync(path.join(dest, ".git"), { recursive: true, force: true });
 }
 
 export async function fetchSnapshots(): Promise<void> {
@@ -83,6 +84,7 @@ export async function fetchSnapshots(): Promise<void> {
         console.log(
             `Snapshot branch '${requestedRef}' not found on ${repo}; falling back to '${DEFAULT_REF}'.`,
         );
+
         ref = DEFAULT_REF;
     }
 
@@ -126,11 +128,14 @@ export async function writebackSnapshots(): Promise<void> {
         console.log(
             `No snapshot clone at ${CACHE_DIR}; skipping writeback. Run with --fetch-snapshots first to populate the cache.`,
         );
+
         return;
     }
+
     if (!fs.existsSync(DEST_DIR)) {
         return;
     }
+
     fs.cpSync(DEST_DIR, CACHE_DIR, { recursive: true, force: true });
-    console.log(`Copied updated snapshots into ${CACHE_DIR}`);
+    console.log(`\nCopied updated snapshots into ${CACHE_DIR}`);
 }

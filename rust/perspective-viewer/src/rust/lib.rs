@@ -50,6 +50,8 @@ pub mod utils;
 extern crate macro_rules_attribute;
 extern crate alloc;
 
+use std::cell::RefCell;
+
 use perspective_js::utils::*;
 use wasm_bindgen::prelude::*;
 
@@ -97,11 +99,35 @@ pub fn registerPlugin(name: &str) {
 /// preserve backwards-compatible synchronous API).
 #[cfg(not(feature = "external-bootstrap"))]
 #[wasm_bindgen(js_name = "init")]
-pub fn js_init() {
+pub fn js_init(module: js_sys::WebAssembly::Module, url: web_sys::Url) {
     console_error_panic_hook::set_once();
     perspective_js::utils::set_global_logging();
     define_web_components!("export * as psp from '../../perspective-viewer.js'");
+    MODULE.with_borrow_mut(|f| {
+        *f = Some((module, url));
+    });
+
     tracing::info!("Perspective initialized.");
+}
+
+thread_local! {
+    static MODULE: RefCell<Option<(js_sys::WebAssembly::Module, web_sys::Url)>> = RefCell::default();
+}
+
+#[cfg(not(feature = "external-bootstrap"))]
+#[wasm_bindgen(js_name = "get_wasm_module")]
+pub fn js_get_module() -> Result<js_sys::WebAssembly::Module, JsValue> {
+    MODULE
+        .with_borrow(|f| f.clone().map(|x| x.0))
+        .ok_or_else(|| "Uninited module".into())
+}
+
+#[cfg(not(feature = "external-bootstrap"))]
+#[wasm_bindgen(js_name = "get_worker_url")]
+pub fn js_get_worker_url() -> Result<web_sys::Url, JsValue> {
+    MODULE
+        .with_borrow(|f| f.clone().map(|x| x.1))
+        .ok_or_else(|| "Uninited module".into())
 }
 
 /// Register Web Components with the global registry, given a Perspective

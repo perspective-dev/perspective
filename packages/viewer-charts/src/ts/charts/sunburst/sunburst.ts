@@ -26,7 +26,6 @@ import {
 import {
     handleSunburstHover,
     handleSunburstClick,
-    showSunburstPinnedTooltip,
     dismissSunburstPinnedTooltip,
     type SunburstBreadcrumbRegion,
 } from "./sunburst-interact";
@@ -48,8 +47,11 @@ export interface SunburstLocations {
  */
 function firstNonMetadataColumn(columns: ColumnDataMap): string {
     for (const k of columns.keys()) {
-        if (!k.startsWith("__")) return k;
+        if (!k.startsWith("__")) {
+            return k;
+        }
     }
+
     return "";
 }
 
@@ -70,7 +72,9 @@ export class SunburstChart extends TreeChartBase {
     _instanceBuffer: WebGLBuffer | null = null;
     _instanceCount = 0;
 
-    /** Label orientation mode — see class docstring. */
+    /**
+     * Label orientation mode — see class docstring.
+     */
     _labelRotation: "upright" | "radial" = "upright";
 
     // Center / radius state resolved per frame.
@@ -78,26 +82,40 @@ export class SunburstChart extends TreeChartBase {
     _centerY = 0;
     _maxRadius = 0;
 
-    // ── Interaction ──────────────────────────────────────────────────────
+    //  Interaction
     _hoveredNodeId: number = NULL_NODE;
     _pinnedNodeId: number = NULL_NODE;
     _breadcrumbRegions: SunburstBreadcrumbRegion[] = [];
 
     _chromeCache: ImageBitmap | null = null;
     _chromeCacheDirty = true;
-    /** See `TreemapChart._chromeCacheGen` — same race, same fix. */
+
+    /**
+     * See `TreemapChart._chromeCacheGen` — same race, same fix.
+     */
     _chromeCacheGen = 0;
 
-    // ── Faceted state ────────────────────────────────────────────────────
+    //  Faceted state
     _facetGrid: import("../../layout/facet-grid").FacetGrid | null = null;
-    /** Per-facet drill roots — mirrors `TreemapChart._facetDrillRoots`. */
+
+    /**
+     * Per-facet drill roots — mirrors `TreemapChart._facetDrillRoots`.
+     */
     _facetDrillRoots: Map<string, number> = new Map();
+
     /**
      * Per-facet rendering state. `index` matches the facet grid cell;
      * `centerX`, `centerY`, `maxRadius` are used for layout + hit test;
      * `drillRoot` is the sub-root the facet is currently showing;
-     * `instanceStart`, `instanceCount` index into the shared instance
-     * buffer for draw dispatch.
+     * `instanceStart`, `instanceCount` index into the shared GPU
+     * instance buffer for draw dispatch (these are post-skip values,
+     * rewritten by `uploadArcInstances` after zero-width arcs and the
+     * drill root are filtered out). `nodeStart`, `nodeCount` are the
+     * pre-skip range over `_visibleNodeIds` and are *not* rewritten —
+     * canvas chrome (arc-label translate origin) walks this range so
+     * each label can be placed around its own facet's center instead
+     * of the chart-wide `_centerX/_centerY` (which always point at the
+     * first facet).
      */
     _facets: {
         label: string;
@@ -107,12 +125,14 @@ export class SunburstChart extends TreeChartBase {
         drillRoot: number;
         instanceStart: number;
         instanceCount: number;
+        nodeStart: number;
+        nodeCount: number;
     }[] = [];
 
-    attachTooltip(glCanvas: HTMLCanvasElement): void {
-        this._glCanvas = glCanvas;
-        this._tooltip.attach(glCanvas, {
-            onHover: (mx, my) => handleSunburstHover(this, mx, my),
+    protected override tooltipCallbacks() {
+        return {
+            onHover: (mx: number, my: number) =>
+                handleSunburstHover(this, mx, my),
             onLeave: () => {
                 if (
                     this._hoveredNodeId !== NULL_NODE &&
@@ -122,24 +142,22 @@ export class SunburstChart extends TreeChartBase {
                     renderSunburstChromeOverlay(this);
                 }
             },
-            onClickPre: (mx, my) => {
+            onClickPre: (mx: number, my: number) => {
                 handleSunburstClick(this, mx, my);
                 return true;
             },
-        });
+        };
     }
 
-    uploadAndRender(
+    async uploadAndRender(
         glManager: WebGLContextManager,
         columns: ColumnDataMap,
         startRow: number,
         _endRow: number,
-    ): void {
+    ): Promise<void> {
         this._glManager = glManager;
 
         if (startRow === 0) {
-            this._cancelScheduledRender();
-
             const slots = this._columnSlots;
             this._sizeName = slots[0] || firstNonMetadataColumn(columns) || "";
             this._colorName = slots[1] || "";
@@ -164,14 +182,14 @@ export class SunburstChart extends TreeChartBase {
             this._facetDrillRoots.clear();
             this._facetGrid = null;
             this._facets = [];
+
             // Invalidate the instance buffer so a render that fires
             // before the fresh upload draws zero arcs.
             this._instanceCount = 0;
+
             // Drop any in-flight hover tooltip promise (see treemap).
-            this._hoveredTooltipLines = null;
-            this._hoveredTooltipNodeId = -1;
-            this._hoveredTooltipSerial++;
-            this._pinnedTooltipSerial++;
+            this._lazyTooltip.clearHover();
+            this._lazyTooltip.invalidatePin();
             dismissSunburstPinnedTooltip(this);
             this._chromeCache?.close();
             this._chromeCache = null;
@@ -183,15 +201,17 @@ export class SunburstChart extends TreeChartBase {
 
         processTreeChunk(this, columns);
         finalizeTree(this);
-        if (this._rootId !== NULL_NODE) this._scheduleRender(glManager);
+        if (this._rootId !== NULL_NODE) {
+            await this.requestRender(glManager);
+        }
     }
 
-    redraw(glManager: WebGLContextManager): void {
+    _fullRender(glManager: WebGLContextManager): void {
+        if (this._rootId === NULL_NODE) {
+            return;
+        }
+
         this._glManager = glManager;
-        if (this._rootId !== NULL_NODE) this._scheduleRender(glManager);
-    }
-
-    protected _fullRender(glManager: WebGLContextManager): void {
         renderSunburstFrame(this, glManager);
     }
 
@@ -201,9 +221,15 @@ export class SunburstChart extends TreeChartBase {
         this._chromeCache = null;
         const gl = this._glManager?.gl;
         if (gl) {
-            if (this._stripBuffer) gl.deleteBuffer(this._stripBuffer);
-            if (this._instanceBuffer) gl.deleteBuffer(this._instanceBuffer);
+            if (this._stripBuffer) {
+                gl.deleteBuffer(this._stripBuffer);
+            }
+
+            if (this._instanceBuffer) {
+                gl.deleteBuffer(this._instanceBuffer);
+            }
         }
+
         this._stripBuffer = null;
         this._instanceBuffer = null;
         this._program = null;

@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+    <head>
+        <script type="module" src="/node_modules/@perspective-dev/viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js"></script>
+        <script type="module" src="/node_modules/@perspective-dev/viewer-charts/dist/cdn/perspective-viewer-charts.js"></script>
+        <script type="module" src="/node_modules/@perspective-dev/test/load-viewer-two-csv.js"></script>
+
+        <link rel="stylesheet" href="/node_modules/@perspective-dev/viewer/dist/css/pro.css" />
+        <link rel="stylesheet" href="/node_modules/@fontsource/roboto-mono/400.css" />
+
+        <style>
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                font-family: "Roboto Mono" !important;
+                --preload-fonts: "Roboto Mono:400";
+            }
+
+            .panel {
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                width: 50%;
+            }
+
+            .panel.left {
+                left: 0;
+            }
+
+            .panel.right {
+                right: 0;
+            }
+
+            perspective-viewer {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                font-family: "Roboto Mono" !important;
+                --preload-fonts: "Roboto Mono:400";
+            }
+
+            perspective-viewer-datagrid::part(regular-table) {
+                font-family: "Roboto Mono";
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="panel left"><perspective-viewer></perspective-viewer></div>
+        <div class="panel right"><perspective-viewer></perspective-viewer></div>
+    </body>
+</html>

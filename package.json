@@ -53,10 +53,12 @@
         "@playwright/test": "catalog:",
         "chalk": "catalog:",
         "dotenv": "catalog:",
+        "eslint": "catalog:",
         "husky": "catalog:",
         "npm-run-all": "catalog:",
         "prettier": "catalog:",
-        "tsx": "catalog:"
+        "tsx": "catalog:",
+        "typescript-eslint": "catalog:"
     },
     "pnpm": {
         "overrides": {

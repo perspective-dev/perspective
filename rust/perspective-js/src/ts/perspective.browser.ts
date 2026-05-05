@@ -65,13 +65,32 @@ export function init_server(
 }
 
 let GLOBAL_CLIENT_WASM: Promise<typeof psp>;
+let GLOBAL_CLIENT_MODULE: Promise<WebAssembly.Module> | undefined;
+
+async function compile_module(wasm: any): Promise<WebAssembly.Module> {
+    if (wasm instanceof WebAssembly.Module) {
+        return wasm;
+    }
+
+    if (typeof Response !== "undefined" && wasm instanceof Response) {
+        return WebAssembly.compileStreaming(wasm);
+    }
+
+    return WebAssembly.compile(wasm);
+}
 
 async function compilerize(
     wasm: PerspectiveWasm,
     disable_stage_0: boolean = false,
 ) {
     const wasm_buff = disable_stage_0 ? wasm : await load_wasm_stage_0(wasm);
-    await wasm_module.default({ module_or_path: wasm_buff });
+    // Compile to a `WebAssembly.Module` once so it can be both instantiated
+    // locally and forwarded to other workers via `getCompiledClientWasm()`.
+    // `WebAssembly.Module` is structured-cloneable across workers, so the
+    // recipient can instantiate without re-fetching or re-compiling.
+    const compiled = await compile_module(wasm_buff);
+    GLOBAL_CLIENT_MODULE = Promise.resolve(compiled);
+    await wasm_module.default({ module_or_path: compiled });
     await wasm_module.init();
     return wasm_module;
 }
@@ -103,11 +122,56 @@ function get_client() {
     const viewer_class: any = customElements.get("perspective-viewer");
     if (viewer_class) {
         GLOBAL_CLIENT_WASM = Promise.resolve(viewer_class.__wasm_module__);
+        if (
+            GLOBAL_CLIENT_MODULE === undefined &&
+            viewer_class.__wasm_client_module__
+        ) {
+            GLOBAL_CLIENT_MODULE = Promise.resolve(
+                viewer_class.__wasm_client_module__,
+            );
+        }
     } else if (GLOBAL_CLIENT_WASM === undefined) {
         throw new Error("Missing perspective-client.wasm");
     }
 
     return GLOBAL_CLIENT_WASM;
+}
+
+/**
+ * Returns the compiled `WebAssembly.Module` for the perspective-js client
+ * runtime. The module is structured-cloneable, so it can be sent via
+ * `postMessage` to a Worker which can instantiate its own `Client` without
+ * re-fetching or re-compiling the wasm binary.
+ *
+ * Requires that the client wasm has been initialized — typically by a prior
+ * call to `init_client(...)`, or implicitly by mounting a `<perspective-viewer>`
+ * element. Throws otherwise.
+ *
+ * # Examples
+ *
+ * ```javascript
+ * const mod = await perspective.getCompiledClientWasm();
+ * worker.postMessage({ kind: "init", clientWasm: mod }, [port]);
+ * ```
+ */
+export async function getCompiledClientWasm(): Promise<WebAssembly.Module> {
+    if (GLOBAL_CLIENT_MODULE !== undefined) {
+        return GLOBAL_CLIENT_MODULE;
+    }
+
+    const viewer_class: any = customElements.get("perspective-viewer");
+    if (viewer_class?.__wasm_client_module__) {
+        GLOBAL_CLIENT_MODULE = Promise.resolve(
+            viewer_class.__wasm_client_module__,
+        );
+        return GLOBAL_CLIENT_MODULE;
+    }
+
+    throw new Error(
+        "perspective-js client wasm has not been compiled yet — call " +
+            "`init_client(...)` or `perspective.worker()` before " +
+            "`getCompiledClientWasm()`.",
+    );
 }
 
 function get_server() {
@@ -122,13 +186,30 @@ function get_server() {
 
 let GLOBAL_WORKER: undefined | (() => Promise<Worker>) = undefined;
 
-// Inline the worker for now. This code will eventually allow outlining this resource
-// @ts-ignore
-import perspective_wasm_worker from "../../src/ts/perspective-server.worker.js";
+// `WorkerPlugin` resolves this import to a stub that exports
+// `getPerspectiveWorkerURL(): Promise<string>`. The URL is either a
+// Blob URL (inline mode — production builds) or a real file path
+// resolved against `import.meta.url` (file mode — debug builds).
+// Constructing the `Worker` lives here in the consumer rather than
+// inside the plugin so the same module text can also be loaded
+// in-process via dynamic `import(url)` when a future caller wants
+// it; the plugin no longer owns Worker lifecycle.
+//
+// `initialize()` constructs `new Worker(blobUrl)` and falls back to
+// running the worker source on the main thread via `new Function(...)`
+// when Worker construction is unavailable (e.g. `file://` origins where
+// module-Worker support is gated). The shim it returns is
+// MessagePort-shaped so downstream code can treat it like a real
+// Worker.
+// @ts-ignore — resolved at build time by `@perspective-dev/esbuild-plugin/worker`
+import { initialize as initializePerspectiveWorker } from "../../src/ts/perspective-server.worker.js";
 
-function get_worker(): Promise<Worker> {
+async function get_worker(): Promise<Worker> {
     if (GLOBAL_WORKER === undefined) {
-        return perspective_wasm_worker();
+        return await initializePerspectiveWorker({
+            type: "module",
+            name: "perspective-server",
+        });
     }
 
     return GLOBAL_WORKER();
@@ -154,6 +235,7 @@ export default {
     init_client,
     init_server,
     createMessageHandler,
+    getCompiledClientWasm,
     GenericSQLVirtualServerModel,
     VirtualDataSlice,
     VirtualServer,

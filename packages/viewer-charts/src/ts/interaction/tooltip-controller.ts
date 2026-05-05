@@ -10,32 +10,54 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+import type { Canvas2D, Context2D } from "../charts/canvas-types";
 import type { PlotLayout } from "../layout/plot-layout";
 import type { Theme } from "../theme/theme";
 
-/** Minimal positioning input — PlotLayout satisfies this. */
+/**
+ * Minimal positioning input — PlotLayout satisfies this.
+ */
 export interface CssBounds {
     cssWidth: number;
     cssHeight: number;
 }
 
 export interface TooltipCallbacks {
-    /** RAF-throttled mouse position in CSS pixels, relative to `glCanvas`. */
+    /**
+     * RAF-throttled mouse position in CSS pixels, relative to the GL
+     * canvas (host already subtracted `getBoundingClientRect`).
+     */
     onHover(mx: number, my: number): void;
-    /** Fires on mouseleave; skipped while a pinned tooltip is active. */
+
+    /**
+     * Fires on mouseleave; skipped while a pinned tooltip is active.
+     */
     onLeave(): void;
+
     /**
      * Fires on click with mouse position. Return true to consume the click
      * (skipping the default pin/dismiss flow — used for legend clicks).
      */
     onClickPre?(mx: number, my: number): boolean;
-    /** Fires when a click should pin the current hover target. */
+
+    /**
+     * Fires when a click should pin the current hover target.
+     */
     onPin?(mx: number, my: number): void;
+
+    /**
+     * Fires on dblclick (treemap drill-up gesture). Optional — charts
+     * that don't bind a handler simply ignore the event.
+     */
+    onDblClick?(mx: number, my: number): void;
 }
 
 export interface RenderTooltipOptions {
-    /** Draw a dashed crosshair at `pos`. Used by scatter/line. */
+    /**
+     * Draw a dashed crosshair at `pos`. Used by scatter/line.
+     */
     crosshair?: boolean;
+
     /**
      * Draw a ring of `radius` CSS pixels at `pos`. Used to highlight a
      * hovered point. Omit for bars (where the bar itself highlights).
@@ -44,137 +66,181 @@ export interface RenderTooltipOptions {
 }
 
 /**
- * Owns tooltip mouse wiring and the pinned-DOM-tooltip lifecycle.
- * Composition-friendly: each chart instantiates one, forwards callbacks
- * into its own state, and calls the canvas/DOM render helpers.
+ * Side-channel from the chart back to the host's DOM. The chart calls
+ * into a sink rather than touching the DOM itself; the host
+ * materializes the actual visual (`<div>` for pinned tooltip, cursor
+ * mutation on the GL canvas).
+ *
+ *   - `MessageHostSink` (in worker/) — forwards calls over a
+ *                              `postMessage`-shaped channel back to
+ *                              the host.
+ *   - `DomHostSink` (in host transport) — receives the matching
+ *                              envelopes and applies them to the DOM.
+ *
+ * The controller's `_pinned` flag is the source of truth for whether
+ * hover updates are gated; the sink only owns the visual artifact.
+ */
+export interface HostSink {
+    pin(
+        lines: string[],
+        pos: { px: number; py: number },
+        bounds: CssBounds,
+    ): void;
+    dismiss(): void;
+    setCursor(cursor: string): void;
+}
+
+/**
+ * Owns the hover/click/dblclick state machine and the pinned-tooltip
+ * lifecycle. The renderer drives this purely through
+ * `dispatchHover` / `dispatchLeave` / `dispatchClick` /
+ * `dispatchDblClick` — the host's `RawEventForwarder` captures DOM
+ * events on the GL canvas and posts them as `InteractionEvent`s.
+ *
+ * Pinning + cursor changes go through a {@link HostSink} so the actual
+ * DOM mutations happen host-side regardless of where the chart runs.
  */
 export class TooltipController {
-    private _canvas: HTMLCanvasElement | null = null;
-    private _moveHandler: ((e: MouseEvent) => void) | null = null;
-    private _leaveHandler: (() => void) | null = null;
-    private _clickHandler: ((e: MouseEvent) => void) | null = null;
+    private _callbacks: TooltipCallbacks | null = null;
     private _hoverRAFId = 0;
-    private _pinnedDiv: HTMLDivElement | null = null;
+    private _hoverTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    private _host: HostSink | null = null;
+    private _pinned = false;
 
     get isPinned(): boolean {
-        return this._pinnedDiv !== null;
+        return this._pinned;
     }
 
-    attach(glCanvas: HTMLCanvasElement, callbacks: TooltipCallbacks): void {
+    /**
+     * Replace the active host sink. Dismisses any existing pin via the
+     * prior sink so we never leak a pinned artifact across resets —
+     * though in practice each chart instance uses one sink for its
+     * lifetime.
+     */
+    setHost(sink: HostSink): void {
+        if (this._pinned) {
+            this._host?.dismiss();
+            this._pinned = false;
+        }
+
+        this._host = sink;
+    }
+
+    /**
+     * Forward a cursor change to the host. No-op when no host sink is
+     * installed (chart constructed without a transport).
+     */
+    setCursor(cursor: string): void {
+        this._host?.setCursor(cursor);
+    }
+
+    /**
+     * Install the chart's tooltip callbacks. The renderer drives the
+     * controller via `dispatchHover` / `dispatchLeave` /
+     * `dispatchClick` / `dispatchDblClick`; this controller never
+     * touches the DOM directly.
+     */
+    attach(callbacks: TooltipCallbacks): void {
         this.detach();
-        this._canvas = glCanvas;
-
-        this._moveHandler = (e: MouseEvent) => {
-            if (this.isPinned) return;
-            if (this._hoverRAFId) return;
-            const rect = glCanvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left;
-            const my = e.clientY - rect.top;
-            this._hoverRAFId = requestAnimationFrame(() => {
-                this._hoverRAFId = 0;
-                callbacks.onHover(mx, my);
-            });
-        };
-
-        this._leaveHandler = () => {
-            if (this.isPinned) return;
-            callbacks.onLeave();
-        };
-
-        this._clickHandler = (e: MouseEvent) => {
-            const rect = glCanvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left;
-            const my = e.clientY - rect.top;
-            if (callbacks.onClickPre?.(mx, my)) return;
-            if (this.isPinned) {
-                this.dismissPinned();
-                return;
-            }
-            callbacks.onPin?.(mx, my);
-        };
-
-        glCanvas.addEventListener("mousemove", this._moveHandler);
-        glCanvas.addEventListener("mouseleave", this._leaveHandler);
-        glCanvas.addEventListener("click", this._clickHandler);
+        this._callbacks = callbacks;
     }
 
     detach(): void {
-        if (this._canvas) {
-            if (this._moveHandler)
-                this._canvas.removeEventListener(
-                    "mousemove",
-                    this._moveHandler,
-                );
-            if (this._leaveHandler)
-                this._canvas.removeEventListener(
-                    "mouseleave",
-                    this._leaveHandler,
-                );
-            if (this._clickHandler)
-                this._canvas.removeEventListener("click", this._clickHandler);
-        }
-
         if (this._hoverRAFId) {
             cancelAnimationFrame(this._hoverRAFId);
             this._hoverRAFId = 0;
         }
 
-        this._moveHandler = null;
-        this._leaveHandler = null;
-        this._clickHandler = null;
+        if (this._hoverTimeoutId !== null) {
+            clearTimeout(this._hoverTimeoutId);
+            this._hoverTimeoutId = null;
+        }
+
+        this._callbacks = null;
     }
 
-    /** Create a floating DOM tooltip and attach to `parent`. */
-    showPinned(
-        parent: HTMLElement,
+    /**
+     * Schedule an `onHover` callback for the given canvas-relative
+     * coords. Coalesces multiple calls within one animation frame so
+     * pointer streams don't backlog the chart's hit-test path.
+     *
+     * Workers ship with `requestAnimationFrame` (DedicatedWorkerGlobalScope
+     * exposes it for OffscreenCanvas painting), so the same coalescer
+     * works in both modes. We fall back to setTimeout if RAF is missing
+     * (e.g. node tests without a polyfill).
+     */
+    dispatchHover(mx: number, my: number): void {
+        if (this._pinned || !this._callbacks) {
+            return;
+        }
+
+        if (this._hoverRAFId || this._hoverTimeoutId !== null) {
+            return;
+        }
+
+        const fire = () => {
+            this._hoverRAFId = 0;
+            this._hoverTimeoutId = null;
+            this._callbacks?.onHover(mx, my);
+        };
+
+        if (typeof requestAnimationFrame === "function") {
+            this._hoverRAFId = requestAnimationFrame(fire);
+        } else {
+            this._hoverTimeoutId = setTimeout(fire, 16);
+        }
+    }
+
+    dispatchLeave(): void {
+        if (this._pinned || !this._callbacks) {
+            return;
+        }
+
+        this._callbacks.onLeave();
+    }
+
+    dispatchClick(mx: number, my: number): void {
+        if (!this._callbacks) {
+            return;
+        }
+
+        if (this._callbacks.onClickPre?.(mx, my)) {
+            return;
+        }
+
+        if (this._pinned) {
+            this.dismiss();
+            return;
+        }
+
+        this._callbacks.onPin?.(mx, my);
+    }
+
+    dispatchDblClick(mx: number, my: number): void {
+        this._callbacks?.onDblClick?.(mx, my);
+    }
+
+    /**
+     * Pin a tooltip (or replace an active one). Forwards through the
+     * configured sink and flips the controller's pinned flag so hover
+     * dispatch is suppressed until dismissal.
+     */
+    pin(
         lines: string[],
         pos: { px: number; py: number },
         bounds: CssBounds,
     ): void {
-        this.dismissPinned();
-        if (lines.length === 0) return;
-        const div = document.createElement("div");
-        // Styling lives in the package's adopted stylesheet under
-        // `.webgl-tooltip` — keeps theme wiring in CSS (via
-        // `--psp-webgl--tooltip--*` custom properties) and reserves
-        // this path for the truly dynamic bits: the bounds-derived
-        // max-height and the post-measurement position.
-        div.className = "webgl-tooltip";
-        div.style.maxHeight = `${Math.round(bounds.cssHeight * 0.6)}px`;
-
-        div.textContent = lines.join("\n");
-
-        // The pinned div uses `position: absolute` and anchors to the
-        // nearest positioned ancestor. Force a positioned parent only
-        // when it's still `static` — flipping an already-positioned
-        // parent (e.g. `.webgl-container` which relies on
-        // `position: absolute` + four-edge insets for sizing) would
-        // collapse its box.
-        if (getComputedStyle(parent).position === "static") {
-            parent.style.position = "relative";
+        if (lines.length === 0) {
+            return;
         }
 
-        div.style.left = "-9999px";
-        div.style.top = "0px";
-        parent.appendChild(div);
-        this._pinnedDiv = div;
-        const divW = div.getBoundingClientRect().width;
-        const divH = div.getBoundingClientRect().height;
-        let tx = pos.px + 12;
-        let ty = pos.py - divH - 8;
-        if (tx + divW > bounds.cssWidth) tx = pos.px - divW - 12;
-        if (tx < 0) tx = 4;
-        if (ty < 0) ty = pos.py + 12;
-        if (ty + divH > bounds.cssHeight) ty = bounds.cssHeight - divH - 4;
-        div.style.left = `${tx}px`;
-        div.style.top = `${ty}px`;
+        this._host?.pin(lines, pos, bounds);
+        this._pinned = true;
     }
 
-    dismissPinned(): void {
-        if (this._pinnedDiv) {
-            this._pinnedDiv.remove();
-            this._pinnedDiv = null;
-        }
+    dismiss(): void {
+        this._host?.dismiss();
+        this._pinned = false;
     }
 }
 
@@ -188,16 +254,23 @@ export class TooltipController {
  * proportionally to its distance from the origin.
  */
 export function renderCanvasTooltip(
-    canvas: HTMLCanvasElement,
+    canvas: Canvas2D | null,
     pos: { px: number; py: number },
     lines: string[],
     layout: PlotLayout,
     theme: Theme,
+    dpr: number,
     options: RenderTooltipOptions = {},
 ): void {
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const dpr = window.devicePixelRatio || 1;
+    if (!canvas) {
+        return;
+    }
+
+    const ctx = canvas.getContext("2d") as Context2D | null;
+    if (!ctx) {
+        return;
+    }
+
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
@@ -207,16 +280,26 @@ export function renderCanvasTooltip(
     let maxWidth = 0;
     for (const line of lines) {
         const w = ctx.measureText(line).width;
-        if (w > maxWidth) maxWidth = w;
+        if (w > maxWidth) {
+            maxWidth = w;
+        }
     }
 
     const boxW = maxWidth + padding * 2;
     const boxH = lines.length * lineHeight + padding * 2 - 4;
     let tx = pos.px + 12;
     let ty = pos.py - boxH - 8;
-    if (tx + boxW > layout.cssWidth) tx = pos.px - boxW - 12;
-    if (ty < 0) ty = pos.py + 12;
-    if (ty + boxH > layout.cssHeight) ty = layout.cssHeight - boxH - 4;
+    if (tx + boxW > layout.cssWidth) {
+        tx = pos.px - boxW - 12;
+    }
+
+    if (ty < 0) {
+        ty = pos.py + 12;
+    }
+
+    if (ty + boxH > layout.cssHeight) {
+        ty = layout.cssHeight - boxH - 4;
+    }
 
     const hasLines = lines.length > 0;
 

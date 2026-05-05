@@ -21,8 +21,12 @@ exports.PerspectiveEsbuildPlugin = function PerspectiveEsbuildPlugin(
     //     !options.wasm?.webpack_hack
     // );
 
+    // `inline` (default true) keeps the legacy single-bundle behavior
+    // — worker source embedded as a string and wrapped in a Blob URL
+    // at runtime. Pass `worker: { inline: false }` to emit the worker
+    // as a sibling file (preserves source maps in DevTools).
     const worker_plugin = WorkerPlugin({
-        targetdir: options.worker?.targetdir,
+        inline: options.worker?.inline !== false,
     });
 
     function setup(build) {

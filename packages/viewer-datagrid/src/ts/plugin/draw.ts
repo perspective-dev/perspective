@@ -47,6 +47,7 @@ export async function draw(
         this.regular_table.scrollLeft = 0;
         this._reset_scroll_left = false;
     }
+
     if (this._reset_select) {
         this.regular_table.dispatchEvent(
             new CustomEvent("psp-deselect-all", { bubbles: false }),

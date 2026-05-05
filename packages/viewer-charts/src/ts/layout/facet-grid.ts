@@ -34,18 +34,32 @@ export type AxisMode = "outer" | "cell" | "none";
 export interface FacetGridOptions {
     cssWidth: number;
     cssHeight: number;
-    /** See {@link AxisMode}. Default `"cell"`. */
+
+    /**
+     * See {@link AxisMode}. Default `"cell"`.
+     */
     xAxis?: AxisMode;
-    /** See {@link AxisMode}. Default `"cell"`. */
+
+    /**
+     * See {@link AxisMode}. Default `"cell"`.
+     */
     yAxis?: AxisMode;
-    /** Reserve a right gutter for a single shared legend. */
+
+    /**
+     * Reserve a right gutter for a single shared legend.
+     */
     hasLegend?: boolean;
+
     /** Axis-label allowance (consumed only when the corresponding axis
      *  mode produces a gutter — outer band or per-cell). */
     hasXLabel?: boolean;
     hasYLabel?: boolean;
-    /** Per-facet title strip height (px). 0 disables. */
+
+    /**
+     * Per-facet title strip height (px). 0 disables.
+     */
     titleBand?: number;
+
     /**
      * Pixel gap between adjacent cells. Carved out of the grid
      * interior before cell sizing; outer edges of the leftmost /
@@ -58,6 +72,7 @@ export interface FacetGridOptions {
 export interface FacetCell {
     index: number;
     label: string;
+
     /**
      * Sub-plot layout. Every cell in a grid has *identical*
      * `plotRect.width` and `plotRect.height` — cell internal margins
@@ -66,7 +81,10 @@ export interface FacetCell {
      * once per frame by the caller.
      */
     layout: PlotLayout;
-    /** Title strip above the facet's plot rect, if `titleBand > 0`. */
+
+    /**
+     * Title strip above the facet's plot rect, if `titleBand > 0`.
+     */
     titleRect?: PlotRect;
     isLeftEdge: boolean;
     isBottomEdge: boolean;
@@ -74,8 +92,12 @@ export interface FacetCell {
 
 export interface FacetGrid {
     cells: FacetCell[];
-    /** Right-gutter rect for the shared legend. */
+
+    /**
+     * Right-gutter rect for the shared legend.
+     */
     legendRect?: PlotRect;
+
     /**
      * Outer band reserved for the shared X axis (ticks + label). Only
      * set when `xAxis === "outer"`. Spans the grid interior's
@@ -83,6 +105,7 @@ export interface FacetGrid {
      * cells.
      */
     outerXAxisRect?: PlotRect;
+
     /**
      * Outer band reserved for the shared Y axis (ticks + label). Only
      * set when `yAxis === "outer"`. Spans the grid interior's
@@ -117,7 +140,10 @@ function pickGridShape(
     gridH: number,
     gap: number,
 ): { cols: number; rows: number } {
-    if (count <= 1) return { cols: 1, rows: 1 };
+    if (count <= 1) {
+        return { cols: 1, rows: 1 };
+    }
+
     let bestCols = 1;
     let bestRows = count;
     let bestCost = Infinity;
@@ -136,6 +162,7 @@ function pickGridShape(
             bestTotal = total;
         }
     }
+
     return { cols: bestCols, rows: bestRows };
 }
 
@@ -180,6 +207,7 @@ export function buildFacetGrid(
 
     const xMode: AxisMode = opts.xAxis ?? "cell";
     const yMode: AxisMode = opts.yAxis ?? "cell";
+
     // Axis-less chart types (trees) benefit from fully-flush cells —
     // no per-cell breathing on the right either, so adjacent plot
     // rects share a boundary instead of leaving a 16 px seam.

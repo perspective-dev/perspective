@@ -18,7 +18,11 @@ import "zx/globals";
 
 dotenv.config({ path: "./.perspectiverc", quiet: true });
 const scope = get_scope();
-if (scope.includes("client")) {
+if (scope.includes("viewer-charts")) {
+    await $`pnpm run --recursive --filter bench bench_charts`.pipe(
+        process.stdout,
+    );
+} else if (scope.includes("client")) {
     await $`pnpm run --recursive --filter bench bench_js`.pipe(process.stdout);
 } else if (scope.includes("python")) {
     $.sync`pnpm run --recursive --filter bench bench_python`;

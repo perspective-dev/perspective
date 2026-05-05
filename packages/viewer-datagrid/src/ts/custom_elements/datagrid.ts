@@ -15,17 +15,14 @@ import { activate } from "../plugin/activate.js";
 import { restore } from "../plugin/restore.js";
 import { save } from "../plugin/save.js";
 import { draw } from "../plugin/draw.js";
-import column_style_controls, {
-    ColumnStyleOpts,
-} from "../plugin/column_style_controls.js";
+import column_config_schema, {
+    ColumnConfigSchema,
+} from "../plugin/column_config_schema.js";
 import datagridStyles from "../../../dist/css/perspective-viewer-datagrid.css";
 import { format_raw } from "../data_listener/format_cell.js";
 
 import type { View, ViewWindow } from "@perspective-dev/client";
-import type {
-    HTMLPerspectiveViewerElement,
-    IPerspectiveViewerPlugin,
-} from "@perspective-dev/viewer";
+import type { IPerspectiveViewerPlugin } from "@perspective-dev/viewer";
 import type {
     DatagridModel,
     DatagridToolbarElement,
@@ -151,8 +148,23 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         return type !== "boolean";
     }
 
-    column_style_controls(type: string, group: string): ColumnStyleOpts {
-        return column_style_controls.call(this, type as any, group);
+    column_config_schema(
+        type: string,
+        group: string | undefined,
+        column_name: string,
+        current_value: Record<string, unknown> | null,
+        viewer_config?: { group_by?: string[]; group_rollup_mode?: string },
+        column_stats?: { abs_max: number },
+    ): ColumnConfigSchema {
+        return column_config_schema.call(
+            this,
+            type as any,
+            group,
+            column_name,
+            current_value,
+            viewer_config,
+            column_stats,
+        );
     }
 
     async draw(view: View): Promise<void> {
@@ -172,9 +184,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         }
     }
 
-    async render(viewport?: ViewWindow): Promise<string> {
-        const viewer = this.parentElement as HTMLPerspectiveViewerElement;
-        const view = await viewer.getView();
+    async render(view: View, viewport?: ViewWindow): Promise<string> {
         const json = await view.to_columns(viewport as any);
         const cols = await view.column_paths(viewport as any);
 
@@ -206,6 +216,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
                     out += col[ridx] + "\t";
                 }
             }
+
             out += "\n";
         }
 
@@ -235,12 +246,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         return restore.call(this, token, columns_config ?? {});
     }
 
-    async restyle(view: View): Promise<void> {
-        // Get view from model if available, otherwise no-op
-        if (this.model?._view) {
-            await this.draw(view);
-        }
-    }
+    restyle() {}
 
     delete(): void {
         this.disconnectedCallback();

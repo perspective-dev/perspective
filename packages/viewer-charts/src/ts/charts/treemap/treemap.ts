@@ -41,8 +41,11 @@ export interface TreemapLocations {
  */
 function firstNonMetadataColumn(columns: ColumnDataMap): string {
     for (const k of columns.keys()) {
-        if (!k.startsWith("__")) return k;
+        if (!k.startsWith("__")) {
+            return k;
+        }
     }
+
     return "";
 }
 
@@ -58,11 +61,10 @@ export class TreemapChart extends TreeChartBase {
     _colorBuffer: WebGLBuffer | null = null;
     _vertexCount = 0;
 
-    // ── Interaction ──────────────────────────────────────────────────────
+    //  Interaction
     _hoveredNodeId: number = NULL_NODE;
     _pinnedNodeId: number = NULL_NODE;
     _breadcrumbRegions: BreadcrumbRegion[] = [];
-    _dblClickHandler: ((e: MouseEvent) => void) | null = null;
     _chromeCache: ImageBitmap | null = null;
     _chromeCacheDirty = true;
 
@@ -78,7 +80,7 @@ export class TreemapChart extends TreeChartBase {
      */
     _chromeCacheGen = 0;
 
-    // ── Faceted state ────────────────────────────────────────────────────
+    //  Faceted state
     /**
      * Per-facet drill roots in split_by mode. Key is the facet label
      * (the top-level child of `_rootId`); value is the currently drilled
@@ -102,6 +104,7 @@ export class TreemapChart extends TreeChartBase {
      * layout.
      */
     _visibleBaseDepths: Int32Array | null = null;
+
     /**
      * Parallel to `_visibleNodeIds`. The drill-root node id that owns
      * each visible node (= `_currentRootId` in non-facet mode, per-
@@ -110,46 +113,39 @@ export class TreemapChart extends TreeChartBase {
      */
     _visibleRootIds: Int32Array | null = null;
 
-    attachTooltip(glCanvas: HTMLCanvasElement): void {
-        this._glCanvas = glCanvas;
-        this._tooltip.attach(glCanvas, {
-            onHover: (mx, my) => handleTreemapHover(this, mx, my),
+    protected override tooltipCallbacks() {
+        return {
+            onHover: (mx: number, my: number) =>
+                handleTreemapHover(this, mx, my),
             onLeave: () => {
                 if (
                     this._hoveredNodeId !== NULL_NODE &&
                     this._pinnedNodeId === NULL_NODE
                 ) {
                     this._hoveredNodeId = NULL_NODE;
-                    if (this._glManager)
+                    if (this._glManager) {
                         renderTreemapFrame(this, this._glManager);
+                    }
                 }
             },
-            onClickPre: (mx, my) => {
+            onClickPre: (mx: number, my: number) => {
                 handleTreemapClick(this, mx, my);
                 return true; // treemap owns all click logic
             },
-        });
-
-        this._dblClickHandler = (e: MouseEvent) => {
-            const rect = glCanvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left;
-            const my = e.clientY - rect.top;
-            handleTreemapDblClick(this, mx, my);
+            onDblClick: (mx: number, my: number) =>
+                handleTreemapDblClick(this, mx, my),
         };
-        glCanvas.addEventListener("dblclick", this._dblClickHandler);
     }
 
-    uploadAndRender(
+    async uploadAndRender(
         glManager: WebGLContextManager,
         columns: ColumnDataMap,
         startRow: number,
         _endRow: number,
-    ): void {
+    ): Promise<void> {
         this._glManager = glManager;
 
         if (startRow === 0) {
-            this._cancelScheduledRender();
-
             const slots = this._columnSlots;
             this._sizeName = slots[0] || firstNonMetadataColumn(columns) || "";
             this._colorName = slots[1] || "";
@@ -180,19 +176,18 @@ export class TreemapChart extends TreeChartBase {
             this._facetGrid = null;
             this._visibleBaseDepths = null;
             this._visibleRootIds = null;
+
             // Invalidate the GPU buffer contents so any render that
             // fires before `generateAndUploadTreemap` has refilled the
             // buffers draws zero triangles instead of the previous
             // tree's geometry.
             this._vertexCount = 0;
-            // Drop any in-flight hover tooltip promise — its serial
-            // is captured by the caller, so bumping here makes stale
-            // resolutions no-ops rather than painting old lines on
-            // the new chart.
-            this._hoveredTooltipLines = null;
-            this._hoveredTooltipNodeId = -1;
-            this._hoveredTooltipSerial++;
-            this._pinnedTooltipSerial++;
+
+            // Drop any in-flight hover tooltip promise — bumping the
+            // controller's serials makes stale resolutions no-ops
+            // rather than painting old lines on the new chart.
+            this._lazyTooltip.clearHover();
+            this._lazyTooltip.invalidatePin();
             dismissTreemapPinnedTooltip(this);
             this._chromeCache?.close();
             this._chromeCache = null;
@@ -204,34 +199,35 @@ export class TreemapChart extends TreeChartBase {
 
         processTreemapChunk(this, columns);
         finalizeTreemap(this);
-        if (this._rootId !== NULL_NODE) this._scheduleRender(glManager);
+        if (this._rootId !== NULL_NODE) {
+            await this.requestRender(glManager);
+        }
     }
 
-    redraw(glManager: WebGLContextManager): void {
+    _fullRender(glManager: WebGLContextManager): void {
+        if (this._rootId === NULL_NODE) {
+            return;
+        }
+
         this._glManager = glManager;
-        if (this._rootId !== NULL_NODE) this._scheduleRender(glManager);
-    }
-
-    protected _fullRender(glManager: WebGLContextManager): void {
         renderTreemapFrame(this, glManager);
     }
 
     protected destroyInternal(): void {
-        if (this._glCanvas && this._dblClickHandler) {
-            this._glCanvas.removeEventListener(
-                "dblclick",
-                this._dblClickHandler,
-            );
-        }
-        this._dblClickHandler = null;
         dismissTreemapPinnedTooltip(this);
         this._chromeCache?.close();
         this._chromeCache = null;
         const gl = this._glManager?.gl;
         if (gl) {
-            if (this._positionBuffer) gl.deleteBuffer(this._positionBuffer);
-            if (this._colorBuffer) gl.deleteBuffer(this._colorBuffer);
+            if (this._positionBuffer) {
+                gl.deleteBuffer(this._positionBuffer);
+            }
+
+            if (this._colorBuffer) {
+                gl.deleteBuffer(this._colorBuffer);
+            }
         }
+
         this._positionBuffer = null;
         this._colorBuffer = null;
         this._program = null;

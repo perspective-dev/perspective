@@ -10,18 +10,15 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+import type { Context2D } from "../canvas-types";
 import type { WebGLContextManager } from "../../webgl/context-manager";
 import type { SunburstChart } from "./sunburst";
 import { NULL_NODE } from "../common/node-store";
-import { resolveTheme, readSeriesPalette } from "../../theme/theme";
 import { resolvePalette, type Vec3 } from "../../theme/palette";
-import {
-    colorValueToT,
-    sampleGradient,
-    type GradientStop,
-} from "../../theme/gradient";
-import { renderLegend, renderCategoricalLegend } from "../../chrome/legend";
+import { type GradientStop } from "../../theme/gradient";
+import { renderLegend, renderCategoricalLegend } from "../../axis/legend";
 import { PlotLayout } from "../../layout/plot-layout";
+import { leafColor, leafRGBA, luminance } from "../common/leaf-color";
 import arcVert from "../../shaders/sunburst-arc.vert.glsl";
 import arcFrag from "../../shaders/sunburst-arc.frag.glsl";
 import { getInstancing } from "../../webgl/instanced-attrs";
@@ -32,7 +29,12 @@ import {
     INNER_RING_PX,
 } from "./sunburst-layout";
 import { buildFacetGrid } from "../../layout/facet-grid";
-import { renderCategoricalLegendAt } from "../../chrome/legend";
+import { renderCategoricalLegendAt } from "../../axis/legend";
+import { withChromeCache } from "../common/chrome-cache";
+import {
+    renderBreadcrumbs as renderTreeBreadcrumbs,
+    renderTreeTooltip,
+} from "../common/tree-chrome";
 
 /**
  * Triangle-strip template resolution. `N_STEPS` angular samples × 2
@@ -44,67 +46,57 @@ const N_STEPS = 32;
 const BREADCRUMB_H = 28;
 const LEGEND_W = 90;
 
-function luminance(r: number, g: number, b: number): number {
-    return 0.299 * r + 0.587 * g + 0.114 * b;
-}
-
-function sampleRGB(stops: GradientStop[], t: number): [number, number, number] {
-    const c = sampleGradient(stops, t);
-    return [c[0], c[1], c[2]];
-}
-
-function leafColor(
+/**
+ * Resolve the `(centerX, centerY)` of the facet that owns `nodeId`.
+ * Walks the ancestor chain and matches against each facet's
+ * `drillRoot`; returns `chart._centerX/_centerY` in non-faceted mode
+ * or as a defensive fallback. Used by every chrome path that needs to
+ * place geometry around an arc — labels, hover highlight, hover
+ * tooltip, pinned tooltip — so all four agree on which facet owns the
+ * node. The chart-wide `_centerX/_centerY` fields are
+ * `layoutFacetedSunburst`'s legacy first-facet publication and are
+ * not safe for these calls.
+ */
+export function facetCenterForNode(
     chart: SunburstChart,
     nodeId: number,
-    stops: GradientStop[],
-    palette: Vec3[],
-): [number, number, number] {
-    const store = chart._nodeStore;
-    const colorValue = store.colorValue[nodeId];
-    if (
-        chart._colorMode === "numeric" &&
-        !isNaN(colorValue) &&
-        chart._colorMax > chart._colorMin
-    ) {
-        return sampleRGB(
-            stops,
-            colorValueToT(colorValue, chart._colorMin, chart._colorMax),
-        );
+): { centerX: number; centerY: number } {
+    if (chart._facets.length === 0) {
+        return { centerX: chart._centerX, centerY: chart._centerY };
     }
-    const idx = chart._uniqueColorLabels.get(store.colorLabel[nodeId]) ?? 0;
-    return palette[idx % palette.length] ?? [0, 0, 0];
+
+    const store = chart._nodeStore;
+    for (const facet of chart._facets) {
+        let p = nodeId;
+        while (p !== NULL_NODE) {
+            if (p === facet.drillRoot) {
+                return { centerX: facet.centerX, centerY: facet.centerY };
+            }
+
+            p = store.parent[p];
+        }
+    }
+
+    return { centerX: chart._centerX, centerY: chart._centerY };
 }
 
 /**
- * `leafColor` + alpha: arcs whose source-row size was negative dim
- * to `negativeAlpha` so they read as "magnitude with inverse sign"
- * rather than disappearing. Mirrors the treemap helper.
+ * Full-frame render: layout → WebGL arcs → chrome overlay.
  */
-function leafRGBA(
-    chart: SunburstChart,
-    nodeId: number,
-    stops: GradientStop[],
-    palette: Vec3[],
-    negativeAlpha: number,
-): [number, number, number, number] {
-    const rgb = leafColor(chart, nodeId, stops, palette);
-    const alpha = chart._nodeStore.sizeSign[nodeId] < 0 ? negativeAlpha : 1.0;
-    return [rgb[0], rgb[1], rgb[2], alpha];
-}
-
-/** Full-frame render: layout → WebGL arcs → chrome overlay. */
 export function renderSunburstFrame(
     chart: SunburstChart,
     glManager: WebGLContextManager,
 ): void {
-    if (chart._currentRootId === NULL_NODE) return;
+    if (chart._currentRootId === NULL_NODE) {
+        return;
+    }
 
     const gl = glManager.gl;
-    const cssWidth = (gl.canvas as HTMLCanvasElement).getBoundingClientRect()
-        .width;
-    const cssHeight = (gl.canvas as HTMLCanvasElement).getBoundingClientRect()
-        .height;
-    if (cssWidth <= 0 || cssHeight <= 0) return;
+    const cssWidth = glManager.cssWidth;
+    const cssHeight = glManager.cssHeight;
+    if (cssWidth <= 0 || cssHeight <= 0) {
+        return;
+    }
 
     const hasSplits =
         chart._splitBy.length > 0 && chart._facetConfig.facet_mode === "grid";
@@ -138,17 +130,16 @@ export function renderSunburstFrame(
 
     ensureProgram(chart, glManager);
 
-    const themeEl = chart._gridlineCanvas || chart._chromeCanvas!;
-    const theme = resolveTheme(themeEl);
+    const theme = chart._resolveTheme();
     const stops = theme.gradientStops;
     const palette = resolvePalette(
-        readSeriesPalette(themeEl),
+        theme.seriesPalette,
         stops,
         Math.max(1, chart._uniqueColorLabels.size),
     );
 
     if (chart._gridlineCanvas) {
-        const gCtx = chart._gridlineCanvas.getContext("2d");
+        const gCtx = chart._gridlineCanvas.getContext("2d") as Context2D | null;
         if (gCtx) {
             gCtx.clearRect(
                 0,
@@ -159,10 +150,9 @@ export function renderSunburstFrame(
         }
     }
 
+    const dpr = glManager.dpr;
     chart._chromeCacheDirty = true;
-    uploadArcInstances(chart, gl, stops, palette, theme.areaOpacity);
-
-    const dpr = window.devicePixelRatio || 1;
+    uploadArcInstances(chart, gl, stops, palette, theme.areaOpacity, dpr);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
@@ -170,11 +160,7 @@ export function renderSunburstFrame(
     gl.useProgram(chart._program!);
 
     const loc = chart._locations!;
-    gl.uniform2f(
-        loc.u_resolution,
-        (gl.canvas as HTMLCanvasElement).width,
-        (gl.canvas as HTMLCanvasElement).height,
-    );
+    gl.uniform2f(loc.u_resolution, gl.canvas.width, gl.canvas.height);
     gl.uniform1f(loc.u_border_px, theme.sunburstGapPx * dpr);
 
     if (chart._facets.length > 0) {
@@ -182,7 +168,10 @@ export function renderSunburstFrame(
         // and instance range. Instance attribs are rebound per facet so
         // instance 0 of each dispatch is the facet's first arc.
         for (const facet of chart._facets) {
-            if (facet.instanceCount === 0) continue;
+            if (facet.instanceCount === 0) {
+                continue;
+            }
+
             gl.uniform2f(
                 loc.u_center,
                 facet.centerX * dpr,
@@ -224,7 +213,10 @@ function layoutFacetedSunburst(
         c !== NULL_NODE;
         c = store.nextSibling[c]
     ) {
-        if (store.value[c] <= 0) continue;
+        if (store.value[c] <= 0) {
+            continue;
+        }
+
         facetIds.push(c);
         labels.push(store.name[c]);
     }
@@ -234,6 +226,7 @@ function layoutFacetedSunburst(
         cssWidth: gridWidth,
         cssHeight,
         hasLegend: false,
+
         // Sunburst has no X/Y axes — no per-cell gutter reservation.
         xAxis: "none",
         yAxis: "none",
@@ -246,7 +239,10 @@ function layoutFacetedSunburst(
     for (let i = 0; i < facetIds.length; i++) {
         const facetId = facetIds[i];
         const cell = grid.cells[i];
-        if (!cell) continue;
+        if (!cell) {
+            continue;
+        }
+
         const label = store.name[facetId];
         const drillRoot = chart._facetDrillRoots.get(label) ?? facetId;
         const plot = cell.layout.plotRect;
@@ -270,9 +266,12 @@ function layoutFacetedSunburst(
             drillRoot,
             instanceStart,
             instanceCount,
+            nodeStart: instanceStart,
+            nodeCount: instanceCount,
         });
         outIdx = nextIdx;
     }
+
     chart._visibleNodeCount = outIdx;
     chart._facets = facets;
 
@@ -290,7 +289,10 @@ function ensureProgram(
     chart: SunburstChart,
     glManager: WebGLContextManager,
 ): void {
-    if (chart._program) return;
+    if (chart._program) {
+        return;
+    }
+
     const gl = glManager.gl;
     const prog = glManager.shaders.getOrCreate(
         "sunburst-arc",
@@ -321,6 +323,7 @@ function ensureProgram(
         template[o + 2] = t;
         template[o + 3] = 1; // outer
     }
+
     chart._stripBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, chart._stripBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, template, gl.STATIC_DRAW);
@@ -334,10 +337,10 @@ function uploadArcInstances(
     stops: GradientStop[],
     palette: Vec3[],
     negativeAlpha: number,
+    dpr: number,
 ): void {
     const store = chart._nodeStore;
     const ids = chart._visibleNodeIds!;
-    const dpr = window.devicePixelRatio || 1;
     const faceted = chart._facets.length > 0;
 
     // Walk each facet's pre-upload visible range (instanceStart and
@@ -359,12 +362,18 @@ function uploadArcInstances(
         const rangeStart = instance;
         for (let i = start; i < end; i++) {
             const id = ids[i];
-            if (id === drillRoot) continue;
+            if (id === drillRoot) {
+                continue;
+            }
+
             const a0 = store.a0[id];
             const a1 = store.a1[id];
             const r0 = store.r0[id];
             const r1 = store.r1[id];
-            if (a1 <= a0 || r1 <= r0) continue;
+            if (a1 <= a0 || r1 <= r0) {
+                continue;
+            }
+
             const color = leafRGBA(chart, id, stops, palette, negativeAlpha);
             const o = instance * 8;
             data[o + 0] = a0;
@@ -377,6 +386,7 @@ function uploadArcInstances(
             data[o + 7] = color[3];
             instance++;
         }
+
         return { rangeStart, rangeCount: instance - rangeStart };
     };
 
@@ -421,7 +431,10 @@ function drawArcs(
     instanceStart: number,
     instanceCount: number,
 ): void {
-    if (instanceCount === 0) return;
+    if (instanceCount === 0) {
+        return;
+    }
+
     const loc = chart._locations!;
 
     // Static strip: per-vertex (strip_t, side).
@@ -489,69 +502,46 @@ function drawArcs(
     setDivisor(loc.a_color, 0);
 }
 
-// ── Chrome overlay (Canvas2D) ────────────────────────────────────────────
+//  Chrome overlay (Canvas2D)
 
 export function renderSunburstChromeOverlay(chart: SunburstChart): void {
-    if (!chart._chromeCanvas || chart._currentRootId === NULL_NODE) return;
-
-    const canvas = chart._chromeCanvas;
-    const dpr = window.devicePixelRatio || 1;
-
-    const domRect = canvas.getBoundingClientRect();
-    const cssWidth = domRect.width;
-    const cssHeight = domRect.height;
-    const targetW = Math.round(cssWidth * dpr);
-    const targetH = Math.round(cssHeight * dpr);
-    if (canvas.width !== targetW || canvas.height !== targetH) {
-        canvas.width = targetW;
-        canvas.height = targetH;
-        chart._chromeCacheDirty = true;
+    if (!chart._chromeCanvas || chart._currentRootId === NULL_NODE) {
+        return;
     }
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    if (chart._chromeCacheDirty) {
-        chart._chromeCache?.close();
-        chart._chromeCache = null;
-        chart._chromeCacheDirty = false;
-        // Bump gen so in-flight `createImageBitmap` calls from prior
-        // static draws see a mismatch and discard their snapshot.
-        const gen = ++chart._chromeCacheGen;
-        drawStaticChrome(chart, ctx, dpr, cssWidth, cssHeight);
-
-        createImageBitmap(canvas).then((bmp) => {
-            if (chart._chromeCacheGen === gen) {
-                chart._chromeCache?.close();
-                chart._chromeCache = bmp;
-            } else {
-                bmp.close();
-            }
-        });
-    } else if (chart._chromeCache) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(chart._chromeCache, 0, 0);
+    const glManager = chart._glManager;
+    if (!glManager) {
+        return;
     }
 
-    if (chart._hoveredNodeId !== NULL_NODE) {
-        ctx.save();
-        ctx.scale(dpr, dpr);
-        renderHoverHighlight(ctx, chart, chart._hoveredNodeId);
-        renderSunburstTooltip(
-            chart,
-            ctx,
-            chart._hoveredNodeId,
-            cssWidth,
-            cssHeight,
-            resolveTheme(canvas).fontFamily,
-        );
-        ctx.restore();
-    }
+    const { dpr, cssWidth, cssHeight } = glManager;
+
+    withChromeCache(
+        chart,
+        chart._chromeCanvas,
+        dpr,
+        cssWidth,
+        cssHeight,
+        (ctx) => drawStaticChrome(chart, ctx, dpr, cssWidth, cssHeight),
+        chart._hoveredNodeId !== NULL_NODE
+            ? (ctx) => {
+                  renderHoverHighlight(ctx, chart, chart._hoveredNodeId);
+                  renderSunburstTooltip(
+                      chart,
+                      ctx,
+                      chart._hoveredNodeId,
+                      cssWidth,
+                      cssHeight,
+                      chart._resolveTheme().fontFamily,
+                  );
+              }
+            : null,
+    );
 }
 
 function drawStaticChrome(
     chart: SunburstChart,
-    ctx: CanvasRenderingContext2D,
+    ctx: Context2D,
     dpr: number,
     cssWidth: number,
     cssHeight: number,
@@ -561,12 +551,11 @@ function drawStaticChrome(
     ctx.save();
     ctx.scale(dpr, dpr);
 
-    const themeEl = chart._gridlineCanvas || canvas;
-    const theme = resolveTheme(themeEl);
+    const theme = chart._resolveTheme();
     const { fontFamily, labelColor: textColor, tooltipBg } = theme;
     const stops = theme.gradientStops;
     const palette = resolvePalette(
-        readSeriesPalette(themeEl),
+        theme.seriesPalette,
         stops,
         Math.max(1, chart._uniqueColorLabels.size),
     );
@@ -574,20 +563,53 @@ function drawStaticChrome(
     const ids = chart._visibleNodeIds!;
     const n = chart._visibleNodeCount;
     const faceted = chart._facets.length > 0;
-    const drillRoots = faceted
-        ? new Set<number>(chart._facets.map((f) => f.drillRoot))
-        : null;
 
-    // Arc labels — skip the facet's own drill root (its label is the
-    // center text / facet title, handled below).
-    for (let i = 0; i < n; i++) {
-        const id = ids[i];
-        if (faceted) {
-            if (drillRoots!.has(id)) continue;
-        } else if (id === chart._currentRootId) {
-            continue;
+    // Arc labels — skip each facet's own drill root (its label is the
+    // center text / facet title, handled below). In faceted mode, walk
+    // each facet's `nodeStart`/`nodeCount` range over `_visibleNodeIds`
+    // and rotate around that facet's `(centerX, centerY)`. Without the
+    // per-facet center, every label translates around the chart's
+    // `_centerX/_centerY`, which `layoutFacetedSunburst` publishes
+    // from facet 0 — the symptom is "all labels pile onto facet 0."
+    if (faceted) {
+        for (const facet of chart._facets) {
+            const end = facet.nodeStart + facet.nodeCount;
+            for (let i = facet.nodeStart; i < end; i++) {
+                const id = ids[i];
+                if (id === facet.drillRoot) {
+                    continue;
+                }
+
+                renderArcLabel(
+                    chart,
+                    ctx,
+                    id,
+                    fontFamily,
+                    stops,
+                    palette,
+                    facet.centerX,
+                    facet.centerY,
+                );
+            }
         }
-        renderArcLabel(chart, ctx, id, fontFamily, stops, palette);
+    } else {
+        for (let i = 0; i < n; i++) {
+            const id = ids[i];
+            if (id === chart._currentRootId) {
+                continue;
+            }
+
+            renderArcLabel(
+                chart,
+                ctx,
+                id,
+                fontFamily,
+                stops,
+                palette,
+                chart._centerX,
+                chart._centerY,
+            );
+        }
     }
 
     // Inner drill-up circle(s). One per facet in faceted mode so each
@@ -610,6 +632,7 @@ function drawStaticChrome(
                 facet.centerX,
                 facet.centerY,
             );
+
             // Facet title band above the arcs.
             if (chart._facetGrid) {
                 const cell = chart._facetGrid.cells.find(
@@ -643,7 +666,7 @@ function drawStaticChrome(
     // Breadcrumbs (non-facet only — per-facet drill is tracked through
     // the per-facet drill root's label, not a global breadcrumb trail).
     if (!faceted && chart._breadcrumbIds.length > 1) {
-        renderBreadcrumbs(chart, ctx, cssWidth, fontFamily, textColor);
+        renderTreeBreadcrumbs(chart, ctx, cssWidth, fontFamily, textColor);
     }
 
     // Legend. In faceted mode use the grid's explicit rect; otherwise
@@ -658,6 +681,7 @@ function drawStaticChrome(
                 chart._facetGrid.legendRect,
                 chart._uniqueColorLabels,
                 palette,
+                theme,
             );
         } else if (
             chart._colorMode === "numeric" &&
@@ -677,6 +701,7 @@ function drawStaticChrome(
                     label: chart._colorName,
                 },
                 stops,
+                theme,
             );
         }
     } else if (
@@ -693,6 +718,7 @@ function drawStaticChrome(
             legendLayout,
             chart._uniqueColorLabels,
             palette,
+            theme,
         );
     } else if (
         chart._colorMode === "numeric" &&
@@ -712,6 +738,7 @@ function drawStaticChrome(
                 label: chart._colorName,
             },
             stops,
+            theme,
         );
     }
 
@@ -732,11 +759,13 @@ function drawStaticChrome(
  */
 function renderArcLabel(
     chart: SunburstChart,
-    ctx: CanvasRenderingContext2D,
+    ctx: Context2D,
     nodeId: number,
     fontFamily: string,
     stops: GradientStop[],
     palette: Vec3[],
+    centerX: number,
+    centerY: number,
 ): void {
     const store = chart._nodeStore;
     const a0 = store.a0[nodeId];
@@ -750,10 +779,14 @@ function renderArcLabel(
 
     // Radial labels need enough ring-width for text length and enough
     // tangential space for font height.
-    if (ringWidth < 16 || arcLen < 8) return;
+    if (ringWidth < 16 || arcLen < 8) {
+        return;
+    }
 
     const fontSize = Math.min(11, Math.floor(arcLen * 0.7));
-    if (fontSize < 7) return;
+    if (fontSize < 7) {
+        return;
+    }
 
     ctx.font = `${fontSize}px ${fontFamily}`;
     const name = store.name[nodeId];
@@ -768,12 +801,16 @@ function renderArcLabel(
             }
         }
     }
-    if (text.length < 2) return;
+
+    if (text.length < 2) {
+        return;
+    }
 
     const midA = (a0 + a1) / 2;
 
     ctx.save();
-    ctx.translate(chart._centerX, chart._centerY);
+    ctx.translate(centerX, centerY);
+
     // Rotate so the local +x axis points outward along the radius
     // through the arc's midpoint. Text then runs along that axis.
     let rot = midA;
@@ -781,6 +818,7 @@ function renderArcLabel(
     if (chart._labelRotation === "upright" && onLeftHalf) {
         rot += Math.PI;
     }
+
     ctx.rotate(rot);
 
     // Pick label color by luminance of the arc's fill for contrast.
@@ -799,56 +837,8 @@ function renderArcLabel(
     ctx.restore();
 }
 
-function renderBreadcrumbs(
-    chart: SunburstChart,
-    ctx: CanvasRenderingContext2D,
-    cssWidth: number,
-    fontFamily: string,
-    textColor: string,
-): void {
-    chart._breadcrumbRegions = [];
-    const bgColor = resolveTheme(chart._chromeCanvas!).tooltipBg;
-
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, cssWidth, 24);
-
-    ctx.font = `11px ${fontFamily}`;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-
-    let x = 8;
-    const y = 12;
-    const store = chart._nodeStore;
-
-    for (let i = 0; i < chart._breadcrumbIds.length; i++) {
-        const crumbId = chart._breadcrumbIds[i];
-        const isLast = i === chart._breadcrumbIds.length - 1;
-        const label = store.name[crumbId];
-
-        ctx.fillStyle = textColor;
-        ctx.font = isLast ? `11px ${fontFamily}` : `11px ${fontFamily}`;
-        const textW = ctx.measureText(label).width;
-        ctx.fillText(label, x, y);
-
-        chart._breadcrumbRegions.push({
-            nodeId: crumbId,
-            x0: x - 2,
-            y0: 0,
-            x1: x + textW + 2,
-            y1: 24,
-        });
-
-        x += textW;
-        if (!isLast) {
-            const sep = " › ";
-            ctx.fillText(sep, x, y);
-            x += ctx.measureText(sep).width;
-        }
-    }
-}
-
 function renderHoverHighlight(
-    ctx: CanvasRenderingContext2D,
+    ctx: Context2D,
     chart: SunburstChart,
     nodeId: number,
 ): void {
@@ -857,70 +847,39 @@ function renderHoverHighlight(
     const a1 = store.a1[nodeId];
     const r0 = store.r0[nodeId];
     const r1 = store.r1[nodeId];
+    const { centerX, centerY } = facetCenterForNode(chart, nodeId);
 
     ctx.strokeStyle = "rgba(255,255,255,0.9)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(chart._centerX, chart._centerY, r1, a0, a1);
-    ctx.arc(chart._centerX, chart._centerY, r0, a1, a0, true);
+    ctx.arc(centerX, centerY, r1, a0, a1);
+    ctx.arc(centerX, centerY, r0, a1, a0, true);
     ctx.closePath();
     ctx.stroke();
 }
 
 function renderSunburstTooltip(
     chart: SunburstChart,
-    ctx: CanvasRenderingContext2D,
+    ctx: Context2D,
     nodeId: number,
     cssWidth: number,
     cssHeight: number,
     fontFamily: string,
 ): void {
-    const theme = resolveTheme(chart._chromeCanvas!);
-    const { tooltipBg, tooltipText, tooltipBorder } = theme;
-
-    // Lines come from the async lazy tooltip fetch in
-    // `handleSunburstHover`; empty while in flight.
-    const lines =
-        chart._hoveredTooltipNodeId === nodeId
-            ? (chart._hoveredTooltipLines ?? [])
-            : [];
-    if (lines.length === 0) return;
-
-    ctx.font = `11px ${fontFamily}`;
-    const lineHeight = 16;
-    const padding = 8;
-    let maxWidth = 0;
-    for (const line of lines) {
-        const w = ctx.measureText(line).width;
-        if (w > maxWidth) maxWidth = w;
-    }
-    const boxW = maxWidth + padding * 2;
-    const boxH = lines.length * lineHeight + padding * 2 - 4;
-
     const store = chart._nodeStore;
     const midA = (store.a0[nodeId] + store.a1[nodeId]) / 2;
     const midR = (store.r0[nodeId] + store.r1[nodeId]) / 2;
-    const cx = chart._centerX + Math.cos(midA) * midR;
-    const cy = chart._centerY + Math.sin(midA) * midR;
-    let tx = cx + 12;
-    let ty = cy - boxH - 8;
-    if (tx + boxW > cssWidth) tx = cx - boxW - 12;
-    if (tx < 0) tx = 4;
-    if (ty < 0) ty = cy + 12;
-    if (ty + boxH > cssHeight) ty = cssHeight - boxH - 4;
-
-    ctx.fillStyle = tooltipBg;
-    ctx.strokeStyle = tooltipBorder;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(tx, ty, boxW, boxH, 4);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = tooltipText;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    for (let i = 0; i < lines.length; i++) {
-        ctx.fillText(lines[i], tx + padding, ty + padding + i * lineHeight);
-    }
+    const { centerX, centerY } = facetCenterForNode(chart, nodeId);
+    const cx = centerX + Math.cos(midA) * midR;
+    const cy = centerY + Math.sin(midA) * midR;
+    renderTreeTooltip(
+        chart,
+        ctx,
+        nodeId,
+        cx,
+        cy,
+        cssWidth,
+        cssHeight,
+        fontFamily,
+    );
 }

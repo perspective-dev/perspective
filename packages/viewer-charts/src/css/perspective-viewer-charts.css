@@ -4,76 +4,14 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    font-family: var(
-        --psp-interface-monospace--font-family,
-        "ui-monospace",
-        "SFMono-Regular",
-        "SF Mono",
-        "Menlo",
-        "Consolas",
-        "Liberation Mono",
-        monospace
-    );
+    font-family: inherit;
 
-    --psp-webgl--font-family: var(
-        --psp-interface-monospace--font-family,
-        "ui-monospace",
-        "SFMono-Regular",
-        "SF Mono",
-        "Menlo",
-        "Consolas",
-        "Liberation Mono",
-        monospace
-    );
-    --psp-webgl--tooltip--color: var(--psp--color);
-    --psp-webgl--tooltip--background: var(--psp--background-color);
-    --psp-webgl--tooltip--border-color: var(--psp-inactive--border-color);
+    /* font-family: var(--psp-interface-monospace--font-family, inherit); */
+    /* --psp-charts--font-family: var(font-family, inherit); */
 
-    /* --psp-webgl--axis-ticks--color: var(
-        --psp-d3fc--axis-ticks--color,
-        rgba(160, 160, 160, 0.8)
-    );
-    --psp-webgl--axis-lines--color: var(
-        --psp-d3fc--axis-lines--color,
-        rgba(160, 160, 160, 0.4)
-    ); */
-    /* --psp-webgl--gridline--color: var(
-        --psp-d3fc--gridline--color,
-        rgba(128, 128, 128, 0.8)
-    ); */
-    /* --psp-webgl--label--color: var(--psp--color);
-    --psp-webgl--legend--color: var(
-        --psp-d3fc--legend--color,
-        var(--psp-d3fc--axis-ticks--color, rgba(180, 180, 180, 0.9))
-    );
-    --psp-webgl--gradient-start--color: var(
-        --psp-d3fc--series-1--color,
-        #0366d6
-    );
-    --psp-webgl--gradient-end--color: var(--psp-d3fc--series-2--color, #ff7f0e);
-    --psp-webgl--tooltip--background: var(
-        --psp-d3fc--tooltip--background-color,
-        rgba(155, 155, 155, 0.8)
-    );
-    --psp-webgl--tooltip--color: var(--psp-d3fc--tooltip--color, #161616);
-    --psp-webgl--tooltip--border-color: var(
-        --psp-d3fc--tooltip--border-color,
-        #fff
-    );
-    --psp-webgl--legend-border--color: var(
-        --psp-d3fc--axis-lines--color,
-        rgba(128, 128, 128, 0.3)
-    ); */
-    /* --psp-webgl--font-family: var(
-        --psp-interface-monospace--font-family,
-        "ui-monospace",
-        "SFMono-Regular",
-        "SF Mono",
-        "Menlo",
-        "Consolas",
-        "Liberation Mono",
-        monospace
-    ); */
+    --psp-charts--tooltip--color: var(--psp--color);
+    --psp-charts--tooltip--background: var(--psp--background-color);
+    --psp-charts--tooltip--border-color: var(--psp-inactive--border-color);
 }
 
 .webgl-container {
@@ -126,12 +64,12 @@
 }
 
 .zoom-reset {
-    background: var(--psp-webgl--tooltip--background);
-    color: var(--psp-webgl--tooltip--color);
-    border: 1px solid var(--psp-webgl--tooltip--border-color);
+    background: var(--psp-charts--tooltip--background);
+    color: var(--psp-charts--tooltip--color);
+    border: 1px solid var(--psp-charts--tooltip--border-color);
     border-radius: 4px;
     padding: 4px 12px;
-    font: 11px var(--psp-webgl--font-family);
+    font: 11px var(--psp-charts--font-family);
     cursor: pointer;
     opacity: 0.7;
     transition: opacity 0.15s;
@@ -144,10 +82,10 @@
 .webgl-tooltip {
     position: absolute;
     pointer-events: auto;
-    font: 11px var(--psp-webgl--font-family);
-    background: var(--psp-webgl--tooltip--background);
-    color: var(--psp-webgl--tooltip--color);
-    border: 1px solid var(--psp-webgl--tooltip--border-color);
+    font: 11px var(--psp-charts--font-family);
+    background: var(--psp-charts--tooltip--background);
+    color: var(--psp-charts--tooltip--color);
+    border: 1px solid var(--psp-charts--tooltip--border-color);
     border-radius: 3px;
     padding: 3px;
     overflow-y: auto;

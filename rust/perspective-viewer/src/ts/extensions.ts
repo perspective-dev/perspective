@@ -178,6 +178,10 @@ export interface PerspectiveViewerElementExt {
      */
     registerPlugin(name: string): Promise<void>;
 
+    get_wasm_module(): WebAssembly.Module;
+
+    get_worker_url(): URL;
+
     addEventListener(
         name: "perspective-click",
         cb: (e: CustomEvent) => void,

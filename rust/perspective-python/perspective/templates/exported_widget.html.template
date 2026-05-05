@@ -1,7 +1,7 @@
 <script type="module" src="$psp_cdn_perspective"></script>
 <script type="module" src="$psp_cdn_perspective_viewer"></script>
 <script type="module" src="$psp_cdn_perspective_viewer_datagrid"></script>
-<script type="module" src="$psp_cdn_perspective_viewer_d3fc"></script>
+<script type="module" src="$psp_cdn_perspective_viewer_charts"></script>
 <link rel="stylesheet" crossorigin="anonymous" href="$psp_cdn_perspective_viewer_themes" />
 
 <div class="perspective-envelope" id="perspective-envelope-$viewer_id">
