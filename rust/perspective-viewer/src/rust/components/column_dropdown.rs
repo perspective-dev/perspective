@@ -91,7 +91,9 @@ impl ColumnDropDownElement {
         let width = target.get_bounding_client_rect().width();
         ApiFuture::spawn(async move {
             if !exclude.contains(&input) {
-                let is_expr = session.validate_expr(&input).await?.is_none();
+                let is_expr = crate::queries::validate_expr(&session, &input)
+                    .await?
+                    .is_none();
                 if is_expr {
                     values.push(InPlaceColumn::Expression(Expression::new(
                         None,

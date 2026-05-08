@@ -60,6 +60,7 @@ pub struct RendererData {
     pub plugin_changed: PubSub<JsPerspectiveViewerPlugin>,
     pub style_changed: PubSub<()>,
     pub reset_changed: PubSub<()>,
+    pub selection_changed: PubSub<Option<ViewWindow>>,
 
     /// Injected callback from the root component, replacing the former
     /// `render_limits_changed: PubSub` field.  Fires after every draw/update
@@ -128,6 +129,7 @@ impl Renderer {
             plugin_changed: Default::default(),
             style_changed: Default::default(),
             reset_changed: Default::default(),
+            selection_changed: Default::default(),
             on_render_limits_changed: Default::default(),
         }))
     }
@@ -223,7 +225,12 @@ impl Renderer {
     }
 
     pub fn set_selection(&self, window: Option<ViewWindow>) {
-        self.borrow_mut().selection = window
+        if self.borrow().selection == window {
+            return;
+        }
+
+        self.borrow_mut().selection = window.clone();
+        self.selection_changed.emit(window);
     }
 
     pub fn get_selection(&self) -> Option<ViewWindow> {

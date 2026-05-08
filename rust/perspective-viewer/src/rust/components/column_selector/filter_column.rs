@@ -25,11 +25,11 @@ use crate::components::containers::select::*;
 use crate::components::filter_dropdown::FilterDropDownElement;
 use crate::components::style::LocalStyle;
 use crate::components::type_icon::TypeIcon;
+use crate::css;
 use crate::dragdrop::*;
 use crate::renderer::*;
 use crate::session::*;
 use crate::utils::*;
-use crate::{css, maybe};
 
 #[derive(Clone, Properties)]
 pub struct FilterColumnProps {
@@ -101,11 +101,11 @@ impl Component for FilterColumn {
             .unwrap_or_else(|| "".to_owned());
 
         this.filter_ops = Rc::new(
-            maybe! {
-                Some(get_filter_ops(&ctx.props().metadata, col_type?)?
+            try {
+                get_filter_ops(&ctx.props().metadata, col_type?)?
                     .into_iter()
                     .map(SelectItem::Option)
-                    .collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
             }
             .unwrap_or_default(),
         );
@@ -189,11 +189,11 @@ impl Component for FilterColumn {
         if col_type != old_col_type {
             changed = true;
             self.filter_ops = Rc::new(
-                maybe! {
-                    Some(get_filter_ops(&ctx.props().metadata, col_type?)?
+                try {
+                    get_filter_ops(&ctx.props().metadata, col_type?)?
                         .into_iter()
                         .map(SelectItem::Option)
-                        .collect::<Vec<_>>())
+                        .collect::<Vec<_>>()
                 }
                 .unwrap_or_default(),
             );

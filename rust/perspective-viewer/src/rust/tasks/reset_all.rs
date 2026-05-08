@@ -10,41 +10,62 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use super::structural::*;
-use crate::config::*;
-use crate::*;
+//! Cross-engine reset orchestration: reset session config, optionally clear
+//! presentation columns config / theme, reset the renderer plugin state, and
+//! redraw.
 
-/// A `ViewerConfig` is constructed from various properties acrosss the
-/// application state
+use futures::channel::oneshot;
+use perspective_client::clone;
+use perspective_js::utils::ApiFuture;
+
+use crate::presentation::Presentation;
+use crate::renderer::Renderer;
+use crate::session::{ResetOptions, Session};
+
+/// Reset the viewer's `ViewerConfig` to the default.
 ///
-/// For example, the current `Plugin`, `ViewConfig`, and `Theme`.
-/// `GetViewerConfigModel` provides methods which should be used to get the
-/// applications `ViewerConfig` from across these state objects.
-pub trait GetViewerConfigModel: HasSession + HasRenderer + HasPresentation {
-    /// Get the current [`ViewerConfig`]`
-    async fn get_viewer_config(&self) -> ApiResult<ViewerConfig> {
-        let version = config::API_VERSION.to_string();
-        let view_config = self.session().get_view_config().clone();
-        let js_plugin = self.renderer().get_active_plugin()?;
-        let settings = self.presentation().is_settings_open();
-        let plugin = js_plugin.name();
-        let plugin_config: serde_json::Value = js_plugin.save()?.into_serde_ext()?;
-        let theme = self.presentation().get_selected_theme_name().await;
-        let title = self.session().get_title();
-        let table = self.session().get_table().map(|x| x.get_name().to_owned());
-        let columns_config = self.presentation().all_columns_configs();
-        Ok(ViewerConfig {
-            version,
-            plugin,
-            title,
-            plugin_config,
-            columns_config,
-            settings,
-            table,
-            view_config,
-            theme,
-        })
-    }
-}
+/// - `all = false`: clears the view config but preserves expressions and
+///   per-column style maps.
+/// - `all = true`: also clears expressions, per-column styles, and theme.
+///
+/// Optionally signals `sender` once the reset+redraw round-trip completes,
+/// then emits `renderer.reset_changed`.
+pub fn reset_all(
+    session: &Session,
+    renderer: &Renderer,
+    presentation: &Presentation,
+    all: bool,
+    sender: Option<oneshot::Sender<()>>,
+) {
+    presentation.set_open_column_settings(None);
+    clone!(session, renderer, presentation);
+    ApiFuture::spawn(async move {
+        session
+            .reset(ResetOptions {
+                config: true,
+                expressions: all,
+                ..ResetOptions::default()
+            })
+            .await?;
+        let columns_config = if all {
+            presentation.reset_columns_configs();
+            None
+        } else {
+            Some(presentation.all_columns_configs())
+        };
 
-impl<T: HasRenderer + HasSession + HasPresentation> GetViewerConfigModel for T {}
+        renderer.reset(columns_config.as_ref()).await?;
+        presentation.reset_available_themes(None).await;
+        if all {
+            presentation.reset_theme().await?;
+        }
+
+        let result = renderer.draw(session.validate().await?.create_view()).await;
+        if let Some(sender) = sender {
+            sender.send(()).unwrap();
+        }
+
+        renderer.reset_changed.emit(());
+        result
+    })
+}

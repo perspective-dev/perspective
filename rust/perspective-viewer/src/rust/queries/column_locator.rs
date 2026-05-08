@@ -12,12 +12,10 @@
 
 use perspective_client::config::{ColumnType, ViewConfig};
 
-use super::HasSession;
 use super::plugin_column_styles::can_render_column_styles;
 use crate::presentation::{ColumnLocator, OpenColumnSettings};
 use crate::renderer::Renderer;
 use crate::session::SessionMetadata;
-use crate::tasks::{HasPresentation, HasRenderer, PluginColumnStyles};
 
 /// Returns the column name for a locator, generating a default for new
 /// expressions.
@@ -87,47 +85,4 @@ pub fn get_current_column_locator(
             },
             _ => true,
         })
-}
-
-/// Trait facade — delegates to standalone functions above.
-pub trait ColumnLocatorExt: HasSession {
-    fn locator_name_or_default(&self, locator: &ColumnLocator) -> String {
-        locator_name_or_default(&self.session().metadata(), locator)
-    }
-
-    fn is_locator_active(&self, locator: &ColumnLocator) -> bool {
-        locator
-            .name()
-            .map(|name| self.session().to_props().is_column_active(name))
-            .unwrap_or_default()
-    }
-
-    fn locator_view_type(&self, locator: &ColumnLocator) -> Option<ColumnType> {
-        locator_view_type(&self.session().metadata(), locator)
-    }
-
-    fn get_column_locator(&self, name: Option<String>) -> Option<ColumnLocator> {
-        get_column_locator(&self.session().metadata(), name)
-    }
-}
-
-impl<T: HasSession> ColumnLocatorExt for T {}
-
-/// Trait facade for `get_current_column_locator`.
-pub trait ColumnLocatorCurrentExt:
-    HasPresentation + HasRenderer + HasSession + PluginColumnStyles
-{
-    fn get_current_column_locator(&self) -> Option<ColumnLocator> {
-        get_current_column_locator(
-            &self.presentation().get_open_column_settings(),
-            self.renderer(),
-            &self.session().get_view_config(),
-            &self.session().metadata(),
-        )
-    }
-}
-
-impl<T: HasPresentation + HasRenderer + HasSession + PluginColumnStyles> ColumnLocatorCurrentExt
-    for T
-{
 }

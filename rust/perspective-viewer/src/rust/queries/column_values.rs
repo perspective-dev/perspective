@@ -10,67 +10,50 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColumnType } from "@perspective-dev/client";
-import type { DatagridPluginElement } from "../types.js";
+use perspective_client::config::ViewConfigUpdate;
+use perspective_client::{ViewWindow, clone};
+use perspective_js::utils::{ApiError, ApiFuture};
 
-interface NumberStyleOpts {
-    datagrid_number_style: {
-        fg_gradient: number;
-        pos_fg_color: string;
-        neg_fg_color: string;
-        number_fg_mode: string;
-        bg_gradient: number;
-        pos_bg_color: string;
-        neg_bg_color: string;
-        number_bg_mode: string;
+use crate::session::Session;
+
+/// Get all unique column values for a given column name.
+///
+/// Use the `.to_csv()` method, as I suspected copying this large string
+/// once was more efficient than copying many smaller strings, and
+/// string copying shows up frequently when doing performance analysis.
+///
+/// TODO Does not work with expressions yet.
+pub async fn get_column_values(session: &Session, column: String) -> Result<Vec<String>, ApiError> {
+    let expressions = Some(session.get_view_config().expressions.clone());
+    let config = ViewConfigUpdate {
+        group_by: Some(vec![column]),
+        columns: Some(vec![]),
+        expressions,
+        ..ViewConfigUpdate::default()
     };
-    number_string_format: boolean;
-}
 
-interface DatetimeStyleOpts {
-    datagrid_datetime_style?: {
-        color: string;
-        bg_color: string;
-    };
-    datagrid_string_style?: {
-        color: string;
-        bg_color: string;
-    };
-}
+    let table = session
+        .get_table()
+        .ok_or_else(|| ApiError::from("No table set"))?;
+    let view = table.view(Some(config.clone())).await?;
+    let csv = view.to_csv(ViewWindow::default()).await?;
 
-export type ColumnStyleOpts = NumberStyleOpts | DatetimeStyleOpts | null;
+    clone!(view);
+    ApiFuture::spawn(async move {
+        view.delete().await?;
+        Ok(())
+    });
 
-export default function column_style_opts(
-    this: DatagridPluginElement,
-    type: ColumnType,
-    _group: string,
-): ColumnStyleOpts {
-    if (type === "integer" || type === "float") {
-        return {
-            datagrid_number_style: {
-                fg_gradient: 0,
-                pos_fg_color: this.model!._pos_fg_color[0],
-                neg_fg_color: this.model!._neg_fg_color[0],
-                number_fg_mode: "color",
-                bg_gradient: 0,
-                pos_bg_color: this.model!._pos_bg_color[0],
-                neg_bg_color: this.model!._neg_bg_color[0],
-                number_bg_mode: "disabled",
-            },
-            number_string_format: true,
-        };
-    } else if (type === "date" || type === "datetime" || type === "string") {
-        const control =
-            type === "date" || type === "datetime"
-                ? "datagrid_datetime_style"
-                : `datagrid_string_style`;
-        return {
-            [control]: {
-                color: this.model!._color[0],
-                bg_color: this.model!._color[0],
-            },
-        } as DatetimeStyleOpts;
-    } else {
-        return null;
-    }
+    let res = csv
+        .lines()
+        .map(|val| {
+            if val.starts_with('\"') && val.ends_with('\"') {
+                (val[1..val.len() - 1]).to_owned()
+            } else {
+                val.to_owned()
+            }
+        })
+        .skip(2)
+        .collect::<Vec<String>>();
+    Ok(res)
 }

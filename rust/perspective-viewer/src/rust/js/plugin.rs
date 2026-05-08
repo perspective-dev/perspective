@@ -70,8 +70,15 @@ extern "C" {
     #[wasm_bindgen(method, catch)]
     pub fn can_render_column_styles(this: &JsPerspectiveViewerPlugin, view_type: &str, group: Option<&str>) -> ApiResult<bool>;
 
-    #[wasm_bindgen(method, catch)]
-    pub fn column_style_controls(this: &JsPerspectiveViewerPlugin, view_type: &str, group: Option<&str>) -> ApiResult<JsValue>;
+    /// Returns the per-column schema describing which controls to render
+    /// in the sidebar Style tab and the keys each control owns in the
+    /// column's persisted config map. `column_stats` carries cached
+    /// per-column numeric stats (currently `{ abs_max?: number }`);
+    /// fields are populated lazily and may be missing on the first
+    /// call — the view re-renders and re-queries the schema once the
+    /// async fetch resolves.
+    #[wasm_bindgen(method, catch, js_name = column_config_schema)]
+    pub fn _column_config_schema(this: &JsPerspectiveViewerPlugin, view_type: &str, group: Option<&str>, column_name: &str, current_value: &JsValue, view_config: &JsValue, column_stats: &JsValue) -> ApiResult<JsValue>;
 
     #[wasm_bindgen(method, catch)]
     pub fn save(this: &JsPerspectiveViewerPlugin) -> ApiResult<JsValue>;

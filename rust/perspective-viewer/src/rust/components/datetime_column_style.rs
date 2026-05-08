@@ -21,19 +21,19 @@ use perspective_js::json;
 use perspective_js::utils::global::navigator;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
-use yew::*;
 
-use super::form::color_selector::*;
 use super::modal::{ModalLink, SetModalLink};
 use super::style::LocalStyle;
 use crate::components::datetime_column_style::custom::DatetimeStyleCustom;
 use crate::components::datetime_column_style::simple::DatetimeStyleSimple;
-use crate::components::form::select_enum_field::SelectEnumField;
 use crate::components::form::select_value_field::SelectValueField;
 use crate::config::*;
 use crate::css;
 use crate::utils::WeakScope;
 
+/// Format-only widget for `datetime` columns. Renders the `date_format`
+/// hierarchy (Simple|Custom + timezone); color/color-mode UI is provided
+/// externally as primitive `Enum` + `Color` schema fields.
 #[derive(Properties, Derivative)]
 #[derivative(Debug)]
 pub struct DatetimeColumnStyleProps {
@@ -42,7 +42,10 @@ pub struct DatetimeColumnStyleProps {
     pub default_config: DatetimeColumnStyleDefaultConfig,
 
     #[prop_or_default]
-    pub on_change: Callback<ColumnConfigValueUpdate>,
+    pub on_change: Callback<ColumnConfigFieldUpdate>,
+
+    #[prop_or_default]
+    pub keys: Vec<String>,
 
     #[prop_or_default]
     #[derivative(Debug = "ignore")]
@@ -67,16 +70,11 @@ pub enum DatetimeColumnStyleMsg {
     SimpleDatetimeStyleConfigChanged(SimpleDatetimeStyleConfig),
     CustomDatetimeStyleConfigChanged(CustomDatetimeStyleConfig),
     TimezoneChanged(Option<String>),
-    ColorModeChanged(Option<DatetimeColorMode>),
-    ColorChanged(String),
-    ColorReset,
 }
 
-/// Column style controls for the `datetime` type.
 #[derive(Debug)]
 pub struct DatetimeColumnStyle {
     config: DatetimeColumnStyleConfig,
-    default_config: DatetimeColumnStyleDefaultConfig,
 }
 
 impl Component for DatetimeColumnStyle {
@@ -87,11 +85,9 @@ impl Component for DatetimeColumnStyle {
         ctx.set_modal_link();
         Self {
             config: ctx.props().config.clone().unwrap_or_default(),
-            default_config: ctx.props().default_config.clone(),
         }
     }
 
-    // Always re-render when config changes.
     fn changed(&mut self, ctx: &Context<Self>, old: &Self::Properties) -> bool {
         let mut rerender = false;
         let mut new_config = ctx.props().config.clone().unwrap_or_default();
@@ -105,7 +101,6 @@ impl Component for DatetimeColumnStyle {
         rerender
     }
 
-    // TODO could be more conservative here with re-rendering
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             DatetimeColumnStyleMsg::TimezoneChanged(val) => {
@@ -118,17 +113,6 @@ impl Component for DatetimeColumnStyle {
                 self.dispatch_config(ctx);
                 true
             },
-            DatetimeColumnStyleMsg::ColorModeChanged(mode) => {
-                self.config.datetime_color_mode = mode.unwrap_or_default();
-                self.dispatch_config(ctx);
-                true
-            },
-            DatetimeColumnStyleMsg::ColorChanged(color) => {
-                self.config.color = Some(color);
-                self.dispatch_config(ctx);
-                true
-            },
-
             DatetimeColumnStyleMsg::SimpleDatetimeStyleConfigChanged(simple) => {
                 self.config.date_format = DatetimeFormatType::Simple(simple);
                 self.dispatch_config(ctx);
@@ -139,40 +123,14 @@ impl Component for DatetimeColumnStyle {
                 self.dispatch_config(ctx);
                 true
             },
-            DatetimeColumnStyleMsg::ColorReset => {
-                self.config.color = Some(self.default_config.color.clone());
-                self.dispatch_config(ctx);
-                true
-            },
         }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let selected_color_mode = self.config.datetime_color_mode;
-        let color_mode_changed = ctx
-            .link()
-            .callback(DatetimeColumnStyleMsg::ColorModeChanged);
-
-        let color_controls = match selected_color_mode {
-            DatetimeColorMode::None => html! {},
-            DatetimeColorMode::Foreground => {
-                self.color_select_row(ctx, &DatetimeColorMode::Foreground, "foreground-label")
-            },
-            DatetimeColorMode::Background => {
-                self.color_select_row(ctx, &DatetimeColorMode::Background, "background-label")
-            },
-        };
-
         html! {
             <>
                 <LocalStyle href={css!("column-style")} />
                 <div id="column-style-container" class="datetime-column-style-container">
-                    <SelectEnumField<DatetimeColorMode>
-                        label="color"
-                        on_change={color_mode_changed}
-                        current_value={selected_color_mode}
-                    />
-                    { color_controls }
                     if ctx.props().enable_time_config {
                         <SelectValueField<String>
                             label="timezone"
@@ -251,35 +209,18 @@ static USER_TIMEZONE: LazyLock<String> = LazyLock::new(|| {
 impl DatetimeColumnStyle {
     /// When this config has changed, we must signal the wrapper element.
     fn dispatch_config(&self, ctx: &Context<Self>) {
-        let update =
-            Some(self.config.clone()).filter(|x| x != &DatetimeColumnStyleConfig::default());
-        ctx.props()
-            .on_change
-            .emit(ColumnConfigValueUpdate::DatagridDatetimeStyle(update));
-    }
-
-    /// Generate a color selector component for a specific `StringColorMode`
-    /// variant.
-    fn color_select_row(&self, ctx: &Context<Self>, mode: &DatetimeColorMode, title: &str) -> Html {
-        let on_color = ctx.link().callback(DatetimeColumnStyleMsg::ColorChanged);
-        let color = self
-            .config
-            .color
-            .clone()
-            .unwrap_or_else(|| self.default_config.color.to_owned());
-
-        let color_props = props!(ColorProps {
-            title: title.to_owned(),
-            on_color,
-            is_modified: color != self.default_config.color,
-            color,
-            on_reset: ctx.link().callback(|_| DatetimeColumnStyleMsg::ColorReset)
-        });
-
-        if &self.config.datetime_color_mode == mode {
-            html! { <div class="row"><ColorSelector ..color_props /></div> }
+        let value = if self.config == DatetimeColumnStyleConfig::default() {
+            serde_json::Map::new()
         } else {
-            html! {}
-        }
+            match serde_json::to_value(&self.config) {
+                Ok(serde_json::Value::Object(m)) => m,
+                _ => serde_json::Map::new(),
+            }
+        };
+
+        ctx.props().on_change.emit(ColumnConfigFieldUpdate {
+            keys: ctx.props().keys.clone(),
+            value,
+        });
     }
 }

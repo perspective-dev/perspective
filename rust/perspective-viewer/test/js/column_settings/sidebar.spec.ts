@@ -259,7 +259,7 @@ test.describe("Column Settings Sidebar", () => {
         // expect -ve color input on color range is present and has valid default value
         const getFgColorNeg = async () => {
             return view.columnSettingsSidebar.styleTab.container.locator(
-                "#fg-color-neg",
+                "#foreground-neg",
             );
         };
         let fgColorNeg = await getFgColorNeg();

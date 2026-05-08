@@ -10,28 +10,46 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type * as wasm_module_type from "../../dist/wasm/perspective-viewer.js";
-import { load_wasm_stage_0 } from "@perspective-dev/client/src/ts/wasm/decompress.ts";
+use crate::config::*;
+use crate::presentation::Presentation;
+use crate::renderer::Renderer;
+use crate::session::Session;
+use crate::*;
 
-// @ts-ignore
-import * as worker_url from "./perspective-viewer.worker";
-
-export async function init_client(
-    wasm_binary:
-        | Promise<Response | ArrayBuffer | Uint8Array>
-        | Response
-        | ArrayBuffer
-        | Uint8Array,
-    wasm_module?: typeof wasm_module_type,
-) {
-    // @ts-ignore
-    const url = await worker_url.getWorkerURL();
-    if (wasm_module === undefined) {
-        wasm_module = (await import(url)) as typeof wasm_module_type;
-    }
-
-    const unzipped = await load_wasm_stage_0(wasm_binary);
-    const module_or_path = await WebAssembly.compile(unzipped as BufferSource);
-    await wasm_module.default({ module_or_path });
-    await wasm_module.init(module_or_path, url);
+/// Compose the current [`ViewerConfig`] from across the engine handles.
+///
+/// The `view_config` field is read from the snapshot the currently-bound
+/// `View` was constructed from, so it is consistent with what the active
+/// plugin is rendering. Falls back to the live session config if no
+/// `View` exists yet.
+pub async fn get_viewer_config(
+    session: &Session,
+    renderer: &Renderer,
+    presentation: &Presentation,
+) -> ApiResult<ViewerConfig> {
+    let version = config::API_VERSION.to_string();
+    let view_config = if let Some(rendered) = session.get_rendered_view_config() {
+        (*rendered).clone()
+    } else {
+        session.get_view_config().clone()
+    };
+    let js_plugin = renderer.get_active_plugin()?;
+    let settings = presentation.is_settings_open();
+    let plugin = js_plugin.name();
+    let plugin_config: serde_json::Value = js_plugin.save()?.into_serde_ext()?;
+    let theme = presentation.get_selected_theme_name().await;
+    let title = session.get_title();
+    let table = session.get_table().map(|x| x.get_name().to_owned());
+    let columns_config = presentation.all_columns_configs();
+    Ok(ViewerConfig {
+        version,
+        plugin,
+        title,
+        plugin_config,
+        columns_config,
+        settings,
+        table,
+        view_config,
+        theme,
+    })
 }

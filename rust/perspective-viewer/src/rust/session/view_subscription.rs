@@ -153,6 +153,16 @@ impl ViewSubscription {
         &self.data.view
     }
 
+    /// Snapshot of the [`ViewConfig`] the bound `View` was constructed
+    /// from (or its operationally-equivalent successor on the
+    /// [`ValidSession::create_view`] fast path). This is the
+    /// [`ViewConfig`] consistent with the data the active plugin is
+    /// currently rendering — not the live session config, which may
+    /// have been mutated synchronously ahead of the next queued draw.
+    pub fn get_view_config(&self) -> Rc<ViewConfig> {
+        self.data.config.clone()
+    }
+
     /// Delete this `View`. Neglecting to call this method before a
     /// `ViewSubscription` is dropped will result in a log warning, but the
     /// `View` will not leak.

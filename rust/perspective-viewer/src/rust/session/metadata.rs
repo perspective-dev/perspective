@@ -140,14 +140,14 @@ impl SessionMetadata {
     }
 
     pub fn get_expression_columns(&self) -> impl Iterator<Item = &'_ String> {
-        maybe!(Some(
+        try {
             self.as_ref()?
                 .expr_meta
                 .as_ref()?
                 .expressions
                 .expression_schema
                 .keys()
-        ))
+        }
         .into_iter()
         .flatten()
     }
@@ -173,30 +173,28 @@ impl SessionMetadata {
     /// # Arguments
     /// - `alias` An alias name for an expression column in this `Session`.
     pub fn get_edit_by_alias(&self, alias: &str) -> Option<String> {
-        maybe!(
+        try {
             self.as_ref()?
                 .expr_meta
                 .as_ref()?
                 .edited
                 .get(alias)
-                .cloned()
-        )
+                .cloned()?
+        }
     }
 
     pub fn set_edit_by_alias(&mut self, alias: &str, edit: String) {
-        drop(maybe!(
+        let _: Option<_> = try {
             self.as_mut()?
                 .expr_meta
                 .as_mut()?
                 .edited
                 .insert(alias.to_owned(), edit)
-        ))
+        };
     }
 
     pub fn clear_edit_by_alias(&mut self, alias: &str) {
-        drop(maybe!(
-            self.as_mut()?.expr_meta.as_mut()?.edited.remove(alias)
-        ))
+        let _: Option<_> = try { self.as_mut()?.expr_meta.as_mut()?.edited.remove(alias) };
     }
 
     pub fn get_table_columns(&self) -> Option<&'_ Vec<String>> {
@@ -204,14 +202,14 @@ impl SessionMetadata {
     }
 
     pub fn is_column_expression(&self, name: &str) -> bool {
-        let is_expr = maybe!(Some(
+        let is_expr: Option<bool> = try {
             self.as_ref()?
                 .expr_meta
                 .as_ref()?
                 .expressions
                 .expression_schema
                 .contains_key(name)
-        ));
+        };
 
         is_expr.unwrap_or_default()
     }
@@ -242,7 +240,7 @@ impl SessionMetadata {
     /// - `name` The column name (or expresison alias) to retrieve a principal
     ///   type.
     pub fn get_column_table_type(&self, name: &str) -> Option<ColumnType> {
-        maybe!({
+        try {
             let meta = self.as_ref()?;
             meta.table_schema.get(name).cloned().or_else(|| {
                 meta.expr_meta
@@ -251,8 +249,8 @@ impl SessionMetadata {
                     .expression_schema
                     .get(name)
                     .cloned()
-            })
-        })
+            })?
+        }
     }
 
     /// Returns the type of a column name relative to the `View`, including
@@ -265,7 +263,8 @@ impl SessionMetadata {
     /// - `name` The column name (or expresison alias) to retrieve a `View`
     ///   type.
     pub fn get_column_view_type(&self, name: &str) -> Option<ColumnType> {
-        maybe!(self.as_ref()?.view_schema.as_ref()?.get(name)).cloned()
+        let r: Option<&ColumnType> = try { self.as_ref()?.view_schema.as_ref()?.get(name)? };
+        r.cloned()
     }
 
     pub fn get_column_aggregates<'a>(

@@ -30,7 +30,6 @@ pub mod form;
 pub mod function_dropdown;
 pub mod main_panel;
 pub mod modal;
-pub mod number_column_style;
 pub mod number_series_style;
 pub mod plugin_selector;
 pub mod portal;

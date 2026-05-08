@@ -578,7 +578,13 @@ impl VirtualDataSlice {
     ///
     /// When `group_by` is active, extracts `__GROUPING_ID__` and
     /// `__ROW_PATH_N__` columns to build `self.row_path`, then removes
-    /// them from the output `RecordBatch`.
+    /// `__GROUPING_ID__` from the output `RecordBatch`. The
+    /// `__ROW_PATH_N__` columns are *kept* in the frozen batch so
+    /// downstream Arrow IPC consumers (`with_typed_arrays`, used by
+    /// viewer-charts to drive its categorical/numeric axis resolvers
+    /// and tree-hierarchy walkers) see them inline — matching the
+    /// native `perspective-server`'s `to_arrow` output when
+    /// `emit_legacy_row_path_names: false`.
     ///
     /// When `split_by` is active, renames data columns by replacing `_`
     /// with `|` (the DuckDB PIVOT separator).
@@ -660,7 +666,22 @@ impl VirtualDataSlice {
         let mut new_arrays: Vec<ArrayRef> = Vec::new();
         for (col_idx, field) in schema.fields().iter().enumerate() {
             let name = field.name();
-            if name == "__GROUPING_ID__" || name.starts_with("__ROW_PATH_") {
+            // `__GROUPING_ID__` is an internal SQL-rollup discriminator
+            // (used in Phase A above to decide which row-path levels
+            // belong to each row). No JS consumer reads it, so it's
+            // dropped from the frozen batch.
+            //
+            // `__ROW_PATH_N__` columns are kept. Phase A copied their
+            // values into `self.row_path` for the JSON sidecar paths
+            // (`render_to_columns_json`, `render_to_rows`), but
+            // viewer-charts' `with_typed_arrays` callback needs the
+            // per-level columns inline in the Arrow stream — its
+            // categorical-axis resolver, numeric-position lookup, and
+            // tree hierarchy walker all do `columns.get(\`__ROW_PATH_${n}__\`)`.
+            // Keeping the columns here lets `render_to_arrow_ipc`
+            // serialize them naturally, matching native
+            // `perspective-server`'s `to_arrow` output.
+            if name == "__GROUPING_ID__" {
                 continue;
             }
 
@@ -801,6 +822,25 @@ impl VirtualDataSlice {
                                 let arr = col.as_any().downcast_ref::<Int32Array>().unwrap();
                                 VirtualDataCell::Integer(Some(arr.value(row_idx)))
                             },
+                            DataType::Int64 => {
+                                // TODO ????
+                                let arr = col.as_any().downcast_ref::<Int64Array>().unwrap();
+                                VirtualDataCell::Float(Some(arr.value(row_idx) as f64))
+                            },
+                            DataType::Time64(TimeUnit::Microsecond) => {
+                                let arr = col
+                                    .as_any()
+                                    .downcast_ref::<Time64MicrosecondArray>()
+                                    .unwrap();
+                                VirtualDataCell::Float(Some(arr.value(row_idx) as f64))
+                            },
+                            DataType::Timestamp(TimeUnit::Microsecond, _) => {
+                                let arr = col
+                                    .as_any()
+                                    .downcast_ref::<Time64MicrosecondArray>()
+                                    .unwrap();
+                                VirtualDataCell::Datetime(Some(arr.value(row_idx) * 1000))
+                            },
                             DataType::Timestamp(TimeUnit::Millisecond, _) => {
                                 let arr = col
                                     .as_any()
@@ -914,6 +954,20 @@ impl VirtualDataSlice {
                             .collect::<Vec<_>>(),
                     )?
                 },
+                DataType::Int64 => {
+                    let arr = col.as_any().downcast_ref::<Int64Array>().unwrap();
+                    serde_json::to_value(
+                        (0..num_rows)
+                            .map(|i| {
+                                if arr.is_null(i) {
+                                    None
+                                } else {
+                                    Some(arr.value(i) as f64)
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    )?
+                },
                 DataType::Timestamp(TimeUnit::Millisecond, _) => {
                     let arr = col
                         .as_any()
@@ -926,6 +980,23 @@ impl VirtualDataSlice {
                                     None
                                 } else {
                                     Some(arr.value(i))
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    )?
+                },
+                DataType::Time64(TimeUnit::Microsecond) => {
+                    let arr = col
+                        .as_any()
+                        .downcast_ref::<Time64MicrosecondArray>()
+                        .unwrap();
+                    serde_json::to_value(
+                        (0..num_rows)
+                            .map(|i| {
+                                if arr.is_null(i) {
+                                    None
+                                } else {
+                                    Some(arr.value(i) as f64)
                                 }
                             })
                             .collect::<Vec<_>>(),

@@ -26,9 +26,9 @@ use crate::components::type_icon::TypeIcon;
 use crate::dragdrop::*;
 use crate::js::plugin::*;
 use crate::presentation::ColumnLocator;
+use crate::queries::*;
 use crate::renderer::*;
 use crate::session::*;
-use crate::tasks::*;
 use crate::utils::*;
 
 #[derive(Clone, Properties)]

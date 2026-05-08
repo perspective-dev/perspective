@@ -25,7 +25,7 @@ use yew::{Callback, Html, Properties, html};
 use crate::components::column_settings_sidebar::style_tab::symbol::symbol_pairs::PairsList;
 use crate::components::filter_dropdown::{FilterDropDownElement, FilterDropDownPortal};
 use crate::components::style::LocalStyle;
-use crate::config::{ColumnConfigValueUpdate, KeyValueOpts, SymbolKVPair};
+use crate::config::{ColumnConfigFieldUpdate, KeyValueOpts, SymbolKVPair};
 use crate::css;
 use crate::session::Session;
 
@@ -34,10 +34,12 @@ pub struct SymbolAttrProps {
     pub session: Session,
     pub column_name: String,
     pub restored_config: Option<HashMap<String, String>>,
-    pub on_change: Callback<ColumnConfigValueUpdate>,
+    pub on_change: Callback<ColumnConfigFieldUpdate>,
     pub default_config: KeyValueOpts,
     /// Selected theme name, threaded for PortalModal consumers.
     pub selected_theme: Option<String>,
+    #[prop_or_default]
+    pub keys: Vec<String>,
 }
 impl SymbolAttrProps {
     pub fn next_default_symbol(&self, pairs_len: usize) -> String {
@@ -92,10 +94,17 @@ impl yew::Component for SymbolStyle {
                     .into_iter()
                     .filter_map(|pair| Some((pair.key?, pair.value)))
                     .collect::<HashMap<_, _>>();
-                let update = Some(symbols).filter(|x| !x.is_empty());
-                ctx.props()
-                    .on_change
-                    .emit(ColumnConfigValueUpdate::Symbols(update));
+                let mut value = serde_json::Map::new();
+                if !symbols.is_empty() {
+                    value.insert(
+                        "symbols".to_owned(),
+                        serde_json::to_value(&symbols).unwrap_or(serde_json::Value::Null),
+                    );
+                }
+                ctx.props().on_change.emit(ColumnConfigFieldUpdate {
+                    keys: ctx.props().keys.clone(),
+                    value,
+                });
 
                 let has_last_key = new_pairs
                     .last()

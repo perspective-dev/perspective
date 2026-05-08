@@ -38,8 +38,9 @@ pub mod exprtk;
 mod js;
 mod root;
 
-pub mod engines;
 mod presentation;
+#[doc(hidden)]
+pub mod queries;
 mod renderer;
 mod session;
 #[doc(hidden)]

@@ -20,7 +20,6 @@ use crate::dragdrop::*;
 use crate::renderer::*;
 use crate::session::SessionMetadata;
 use crate::utils::DragTarget;
-use crate::*;
 
 /// The possible states of a column (row) in the active columns list, including
 /// the `Option<String>` label type.
@@ -254,12 +253,11 @@ impl<'a> ColumnsIteratorSet<'a> {
         &'a self,
         values: impl Iterator<Item = &'a String>,
     ) -> impl Iterator<Item = OrderedColumn<'a>> {
-        let is_drag_active = maybe! {
+        let is_drag_active: Option<bool> = try {
             let dragover_col = self.is_dragover_column.as_ref();
             let cols = &self.config.columns;
             let (_, drag_name) = dragover_col?;
-            let is_drag_active = cols.iter().flatten().any(|x| x == drag_name);
-            Some(is_drag_active)
+            cols.iter().flatten().any(|x| x == drag_name)
         };
 
         let col_set = self.config.columns.iter().collect::<HashSet<_>>();
@@ -282,11 +280,11 @@ impl<'a> ColumnsIteratorSet<'a> {
         let dragover_col = self.is_dragover_column.as_ref();
         let cols = &self.config.columns;
         let is_active = col_set.contains(&Some(name.to_string())); // cols.iter().flatten().any(|x| x == name);
-        let is_swap_over = maybe! {
+        let is_swap_over: Option<bool> = try {
             let (drop_index, _) = dragover_col?;
             let is_swap = self.renderer.metadata().is_swap(*drop_index);
             let is_over = cols.get(*drop_index)?.as_ref()? == name;
-            Some(is_swap && is_over && !is_drag_active?)
+            is_swap && is_over && !is_drag_active?
         };
 
         if !is_active || is_swap_over.unwrap_or_default() {

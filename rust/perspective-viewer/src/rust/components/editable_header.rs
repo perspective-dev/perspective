@@ -18,7 +18,6 @@ use yew::{Callback, Component, Html, NodeRef, Properties, TargetCast, classes, h
 
 use super::type_icon::TypeIconType;
 use crate::components::type_icon::TypeIcon;
-use crate::maybe;
 use crate::session::{Session, SessionMetadataRc};
 
 #[derive(Clone, PartialEq, Properties)]
@@ -103,7 +102,7 @@ impl Component for EditableHeader {
                 let maybe_value = (!new_value.is_empty()).then_some(new_value.clone());
                 self.edited = ctx.props().initial_value != maybe_value;
 
-                self.valid = maybe!({
+                self.valid = (|| -> Option<bool> {
                     if maybe_value
                         .as_ref()
                         .map(|v| v == &self.placeholder)
@@ -122,7 +121,7 @@ impl Component for EditableHeader {
                         .chain(expressions)
                         .contains(&new_value);
                     Some(!found)
-                })
+                })()
                 .unwrap_or(true);
 
                 self.value.clone_from(&maybe_value);

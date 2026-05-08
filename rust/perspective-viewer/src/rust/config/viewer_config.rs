@@ -10,7 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::LazyLock;
 
@@ -21,7 +20,6 @@ use serde_json::Value;
 use ts_rs::TS;
 use wasm_bindgen::prelude::*;
 
-use super::ColumnConfigValues;
 use crate::presentation::ColumnConfigMap;
 
 /// The state of an entire `custom_elements::PerspectiveViewerElement` component
@@ -162,7 +160,7 @@ pub type ThemeUpdate = OptionalUpdate<String>;
 pub type TitleUpdate = OptionalUpdate<String>;
 pub type TableUpdate = OptionalUpdate<String>;
 pub type VersionUpdate = OptionalUpdate<String>;
-pub type ColumnConfigUpdate = OptionalUpdate<HashMap<String, ColumnConfigValues>>;
+pub type ColumnConfigUpdate = OptionalUpdate<ColumnConfigMap>;
 
 /// Handles `{}` when included as a field with `#[serde(default)]`.
 impl<T: Clone> Default for OptionalUpdate<T> {

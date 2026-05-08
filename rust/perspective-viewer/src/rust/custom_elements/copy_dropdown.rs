@@ -23,8 +23,11 @@ use super::viewer::PerspectiveViewerElement;
 use crate::components::copy_dropdown::CopyDropDownMenu;
 use crate::components::portal::PortalModal;
 use crate::components::style::StyleProvider;
+use crate::config::*;
 use crate::js::*;
+use crate::presentation::Presentation;
 use crate::renderer::*;
+use crate::session::Session;
 use crate::tasks::*;
 use crate::utils::*;
 use crate::*;
@@ -130,57 +133,66 @@ impl CopyDropDownMenuElement {
     }
 
     pub fn __set_model(&self, parent: &PerspectiveViewerElement) {
-        self.set_config_model(parent)
+        self.set_config_model(&parent.session, &parent.renderer, &parent.presentation)
     }
 
     pub fn connected_callback(&self) {}
 }
 
 impl CopyDropDownMenuElement {
-    pub fn new_from_model<A>(model: &A) -> Self
-    where
-        A: GetViewerConfigModel + StateProvider,
-        <A as StateProvider>::State: HasPresentation + HasRenderer + HasSession,
-    {
+    pub fn new_from_model(
+        session: &Session,
+        renderer: &Renderer,
+        presentation: &Presentation,
+    ) -> Self {
         let dropdown = global::document()
             .create_element("perspective-copy-menu")
             .unwrap()
             .unchecked_into::<HtmlElement>();
 
         let elem = Self::new(dropdown);
-        elem.set_config_model(model);
+        elem.set_config_model(session, renderer, presentation);
         elem
     }
 
-    pub fn set_config_model<A>(&self, model: &A)
-    where
-        A: GetViewerConfigModel + StateProvider,
-        <A as StateProvider>::State: HasPresentation + HasRenderer + HasSession,
-    {
+    pub fn set_config_model(
+        &self,
+        session: &Session,
+        renderer: &Renderer,
+        presentation: &Presentation,
+    ) {
         let callback = Callback::from({
-            let model = model.clone_state();
+            let session = session.clone();
+            let renderer = renderer.clone();
+            let presentation = presentation.clone();
             let target = self.target.clone();
             let root = self.root.clone();
             move |x: ExportFile| {
-                let model = model.clone();
+                let session = session.clone();
+                let renderer = renderer.clone();
+                let presentation = presentation.clone();
                 let target = target.clone();
                 let root = root.clone();
                 spawn_local(async move {
                     let mime = x.method.mimetype(x.is_chart);
-                    let task = model.export_method_to_blob(x.method);
+                    let task = export_method_to_blob(&session, &renderer, &presentation, x.method);
                     let result = copy_to_clipboard(task, mime).await;
-                    crate::maybe_log!({
+                    let r = (|| -> ApiResult<()> {
                         result?;
                         *target.borrow_mut() = None;
                         if let Some(root) = root.borrow().as_ref() {
                             root.send_message(CopyDropDownWrapperMsg::Close);
                         }
-                    })
+                        Ok(())
+                    })();
+                    if let Err(e) = r {
+                        web_sys::console::warn_1(&e.into());
+                    }
                 })
             }
         });
 
-        let renderer = model.renderer().clone();
+        let renderer = renderer.clone();
         let init = ShadowRootInit::new(ShadowRootMode::Open);
         let shadow_root = self
             .elem

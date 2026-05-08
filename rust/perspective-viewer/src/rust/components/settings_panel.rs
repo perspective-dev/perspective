@@ -22,10 +22,10 @@ use crate::components::containers::sidebar_close_button::SidebarCloseButton;
 use crate::config::PluginUpdate;
 use crate::dragdrop::*;
 use crate::presentation::{ColumnLocator, OpenColumnSettings, Presentation};
+use crate::queries::can_render_column_styles;
 use crate::renderer::*;
 use crate::session::column_defaults_update::*;
 use crate::session::*;
-use crate::tasks::can_render_column_styles;
 use crate::utils::*;
 
 #[derive(Clone, Properties)]

@@ -182,6 +182,13 @@
                 if (state.table) {
                     // await viewer.eject();
                     // await window.psp_workspace.removeTable("superstore");
+                    for (const viewer of window.psp_workspace.children) {
+                        const cfg = await viewer.save();
+                        if (cfg.table === "superstore") {
+                            await viewer.eject();
+                        }
+                    }
+
                     await state.table.then((x) => x.delete({ lazy: true }));
                     state.table = undefined;
                 }

@@ -19,7 +19,6 @@ use crate::js::*;
 use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::Session;
-use crate::tasks::*;
 use crate::utils::*;
 use crate::*;
 
@@ -77,30 +76,18 @@ struct IntersectionObserverState {
     presentation: Presentation,
 }
 
-impl HasPresentation for IntersectionObserverState {
-    fn presentation(&self) -> &Presentation {
-        &self.presentation
-    }
-}
-
-impl HasRenderer for IntersectionObserverState {
-    fn renderer(&self) -> &Renderer {
-        &self.renderer
-    }
-}
-
-impl HasSession for IntersectionObserverState {
-    fn session(&self) -> &Session {
-        &self.session
-    }
-}
-
 impl IntersectionObserverState {
     async fn set_pause(self, intersect: bool) -> ApiResult<()> {
         if intersect {
             if self.session.set_pause(false) {
-                self.restore_and_render(ViewerConfigUpdate::default(), async move { Ok(()) })
-                    .await?;
+                super::restore_and_render(
+                    &self.session,
+                    &self.renderer,
+                    &self.presentation,
+                    ViewerConfigUpdate::default(),
+                    async move { Ok(()) },
+                )
+                .await?;
             }
         } else {
             self.session.set_pause(true);

@@ -79,7 +79,7 @@ impl Component for ExpressionEditor {
                 self.expr = val.clone();
                 clone!(ctx.props().session);
                 ctx.link().send_future(async move {
-                    match session.validate_expr(&val).await {
+                    match crate::queries::validate_expr(&session, &val).await {
                         Ok(x) => ExpressionEditorMsg::ValidateComplete(x),
                         Err(err) => {
                             web_sys::console::error_1(&format!("{err:?}").into());
@@ -93,7 +93,7 @@ impl Component for ExpressionEditor {
             ExpressionEditorMsg::ValidateComplete(err) => {
                 self.error = err;
                 if self.error.is_none() {
-                    maybe!({
+                    let _: Option<bool> = try {
                         let alias = ctx.props().alias.as_ref()?;
                         let session = &ctx.props().session;
                         let old = ctx.props().metadata.get_expression_by_alias(alias)?;
@@ -102,8 +102,8 @@ impl Component for ExpressionEditor {
                             .metadata_mut()
                             .set_edit_by_alias(alias, self.expr.to_string());
 
-                        Some(is_edited)
-                    });
+                        is_edited
+                    };
 
                     ctx.props().on_validate.emit(true);
                 } else {

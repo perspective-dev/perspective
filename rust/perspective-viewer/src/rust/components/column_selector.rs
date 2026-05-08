@@ -45,12 +45,12 @@ use crate::components::containers::scroll_panel_item::ScrollPanelItem;
 use crate::css;
 use crate::dragdrop::*;
 use crate::presentation::ColumnLocator;
+use crate::queries::{
+    ActiveColumnState, ActiveColumnStateData, ColumnsIteratorSet, can_render_column_styles,
+};
 use crate::renderer::*;
 use crate::session::drag_drop_update::*;
 use crate::session::*;
-use crate::tasks::{
-    ActiveColumnState, ActiveColumnStateData, ColumnsIteratorSet, can_render_column_styles,
-};
 use crate::utils::*;
 
 #[derive(Properties)]

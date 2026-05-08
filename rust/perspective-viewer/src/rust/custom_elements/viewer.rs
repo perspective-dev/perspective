@@ -32,6 +32,7 @@ use crate::custom_events::*;
 use crate::dragdrop::*;
 use crate::js::*;
 use crate::presentation::*;
+use crate::queries::*;
 use crate::renderer::*;
 use crate::root::Root;
 use crate::session::{ResetOptions, Session, TableLoadState};
@@ -90,43 +91,11 @@ pub struct PerspectiveViewerElement {
     root: Root<components::viewer::PerspectiveViewer>,
     resize_handle: Rc<RefCell<Option<ResizeObserverHandle>>>,
     intersection_handle: Rc<RefCell<Option<IntersectionObserverHandle>>>,
-    session: Session,
-    renderer: Renderer,
-    presentation: Presentation,
-    custom_events: CustomEvents,
+    pub(crate) session: Session,
+    pub(crate) renderer: Renderer,
+    pub(crate) presentation: Presentation,
     _subscriptions: Rc<[Subscription; 2]>,
-}
-
-impl HasCustomEvents for PerspectiveViewerElement {
-    fn custom_events(&self) -> &CustomEvents {
-        &self.custom_events
-    }
-}
-
-impl HasPresentation for PerspectiveViewerElement {
-    fn presentation(&self) -> &Presentation {
-        &self.presentation
-    }
-}
-
-impl HasRenderer for PerspectiveViewerElement {
-    fn renderer(&self) -> &Renderer {
-        &self.renderer
-    }
-}
-
-impl HasSession for PerspectiveViewerElement {
-    fn session(&self) -> &Session {
-        &self.session
-    }
-}
-
-impl StateProvider for PerspectiveViewerElement {
-    type State = PerspectiveViewerElement;
-
-    fn clone_state(&self) -> Self::State {
-        self.clone()
-    }
+    _custom_event_subs: Rc<Vec<Subscription>>,
 }
 
 impl CustomElementMetadata for PerspectiveViewerElement {
@@ -154,7 +123,7 @@ impl PerspectiveViewerElement {
         let session = Session::new();
         let renderer = Renderer::new(&elem);
         let presentation = Presentation::new(&elem);
-        let custom_events = CustomEvents::new(&elem, &session, &renderer, &presentation);
+        let custom_event_subs = wire_custom_events(&elem, &session, &renderer, &presentation);
 
         // Create Yew App
         let props = yew::props!(PerspectiveViewerProps {
@@ -163,10 +132,9 @@ impl PerspectiveViewerElement {
             renderer: renderer.clone(),
             presentation: presentation.clone(),
             dragdrop: DragDrop::new(&elem),
-            custom_events: custom_events.clone(),
         });
 
-        let state = props.clone_state();
+        let state = props.clone();
         let root = Root::new(shadow_root, props);
 
         // Create callbacks
@@ -186,7 +154,7 @@ impl PerspectiveViewerElement {
 
         let eject_sub = presentation.on_eject.add_listener({
             let root = root.clone();
-            move |_| ApiFuture::spawn(state.delete_all(&root))
+            move |_| ApiFuture::spawn(delete_all(&state.session, &state.renderer, &root))
         });
 
         let resize_handle =
@@ -203,8 +171,8 @@ impl PerspectiveViewerElement {
             presentation,
             resize_handle: Rc::new(RefCell::new(Some(resize_handle))),
             intersection_handle: Rc::new(RefCell::new(Some(intersect_handle))),
-            custom_events,
             _subscriptions: Rc::new([update_sub, eject_sub]),
+            _custom_event_subs: Rc::new(custom_event_subs),
         }
     }
 
@@ -371,7 +339,7 @@ impl PerspectiveViewerElement {
     /// await viewer.delete();
     /// ```
     pub fn delete(self) -> ApiFuture<()> {
-        self.delete_all(&self.root)
+        delete_all(&self.session, &self.renderer, &self.root)
     }
 
     /// Restart this `<perspective-viewer>` to its initial state, before
@@ -424,12 +392,24 @@ impl PerspectiveViewerElement {
     /// [`PerspectiveViewerElement::save`]), and also makes no API calls to the
     /// server (unlike [`PerspectiveViewerElement::getView`] followed by
     /// [`View::get_config`])
+    ///
+    /// Returns the [`ViewConfig`] the currently-bound `View` was constructed
+    /// from, so the value is consistent with what the active plugin is
+    /// rendering even if a queued [`Self::restore`]/`update_and_render` has
+    /// already mutated the live config in anticipation of the next draw.
+    /// Falls back to the live session config when no `View` has yet been
+    /// created (e.g., after `load` but before the first render).
     #[wasm_bindgen]
     pub fn getViewConfig(&self) -> ApiFuture<JsViewConfig> {
         let session = self.session.clone();
         ApiFuture::new(async move {
-            let config = session.get_view_config();
-            Ok(JsValue::from_serde_ext(&*config)?.unchecked_into())
+            let config = if let Some(rendered) = session.get_rendered_view_config() {
+                (*rendered).clone()
+            } else {
+                session.get_view_config().clone()
+            };
+
+            Ok(JsValue::from_serde_ext(&config)?.unchecked_into())
         })
     }
 
@@ -596,8 +576,12 @@ impl PerspectiveViewerElement {
                 None
             };
 
-            let result = this
-                .restore_and_render(decoded_update.clone(), {
+            let result = restore_and_render(
+                &this.session,
+                &this.renderer,
+                &this.presentation,
+                decoded_update.clone(),
+                {
                     clone!(this, decoded_update.table);
                     async move {
                         if let OptionalUpdate::Update(name) = table {
@@ -615,11 +599,12 @@ impl PerspectiveViewerElement {
                         receiver.await.unwrap_or_log();
                         Ok(())
                     }
-                })
-                .await;
+                },
+            )
+            .await;
 
             if let Err(e) = &result {
-                this.session().set_error(false, e.clone()).await?;
+                this.session.set_error(false, e.clone()).await?;
             }
             result
         })
@@ -632,7 +617,7 @@ impl PerspectiveViewerElement {
         ApiFuture::spawn(self.session.reset(ResetOptions::default()));
         let this = self.clone();
         ApiFuture::new_throttled(async move {
-            this.update_and_render(ViewConfigUpdate::default())?.await?;
+            update_and_render(&this.session, &this.renderer, ViewConfigUpdate::default())?.await?;
             Ok(())
         })
     }
@@ -662,7 +647,9 @@ impl PerspectiveViewerElement {
             let viewer_config = this
                 .renderer
                 .clone()
-                .with_lock(async { this.get_viewer_config().await })
+                .with_lock(async {
+                    get_viewer_config(&this.session, &this.renderer, &this.presentation).await
+                })
                 .await?;
 
             viewer_config.encode()
@@ -697,7 +684,9 @@ impl PerspectiveViewerElement {
                 ExportMethod::Csv
             };
 
-            let blob = this.export_method_to_blob(method).await?;
+            let blob =
+                export_method_to_blob(&this.session, &this.renderer, &this.presentation, method)
+                    .await?;
             let is_chart = this.renderer.is_chart();
             download(
                 format!("untitled{}", method.as_filename(is_chart)).as_ref(),
@@ -736,7 +725,8 @@ impl PerspectiveViewerElement {
                 ExportMethod::Csv
             };
 
-            this.export_method_to_jsvalue(method).await
+            export_method_to_jsvalue(&this.session, &this.renderer, &this.presentation, method)
+                .await
         })
     }
 
@@ -767,7 +757,8 @@ impl PerspectiveViewerElement {
                 ExportMethod::Csv
             };
 
-            let js_task = this.export_method_to_blob(method);
+            let js_task =
+                export_method_to_blob(&this.session, &this.renderer, &this.presentation, method);
             copy_to_clipboard(js_task, MimeType::TextPlain).await
         })
     }
@@ -828,19 +819,18 @@ impl PerspectiveViewerElement {
             .unwrap_or_default()
             .unwrap_or_default();
 
-        let state = self.clone_state();
+        let state = self.clone();
         ApiFuture::new_throttled(async move {
-            if !state.renderer().is_plugin_activated()? {
-                state
-                    .update_and_render(ViewConfigUpdate::default())?
+            if !state.renderer.is_plugin_activated()? {
+                update_and_render(&state.session, &state.renderer, ViewConfigUpdate::default())?
                     .await?;
             } else if let Some(dims) = opts.dimensions {
                 state
-                    .renderer()
+                    .renderer
                     .resize_with_dimensions(dims.width, dims.height)
                     .await?;
             } else {
-                state.renderer().resize().await?;
+                state.renderer.resize().await?;
             }
 
             Ok(())
@@ -915,9 +905,13 @@ impl PerspectiveViewerElement {
         } else {
             *self.intersection_handle.borrow_mut() = None;
             if self.session.set_pause(false) {
-                return ApiFuture::new(
-                    self.restore_and_render(ViewerConfigUpdate::default(), async move { Ok(()) }),
-                );
+                return ApiFuture::new(restore_and_render(
+                    &self.session,
+                    &self.renderer,
+                    &self.presentation,
+                    ViewerConfigUpdate::default(),
+                    async move { Ok(()) },
+                ));
             }
         }
 
@@ -935,10 +929,6 @@ impl PerspectiveViewerElement {
     #[wasm_bindgen]
     pub fn setSelection(&self, window: Option<JsViewWindow>) -> ApiResult<()> {
         let window = window.map(|x| x.into_serde_ext()).transpose()?;
-        if self.renderer.get_selection() != window {
-            self.custom_events.dispatch_select(window.as_ref())?;
-        }
-
         self.renderer.set_selection(window);
         Ok(())
     }
@@ -1109,7 +1099,7 @@ impl PerspectiveViewerElement {
     pub fn toggleColumnSettings(&self, column_name: String) -> ApiFuture<()> {
         clone!(self.session, self.root);
         ApiFuture::new_throttled(async move {
-            let locator = session.get_column_locator(Some(column_name));
+            let locator = get_column_locator(&session.metadata(), Some(column_name));
             let (sender, receiver) = channel::<()>();
             root.borrow().as_ref().into_apierror()?.send_message(
                 PerspectiveViewerMsg::OpenColumnSettings {
@@ -1131,7 +1121,7 @@ impl PerspectiveViewerElement {
         column_name: Option<String>,
         toggle: Option<bool>,
     ) -> ApiFuture<()> {
-        let locator = self.get_column_locator(column_name);
+        let locator = get_column_locator(&self.session.metadata(), column_name);
         clone!(self.root);
         ApiFuture::new_throttled(async move {
             let (sender, receiver) = channel::<()>();

@@ -26,10 +26,10 @@ use crate::components::main_panel::MainPanel;
 use crate::components::settings_panel::SettingsPanel;
 use crate::config::*;
 use crate::css;
-use crate::custom_events::CustomEvents;
 use crate::dragdrop::{DragDropProps, *};
 use crate::js::JsPerspectiveViewerPlugin;
 use crate::presentation::{ColumnLocator, ColumnSettingsTab, Presentation, PresentationProps};
+use crate::queries::*;
 use crate::renderer::{RendererProps, *};
 use crate::session::{SessionProps, *};
 use crate::tasks::*;
@@ -41,7 +41,6 @@ pub struct PerspectiveViewerProps {
     pub elem: web_sys::HtmlElement,
 
     /// State
-    pub custom_events: CustomEvents,
     pub dragdrop: DragDrop,
     pub session: Session,
     pub renderer: Renderer,
@@ -51,44 +50,6 @@ pub struct PerspectiveViewerProps {
 impl PartialEq for PerspectiveViewerProps {
     fn eq(&self, _rhs: &Self) -> bool {
         false
-    }
-}
-
-impl HasCustomEvents for PerspectiveViewerProps {
-    fn custom_events(&self) -> &CustomEvents {
-        &self.custom_events
-    }
-}
-
-impl HasDragDrop for PerspectiveViewerProps {
-    fn dragdrop(&self) -> &DragDrop {
-        &self.dragdrop
-    }
-}
-
-impl HasPresentation for PerspectiveViewerProps {
-    fn presentation(&self) -> &Presentation {
-        &self.presentation
-    }
-}
-
-impl HasRenderer for PerspectiveViewerProps {
-    fn renderer(&self) -> &Renderer {
-        &self.renderer
-    }
-}
-
-impl HasSession for PerspectiveViewerProps {
-    fn session(&self) -> &Session {
-        &self.session
-    }
-}
-
-impl StateProvider for PerspectiveViewerProps {
-    type State = PerspectiveViewerProps;
-
-    fn clone_state(&self) -> Self::State {
-        self.clone()
     }
 }
 
@@ -221,43 +182,13 @@ impl Component for PerspectiveViewer {
                 false
             },
             Reset(all, sender) => {
-                ctx.props().presentation.set_open_column_settings(None);
-                clone!(
-                    ctx.props().renderer,
-                    ctx.props().session,
-                    ctx.props().presentation
+                reset_all(
+                    &ctx.props().session,
+                    &ctx.props().renderer,
+                    &ctx.props().presentation,
+                    all,
+                    sender,
                 );
-
-                ApiFuture::spawn(async move {
-                    session
-                        .reset(ResetOptions {
-                            config: true,
-                            expressions: all,
-                            ..ResetOptions::default()
-                        })
-                        .await?;
-                    let columns_config = if all {
-                        presentation.reset_columns_configs();
-                        None
-                    } else {
-                        Some(presentation.all_columns_configs())
-                    };
-
-                    renderer.reset(columns_config.as_ref()).await?;
-                    presentation.reset_available_themes(None).await;
-                    if all {
-                        presentation.reset_theme().await?;
-                    }
-
-                    let result = renderer.draw(session.validate().await?.create_view()).await;
-                    if let Some(sender) = sender {
-                        sender.send(()).unwrap();
-                    }
-
-                    renderer.reset_changed.emit(());
-                    result
-                });
-
                 false
             },
             ToggleSettingsInit(Some(SettingsUpdate::Missing), None) => false,
@@ -449,7 +380,6 @@ impl Component for PerspectiveViewer {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let Self::Properties {
-            custom_events,
             dragdrop,
             presentation,
             renderer,
@@ -552,8 +482,8 @@ impl Component for PerspectiveViewer {
                         plugin_name={self.renderer_props.plugin_name.clone()}
                         {metadata}
                         view_config={self.session_props.config.clone()}
+                        column_stats={self.session_props.column_stats.clone()}
                         selected_theme={self.presentation_props.selected_theme.clone()}
-                        {custom_events}
                         {presentation}
                         {renderer}
                         {session}
@@ -564,33 +494,17 @@ impl Component for PerspectiveViewer {
         };
 
         let on_reset = ctx.link().callback(|all| Reset(all, None));
-        let render_limits = self.renderer_props.render_limits;
-        let has_table = self.session_props.has_table.clone();
-        let is_errored = self.session_props.error.is_some();
-        let stats = self.session_props.stats.clone();
-        let update_count = self.update_count;
-        let error = self.session_props.error.clone();
         let is_settings_open = self.settings_open
             && matches!(self.session_props.has_table, Some(TableLoadState::Loaded));
-        let title = self.session_props.title.clone();
-        let selected_theme = self.presentation_props.selected_theme.clone();
-        let available_themes = self.presentation_props.available_themes.clone();
         let main_panel = html! {
             <MainPanel
                 {on_settings}
                 {on_reset}
-                {render_limits}
-                {has_table}
-                {is_errored}
-                {stats}
-                {update_count}
-                {error}
+                session_props={self.session_props.clone()}
+                renderer_props={self.renderer_props.clone()}
+                presentation_props={self.presentation_props.clone()}
                 {is_settings_open}
-                {title}
-                {selected_theme}
-                {available_themes}
-                is_workspace={self.presentation_props.is_workspace}
-                {custom_events}
+                update_count={self.update_count}
                 {presentation}
                 {renderer}
                 {session}
@@ -613,7 +527,7 @@ impl Component for PerspectiveViewer {
                             initial_size={self.settings_panel_width_override}
                             on_reset={ctx.link().callback(|_| SettingsPanelSizeUpdate(None))}
                             on_resize={on_split_panel_resize.clone()}
-                            on_resize_finished={ctx.props().render_callback()}
+                            on_resize_finished={render_callback(&ctx.props().session, &ctx.props().renderer)}
                         >
                             { debug_panel }
                             { settings_panel }
@@ -735,7 +649,13 @@ fn create_subscriptions(ctx: &Context<PerspectiveViewer>) -> Vec<Subscription> {
             .view_created
             .add_listener(ctx.link().callback(|_| DecrementUpdateCount));
 
-        vec![sub1, sub2, sub3, sub4, sub5, sub6, sub7]
+        // Stats fetch resolution (populates session.column_stats) triggers
+        // a fresh `SessionProps` so `column_stats` reaches downstream
+        // components and the StyleTab re-queries the schema with the
+        // new value.
+        let sub8 = s.column_stats_changed.add_notify_listener(&cb);
+
+        vec![sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8]
     };
 
     let renderer_props_sub = {

@@ -13,19 +13,21 @@
 //! A collection of (de-)serializable structs which capture the application
 //! state, suitable for persistence, history, etc. features.
 
+mod column_config_schema;
 mod columns_config;
 mod datetime_column_style;
+mod export_method;
 mod kvpair;
-mod number_column_style;
 mod number_series_style;
 mod number_string_format;
 mod string_column_style;
 pub mod view_config;
 mod viewer_config;
 
+pub use column_config_schema::*;
 pub use columns_config::*;
 pub use datetime_column_style::*;
-pub use number_column_style::*;
+pub use export_method::*;
 pub use number_series_style::*;
 pub use number_string_format::*;
 pub use string_column_style::*;

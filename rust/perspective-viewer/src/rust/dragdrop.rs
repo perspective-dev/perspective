@@ -314,7 +314,7 @@ impl DragDrop {
 pub fn dragenter_helper(callback: impl Fn() + 'static, target: NodeRef) -> Callback<DragEvent> {
     Callback::from({
         move |event: DragEvent| {
-            maybe_log!({
+            let r = (|| -> ApiResult<()> {
                 event.stop_propagation();
                 event.prevent_default();
                 if event.related_target().is_none() {
@@ -324,7 +324,12 @@ pub fn dragenter_helper(callback: impl Fn() + 'static, target: NodeRef) -> Callb
                         .dataset()
                         .set("safaridragleave", "true")?;
                 }
-            });
+                Ok(())
+            })();
+
+            if let Err(e) = r {
+                web_sys::console::warn_1(&e.into());
+            }
 
             callback();
         }
@@ -338,7 +343,7 @@ pub fn dragleave_helper(callback: impl Fn() + 'static, drag_ref: NodeRef) -> Cal
     Callback::from({
         clone!(drag_ref);
         move |event: DragEvent| {
-            maybe_log!({
+            let r = (|| -> ApiResult<()> {
                 event.stop_propagation();
                 event.prevent_default();
 
@@ -403,7 +408,12 @@ pub fn dragleave_helper(callback: impl Fn() + 'static, drag_ref: NodeRef) -> Cal
                         }
                     },
                 };
-            })
+                Ok(())
+            })();
+
+            if let Err(e) = r {
+                web_sys::console::warn_1(&e.into());
+            }
         }
     })
 }

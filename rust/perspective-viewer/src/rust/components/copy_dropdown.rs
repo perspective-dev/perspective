@@ -15,8 +15,8 @@ use std::rc::Rc;
 use yew::prelude::*;
 
 use super::containers::dropdown_menu::*;
+use crate::config::*;
 use crate::renderer::*;
-use crate::tasks::*;
 
 type CopyDropDownMenuItem = DropDownMenuItem<ExportFile>;
 

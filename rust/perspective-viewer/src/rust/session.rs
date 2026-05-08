@@ -18,13 +18,13 @@ pub(crate) mod replace_expression_update;
 mod view_subscription;
 
 use std::cell::{Ref, RefCell};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::ops::Deref;
 use std::rc::Rc;
 
 use perspective_client::config::*;
-use perspective_client::{Client, ClientError, ReconnectCallback, View, ViewWindow};
+use perspective_client::{Client, ClientError, ReconnectCallback, View};
 use perspective_js::apierror;
 use perspective_js::utils::*;
 use wasm_bindgen::prelude::*;
@@ -39,6 +39,15 @@ use self::view_subscription::*;
 use crate::js::plugin::*;
 use crate::utils::*;
 
+/// Per-column numeric stats sourced from `View::get_min_max`. Keyed by
+/// column name in [`SessionHandle::column_stats`]; populated lazily by
+/// the `fetch_column_abs_max` task; cleared on every
+/// `view_config_changed`.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ColumnStats {
+    pub abs_max: Option<f64>,
+}
+
 /// Immutable state for `Session`.
 #[derive(Default)]
 pub struct SessionHandle {
@@ -49,6 +58,34 @@ pub struct SessionHandle {
     pub view_created: PubSub<()>,
     pub view_config_changed: PubSub<()>,
     pub title_changed: PubSub<Option<String>>,
+
+    /// Fires when the user clicks the status indicator while in
+    /// [`StatusIconState::Normal`]. `wire_custom_events` is the only
+    /// listener and fans this out as the `perspective-status-indicator-click`
+    /// `CustomEvent`.
+    pub status_indicator_clicked: PubSub<()>,
+
+    /// Per-column numeric stats cache. Populated by the
+    /// `fetch_column_abs_max` task and consumed by the schema-query
+    /// path so plugins emit gradient defaults without
+    /// per-render `View::get_min_max` round trips. Cleared
+    /// synchronously inside [`Session::update_view_config`].
+    column_stats: RefCell<HashMap<String, ColumnStats>>,
+
+    /// Memoized snapshots used by [`Session::to_props`] to keep
+    /// `PtrEqRc` identity stable across repeated `to_props()` calls
+    /// when the underlying value hasn't changed. Without this, every
+    /// `PubSub` fire (including `column_stats_changed`) produces a
+    /// fresh `Rc` for `config` / `metadata`, triggering downstream
+    /// `use_effect_with(view_config, ...)` effects to spuriously
+    /// refire — closing a loop with the stats fetch path.
+    cached_config: RefCell<Option<PtrEqRc<ViewConfig>>>,
+    cached_metadata: RefCell<Option<SessionMetadataRc>>,
+
+    /// Fires when [`SessionHandle::column_stats`] is updated (insert or
+    /// clear). Subscribers re-render and re-query the schema with the
+    /// new value.
+    pub column_stats_changed: PubSub<()>,
 
     /// Injected callback from the root component, replacing the former
     /// `stats_changed: PubSub` field.  Fires when view stats are updated.
@@ -418,92 +455,6 @@ impl Session {
         Ok(())
     }
 
-    /// Validate an expression string and marshall the results.
-    pub async fn validate_expr(
-        &self,
-        expr: &str,
-    ) -> Result<Option<perspective_client::ExprValidationError>, ApiError> {
-        let table = self.borrow().table.as_ref().unwrap().clone();
-        let errors = table
-            .validate_expressions(
-                ExpressionsDeserde::Map(std::collections::HashMap::from_iter([(
-                    "_".to_string(),
-                    expr.to_string(),
-                )]))
-                .into(),
-            )
-            .await?
-            .errors;
-
-        Ok(errors.get("_").cloned())
-    }
-
-    pub async fn arrow_as_vec(
-        &self,
-        flat: bool,
-        window: Option<ViewWindow>,
-    ) -> Result<Vec<u8>, ApiError> {
-        Ok(self
-            .flat_view(flat)
-            .await?
-            .to_arrow(window.unwrap_or_default())
-            .await?
-            .into())
-    }
-
-    pub async fn arrow_as_jsvalue(
-        &self,
-        flat: bool,
-        window: Option<ViewWindow>,
-    ) -> Result<js_sys::ArrayBuffer, ApiError> {
-        let arrow = self
-            .flat_view(flat)
-            .await?
-            .to_arrow(window.unwrap_or_default())
-            .await?;
-        Ok(js_sys::Uint8Array::from(&arrow[..])
-            .buffer()
-            .unchecked_into())
-    }
-
-    pub async fn ndjson_as_jsvalue(
-        &self,
-        flat: bool,
-        window: Option<ViewWindow>,
-    ) -> Result<js_sys::JsString, ApiError> {
-        let json: String = self
-            .flat_view(flat)
-            .await?
-            .to_ndjson(window.unwrap_or_default())
-            .await?;
-
-        Ok(json.into())
-    }
-
-    pub async fn json_as_jsvalue(
-        &self,
-        flat: bool,
-        window: Option<ViewWindow>,
-    ) -> Result<js_sys::Object, ApiError> {
-        let json: String = self
-            .flat_view(flat)
-            .await?
-            .to_columns_string(window.unwrap_or_default())
-            .await?;
-
-        Ok(js_sys::JSON::parse(&json)?.unchecked_into())
-    }
-
-    pub async fn csv_as_jsvalue(
-        &self,
-        flat: bool,
-        window: Option<ViewWindow>,
-    ) -> Result<js_sys::JsString, ApiError> {
-        let window = window.unwrap_or_default();
-        let csv = self.flat_view(flat).await?.to_csv(window).await;
-        Ok(csv.map(js_sys::JsString::from)?)
-    }
-
     pub fn get_view(&self) -> Option<View> {
         self.borrow()
             .view_sub
@@ -519,46 +470,17 @@ impl Session {
         Ref::map(self.borrow(), |x| &x.config)
     }
 
-    /// Get all unique column values for a given column name.
+    /// Snapshot of the [`ViewConfig`] the currently-bound `View` was
+    /// constructed from. Returns `None` if no `View` has been created
+    /// yet (e.g., the post-`load`/pre-render window, or after a reset).
     ///
-    /// Use the `.to_csv()` method, as I suspected copying this large string
-    /// once was more efficient than copying many smaller strings, and
-    /// string copying shows up frequently when doing performance analysis.
-    ///
-    /// TODO Does not work with expressions yet.
-    ///
-    /// # Arguments
-    /// - `column` The name of the column (or expression).
-    pub async fn get_column_values(&self, column: String) -> Result<Vec<String>, ApiError> {
-        let expressions = Some(self.borrow().config.expressions.clone());
-        let config = ViewConfigUpdate {
-            group_by: Some(vec![column]),
-            columns: Some(vec![]),
-            expressions,
-            ..ViewConfigUpdate::default()
-        };
-
-        let table = self.borrow().table.clone().unwrap();
-        let view = table.view(Some(config.clone())).await?;
-        let csv = view.to_csv(ViewWindow::default()).await?;
-
-        ApiFuture::spawn(async move {
-            view.delete().await?;
-            Ok(())
-        });
-
-        let res = csv
-            .lines()
-            .map(|val| {
-                if val.starts_with('\"') && val.ends_with('\"') {
-                    (val[1..val.len() - 1]).to_owned()
-                } else {
-                    val.to_owned()
-                }
-            })
-            .skip(2)
-            .collect::<Vec<String>>();
-        Ok(res)
+    /// Prefer this over [`Self::get_view_config`] when you need a
+    /// value consistent with what the active plugin is rendering.
+    /// `get_view_config` returns the live config, which is mutated
+    /// synchronously by [`Self::update_view_config`] ahead of the next
+    /// draw and so may temporarily disagree with the bound `View`.
+    pub fn get_rendered_view_config(&self) -> Option<Rc<ViewConfig>> {
+        self.borrow().view_sub.as_ref().map(|s| s.get_view_config())
     }
 
     pub fn set_update_column_defaults(
@@ -586,10 +508,40 @@ impl Session {
 
         if self.borrow_mut().config.apply_update(config_update) && self.0.borrow().is_clean {
             self.0.borrow_mut().is_clean = false;
+            // View config changed → cached stats are stale.
+            self.clear_column_stats();
             self.view_config_changed.emit(());
         }
 
         Ok(())
+    }
+
+    /// Read the cached `ColumnStats` for a column. Returns `None` if no
+    /// fetch has populated this column yet (or the cache was just
+    /// cleared by a view-config change).
+    pub fn get_column_stats(&self, column_name: &str) -> Option<ColumnStats> {
+        self.column_stats.borrow().get(column_name).copied()
+    }
+
+    /// Insert a freshly-fetched `abs_max` for a column and notify
+    /// subscribers via [`SessionHandle::column_stats_changed`].
+    pub fn set_column_abs_max(&self, column_name: String, abs_max: f64) {
+        self.column_stats
+            .borrow_mut()
+            .entry(column_name)
+            .or_default()
+            .abs_max = Some(abs_max);
+        self.column_stats_changed.emit(());
+    }
+
+    /// Drop the entire stats cache. Called when the view config changes
+    /// (filter / group_by / etc.) so stats are re-fetched on next
+    /// schema query.
+    pub fn clear_column_stats(&self) {
+        if !self.column_stats.borrow().is_empty() {
+            self.column_stats.borrow_mut().clear();
+            self.column_stats_changed.emit(());
+        }
     }
 
     /// In order to create a new view in this session, the session must first be
@@ -641,19 +593,6 @@ impl Session {
         }
 
         Ok(ValidSession(self, is_diff))
-    }
-
-    async fn flat_view(&self, flat: bool) -> ApiResult<View> {
-        if flat {
-            let table = self.borrow().table.clone().into_apierror()?;
-            Ok(table.view(None).await?)
-        } else {
-            self.borrow()
-                .view_sub
-                .as_ref()
-                .map(|x| x.get_view().clone())
-                .into_apierror()
-        }
     }
 
     fn update_stats(&self, stats: ViewStats) {
@@ -772,9 +711,31 @@ impl Session {
     /// for passing as a Yew prop.  Called by the root component whenever a
     /// session-related PubSub event fires.
     pub fn to_props(&self) -> SessionProps {
+        let column_stats = PtrEqRc::new(self.column_stats.borrow().clone());
         let data = self.borrow();
+
+        // Reuse memoized snapshots when the underlying value hasn't
+        // changed. PtrEq identity must be stable across `to_props()`
+        // calls triggered by *unrelated* pubsubs (e.g. our own
+        // `column_stats_changed`), or downstream effects keyed on
+        // these `PtrEqRc`s will spuriously refire.
+        let config = {
+            let mut cached = self.cached_config.borrow_mut();
+            if !matches!(&*cached, Some(c) if **c == data.config) {
+                *cached = Some(PtrEqRc::new(data.config.clone()));
+            }
+            cached.clone().unwrap()
+        };
+        let metadata = {
+            let mut cached = self.cached_metadata.borrow_mut();
+            if !matches!(&*cached, Some(m) if **m == data.metadata) {
+                *cached = Some(PtrEqRc::new(data.metadata.clone()));
+            }
+            cached.clone().unwrap()
+        };
+
         SessionProps {
-            config: PtrEqRc::new(data.config.clone()),
+            config,
             stats: data.stats.clone(),
             has_table: if data.table.is_some() {
                 Some(TableLoadState::Loaded)
@@ -785,7 +746,8 @@ impl Session {
             },
             error: data.error.clone(),
             title: data.title.clone(),
-            metadata: PtrEqRc::new(data.metadata.clone()),
+            metadata,
+            column_stats,
         }
     }
 }

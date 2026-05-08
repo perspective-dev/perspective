@@ -16,11 +16,9 @@ use yew::prelude::*;
 
 use super::render_warning::RenderWarning;
 use super::status_bar::StatusBar;
-use crate::custom_events::CustomEvents;
-use crate::presentation::Presentation;
-use crate::renderer::limits::RenderLimits;
+use crate::presentation::{Presentation, PresentationProps};
 use crate::renderer::*;
-use crate::session::{Session, TableErrorState, TableLoadState, ViewStats};
+use crate::session::{Session, SessionProps};
 use crate::utils::*;
 
 #[derive(Clone, Properties)]
@@ -32,28 +30,19 @@ pub struct MainPanelProps {
     /// + column configs), `false` for config-only.
     pub on_reset: Callback<bool>,
 
-    /// Render-limit dimensions forwarded from the root's `RendererProps`.
-    /// `Some` when the active plugin is capping the rendered row/column count;
-    /// `None` when no limits are active (e.g. after a plugin change).
-    pub render_limits: Option<RenderLimits>,
+    /// Snapshots threaded from root.  Read for `has_table`, `title` here in
+    /// the panel itself; threaded wholesale to `StatusBar`/`StatusIndicator`.
+    pub session_props: SessionProps,
+    pub renderer_props: RendererProps,
+    pub presentation_props: PresentationProps,
 
-    /// Value props from root's `SessionProps`, threaded to `StatusBar` /
-    /// `StatusIndicator`.
-    pub has_table: Option<TableLoadState>,
-    pub is_errored: bool,
-    pub stats: Option<ViewStats>,
-    pub update_count: u32,
-    pub error: Option<TableErrorState>,
-    pub title: Option<String>,
-
-    /// Value props from root's `PresentationProps`, threaded to `StatusBar`.
+    /// Derived from root: `settings_open && has_table_loaded`.
     pub is_settings_open: bool,
-    pub selected_theme: Option<String>,
-    pub available_themes: PtrEqRc<Vec<String>>,
-    pub is_workspace: bool,
+
+    /// Root-managed in-flight render counter (not engine state).
+    pub update_count: u32,
 
     /// State
-    pub custom_events: CustomEvents,
     pub session: Session,
     pub renderer: Renderer,
     pub presentation: Presentation,
@@ -61,23 +50,17 @@ pub struct MainPanelProps {
 
 impl PartialEq for MainPanelProps {
     fn eq(&self, rhs: &Self) -> bool {
-        self.has_table == rhs.has_table
-            && self.is_errored == rhs.is_errored
-            && self.stats == rhs.stats
-            && self.update_count == rhs.update_count
-            && self.error == rhs.error
-            && self.title == rhs.title
+        self.session_props == rhs.session_props
+            && self.renderer_props == rhs.renderer_props
+            && self.presentation_props == rhs.presentation_props
             && self.is_settings_open == rhs.is_settings_open
-            && self.selected_theme == rhs.selected_theme
-            && self.available_themes == rhs.available_themes
-            && self.is_workspace == rhs.is_workspace
-            && self.render_limits == rhs.render_limits
+            && self.update_count == rhs.update_count
     }
 }
 
 impl MainPanelProps {
     fn is_title(&self) -> bool {
-        self.title.is_some()
+        self.session_props.title.is_some()
     }
 }
 
@@ -109,10 +92,7 @@ impl Component for MainPanel {
                         .cast::<web_sys::HtmlElement>()
                         .map(JsValue::from)
                 {
-                    ctx.props()
-                        .custom_events
-                        .dispatch_event(format!("statusbar-{}", event.type_()).as_str(), &event)
-                        .unwrap();
+                    ctx.props().presentation.statusbar_pointer_event.emit(event);
                 }
 
                 false
@@ -126,16 +106,13 @@ impl Component for MainPanel {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let Self::Properties {
-            custom_events,
             presentation,
             renderer,
             session,
             ..
         } = ctx.props();
 
-        let is_settings_open = ctx.props().is_settings_open
-            && matches!(ctx.props().has_table, Some(TableLoadState::Loaded));
-
+        let is_settings_open = ctx.props().is_settings_open;
         let on_settings = (!is_settings_open).then(|| ctx.props().on_settings.clone());
 
         let mut class = classes!();
@@ -166,17 +143,10 @@ impl Component for MainPanel {
                     id="status_bar"
                     {on_settings}
                     on_reset={ctx.props().on_reset.clone()}
-                    has_table={ctx.props().has_table.clone()}
-                    is_errored={ctx.props().is_errored}
-                    stats={ctx.props().stats.clone()}
-                    update_count={ctx.props().update_count}
-                    error={ctx.props().error.clone()}
-                    title={ctx.props().title.clone()}
+                    session_props={ctx.props().session_props.clone()}
+                    presentation_props={ctx.props().presentation_props.clone()}
                     is_settings_open={ctx.props().is_settings_open}
-                    selected_theme={ctx.props().selected_theme.clone()}
-                    available_themes={ctx.props().available_themes.clone()}
-                    is_workspace={ctx.props().is_workspace}
-                    {custom_events}
+                    update_count={ctx.props().update_count}
                     {presentation}
                     {renderer}
                     {session}
@@ -189,7 +159,7 @@ impl Component for MainPanel {
                 >
                     <RenderWarning
                         on_dismiss={on_dismiss_warning}
-                        dimensions={ctx.props().render_limits}
+                        dimensions={ctx.props().renderer_props.render_limits}
                     />
                     <slot />
                 </div>

@@ -27,10 +27,16 @@ use yew::prelude::*;
 
 pub use self::column_locator::{ColumnLocator, ColumnSettingsTab, ColumnTab, OpenColumnSettings};
 pub use self::props::PresentationProps;
-use crate::config::{ColumnConfigUpdate, ColumnConfigValueUpdate, ColumnConfigValues};
+use crate::config::{ColumnConfigFieldUpdate, ColumnConfigUpdate};
 use crate::utils::*;
 
-pub type ColumnConfigMap = HashMap<String, ColumnConfigValues>;
+/// A per-column config map, opaque from the viewer's perspective. Each
+/// inner [`serde_json::Map`] is a flat collection of plugin-defined JSON
+/// keys whose shape is dictated by the active plugin's
+/// [`crate::config::ColumnConfigSchema`]. Foreign keys (left over from a
+/// previous plugin) coexist as ghost state and are filtered out at the
+/// `plugin.restore()` boundary.
+pub type ColumnConfigMap = HashMap<String, serde_json::Map<String, serde_json::Value>>;
 
 /// The available themes as detected in the browser environment or set
 /// explicitly when CORS prevents detection.  Detection is expensive and
@@ -49,6 +55,14 @@ pub struct PresentationHandle {
     open_column_settings: RefCell<OpenColumnSettings>,
     columns_config: RefCell<ColumnConfigMap>,
     is_workspace: RefCell<Option<bool>>,
+
+    /// Per-element dedup cell for `perspective-config-update` event
+    /// dispatch. Read+written by `crate::custom_events::dispatch_*`
+    /// helpers; living here means every consumer with a `&Presentation`
+    /// (subscriptions in `wire_custom_events`, `tasks::send_plugin_config`,
+    /// `setSelection`) sees the same cache without separate plumbing.
+    pub last_dispatched_config: RefCell<Option<crate::config::ViewerConfig>>,
+
     pub settings_open_changed: PubSub<bool>,
 
     /// Injected callback from the root component, replacing the former
@@ -58,6 +72,17 @@ pub struct PresentationHandle {
     pub column_settings_open_changed: PubSub<(bool, Option<String>)>,
     pub theme_config_updated: PubSub<(PtrEqRc<Vec<String>>, Option<usize>)>,
     pub on_eject: PubSub<()>,
+
+    /// Fires after `tasks::send_plugin_config` applies a column-config edit
+    /// from a sidebar control. Subscribers receive the post-update
+    /// [`ColumnConfigMap`]; `wire_custom_events` is the only listener and
+    /// fans this out as the `perspective-column-style-change` `CustomEvent`.
+    pub column_style_changed: PubSub<ColumnConfigMap>,
+
+    /// Fires for status-bar / main-panel pointer events that target the
+    /// statusbar element. `wire_custom_events` formats the `PointerEvent`'s
+    /// `type_()` into a `perspective-statusbar-{type}` `CustomEvent` name.
+    pub statusbar_pointer_event: PubSub<PointerEvent>,
 }
 
 /// State object responsible for the non-persistable/gui element state,
@@ -96,10 +121,17 @@ impl Presentation {
             open_column_settings: Default::default(),
             theme_config_updated: PubSub::default(),
             on_eject: PubSub::default(),
+            column_style_changed: PubSub::default(),
+            statusbar_pointer_event: PubSub::default(),
+            last_dispatched_config: Default::default(),
         }));
 
         ApiFuture::spawn(theme.clone().init());
         theme
+    }
+
+    pub fn viewer_elem(&self) -> &HtmlElement {
+        &self.viewer_elem
     }
 
     pub fn is_visible(&self) -> bool {
@@ -285,12 +317,19 @@ impl Presentation {
         *self.columns_config.borrow_mut() = ColumnConfigMap::new();
     }
 
-    /// Gets a clone of the ColumnConfig for the given column name.
-    pub fn get_columns_config(&self, column_name: &str) -> Option<ColumnConfigValues> {
+    /// Gets a clone of the raw column-config JSON map for the given
+    /// column name. Returns `None` if the column has no stored
+    /// configuration.
+    pub fn get_columns_config(
+        &self,
+        column_name: &str,
+    ) -> Option<serde_json::Map<String, serde_json::Value>> {
         self.columns_config.borrow().get(column_name).cloned()
     }
 
-    /// Updates the entire column config struct. (like from a restore() call)
+    /// Updates the entire column config map (e.g. from a `restore()`
+    /// call). The replacement map is opaque; foreign keys persist as
+    /// ghost state for plugins to ignore.
     pub fn update_columns_configs(&self, update: ColumnConfigUpdate) {
         match update {
             crate::config::OptionalUpdate::SetDefault => {
@@ -308,16 +347,26 @@ impl Presentation {
         }
     }
 
-    pub fn update_columns_config_value(
+    /// Apply a single schema-field update from the UI: clear all keys the
+    /// field owns, then splice in the partial new sub-state. If the
+    /// resulting column entry is empty, drop it from the map entirely.
+    pub fn update_columns_config_field(
         &self,
         column_name: String,
-        update: ColumnConfigValueUpdate,
+        update: ColumnConfigFieldUpdate,
     ) {
         let mut config = self.columns_config.borrow_mut();
-        let value = config.remove(&column_name).unwrap_or_default();
-        let update = value.update(update);
-        if !update.is_empty() {
-            config.insert(column_name, update);
+        let entry = config.entry(column_name.clone()).or_default();
+        for k in &update.keys {
+            entry.remove(k);
+        }
+        for (k, v) in update.value {
+            if update.keys.contains(&k) {
+                entry.insert(k, v);
+            }
+        }
+        if entry.is_empty() {
+            config.remove(&column_name);
         }
     }
 

@@ -26,9 +26,11 @@ use crate::css;
 #[derive(Properties, PartialEq, Clone)]
 pub struct CustomNumberFormatProps {
     pub restored_config: CustomNumberFormatConfig,
-    pub on_change: Callback<ColumnConfigValueUpdate>,
+    pub on_change: Callback<ColumnConfigFieldUpdate>,
     pub view_type: ColumnType,
     pub column_name: String,
+    #[prop_or_default]
+    pub keys: Vec<String>,
 }
 
 pub enum CustomNumberFormatMsg {
@@ -56,10 +58,6 @@ pub struct CustomNumberFormat {
     config: CustomNumberFormatConfig,
     style: NumberStyle,
     notation: Option<NotationName>,
-    // show_frac: bool,
-    // show_sig: bool,
-    // disable_rounding_increment: bool,
-    // disable_rounding_priority: bool,
 }
 
 impl Component for CustomNumberFormat {
@@ -197,11 +195,17 @@ impl Component for CustomNumberFormat {
 
         let is_float = ctx.props().view_type == ColumnType::Float;
         let filtered_config = self.config.clone().filter_default(is_float);
-        let value =
-            (filtered_config != CustomNumberFormatConfig::default()).then_some(filtered_config);
-
-        let update = ColumnConfigValueUpdate::CustomNumberStringFormat(value);
-        ctx.props().on_change.emit(update);
+        let mut value = serde_json::Map::new();
+        if filtered_config != CustomNumberFormatConfig::default() {
+            value.insert(
+                "number_format".to_owned(),
+                serde_json::to_value(&filtered_config).unwrap_or(serde_json::Value::Null),
+            );
+        }
+        ctx.props().on_change.emit(ColumnConfigFieldUpdate {
+            keys: ctx.props().keys.clone(),
+            value,
+        });
         true
     }
 
@@ -220,22 +224,6 @@ impl Component for CustomNumberFormat {
 impl CustomNumberFormat {
     fn initialize(ctx: &yew::prelude::Context<Self>) -> Self {
         let config = ctx.props().restored_config.clone();
-        // let show_frac = config
-        //     .minimum_fraction_digits
-        //     .or(config.maximum_fraction_digits)
-        //     .or(config.rounding_increment)
-        //     .is_some();
-        // let show_sig = config
-        //     .minimum_significant_digits
-        //     .or(config.maximum_significant_digits)
-        //     .is_some();
-        // let disable_rounding_increment = show_sig
-        //     || show_frac
-        //     || !matches!(
-        //         config.rounding_priority,
-        //         Some(RoundingPriority::Auto) | None
-        //     );
-        // let disable_rounding_priority = !(show_frac && show_sig);
         Self {
             style: config
                 ._style
@@ -248,10 +236,6 @@ impl CustomNumberFormat {
                 })
                 .unwrap_or_default(),
             config,
-            // show_frac,
-            // show_sig,
-            // disable_rounding_increment,
-            // disable_rounding_priority,
             notation: None,
         }
     }

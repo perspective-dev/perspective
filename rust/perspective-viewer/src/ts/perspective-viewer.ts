@@ -38,7 +38,6 @@ export type * from "./extensions.ts";
 export { PerspectiveSelectDetail } from "./extensions.ts";
 export type * from "./ts-rs/ViewerConfigUpdate.d.ts";
 export type * from "./ts-rs/ViewerConfig.d.ts";
-export type * from "./ts-rs/ColumnConfigValues.d.ts";
 export type * from "./ts-rs/Filter.d.ts";
 export type * from "./ts-rs/FilterTerm.d.ts";
 export type * from "./ts-rs/FilterReducer.d.ts";
