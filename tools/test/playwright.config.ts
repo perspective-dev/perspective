@@ -49,9 +49,9 @@ const package_venn = (get_scope() as string[]).reduce(
 let PACKAGE: string[] = [];
 if (package_venn.include.length === 0) {
     PACKAGE = (
-        JSON.parse(
-            execSync(`pnpm m ls --json --depth=-1`).toString(),
-        ) as { name?: string }[]
+        JSON.parse(execSync(`pnpm m ls --json --depth=-1`).toString()) as {
+            name?: string;
+        }[]
     )
         .filter((x): x is { name: string } => x.name !== undefined)
         .map((x) => x.name.replace("@perspective-dev/", ""))
@@ -106,10 +106,6 @@ const BROWSER_PACKAGES = [
     {
         packageName: "viewer-charts",
         testDir: "packages/viewer-charts/test/ts",
-    },
-    {
-        packageName: "viewer-openlayers",
-        testDir: "packages/viewer-openlayers/test/js",
     },
     {
         packageName: "jupyterlab",

@@ -22,4 +22,3 @@ pub mod sidebar;
 pub mod sidebar_close_button;
 pub mod split_panel;
 pub mod tab_list;
-pub mod trap_door_panel;

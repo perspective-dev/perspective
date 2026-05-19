@@ -62,7 +62,6 @@ export default function column_config_schema(
         fields.push({
             kind: "Enum",
             key: "number_fg_mode",
-            label: "foreground",
             default: "color",
             variants: [
                 { value: "disabled", label: "Disabled" },
@@ -78,7 +77,6 @@ export default function column_config_schema(
                 kind: "ColorRange",
                 key_pos: "pos_fg_color",
                 key_neg: "neg_fg_color",
-                label: "foreground",
                 default_pos: pos_fg,
                 default_neg: neg_fg,
                 is_gradient: false,
@@ -89,7 +87,6 @@ export default function column_config_schema(
             fields.push({
                 kind: "Number",
                 key: "fg_gradient",
-                label: "max-value",
                 default: column_stats?.abs_max ?? 0,
                 include: true,
             });
@@ -98,7 +95,6 @@ export default function column_config_schema(
         fields.push({
             kind: "Enum",
             key: "number_bg_mode",
-            label: "background",
             default: "disabled",
             variants: [
                 { value: "disabled", label: "Disabled" },
@@ -114,7 +110,6 @@ export default function column_config_schema(
                 kind: "ColorRange",
                 key_pos: "pos_bg_color",
                 key_neg: "neg_bg_color",
-                label: "background",
                 default_pos: pos_bg,
                 default_neg: neg_bg,
                 is_gradient: bg_mode === "gradient" || bg_mode === "pulse",
@@ -125,7 +120,6 @@ export default function column_config_schema(
             fields.push({
                 kind: "Number",
                 key: "bg_gradient",
-                label: "max-value",
                 include: true,
                 default: column_stats?.abs_max ?? 0,
             });
@@ -133,15 +127,11 @@ export default function column_config_schema(
 
         fields.push({ kind: "NumberFormat" });
     } else if (type === "date" || type === "datetime") {
-        fields.push({
-            kind: "DatetimeFormat",
-            default: { color: this.model!._color[0] },
-        });
+        fields.push({ kind: "DatetimeFormat" });
 
         fields.push({
             kind: "Enum",
             key: "datetime_color_mode",
-            label: "color",
             default: "none",
             variants: [
                 { value: "none", label: "None" },
@@ -157,20 +147,15 @@ export default function column_config_schema(
             fields.push({
                 kind: "Color",
                 key: "color",
-                label: dt_mode,
                 default: this.model!._color[0],
             });
         }
     } else if (type === "string") {
-        fields.push({
-            kind: "StringFormat",
-            default: { color: this.model!._color[0] },
-        });
+        fields.push({ kind: "StringFormat" });
 
         fields.push({
             kind: "Enum",
             key: "string_color_mode",
-            label: "color",
             default: "none",
             variants: [
                 { value: "none", label: "None" },
@@ -185,7 +170,6 @@ export default function column_config_schema(
             fields.push({
                 kind: "Color",
                 key: "color",
-                label: str_mode,
                 default: this.model!._color[0],
             });
         }

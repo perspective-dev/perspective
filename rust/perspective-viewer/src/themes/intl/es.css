@@ -54,11 +54,11 @@ perspective-dropdown {
     --psp-label--copy-button--content: "Copiar";
     --psp-label--export-button--content: "Exportar";
     --psp-label--reset-button--content: "Reiniciar";
-    --psp-label--edit-mode-read-only--content: "Read Only";
-    --psp-label--edit-mode-edit--content: "Text Edit";
-    --psp-label--edit-mode-select-row--content: "Select Row";
-    --psp-label--edit-mode-select-column--content: "Select Column";
-    --psp-label--edit-mode-select-region--content: "Select Region";
+    --psp-label--edit-mode-read-only--content: "Solo lectura";
+    --psp-label--edit-mode-edit--content: "Edición de texto";
+    --psp-label--edit-mode-select-row--content: "Seleccionar fila";
+    --psp-label--edit-mode-select-column--content: "Seleccionar columna";
+    --psp-label--edit-mode-select-region--content: "Seleccionar región";
     --psp-label--scroll-lock-toggle--content: "Desplazamiento libre";
     --psp-label--scroll-lock-alt-toggle--content: "Alinear desplazamiento";
 
@@ -70,15 +70,24 @@ perspective-dropdown {
     --psp-label--time-style--content: "Estilo de hora";
     --psp-label--foreground--content: "Primer plano";
     --psp-label--background--content: "Fondo";
+    --psp-label--number-fg-mode--content: "Primer plano";
+    --psp-label--number-bg-mode--content: "Fondo";
+    --psp-label--pos-bg-color--content: "Fondo";
+    --psp-label--datetime-color-mode--content: "Color";
+    --psp-label--string-color-mode--content: "Color";
     --psp-label--series--content: "Serie";
     --psp-label--color-range--content: "Gama de colores";
     --psp-label--style--content: "Estilo";
+    --psp-label--stack--content: "Apilar";
+    --psp-label--alt-axis--content: "Eje Alterno";
     --psp-label--minimum-integer-digits--content: "Dígitos enteros mínimos";
     --psp-label--rounding-increment--content: "Incremento de redondeo";
     --psp-label--notation--content: "Notación";
     --psp-label--use-grouping--content: "Usar agrupación";
     --psp-label--sign-display--content: "Visualización de letreros";
     --psp-label--max-value--content: "Valor máximo";
+    --psp-label--fg-gradient--content: "Valor máximo";
+    --psp-label--bg-gradient--content: "Valor máximo";
     --psp-label--rounding-priority--content: "Prioridad de redondeo";
     --psp-label--rounding-mode--content: "Modo de redondeo";
     --psp-label--trailing-zero-display--content: "Visualización del cero final";
@@ -98,5 +107,32 @@ perspective-dropdown {
     /* Tabs */
     --psp-label--style-tab--content: "Estilo";
     --psp-label--attributes-tab--content: "Atributos";
-    --psp-label--debug-tab--content: "Debug JSON";
+    --psp-label--query-tab--content: "Consulta";
+    --psp-label--plugin-tab--content: "Plugin";
+    --psp-label--debug-tab--content: "JSON";
+
+    /* Plugin settings */
+    --psp-label--edit-mode--content: "Modo de edición";
+    --psp-label--scroll-lock--content: "Bloqueo de desplazamiento";
+    --psp-label--chart-type--content: "Tipo de gráfico de series";
+
+    /* Plugin settings — viewer-charts */
+    --psp-label--auto-alt-y-axis--content: "Eje Y dual automático";
+    --psp-label--facet-mode--content: "Modo de facetas";
+    --psp-label--facet-zoom-mode--content: "Zoom de facetas";
+    --psp-label--series-zoom-mode--content: "Zoom de series";
+    --psp-label--line-width-px--content: "Ancho de línea";
+    --psp-label--point-size-px--content: "Tamaño del punto";
+    --psp-label--band-inner-frac--content: "Ancho de banda";
+    --psp-label--bar-inner-pad--content: "Separación de barras";
+    --psp-label--wick-width-px--content: "Ancho de mecha";
+    --psp-label--ohlc-line-width-px--content: "Ancho de línea OHLC";
+    --psp-label--include-zero--content: "Incluir cero";
+    --psp-label--domain-mode--content: "Modo de dominio";
+    --psp-label--gradient-color-mode--content: "Modo de color";
+    --psp-label--gradient-radius-px--content: "Radio del gradiente";
+    --psp-label--gradient-intensity--content: "Intensidad";
+    --psp-label--gradient-heat-max--content: "Calor máximo";
+    --psp-label--map-tile-provider--content: "Proveedor de mapa";
+    --psp-label--map-tile-alpha--content: "Opacidad del mapa";
 }

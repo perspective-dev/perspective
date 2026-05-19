@@ -1,0 +1,99 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+:host {
+    label#edit_mode-label:before {
+        content: var(--psp-label--edit-mode--content);
+    }
+
+    label#scroll_lock-label:before {
+        content: var(--psp-label--scroll-lock--content);
+    }
+
+    label#chart_type-label:before {
+        content: var(--psp-label--chart-type--content);
+    }
+
+    /* viewer-charts plugin_config controls */
+    label#auto_alt_y_axis-label:before {
+        content: var(--psp-label--auto-alt-y-axis--content);
+    }
+
+    label#facet_mode-label:before {
+        content: var(--psp-label--facet-mode--content);
+    }
+
+    label#facet_zoom_mode-label:before {
+        content: var(--psp-label--facet-zoom-mode--content);
+    }
+
+    label#series_zoom_mode-label:before {
+        content: var(--psp-label--series-zoom-mode--content);
+    }
+
+    label#line_width_px-label:before {
+        content: var(--psp-label--line-width-px--content);
+    }
+
+    label#point_size_px-label:before {
+        content: var(--psp-label--point-size-px--content);
+    }
+
+    label#band_inner_frac-label:before {
+        content: var(--psp-label--band-inner-frac--content);
+    }
+
+    label#bar_inner_pad-label:before {
+        content: var(--psp-label--bar-inner-pad--content);
+    }
+
+    label#wick_width_px-label:before {
+        content: var(--psp-label--wick-width-px--content);
+    }
+
+    label#ohlc_line_width_px-label:before {
+        content: var(--psp-label--ohlc-line-width-px--content);
+    }
+
+    label#include_zero-label:before {
+        content: var(--psp-label--include-zero--content);
+    }
+
+    label#domain_mode-label:before {
+        content: var(--psp-label--domain-mode--content);
+    }
+
+    label#gradient_color_mode-label:before {
+        content: var(--psp-label--gradient-color-mode--content);
+    }
+
+    label#gradient_radius_px-label:before {
+        content: var(--psp-label--gradient-radius-px--content);
+    }
+
+    label#gradient_intensity-label:before {
+        content: var(--psp-label--gradient-intensity--content);
+    }
+
+    label#gradient_heat_max-label:before {
+        content: var(--psp-label--gradient-heat-max--content);
+    }
+
+    label#map_tile_provider-label:before {
+        content: var(--psp-label--map-tile-provider--content);
+    }
+
+    label#map_tile_alpha-label:before {
+        content: var(--psp-label--map-tile-alpha--content);
+    }
+}

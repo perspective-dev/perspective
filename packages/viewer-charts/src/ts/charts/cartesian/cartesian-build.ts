@@ -67,16 +67,43 @@ export function initCartesianPipeline(
     const prevColorName = chart._colorName;
     const prevColorIsString = chart._colorIsString;
 
-    chart._xMin = Infinity;
-    chart._xMax = -Infinity;
-    chart._yMin = Infinity;
-    chart._yMax = -Infinity;
+    // `domain_mode: "expand"` seeds the per-build extents from the
+    // running accumulator instead of `±Infinity`, so the per-row scan
+    // below naturally unions new data into the previously rendered
+    // domain / range / color / size scales. `"fit"` clears the
+    // accumulator alongside the live extents so toggling back to
+    // expand later starts from a fresh baseline.
+    const expand = chart._pluginConfig.domain_mode === "expand";
+    if (expand) {
+        chart._xMin = chart._expandedXMin;
+        chart._xMax = chart._expandedXMax;
+        chart._yMin = chart._expandedYMin;
+        chart._yMax = chart._expandedYMax;
+        chart._colorMin = chart._expandedColorMin;
+        chart._colorMax = chart._expandedColorMax;
+        chart._sizeMin = chart._expandedSizeMin;
+        chart._sizeMax = chart._expandedSizeMax;
+    } else {
+        chart._xMin = Infinity;
+        chart._xMax = -Infinity;
+        chart._yMin = Infinity;
+        chart._yMax = -Infinity;
+        chart._colorMin = Infinity;
+        chart._colorMax = -Infinity;
+        chart._sizeMin = Infinity;
+        chart._sizeMax = -Infinity;
+        chart._expandedXMin = Infinity;
+        chart._expandedXMax = -Infinity;
+        chart._expandedYMin = Infinity;
+        chart._expandedYMax = -Infinity;
+        chart._expandedColorMin = Infinity;
+        chart._expandedColorMax = -Infinity;
+        chart._expandedSizeMin = Infinity;
+        chart._expandedSizeMax = -Infinity;
+    }
+
     chart._xOrigin = NaN;
     chart._yOrigin = NaN;
-    chart._colorMin = Infinity;
-    chart._colorMax = -Infinity;
-    chart._sizeMin = Infinity;
-    chart._sizeMax = -Infinity;
     chart._dataCount = 0;
     chart._hitTest.clear();
     chart._maxSeriesUploaded = 0;
@@ -336,6 +363,16 @@ export function processCartesianChunk(
         }
     }
 
+    // Faceted-no-Color: pin the color range to the facet-index domain
+    // so the vertex shader's linear `(v - cmin) / (cmax - cmin)`
+    // mapping lands per-point at LUT stop `s / (N-1)`. Without this
+    // pin, `_colorMin/_colorMax` would stay at the +Inf/-Inf sentinel
+    // and every facet's points would sample the LUT center.
+    if (!chart._colorName && chart._splitGroups.length > 1) {
+        chart._colorMin = 0;
+        chart._colorMax = chart._splitGroups.length - 1;
+    }
+
     for (let s = 0; s < series.length; s++) {
         const ser = series[s];
         const prevCount = chart._seriesUploadedCounts[s] ?? 0;
@@ -365,8 +402,17 @@ export function processCartesianChunk(
                 colorValid !== undefined &&
                 !((colorValid[i >> 3] >> (i & 7)) & 1);
 
-            const y = ser.yCol[i] as number;
-            const x = ser.xCol ? (ser.xCol[i] as number) : startRow + i;
+            const rawY = ser.yCol[i] as number;
+            const rawX = ser.xCol ? (ser.xCol[i] as number) : startRow + i;
+            if (isNaN(rawX) || isNaN(rawY)) {
+                continue;
+            }
+
+            // Project raw (x, y) → data-space (x, y). Default is
+            // identity for cartesian charts; map subclasses override
+            // to apply Mercator. Second NaN guard catches projection
+            // failures (e.g. Mercator's ±85° lat clamp).
+            const [x, y] = chart.projectPoint(rawX, rawY);
             if (isNaN(x) || isNaN(y)) {
                 continue;
             }
@@ -467,8 +513,8 @@ export function processCartesianChunk(
                 // Skip min/max updates — they were pinned to the full
                 // palette-index domain during seeding.
             } else {
-                colorValues[writeIdx] = 0.5;
-                chart._colorData![flatIdx] = 0.5;
+                colorValues[writeIdx] = s;
+                chart._colorData![flatIdx] = s;
             }
 
             //  Label: resolve the slot's string via the column's arrow

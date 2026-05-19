@@ -14,9 +14,12 @@ import { worker } from "./worker.js";
 // @ts-ignore
 import SUPERSTORE_URL from "superstore-arrow/superstore.lz4.arrow";
 
+export const WORKER = worker();
+
 export const SUPERSTORE_TABLE = (async function () {
-    const w = await worker();
     const req = await fetch(SUPERSTORE_URL);
     const arrow = await req.arrayBuffer();
-    return await w.table(arrow.slice());
+    return await WORKER.then((w) =>
+        w.table(arrow.slice(), { name: "superstore" }),
+    );
 })();

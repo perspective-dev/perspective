@@ -45,8 +45,7 @@ impl Component for ExportDropDownMenu {
 
     fn view(&self, ctx: &Context<Self>) -> yew::virtual_dom::VNode {
         let callback = ctx.link().callback(|_| ExportDropDownMenuMsg::TitleChange);
-        let plugin = ctx.props().renderer.get_active_plugin().unwrap();
-        let is_chart = plugin.name().as_str() != "Datagrid";
+        let is_chart = ctx.props().renderer.is_chart();
         html! {
             <>
                 <span class="dropdown-group-label">{ "Save as" }</span>

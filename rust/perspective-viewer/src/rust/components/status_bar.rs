@@ -138,26 +138,21 @@ impl Component for StatusBar {
                     false
                 },
                 StatusBarMsg::ResetTheme => {
-                    let presentation = ctx.props().presentation.clone();
-                    let session = ctx.props().session.clone();
-                    let renderer = ctx.props().renderer.clone();
-                    ApiFuture::spawn(async move {
-                        presentation.reset_theme().await?;
-                        let view = session.get_view().into_apierror()?;
-                        renderer.restyle_all(&view).await
-                    });
+                    update_theme(
+                        &ctx.props().session,
+                        &ctx.props().renderer,
+                        &ctx.props().presentation,
+                        None,
+                    );
                     true
                 },
                 StatusBarMsg::SetTheme(theme_name) => {
-                    let presentation = ctx.props().presentation.clone();
-                    let session = ctx.props().session.clone();
-                    let renderer = ctx.props().renderer.clone();
-                    ApiFuture::spawn(async move {
-                        presentation.set_theme_name(Some(&theme_name)).await?;
-                        let view = session.get_view().into_apierror()?;
-                        renderer.restyle_all(&view).await
-                    });
-
+                    update_theme(
+                        &ctx.props().session,
+                        &ctx.props().renderer,
+                        &ctx.props().presentation,
+                        Some(theme_name),
+                    );
                     false
                 },
                 StatusBarMsg::Export => {

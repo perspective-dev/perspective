@@ -22,8 +22,6 @@ import { formatTickValue, formatDateTickValue } from "../../../layout/ticks";
 import lineVert from "../../../shaders/line.vert.glsl";
 import lineFrag from "../../../shaders/line.frag.glsl";
 
-const LINE_WIDTH_PX = 2.0;
-
 interface LineCache {
     program: WebGLProgram;
     cornerBuffer: WebGLBuffer;
@@ -48,9 +46,13 @@ interface LineCache {
  */
 export class LineGlyph implements Glyph {
     readonly name = "line" as const;
+    private _cache: LineCache | null = null;
 
-    ensureProgram(chart: CartesianChart, glManager: WebGLContextManager): void {
-        if (chart._glyphCache) {
+    ensureProgram(
+        _chart: CartesianChart,
+        glManager: WebGLContextManager,
+    ): void {
+        if (this._cache) {
             return;
         }
 
@@ -61,7 +63,7 @@ export class LineGlyph implements Glyph {
             lineFrag,
         );
         const cornerBuffer = createLineCornerBuffer(gl);
-        const cache: LineCache = {
+        this._cache = {
             program,
             cornerBuffer,
             u_projection: gl.getUniformLocation(program, "u_projection"),
@@ -75,7 +77,6 @@ export class LineGlyph implements Glyph {
             a_color_end: gl.getAttribLocation(program, "a_color_end"),
             a_corner: gl.getAttribLocation(program, "a_corner"),
         };
-        chart._glyphCache = cache;
     }
 
     draw(
@@ -83,7 +84,7 @@ export class LineGlyph implements Glyph {
         glManager: WebGLContextManager,
         projection: Float32Array,
     ): void {
-        const cache = chart._glyphCache as LineCache | null;
+        const cache = this._cache;
         if (!cache) {
             return;
         }
@@ -107,7 +108,7 @@ export class LineGlyph implements Glyph {
         projection: Float32Array,
         seriesIdx: number,
     ): void {
-        const cache = chart._glyphCache as LineCache | null;
+        const cache = this._cache;
         if (!cache) {
             return;
         }
@@ -164,10 +165,12 @@ export class LineGlyph implements Glyph {
     }
 
     destroy(chart: CartesianChart): void {
-        const cache = chart._glyphCache as LineCache | null;
+        const cache = this._cache;
         if (cache?.cornerBuffer && chart._glManager) {
             chart._glManager.gl.deleteBuffer(cache.cornerBuffer);
         }
+
+        this._cache = null;
     }
 }
 
@@ -193,7 +196,7 @@ function bindLineState(
     gl.useProgram(cache.program);
     gl.uniformMatrix4fv(cache.u_projection, false, projection);
     gl.uniform2f(cache.u_resolution, gl.canvas.width, gl.canvas.height);
-    gl.uniform1f(cache.u_line_width, LINE_WIDTH_PX * dpr);
+    gl.uniform1f(cache.u_line_width, chart._pluginConfig.line_width_px * dpr);
     if (chart._colorMin < chart._colorMax) {
         gl.uniform2f(cache.u_color_range, chart._colorMin, chart._colorMax);
     } else {

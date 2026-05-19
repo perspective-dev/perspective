@@ -396,8 +396,8 @@ test.describe("Column Style Tests", () => {
 
         // Background ColorRange ids derive from the `label`
         // ("background") in the Datagrid schema.
-        await sidebar_locator.locator("#background-pos").waitFor();
-        await sidebar_locator.locator("#background-neg").waitFor();
+        await sidebar_locator.locator("#pos_bg_color-pos").waitFor();
+        await sidebar_locator.locator("#pos_bg_color-neg").waitFor();
 
         // Snapshot the sidebar's style-tab DOM as a holistic check.
         const contents = await sidebar_locator.innerHTML();

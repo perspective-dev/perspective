@@ -16,7 +16,7 @@ use yew::prelude::*;
 
 use crate::components::containers::dragdrop_list::*;
 use crate::components::type_icon::TypeIcon;
-use crate::dragdrop::*;
+use crate::presentation::Presentation;
 use crate::session::*;
 use crate::utils::*;
 
@@ -38,7 +38,7 @@ pub struct PivotColumnProps {
     // State
     #[prop_or_default]
     pub opt_session: Option<Session>,
-    pub dragdrop: DragDrop,
+    pub presentation: Presentation,
 }
 
 impl PartialEq for PivotColumnProps {
@@ -70,17 +70,17 @@ impl Component for PivotColumn {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let dragstart = Callback::from({
             let event_name = ctx.props().column.to_owned();
-            let dragdrop = ctx.props().dragdrop.clone();
+            let presentation = ctx.props().presentation.clone();
             let action = ctx.props().action;
             move |event: DragEvent| {
-                dragdrop.set_drag_image(&event).unwrap();
-                dragdrop.notify_drag_start(event_name.to_string(), DragEffect::Move(action))
+                presentation.set_drag_image(&event).unwrap();
+                presentation.notify_drag_start(event_name.to_string(), DragEffect::Move(action))
             }
         });
 
         let dragend = Callback::from({
-            let dragdrop = ctx.props().dragdrop.clone();
-            move |_event| dragdrop.notify_drag_end()
+            let presentation = ctx.props().presentation.clone();
+            move |_event| presentation.notify_drag_end()
         });
 
         let col_type = ctx.props().column_type.unwrap_or_else(|| {

@@ -25,7 +25,6 @@ use crate::utils::WeakScope;
 #[derive(Properties)]
 pub struct StringColumnStyleProps {
     pub config: Option<StringColumnStyleConfig>,
-    pub default_config: StringColumnStyleDefaultConfig,
 
     #[prop_or_default]
     pub on_change: Callback<ColumnConfigFieldUpdate>,
@@ -45,7 +44,7 @@ impl ModalLink<StringColumnStyle> for StringColumnStyleProps {
 
 impl PartialEq for StringColumnStyleProps {
     fn eq(&self, other: &Self) -> bool {
-        self.config == other.config && self.default_config == other.default_config
+        self.config == other.config
     }
 }
 

@@ -68,18 +68,24 @@ perspective-dropdown {
     --psp-label--timezone--content: "Timezone";
     --psp-label--date-style--content: "Date Style";
     --psp-label--time-style--content: "Time Style";
-    --psp-label--foreground--content: "Foreground";
-    --psp-label--background--content: "Background";
+    --psp-label--number-fg-mode--content: "Foreground";
+    --psp-label--number-bg-mode--content: "Background";
+    --psp-label--pos-bg-color--content: "Background";
+    --psp-label--datetime-color-mode--content: "Color";
+    --psp-label--string-color-mode--content: "Color";
     --psp-label--series--content: "Series";
     --psp-label--color-range--content: "Color Range";
     --psp-label--style--content: "Style";
+    --psp-label--stack--content: "Stack";
+    --psp-label--alt-axis--content: "Alt Axis";
     --psp-label--minimum-integer-digits--content: "Minimum Integer Digits";
     --psp-label--rounding-increment--content: "Rounding Increment";
     --psp-label--notation--content: "Notation";
     --psp-label--use-grouping--content: "Use Grouping";
     --psp-label--sign-display--content: "Sign Display";
     --psp-label--aggregate-depth--content: "Aggregate Depth";
-    --psp-label--max-value--content: "Max Value";
+    --psp-label--fg-gradient--content: "Max Value";
+    --psp-label--bg-gradient--content: "Max Value";
     --psp-label--rounding-priority--content: "Rounding Priority";
     --psp-label--rounding-mode--content: "Rounding Mode";
     --psp-label--trailing-zero-display--content: "Trailing Zero Display";
@@ -98,5 +104,32 @@ perspective-dropdown {
     /* Tabs */
     --psp-label--style-tab--content: "Style";
     --psp-label--attributes-tab--content: "Attributes";
-    --psp-label--debug-tab--content: "Debug JSON";
+    --psp-label--query-tab--content: "Query";
+    --psp-label--plugin-tab--content: "Plugin";
+    --psp-label--debug-tab--content: "JSON";
+
+    /* Plugin settings */
+    --psp-label--edit-mode--content: "Edit mode";
+    --psp-label--scroll-lock--content: "Scroll lock";
+    --psp-label--chart-type--content: "Glyph type";
+
+    /* Plugin settings — viewer-charts */
+    --psp-label--auto-alt-y-axis--content: "Auto dual Y axis";
+    --psp-label--facet-mode--content: "Facet mode";
+    --psp-label--facet-zoom-mode--content: "Facet zoom";
+    --psp-label--series-zoom-mode--content: "Series zoom";
+    --psp-label--line-width-px--content: "Line width";
+    --psp-label--point-size-px--content: "Point size";
+    --psp-label--band-inner-frac--content: "Band width";
+    --psp-label--bar-inner-pad--content: "Bar padding";
+    --psp-label--wick-width-px--content: "Wick width";
+    --psp-label--ohlc-line-width-px--content: "OHLC line width";
+    --psp-label--include-zero--content: "Include zero";
+    --psp-label--domain-mode--content: "Domain mode";
+    --psp-label--gradient-color-mode--content: "Color mode";
+    --psp-label--gradient-radius-px--content: "Gradient radius";
+    --psp-label--gradient-intensity--content: "Intensity";
+    --psp-label--gradient-heat-max--content: "Heat max";
+    --psp-label--map-tile-provider--content: "Map provider";
+    --psp-label--map-tile-alpha--content: "Map opacity";
 }

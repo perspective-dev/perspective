@@ -31,6 +31,23 @@ import {
     handleCandlestickHover,
     showCandlestickPinnedTooltip,
 } from "./candlestick-interact";
+import { BodyWickGlyph } from "./glyphs/draw-candlesticks";
+import { OHLCGlyph } from "./glyphs/draw-ohlc";
+
+/**
+ * Per-frame memo of the auto-fit Y extent for a {@link CandlestickChart},
+ * keyed on the visible X window. Hover-only redraws hit the cache.
+ */
+export interface CandlestickAutoFitCache {
+    // Cache key — the categorical (X) window.
+    xMin: number;
+    xMax: number;
+
+    // VisibleExtent payload — value axis min/max + hasFit flag.
+    min: number;
+    max: number;
+    hasFit: boolean;
+}
 
 export interface CandlestickLocations {
     u_proj_left: WebGLUniformLocation | null;
@@ -74,6 +91,17 @@ export class CandlestickChart extends CategoricalYChart {
     _yDomain: { min: number; max: number } = { min: 0, max: 1 };
 
     /**
+     * `domain_mode: "expand"` accumulators. Hold the running union of
+     * the value-axis (and, in numeric-category mode, category-axis)
+     * extent across data loads. Cleared in `resetExpandedDomain` —
+     * wired from the worker's `resetAllZooms` and from view-config
+     * mutations on `AbstractChart`. `null` whenever the option is
+     * `"fit"` or the accumulator has just been cleared.
+     */
+    _expandedYDomain: { min: number; max: number } | null = null;
+    _expandedCategoryDomain: { min: number; max: number } | null = null;
+
+    /**
      * Numeric category-axis state (single non-string group_by).
      */
     _categoryAxisMode: "category" | "numeric" = "category";
@@ -105,20 +133,16 @@ export class CandlestickChart extends CategoricalYChart {
     _pinnedIdx = -1;
 
     /**
-     * Lazy program / shared-resource cache. Each glyph (candlestick
-     * body, wick, OHLC) lazily attaches its program + corner buffers
-     * here on first use. Persistent vertex buffers (built once per
-     * data load) live on `_glyphBuffers` instead.
+     * Typed glyph composition. Each glyph owns its own program cache
+     * and persistent vertex buffers privately; the chart routes
+     * draw/rebuild/invalidate via `_glyphs`. `_defaultChartType`
+     * (`"candlestick"` vs `"ohlc"`) selects which glyph the frame
+     * builder dispatches to.
      */
-    _wickCache: unknown = undefined;
-
-    /**
-     * Persistent per-glyph vertex buffer state — built in
-     * `rebuildGlyphBuffers` (called from `uploadAndRender`) and reused
-     * across pan/zoom frames. Eliminates the legacy per-frame
-     * `bufferData(DYNAMIC_DRAW)` of body / wick / OHLC vertex data.
-     */
-    _glyphBuffers: unknown = undefined;
+    readonly _glyphs = {
+        bodyWick: new BodyWickGlyph(),
+        ohlc: new OHLCGlyph(),
+    } as const;
 
     /**
      * Auto-fit the price (Y) axis to the `low`/`high` extent of
@@ -134,16 +158,7 @@ export class CandlestickChart extends CategoricalYChart {
      * window. Hover-only redraws (X window unchanged) hit the cache.
      * Reset to null on data upload.
      */
-    _autoFitCache: {
-        // Cache key — the categorical (X) window.
-        xMin: number;
-        xMax: number;
-
-        // VisibleExtent payload — value axis min/max + hasFit flag.
-        min: number;
-        max: number;
-        hasFit: boolean;
-    } | null = null;
+    _autoFitCache: CandlestickAutoFitCache | null = null;
 
     protected override tooltipCallbacks() {
         return {
@@ -160,12 +175,64 @@ export class CandlestickChart extends CategoricalYChart {
                     renderCandlestickChromeOverlay(this);
                 }
             },
-            onPin: () => {
+            onPin: (mx: number, my: number) => {
+                // Refresh the hit-test at the click coords so the pin
+                // path doesn't depend on the RAF-throttled hover state
+                // — see comment in `series.ts` `onPin`.
+                handleCandlestickHover(this, mx, my);
                 if (this._hoveredIdx >= 0) {
-                    showCandlestickPinnedTooltip(this, this._hoveredIdx);
+                    const idx = this._hoveredIdx;
+                    showCandlestickPinnedTooltip(this, idx);
+                    void this._emitCandleClickSelect(idx);
                 }
             },
+            onUnpin: () => {
+                this.emitUnselect();
+            },
         };
+    }
+
+    /**
+     * Resolve a clicked candle into a `PerspectiveClickDetail` and
+     * emit both `perspective-click` and
+     * `perspective-global-filter selected:true`.
+     *
+     * One candle per (catIdx, splitIdx). Like the series pipeline,
+     * `catIdx + _rowOffset` is the source-view row; the column name is
+     * the Close column (the canonical "y" target for OHLC). Group-by
+     * values come from `_rowPaths`; split-by values come from
+     * `_splitPrefixes[splitIdx]` split on `|`.
+     */
+    private async _emitCandleClickSelect(idx: number): Promise<void> {
+        if (idx < 0 || idx >= this._candles.count) {
+            return;
+        }
+
+        const catIdx = this._candles.catIdx[idx];
+        const splitIdx = this._candles.splitIdx[idx];
+        const groupByValues: (string | null)[] = this._rowPaths.map(
+            (level) => level.labels[catIdx] ?? null,
+        );
+        const splitKey = this._splitPrefixes[splitIdx] ?? "";
+        const splitByValues =
+            this._splitBy.length > 0 && splitKey !== ""
+                ? splitKey.split("|")
+                : [];
+
+        // OHLC plugins put Close in slot 1 (FIN_NAMES = ["Open",
+        // "Close", "High", "Low", "Tooltip"]). Fall back to the first
+        // non-null slot if Close isn't configured.
+        const columnName =
+            this._columnSlots[1] ||
+            this._columnSlots.find((s): s is string => !!s) ||
+            "";
+
+        await this.emitClickAndSelect({
+            rowIdx: catIdx + this._rowOffset,
+            columnName,
+            groupByValues,
+            splitByValues,
+        });
     }
 
     override invalidateTheme(): void {
@@ -194,8 +261,49 @@ export class CandlestickChart extends CategoricalYChart {
             groupBy: this._groupBy,
             splitBy: this._splitBy,
             groupByTypes: this._groupByTypes,
+            bandInnerFrac: this._pluginConfig.band_inner_frac,
+            barInnerPad: this._pluginConfig.bar_inner_pad,
             scratchCandles: this._candles,
         });
+        // `domain_mode: "expand"` post-build union — mirrors the series
+        // pipeline. Mutate the pipeline result in place so the
+        // assignments below pick up the grown extent automatically.
+        if (this._pluginConfig.domain_mode === "expand") {
+            if (this._expandedYDomain) {
+                result.yDomain.min = Math.min(
+                    this._expandedYDomain.min,
+                    result.yDomain.min,
+                );
+                result.yDomain.max = Math.max(
+                    this._expandedYDomain.max,
+                    result.yDomain.max,
+                );
+            }
+
+            this._expandedYDomain = { ...result.yDomain };
+
+            if (result.numericCategoryDomain) {
+                if (this._expandedCategoryDomain) {
+                    result.numericCategoryDomain.min = Math.min(
+                        this._expandedCategoryDomain.min,
+                        result.numericCategoryDomain.min,
+                    );
+                    result.numericCategoryDomain.max = Math.max(
+                        this._expandedCategoryDomain.max,
+                        result.numericCategoryDomain.max,
+                    );
+                }
+
+                this._expandedCategoryDomain = {
+                    min: result.numericCategoryDomain.min,
+                    max: result.numericCategoryDomain.max,
+                };
+            }
+        } else {
+            this._expandedYDomain = null;
+            this._expandedCategoryDomain = null;
+        }
+
         this._rowPaths = result.rowPaths;
         this._numCategories = result.numCategories;
         this._rowOffset = result.rowOffset;
@@ -229,6 +337,11 @@ export class CandlestickChart extends CategoricalYChart {
         renderCandlestickFrame(this, glManager);
     }
 
+    override resetExpandedDomain(): void {
+        this._expandedYDomain = null;
+        this._expandedCategoryDomain = null;
+    }
+
     protected destroyInternal(): void {
         if (this._glManager) {
             const gl = this._glManager.gl;
@@ -236,71 +349,19 @@ export class CandlestickChart extends CategoricalYChart {
                 gl.deleteBuffer(this._cornerBuffer);
             }
 
-            // Free the persistent vertex buffers and the program-local
-            // GPU resources stashed on `_wickCache`. Without this each
-            // `delete()` would leak ~6 GL buffers per chart instance.
-            invalidateGlyphBuffers(this);
-            destroyWickCache(this);
+            // Each glyph owns its program-local GPU resources +
+            // persistent vertex buffers; `destroy` frees both.
+            this._glyphs.bodyWick.destroy(this);
+            this._glyphs.ohlc.destroy(this);
         }
 
         this._program = null;
         this._locations = null;
         this._cornerBuffer = null;
-        this._wickCache = undefined;
-        this._glyphBuffers = undefined;
         this._candles = emptyCandleColumns();
         this._series = [];
         this._rowPaths = [];
         this._numCategories = 0;
         this._upDownColorKey = null;
-    }
-}
-
-/**
- * Free the program-local GPU buffers stashed on `_wickCache` (corner
- * buffer + segment buffer for wick / OHLC, quad + instance buffer for
- * the candlestick body shader). Programs themselves are owned by the
- * `WebGLContextManager.shaders` cache and are not freed here.
- */
-function destroyWickCache(chart: CandlestickChart): void {
-    if (!chart._glManager || !chart._wickCache) {
-        return;
-    }
-
-    const gl = chart._glManager.gl;
-    const cache = chart._wickCache as {
-        body?: { quadBuffer?: WebGLBuffer; instanceBuffer?: WebGLBuffer };
-        wick?: { cornerBuffer?: WebGLBuffer; segmentBuffer?: WebGLBuffer };
-        ohlc?: { cornerBuffer?: WebGLBuffer; segmentBuffer?: WebGLBuffer };
-    };
-
-    if (cache.body) {
-        if (cache.body.quadBuffer) {
-            gl.deleteBuffer(cache.body.quadBuffer);
-        }
-
-        if (cache.body.instanceBuffer) {
-            gl.deleteBuffer(cache.body.instanceBuffer);
-        }
-    }
-
-    if (cache.wick) {
-        if (cache.wick.cornerBuffer) {
-            gl.deleteBuffer(cache.wick.cornerBuffer);
-        }
-
-        if (cache.wick.segmentBuffer) {
-            gl.deleteBuffer(cache.wick.segmentBuffer);
-        }
-    }
-
-    if (cache.ohlc) {
-        if (cache.ohlc.cornerBuffer) {
-            gl.deleteBuffer(cache.ohlc.cornerBuffer);
-        }
-
-        if (cache.ohlc.segmentBuffer) {
-            gl.deleteBuffer(cache.ohlc.segmentBuffer);
-        }
     }
 }

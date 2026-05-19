@@ -33,16 +33,16 @@ pub mod components;
 pub mod config;
 pub mod custom_elements;
 mod custom_events;
-mod dragdrop;
 pub mod exprtk;
 mod js;
+mod presentation;
 mod root;
 
-mod presentation;
 #[doc(hidden)]
 pub mod queries;
 mod renderer;
 mod session;
+
 #[doc(hidden)]
 pub mod tasks;
 pub mod utils;
@@ -80,6 +80,7 @@ import type {
 
 export type * from "../../src/ts/ts-rs/ViewerConfig.d.ts";
 export type * from "../../src/ts/ts-rs/ViewerConfigUpdate.d.ts";
+export type * from "../../src/ts/ts-rs/PluginStaticConfig.d.ts";
 import type {ViewerConfig} from "../../src/ts/ts-rs/ViewerConfig.d.ts";
 import type {ViewerConfigUpdate} from "../../src/ts/ts-rs/ViewerConfigUpdate.d.ts";
 "#;

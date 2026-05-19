@@ -12,7 +12,7 @@
 mod attributes_tab;
 
 mod save_settings;
-mod style_tab;
+pub(crate) mod style_tab;
 
 use std::rc::Rc;
 
@@ -34,7 +34,6 @@ use crate::components::expression_editor::ExpressionEditorProps;
 use crate::components::style::LocalStyle;
 use crate::components::type_icon::TypeIconType;
 use crate::presentation::{ColumnLocator, ColumnSettingsTab, Presentation};
-use crate::queries::{can_render_column_styles, locator_name_or_default, locator_view_type};
 use crate::renderer::Renderer;
 use crate::session::{Session, SessionMetadataRc};
 use crate::tasks::{delete_expr, save_expr, update_expr};
@@ -386,8 +385,10 @@ impl ColumnSettingsPanel {
     }
 
     fn initialize(&mut self, ctx: &yew::prelude::Context<Self>) {
-        let column_name =
-            locator_name_or_default(&ctx.props().metadata, &ctx.props().selected_column);
+        let column_name = ctx
+            .props()
+            .metadata
+            .locator_name_or_default(&ctx.props().selected_column);
 
         let initial_expr_value = ctx
             .props()
@@ -399,19 +400,23 @@ impl ColumnSettingsPanel {
         let initial_header_value =
             (*initial_expr_value != column_name).then_some(column_name.clone());
 
-        let maybe_ty = locator_view_type(&ctx.props().metadata, &ctx.props().selected_column);
+        let maybe_ty = ctx
+            .props()
+            .metadata
+            .locator_view_type(&ctx.props().selected_column);
 
         let tabs = {
             let mut tabs = vec![];
             let is_new_expr = ctx.props().selected_column.is_new_expr();
             let show_styles = !is_new_expr
-                && can_render_column_styles(
-                    &ctx.props().renderer,
-                    &ctx.props().view_config,
-                    &ctx.props().metadata,
-                    &column_name,
-                )
-                .unwrap_or_default();
+                && ctx.props().renderer.can_render_column_styles()
+                && ctx.props().view_config.columns.contains(&Some(
+                    ctx.props()
+                        .selected_column
+                        .name()
+                        .map(|x| x.to_string())
+                        .unwrap_or_default(),
+                ));
 
             if !is_new_expr && show_styles {
                 tabs.push(ColumnSettingsTab::Style);
@@ -420,6 +425,7 @@ impl ColumnSettingsPanel {
             if ctx.props().selected_column.is_expr() {
                 tabs.push(ColumnSettingsTab::Attributes);
             }
+
             tabs
         };
 

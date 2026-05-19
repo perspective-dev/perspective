@@ -43,11 +43,8 @@ use super::style::LocalStyle;
 use crate::components::column_dropdown::{ColumnDropDownElement, ColumnDropDownPortal};
 use crate::components::containers::scroll_panel_item::ScrollPanelItem;
 use crate::css;
-use crate::dragdrop::*;
-use crate::presentation::ColumnLocator;
-use crate::queries::{
-    ActiveColumnState, ActiveColumnStateData, ColumnsIteratorSet, can_render_column_styles,
-};
+use crate::presentation::{ColumnLocator, DragDropContainer, Presentation};
+use crate::queries::{ActiveColumnState, ActiveColumnStateData, ColumnsIteratorSet};
 use crate::renderer::*;
 use crate::session::drag_drop_update::*;
 use crate::session::*;
@@ -77,11 +74,28 @@ pub struct ColumnSelectorProps {
     // State
     pub session: Session,
     pub renderer: Renderer,
-    pub dragdrop: DragDrop,
+    pub presentation: Presentation,
 
     /// Fires when this component is resized via the UI.
     #[prop_or_default]
     pub on_resize: Option<Rc<PubSub<()>>>,
+
+    /// Trap-door width pinned by the parent `SettingsPanel` so switching
+    /// tabs doesn't shrink the panel. Threaded into the inner
+    /// `ScrollPanel` as `initial_width`.
+    #[prop_or_default]
+    pub initial_width: f64,
+
+    /// Fires when the inner `ScrollPanel` measures its natural width.
+    /// Routed up to `SettingsPanel` which keeps the running max.
+    #[prop_or_default]
+    pub on_auto_width: Callback<f64>,
+
+    /// External "release the trap-door" signal from the outer settings
+    /// split-panel divider reset. Forwarded into `self.on_reset` so both
+    /// inner `ScrollPanel`s drop their cached `viewport_width`.
+    #[prop_or_default]
+    pub on_dimensions_reset: Option<Rc<PubSub<()>>>,
 }
 
 impl PartialEq for ColumnSelectorProps {
@@ -93,6 +107,7 @@ impl PartialEq for ColumnSelectorProps {
             && self.drag_column == rhs.drag_column
             && self.metadata == rhs.metadata
             && self.selected_theme == rhs.selected_theme
+            && self.initial_width == rhs.initial_width
     }
 }
 
@@ -102,7 +117,6 @@ pub enum ColumnSelectorMsg {
     /// from `ConfigSelector` after it mutates the view config.
     Redraw,
     HoverActiveIndex(Option<usize>),
-    SetWidth(f64),
     Drop((String, DragTarget, DragEffect, usize)),
 }
 
@@ -111,10 +125,9 @@ use ColumnSelectorMsg::*;
 /// A `ColumnSelector` controls the `columns` field of the `ViewConfig`,
 /// deriving its options from the table columns and `ViewConfig` expressions.
 pub struct ColumnSelector {
-    _subscriptions: [Subscription; 1],
+    _subscriptions: Vec<Subscription>,
     drag_container: DragDropContainer,
     column_dropdown: ColumnDropDownElement,
-    viewport_width: f64,
     on_reset: Rc<PubSub<()>>,
 }
 
@@ -124,12 +137,14 @@ impl Component for ColumnSelector {
 
     fn create(ctx: &Context<Self>) -> Self {
         let ColumnSelectorProps {
-            dragdrop, session, ..
+            presentation,
+            session,
+            ..
         } = ctx.props();
 
         let drop_sub = {
             let cb = ctx.link().callback(ColumnSelectorMsg::Drop);
-            dragdrop.drop_received.add_listener(cb)
+            presentation.drop_received.add_listener(cb)
         };
 
         let drag_container = DragDropContainer::new(|| {}, {
@@ -138,28 +153,32 @@ impl Component for ColumnSelector {
         });
 
         let column_dropdown = ColumnDropDownElement::new(session.clone());
+        let on_reset: Rc<PubSub<()>> = Default::default();
+        let mut subscriptions = vec![drop_sub];
+        if let Some(outer_reset) = ctx.props().on_dimensions_reset.as_ref() {
+            let on_reset = on_reset.clone();
+            subscriptions.push(outer_reset.add_listener(move |()| on_reset.emit(())));
+        }
+
         Self {
-            _subscriptions: [drop_sub],
-            viewport_width: 0f64,
+            _subscriptions: subscriptions,
             drag_container,
             column_dropdown,
-            on_reset: Default::default(),
+            on_reset,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Redraw => true,
-            SetWidth(w) => {
-                self.viewport_width = w;
-                false
-            },
             HoverActiveIndex(Some(to_index)) => ctx
                 .props()
-                .dragdrop
+                .presentation
                 .notify_drag_enter(DragTarget::Active, to_index),
             HoverActiveIndex(_) => {
-                ctx.props().dragdrop.notify_drag_leave(DragTarget::Active);
+                ctx.props()
+                    .presentation
+                    .notify_drag_leave(DragTarget::Active);
                 true
             },
             Drop((column, DragTarget::Active, DragEffect::Move(DragTarget::Active), index)) => {
@@ -170,7 +189,7 @@ impl Component for ColumnSelector {
                         .iter()
                         .position(|x| x.as_ref() == Some(&column));
 
-                    let min_cols = ctx.props().renderer.metadata().min;
+                    let min_cols = ctx.props().renderer.metadata().min_config_columns;
                     let is_to_empty = !config
                         .columns
                         .get(index)
@@ -247,7 +266,7 @@ impl Component for ColumnSelector {
         let ColumnSelectorProps {
             session,
             renderer,
-            dragdrop,
+            presentation,
             ..
         } = ctx.props();
         let metadata = &ctx.props().metadata;
@@ -271,18 +290,18 @@ impl Component for ColumnSelector {
         };
 
         let is_aggregated = config.is_aggregated();
-        let columns_iter = ColumnsIteratorSet::new(&config, metadata, renderer, dragdrop);
+        let columns_iter = ColumnsIteratorSet::new(&config, metadata, renderer, presentation);
         let onselect = ctx.link().callback(|()| Redraw);
         let ondragenter = ctx.link().callback(HoverActiveIndex);
         let ondragover = Callback::from(|_event: DragEvent| _event.prevent_default());
         let ondrop = Callback::from({
-            clone!(dragdrop);
-            move |event| dragdrop.notify_drop(&event)
+            clone!(presentation);
+            move |event| presentation.notify_drop(&event)
         });
 
         let ondragend = Callback::from({
-            clone!(dragdrop);
-            move |_| dragdrop.notify_drag_end()
+            clone!(presentation);
+            move |_| presentation.notify_drag_end()
         });
 
         let mut active_classes = classes!("scrollable");
@@ -333,7 +352,7 @@ impl Component for ColumnSelector {
                     drag_column={ctx.props().drag_column.clone()}
                     metadata={metadata.clone()}
                     selected_theme={ctx.props().selected_theme.clone()}
-                    {dragdrop}
+                    {presentation}
                     {renderer}
                     {session}
                 />
@@ -368,7 +387,7 @@ impl Component for ColumnSelector {
                     .and_then(|n| metadata.get_column_table_type(n))
                     .or_else(|| {
                         if matches!(name.state, ActiveColumnStateData::DragOver) {
-                            dragdrop
+                            presentation
                                 .get_drag_column()
                                 .and_then(|c| metadata.get_column_table_type(&c))
                         } else {
@@ -381,10 +400,8 @@ impl Component for ColumnSelector {
                     .map(|n| metadata.is_column_expression(n))
                     .unwrap_or(false);
 
-                let can_render_styles = name
-                    .get_name()
-                    .and_then(|n| can_render_column_styles(renderer, &config, metadata, n).ok())
-                    .unwrap_or(false);
+                let can_render_styles =
+                    name.get_name().is_some() && renderer.can_render_column_styles();
 
                 let show_edit_btn = is_expression || can_render_styles;
                 let on_open_expr_panel = &ctx.props().on_open_expr_panel;
@@ -405,7 +422,7 @@ impl Component for ColumnSelector {
                             {ondragenter}
                             ondragend={&ondragend}
                             onselect={&onselect}
-                            {dragdrop}
+                            {presentation}
                             {renderer}
                             {session}
                         />
@@ -435,7 +452,7 @@ impl Component for ColumnSelector {
                             onselect={&onselect}
                             ondragend={&ondragend}
                             on_open_expr_panel={&ctx.props().on_open_expr_panel}
-                            {dragdrop}
+                            {presentation}
                             {renderer}
                             {session}
                         />
@@ -471,13 +488,14 @@ impl Component for ColumnSelector {
             <div id="selected-columns" key="__active_columns__">
                 <ScrollPanel
                     id="active-columns"
+                    omit_autosize_div={true}
                     class={active_classes}
                     dragover={ondragover}
                     dragenter={&self.drag_container.dragenter}
                     dragleave={&self.drag_container.dragleave}
                     viewport_ref={&self.drag_container.noderef}
-                    initial_width={self.viewport_width}
-                    on_auto_width={ctx.link().callback(ColumnSelectorMsg::SetWidth)}
+                    initial_width={ctx.props().initial_width}
+                    on_auto_width={ctx.props().on_auto_width.clone()}
                     drop={ondrop}
                     on_resize={&ctx.props().on_resize}
                     on_dimensions_reset={&self.on_reset}

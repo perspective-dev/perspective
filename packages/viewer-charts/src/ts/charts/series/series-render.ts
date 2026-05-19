@@ -12,27 +12,16 @@
 
 import type { Context2D } from "../canvas-types";
 import type { WebGLContextManager } from "../../webgl/context-manager";
-import { ensurePalette, type SeriesChart } from "./series";
+import {
+    ensurePalette,
+    type SeriesChart,
+    type SeriesAutoFitCache,
+} from "./series";
 import type { PlotRect } from "../../layout/plot-layout";
 import { PlotLayout } from "../../layout/plot-layout";
 import { renderInPlotFrame } from "../../webgl/plot-frame";
 import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
 import { drawBars, BAR_TYPE_BAR_VAL as BAR_TYPE_BAR } from "./glyphs/draw-bars";
-import {
-    drawLines,
-    rebuildLineBuffers,
-    invalidateLineBuffers,
-} from "./glyphs/draw-lines";
-import {
-    drawScatter,
-    rebuildScatterBuffers,
-    invalidateScatterBuffers,
-} from "./glyphs/draw-scatter";
-import {
-    drawAreas,
-    rebuildAreaBuffers,
-    invalidateAreaBuffers,
-} from "./glyphs/draw-areas";
 import { getHoveredBar } from "./series-interact";
 import { computeNiceTicks } from "../../layout/ticks";
 import { type AxisDomain } from "../../axis/numeric-axis";
@@ -265,9 +254,9 @@ export function uploadBarColors(
  * Called from `uploadAndRender` before {@link rebuildGlyphBuffers}.
  */
 export function invalidateGlyphBuffers(chart: SeriesChart): void {
-    invalidateLineBuffers(chart);
-    invalidateScatterBuffers(chart);
-    invalidateAreaBuffers(chart);
+    chart._glyphs.lines.invalidateBuffers(chart);
+    chart._glyphs.scatter.invalidateBuffers(chart);
+    chart._glyphs.areas.invalidateBuffers(chart);
 }
 
 /**
@@ -280,9 +269,9 @@ export function rebuildGlyphBuffers(
     chart: SeriesChart,
     glManager: WebGLContextManager,
 ): void {
-    rebuildLineBuffers(chart, glManager);
-    rebuildScatterBuffers(chart, glManager);
-    rebuildAreaBuffers(chart, glManager);
+    chart._glyphs.lines.rebuildBuffers(chart, glManager);
+    chart._glyphs.scatter.rebuildBuffers(chart, glManager);
+    chart._glyphs.areas.rebuildBuffers(chart, glManager);
 }
 
 /**
@@ -381,6 +370,32 @@ export function renderBarFrame(
         }
     }
 
+    // `include_zero` is absolute — zero must stay inside the rendered
+    // domain even after a dynamic-zoom refit (`computeVisibleValueExtent`
+    // returns the data-only extent, which can drop the baseline).
+    // Without this, tick computation sees the refit window while the
+    // projection's `requireZero` snap silently re-anchors to zero, so
+    // ticks crowd one edge of an otherwise zero-anchored plot.
+    if (chart._pluginConfig.include_zero) {
+        if (visValMin > 0) {
+            visValMin = 0;
+        }
+
+        if (visValMax < 0) {
+            visValMax = 0;
+        }
+
+        if (chart._rightDomain) {
+            if (visRightMin > 0) {
+                visRightMin = 0;
+            }
+
+            if (visRightMax < 0) {
+                visRightMax = 0;
+            }
+        }
+    }
+
     const hasLegend = chart._series.length > 1;
     const hasCatLabel = chart._groupBy.length > 0;
 
@@ -436,9 +451,12 @@ export function renderBarFrame(
     }
 
     // Build the primary projection. `clamp` names the axis that carries
-    // the *value* data (Y for Y Bar, X for X Bar). `requireZero: true`
-    // pins the baseline at zero so bars grow from the axis line even
-    // when the data range doesn't naturally include zero.
+    // the *value* data (Y for Y Bar, X for X Bar). `requireZero` pins
+    // the baseline at zero so bar / area glyphs grow from the axis
+    // line; it must track `include_zero` so the projection's padded
+    // domain matches the build pipeline's `leftDomain` (otherwise the
+    // tick computation and the WebGL geometry use different scales).
+    const requireZero = chart._pluginConfig.include_zero;
     const projLeft = horizontal
         ? layout.buildProjectionMatrix(
               visValMin,
@@ -448,7 +466,7 @@ export function renderBarFrame(
               visCatMax,
               visCatMin,
               "x",
-              true,
+              requireZero,
               undefined,
               0,
               chart._categoryOrigin,
@@ -459,7 +477,7 @@ export function renderBarFrame(
               visValMin,
               visValMax,
               "y",
-              true,
+              requireZero,
               undefined,
               chart._categoryOrigin,
               0,
@@ -477,7 +495,7 @@ export function renderBarFrame(
             visRightMin,
             visRightMax,
             "y",
-            true,
+            requireZero,
             undefined,
             chart._categoryOrigin,
             0,
@@ -530,7 +548,7 @@ export function renderBarFrame(
         // only paints bars — the other glyphs bake in vertical geometry
         // and aren't supported for horizontal orientation.
         if (!horizontal) {
-            drawAreas(
+            chart._glyphs.areas.draw(
                 chart,
                 gl,
                 glManager,
@@ -545,13 +563,19 @@ export function renderBarFrame(
         gl.uniformMatrix4fv(loc.u_proj_left, false, projLeft);
         gl.uniformMatrix4fv(loc.u_proj_right, false, projRight);
         gl.uniform1f(loc.u_horizontal, horizontal ? 1.0 : 0.0);
-        const hovered = getHoveredBar(chart);
+        const hovered = chart._series.length > 1 ? getHoveredBar(chart) : null;
         gl.uniform1f(loc.u_hover_series, hovered ? hovered.seriesId : -1);
         drawBars(chart, gl, glManager);
 
         if (!horizontal) {
-            drawLines(chart, gl, glManager, projLeft, projRight);
-            drawScatter(chart, gl, glManager, projLeft, projRight);
+            chart._glyphs.lines.draw(chart, gl, glManager, projLeft, projRight);
+            chart._glyphs.scatter.draw(
+                chart,
+                gl,
+                glManager,
+                projLeft,
+                projRight,
+            );
         }
     });
 
@@ -602,6 +626,15 @@ export function renderBarChromeOverlay(chart: SeriesChart): void {
         return;
     }
 
+    // Y axis columns: the primary axis aggregates the unique Y column
+    // shared by all series on it. With `auto_alt_y_axis`, series can
+    // split across primary/secondary by `_series[i].onAltAxis`; the
+    // primary formatter follows the first non-alt series, alt follows
+    // the first alt series (falls back to the formatter's own type-
+    // aware fallback if no such series exists).
+    const primarySeries = chart._series.find((s) => s.axis === 0);
+    const altSeries = chart._series.find((s) => s.axis === 1);
+    const xColumn = chart._groupBy[0];
     renderBarAxesChrome(
         chart._chromeCanvas,
         catAxis,
@@ -613,6 +646,14 @@ export function renderBarChromeOverlay(chart: SeriesChart): void {
         chart._lastAltYDomain ?? undefined,
         chart._lastAltYTicks ?? undefined,
         chart._isHorizontal,
+        {
+            value: chart.getColumnFormatter(
+                primarySeries?.aggName ?? null,
+                "tick",
+            ),
+            alt: chart.getColumnFormatter(altSeries?.aggName ?? null, "tick"),
+            category: chart.getColumnFormatter(xColumn, "tick"),
+        },
     );
 
     renderBarLegend(chart);
@@ -882,7 +923,7 @@ function computeVisibleValueExtent(
     // hit path catches set-content changes because the legend-click
     // handler swaps / mutates the set in ways that invalidate the
     // cache via the explicit null-out.
-    const next = cache ?? ({} as NonNullable<SeriesChart["_autoFitCache"]>);
+    const next = cache ?? newSeriesAutoFitCache();
     next.catMin = visCatMin;
     next.catMax = visCatMax;
     next.hidden = chart._hiddenSeries;
@@ -896,16 +937,37 @@ function computeVisibleValueExtent(
     return next;
 }
 
+function newSeriesAutoFitCache(): SeriesAutoFitCache {
+    return {
+        catMin: 0,
+        catMax: 0,
+        hidden: new Set(),
+        leftMin: 0,
+        leftMax: 0,
+        hasLeft: false,
+        rightMin: 0,
+        rightMax: 0,
+        hasRight: false,
+    };
+}
+
 /**
  * Build (or rebuild) the per-category extent buckets for the current
- * `_bars` set, filtered by the current `_hiddenSeries` set. The
- * buckets answer "what's the value range across this category?" in
- * O(1) per category, replacing the O(`bars.count`) per-frame walk.
+ * `_bars` set plus the line / scatter sample grid, filtered by the
+ * current `_hiddenSeries` set. The buckets answer "what's the value
+ * range across this category?" in O(1) per category, replacing the
+ * O(`bars.count` + N × |line+scatter|) per-frame walk.
+ *
+ * Bar / area glyphs contribute via `_bars` (min/max of `y0`,`y1`, so
+ * stacking and negative values are handled uniformly). Line / scatter
+ * glyphs have no `_bars` records — they contribute the raw sample
+ * value `v` as the single-point extent `[v, v]`; without this pass
+ * `series_zoom_mode === "dynamic"` would silently behave as `"fixed"`
+ * on any pure line/scatter chart.
  *
  * Capacity-reused: typed arrays grown only when `_numCategories`
- * exceeds prior capacity. The per-(cat, axis) loop is the same total
- * cost as the prior per-frame walk, but it amortizes — runs once per
- * data load + once per legend toggle, not per frame.
+ * exceeds prior capacity. Amortizes across pan/zoom frames — runs
+ * once per data load + once per legend toggle, not per frame.
  */
 function ensureCatExtents(
     chart: SeriesChart,
@@ -990,6 +1052,55 @@ function ensureCatExtents(
             }
 
             buckets.hasLeft[ci] = 1;
+        }
+    }
+
+    // Line / scatter glyphs route through `_samples`, not `_bars`, so
+    // fold their per-cat values in here. Bar / area series are already
+    // covered by the loop above (including non-stacking bar/area, which
+    // emit `_bars` records with `y0=0`, `y1=v`); line / scatter never
+    // stack, so the sample grid is their only contribution.
+    const samplingSeries = [chart._lineSeries, chart._scatterSeries];
+    const samples = chart._samples;
+    const sampleValid = chart._sampleValid;
+    const S = chart._series.length;
+    for (const seriesArr of samplingSeries) {
+        for (const s of seriesArr) {
+            if (hidden.has(s.seriesId)) {
+                continue;
+            }
+
+            const onRight = s.axis === 1;
+            const sid = s.seriesId;
+            for (let ci = 0; ci < N; ci++) {
+                const sampleIdx = ci * S + sid;
+                if (!((sampleValid[sampleIdx >> 3] >> (sampleIdx & 7)) & 1)) {
+                    continue;
+                }
+
+                const v = samples[sampleIdx];
+                if (onRight) {
+                    if (v < buckets.rightMin[ci]) {
+                        buckets.rightMin[ci] = v;
+                    }
+
+                    if (v > buckets.rightMax[ci]) {
+                        buckets.rightMax[ci] = v;
+                    }
+
+                    buckets.hasRight[ci] = 1;
+                } else {
+                    if (v < buckets.leftMin[ci]) {
+                        buckets.leftMin[ci] = v;
+                    }
+
+                    if (v > buckets.leftMax[ci]) {
+                        buckets.leftMax[ci] = v;
+                    }
+
+                    buckets.hasLeft[ci] = 1;
+                }
+            }
         }
     }
 

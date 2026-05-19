@@ -10,6 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+import { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 import type {
     DatagridModel,
     DatagridPluginElement,
@@ -52,7 +53,7 @@ export function toggle_edit_mode(
         mode = EDIT_MODES[idx];
     }
 
-    (this.parentElement as any)?.setSelection?.();
+    (this.parentElement as HTMLPerspectiveViewerElement)?.setSelection?.();
     this._edit_mode = mode;
     if (this.model) {
         this.model._edit_mode = mode;
@@ -62,6 +63,10 @@ export function toggle_edit_mode(
             dirty: true,
         };
     }
+
+    (this.parentElement as HTMLPerspectiveViewerElement)?.restore?.({
+        plugin_config: { edit_mode: mode },
+    });
 
     if (this._edit_button !== undefined) {
         this._edit_button.dataset.editMode = mode;

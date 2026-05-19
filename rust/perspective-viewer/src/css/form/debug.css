@@ -21,14 +21,6 @@
         display: flex;
     }
 
-    .tab-padding {
-        border-right: none;
-    }
-
-    .tab-title {
-        height: 36px;
-    }
-
     #debug-panel {
         display: flex;
         min-width: 150px;
@@ -42,7 +34,7 @@
             display: flex;
             flex: 0 0 auto;
             gap: 0.333333em;
-            padding: 0px 8px 12px 8px;
+            padding: 12px 8px 0px 0px;
             align-items: center;
             button {
                 appearance: none;
@@ -76,13 +68,14 @@
             flex-direction: column;
             flex: 0 1 auto;
             overflow: hidden;
-            padding: 12px 8px 12px 8px;
+            padding: 8px 8px 8px 0;
         }
 
         #editor {
             background-color: var(--psp--background-color);
             border: 1px solid var(--psp-inactive--color);
             border-radius: 2px;
+            font-size: 0.8em;
             /* height: 100%; */
         }
     }

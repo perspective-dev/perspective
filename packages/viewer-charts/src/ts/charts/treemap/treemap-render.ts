@@ -683,6 +683,7 @@ function drawStaticChrome(
             },
             stops,
             theme,
+            chart.getColumnFormatter(chart._colorName, "value"),
         );
     }
 

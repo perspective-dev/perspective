@@ -18,6 +18,7 @@ import { type PlotRect } from "../../layout/plot-layout";
 import { type AxisDomain } from "../../axis/numeric-axis";
 import {
     buildSeriesPipeline,
+    readBarRecord,
     type SeriesChartRecord,
     type NumericCategoryDomain,
     type SeriesInfo,
@@ -37,8 +38,28 @@ import {
     showBarPinnedTooltipForSample,
 } from "./series-interact";
 import { resolvePalette } from "../../theme/palette";
+import { LineGlyph } from "./glyphs/draw-lines";
+import { ScatterGlyph } from "./glyphs/draw-scatter";
+import { AreaGlyph } from "./glyphs/draw-areas";
 import barVert from "../../shaders/bar.vert.glsl";
 import barFrag from "../../shaders/bar.frag.glsl";
+
+/**
+ * Per-frame memo of the auto-fit value extent for a {@link SeriesChart},
+ * keyed on the visible categorical window. Two axis slots (`left*` /
+ * `right*`) because dual-axis bar charts refit independently.
+ */
+export interface SeriesAutoFitCache {
+    catMin: number;
+    catMax: number;
+    hidden: Set<number>;
+    leftMin: number;
+    leftMax: number;
+    hasLeft: boolean;
+    rightMin: number;
+    rightMax: number;
+    hasRight: boolean;
+}
 
 export interface CachedLocations {
     u_proj_left: WebGLUniformLocation | null;
@@ -163,6 +184,19 @@ export class SeriesChart extends CategoricalYChart {
     _hasRightAxis = false;
 
     /**
+     * `domain_mode: "expand"` accumulators. Hold the running union of
+     * every prior build's value-axis (and, in numeric-category mode,
+     * category-axis) extent for as long as the option is active.
+     * Cleared in `resetExpandedDomain` — wired from the worker's
+     * `resetAllZooms` and from view-config mutations on the base
+     * class. `null` whenever the option is `"fit"` or the accumulator
+     * has just been cleared; the next build re-seeds.
+     */
+    _expandedLeftDomain: { min: number; max: number } | null = null;
+    _expandedRightDomain: { min: number; max: number } | null = null;
+    _expandedCategoryDomain: { min: number; max: number } | null = null;
+
+    /**
      * Numeric category-axis state. Populated only when `group_by` has
      * exactly one level and that level is `date | datetime | integer |
      * float` (boolean → category). When set, `_bars[].xCenter` lives in
@@ -214,13 +248,19 @@ export class SeriesChart extends CategoricalYChart {
     _samples: Float32Array = new Float32Array(0);
     _sampleValid: Uint8Array = new Uint8Array(0);
 
-    // Lazily-initialised per-glyph shader / buffer caches. Undefined until
-    // the first frame that needs the corresponding glyph. Typed as `unknown`
-    // so the glyph modules can own their own cache shape without forcing a
-    // circular import into `bar.ts`.
-    _lineCache: unknown = undefined;
-    _scatterCache: unknown = undefined;
-    _areaCache: unknown = undefined;
+    /**
+     * Typed glyph composition. Each glyph (line / scatter / area) owns
+     * its program cache and persistent vertex buffers privately; the
+     * chart routes draw / rebuild / invalidate via `_glyphs`. Bar
+     * glyph state lives on the chart directly (shared bar program +
+     * `_locations` + buffer pool), so it's a free function rather than
+     * a class.
+     */
+    readonly _glyphs = {
+        lines: new LineGlyph(),
+        scatter: new ScatterGlyph(),
+        areas: new AreaGlyph(),
+    } as const;
 
     // Dual-axis bar charts keep a secondary Y-axis domain + ticks for
     // the right-side axis chrome.
@@ -248,19 +288,6 @@ export class SeriesChart extends CategoricalYChart {
     _legendCacheValid = false;
 
     /**
-     * Persistent GPU buffer state for line / scatter / area glyphs.
-     * Built in `uploadAndRender` and reused across pan/zoom frames —
-     * the legacy code rebuilt these every frame which dominated the
-     * frame budget at scale. Invalidated on data load and on
-     * `_hiddenSeries` mutation; the latter only triggers a rebuild for
-     * scatter (per-axis merged buffers) — line and area are per-series
-     * and the draw paths just skip hidden entries.
-     */
-    _lineBuffers: unknown = undefined;
-    _scatterBuffers: unknown = undefined;
-    _areaBuffers: unknown = undefined;
-
-    /**
      * Per-frame memo of the auto-fit value extent keyed on the visible
      * categorical window. Two comparisons per hit → no walk. Reset to
      * null on any mutation that would change the outcome (data reload,
@@ -276,17 +303,7 @@ export class SeriesChart extends CategoricalYChart {
      * profiling shows the walk in the hot path — current scale caps
      * keep it below 1% of frame time.
      */
-    _autoFitCache: {
-        catMin: number;
-        catMax: number;
-        hidden: Set<number>;
-        leftMin: number;
-        leftMax: number;
-        hasLeft: boolean;
-        rightMin: number;
-        rightMax: number;
-        hasRight: boolean;
-    } | null = null;
+    _autoFitCache: SeriesAutoFitCache | null = null;
 
     /**
      * Per-category extent buckets. Built once per data load (and
@@ -331,14 +348,70 @@ export class SeriesChart extends CategoricalYChart {
             },
             onClickPre: (mx: number, my: number) =>
                 handleBarLegendClick(this, mx, my),
-            onPin: () => {
+            onPin: (mx: number, my: number) => {
+                // Refresh the hit-test at the click coords directly:
+                // `dispatchHover` is RAF-throttled in the worker, so a
+                // click that follows a mousemove in the same task may
+                // arrive at `onPin` before the prior hover RAF has
+                // updated `_hoveredBarIdx`. Re-running the hit-test
+                // here makes the pin path independent of hover timing.
+                handleBarHover(this, mx, my);
                 if (this._hoveredBarIdx >= 0) {
-                    showBarPinnedTooltip(this, this._hoveredBarIdx);
+                    const barIdx = this._hoveredBarIdx;
+                    showBarPinnedTooltip(this, barIdx);
+                    const rec = readBarRecord(
+                        this._bars,
+                        barIdx,
+                        this._splitPrefixes.length,
+                        this._samples,
+                        this._series.length,
+                    );
+                    void this._emitSeriesClickSelect(rec);
                 } else if (this._hoveredSample) {
-                    showBarPinnedTooltipForSample(this, this._hoveredSample);
+                    const rec = this._hoveredSample;
+                    showBarPinnedTooltipForSample(this, rec);
+                    void this._emitSeriesClickSelect(rec);
                 }
             },
+            onUnpin: () => {
+                this.emitUnselect();
+            },
         };
+    }
+
+    /**
+     * Resolve a clicked bar / point into a `PerspectiveClickDetail`
+     * (via `buildClickDetail`) and emit both
+     * `perspective-click` and `perspective-global-filter` to the host.
+     *
+     * `rowIdx` derivation: the series pipeline emits one record per
+     * (catIdx, agg, split) tuple, and a pivoted view has one view row
+     * per category — so `catIdx + _rowOffset` is the source-view row.
+     * `_aggregates[aggIdx]` is the *base* column name (no split
+     * prefix). Group-by values come from per-level `_rowPaths`, split-by
+     * values are recovered by splitting `_splitPrefixes[splitIdx]` on
+     * the `|` delimiter the engine uses for pivoted column names.
+     */
+    private async _emitSeriesClickSelect(b: SeriesChartRecord): Promise<void> {
+        if (!this._aggregates[b.aggIdx]) {
+            return;
+        }
+
+        const groupByValues: (string | null)[] = this._rowPaths.map(
+            (level) => level.labels[b.catIdx] ?? null,
+        );
+        const splitKey = this._splitPrefixes[b.splitIdx] ?? "";
+        const splitByValues =
+            this._splitBy.length > 0 && splitKey !== ""
+                ? splitKey.split("|")
+                : [];
+
+        await this.emitClickAndSelect({
+            rowIdx: b.catIdx + this._rowOffset,
+            columnName: this._aggregates[b.aggIdx],
+            groupByValues,
+            splitByValues,
+        });
     }
 
     async uploadAndRender(
@@ -401,10 +474,72 @@ export class SeriesChart extends CategoricalYChart {
                 | "scatter"
                 | "area"
                 | undefined,
+            autoAltYAxis: this._pluginConfig.auto_alt_y_axis,
+            bandInnerFrac: this._pluginConfig.band_inner_frac,
+            barInnerPad: this._pluginConfig.bar_inner_pad,
+            includeZero: this._pluginConfig.include_zero,
             scratchBars: this._bars,
             scratchPosStack: this._posStackScratch,
             scratchNegStack: this._negStackScratch,
         });
+
+        // `domain_mode: "expand"` post-build union. Mutate the pipeline
+        // result struct in place so every downstream assignment below
+        // (`_leftDomain`, `_rightDomain`, `_numericCategoryDomain`,
+        // `_categoryOrigin`) automatically picks up the grown extent.
+        // `"fit"` (or a fresh reset) leaves the result untouched and
+        // clears the accumulators so the next toggle starts fresh.
+        if (this._pluginConfig.domain_mode === "expand") {
+            if (this._expandedLeftDomain) {
+                result.leftDomain.min = Math.min(
+                    this._expandedLeftDomain.min,
+                    result.leftDomain.min,
+                );
+                result.leftDomain.max = Math.max(
+                    this._expandedLeftDomain.max,
+                    result.leftDomain.max,
+                );
+            }
+
+            this._expandedLeftDomain = { ...result.leftDomain };
+
+            if (result.rightDomain) {
+                if (this._expandedRightDomain) {
+                    result.rightDomain.min = Math.min(
+                        this._expandedRightDomain.min,
+                        result.rightDomain.min,
+                    );
+                    result.rightDomain.max = Math.max(
+                        this._expandedRightDomain.max,
+                        result.rightDomain.max,
+                    );
+                }
+
+                this._expandedRightDomain = { ...result.rightDomain };
+            }
+
+            if (result.numericCategoryDomain) {
+                if (this._expandedCategoryDomain) {
+                    result.numericCategoryDomain.min = Math.min(
+                        this._expandedCategoryDomain.min,
+                        result.numericCategoryDomain.min,
+                    );
+                    result.numericCategoryDomain.max = Math.max(
+                        this._expandedCategoryDomain.max,
+                        result.numericCategoryDomain.max,
+                    );
+                }
+
+                this._expandedCategoryDomain = {
+                    min: result.numericCategoryDomain.min,
+                    max: result.numericCategoryDomain.max,
+                };
+            }
+        } else {
+            this._expandedLeftDomain = null;
+            this._expandedRightDomain = null;
+            this._expandedCategoryDomain = null;
+        }
 
         this._aggregates = result.aggregates;
         this._splitPrefixes = result.splitPrefixes;
@@ -503,6 +638,12 @@ export class SeriesChart extends CategoricalYChart {
 
         this._glManager = glManager;
         renderBarFrame(this, glManager);
+    }
+
+    override resetExpandedDomain(): void {
+        this._expandedLeftDomain = null;
+        this._expandedRightDomain = null;
+        this._expandedCategoryDomain = null;
     }
 
     protected destroyInternal(): void {
@@ -634,63 +775,13 @@ function resolvePaletteCached(
 }
 
 /**
- * Tear down the per-glyph GPU buffers built in `uploadAndRender`. Each
- * glyph module owns its own resource set (line, scatter, area).
+ * Tear down per-glyph GPU resources. Each glyph instance owns its own
+ * program cache + persistent buffers and frees both in `destroy`.
  */
 function destroyGlyphBuffers(chart: SeriesChart): void {
-    if (!chart._glManager) {
-        return;
-    }
-
-    const gl = chart._glManager.gl;
-    const lb = chart._lineBuffers as
-        | { gpuBuffer?: WebGLBuffer | null }
-        | null
-        | undefined;
-    if (lb?.gpuBuffer) {
-        gl.deleteBuffer(lb.gpuBuffer);
-    }
-
-    chart._lineBuffers = undefined;
-
-    const sb = chart._scatterBuffers as
-        | {
-              posLeft?: WebGLBuffer | null;
-              posRight?: WebGLBuffer | null;
-              colLeft?: WebGLBuffer | null;
-              colRight?: WebGLBuffer | null;
-          }
-        | null
-        | undefined;
-    if (sb) {
-        if (sb.posLeft) {
-            gl.deleteBuffer(sb.posLeft);
-        }
-
-        if (sb.posRight) {
-            gl.deleteBuffer(sb.posRight);
-        }
-
-        if (sb.colLeft) {
-            gl.deleteBuffer(sb.colLeft);
-        }
-
-        if (sb.colRight) {
-            gl.deleteBuffer(sb.colRight);
-        }
-    }
-
-    chart._scatterBuffers = undefined;
-
-    const ab = chart._areaBuffers as
-        | { gpuBuffer?: WebGLBuffer | null }
-        | null
-        | undefined;
-    if (ab?.gpuBuffer) {
-        gl.deleteBuffer(ab.gpuBuffer);
-    }
-
-    chart._areaBuffers = undefined;
+    chart._glyphs.lines.destroy(chart);
+    chart._glyphs.scatter.destroy(chart);
+    chart._glyphs.areas.destroy(chart);
 }
 
 /**

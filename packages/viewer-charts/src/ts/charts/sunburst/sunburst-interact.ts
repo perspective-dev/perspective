@@ -11,9 +11,8 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { SunburstChart } from "./sunburst";
-import { NULL_NODE } from "../common/node-store";
+import { NULL_NODE, ancestorNames } from "../common/node-store";
 import { rebuildBreadcrumbs } from "../common/tree-data";
-import { formatTickValue } from "../../layout/ticks";
 import {
     renderSunburstFrame,
     renderSunburstChromeOverlay,
@@ -215,6 +214,7 @@ export function handleSunburstClick(
 ): void {
     if (chart._pinnedNodeId !== NULL_NODE) {
         dismissSunburstPinnedTooltip(chart);
+        chart.emitUnselect();
         return;
     }
 
@@ -228,6 +228,7 @@ export function handleSunburstClick(
         ) {
             if (region.nodeId !== chart._currentRootId) {
                 drillTo(chart, region.nodeId);
+                chart.emitUnselect();
             }
 
             return;
@@ -245,6 +246,7 @@ export function handleSunburstClick(
             const parent = store.parent[ctx.drillRoot];
             if (parent !== NULL_NODE && parent !== chart._rootId) {
                 drillTo(chart, parent);
+                chart.emitUnselect();
             } else if (chart._facets.length > 0) {
                 // Already at the facet root: reset this facet's drill.
                 const facet = chart._facets.find(
@@ -252,6 +254,7 @@ export function handleSunburstClick(
                 );
                 if (facet) {
                     chart._facetDrillRoots.delete(facet.label);
+                    chart.emitUnselect();
                 }
 
                 if (chart._glManager) {
@@ -270,9 +273,45 @@ export function handleSunburstClick(
 
     if (store.firstChild[hit] !== NULL_NODE) {
         drillTo(chart, hit);
+        void emitSunburstNodeEvent(chart, hit, "branch");
     } else {
         showSunburstPinnedTooltip(chart, hit);
+        void emitSunburstNodeEvent(chart, hit, "leaf");
     }
+}
+
+/**
+ * Counterpart to `emitTreemapNodeEvent` for sunburst. Same path-walk
+ * semantics — split-by prefix in faceted mode, group-by levels
+ * afterward, leaf row idx from `_nodeStore.leafRowIdx`.
+ */
+async function emitSunburstNodeEvent(
+    chart: SunburstChart,
+    nodeId: number,
+    kind: "leaf" | "branch",
+): Promise<void> {
+    const store = chart._nodeStore;
+    const path = ancestorNames(store, nodeId);
+    const isFaceted =
+        chart._splitBy.length > 0 && chart._facetConfig.facet_mode === "grid";
+    const splitByValues: (string | null)[] = isFaceted
+        ? path.slice(0, chart._splitBy.length)
+        : [];
+    const groupByValues: (string | null)[] = isFaceted
+        ? path.slice(
+              chart._splitBy.length,
+              chart._splitBy.length + chart._groupBy.length,
+          )
+        : path.slice(0, chart._groupBy.length);
+
+    const rowIdx = kind === "leaf" ? (store.leafRowIdx[nodeId] ?? null) : null;
+
+    await chart.emitClickAndSelect({
+        rowIdx: rowIdx != null && rowIdx >= 0 ? rowIdx : null,
+        columnName: chart._sizeName,
+        groupByValues,
+        splitByValues,
+    });
 }
 
 /**
@@ -374,13 +413,15 @@ export async function buildSunburstTooltipLines(
         lines.push(store.name[nodeId]);
     }
 
-    lines.push(`Value: ${formatTickValue(store.value[nodeId])}`);
+    const sizeFmt = chart.getColumnFormatter(chart._sizeName, "value");
+    lines.push(`Value: ${sizeFmt(store.value[nodeId])}`);
 
     // Color value (numeric branch): stored on the node at insert
     // time, so it's always available without a view fetch.
     if (chart._colorName && !isNaN(store.colorValue[nodeId])) {
+        const colorFmt = chart.getColumnFormatter(chart._colorName, "value");
         lines.push(
-            `${chart._colorName}: ${formatTickValue(store.colorValue[nodeId])}`,
+            `${chart._colorName}: ${colorFmt(store.colorValue[nodeId])}`,
         );
     }
 
@@ -402,7 +443,9 @@ export async function buildSunburstTooltipLines(
             }
 
             if (typeof value === "number") {
-                lines.push(`${name}: ${formatTickValue(value)}`);
+                lines.push(
+                    `${name}: ${chart.getColumnFormatter(name, "value")(value)}`,
+                );
             } else {
                 lines.push(`${name}: ${value}`);
             }

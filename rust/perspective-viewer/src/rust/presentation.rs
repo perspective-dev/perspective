@@ -11,32 +11,27 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 mod column_locator;
+pub mod drag_helpers;
 mod props;
 mod sheets;
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
 
 use async_lock::Mutex;
-use perspective_js::utils::{ApiFuture, ApiResult};
+use perspective_js::utils::*;
+use wasm_bindgen::prelude::*;
 use web_sys::*;
 use yew::html::ImplicitClone;
 use yew::prelude::*;
 
 pub use self::column_locator::{ColumnLocator, ColumnSettingsTab, ColumnTab, OpenColumnSettings};
-pub use self::props::PresentationProps;
-use crate::config::{ColumnConfigFieldUpdate, ColumnConfigUpdate};
+use self::drag_helpers::DragTargetState;
+pub use self::drag_helpers::{DragDropContainer, DragEndCallback};
+pub use self::props::{DragDropProps, PresentationProps};
 use crate::utils::*;
-
-/// A per-column config map, opaque from the viewer's perspective. Each
-/// inner [`serde_json::Map`] is a flat collection of plugin-defined JSON
-/// keys whose shape is dictated by the active plugin's
-/// [`crate::config::ColumnConfigSchema`]. Foreign keys (left over from a
-/// previous plugin) coexist as ghost state and are filtered out at the
-/// `plugin.restore()` boundary.
-pub type ColumnConfigMap = HashMap<String, serde_json::Map<String, serde_json::Value>>;
 
 /// The available themes as detected in the browser environment or set
 /// explicitly when CORS prevents detection.  Detection is expensive and
@@ -47,14 +42,63 @@ struct ThemeData {
     themes: Option<Vec<String>>,
 }
 
+#[derive(Clone, Debug)]
+struct DragFrom {
+    column: String,
+    effect: DragEffect,
+}
+
+#[derive(Debug)]
+struct DragOver {
+    target: DragTarget,
+    index: usize,
+}
+
+#[derive(Debug, Default)]
+enum DragState {
+    #[default]
+    NoDrag,
+    DragInProgress(DragFrom),
+    DragOverInProgress(DragFrom, DragOver),
+}
+
+impl DragState {
+    const fn is_drag_in_progress(&self) -> bool {
+        !matches!(self, Self::NoDrag)
+    }
+}
+
 /// Actual presentations tate struct with some fields hidden.
 pub struct PresentationHandle {
     viewer_elem: HtmlElement,
     theme_data: Mutex<ThemeData>,
     is_settings_open: RefCell<bool>,
     open_column_settings: RefCell<OpenColumnSettings>,
-    columns_config: RefCell<ColumnConfigMap>,
     is_workspace: RefCell<Option<bool>>,
+
+    /// Drag/drop in-progress state. Empty (`NoDrag`) when no user drag is
+    /// active. Mutated by `notify_drag_*` / `notify_drop`; read by component
+    /// CSS-class derivations (`is_dragover`, `get_drag_column`).
+    drag_state: RefCell<DragState>,
+    pub drop_received: PubSub<(String, DragTarget, DragEffect, usize)>,
+
+    /// Injected callback from the root component fired after a drag begins
+    /// (one frame later, to let the drag image latch). Replaces the former
+    /// `dragstart_received: PubSub` field on `DragDrop`.
+    pub on_dragstart: RefCell<Option<Callback<DragEffect>>>,
+
+    /// Injected callback from the root component fired when the drag ends,
+    /// regardless of drop outcome.
+    pub on_dragend: RefCell<Option<Callback<()>>>,
+
+    /// Host-level `dragend` listener closure, attached to `viewer_elem` to
+    /// guarantee `dragend` fires even when virtual DOM updates remove the
+    /// dragged element from the shadow tree.
+    host_dragend: RefCell<Option<DragEndCallback>>,
+
+    /// IntersectionObserver-based fallback for the drag image, kept alive for
+    /// the duration of the drag.
+    drag_target: RefCell<Option<DragTargetState>>,
 
     /// Per-element dedup cell for `perspective-config-update` event
     /// dispatch. Read+written by `crate::custom_events::dispatch_*`
@@ -72,12 +116,6 @@ pub struct PresentationHandle {
     pub column_settings_open_changed: PubSub<(bool, Option<String>)>,
     pub theme_config_updated: PubSub<(PtrEqRc<Vec<String>>, Option<usize>)>,
     pub on_eject: PubSub<()>,
-
-    /// Fires after `tasks::send_plugin_config` applies a column-config edit
-    /// from a sidebar control. Subscribers receive the post-update
-    /// [`ColumnConfigMap`]; `wire_custom_events` is the only listener and
-    /// fans this out as the `perspective-column-style-change` `CustomEvent`.
-    pub column_style_changed: PubSub<ColumnConfigMap>,
 
     /// Fires for status-bar / main-panel pointer events that target the
     /// statusbar element. `wire_custom_events` formats the `PointerEvent`'s
@@ -116,14 +154,18 @@ impl Presentation {
             settings_before_open_changed: Default::default(),
             column_settings_open_changed: Default::default(),
             on_is_workspace_changed: Default::default(),
-            columns_config: Default::default(),
             is_settings_open: Default::default(),
             open_column_settings: Default::default(),
             theme_config_updated: PubSub::default(),
             on_eject: PubSub::default(),
-            column_style_changed: PubSub::default(),
             statusbar_pointer_event: PubSub::default(),
             last_dispatched_config: Default::default(),
+            drag_state: Default::default(),
+            drop_received: Default::default(),
+            on_dragstart: Default::default(),
+            on_dragend: Default::default(),
+            host_dragend: Default::default(),
+            drag_target: Default::default(),
         }));
 
         ApiFuture::spawn(theme.clone().init());
@@ -308,66 +350,190 @@ impl Presentation {
         Ok(true)
     }
 
-    /// Returns an owned copy of the curent column configuration map.
-    pub fn all_columns_configs(&self) -> ColumnConfigMap {
-        self.columns_config.borrow().clone()
-    }
-
-    pub fn reset_columns_configs(&self) {
-        *self.columns_config.borrow_mut() = ColumnConfigMap::new();
-    }
-
-    /// Gets a clone of the raw column-config JSON map for the given
-    /// column name. Returns `None` if the column has no stored
-    /// configuration.
-    pub fn get_columns_config(
-        &self,
-        column_name: &str,
-    ) -> Option<serde_json::Map<String, serde_json::Value>> {
-        self.columns_config.borrow().get(column_name).cloned()
-    }
-
-    /// Updates the entire column config map (e.g. from a `restore()`
-    /// call). The replacement map is opaque; foreign keys persist as
-    /// ghost state for plugins to ignore.
-    pub fn update_columns_configs(&self, update: ColumnConfigUpdate) {
-        match update {
-            crate::config::OptionalUpdate::SetDefault => {
-                let mut config = self.columns_config.borrow_mut();
-                *config = HashMap::default()
-            },
-            crate::config::OptionalUpdate::Missing => {},
-            crate::config::OptionalUpdate::Update(update) => {
-                for (col_name, new_config) in update.into_iter() {
-                    self.columns_config
-                        .borrow_mut()
-                        .insert(col_name, new_config);
-                }
-            },
+    /// Snapshot the drag state as a [`DragDropProps`] value for threading
+    /// through the component tree without PubSub subscriptions.
+    pub fn drag_drop_props(&self) -> DragDropProps {
+        DragDropProps {
+            column: self.get_drag_column(),
         }
     }
 
-    /// Apply a single schema-field update from the UI: clear all keys the
-    /// field owns, then splice in the partial new sub-state. If the
-    /// resulting column entry is empty, drop it from the map entirely.
-    pub fn update_columns_config_field(
-        &self,
-        column_name: String,
-        update: ColumnConfigFieldUpdate,
-    ) {
-        let mut config = self.columns_config.borrow_mut();
-        let entry = config.entry(column_name.clone()).or_default();
-        for k in &update.keys {
-            entry.remove(k);
+    /// Get the column name currently being drag/dropped.
+    pub fn get_drag_column(&self) -> Option<String> {
+        match *self.drag_state.borrow() {
+            DragState::DragInProgress(DragFrom { ref column, .. })
+            | DragState::DragOverInProgress(DragFrom { ref column, .. }, _) => Some(column.clone()),
+            _ => None,
         }
-        for (k, v) in update.value {
-            if update.keys.contains(&k) {
-                entry.insert(k, v);
+    }
+
+    pub fn get_drag_target(&self) -> Option<DragTarget> {
+        match *self.drag_state.borrow() {
+            DragState::DragInProgress(DragFrom {
+                effect: DragEffect::Move(target),
+                ..
+            })
+            | DragState::DragOverInProgress(
+                DragFrom {
+                    effect: DragEffect::Move(target),
+                    ..
+                },
+                _,
+            ) => Some(target),
+            _ => None,
+        }
+    }
+
+    pub fn set_drag_image(&self, event: &DragEvent) -> ApiResult<()> {
+        event.stop_propagation();
+        if let Some(dt) = event.data_transfer() {
+            dt.set_drop_effect("move");
+        }
+
+        let original: HtmlElement = event.target().into_apierror()?.unchecked_into();
+        let elem: HtmlElement = original
+            .children()
+            .get_with_index(0)
+            .unwrap()
+            .clone_node_with_deep(true)?
+            .unchecked_into();
+
+        elem.class_list().toggle("snap-drag-image")?;
+        original.append_child(&elem)?;
+        event.data_transfer().into_apierror()?.set_drag_image(
+            &elem,
+            event.offset_x(),
+            event.offset_y(),
+        );
+
+        *self.drag_target.borrow_mut() = Some(DragTargetState::new(
+            self.viewer_elem.clone(),
+            original.clone(),
+        ));
+
+        // Drag image does not register correctly unless we wait.
+        ApiFuture::spawn(async move {
+            request_animation_frame().await;
+            original.remove_child(&elem)?;
+            Ok(())
+        });
+
+        Ok(())
+    }
+
+    /// Is the drag/drop state currently in `action`?
+    pub fn is_dragover(&self, drag_target: DragTarget) -> Option<(usize, String)> {
+        match *self.drag_state.borrow() {
+            DragState::DragOverInProgress(
+                DragFrom { ref column, .. },
+                DragOver { target, index },
+            ) if target == drag_target => Some((index, column.clone())),
+            _ => None,
+        }
+    }
+
+    pub fn notify_drop(&self, event: &DragEvent) {
+        event.prevent_default();
+        event.stop_propagation();
+
+        let action = match &*self.drag_state.borrow() {
+            DragState::DragOverInProgress(
+                DragFrom { column, effect },
+                DragOver { target, index },
+            ) => Some((column.to_string(), *target, *effect, *index)),
+            _ => None,
+        };
+
+        self.drag_target.borrow_mut().take();
+        *self.drag_state.borrow_mut() = DragState::NoDrag;
+        if let Some(action) = action {
+            self.drop_received.emit(action);
+        }
+    }
+
+    /// Start the drag/drop action with the name of the column being dragged.
+    pub fn notify_drag_start(&self, column: String, effect: DragEffect) {
+        *self.drag_state.borrow_mut() = DragState::DragInProgress(DragFrom { column, effect });
+        self.register_host_dragend();
+        let emit = self.on_dragstart.borrow().clone();
+        ApiFuture::spawn(async move {
+            request_animation_frame().await;
+            if let Some(cb) = emit {
+                cb.emit(effect);
+            }
+
+            Ok(())
+        });
+    }
+
+    /// End the drag/drop action by resetting the state to default.
+    pub fn notify_drag_end(&self) {
+        if self.drag_state.borrow().is_drag_in_progress() {
+            self.drag_target.borrow_mut().take();
+            *self.drag_state.borrow_mut() = DragState::NoDrag;
+            if let Some(cb) = self.on_dragend.borrow().as_ref() {
+                cb.emit(());
             }
         }
-        if entry.is_empty() {
-            config.remove(&column_name);
+    }
+
+    /// Register a `dragend` listener on the host `<perspective-viewer>`
+    /// element so that drag-end cleanup fires even when Yew re-renders
+    /// remove the original dragged element from the shadow DOM.  The host
+    /// element is outside the virtual DOM and therefore stable.
+    fn register_host_dragend(&self) {
+        if let Some(prev) = self.host_dragend.borrow_mut().take() {
+            let _ = self
+                .viewer_elem
+                .remove_event_listener_with_callback("dragend", prev.as_ref().unchecked_ref());
         }
+
+        let this = self.clone();
+        let closure = Closure::wrap(Box::new(move |_event: DragEvent| {
+            this.notify_drag_end();
+        }) as Box<dyn FnMut(DragEvent)>);
+
+        self.viewer_elem
+            .add_event_listener_with_callback("dragend", closure.as_ref().unchecked_ref())
+            .unwrap();
+
+        *self.host_dragend.borrow_mut() = Some(closure);
+    }
+
+    /// Leave the `action` zone.
+    pub fn notify_drag_leave(&self, drag_target: DragTarget) {
+        let reset = match *self.drag_state.borrow() {
+            DragState::DragOverInProgress(
+                DragFrom { ref column, effect },
+                DragOver { target, .. },
+            ) if target == drag_target => Some((column.clone(), effect)),
+            _ => None,
+        };
+
+        if let Some((column, effect)) = reset {
+            self.notify_drag_start(column, effect);
+        }
+    }
+
+    /// Enter the `action` zone at `index`, which must be <= the number of
+    /// children in the container.
+    pub fn notify_drag_enter(&self, target: DragTarget, index: usize) -> bool {
+        let mut drag_state = self.drag_state.borrow_mut();
+        let should_render = match &*drag_state {
+            DragState::DragOverInProgress(_, drag_to) => {
+                drag_to.target != target || drag_to.index != index
+            },
+            _ => true,
+        };
+
+        *drag_state = match &*drag_state {
+            DragState::DragOverInProgress(drag_from, _) | DragState::DragInProgress(drag_from) => {
+                DragState::DragOverInProgress(drag_from.clone(), DragOver { target, index })
+            },
+            _ => DragState::NoDrag,
+        };
+
+        should_render
     }
 
     /// Snapshot the current presentation state as a [`PresentationProps`]

@@ -115,6 +115,23 @@ export interface FacetGrid {
     outerYAxisRect?: PlotRect;
 }
 
+/**
+ * Collect the bottom-row cells' `PlotLayout`s — i.e. the cells that
+ * sit on the grid's bottom edge. Shared-X axis renderers paint X
+ * ticks aligned to each of these. Empty when the grid has zero cells.
+ */
+export function bottomRowLayouts(grid: FacetGrid): PlotLayout[] {
+    return grid.cells.filter((c) => c.isBottomEdge).map((c) => c.layout);
+}
+
+/**
+ * Collect the left-column cells' `PlotLayout`s — symmetric to
+ * {@link bottomRowLayouts} for the shared-Y axis path.
+ */
+export function leftColumnLayouts(grid: FacetGrid): PlotLayout[] {
+    return grid.cells.filter((c) => c.isLeftEdge).map((c) => c.layout);
+}
+
 // Per-cell internal gutter defaults mirror `PlotLayout`'s constants so
 // that a cell with `leftExtra: undefined` reserves the same space the
 // outer band would reserve when the axis is shared. Keep these in sync

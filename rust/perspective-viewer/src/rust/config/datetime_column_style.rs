@@ -92,8 +92,3 @@ impl Default for DatetimeColumnStyleConfig {
         }
     }
 }
-
-#[derive(Clone, Default, Deserialize, Eq, PartialEq, Serialize, Debug)]
-pub struct DatetimeColumnStyleDefaultConfig {
-    pub color: String,
-}

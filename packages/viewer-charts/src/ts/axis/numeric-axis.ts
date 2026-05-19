@@ -72,7 +72,15 @@ export function renderGridlines(
     drawGridlinesY(ctx, plot, yTicks, (v) => layout.dataToPixel(0, v).py);
 }
 
-function tickFmt(domain: AxisDomain, ticks: number[]): (v: number) => string {
+function tickFmt(
+    domain: AxisDomain,
+    ticks: number[],
+    override?: (v: number) => string,
+): (v: number) => string {
+    if (override) {
+        return override;
+    }
+
     const step = ticks.length > 1 ? ticks[1] - ticks[0] : 0;
     return domain.isDate
         ? (v: number) => formatDateTickValue(v, step)
@@ -94,9 +102,10 @@ function renderXAxisCore(
     band: { x: number; width: number },
     theme: Theme,
     label: { cx: number; baselineY: number } | null,
+    formatter?: (v: number) => string,
 ): void {
     const { tickColor, labelColor, axisLineColor, fontFamily } = theme;
-    const fmt = tickFmt(xDomain, xTicks);
+    const fmt = tickFmt(xDomain, xTicks, formatter);
 
     ctx.strokeStyle = axisLineColor;
     ctx.lineWidth = 1;
@@ -143,9 +152,10 @@ function renderYAxisCore(
     band: { y: number; height: number },
     theme: Theme,
     label: { pivotY: number } | null,
+    formatter?: (v: number) => string,
 ): void {
     const { tickColor, labelColor, axisLineColor, fontFamily } = theme;
-    const fmt = tickFmt(yDomain, yTicks);
+    const fmt = tickFmt(yDomain, yTicks, formatter);
 
     ctx.strokeStyle = axisLineColor;
     ctx.lineWidth = 1;
@@ -190,6 +200,7 @@ export function renderCellXAxis(
     theme: Theme,
     hasLabel: boolean,
     dpr: number,
+    formatter?: (v: number) => string,
 ): void {
     const ctx = getScaledContext(canvas, dpr);
     if (!ctx) {
@@ -211,6 +222,7 @@ export function renderCellXAxis(
                   baselineY: layout.cssHeight - 2,
               }
             : null,
+        formatter,
     );
 }
 
@@ -222,6 +234,7 @@ export function renderCellYAxis(
     theme: Theme,
     hasLabel: boolean,
     dpr: number,
+    formatter?: (v: number) => string,
 ): void {
     const ctx = getScaledContext(canvas, dpr);
     if (!ctx) {
@@ -238,6 +251,7 @@ export function renderCellYAxis(
         plot,
         theme,
         hasLabel ? { pivotY: plot.y + plot.height / 2 } : null,
+        formatter,
     );
 }
 
@@ -250,9 +264,29 @@ export function renderAxesChrome(
     yTicks: number[],
     theme: Theme,
     dpr: number,
+    xFormatter?: (v: number) => string,
+    yFormatter?: (v: number) => string,
 ): void {
-    renderCellYAxis(canvas, yDomain, layout, yTicks, theme, true, dpr);
-    renderCellXAxis(canvas, xDomain, layout, xTicks, theme, true, dpr);
+    renderCellYAxis(
+        canvas,
+        yDomain,
+        layout,
+        yTicks,
+        theme,
+        true,
+        dpr,
+        yFormatter,
+    );
+    renderCellXAxis(
+        canvas,
+        xDomain,
+        layout,
+        xTicks,
+        theme,
+        true,
+        dpr,
+        xFormatter,
+    );
 }
 
 export function renderOuterXAxis(
@@ -264,6 +298,7 @@ export function renderOuterXAxis(
     theme: Theme,
     hasLabel: boolean,
     dpr: number,
+    formatter?: (v: number) => string,
 ): void {
     const ctx = getScaledContext(canvas, dpr);
     if (!ctx) {
@@ -284,6 +319,7 @@ export function renderOuterXAxis(
                   baselineY: rect.y + rect.height - 2,
               }
             : null,
+        formatter,
     );
 }
 
@@ -296,6 +332,7 @@ export function renderOuterYAxis(
     theme: Theme,
     hasLabel: boolean,
     dpr: number,
+    formatter?: (v: number) => string,
 ): void {
     const ctx = getScaledContext(canvas, dpr);
     if (!ctx) {
@@ -311,5 +348,6 @@ export function renderOuterYAxis(
         rect,
         theme,
         hasLabel ? { pivotY: rect.y + rect.height / 2 } : null,
+        formatter,
     );
 }

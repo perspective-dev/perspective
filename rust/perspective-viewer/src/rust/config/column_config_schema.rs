@@ -15,10 +15,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{
-    DatetimeColumnStyleDefaultConfig, KeyValueOpts, NumberSeriesStyleDefaultConfig,
-    StringColumnStyleDefaultConfig,
-};
+use super::{KeyValueOpts, NumberSeriesStyleDefaultConfig};
 
 /// The full schema for one column at one point in time. Plugins may return
 /// different schemas for the same column based on the column's current
@@ -26,10 +23,10 @@ use super::{
 /// every field update.
 ///
 /// Each entry is a [`ControlSpec`]. Primitive variants carry their own
-/// `key` (JSON storage key) and `label` (sidebar UI label) inline.
-/// Composite variants render a self-contained Yew component that supplies
-/// its own labels and owns a fixed key namespace via
-/// [`ControlSpec::serialized_keys`].
+/// `key` (JSON storage key) inline; the sidebar UI label is supplied by
+/// CSS via `--psp-label--<key>--content`. Composite variants render a
+/// self-contained Yew component that supplies its own labels and owns a
+/// fixed key namespace via [`ControlSpec::serialized_keys`].
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ColumnConfigSchema {
     pub fields: Vec<ControlSpec>,
@@ -55,24 +52,22 @@ impl ColumnConfigSchema {
 /// Discriminated union of widget kinds the viewer can render. Composite
 /// variants wrap an existing rich Yew component and carry only the
 /// component's `*DefaultConfig`. Primitive variants render generic scalar
-/// widgets and carry their own `key` + `label` inline.
+/// widgets and carry their own `key` inline; the visible label is
+/// resolved at CSS time via `--psp-label--<key>--content`.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind")]
 pub enum ControlSpec {
     Enum {
         key: String,
-        label: String,
         variants: Vec<EnumVariant>,
         default: String,
     },
     Bool {
         key: String,
-        label: String,
         default: bool,
     },
     Number {
         key: String,
-        label: String,
         default: f64,
 
         /// If `true`, always serialize this values even if it is the default.
@@ -90,25 +85,23 @@ pub enum ControlSpec {
     },
     String {
         key: String,
-        label: String,
         default: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         placeholder: Option<String>,
     },
     Color {
         key: String,
-        label: String,
         default: String,
     },
     /// Paired pos/neg color picker rendered as a single horizontal
     /// gradient/range bar. Used to expose the existing
     /// [`crate::components::form::color_range_selector::ColorRangeSelector`]
     /// widget at primitive granularity. Owns two top-level keys
-    /// (`key_pos` + `key_neg`).
+    /// (`key_pos` + `key_neg`); the visible label is derived from
+    /// `key_pos`.
     ColorRange {
         key_pos: String,
         key_neg: String,
-        label: String,
         default_pos: String,
         default_neg: String,
         /// When `true`, the bar renders as a continuous gradient
@@ -123,15 +116,11 @@ pub enum ControlSpec {
     /// `date_format` only. Pair with primitive `Enum` and `Color` fields
     /// for `datetime_color_mode` + `color` to fully decompose datetime
     /// styling.
-    DatetimeFormat {
-        default: DatetimeColumnStyleDefaultConfig,
-    },
+    DatetimeFormat,
     /// Residual format-only widget for string columns — owns `format`
     /// only. Pair with primitive `Enum` and `Color` fields for
     /// `string_color_mode` + `color` to fully decompose string styling.
-    StringFormat {
-        default: StringColumnStyleDefaultConfig,
-    },
+    StringFormat,
     NumberSeriesStyle {
         default: NumberSeriesStyleDefaultConfig,
     },
@@ -157,8 +146,8 @@ impl ControlSpec {
     /// `columns_config` blob passed to `plugin.restore()`.
     pub fn serialized_keys(&self) -> Vec<&str> {
         match self {
-            ControlSpec::DatetimeFormat { .. } => vec!["date_format"],
-            ControlSpec::StringFormat { .. } => vec!["format"],
+            ControlSpec::DatetimeFormat => vec!["date_format"],
+            ControlSpec::StringFormat => vec!["format"],
             ControlSpec::NumberSeriesStyle { .. } => vec!["chart_type", "stack"],
             ControlSpec::Symbols { .. } => vec!["symbols"],
             ControlSpec::NumberFormat => vec!["number_format"],

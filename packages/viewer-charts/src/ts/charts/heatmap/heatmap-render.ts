@@ -10,11 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Canvas2D } from "../canvas-types";
 import type { WebGLContextManager } from "../../webgl/context-manager";
 import type { HeatmapChart } from "./heatmap";
 import { PlotLayout } from "../../layout/plot-layout";
-import { type Theme } from "../../theme/theme";
+import { drawFacetTitle } from "../../axis/facet-chrome";
 import {
     renderInPlotFrame,
     clearAndSetupFrame,
@@ -439,16 +438,35 @@ export function renderHeatmapChromeOverlay(chart: HeatmapChart): void {
         levelLabels: [],
     };
 
+    // Heatmap X axis is the first group_by level; Y axis is the
+    // second (when present) or the first split_by level.
+    const xColumn = chart._groupBy[0];
+    const yColumn = chart._groupBy[1] ?? chart._splitBy[0];
+
     if (chart._xAxisMode.mode === "numeric" && chart._xNumericDomain) {
         const ticks = computeNiceTicks(layout.paddedXMin, layout.paddedXMax, 6);
-        drawNumericCategoryX(ctx, layout, chart._xNumericDomain, ticks, theme);
+        drawNumericCategoryX(
+            ctx,
+            layout,
+            chart._xNumericDomain,
+            ticks,
+            theme,
+            chart.getColumnFormatter(xColumn, "tick"),
+        );
     } else {
         renderCategoricalXTicks(ctx, layout, xDomain, theme);
     }
 
     if (chart._yAxisMode.mode === "numeric" && chart._yNumericDomain) {
         const ticks = computeNiceTicks(layout.paddedYMin, layout.paddedYMax, 6);
-        drawNumericCategoryY(ctx, layout, chart._yNumericDomain, ticks, theme);
+        drawNumericCategoryY(
+            ctx,
+            layout,
+            chart._yNumericDomain,
+            ticks,
+            theme,
+            chart.getColumnFormatter(yColumn, "tick"),
+        );
     } else {
         renderCategoricalYTicks(
             ctx,
@@ -459,7 +477,8 @@ export function renderHeatmapChromeOverlay(chart: HeatmapChart): void {
         );
     }
 
-    // Color legend on the right.
+    // Color legend on the right. The aggregate column name is in
+    // `_columnSlots[0]` (heatmap's only data column slot is "Color").
     renderLegend(
         chart._chromeCanvas,
         layout,
@@ -470,6 +489,7 @@ export function renderHeatmapChromeOverlay(chart: HeatmapChart): void {
         },
         theme.gradientStops,
         theme,
+        chart.getColumnFormatter(chart._columnSlots[0], "value"),
     );
 
     if (chart._hoveredCell) {
@@ -489,13 +509,20 @@ function renderFacetedHeatmap(
     const gl = glManager.gl;
     const theme = chart._resolveTheme();
 
+    // Derive the effective shared-axis flags for this frame. Stamps
+    // `_lastEffectiveSharedX/Y` on the chart so
+    // `renderFacetedHeatmapChromeOverlay` reads the same values without
+    // re-deriving (and without us having to mutate `_facetConfig`).
+    const { effectiveSharedX, effectiveSharedY } =
+        chart.computeEffectiveFacetFlags();
+
     const grid = buildFacetGrid(
         chart._facets.map((f) => f.label),
         {
             cssWidth,
             cssHeight,
-            xAxis: "cell",
-            yAxis: "cell",
+            xAxis: effectiveSharedX ? "outer" : "cell",
+            yAxis: effectiveSharedY ? "outer" : "cell",
             hasLegend: true,
             hasXLabel: chart._groupBy.length > 0,
             hasYLabel: false,
@@ -510,6 +537,10 @@ function renderFacetedHeatmap(
             chart._facets[i].layout = cell.layout;
         }
     }
+
+    // Wire every active zoom controller's layout pointer so wheel/pan
+    // hit-tests compute correct data deltas.
+    chart.syncFacetZoomLayouts(grid.cells);
 
     ensureProgram(chart, glManager);
     uploadInstanceBuffers(chart, glManager);
@@ -555,11 +586,32 @@ function renderFacetedHeatmap(
         const yDomainMax = yNumeric
             ? facet.pipeline.yNumericDomain!.max
             : numY - 0.5;
+
+        // Anchor the controller's base domain to this facet's data
+        // extent so wheel/pan transforms compose against a meaningful
+        // identity. In shared mode every facet writes the same base
+        // (heatmap facets share group_by → identical X domain, and
+        // matching Y shapes from `partitionColumnsPerFacet` → identical
+        // Y domain), so last-write-wins is a no-op. In independent
+        // mode each facet's own controller gets its own base.
+        const zc = chart.getZoomControllerForFacet(i);
+        if (zc) {
+            zc.setBaseDomain(xDomainMin, xDomainMax, yDomainMin, yDomainMax);
+        }
+
+        const vis = zc
+            ? zc.getVisibleDomain()
+            : {
+                  xMin: xDomainMin,
+                  xMax: xDomainMax,
+                  yMin: yDomainMin,
+                  yMax: yDomainMax,
+              };
         const projection = layout.buildProjectionMatrix(
-            xDomainMin,
-            xDomainMax,
-            yDomainMin,
-            yDomainMax,
+            vis.xMin,
+            vis.xMax,
+            vis.yMin,
+            vis.yMax,
             undefined,
             undefined,
             0,
@@ -568,8 +620,8 @@ function renderFacetedHeatmap(
         );
 
         const plot = layout.plotRect;
-        const pxPerDataX = plot.width / (xDomainMax - xDomainMin);
-        const pxPerDataY = plot.height / (yDomainMax - yDomainMin);
+        const pxPerDataX = plot.width / (vis.xMax - vis.xMin);
+        const pxPerDataY = plot.height / (vis.yMax - vis.yMin);
         const halfGap = theme.heatmapGapPx * 0.5;
         const cellSizeX = xNumeric
             ? facet.pipeline.xNumericDomain!.bandWidth
@@ -622,7 +674,21 @@ function renderFacetedHeatmapChromeOverlay(chart: HeatmapChart): void {
         return;
     }
 
-    for (const facet of chart._facets) {
+    // Shared-axis suppression: when shared-X is active the X tick
+    // labels paint just below `cell.layout.plotRect` — which, because
+    // `buildFacetGrid` was called with `xAxis: "outer"`, falls into
+    // the reserved `outerXAxisRect` band rather than per-cell padding.
+    // Painting from a bottom-edge cell's layout is enough; non-edge
+    // rows would paint the same labels at the wrong y coordinate, so
+    // we skip them. Symmetric for Y. The cleanest way to express
+    // "shared = only edge cells render axes" is to gate the per-cell
+    // call on `!sharedX || isBottomEdge` (and analogously for Y).
+    const sharedX = chart._lastEffectiveSharedX;
+    const sharedY = chart._lastEffectiveSharedY;
+    const grid = chart._facetGrid;
+    for (let i = 0; i < chart._facets.length; i++) {
+        const facet = chart._facets[i];
+        const cell = grid.cells[i];
         const layout = facet.layout;
         const plot = layout.plotRect;
 
@@ -645,57 +711,65 @@ function renderFacetedHeatmapChromeOverlay(chart: HeatmapChart): void {
             levelLabels: [],
         };
 
-        if (
-            facet.pipeline.xAxisMode.mode === "numeric" &&
-            facet.pipeline.xNumericDomain
-        ) {
-            const ticks = computeNiceTicks(
-                layout.paddedXMin,
-                layout.paddedXMax,
-                6,
-            );
-            drawNumericCategoryX(
-                ctx,
-                layout,
-                facet.pipeline.xNumericDomain,
-                ticks,
-                theme,
-            );
-        } else {
-            renderCategoricalXTicks(ctx, layout, xDomain, theme);
+        const xColumn = chart._groupBy[0];
+        const yColumn = chart._groupBy[1] ?? chart._splitBy[0];
+
+        if (!sharedX || cell.isBottomEdge) {
+            if (
+                facet.pipeline.xAxisMode.mode === "numeric" &&
+                facet.pipeline.xNumericDomain
+            ) {
+                const ticks = computeNiceTicks(
+                    layout.paddedXMin,
+                    layout.paddedXMax,
+                    6,
+                );
+                drawNumericCategoryX(
+                    ctx,
+                    layout,
+                    facet.pipeline.xNumericDomain,
+                    ticks,
+                    theme,
+                    chart.getColumnFormatter(xColumn, "tick"),
+                );
+            } else {
+                renderCategoricalXTicks(ctx, layout, xDomain, theme);
+            }
         }
 
-        if (
-            facet.pipeline.yAxisMode.mode === "numeric" &&
-            facet.pipeline.yNumericDomain
-        ) {
-            const ticks = computeNiceTicks(
-                layout.paddedYMin,
-                layout.paddedYMax,
-                6,
-            );
-            drawNumericCategoryY(
-                ctx,
-                layout,
-                facet.pipeline.yNumericDomain,
-                ticks,
-                theme,
-            );
-        } else {
-            renderCategoricalYTicks(
-                ctx,
-                layout,
-                yDomain,
-                theme,
-                HEATMAP_Y_AXIS_OPTS,
-            );
+        if (!sharedY || cell.isLeftEdge) {
+            if (
+                facet.pipeline.yAxisMode.mode === "numeric" &&
+                facet.pipeline.yNumericDomain
+            ) {
+                const ticks = computeNiceTicks(
+                    layout.paddedYMin,
+                    layout.paddedYMax,
+                    6,
+                );
+                drawNumericCategoryY(
+                    ctx,
+                    layout,
+                    facet.pipeline.yNumericDomain,
+                    ticks,
+                    theme,
+                    chart.getColumnFormatter(yColumn, "tick"),
+                );
+            } else {
+                renderCategoricalYTicks(
+                    ctx,
+                    layout,
+                    yDomain,
+                    theme,
+                    HEATMAP_Y_AXIS_OPTS,
+                );
+            }
         }
     }
 
     // Per-facet titles sit in the grid cell's titleRect — one strip per
     // facet, above the plot rect. The grid's cells and the chart's
     // facets are parallel arrays by construction.
-    const grid = chart._facetGrid;
     for (let i = 0; i < grid.cells.length; i++) {
         const cell = grid.cells[i];
         const facet = chart._facets[i];
@@ -731,33 +805,11 @@ function renderFacetedHeatmapChromeOverlay(chart: HeatmapChart): void {
             },
             theme.gradientStops,
             theme,
+            chart.getColumnFormatter(chart._columnSlots[0], "value"),
         );
     }
 
     if (chart._hoveredCell) {
         renderHeatmapTooltip(chart);
     }
-}
-
-function drawFacetTitle(
-    canvas: Canvas2D,
-    label: string,
-    rect: { x: number; y: number; width: number; height: number },
-    theme: Theme,
-    dpr: number,
-): void {
-    const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
-    if (!ctx) {
-        return;
-    }
-
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(dpr, dpr);
-    ctx.font = `11px ${theme.fontFamily}`;
-    ctx.fillStyle = theme.labelColor;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, rect.x + rect.width / 2, rect.y + rect.height / 2);
-    ctx.restore();
 }

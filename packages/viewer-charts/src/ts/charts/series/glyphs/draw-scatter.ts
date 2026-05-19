@@ -18,8 +18,6 @@ import scatterFrag from "../../../shaders/y-scatter.frag.glsl";
 
 type GL = WebGL2RenderingContext | WebGLRenderingContext;
 
-const POINT_SIZE_PX = 8.0;
-
 interface ScatterProgramCache {
     program: WebGLProgram;
     posLeftBuffer: WebGLBuffer;
@@ -37,63 +35,9 @@ interface ScatterProgramCache {
  * buffers built once at data load. Pan/zoom redraws rebind without
  * uploading.
  */
-export interface ScatterBuffers {
-    program: WebGLProgram;
-    posLeft: WebGLBuffer;
-    posRight: WebGLBuffer;
-    colLeft: WebGLBuffer;
-    colRight: WebGLBuffer;
-    u_projection: WebGLUniformLocation | null;
-    u_point_size: WebGLUniformLocation | null;
-    a_position: number;
-    a_color: number;
+interface ScatterBuffers {
     leftCount: number;
     rightCount: number;
-}
-
-function ensureProgramCache(
-    chart: SeriesChart,
-    glManager: WebGLContextManager,
-): ScatterProgramCache {
-    if (chart._scatterCache) {
-        return chart._scatterCache as ScatterProgramCache;
-    }
-
-    const gl = glManager.gl;
-    const partial = compileProgram<
-        Omit<
-            ScatterProgramCache,
-            | "posLeftBuffer"
-            | "posRightBuffer"
-            | "colorLeftBuffer"
-            | "colorRightBuffer"
-        >
-    >(
-        glManager,
-        "bar-scatter",
-        scatterVert,
-        scatterFrag,
-        ["u_projection", "u_point_size"],
-        ["a_position", "a_color"],
-    );
-    const cache: ScatterProgramCache = {
-        ...partial,
-        posLeftBuffer: gl.createBuffer()!,
-        posRightBuffer: gl.createBuffer()!,
-        colorLeftBuffer: gl.createBuffer()!,
-        colorRightBuffer: gl.createBuffer()!,
-    };
-    chart._scatterCache = cache;
-    return cache;
-}
-
-/**
- * Drop persistent scatter buffer state. The underlying GL buffer
- * objects on `_scatterCache` are reused (they're owned by the program
- * cache, not the per-build buffer view).
- */
-export function invalidateScatterBuffers(chart: SeriesChart): void {
-    chart._scatterBuffers = undefined;
 }
 
 /**
@@ -114,187 +58,253 @@ function ensureScratch(n: number): void {
 }
 
 /**
- * Build merged per-axis (position, color) buffers for every visible
- * scatter series and upload them. Hidden series are excluded — call
- * this from data-load and from the legend-toggle path so the GPU
- * buffers always reflect the current visible mask.
+ * Scatter glyph for {@link SeriesChart}. Owns the program + per-axis
+ * (position, color) GPU buffers. Single program/buffer set; left and
+ * right axes are merged into shared buffers with sub-ranges.
  */
-export function rebuildScatterBuffers(
-    chart: SeriesChart,
-    glManager: WebGLContextManager,
-): void {
-    const scatterSeries = chart._scatterSeries;
-    if (scatterSeries.length === 0) {
-        chart._scatterBuffers = undefined;
-        return;
-    }
+export class ScatterGlyph {
+    private _program: ScatterProgramCache | null = null;
+    private _buffers: ScatterBuffers | null = null;
 
-    const N = chart._numCategories;
-    const S = chart._series.length;
-    if (N === 0 || S === 0) {
-        chart._scatterBuffers = undefined;
-        return;
-    }
-
-    const cache = ensureProgramCache(chart, glManager);
-    const gl = glManager.gl;
-
-    const samples = chart._samples;
-    const valid = chart._sampleValid;
-    const positions = chart._categoryPositions;
-    const xOrigin = chart._categoryOrigin;
-    const hidden = chart._hiddenSeries;
-
-    // Two-pass: first count to size scratch, then fill. Avoids a number[]
-    // growth path while still accommodating both axes in a single pair
-    // of buffers.
-    let leftCount = 0;
-    let rightCount = 0;
-    for (const s of scatterSeries) {
-        if (hidden.has(s.seriesId)) {
-            continue;
+    private ensureProgram(glManager: WebGLContextManager): ScatterProgramCache {
+        if (this._program) {
+            return this._program;
         }
 
-        for (let c = 0; c < N; c++) {
-            const idx = c * S + s.seriesId;
-            if (!((valid[idx >> 3] >> (idx & 7)) & 1)) {
+        const gl = glManager.gl;
+        const partial = compileProgram<
+            Omit<
+                ScatterProgramCache,
+                | "posLeftBuffer"
+                | "posRightBuffer"
+                | "colorLeftBuffer"
+                | "colorRightBuffer"
+            >
+        >(
+            glManager,
+            "bar-scatter",
+            scatterVert,
+            scatterFrag,
+            ["u_projection", "u_point_size"],
+            ["a_position", "a_color"],
+        );
+        this._program = {
+            ...partial,
+            posLeftBuffer: gl.createBuffer()!,
+            posRightBuffer: gl.createBuffer()!,
+            colorLeftBuffer: gl.createBuffer()!,
+            colorRightBuffer: gl.createBuffer()!,
+        };
+        return this._program;
+    }
+
+    /**
+     * Drop persistent scatter buffer state. The underlying GL buffer
+     * objects on `_program` are reused (owned by the program cache,
+     * not the per-build buffer view).
+     */
+    invalidateBuffers(_chart: SeriesChart): void {
+        this._buffers = null;
+    }
+
+    /**
+     * Build merged per-axis (position, color) buffers for every visible
+     * scatter series and upload them. Hidden series are excluded — call
+     * this from data-load and from the legend-toggle path so the GPU
+     * buffers always reflect the current visible mask.
+     */
+    rebuildBuffers(chart: SeriesChart, glManager: WebGLContextManager): void {
+        const scatterSeries = chart._scatterSeries;
+        if (scatterSeries.length === 0) {
+            this._buffers = null;
+            return;
+        }
+
+        const N = chart._numCategories;
+        const S = chart._series.length;
+        if (N === 0 || S === 0) {
+            this._buffers = null;
+            return;
+        }
+
+        const cache = this.ensureProgram(glManager);
+        const gl = glManager.gl;
+
+        const samples = chart._samples;
+        const valid = chart._sampleValid;
+        const positions = chart._categoryPositions;
+        const xOrigin = chart._categoryOrigin;
+        const hidden = chart._hiddenSeries;
+
+        // Two-pass: first count to size scratch, then fill. Avoids a
+        // number[] growth path while still accommodating both axes in a
+        // single pair of buffers.
+        let leftCount = 0;
+        let rightCount = 0;
+        for (const s of scatterSeries) {
+            if (hidden.has(s.seriesId)) {
                 continue;
             }
 
-            if (s.axis === 1) {
-                rightCount++;
-            } else {
-                leftCount++;
+            for (let c = 0; c < N; c++) {
+                const idx = c * S + s.seriesId;
+                if (!((valid[idx >> 3] >> (idx & 7)) & 1)) {
+                    continue;
+                }
+
+                if (s.axis === 1) {
+                    rightCount++;
+                } else {
+                    leftCount++;
+                }
             }
         }
-    }
 
-    const total = leftCount + rightCount;
-    if (total === 0) {
-        chart._scatterBuffers = undefined;
-        return;
-    }
-
-    ensureScratch(total);
-
-    // Fill left bucket from `[0, leftCount)`, right bucket from
-    // `[leftCount, total)` — single typed-array allocation each.
-    let leftWrite = 0;
-    let rightWrite = leftCount;
-    for (const s of scatterSeries) {
-        if (hidden.has(s.seriesId)) {
-            continue;
+        const total = leftCount + rightCount;
+        if (total === 0) {
+            this._buffers = null;
+            return;
         }
 
-        const r = s.color[0];
-        const g = s.color[1];
-        const b = s.color[2];
-        for (let c = 0; c < N; c++) {
-            const idx = c * S + s.seriesId;
-            if (!((valid[idx >> 3] >> (idx & 7)) & 1)) {
+        ensureScratch(total);
+
+        // Fill left bucket from `[0, leftCount)`, right bucket from
+        // `[leftCount, total)` — single typed-array allocation each.
+        let leftWrite = 0;
+        let rightWrite = leftCount;
+        for (const s of scatterSeries) {
+            if (hidden.has(s.seriesId)) {
                 continue;
             }
 
-            const x = positions ? positions[c] - xOrigin : c;
-            const v = samples[idx];
-            if (s.axis === 1) {
-                _posScratch[rightWrite * 2] = x;
-                _posScratch[rightWrite * 2 + 1] = v;
-                _colScratch[rightWrite * 3] = r;
-                _colScratch[rightWrite * 3 + 1] = g;
-                _colScratch[rightWrite * 3 + 2] = b;
-                rightWrite++;
-            } else {
-                _posScratch[leftWrite * 2] = x;
-                _posScratch[leftWrite * 2 + 1] = v;
-                _colScratch[leftWrite * 3] = r;
-                _colScratch[leftWrite * 3 + 1] = g;
-                _colScratch[leftWrite * 3 + 2] = b;
-                leftWrite++;
+            const r = s.color[0];
+            const g = s.color[1];
+            const b = s.color[2];
+            for (let c = 0; c < N; c++) {
+                const idx = c * S + s.seriesId;
+                if (!((valid[idx >> 3] >> (idx & 7)) & 1)) {
+                    continue;
+                }
+
+                const x = positions ? positions[c] - xOrigin : c;
+                const v = samples[idx];
+                if (s.axis === 1) {
+                    _posScratch[rightWrite * 2] = x;
+                    _posScratch[rightWrite * 2 + 1] = v;
+                    _colScratch[rightWrite * 3] = r;
+                    _colScratch[rightWrite * 3 + 1] = g;
+                    _colScratch[rightWrite * 3 + 2] = b;
+                    rightWrite++;
+                } else {
+                    _posScratch[leftWrite * 2] = x;
+                    _posScratch[leftWrite * 2 + 1] = v;
+                    _colScratch[leftWrite * 3] = r;
+                    _colScratch[leftWrite * 3 + 1] = g;
+                    _colScratch[leftWrite * 3 + 2] = b;
+                    leftWrite++;
+                }
             }
         }
+
+        if (leftCount > 0) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, cache.posLeftBuffer);
+            gl.bufferData(
+                gl.ARRAY_BUFFER,
+                _posScratch.subarray(0, leftCount * 2),
+                gl.STATIC_DRAW,
+            );
+            gl.bindBuffer(gl.ARRAY_BUFFER, cache.colorLeftBuffer);
+            gl.bufferData(
+                gl.ARRAY_BUFFER,
+                _colScratch.subarray(0, leftCount * 3),
+                gl.STATIC_DRAW,
+            );
+        }
+
+        if (rightCount > 0) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, cache.posRightBuffer);
+            gl.bufferData(
+                gl.ARRAY_BUFFER,
+                _posScratch.subarray(leftCount * 2, total * 2),
+                gl.STATIC_DRAW,
+            );
+            gl.bindBuffer(gl.ARRAY_BUFFER, cache.colorRightBuffer);
+            gl.bufferData(
+                gl.ARRAY_BUFFER,
+                _colScratch.subarray(leftCount * 3, total * 3),
+                gl.STATIC_DRAW,
+            );
+        }
+
+        this._buffers = { leftCount, rightCount };
     }
 
-    if (leftCount > 0) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, cache.posLeftBuffer);
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            _posScratch.subarray(0, leftCount * 2),
-            gl.STATIC_DRAW,
+    /**
+     * Bind the persistent left/right buffers and issue up to two draw
+     * calls. No per-frame allocations or buffer uploads.
+     */
+    draw(
+        chart: SeriesChart,
+        gl: GL,
+        glManager: WebGLContextManager,
+        projLeft: Float32Array,
+        projRight: Float32Array,
+    ): void {
+        const buf = this._buffers;
+        const cache = this._program;
+        if (!buf || !cache) {
+            return;
+        }
+
+        if (buf.leftCount === 0 && buf.rightCount === 0) {
+            return;
+        }
+
+        const dpr = glManager.dpr;
+        gl.useProgram(cache.program);
+        gl.uniform1f(
+            cache.u_point_size,
+            chart._pluginConfig.point_size_px * dpr,
         );
-        gl.bindBuffer(gl.ARRAY_BUFFER, cache.colorLeftBuffer);
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            _colScratch.subarray(0, leftCount * 3),
-            gl.STATIC_DRAW,
+
+        drawBucket(
+            gl,
+            cache,
+            cache.posLeftBuffer,
+            cache.colorLeftBuffer,
+            buf.leftCount,
+            projLeft,
+        );
+        drawBucket(
+            gl,
+            cache,
+            cache.posRightBuffer,
+            cache.colorRightBuffer,
+            buf.rightCount,
+            projRight,
         );
     }
 
-    if (rightCount > 0) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, cache.posRightBuffer);
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            _posScratch.subarray(leftCount * 2, total * 2),
-            gl.STATIC_DRAW,
-        );
-        gl.bindBuffer(gl.ARRAY_BUFFER, cache.colorRightBuffer);
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            _colScratch.subarray(leftCount * 3, total * 3),
-            gl.STATIC_DRAW,
-        );
+    destroy(chart: SeriesChart): void {
+        const gl = chart._glManager?.gl;
+        if (gl) {
+            const cache = this._program;
+            if (cache) {
+                gl.deleteBuffer(cache.posLeftBuffer);
+                gl.deleteBuffer(cache.posRightBuffer);
+                gl.deleteBuffer(cache.colorLeftBuffer);
+                gl.deleteBuffer(cache.colorRightBuffer);
+            }
+        }
+
+        this._program = null;
+        this._buffers = null;
     }
-
-    chart._scatterBuffers = {
-        program: cache.program,
-        posLeft: cache.posLeftBuffer,
-        posRight: cache.posRightBuffer,
-        colLeft: cache.colorLeftBuffer,
-        colRight: cache.colorRightBuffer,
-        u_projection: cache.u_projection,
-        u_point_size: cache.u_point_size,
-        a_position: cache.a_position,
-        a_color: cache.a_color,
-        leftCount,
-        rightCount,
-    };
-}
-
-/**
- * Bind the persistent left/right buffers and issue up to two draw
- * calls. No per-frame allocations or buffer uploads.
- */
-export function drawScatter(
-    chart: SeriesChart,
-    gl: GL,
-    glManager: WebGLContextManager,
-    projLeft: Float32Array,
-    projRight: Float32Array,
-): void {
-    const buf = chart._scatterBuffers as ScatterBuffers | undefined;
-    if (!buf) {
-        return;
-    }
-
-    if (buf.leftCount === 0 && buf.rightCount === 0) {
-        return;
-    }
-
-    const dpr = glManager.dpr;
-    gl.useProgram(buf.program);
-    gl.uniform1f(buf.u_point_size, POINT_SIZE_PX * dpr);
-
-    drawBucket(gl, buf, buf.posLeft, buf.colLeft, buf.leftCount, projLeft);
-    drawBucket(gl, buf, buf.posRight, buf.colRight, buf.rightCount, projRight);
-
-    // Suppress unused-param warning for `glManager` — kept for symmetry
-    // with the other glyph entry points and for future use.
-    void glManager;
 }
 
 function drawBucket(
     gl: GL,
-    buf: ScatterBuffers,
+    cache: ScatterProgramCache,
     posBuf: WebGLBuffer,
     colBuf: WebGLBuffer,
     count: number,
@@ -304,15 +314,15 @@ function drawBucket(
         return;
     }
 
-    gl.uniformMatrix4fv(buf.u_projection, false, proj);
+    gl.uniformMatrix4fv(cache.u_projection, false, proj);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
-    gl.enableVertexAttribArray(buf.a_position);
-    gl.vertexAttribPointer(buf.a_position, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(cache.a_position);
+    gl.vertexAttribPointer(cache.a_position, 2, gl.FLOAT, false, 0, 0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, colBuf);
-    gl.enableVertexAttribArray(buf.a_color);
-    gl.vertexAttribPointer(buf.a_color, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(cache.a_color);
+    gl.vertexAttribPointer(cache.a_color, 3, gl.FLOAT, false, 0, 0);
 
     gl.drawArrays(gl.POINTS, 0, count);
 }

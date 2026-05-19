@@ -48,10 +48,17 @@ pub fn reset_all(
             })
             .await?;
         let columns_config = if all {
-            presentation.reset_columns_configs();
+            renderer.reset_columns_configs();
+            renderer.reset_plugin_config();
+            // Mirror the per-plugin bucket clear on the event bus so
+            // `PluginTab` re-pulls (its props are interior-mutable
+            // handles whose identity doesn't change on the reset).
+            renderer
+                .plugin_config_changed
+                .emit(renderer.get_plugin_config());
             None
         } else {
-            Some(presentation.all_columns_configs())
+            Some(renderer.all_columns_configs())
         };
 
         renderer.reset(columns_config.as_ref()).await?;

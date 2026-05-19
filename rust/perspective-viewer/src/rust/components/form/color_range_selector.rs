@@ -16,7 +16,13 @@ use yew::prelude::*;
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct ColorRangeProps {
-    pub id: String,
+    /// Extra class appended to the positive input's `class` attribute,
+    /// so callers can target the pos / neg sides independently from CSS.
+    /// Paired with `neg_class`; both default to empty.
+    #[prop_or_default]
+    pub pos_class: Classes,
+    #[prop_or_default]
+    pub neg_class: Classes,
     pub pos_color: String,
     pub neg_color: String,
     pub is_gradient: bool,
@@ -68,32 +74,33 @@ pub fn color_chooser_component(props: &ColorRangeProps) -> Html {
 
     let on_reset = use_callback(props.clone(), |_: MouseEvent, deps| deps.on_reset.emit(()));
 
+    let pos_class = classes!("parameter", "pos-color-param", props.pos_class.clone());
+    let neg_class = classes!("parameter", "neg-color-param", props.neg_class.clone());
+
     html! {
         <>
             <label id="color-range-label" />
             <div class="color-gradient-container">
                 <div style={fg_pos} class="color-selector">
                     <input
-                        id={format!("{}-pos", props.id)}
-                        class="parameter pos-color-param"
+                        class={pos_class}
                         type="color"
                         value={props.pos_color.to_owned()}
                         data-value={props.pos_color.to_owned()}
                         oninput={on_pos_color}
                     />
-                    <label for={format!("{}-pos", props.id)} class="color-label">{ "+" }</label>
+                    <label class="color-label">{ "+" }</label>
                 </div>
                 <div class="color-thermometer" {style} />
                 <div style={fg_neg} class="color-selector">
                     <input
-                        id={format!("{}-neg", props.id)}
-                        class="parameter neg-color-param"
+                        class={neg_class}
                         type="color"
                         value={props.neg_color.to_owned()}
                         data-value={props.neg_color.to_owned()}
                         oninput={on_neg_color}
                     />
-                    <label for={format!("{}-neg", props.id)} class="color-label">{ "-" }</label>
+                    <label class="color-label">{ "-" }</label>
                 </div>
                 if props.is_modified {
                     <span class="reset-default-style" onclick={on_reset} />

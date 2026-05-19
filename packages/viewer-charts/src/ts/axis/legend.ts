@@ -39,6 +39,7 @@ export function renderLegend(
     colorDomain: { min: number; max: number; label: string },
     stops: GradientStop[],
     theme: Theme,
+    formatter?: (v: number) => string,
 ): void {
     const rect: PlotRect = {
         x: layout.plotRect.x + layout.plotRect.width + 12,
@@ -49,7 +50,7 @@ export function renderLegend(
         ),
         height: Math.max(1, layout.plotRect.height),
     };
-    renderLegendAt(canvas, rect, colorDomain, stops, theme);
+    renderLegendAt(canvas, rect, colorDomain, stops, theme, formatter);
 }
 
 /**
@@ -63,6 +64,7 @@ export function renderLegendAt(
     colorDomain: { min: number; max: number; label: string },
     stops: GradientStop[],
     theme: Theme,
+    formatter: (v: number) => string = formatTickValue,
 ): void {
     const ctx = canvas.getContext("2d") as Context2D | null;
     if (!ctx) {
@@ -112,13 +114,13 @@ export function renderLegendAt(
     ctx.textBaseline = "middle";
 
     const labelX = x + barWidth + 5;
-    ctx.fillText(formatTickValue(colorDomain.max), labelX, y + 2);
+    ctx.fillText(formatter(colorDomain.max), labelX, y + 2);
     ctx.fillText(
-        formatTickValue((colorDomain.min + colorDomain.max) / 2),
+        formatter((colorDomain.min + colorDomain.max) / 2),
         labelX,
         y + barHeight / 2,
     );
-    ctx.fillText(formatTickValue(colorDomain.min), labelX, y + barHeight - 2);
+    ctx.fillText(formatter(colorDomain.min), labelX, y + barHeight - 2);
 
     // Sign-pivot marker when the data crosses zero: a small tick on the
     // right edge of the bar + a "0" label.

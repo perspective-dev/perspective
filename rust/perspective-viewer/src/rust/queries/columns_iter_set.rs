@@ -16,7 +16,7 @@ use itertools::Itertools;
 use perspective_client::config::*;
 
 use super::is_invalid_columns_column;
-use crate::dragdrop::*;
+use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::SessionMetadata;
 use crate::utils::DragTarget;
@@ -75,10 +75,10 @@ impl<'a> ColumnsIteratorSet<'a> {
         config: &'a ViewConfig,
         metadata: &'a SessionMetadata,
         renderer: &'a Renderer,
-        dragdrop: &DragDrop,
+        presentation: &Presentation,
     ) -> ColumnsIteratorSet<'a> {
-        let is_dragover_column = dragdrop.is_dragover(DragTarget::Active);
-        let named_columns = renderer.metadata().names.clone().unwrap_or_default();
+        let is_dragover_column = presentation.is_dragover(DragTarget::Active);
+        let named_columns = renderer.metadata().config_column_names.clone();
         ColumnsIteratorSet {
             config,
             renderer,
@@ -91,12 +91,7 @@ impl<'a> ColumnsIteratorSet<'a> {
     /// Generate an iterator for active columns, which are represented as
     /// `Option` for dragover and missing columns.
     pub fn active(&'a self) -> impl Iterator<Item = ActiveColumnState> + 'a {
-        let min_cols = self
-            .renderer
-            .metadata()
-            .names
-            .as_ref()
-            .map_or(0, |x| x.len());
+        let min_cols = self.renderer.metadata().config_column_names.len();
 
         let last_col = self.config.columns.last().and_then(|x| x.as_ref());
         let has_blank_tail = last_col.is_none()
@@ -121,7 +116,7 @@ impl<'a> ColumnsIteratorSet<'a> {
                     .position(|x| x.as_ref() == Some(from_column));
 
                 let is_from_required = from_index
-                    .and_then(|x| self.renderer.metadata().min.map(|y| x < y))
+                    .and_then(|x| self.renderer.metadata().min_config_columns.map(|y| x < y))
                     .unwrap_or_default();
 
                 let is_from_swap = from_index
@@ -130,7 +125,7 @@ impl<'a> ColumnsIteratorSet<'a> {
 
                 let is_swap_invalid = is_invalid_columns_column(
                     self.config,
-                    self.renderer.metadata().min,
+                    self.renderer.metadata().min_config_columns,
                     from_column,
                     *to_index,
                 );

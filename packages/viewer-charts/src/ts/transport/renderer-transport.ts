@@ -10,8 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Client, View } from "@perspective-dev/client";
-import type { FacetConfig } from "../charts/chart";
+import type { Client, View, ViewConfig } from "@perspective-dev/client";
+import type { FacetConfig, PluginConfig } from "../charts/chart";
 import type {
     ControlMsg,
     InitMsg,
@@ -20,6 +20,10 @@ import type {
     WorkerEnvelope,
     WorkerMsg,
 } from "./protocol";
+import {
+    PerspectiveSelectDetail,
+    type PerspectiveClickDetail,
+} from "../event-detail";
 import { snapshotThemeVars } from "../theme/theme-snapshot";
 import { snapshotFontFaces } from "../utils/font-snapshot";
 import { DomHostSink } from "../interaction/host-sink-dom";
@@ -164,6 +168,16 @@ export class RendererTransport {
      */
     private _hostSink: DomHostSink | null = null;
 
+    /**
+     * Last `insertConfig` accepted by a `userSelect { selected: true }`
+     * message. Used to populate `removeConfigs` on the next
+     * `selected: false` (unpin / drill-up / view-change) — mirrors
+     * datagrid's `model._last_insert_configs` so coordinated-filter
+     * consumers can roll back the previous select when a new one
+     * supplants it.
+     */
+    private _lastInsertConfig: Partial<ViewConfig> | undefined = undefined;
+
     constructor(opts: {
         client: Client;
         view: View;
@@ -195,6 +209,7 @@ export class RendererTransport {
         gridlines: HTMLCanvasElement;
         chrome: HTMLCanvasElement;
         facetConfig: FacetConfig;
+        pluginConfig: PluginConfig;
         defaultChartType?: string;
         renderBlitMode: "blit" | "direct";
     }): Promise<void> {
@@ -275,13 +290,14 @@ export class RendererTransport {
             viewName: this._view.__unsafe_get_name(),
             tableName: this._tableName,
             facetConfig: opts.facetConfig,
+            pluginConfig: opts.pluginConfig,
             defaultChartType: opts.defaultChartType,
             themeVars,
             fontFaces,
             cssWidth: rect.width,
             cssHeight: rect.height,
             dpr,
-            bufferMaxCapacity: this._maxCells,
+            bufferMaxCapacity: 0,
             precompileShaders: this._precompileShaders,
         };
 
@@ -402,6 +418,10 @@ export class RendererTransport {
         this._post({ kind: "setColumnsConfig", cfg });
     }
 
+    setPluginConfig(cfg: PluginConfig): void {
+        this._post({ kind: "setPluginConfig", cfg });
+    }
+
     setBufferMaxCapacity(n: number): void {
         this._post({ kind: "setBufferMaxCapacity", n });
     }
@@ -472,7 +492,7 @@ export class RendererTransport {
         this._post({ kind: "invalidateTheme", themeVars });
     }
 
-    saveZoom() {
+    async saveZoom() {
         const { id } = this._allocPending<any>("saveZoom");
         this._post({ kind: "saveZoom", requestId: id });
     }
@@ -505,6 +525,10 @@ export class RendererTransport {
 
     resetAllZooms(): void {
         this._post({ kind: "resetAllZooms" });
+    }
+
+    resetExpandedDomain(): void {
+        this._post({ kind: "resetExpandedDomain" });
     }
 
     /**
@@ -602,6 +626,51 @@ export class RendererTransport {
             case "setCursor":
                 this._ensureHostSink()?.setCursor(msg.cursor);
                 break;
+            case "userClick":
+                this._dispatchOnViewer(
+                    new CustomEvent<PerspectiveClickDetail>(
+                        "perspective-click",
+                        {
+                            bubbles: true,
+                            composed: true,
+                            detail: msg.detail,
+                        },
+                    ),
+                );
+                break;
+            case "userSelect": {
+                const removeConfigs = this._lastInsertConfig
+                    ? [this._lastInsertConfig]
+                    : [];
+                const insertConfigs = msg.selected ? [msg.insertConfig] : [];
+                this._lastInsertConfig = msg.selected
+                    ? msg.insertConfig
+                    : undefined;
+                const detail = new PerspectiveSelectDetail(
+                    msg.selected,
+                    msg.row,
+                    msg.column_names,
+                    // `Partial<ViewConfig>` (what the chart emits) is
+                    // structurally a `ViewConfigUpdate` for the
+                    // `filter`-only patches we ship; the only
+                    // incompatible field (`group_by_depth: number |
+                    // null`) is never set by our emitters.
+                    removeConfigs as any,
+                    insertConfigs as any,
+                );
+                this._dispatchOnViewer(
+                    new CustomEvent<PerspectiveSelectDetail>(
+                        "perspective-global-filter",
+                        {
+                            bubbles: true,
+                            composed: true,
+                            detail,
+                        },
+                    ),
+                );
+                break;
+            }
+
             case "frameBitmap":
                 this._drawFrameBitmap(msg.bitmap);
                 break;
@@ -664,6 +733,38 @@ export class RendererTransport {
         }
 
         bitmap.close();
+    }
+
+    /**
+     * Dispatch a `CustomEvent` on the `<perspective-viewer>` ancestor
+     * of this transport's GL canvas. Walks the parent chain so the
+     * event bubbles from the viewer (matching where datagrid
+     * dispatches its `perspective-click` / `perspective-global-filter`
+     * events). No-op when the canvas is detached or no viewer ancestor
+     * exists (test harnesses, snapshot mode).
+     */
+    private _dispatchOnViewer(ev: CustomEvent): void {
+        if (!this._hostGlCanvas) {
+            return;
+        }
+
+        let node: Node | null = this._hostGlCanvas;
+        while (node) {
+            if (
+                node instanceof HTMLElement &&
+                node.tagName === "PERSPECTIVE-VIEWER"
+            ) {
+                node.dispatchEvent(ev);
+                return;
+            }
+
+            // Cross shadow-root boundaries — `parentNode` returns `null`
+            // at a ShadowRoot, so use `host` when present.
+            node =
+                (node as ShadowRoot).host ??
+                (node as Element).parentNode ??
+                null;
+        }
     }
 
     /**

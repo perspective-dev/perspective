@@ -21,9 +21,10 @@ import type { CartesianChart } from "./cartesian";
  */
 export interface Glyph {
     /**
-     * `"point"` for scatter-style markers; `"line"` for polylines.
+     * `"point"` for scatter-style markers; `"line"` for polylines;
+     * `"density"` for the density-field shader glyph.
      */
-    readonly name: "point" | "line";
+    readonly name: "point" | "line" | "density";
 
     /**
      * Compile the program + cache attrib/uniform locations on first

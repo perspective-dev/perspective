@@ -17,6 +17,7 @@ use std::ops::{Deref, DerefMut};
 use perspective_client::config::*;
 use perspective_js::apierror;
 
+use crate::presentation::ColumnLocator;
 use crate::utils::PtrEqRc;
 use crate::*;
 
@@ -265,6 +266,21 @@ impl SessionMetadata {
     pub fn get_column_view_type(&self, name: &str) -> Option<ColumnType> {
         let r: Option<&ColumnType> = try { self.as_ref()?.view_schema.as_ref()?.get(name)? };
         r.cloned()
+    }
+
+    /// Returns the column name for a locator, generating a default for new
+    /// expressions.
+    pub fn locator_name_or_default(&self, locator: &ColumnLocator) -> String {
+        match locator {
+            ColumnLocator::Table(s) | ColumnLocator::Expression(s) => s.clone(),
+            ColumnLocator::NewExpression => self.make_new_column_name(None),
+        }
+    }
+
+    /// Returns the view type for a locator's column, if available.
+    pub fn locator_view_type(&self, locator: &ColumnLocator) -> Option<ColumnType> {
+        let name = locator.name().cloned().unwrap_or_default();
+        self.get_column_view_type(name.as_str())
     }
 
     pub fn get_column_aggregates<'a>(

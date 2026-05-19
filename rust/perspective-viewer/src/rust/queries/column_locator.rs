@@ -10,30 +10,11 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_client::config::{ColumnType, ViewConfig};
+use perspective_client::config::ViewConfig;
 
-use super::plugin_column_styles::can_render_column_styles;
 use crate::presentation::{ColumnLocator, OpenColumnSettings};
 use crate::renderer::Renderer;
 use crate::session::SessionMetadata;
-
-/// Returns the column name for a locator, generating a default for new
-/// expressions.
-pub fn locator_name_or_default(metadata: &SessionMetadata, locator: &ColumnLocator) -> String {
-    match locator {
-        ColumnLocator::Table(s) | ColumnLocator::Expression(s) => s.clone(),
-        ColumnLocator::NewExpression => metadata.make_new_column_name(None),
-    }
-}
-
-/// Returns the view type for a locator's column, if available.
-pub fn locator_view_type(
-    metadata: &SessionMetadata,
-    locator: &ColumnLocator,
-) -> Option<ColumnType> {
-    let name = locator.name().cloned().unwrap_or_default();
-    metadata.get_column_view_type(name.as_str())
-}
 
 /// Returns a [`ColumnLocator`] for a given column name, or [`None`] if no
 /// such column exists.
@@ -55,17 +36,20 @@ pub fn get_column_locator(
 
 /// Gets a [`ColumnLocator`] for the current UI's column settings state,
 /// or [`None`] if it is not currently active.
+///
+/// Table columns only have a useful sidebar (the Style tab)
+/// when they're in `view_config.columns`.
 pub fn get_current_column_locator(
     open_column_settings: &OpenColumnSettings,
     renderer: &Renderer,
     view_config: &ViewConfig,
-    metadata: &SessionMetadata,
+    _metadata: &SessionMetadata,
 ) -> Option<ColumnLocator> {
     open_column_settings
         .locator
         .clone()
         .filter(|locator| match locator {
-            ColumnLocator::Table(name) => {
+            ColumnLocator::Table(_name) => {
                 locator
                     .name()
                     .map(|name| {
@@ -74,14 +58,19 @@ pub fn get_current_column_locator(
                                 .as_ref()
                                 .map(|col| col == name)
                                 .unwrap_or_default()
-                        }) || view_config.group_by.iter().any(|col| col == name)
-                            || view_config.split_by.iter().any(|col| col == name)
-                            || view_config.filter.iter().any(|col| col.column() == name)
-                            || view_config.sort.iter().any(|col| &col.0 == name)
+
+                            //     }) || view_config.group_by.iter().any(|col|
+                            // col == name)         ||
+                            // view_config.split_by.iter().any(|col| col ==
+                            // name)         ||
+                            // view_config.filter.iter().any(|col| col.column()
+                            // == name)         ||
+                            // view_config.sort.iter().any(|col| &col.0 == name)
+                            // })
+                        })
                     })
                     .unwrap_or_default()
-                    && can_render_column_styles(renderer, view_config, metadata, name)
-                        .unwrap_or_default()
+                    && renderer.can_render_column_styles()
             },
             _ => true,
         })

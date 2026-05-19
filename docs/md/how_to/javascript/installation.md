@@ -42,7 +42,7 @@ installed separately. All Plugins are optional - but a `<perspective-viewer>`
 without Plugins would be rather boring!
 
 ```bash
-$ npm add @perspective-dev/viewer-charts @perspective-dev/viewer-datagrid @perspective-dev/viewer-openlayers
+$ npm add @perspective-dev/viewer-charts @perspective-dev/viewer-datagrid
 ```
 
 ## Node.js

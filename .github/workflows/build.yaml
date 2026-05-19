@@ -152,7 +152,7 @@ jobs:
             - name: WebAssembly Build
               run: pnpm run build --ci
               env:
-                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,viewer-openlayers,workspace,react"
+                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,workspace,react"
                   # PSP_USE_CCACHE: 1
 
             - uses: actions/upload-artifact@v4
@@ -166,7 +166,6 @@ jobs:
                       rust/perspective-viewer/src
                       packages/viewer-charts/dist
                       packages/viewer-datagrid/dist
-                      packages/viewer-openlayers/dist
                       packages/workspace/dist
                       packages/react/dist
 
@@ -652,7 +651,7 @@ jobs:
               id: run_tests
               run: pnpm run test -- --fetch-snapshots
               env:
-                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,viewer-openlayers,workspace,react"
+                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,workspace,react"
                   PSP_SNAPSHOT_REPO: ${{ vars.PSP_SNAPSHOT_REPO }}
                   PSP_SNAPSHOT_TOKEN: ${{ secrets.PSP_SNAPSHOT_TOKEN }}
                   PSP_SNAPSHOT_REF: ${{ github.head_ref || github.ref_name }}
@@ -1029,9 +1028,6 @@ jobs:
 
             - run: pnpm pack --pack-destination=../..
               working-directory: ./packages/viewer-charts
-
-            - run: pnpm pack --pack-destination=../..
-              working-directory: ./packages/viewer-openlayers
 
             - run: pnpm pack --pack-destination=../..
               working-directory: ./packages/workspace

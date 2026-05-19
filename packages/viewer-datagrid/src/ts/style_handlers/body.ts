@@ -185,8 +185,11 @@ export function applyBodyCellStyles(
                     td.classList.toggle("psp-select-region-inactive", isSub);
                 }
             }
-        } else {
-            td.classList.toggle("psp-select-region", false);
+            // } else if (
+            //     model._edit_mode === "READ_ONLY" ||
+            //     model._edit_mode === "EDIT"
+            // ) {
+            //     td.classList.toggle("psp-select-region", false);
         }
 
         // Apply editable styling (if editable)

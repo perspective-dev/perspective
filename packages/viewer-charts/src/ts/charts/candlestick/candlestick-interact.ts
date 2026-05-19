@@ -11,7 +11,6 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { CandlestickChart } from "./candlestick";
-import { formatTickValue, formatDateTickValue } from "../../layout/ticks";
 import { renderCandlestickChromeOverlay } from "./candlestick-render";
 
 /**
@@ -219,10 +218,8 @@ export function buildCandlestickTooltipLines(
         chart._categoryPositions
     ) {
         const v = chart._categoryPositions[catIdx];
-        const label = chart._numericCategoryDomain.isDate
-            ? formatDateTickValue(v)
-            : formatTickValue(v);
-        lines.push(label);
+        const xColumn = chart._groupBy[0];
+        lines.push(chart.getColumnFormatter(xColumn, "value")(v));
     } else if (chart._rowPaths.length > 0) {
         const parts: string[] = [];
         for (const rp of chart._rowPaths) {
@@ -246,10 +243,14 @@ export function buildCandlestickTooltipLines(
         }
     }
 
-    lines.push(`Open: ${formatTickValue(open)}`);
-    lines.push(`Close: ${formatTickValue(close)}`);
-    lines.push(`High: ${formatTickValue(high)}`);
-    lines.push(`Low: ${formatTickValue(low)}`);
+    const openFmt = chart.getColumnFormatter(chart._columnSlots[0], "value");
+    const closeFmt = chart.getColumnFormatter(chart._columnSlots[1], "value");
+    const highFmt = chart.getColumnFormatter(chart._columnSlots[2], "value");
+    const lowFmt = chart.getColumnFormatter(chart._columnSlots[3], "value");
+    lines.push(`Open: ${openFmt(open)}`);
+    lines.push(`Close: ${closeFmt(close)}`);
+    lines.push(`High: ${highFmt(high)}`);
+    lines.push(`Low: ${lowFmt(low)}`);
 
     return lines;
 }

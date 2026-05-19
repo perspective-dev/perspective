@@ -77,7 +77,27 @@ async fn update_and_render_inner(session: Session, renderer: Renderer) -> ApiRes
         return Ok(());
     }
 
-    renderer.apply_pending_plugin()?;
+    let plugin_swapped = renderer.apply_pending_plugin()?;
+    if plugin_swapped {
+        // `commit_plugin_idx` already restored the new plugin from its
+        // raw bucket; re-run with the materialized snapshot so any
+        // `include: true` schema defaults (e.g. Datagrid's
+        // `fg_gradient` when `number_fg_mode = "bar"`) make it into
+        // the plugin's state before the first draw. The Session is in
+        // scope here but not at `commit_plugin_idx`'s call sites in
+        // the column-selector tree, so we do the second restore at
+        // the caller instead of plumbing `&Session` through every
+        // `apply_pending_plugin` site.
+        let view_config_snapshot = session.get_view_config().clone();
+        let plugin_token = wasm_bindgen::JsValue::from_serde_ext(&renderer.get_plugin_config())
+            .unwrap_or(wasm_bindgen::JsValue::NULL);
+        let columns_config =
+            renderer.all_columns_configs_materialized(&view_config_snapshot, &session);
+        renderer
+            .get_active_plugin()?
+            .restore(&plugin_token, Some(&columns_config))?;
+    }
+
     let view = session.validate().await?;
     renderer.draw(view.create_view()).await
 }

@@ -48,56 +48,12 @@ interface AreaSeriesEntry {
 }
 
 /**
- * Persistent area glyph state. Built in `rebuildAreaBuffers`. Each
- * series owns one GPU buffer holding all of its strip vertices in
+ * Persistent area glyph state. Built in `rebuildBuffers`. Each series
+ * owns one GPU buffer holding all of its strip vertices in
  * `[x,y_bot, x,y_top, ...]` layout; draws rebind without uploading.
  */
-export interface AreaBuffers {
-    program: WebGLProgram;
-    u_projection: WebGLUniformLocation | null;
-    u_color: WebGLUniformLocation | null;
-    u_opacity: WebGLUniformLocation | null;
-    a_position: number;
+interface AreaBuffers {
     series: AreaSeriesEntry[];
-    gpuBuffer?: WebGLBuffer | null;
-}
-
-function ensureProgramCache(
-    chart: SeriesChart,
-    glManager: WebGLContextManager,
-): AreaProgramCache {
-    if (chart._areaCache) {
-        return chart._areaCache as AreaProgramCache;
-    }
-
-    const cache = compileProgram<AreaProgramCache>(
-        glManager,
-        "bar-area",
-        areaVert,
-        areaFrag,
-        ["u_projection", "u_color", "u_opacity"],
-        ["a_position"],
-    );
-    chart._areaCache = cache;
-    return cache;
-}
-
-/**
- * Drop persistent area buffers. Subsequent draws no-op until rebuild.
- */
-export function invalidateAreaBuffers(chart: SeriesChart): void {
-    const buf = chart._areaBuffers as AreaBuffers | undefined;
-    if (!buf || !chart._glManager) {
-        chart._areaBuffers = undefined;
-        return;
-    }
-
-    const gl = chart._glManager.gl;
-    for (const s of buf.series) {
-        gl.deleteBuffer(s.gpuBuffer);
-    }
-
-    chart._areaBuffers = undefined;
 }
 
 /**
@@ -116,136 +72,172 @@ function ensureStripScratch(n: number): Float32Array {
 }
 
 /**
- * Build per-series strip buffers for area glyphs. Reads stacked y0/y1
- * from `chart._areaBarIndex` (cached at data load) and unstacked values
- * from `_samples`. Single GPU upload per series; subsequent frames just
- * rebind.
+ * Area glyph for {@link SeriesChart}. Owns its program + per-series
+ * strip buffers privately.
  */
-export function rebuildAreaBuffers(
-    chart: SeriesChart,
-    glManager: WebGLContextManager,
-): void {
-    const areaSeries = chart._areaSeries;
-    if (areaSeries.length === 0) {
-        chart._areaBuffers = undefined;
-        return;
-    }
+export class AreaGlyph {
+    private _program: AreaProgramCache | null = null;
+    private _buffers: AreaBuffers | null = null;
 
-    const N = chart._numCategories;
-    const S = chart._series.length;
-    if (N === 0 || S === 0) {
-        chart._areaBuffers = undefined;
-        return;
-    }
-
-    const cache = ensureProgramCache(chart, glManager);
-    const gl = glManager.gl;
-    const samples = chart._samples;
-    const valid = chart._sampleValid;
-    const positions = chart._categoryPositions;
-    const xOrigin = chart._categoryOrigin;
-    const barIndex = chart._areaBarIndex;
-    const bars = chart._bars;
-
-    const entries: AreaSeriesEntry[] = [];
-    for (const s of areaSeries) {
-        const strips = collectAreaStrips(
-            s,
-            N,
-            S,
-            samples,
-            valid,
-            barIndex,
-            bars.y0,
-            bars.y1,
-            positions,
-            xOrigin,
-        );
-        if (strips.totalVertices === 0) {
-            continue;
+    private ensureProgram(glManager: WebGLContextManager): AreaProgramCache {
+        if (this._program) {
+            return this._program;
         }
 
-        const buf = gl.createBuffer()!;
-        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            strips.scratch.subarray(0, strips.totalVertices * 2),
-            gl.STATIC_DRAW,
+        this._program = compileProgram<AreaProgramCache>(
+            glManager,
+            "bar-area",
+            areaVert,
+            areaFrag,
+            ["u_projection", "u_color", "u_opacity"],
+            ["a_position"],
         );
-
-        entries.push({
-            seriesId: s.seriesId,
-            axis: s.axis,
-            color: [s.color[0], s.color[1], s.color[2]],
-            gpuBuffer: buf,
-            strips: strips.descriptors,
-        });
+        return this._program;
     }
 
-    chart._areaBuffers = {
-        program: cache.program,
-        u_projection: cache.u_projection,
-        u_color: cache.u_color,
-        u_opacity: cache.u_opacity,
-        a_position: cache.a_position,
-        series: entries,
-        gpuBuffer: null,
-    };
-}
-
-/**
- * Bind persistent strip buffers and dispatch one TRIANGLE_STRIP per
- * series-run. Skips hidden series.
- */
-export function drawAreas(
-    chart: SeriesChart,
-    gl: GL,
-    glManager: WebGLContextManager,
-    projLeft: Float32Array,
-    projRight: Float32Array,
-    opacity: number,
-): void {
-    const buf = chart._areaBuffers as AreaBuffers | undefined;
-    if (!buf || buf.series.length === 0) {
-        return;
-    }
-
-    gl.useProgram(buf.program);
-    gl.uniform1f(buf.u_opacity, opacity);
-
-    const hidden = chart._hiddenSeries;
-    for (const s of buf.series) {
-        if (hidden.has(s.seriesId)) {
-            continue;
+    /**
+     * Drop persistent area buffers. Subsequent draws no-op until rebuild.
+     */
+    invalidateBuffers(chart: SeriesChart): void {
+        const buf = this._buffers;
+        if (!buf || !chart._glManager) {
+            this._buffers = null;
+            return;
         }
 
-        gl.uniformMatrix4fv(
-            buf.u_projection,
-            false,
-            s.axis === 1 ? projRight : projLeft,
-        );
-        const color = chart._series[s.seriesId].color;
-        gl.uniform3f(buf.u_color, color[0], color[1], color[2]);
+        const gl = chart._glManager.gl;
+        for (const s of buf.series) {
+            gl.deleteBuffer(s.gpuBuffer);
+        }
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, s.gpuBuffer);
-        gl.enableVertexAttribArray(buf.a_position);
-        gl.vertexAttribPointer(buf.a_position, 2, gl.FLOAT, false, 0, 0);
+        this._buffers = null;
+    }
 
-        for (const strip of s.strips) {
-            gl.bindBuffer(gl.ARRAY_BUFFER, s.gpuBuffer);
-            gl.vertexAttribPointer(
-                buf.a_position,
-                2,
-                gl.FLOAT,
-                false,
-                0,
-                strip.offsetBytes,
+    /**
+     * Build per-series strip buffers for area glyphs. Reads stacked
+     * y0/y1 from `chart._areaBarIndex` (cached at data load) and
+     * unstacked values from `_samples`. Single GPU upload per series;
+     * subsequent frames just rebind.
+     */
+    rebuildBuffers(chart: SeriesChart, glManager: WebGLContextManager): void {
+        const areaSeries = chart._areaSeries;
+        if (areaSeries.length === 0) {
+            this._buffers = null;
+            return;
+        }
+
+        const N = chart._numCategories;
+        const S = chart._series.length;
+        if (N === 0 || S === 0) {
+            this._buffers = null;
+            return;
+        }
+
+        this.ensureProgram(glManager);
+        const gl = glManager.gl;
+        const samples = chart._samples;
+        const valid = chart._sampleValid;
+        const positions = chart._categoryPositions;
+        const xOrigin = chart._categoryOrigin;
+        const barIndex = chart._areaBarIndex;
+        const bars = chart._bars;
+
+        const entries: AreaSeriesEntry[] = [];
+        for (const s of areaSeries) {
+            const strips = collectAreaStrips(
+                s,
+                N,
+                S,
+                samples,
+                valid,
+                barIndex,
+                bars.y0,
+                bars.y1,
+                positions,
+                xOrigin,
             );
-            gl.drawArrays(gl.TRIANGLE_STRIP, 0, strip.vertexCount);
+            if (strips.totalVertices === 0) {
+                continue;
+            }
+
+            const buf = gl.createBuffer()!;
+            gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+            gl.bufferData(
+                gl.ARRAY_BUFFER,
+                strips.scratch.subarray(0, strips.totalVertices * 2),
+                gl.STATIC_DRAW,
+            );
+
+            entries.push({
+                seriesId: s.seriesId,
+                axis: s.axis,
+                color: [s.color[0], s.color[1], s.color[2]],
+                gpuBuffer: buf,
+                strips: strips.descriptors,
+            });
+        }
+
+        this._buffers = { series: entries };
+    }
+
+    /**
+     * Bind persistent strip buffers and dispatch one TRIANGLE_STRIP per
+     * series-run. Skips hidden series.
+     */
+    draw(
+        chart: SeriesChart,
+        gl: GL,
+        _glManager: WebGLContextManager,
+        projLeft: Float32Array,
+        projRight: Float32Array,
+        opacity: number,
+    ): void {
+        const buf = this._buffers;
+        const cache = this._program;
+        if (!buf || !cache || buf.series.length === 0) {
+            return;
+        }
+
+        gl.useProgram(cache.program);
+        gl.uniform1f(cache.u_opacity, opacity);
+
+        const hidden = chart._hiddenSeries;
+        for (const s of buf.series) {
+            if (hidden.has(s.seriesId)) {
+                continue;
+            }
+
+            gl.uniformMatrix4fv(
+                cache.u_projection,
+                false,
+                s.axis === 1 ? projRight : projLeft,
+            );
+            const color = chart._series[s.seriesId].color;
+            gl.uniform3f(cache.u_color, color[0], color[1], color[2]);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, s.gpuBuffer);
+            gl.enableVertexAttribArray(cache.a_position);
+            gl.vertexAttribPointer(cache.a_position, 2, gl.FLOAT, false, 0, 0);
+
+            for (const strip of s.strips) {
+                gl.bindBuffer(gl.ARRAY_BUFFER, s.gpuBuffer);
+                gl.vertexAttribPointer(
+                    cache.a_position,
+                    2,
+                    gl.FLOAT,
+                    false,
+                    0,
+                    strip.offsetBytes,
+                );
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, strip.vertexCount);
+            }
         }
     }
 
-    void glManager;
+    destroy(chart: SeriesChart): void {
+        this.invalidateBuffers(chart);
+        this._program = null;
+    }
 }
 
 interface CollectedStrips {

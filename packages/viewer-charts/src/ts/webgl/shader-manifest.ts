@@ -30,6 +30,15 @@ import sunburstArcVert from "../shaders/sunburst-arc.vert.glsl";
 import sunburstArcFrag from "../shaders/sunburst-arc.frag.glsl";
 import treemapVert from "../shaders/treemap.vert.glsl";
 import treemapFrag from "../shaders/treemap.frag.glsl";
+import densitySplatVert from "../shaders/density-splat.vert.glsl";
+import densitySplatFrag from "../shaders/density-splat.frag.glsl";
+import densityExtremeFrag from "../shaders/density-extreme.frag.glsl";
+import densityMrtVert from "../shaders/density-mrt.vert.glsl";
+import densityMrtFrag from "../shaders/density-mrt.frag.glsl";
+import densityResolveVert from "../shaders/density-resolve.vert.glsl";
+import densityResolveFrag from "../shaders/density-resolve.frag.glsl";
+import tileVert from "../shaders/tile.vert.glsl";
+import tileFrag from "../shaders/tile.frag.glsl";
 
 /**
  * One shader program in the build's static manifest. The `name` is the
@@ -72,6 +81,32 @@ export const SHADER_MANIFEST: readonly ShaderSpec[] = [
     { name: "heatmap", vert: heatmapVert, frag: heatmapFrag },
     { name: "sunburst-arc", vert: sunburstArcVert, frag: sunburstArcFrag },
     { name: "treemap", vert: treemapVert, frag: treemapFrag },
+    {
+        name: "density-splat",
+        vert: densitySplatVert,
+        frag: densitySplatFrag,
+    },
+    {
+        name: "density-extreme",
+        vert: densitySplatVert,
+        frag: densityExtremeFrag,
+    },
+    {
+        name: "density-resolve",
+        vert: densityResolveVert,
+        frag: densityResolveFrag,
+    },
+    // The MRT variant declares `#extension GL_EXT_draw_buffers :
+    // require` and only compiles on contexts that advertise it. The
+    // glyph compiles it lazily after probing `OES_draw_buffers_indexed`
+    // — adding it here would crash precompile on hardware without
+    // multi-render-target support.
+
+    // Map tile basemap (textured quad in Mercator space). Compiled
+    // unconditionally because the program is GLSL 100 and links on
+    // every WebGL1/2 context; the loader only kicks in when a map
+    // plugin tag activates.
+    { name: "map-tile", vert: tileVert, frag: tileFrag },
 ];
 
 // Re-export each shader source so glyph modules can import their
@@ -101,4 +136,13 @@ export {
     sunburstArcFrag,
     treemapVert,
     treemapFrag,
+    densitySplatVert,
+    densitySplatFrag,
+    densityExtremeFrag,
+    densityMrtVert,
+    densityMrtFrag,
+    densityResolveVert,
+    densityResolveFrag,
+    tileVert,
+    tileFrag,
 };

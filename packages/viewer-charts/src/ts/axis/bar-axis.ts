@@ -31,7 +31,12 @@ import type { Theme } from "../theme/theme";
 function tickFormatter(
     domain: AxisDomain,
     ticks: number[],
+    override?: (v: number) => string,
 ): (v: number) => string {
+    if (override) {
+        return override;
+    }
+
     if (!domain.isDate) {
         return formatTickValue;
     }
@@ -50,6 +55,7 @@ function drawNumericXAxis(
     ticks: number[],
     side: "top" | "bottom",
     theme: Theme,
+    formatter?: (v: number) => string,
 ): void {
     const { labelColor, fontFamily } = theme;
     const { plotRect: plot } = layout;
@@ -65,7 +71,7 @@ function drawNumericXAxis(
         axisY,
         side,
         (v) => layout.dataToPixel(v, 0).px,
-        tickFormatter(domain, ticks),
+        tickFormatter(domain, ticks, formatter),
     );
 
     ctx.font = `13px ${fontFamily}`;
@@ -90,6 +96,7 @@ function drawYAxis(
     ticks: number[],
     side: "left" | "right",
     theme: Theme,
+    formatter?: (v: number) => string,
 ): void {
     const { labelColor, fontFamily } = theme;
     const { plotRect: plot } = layout;
@@ -105,7 +112,7 @@ function drawYAxis(
         axisX,
         side,
         (v) => layout.dataToPixel(0, v).py,
-        tickFormatter(domain, ticks),
+        tickFormatter(domain, ticks, formatter),
     );
 
     ctx.font = `13px ${fontFamily}`;
@@ -145,8 +152,9 @@ export function drawNumericCategoryX(
     domain: AxisDomain,
     ticks: number[],
     theme: Theme,
+    formatter?: (v: number) => string,
 ): void {
-    drawNumericXAxis(ctx, layout, domain, ticks, "bottom", theme);
+    drawNumericXAxis(ctx, layout, domain, ticks, "bottom", theme, formatter);
 }
 
 export function drawNumericCategoryY(
@@ -155,8 +163,9 @@ export function drawNumericCategoryY(
     domain: AxisDomain,
     ticks: number[],
     theme: Theme,
+    formatter?: (v: number) => string,
 ): void {
-    drawYAxis(ctx, layout, domain, ticks, "left", theme);
+    drawYAxis(ctx, layout, domain, ticks, "left", theme, formatter);
 }
 
 /**
@@ -169,6 +178,15 @@ export function drawNumericCategoryY(
  * `altDomain`/`altTicks` arguments always describe the *secondary*
  * numeric axis regardless of orientation.
  */
+export interface BarAxesFormatters {
+    /** Formatter for the value (Y in vertical, X in horizontal) axis. */
+    value?: (v: number) => string;
+    /** Formatter for the secondary alt value axis. */
+    alt?: (v: number) => string;
+    /** Formatter for the numeric category axis (when `catAxis.mode === "numeric"`). */
+    category?: (v: number) => string;
+}
+
 export function renderBarAxesChrome(
     canvas: Canvas2D,
     catAxis: BarCategoryAxis,
@@ -180,6 +198,7 @@ export function renderBarAxesChrome(
     altDomain?: AxisDomain,
     altTicks?: number[],
     isHorizontal = false,
+    formatters: BarAxesFormatters = {},
 ): void {
     const ctx = initCanvas(canvas, layout, dpr);
     if (!ctx) {
@@ -215,16 +234,33 @@ export function renderBarAxesChrome(
                 catAxis.domain,
                 catAxis.ticks,
                 theme,
+                formatters.category,
             );
         }
 
-        drawNumericXAxis(ctx, layout, valueDomain, valueTicks, "bottom", theme);
+        drawNumericXAxis(
+            ctx,
+            layout,
+            valueDomain,
+            valueTicks,
+            "bottom",
+            theme,
+            formatters.value,
+        );
         if (altDomain && altTicks) {
             const origMin = layout.paddedXMin;
             const origMax = layout.paddedXMax;
             layout.paddedXMin = altDomain.min;
             layout.paddedXMax = altDomain.max;
-            drawNumericXAxis(ctx, layout, altDomain, altTicks, "top", theme);
+            drawNumericXAxis(
+                ctx,
+                layout,
+                altDomain,
+                altTicks,
+                "top",
+                theme,
+                formatters.alt,
+            );
             layout.paddedXMin = origMin;
             layout.paddedXMax = origMax;
         }
@@ -238,16 +274,33 @@ export function renderBarAxesChrome(
                 catAxis.domain,
                 catAxis.ticks,
                 theme,
+                formatters.category,
             );
         }
 
-        drawYAxis(ctx, layout, valueDomain, valueTicks, "left", theme);
+        drawYAxis(
+            ctx,
+            layout,
+            valueDomain,
+            valueTicks,
+            "left",
+            theme,
+            formatters.value,
+        );
         if (altDomain && altTicks) {
             const origMin = layout.paddedYMin;
             const origMax = layout.paddedYMax;
             layout.paddedYMin = altDomain.min;
             layout.paddedYMax = altDomain.max;
-            drawYAxis(ctx, layout, altDomain, altTicks, "right", theme);
+            drawYAxis(
+                ctx,
+                layout,
+                altDomain,
+                altTicks,
+                "right",
+                theme,
+                formatters.alt,
+            );
             layout.paddedYMin = origMin;
             layout.paddedYMax = origMax;
         }

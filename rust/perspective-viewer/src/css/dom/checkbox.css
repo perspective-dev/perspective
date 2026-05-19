@@ -87,10 +87,6 @@
         }
 
         &:hover {
-            background-color: transparent;
-        }
-
-        &:hover {
             -webkit-mask-image: var(--psp-icon--checkbox-hover--mask-image);
             mask-image: var(--psp-icon--checkbox-hover--mask-image);
         }

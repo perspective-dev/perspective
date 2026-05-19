@@ -10,7 +10,9 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { FacetConfig } from "../charts/chart";
+import type { FacetConfig, PluginConfig } from "../charts/chart";
+import type { PerspectiveClickDetail } from "../event-detail";
+import type { ViewConfig } from "@perspective-dev/client";
 
 /**
  * Worker-mode control-channel messages. Distinct from the perspective
@@ -22,6 +24,7 @@ export type ControlMsg =
     | InitMsg
     | SetViewByNameMsg
     | SetColumnsConfigMsg
+    | SetPluginConfigMsg
     | SetBufferMaxCapacityMsg
     | LoadAndRenderMsg
     | RedrawMsg
@@ -30,6 +33,7 @@ export type ControlMsg =
     | InvalidateThemeMsg
     | RestoreZoomMsg
     | ResetAllZoomsMsg
+    | ResetExpandedDomainMsg
     | SaveZoomReqMsg
     | SnapshotPngReqMsg
     | InteractionMsg
@@ -43,6 +47,8 @@ export type WorkerMsg =
     | PinTooltipMsg
     | DismissTooltipMsg
     | SetCursorMsg
+    | UserClickMsg
+    | UserSelectMsg
     | LoadAndRenderAckMsg
     | FrameBitmapMsg
     | ErrorMsg;
@@ -141,6 +147,16 @@ export interface InitMsg {
      */
     tableName?: string;
     facetConfig: FacetConfig;
+
+    /**
+     * Initial plugin-scoped global config. Seeds the chart impl's
+     * `_pluginConfig` before the first `loadAndRender` so the build
+     * pipeline (`auto_alt_y_axis`, `band_inner_frac`, `bar_inner_pad`)
+     * and render-path uniforms see correct values on the very first
+     * frame. The host's later `restore({ plugin_config })` arrives as
+     * a `setPluginConfig` control msg.
+     */
+    pluginConfig: PluginConfig;
     defaultChartType?: string;
 
     /**
@@ -224,6 +240,21 @@ export interface SetColumnsConfigMsg {
     cfg: Record<string, any>;
 }
 
+/**
+ * Host → worker: replace the chart impl's `_pluginConfig` with a new
+ * snapshot. Sent on every `plugin.restore({ plugin_config })`. The
+ * chart re-syncs derived state (`_facetConfig.facet_mode`,
+ * `_facetConfig.zoom_mode`, `_autoFitValue`) in `setPluginConfig` and
+ * the host posts a `redraw` so render-path uniform changes (line
+ * widths, point size) take effect on the next frame. Build-time
+ * fields (`auto_alt_y_axis`, `band_inner_frac`, `bar_inner_pad`) take
+ * effect on the next `loadAndRender`.
+ */
+export interface SetPluginConfigMsg {
+    kind: "setPluginConfig";
+    cfg: PluginConfig;
+}
+
 export interface SetBufferMaxCapacityMsg {
     kind: "setBufferMaxCapacity";
     n: number;
@@ -301,6 +332,17 @@ export interface RestoreZoomMsg {
 
 export interface ResetAllZoomsMsg {
     kind: "resetAllZooms";
+}
+
+/**
+ * Host → worker: clear the chart's `domain_mode: "expand"` accumulator
+ * so the next data load starts from a fresh extent. Sent at the head
+ * of every `plugin.draw()` (which always indicates a view-level
+ * change). `plugin.update()` does not send this — same view, more
+ * data, the accumulator should keep growing.
+ */
+export interface ResetExpandedDomainMsg {
+    kind: "resetExpandedDomain";
 }
 
 export interface SaveZoomReqMsg {
@@ -408,6 +450,32 @@ export interface DismissTooltipMsg {
 export interface SetCursorMsg {
     kind: "setCursor";
     cursor: string;
+}
+
+/**
+ * Renderer → host: a user click landed on a chart glyph. Host
+ * re-dispatches as `CustomEvent<PerspectiveClickDetail>` on the
+ * `<perspective-viewer>` ancestor. Payload is a plain object so it
+ * survives `postMessage` without losing the class prototype.
+ */
+export interface UserClickMsg {
+    kind: "userClick";
+    detail: PerspectiveClickDetail;
+}
+
+/**
+ * Renderer → host: a user click pinned or unpinned a chart target.
+ * Host materializes a `PerspectiveSelectDetail` from this payload plus
+ * its own cached previous-insert config and dispatches as
+ * `CustomEvent<PerspectiveSelectDetail>` (`perspective-global-filter`).
+ * `removeConfigs` is computed host-side — not sent.
+ */
+export interface UserSelectMsg {
+    kind: "userSelect";
+    selected: boolean;
+    row: Record<string, unknown>;
+    column_names: string[];
+    insertConfig: Partial<ViewConfig>;
 }
 
 /**

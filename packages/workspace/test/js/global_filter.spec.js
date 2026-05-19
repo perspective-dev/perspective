@@ -391,8 +391,11 @@ function tests(context, compare) {
             class MyGrid extends customElements.get(
                 "perspective-viewer-datagrid",
             ) {
-                get name() {
-                    return "My Datagrid";
+                get_static_config() {
+                    return {
+                        ...super.get_static_config(),
+                        name: "My Datagrid",
+                    };
                 }
             }
             customElements.define("my-grid", MyGrid);

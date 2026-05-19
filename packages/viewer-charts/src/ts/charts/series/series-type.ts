@@ -29,6 +29,14 @@ export interface ColumnChartConfig {
      * line / scatter do not.
      */
     stack?: boolean;
+
+    /**
+     * Force this aggregate onto the secondary (right) Y axis,
+     * independent of `autoAltYAxis` and the dual-axis ratio
+     * heuristic. Missing / false → axis assignment is driven by
+     * `autoAltYAxis` alone.
+     */
+    alt_axis?: boolean;
 }
 
 /**
@@ -75,4 +83,17 @@ export function resolveStack(
     }
 
     return chartType === "bar" || chartType === "area";
+}
+
+/**
+ * Resolve whether a column is pinned to the secondary Y axis via
+ * `columns_config[aggName].alt_axis`. Independent of `autoAltYAxis`:
+ * when `true`, the per-column override forces axis 1 regardless of
+ * the auto-split heuristic.
+ */
+export function resolveAltAxis(
+    aggName: string,
+    cfg: Record<string, ColumnChartConfig> | undefined,
+): boolean {
+    return cfg?.[aggName]?.alt_axis === true;
 }

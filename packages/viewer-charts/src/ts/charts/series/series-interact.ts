@@ -17,7 +17,6 @@ import {
     readBarRecord,
     type SeriesChartRecord,
 } from "./series-build";
-import { formatTickValue, formatDateTickValue } from "../../layout/ticks";
 import {
     renderBarFrame,
     uploadBarInstances,
@@ -479,14 +478,15 @@ export function buildBarTooltipLines(
         lines.push(categoryPath);
     }
 
-    lines.push(`${s.aggName}: ${formatTickValue(b.value)}`);
+    const yFmt = chart.getColumnFormatter(s.aggName, "value");
+    lines.push(`${s.aggName}: ${yFmt(b.value)}`);
     if (s.splitKey) {
         lines.push(`Split: ${s.splitKey}`);
     }
 
     if (b.y0 !== 0) {
-        lines.push(`Base: ${formatTickValue(b.y0)}`);
-        lines.push(`Top: ${formatTickValue(b.y1)}`);
+        lines.push(`Base: ${yFmt(b.y0)}`);
+        lines.push(`Top: ${yFmt(b.y1)}`);
     }
 
     return lines;
@@ -517,10 +517,8 @@ export function formatBarCategoryPath(
             return "";
         }
 
-        const label = chart._numericCategoryDomain.isDate
-            ? formatDateTickValue(v)
-            : formatTickValue(v);
-        return label;
+        const xColumn = chart._groupBy[0];
+        return chart.getColumnFormatter(xColumn, "value")(v);
     }
 
     if (chart._rowPaths.length === 0) {

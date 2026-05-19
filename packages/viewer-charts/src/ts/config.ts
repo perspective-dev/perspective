@@ -11,11 +11,6 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 /**
- * Feature flag for auto-detecting Y alt-axes.
- */
-export const AUTO_ALT_Y_AXIS = false;
-
-/**
  * Renderer mode. `"worker"` runs the chart code in a Web Worker (off
  * the main thread, gets parallelism but pays a postMessage hop on
  * every interaction). `"inprocess"` dynamic-imports the same worker

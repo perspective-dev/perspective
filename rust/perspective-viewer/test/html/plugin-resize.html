@@ -7,8 +7,12 @@
             const BASE = customElements.get("perspective-viewer-plugin");
 
             class TestPluginImplementsResize extends BASE {
-                get name() {
-                    return "Resizing Plugin";
+                get_static_config() {
+                    return {
+                        name: "Resizing Plugin",
+                        select_mode: "select",
+                        config_column_names: [],
+                    };
                 }
 
                 async draw(view) {

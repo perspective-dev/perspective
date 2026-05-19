@@ -14,7 +14,7 @@ import type { WebGLContextManager } from "../../../webgl/context-manager";
 import type { CartesianChart } from "../cartesian";
 import type { Glyph } from "../glyph";
 import { bindGradientTexture } from "../../../webgl/gradient-texture";
-import { formatTickValue, formatDateTickValue } from "../../../layout/ticks";
+import { buildPointRowTooltipLines } from "../tooltip-lines";
 import scatterVert from "../../../shaders/scatter.vert.glsl";
 import scatterFrag from "../../../shaders/scatter.frag.glsl";
 
@@ -43,9 +43,13 @@ interface PointCache {
  */
 export class PointGlyph implements Glyph {
     readonly name = "point" as const;
+    private _cache: PointCache | null = null;
 
-    ensureProgram(chart: CartesianChart, glManager: WebGLContextManager): void {
-        if (chart._glyphCache) {
+    ensureProgram(
+        _chart: CartesianChart,
+        glManager: WebGLContextManager,
+    ): void {
+        if (this._cache) {
             return;
         }
 
@@ -55,7 +59,7 @@ export class PointGlyph implements Glyph {
             scatterVert,
             scatterFrag,
         );
-        const cache: PointCache = {
+        this._cache = {
             program,
             u_projection: gl.getUniformLocation(program, "u_projection"),
             u_point_size: gl.getUniformLocation(program, "u_point_size"),
@@ -70,7 +74,6 @@ export class PointGlyph implements Glyph {
             a_color_value: gl.getAttribLocation(program, "a_color_value"),
             a_size_value: gl.getAttribLocation(program, "a_size_value"),
         };
-        chart._glyphCache = cache;
     }
 
     draw(
@@ -78,7 +81,7 @@ export class PointGlyph implements Glyph {
         glManager: WebGLContextManager,
         projection: Float32Array,
     ): void {
-        const cache = chart._glyphCache as PointCache | null;
+        const cache = this._cache;
         if (!cache) {
             return;
         }
@@ -110,7 +113,7 @@ export class PointGlyph implements Glyph {
         projection: Float32Array,
         seriesIdx: number,
     ): void {
-        const cache = chart._glyphCache as PointCache | null;
+        const cache = this._cache;
         if (!cache) {
             return;
         }
@@ -129,84 +132,11 @@ export class PointGlyph implements Glyph {
         gl.drawArrays(gl.POINTS, seriesIdx * cap, count);
     }
 
-    async buildTooltipLines(
+    buildTooltipLines(
         chart: CartesianChart,
         flatIdx: number,
     ): Promise<string[]> {
-        const lines: string[] = [];
-        if (!chart._rowIndexData || !chart._lazyRows) {
-            return lines;
-        }
-
-        const rowIdx = chart._rowIndexData[flatIdx];
-        if (rowIdx < 0) {
-            return lines;
-        }
-
-        // In split mode, the row the user hovered corresponds to one
-        // series — so surface the split prefix as the first line so
-        // the user can tell which facet's data this is.
-        if (chart._splitGroups.length > 0 && chart._seriesCapacity > 0) {
-            const seriesIdx = Math.floor(flatIdx / chart._seriesCapacity);
-            const sg = chart._splitGroups[seriesIdx];
-            if (sg?.prefix) {
-                lines.push(sg.prefix);
-            }
-        }
-
-        const row = await chart._lazyRows.fetchRow(rowIdx);
-
-        // Row-path (group_by): the view emits `__ROW_PATH_0__` …
-        // `__ROW_PATH_N__` dictionary columns. `LazyRowFetcher`
-        // filters out `__` columns, so fetch the row-path from the
-        // levels we know: iterate the view schema via `_columnTypes`
-        // is costly; instead, reuse the column-type map to infer only
-        // the non-metadata columns. Row-path columns are metadata; we
-        // skip them here and the visual hierarchy is instead conveyed
-        // by the aggregated view already surfacing grouped columns.
-        //
-        // In split mode we only have per-split columns like
-        // `A|price`. Filter to the prefix the user hovered on so
-        // the tooltip shows only relevant facet values.
-        const prefixFilter =
-            chart._splitGroups.length > 0 && chart._seriesCapacity > 0
-                ? (chart._splitGroups[
-                      Math.floor(flatIdx / chart._seriesCapacity)
-                  ]?.prefix ?? null)
-                : null;
-
-        for (const [colName, value] of row) {
-            if (value === null || value === undefined) {
-                continue;
-            }
-
-            let displayName = colName;
-            if (prefixFilter !== null) {
-                const expected = `${prefixFilter}|`;
-                if (!colName.startsWith(expected)) {
-                    continue;
-                }
-
-                displayName = colName.substring(expected.length);
-            } else if (colName.includes("|")) {
-                // Non-split chart that somehow has pipe-prefixed
-                // columns (shouldn't happen, but defensively skip).
-                continue;
-            }
-
-            if (typeof value === "number") {
-                const colType = chart._columnTypes[colName] || "";
-                const isDate = colType === "date" || colType === "datetime";
-                const formatted = isDate
-                    ? formatDateTickValue(value)
-                    : formatTickValue(value);
-                lines.push(`${displayName}: ${formatted}`);
-            } else {
-                lines.push(`${displayName}: ${value}`);
-            }
-        }
-
-        return lines;
+        return buildPointRowTooltipLines(chart, flatIdx);
     }
 
     tooltipOptions() {
@@ -214,9 +144,9 @@ export class PointGlyph implements Glyph {
     }
 
     destroy(_chart: CartesianChart): void {
-        // Program lifetime is owned by the shader registry; nothing glyph-
-        // specific to free here beyond the cache reference itself, which
-        // `CartesianChart.destroyInternal` clears.
+        // Program lifetime is owned by the shader registry; just drop
+        // the cache reference. No private GPU resources to free.
+        this._cache = null;
     }
 }
 
@@ -228,7 +158,7 @@ function setUniforms(
     dpr: number,
 ): void {
     gl.uniformMatrix4fv(cache.u_projection, false, projection);
-    gl.uniform1f(cache.u_point_size, 8.0 * dpr);
+    gl.uniform1f(cache.u_point_size, chart._pluginConfig.point_size_px * dpr);
 
     if (chart._colorMin < chart._colorMax) {
         gl.uniform2f(cache.u_color_range, chart._colorMin, chart._colorMax);
@@ -242,7 +172,16 @@ function setUniforms(
         gl.uniform2f(cache.u_size_range, 0.0, 0.0);
     }
 
-    gl.uniform2f(cache.u_point_size_range, 2.0 * dpr, 16.0 * dpr);
+    const size_scale_factor = Math.min(chart._pluginConfig.point_size_px, 3);
+
+    gl.uniform2f(
+        cache.u_point_size_range,
+        Math.max(
+            2 * dpr,
+            (chart._pluginConfig.point_size_px / size_scale_factor) * dpr,
+        ),
+        chart._pluginConfig.point_size_px * size_scale_factor * dpr,
+    );
 }
 
 /**

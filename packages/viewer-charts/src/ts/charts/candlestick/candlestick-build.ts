@@ -157,6 +157,15 @@ export interface CandlestickPipelineInput {
     groupByTypes: Record<string, string>;
 
     /**
+     * Band-slot geometry knobs sourced from
+     * {@link PluginConfig.band_inner_frac} / `bar_inner_pad`. Forwarded
+     * to `computeSlotGeometry`. Replace the `BAND_INNER_FRAC` /
+     * `BAR_INNER_PAD` constants.
+     */
+    bandInnerFrac: number;
+    barInnerPad: number;
+
+    /**
      * Reusable scratch — pipeline writes records into the typed arrays
      * in place. Pass the previous build's columns to amortize
      * allocation across data reloads.
@@ -221,6 +230,8 @@ export function buildCandlestickPipeline(
         groupBy,
         splitBy,
         groupByTypes,
+        bandInnerFrac,
+        barInnerPad,
         scratchCandles,
     } = input;
     const axisMode = resolveAxisMode(groupBy, groupByTypes);
@@ -317,7 +328,7 @@ export function buildCandlestickPipeline(
         }
     }
 
-    const baseSlot = computeSlotGeometry(P);
+    const baseSlot = computeSlotGeometry(P, bandInnerFrac, barInnerPad);
     const slotWidth = baseSlot.slotWidth * numericBandWidth;
     const halfWidth = baseSlot.halfWidth * numericBandWidth;
     const halfP = (P - 1) / 2;

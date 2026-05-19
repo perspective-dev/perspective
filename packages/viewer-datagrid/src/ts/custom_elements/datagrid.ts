@@ -20,9 +20,13 @@ import column_config_schema, {
 } from "../plugin/column_config_schema.js";
 import datagridStyles from "../../../dist/css/perspective-viewer-datagrid.css";
 import { format_raw } from "../data_listener/format_cell.js";
+import { sourceColumn } from "@perspective-dev/viewer/src/ts/column-format.js";
 
 import type { View, ViewWindow } from "@perspective-dev/client";
-import type { IPerspectiveViewerPlugin } from "@perspective-dev/viewer";
+import type {
+    IPerspectiveViewerPlugin,
+    PluginStaticConfig,
+} from "@perspective-dev/viewer";
 import type {
     DatagridModel,
     DatagridToolbarElement,
@@ -112,40 +116,45 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         return await activate.call(this, view);
     }
 
-    get name(): string {
-        return "Datagrid";
+    get_static_config(): PluginStaticConfig {
+        return {
+            name: "Datagrid",
+            category: "Basic",
+            select_mode: "toggle",
+            config_column_names: ["Columns"],
+            group_rollup_modes: ["rollup", "flat", "total"],
+            // Higher priority than the chart plugins so the Datagrid is
+            // loaded by default.
+            priority: 1,
+            can_render_column_styles: true,
+        };
     }
 
-    get category(): string {
-        return "Basic";
-    }
+    plugin_config_schema(): ColumnConfigSchema {
+        const fields = [];
+        fields.push({
+            kind: "Enum",
+            key: "edit_mode",
+            default: "READ_ONLY",
+            variants: [
+                { value: "EDIT", label: "Edit" },
+                { value: "READ_ONLY", label: "Read-only" },
+                { value: "SELECT_ROW", label: "Row Select" },
+                { value: "SELECT_COLUMN", label: "Column Select" },
+                { value: "SELECT_REGION", label: "Region Select" },
+                { value: "SELECT_ROW_TREE", label: "Tree Select" },
+            ],
+        });
 
-    get select_mode(): string {
-        return "toggle";
-    }
+        fields.push({
+            kind: "Bool",
+            key: "scroll_lock",
+            default: false,
+        });
 
-    get min_config_columns(): number | undefined {
-        return undefined;
-    }
-
-    get config_column_names(): string[] {
-        return ["Columns"];
-    }
-
-    get group_rollups(): string[] {
-        return ["rollup", "flat", "total"];
-    }
-
-    /**
-     * Give the Datagrid a higher priority so it is loaded
-     * over the default charts by default.
-     */
-    get priority(): number {
-        return 1;
-    }
-
-    can_render_column_styles(type: string, _group: string): boolean {
-        return type !== "boolean";
+        return {
+            fields,
+        };
     }
 
     column_config_schema(
@@ -204,7 +213,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
                 const pluginConfig = (this.regular_table as any)[
                     PRIVATE_PLUGIN_SYMBOL
                 ] as ColumnsConfig | undefined;
-                const columnName = col_name.split("|").at(-1)!;
+                const columnName = sourceColumn(col_name);
                 const formatter = format_raw(
                     type,
                     pluginConfig?.[columnName] || {},

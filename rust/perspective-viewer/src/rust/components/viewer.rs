@@ -19,16 +19,16 @@ use yew::prelude::*;
 
 use super::containers::split_panel::SplitPanel;
 use super::font_loader::{FontLoader, FontLoaderProps, FontLoaderStatus};
-use super::form::debug::DebugPanel;
 use super::style::{LocalStyle, StyleProvider};
 use crate::components::column_settings_sidebar::ColumnSettingsPanel;
 use crate::components::main_panel::MainPanel;
-use crate::components::settings_panel::SettingsPanel;
+use crate::components::settings_panel::{SelectedTab, SettingsPanel};
 use crate::config::*;
 use crate::css;
-use crate::dragdrop::{DragDropProps, *};
 use crate::js::JsPerspectiveViewerPlugin;
-use crate::presentation::{ColumnLocator, ColumnSettingsTab, Presentation, PresentationProps};
+use crate::presentation::{
+    ColumnLocator, ColumnSettingsTab, DragDropProps, Presentation, PresentationProps,
+};
 use crate::queries::*;
 use crate::renderer::{RendererProps, *};
 use crate::session::{SessionProps, *};
@@ -41,7 +41,6 @@ pub struct PerspectiveViewerProps {
     pub elem: web_sys::HtmlElement,
 
     /// State
-    pub dragdrop: DragDrop,
     pub session: Session,
     pub renderer: Renderer,
     pub presentation: Presentation,
@@ -66,6 +65,8 @@ pub enum PerspectiveViewerMsg {
     Reset(bool, Option<Sender<()>>),
     Resize,
     SettingsPanelSizeUpdate(Option<i32>),
+    SettingsPanelTabChanged(SelectedTab),
+    SettingsPanelAutoWidth(f64),
     ToggleDebug,
     ToggleSettingsComplete(SettingsUpdate, Sender<()>),
     ToggleSettingsInit(Option<SettingsUpdate>, Option<Sender<ApiResult<JsValue>>>),
@@ -103,8 +104,11 @@ pub struct PerspectiveViewer {
     on_close_column_settings: Callback<()>,
     on_rendered: Option<Sender<()>>,
     on_resize: Rc<PubSub<()>>,
+    on_settings_panel_dimensions_reset: Rc<PubSub<()>>,
     settings_open: bool,
     settings_panel_width_override: Option<i32>,
+    settings_panel_selected_tab: SelectedTab,
+    settings_panel_auto_width: f64,
 
     /// Value-semantic state snapshots (Step 4 scaffold).
     /// Populated by `UpdateSession` / `UpdateRenderer` / `UpdatePresentation` /
@@ -164,8 +168,11 @@ impl Component for PerspectiveViewer {
             on_close_column_settings,
             on_rendered: None,
             on_resize: Default::default(),
+            on_settings_panel_dimensions_reset: Default::default(),
             settings_open: false,
             settings_panel_width_override: None,
+            settings_panel_selected_tab: SelectedTab::default(),
+            settings_panel_auto_width: 0.0,
             session_props,
             renderer_props,
             presentation_props,
@@ -266,6 +273,10 @@ impl Component for PerspectiveViewer {
                     ctx.props()
                         .presentation
                         .set_open_column_settings(Some(open_column_settings));
+
+                    if locator.is_some() {
+                        self.settings_panel_selected_tab = SelectedTab::Query;
+                    }
                 }
 
                 if let Some(sender) = sender {
@@ -280,7 +291,22 @@ impl Component for PerspectiveViewer {
             },
             SettingsPanelSizeUpdate(None) => {
                 self.settings_panel_width_override = None;
-                false
+                self.settings_panel_auto_width = 0.0;
+                self.on_settings_panel_dimensions_reset.emit(());
+                true
+            },
+            SettingsPanelTabChanged(tab) => {
+                let changed = tab != self.settings_panel_selected_tab;
+                self.settings_panel_selected_tab = tab;
+                changed
+            },
+            SettingsPanelAutoWidth(w) => {
+                if w > self.settings_panel_auto_width {
+                    self.settings_panel_auto_width = w;
+                    true
+                } else {
+                    false
+                }
             },
             ColumnSettingsPanelSizeUpdate(Some(x)) => {
                 self.column_settings_panel_width_override = Some(x);
@@ -380,7 +406,6 @@ impl Component for PerspectiveViewer {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let Self::Properties {
-            dragdrop,
             presentation,
             renderer,
             session,
@@ -400,7 +425,7 @@ impl Component for PerspectiveViewer {
         }
 
         let on_open_expr_panel = ctx.link().callback(|c| OpenColumnSettings {
-            locator: Some(c),
+            locator: c,
             sender: None,
             toggle: true,
         });
@@ -426,17 +451,13 @@ impl Component for PerspectiveViewer {
         let plugin_name = self.renderer_props.plugin_name.clone();
         let available_plugins = self.renderer_props.available_plugins.clone();
         let has_table = self.session_props.has_table.clone();
-        let named_column_count = self
-            .renderer_props
-            .requirements
-            .names
-            .as_ref()
-            .map(|n| n.len())
-            .unwrap_or(0);
+        let named_column_count = self.renderer_props.config.config_column_names.len();
 
         let view_config = self.session_props.config.clone();
         let drag_column = self.dragdrop_props.column.clone();
         let metadata = self.session_props.metadata.clone();
+        let on_select_tab = ctx.link().callback(SettingsPanelTabChanged);
+        let on_auto_width = ctx.link().callback(SettingsPanelAutoWidth);
         let settings_panel = html! {
             if is_settings_open {
                 <SettingsPanel
@@ -450,11 +471,16 @@ impl Component for PerspectiveViewer {
                     {has_table}
                     {named_column_count}
                     {view_config}
+                    plugin_config={self.renderer_props.plugin_config.clone()}
                     {drag_column}
                     metadata={metadata.clone()}
                     open_column_settings={self.presentation_props.open_column_settings.clone()}
                     selected_theme={self.presentation_props.selected_theme.clone()}
-                    {dragdrop}
+                    selected_tab={self.settings_panel_selected_tab}
+                    auto_width={self.settings_panel_auto_width}
+                    on_dimensions_reset={&self.on_settings_panel_dimensions_reset}
+                    {on_select_tab}
+                    {on_auto_width}
                     {presentation}
                     {renderer}
                     {session}
@@ -511,10 +537,6 @@ impl Component for PerspectiveViewer {
             />
         };
 
-        let debug_panel = html! {
-            if self.debug_open { <DebugPanel {presentation} {renderer} {session} /> }
-        };
-
         html! {
             <StyleProvider root={ctx.props().elem.clone()}>
                 <LocalStyle href={css!("viewer")} />
@@ -529,7 +551,6 @@ impl Component for PerspectiveViewer {
                             on_resize={on_split_panel_resize.clone()}
                             on_resize_finished={render_callback(&ctx.props().session, &ctx.props().renderer)}
                         >
-                            { debug_panel }
                             { settings_panel }
                             <div id="main_column_container">
                                 { main_panel }
@@ -661,11 +682,31 @@ fn create_subscriptions(ctx: &Context<PerspectiveViewer>) -> Vec<Subscription> {
     let renderer_props_sub = {
         let renderer = ctx.props().renderer.clone();
         let cb_plugin = ctx.link().callback({
+            let renderer = renderer.clone();
             move |_: JsPerspectiveViewerPlugin| UpdateRenderer(Box::new(renderer.to_props(None)))
         });
 
+        // Re-snapshot RendererProps when the plugin_config bucket
+        // changes (in-tab edit via `send_plugin_config`, JSON paste via
+        // `restore_and_render`, full clear via `reset_all` with
+        // `all=true`). Without this, `RendererProps.plugin_config`
+        // would stay frozen at its construct-time value and `PluginTab`
+        // would render stale.
+        let cb_plugin_config = ctx.link().callback({
+            let renderer = renderer.clone();
+            move |_: serde_json::Map<String, serde_json::Value>| {
+                UpdateRenderer(Box::new(renderer.to_props(None)))
+            }
+        });
+
         let sub1 = ctx.props().renderer.plugin_changed.add_listener(cb_plugin);
-        vec![sub1]
+        let sub2 = ctx
+            .props()
+            .renderer
+            .plugin_config_changed
+            .add_listener(cb_plugin_config);
+
+        vec![sub1, sub2]
     };
 
     let presentation_props_sub = {
@@ -699,7 +740,7 @@ fn create_subscriptions(ctx: &Context<PerspectiveViewer>) -> Vec<Subscription> {
         let cb_clear = ctx.link().callback(|_: ()| UpdateDragDrop(Box::default()));
         let sub1 = ctx
             .props()
-            .dragdrop
+            .presentation
             .drop_received
             .add_notify_listener(&cb_clear);
 
@@ -778,19 +819,19 @@ fn inject_engine_callbacks(ctx: &Context<PerspectiveViewer>) {
             .borrow_mut() = Some(cb);
     }
 
-    // DragDrop: on_dragstart
+    // Drag/drop: on_dragstart (post-merge: lives on Presentation)
     {
-        let dragdrop = ctx.props().dragdrop.clone();
-        let cb = ctx
-            .link()
-            .callback(move |_: DragEffect| UpdateDragDrop(Box::new(dragdrop.to_props())));
+        let presentation = ctx.props().presentation.clone();
+        let cb = ctx.link().callback(move |_: DragEffect| {
+            UpdateDragDrop(Box::new(presentation.drag_drop_props()))
+        });
 
-        *ctx.props().dragdrop.on_dragstart.borrow_mut() = Some(cb);
+        *ctx.props().presentation.on_dragstart.borrow_mut() = Some(cb);
     }
 
-    // DragDrop: on_dragend
+    // Drag/drop: on_dragend
     {
         let cb = ctx.link().callback(|_: ()| UpdateDragDrop(Box::default()));
-        *ctx.props().dragdrop.on_dragend.borrow_mut() = Some(cb);
+        *ctx.props().presentation.on_dragend.borrow_mut() = Some(cb);
     }
 }

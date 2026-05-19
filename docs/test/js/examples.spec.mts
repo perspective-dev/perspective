@@ -67,8 +67,6 @@ test.describe("Examples", () => {
             let selector = "";
             if (new_config.plugin === "Datagrid") {
                 selector = "perspective-viewer-datagrid";
-            } else if (new_config.plugin === "Map Scatter") {
-                selector = "perspective-viewer-openlayers-scatter";
             } else {
                 const plugin = new_config.plugin
                     .replace(/[-\/\s]/gi, "")

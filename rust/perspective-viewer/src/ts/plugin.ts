@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { View } from "@perspective-dev/client";
+import { PluginStaticConfig } from "./ts-rs/PluginStaticConfig.js";
 
 /**
  * The `IPerspectiveViewerPlugin` interface defines the necessary API for a
@@ -19,7 +20,8 @@ import type { View } from "@perspective-dev/client";
  * scratch however, the simplest way is to inherit from
  * `<perspective-viewer-plugin>`, which implements `IPerspectiveViewerPlugin`
  * with non-offensive default implementations, where only the `draw()` and
- * `name()` methods need be overridden to get started with a simple plugin.
+ * `get_static_config()` methods need be overridden to get started with a
+ * simple plugin.
  *
  * Note that plugins are frozen once a `<perspective-viewer>` has been
  * instantiated, so generally new plugin code must be executed at the module
@@ -30,8 +32,8 @@ import type { View } from "@perspective-dev/client";
  * ```javascript
  * const BasePlugin = customElements.get("perspective-viewer-plugin");
  * class MyPlugin extends BasePlugin {
- *     get name() {
- *         return "My Plugin";
+ *     get_static_config() {
+ *         return { name: "My Plugin", config_column_names: [] };
  *     }
  *     async draw(view) {
  *         const count = await view.num_rows();
@@ -47,63 +49,17 @@ import type { View } from "@perspective-dev/client";
  */
 export interface IPerspectiveViewerPlugin {
     /**
-     * The name for this plugin, which is used as both it's unique key for use
-     * as a parameter for the `plugin` field of a `ViewerConfig`, and as the
-     * display name for this plugin in the `<perspective-viewer>` UI.
+     * Static plugin configuration. Called exactly once per plugin at
+     * registration time and cached; the result must be stable for the
+     * lifetime of the application.
      */
-    get name(): string;
-
-    /**
-     * Select mode determines how column add/remove buttons behave for this
-     * plugin.  `"select"` mode exclusively selects the added column, removing
-     * other columns.  `"toggle"` mode toggles the column on or off (dependent
-     * on column state), leaving existing columns alone.
-     */
-    get select_mode(): string | undefined;
-
-    /**
-     * The minimum number of columns required for this plugin to operate.
-     * This mostly affects drag/drop and column remove button behavior,
-     * preventing the use from applying configs which violate this min.
-     *
-     * While this option can technically be `undefined` (as in the case of
-     * `@perspective-dev/viewer-datagrid`), doing so currently has nearly
-     * identical behavior to 1.
-     */
-    get min_config_columns(): number | undefined;
-
-    /**
-     * The named column labels, if desired.  Named columns behave differently
-     * in drag/drop mode than unnamed columns, having replace/swap behavior
-     * rather than insert.  If provided, the length of `config_column_names`
-     * _must_ be `>= min_config_columns`, as this is assumed by the drag/drop
-     * logic.
-     */
-    get config_column_names(): string[] | undefined;
-
-    /**
-     * The load priority of the plugin. If the plugin shares priority with another,
-     * the first to load has a higher priority.
-     *
-     * A larger number has a higher priority.
-     *
-     * The plugin with the highest priority will be loaded by default by the Perspective viewer.
-     * If you would like to instead begin with a lower priority plugin, choose it explicitly with
-     * a `HTMLPerspectiveViewerPluginElement.restore` call.
-     */
-    get priority(): number | undefined;
-
-    /**
-     * Given a column's grouping (determined by indexing it in `plugin.config_column_names`)
-     * and its view type, determines whether or not to render column styles in the settings sidebar.
-     * Implementing this function and `column_style_config` allows the plugin to interface with the viewer's column configuration API.
-     */
-    can_render_column_styles?: (view_type: string, group: string) => boolean;
+    get_static_config(): PluginStaticConfig;
 
     /**
      * Determines which column configuration controls are populated in the viewer.
-     * Corresponds to the data the plugin will recieve on save.
-     * Implementing this function and `can_render_column_styles` allows the plugin to interface with the viewer's column configuration API.
+     * Corresponds to the data the plugin will recieve on save. Only
+     * invoked when `can_render_column_styles` is `true` in the static
+     * config.
      */
     column_style_config?: (view_type: string, group: string) => any;
 
@@ -164,19 +120,6 @@ export interface IPerspectiveViewerPlugin {
     restyle(): void;
 
     /**
-     * Save this plugin's state to a JSON-serializable value.  While this value
-     * can be anything, it should work reciprocally with `restore()` to return
-     * this plugin's renderer to the same state, though potentially with a
-     * different `View`.
-     *
-     * `save()` should be used for user-persistent settings that are
-     * data-agnostic, so the user can have persistent view during refresh or
-     * reload.  For example, `@perspective-dev/viewer-charts` uses
-     * `plugin_config` to remember the user-repositionable legend coordinates.
-     */
-    save(): any;
-
-    /**
      * Restore this plugin to a state previously returned by `save()`.
      */
     restore(config: any): void;
@@ -211,33 +154,16 @@ export class HTMLPerspectiveViewerPluginElement
         super();
     }
 
-    get name(): string {
-        return "Debug";
-    }
-
-    get select_mode(): "select" | "toggle" {
-        return "select";
-    }
-
-    get min_config_columns(): number | undefined {
-        return undefined;
-    }
-
-    get config_column_names(): string[] | undefined {
-        return undefined;
-    }
-
-    get priority(): number {
-        return 0;
-    }
-
-    can_render_column_styles(): boolean {
-        return false;
+    get_static_config(): PluginStaticConfig {
+        return {
+            name: "Debug",
+            select_mode: "select",
+            config_column_names: [],
+        };
     }
 
     column_style_config(): any {
-        {
-        }
+        return {};
     }
 
     async update(view: View): Promise<void> {
@@ -260,10 +186,6 @@ export class HTMLPerspectiveViewerPluginElement
     }
 
     restyle() {
-        // Not Implemented
-    }
-
-    save(): any {
         // Not Implemented
     }
 

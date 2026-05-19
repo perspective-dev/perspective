@@ -32,6 +32,7 @@ pub mod main_panel;
 pub mod modal;
 pub mod number_series_style;
 pub mod plugin_selector;
+pub mod plugin_tab;
 pub mod portal;
 pub mod render_warning;
 pub mod settings_panel;

@@ -22,9 +22,9 @@ use wasm_bindgen::prelude::*;
 use web_sys::*;
 
 use crate::js::JsPerspectiveViewerPlugin;
-use crate::presentation::{ColumnConfigMap, Presentation};
+use crate::presentation::Presentation;
 use crate::queries::get_viewer_config;
-use crate::renderer::Renderer;
+use crate::renderer::{ColumnConfigMap, Renderer};
 use crate::session::Session;
 use crate::utils::{AddListener, Subscription};
 
@@ -177,7 +177,7 @@ pub fn wire_custom_events(
         }
     });
 
-    let column_style_sub = presentation.column_style_changed.add_listener({
+    let column_style_sub = renderer.column_style_changed.add_listener({
         clone!(elem, session, renderer, presentation);
         move |cfg: ColumnConfigMap| {
             let detail = JsValue::from_serde_ext(&cfg).unwrap();

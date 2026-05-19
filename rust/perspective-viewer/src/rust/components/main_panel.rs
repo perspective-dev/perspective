@@ -10,7 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_js::utils::*;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
@@ -19,7 +18,7 @@ use super::status_bar::StatusBar;
 use crate::presentation::{Presentation, PresentationProps};
 use crate::renderer::*;
 use crate::session::{Session, SessionProps};
-use crate::utils::*;
+use crate::tasks::dismiss_render_warning_callback;
 
 #[derive(Clone, Properties)]
 pub struct MainPanelProps {
@@ -125,17 +124,7 @@ impl Component for MainPanel {
         }
 
         let pointerdown = ctx.link().callback(MainPanelMsg::PointerEvent);
-        let on_dismiss_warning = {
-            clone!(renderer, session);
-            Callback::from(move |_: ()| {
-                clone!(renderer, session);
-                ApiFuture::spawn(async move {
-                    renderer.disable_active_plugin_render_warning();
-                    let view_task = session.get_view();
-                    renderer.update(view_task).await
-                });
-            })
-        };
+        let on_dismiss_warning = dismiss_render_warning_callback(session, renderer);
 
         html! {
             <div id="main_column">

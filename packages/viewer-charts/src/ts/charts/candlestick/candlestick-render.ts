@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { WebGLContextManager } from "../../webgl/context-manager";
-import type { CandlestickChart } from "./candlestick";
+import type { CandlestickChart, CandlestickAutoFitCache } from "./candlestick";
 import { PlotLayout } from "../../layout/plot-layout";
 import { sampleGradient } from "../../theme/gradient";
 import { renderInPlotFrame } from "../../webgl/plot-frame";
@@ -27,16 +27,6 @@ import {
     measureCategoricalAxisHeight,
     type CategoricalDomain,
 } from "../../axis/categorical-axis";
-import {
-    drawCandlesticks,
-    rebuildCandlestickBodyAndWickBuffers,
-    invalidateCandlestickBodyAndWickBuffers,
-} from "./glyphs/draw-candlesticks";
-import {
-    drawOHLC,
-    rebuildOHLCBuffers,
-    invalidateOHLCBuffers,
-} from "./glyphs/draw-ohlc";
 import { buildCandlestickTooltipLines } from "./candlestick-interact";
 import {
     computeVisibleExtent,
@@ -69,8 +59,8 @@ export function ensureUpDownColors(chart: CandlestickChart): void {
  * no-op until the next {@link rebuildGlyphBuffers} call.
  */
 export function invalidateGlyphBuffers(chart: CandlestickChart): void {
-    invalidateCandlestickBodyAndWickBuffers(chart);
-    invalidateOHLCBuffers(chart);
+    chart._glyphs.bodyWick.invalidateBuffers(chart);
+    chart._glyphs.ohlc.invalidateBuffers(chart);
 }
 
 /**
@@ -83,8 +73,8 @@ export function rebuildGlyphBuffers(
     chart: CandlestickChart,
     glManager: WebGLContextManager,
 ): void {
-    rebuildCandlestickBodyAndWickBuffers(chart, glManager);
-    rebuildOHLCBuffers(chart, glManager);
+    chart._glyphs.bodyWick.rebuildBuffers(chart, glManager);
+    chart._glyphs.ohlc.rebuildBuffers(chart, glManager);
 }
 
 export function renderCandlestickFrame(
@@ -221,9 +211,9 @@ export function renderCandlestickFrame(
 
     renderInPlotFrame(gl, layout, glManager.dpr, () => {
         if (chart._defaultChartType === "ohlc") {
-            drawOHLC(chart, gl, glManager, projection);
+            chart._glyphs.ohlc.draw(chart, gl, glManager, projection);
         } else {
-            drawCandlesticks(chart, gl, glManager, projection);
+            chart._glyphs.bodyWick.draw(chart, gl, glManager, projection);
         }
     });
 
@@ -269,6 +259,15 @@ export function renderCandlestickChromeOverlay(chart: CandlestickChart): void {
         return;
     }
 
+    // OHLC value axis: all four price columns share the value axis;
+    // pick the first available (Open is always present, the rest can
+    // be null per `candlestick-build.ts`).
+    const valueColumn =
+        chart._columnSlots[0] ??
+        chart._columnSlots[1] ??
+        chart._columnSlots[2] ??
+        chart._columnSlots[3];
+    const xColumn = chart._groupBy[0];
     renderBarAxesChrome(
         chart._chromeCanvas,
         catAxis,
@@ -277,6 +276,13 @@ export function renderCandlestickChromeOverlay(chart: CandlestickChart): void {
         chart._lastLayout,
         theme,
         chart._glManager?.dpr ?? 1,
+        undefined,
+        undefined,
+        false,
+        {
+            value: chart.getColumnFormatter(valueColumn, "tick"),
+            category: chart.getColumnFormatter(xColumn, "tick"),
+        },
     );
 
     if (chart._hoveredIdx >= 0 && chart._hoveredIdx < chart._candles.count) {
@@ -334,8 +340,7 @@ function computeVisibleCandleExtent(
         return cache;
     }
 
-    const next =
-        cache ?? ({} as NonNullable<CandlestickChart["_autoFitCache"]>);
+    const next = cache ?? newCandlestickAutoFitCache();
     next.xMin = visXMin;
     next.xMax = visXMax;
 
@@ -375,4 +380,8 @@ function computeVisibleCandleExtent(
     // shared common helper but no longer used in this fast path.
     void computeVisibleExtent;
     return next;
+}
+
+function newCandlestickAutoFitCache(): CandlestickAutoFitCache {
+    return { xMin: 0, xMax: 0, min: 0, max: 1, hasFit: false };
 }

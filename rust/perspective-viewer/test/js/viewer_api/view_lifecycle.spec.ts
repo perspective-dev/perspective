@@ -41,8 +41,12 @@ test.describe("View Lifecycle", () => {
             let is_paused = false;
             const BasePlugin = customElements.get("perspective-viewer-plugin");
             class PausePlugin extends BasePlugin {
-                get name() {
-                    return "pause-plugin";
+                get_static_config() {
+                    return {
+                        name: "pause-plugin",
+                        select_mode: "select",
+                        config_column_names: [],
+                    };
                 }
 
                 async draw(view) {

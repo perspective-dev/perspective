@@ -13,6 +13,9 @@
 import CHARTS from "./plugin/charts";
 import { HTMLPerspectiveViewerWebGLPluginElement } from "./plugin/plugin";
 
+export type { PerspectiveClickDetail } from "./event-detail";
+export { PerspectiveSelectDetail } from "./event-detail";
+
 export function register(...plugin_names: string[]) {
     const plugins = new Set(
         plugin_names.length > 0

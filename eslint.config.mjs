@@ -24,7 +24,6 @@ export default tseslint.config(
             "packages/jupyterlab/**/*",
             // "packages/viewer-charts/**/*",
             // "packages/viewer-datagrid/**/*",
-            "packages/viewer-openlayers/**/*",
             "packages/workspace/**/*",
             "packages/react/**/*",
 

@@ -18,7 +18,8 @@
 
     .scroll-panel-auto-width {
         height: 1px;
-        margin-top: -1px;
+        /* margin-left: 6px; */
+        /* margin-top: -1px; */
     }
 
     .scroll-panel-content {

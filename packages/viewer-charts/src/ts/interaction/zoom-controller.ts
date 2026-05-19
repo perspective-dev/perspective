@@ -28,13 +28,69 @@ export interface ZoomState {
  * `lockAxis` pins one axis at `scale=1, translate=0` and suppresses
  * wheel / pan updates on that axis, leaving the other axis fully
  * zoomable. Categorical axes are the typical candidates.
+ *
+ * `lockAspect` keeps `dataPerPixel` equal on both axes by padding the
+ * narrower axis of the rendered domain to match the plot rect's aspect
+ * ratio. Required by map plugins (Mercator preserves local angle, so
+ * map glyphs distort under independent X/Y zoom), and useful for any
+ * cartesian view where stretching points along one axis would lie
+ * about the data.
  */
 export interface ZoomConfig {
     lockAxis?: "x" | "y" | null;
+    lockAspect?: boolean;
 }
 
 export const MAX_ZOOM = 100_000;
 export const MIN_ZOOM = 1;
+
+/**
+ * Pad the narrower axis of `domain` so its aspect ratio matches
+ * `plotRect`. Preserves the center of each axis and the longer axis's
+ * extent — only the shorter axis grows. Returns the input unmodified
+ * if either dimension is non-positive.
+ *
+ * Used by `lockAspect` mode to keep `dataPerPixel` equal on both axes,
+ * which is what map plugins (Mercator) and any "square pixel" view
+ * require.
+ */
+function applyAspectLock(
+    domain: { xMin: number; xMax: number; yMin: number; yMax: number },
+    plotRect: { width: number; height: number },
+): { xMin: number; xMax: number; yMin: number; yMax: number } {
+    if (plotRect.width <= 0 || plotRect.height <= 0) {
+        return domain;
+    }
+
+    const xRange = domain.xMax - domain.xMin;
+    const yRange = domain.yMax - domain.yMin;
+    if (xRange <= 0 || yRange <= 0) {
+        return domain;
+    }
+
+    const plotAspect = plotRect.width / plotRect.height;
+    const dataAspect = xRange / yRange;
+
+    if (dataAspect < plotAspect) {
+        const cx = (domain.xMin + domain.xMax) / 2;
+        const newX = (yRange * plotAspect) / 2;
+        return {
+            xMin: cx - newX,
+            xMax: cx + newX,
+            yMin: domain.yMin,
+            yMax: domain.yMax,
+        };
+    } else {
+        const cy = (domain.yMin + domain.yMax) / 2;
+        const newY = xRange / plotAspect / 2;
+        return {
+            xMin: domain.xMin,
+            xMax: domain.xMax,
+            yMin: cy - newY,
+            yMax: cy + newY,
+        };
+    }
+}
 
 export class ZoomController {
     private _scaleX = 1;
@@ -50,6 +106,7 @@ export class ZoomController {
     private _baseYMax = 1;
 
     private _lockAxis: "x" | "y" | null = null;
+    private _lockAspect = false;
 
     private _element: HTMLElement | null = null;
     private _layout: PlotLayout | null = null;
@@ -167,6 +224,7 @@ export class ZoomController {
      */
     configure(config: ZoomConfig): void {
         this._lockAxis = config.lockAxis ?? null;
+        this._lockAspect = config.lockAspect ?? false;
         if (this._lockAxis === "x") {
             this._scaleX = 1;
             this._normTX = 0;
@@ -202,12 +260,18 @@ export class ZoomController {
         const cy =
             (this._baseYMin + this._baseYMax) / 2 + this._normTY * byRange;
 
-        return {
+        const domain = {
             xMin: cx - vxRange / 2,
             xMax: cx + vxRange / 2,
             yMin: cy - vyRange / 2,
             yMax: cy + vyRange / 2,
         };
+
+        if (this._lockAspect && this._layout) {
+            return applyAspectLock(domain, this._layout.plotRect);
+        }
+
+        return domain;
     }
 
     attach(

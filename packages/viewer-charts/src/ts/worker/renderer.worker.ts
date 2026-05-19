@@ -12,11 +12,7 @@
 
 import "./boot";
 
-import {
-    type Client,
-    type Table,
-    type View,
-} from "@perspective-dev/viewer/dist/wasm/perspective-viewer.js";
+import type { Client, Table, View } from "@perspective-dev/client";
 
 import type * as wasm_module_type from "@perspective-dev/viewer/dist/wasm/perspective-viewer.js";
 import { WebGLContextManager } from "../webgl/context-manager";
@@ -64,6 +60,22 @@ class StaleGenerationError extends Error {
  * doesn't care — both modes drive it through a `MessagePort` of
  * `ControlMsg`s.
  */
+/**
+ * Resolve a chart tag to its impl class via the lazy registry. Eager
+ * tags microtask-resolve; map tags trigger a dynamic `import()` that
+ * the bundler emits as a separately-fetched chunk.
+ */
+async function resolveChartImpl(
+    tag: string,
+): Promise<new () => ChartImplementation> {
+    const factory = CHART_IMPLS[tag];
+    if (!factory) {
+        throw new Error(`Unknown chart tag: ${tag}`);
+    }
+
+    return await factory();
+}
+
 export class WorkerRenderer {
     chartImpl: ChartImplementation;
     glManager: WebGLContextManager;
@@ -110,16 +122,12 @@ export class WorkerRenderer {
         view: View,
         table: Table | null,
         controlPort: MessagePort,
+        ImplClass: new () => ChartImplementation,
     ) {
         this.client = client;
         this.view = view;
         this.table = table;
         this.controlPort = controlPort;
-
-        const ImplClass = CHART_IMPLS[msg.chartTag];
-        if (!ImplClass) {
-            throw new Error(`Unknown chart tag: ${msg.chartTag}`);
-        }
 
         this.chartImpl = new ImplClass();
 
@@ -159,6 +167,7 @@ export class WorkerRenderer {
         }
 
         this.chartImpl.setFacetConfig?.(msg.facetConfig);
+        this.chartImpl.setPluginConfig?.(msg.pluginConfig);
 
         if (this.chartImpl.setZoomController) {
             this.zoomController = new ZoomController();
@@ -183,6 +192,21 @@ export class WorkerRenderer {
                     break;
                 case "setCursor":
                     this.post({ kind: "setCursor", cursor: envelope.cursor });
+                    break;
+                case "userClick":
+                    this.post({
+                        kind: "userClick",
+                        detail: envelope.payload as any,
+                    });
+                    break;
+                case "userSelect":
+                    this.post({
+                        kind: "userSelect",
+                        selected: envelope.payload.selected,
+                        row: envelope.payload.row,
+                        column_names: envelope.payload.column_names,
+                        insertConfig: envelope.payload.insertConfig as any,
+                    });
                     break;
             }
         });
@@ -379,6 +403,16 @@ export class WorkerRenderer {
                 zc?.reset();
             }
         }
+
+        // Also drop any `domain_mode: "expand"` accumulator — the user
+        // explicitly asked for a clean reset, so the next data load
+        // should start from the fresh data extent rather than the
+        // previously-grown one.
+        this.resetExpandedDomain();
+    }
+
+    resetExpandedDomain(): void {
+        this.chartImpl.resetExpandedDomain?.();
     }
 
     /**
@@ -636,7 +670,15 @@ async function bootstrapWorker(
     proxyPort.start();
     const view = client.__unsafe_open_view(msg.viewName);
     const table = msg.tableName ? await client.open_table(msg.tableName) : null;
-    const renderer = new WorkerRenderer(msg, client, view, table, host);
+    const ImplClass = await resolveChartImpl(msg.chartTag);
+    const renderer = new WorkerRenderer(
+        msg,
+        client,
+        view,
+        table,
+        host,
+        ImplClass,
+    );
     renderer.post({ kind: "ready" });
     return renderer;
 }
@@ -657,12 +699,14 @@ export async function bootstrapInProcess(opts: {
     const table = opts.msg.tableName
         ? await opts.client.open_table(opts.msg.tableName)
         : null;
+    const ImplClass = await resolveChartImpl(opts.msg.chartTag);
     const renderer = new WorkerRenderer(
         opts.msg,
         opts.client,
         view,
         table,
         opts.controlPort,
+        ImplClass,
     );
 
     // Listen for control messages on the same port so the host's

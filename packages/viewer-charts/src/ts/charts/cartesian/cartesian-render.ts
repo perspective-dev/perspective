@@ -10,11 +10,17 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Canvas2D, Context2D } from "../canvas-types";
+import type { Canvas2D } from "../canvas-types";
+import { drawFacetTitle } from "../../axis/facet-chrome";
 import type { WebGLContextManager } from "../../webgl/context-manager";
 import type { CartesianChart } from "./cartesian";
 import { PlotLayout } from "../../layout/plot-layout";
-import { buildFacetGrid, type FacetGrid } from "../../layout/facet-grid";
+import {
+    buildFacetGrid,
+    bottomRowLayouts,
+    leftColumnLayouts,
+    type FacetGrid,
+} from "../../layout/facet-grid";
 import { type Theme } from "../../theme/theme";
 import { resolvePalette } from "../../theme/palette";
 import { paletteToStops } from "../../theme/gradient";
@@ -58,7 +64,7 @@ function rebaseOrigin(o: number): number {
  *
  *   - `"overlay"` (legacy): a single plot rect; all split series are
  *     drawn together, distinguished by color. This is the pre-facet
- *     behavior, preserved for manual opt-in via `FACET_CONFIG`.
+ *     behavior, preserved for manual opt-in via `plugin_config.facet_mode`.
  *   - `"grid"` (default): when splits are present, `_splitGroups` laid
  *     out as a grid of sub-plots by {@link buildFacetGrid}. When splits
  *     are absent, falls through to the single-plot path — identical to
@@ -80,23 +86,6 @@ export function renderCartesianFrame(
     const hasSplits = chart._splitGroups.length > 0;
     const facetMode = chart._facetConfig.facet_mode;
     const useGrid = hasSplits && facetMode === "grid";
-
-    // Shared axes and independent zoom are incompatible: the outer
-    // axis band would display domain values that don't match any
-    // single cell's zoom. Force shared axes off when independent zoom
-    // is active; per-cell axes then reflect each cell's own domain.
-    if (useGrid && chart._facetConfig.zoom_mode === "independent") {
-        if (
-            chart._facetConfig.shared_x_axis ||
-            chart._facetConfig.shared_y_axis
-        ) {
-            chart._facetConfig = {
-                ...chart._facetConfig,
-                shared_x_axis: false,
-                shared_y_axis: false,
-            };
-        }
-    }
 
     // Legend appears only when the user wired a color column with a
     // non-degenerate range. `split_by` alone no longer forces a
@@ -150,7 +139,7 @@ export function renderCartesianFrame(
     let lutStops = theme.gradientStops;
     if (isCategorical || hasNoColorSource) {
         const labelCount = hasNoColorSource
-            ? 1
+            ? Math.max(1, chart._splitGroups.length)
             : Math.max(1, chart._uniqueColorLabels.size);
 
         // Cache key carries the `seriesPalette` reference (changes per
@@ -290,7 +279,9 @@ function renderSinglePlotFrame(
     const yDomain = buildYDomain(chart, domain.yMin, domain.yMax, yIsDate);
     const { xTicks, yTicks } = computeTicks(xDomain, yDomain, layout);
 
-    if (chart._gridlineCanvas) {
+    const isMap = chart._renderMode === "map";
+
+    if (chart._gridlineCanvas && !isMap) {
         // One-shot destructive prep (resizes + clears + scales to DPR).
         // `renderGridlines` itself is non-destructive.
         const dpr = glManager.dpr;
@@ -303,9 +294,27 @@ function renderSinglePlotFrame(
             theme,
             dpr,
         );
+    } else if (chart._gridlineCanvas && isMap) {
+        // Map mode draws no cartesian gridlines, but the gridline
+        // canvas may carry stale ink from a prior cartesian chart
+        // type. Reset it to a clean transparent surface so the
+        // basemap (rendered into the GL canvas below) reads as the
+        // only background layer.
+        initCanvas(chart._gridlineCanvas, layout, glManager.dpr);
     }
 
     renderInPlotFrame(gl, layout, glManager.dpr, () => {
+        if (isMap) {
+            chart.renderBackground(
+                glManager,
+                layout,
+                projection,
+                domain,
+                rebaseOrigin(chart._xOrigin),
+                rebaseOrigin(chart._yOrigin),
+            );
+        }
+
         chart.glyph.draw(chart, glManager, projection);
     });
 
@@ -352,15 +361,18 @@ function renderFacetedFrame(
         chart._colorMin < chart._colorMax;
     const hasLegend = hasCategoricalLegend || hasGradientLegend;
 
-    // `FacetConfig.shared_x_axis` / `shared_y_axis` are booleans;
-    // continuous charts always have both axes, so the false branch
-    // maps to the per-cell mode (never to the axis-less "none" mode,
-    // which is reserved for tree charts).
+    // Use the frame-local effective flags (set in
+    // `renderCartesianFrame`) so independent-zoom mode falls through
+    // to per-cell axes without mutating the user's stored
+    // `_facetConfig.shared_x_axis` / `shared_y_axis`. Continuous
+    // charts always have both axes, so the false branch maps to
+    // per-cell mode (never to "none", which is reserved for tree
+    // charts).
     const grid: FacetGrid = buildFacetGrid(labels, {
         cssWidth,
         cssHeight,
-        xAxis: chart._facetConfig.shared_x_axis ? "outer" : "cell",
-        yAxis: chart._facetConfig.shared_y_axis ? "outer" : "cell",
+        xAxis: chart._lastEffectiveSharedX ? "outer" : "cell",
+        yAxis: chart._lastEffectiveSharedY ? "outer" : "cell",
         hasLegend,
         hasXLabel: !!chart._xLabel,
         hasYLabel: !!chart._yLabel,
@@ -393,17 +405,8 @@ function renderFacetedFrame(
     chart._lastLayout = grid.cells[0]?.layout ?? null;
 
     // Keep every controller's layout pointer fresh for wheel/pan math.
+    chart.syncFacetZoomLayouts(grid.cells);
     const independent = chart._facetConfig.zoom_mode === "independent";
-    for (let i = 0; i < grid.cells.length; i++) {
-        const zc = chart.getZoomControllerForFacet(i);
-        if (zc) {
-            zc.updateLayout(grid.cells[i].layout);
-        }
-
-        if (!independent) {
-            break;
-        }
-    }
 
     const xDomain = buildXDomain(chart, domain.xMin, domain.xMax, xIsDate);
     const yDomain = buildYDomain(chart, domain.yMin, domain.yMax, yIsDate);
@@ -453,8 +456,11 @@ function renderFacetedFrame(
 
         // Per-facet gridlines: reuse shared ticks in shared-zoom mode,
         // compute fresh ticks in independent mode (each facet has its
-        // own domain).
-        if (chart._gridlineCanvas) {
+        // own domain). Map mode skips gridlines entirely; the
+        // basemap layer is rendered into the GL canvas inside the
+        // facet's scissor below.
+        const isMap = chart._renderMode === "map";
+        if (chart._gridlineCanvas && !isMap) {
             const localXTicks = independent
                 ? computeTicks(
                       buildXDomain(
@@ -500,6 +506,17 @@ function renderFacetedFrame(
         }
 
         withScissor(gl, cell.layout, glManager.dpr, () => {
+            if (isMap) {
+                chart.renderBackground(
+                    glManager,
+                    cell.layout,
+                    projection,
+                    facetDomain,
+                    rebaseOrigin(chart._xOrigin),
+                    rebaseOrigin(chart._yOrigin),
+                );
+            }
+
             chart.glyph.drawSeries(chart, glManager, projection, i);
         });
     }
@@ -542,17 +559,24 @@ function renderSinglePlotChromeOverlay(chart: CartesianChart): void {
     const layout = chart._lastLayout!;
     const theme = chart._resolveTheme();
     const dpr = chart._glManager?.dpr ?? 1;
+    const isMap = chart._renderMode === "map";
 
-    renderAxesChrome(
-        chart._chromeCanvas!,
-        chart._lastXDomain!,
-        chart._lastYDomain!,
-        layout,
-        chart._lastXTicks!,
-        chart._lastYTicks!,
-        theme,
-        dpr,
-    );
+    if (isMap) {
+        chart.renderMapChrome(chart._chromeCanvas!, layout, theme, dpr);
+    } else {
+        renderAxesChrome(
+            chart._chromeCanvas!,
+            chart._lastXDomain!,
+            chart._lastYDomain!,
+            layout,
+            chart._lastXTicks!,
+            chart._lastYTicks!,
+            theme,
+            dpr,
+            chart.getColumnFormatter(chart._xName, "tick"),
+            chart.getColumnFormatter(chart._yName, "tick"),
+        );
+    }
 
     if (chart._lastHasColorCol) {
         const stops = chart._lastGradientStops ?? theme.gradientStops;
@@ -580,6 +604,7 @@ function renderSinglePlotChromeOverlay(chart: CartesianChart): void {
                 },
                 stops,
                 theme,
+                chart.getColumnFormatter(chart._colorName, "value"),
             );
         }
     }
@@ -600,51 +625,57 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
     const sharedYTicks = chart._lastYTicks!;
     const xDomain = chart._lastXDomain!;
     const yDomain = chart._lastYDomain!;
+    const isMap = chart._renderMode === "map";
 
-    // `shared_x_axis` / `shared_y_axis` are silently forced off in
-    // independent-zoom mode by the render entry — see `renderCartesianFrame`.
-    // So by the time we get here, shared = true implies shared-zoom too.
-    const sharedX = chart._facetConfig.shared_x_axis;
-    const sharedY = chart._facetConfig.shared_y_axis;
+    // Read the frame-local effective flags set by `renderCartesianFrame`
+    // — these already fold in the independent-zoom override (outer
+    // axes are incompatible with per-cell viewports), so `sharedX` /
+    // `sharedY` true here implies shared-zoom too.
+    const sharedX = chart._lastEffectiveSharedX;
+    const sharedY = chart._lastEffectiveSharedY;
     const independent = chart._facetConfig.zoom_mode === "independent";
 
     // Shared X axis: one outer band across the bottom of the grid,
     // with ticks painted per-column (one pass per bottom-row cell).
     // Shared Y axis: one outer band down the left, ticks per-row
-    // (one pass per leftmost-column cell).
-    if (sharedX && grid.outerXAxisRect) {
-        const bottomRowLayouts = grid.cells
-            .filter((c) => c.isBottomEdge)
-            .map((c) => c.layout);
+    // (one pass per leftmost-column cell). Map mode replaces both
+    // with `renderMapChrome` (attribution + scale bar), painted once
+    // over the whole facet grid.
+    if (isMap) {
+        chart.renderMapChrome(canvas, chart._lastLayout!, theme, dpr);
+    }
+
+    if (!isMap && sharedX && grid.outerXAxisRect) {
         renderOuterXAxis(
             canvas,
             grid.outerXAxisRect,
             xDomain,
             sharedXTicks,
-            bottomRowLayouts,
+            bottomRowLayouts(grid),
             theme,
             !!chart._xLabel,
             dpr,
+            chart.getColumnFormatter(chart._xName, "tick"),
         );
     }
 
-    if (sharedY && grid.outerYAxisRect) {
-        const leftColLayouts = grid.cells
-            .filter((c) => c.isLeftEdge)
-            .map((c) => c.layout);
+    if (!isMap && sharedY && grid.outerYAxisRect) {
         renderOuterYAxis(
             canvas,
             grid.outerYAxisRect,
             yDomain,
             sharedYTicks,
-            leftColLayouts,
+            leftColumnLayouts(grid),
             theme,
             !!chart._yLabel,
             dpr,
+            chart.getColumnFormatter(chart._yName, "tick"),
         );
     }
 
     // Per-facet axes for the non-shared sides + title strips.
+    // Map mode skips per-cell axis rendering (no cartesian axes
+    // belong on a map) but still paints facet titles and labels.
     for (let i = 0; i < grid.cells.length; i++) {
         const cell = grid.cells[i];
         const zc = independent ? chart.getZoomControllerForFacet(i) : null;
@@ -655,7 +686,7 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
             ? computeTicks(localX, localY, cell.layout)
             : { xTicks: sharedXTicks, yTicks: sharedYTicks };
 
-        if (!sharedX) {
+        if (!isMap && !sharedX) {
             renderCellXAxis(
                 canvas,
                 localX,
@@ -664,10 +695,11 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
                 theme,
                 !!chart._xLabel,
                 dpr,
+                chart.getColumnFormatter(chart._xName, "tick"),
             );
         }
 
-        if (!sharedY) {
+        if (!isMap && !sharedY) {
             renderCellYAxis(
                 canvas,
                 localY,
@@ -676,6 +708,7 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
                 theme,
                 !!chart._yLabel,
                 dpr,
+                chart.getColumnFormatter(chart._yName, "tick"),
             );
         }
 
@@ -723,6 +756,7 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
                 },
                 stops,
                 theme,
+                chart.getColumnFormatter(chart._colorName, "value"),
             );
         }
     }
@@ -769,29 +803,6 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
             });
         }
     }
-}
-
-function drawFacetTitle(
-    canvas: Canvas2D,
-    label: string,
-    rect: { x: number; y: number; width: number; height: number },
-    theme: Theme,
-    dpr: number,
-): void {
-    const ctx = canvas.getContext("2d") as Context2D | null;
-    if (!ctx) {
-        return;
-    }
-
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(dpr, dpr);
-    ctx.font = `11px ${theme.fontFamily}`;
-    ctx.fillStyle = theme.labelColor;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, rect.x + rect.width / 2, rect.y + rect.height / 2);
-    ctx.restore();
 }
 
 /**

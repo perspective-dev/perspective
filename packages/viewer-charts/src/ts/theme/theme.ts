@@ -103,8 +103,8 @@ export function resolveThemeFromVars(vars: ThemeSnapshot): Theme {
         vars["--psp-charts--gradient--background"] ||
         vars["--psp-charts--full-gradient--background"] ||
         "linear-gradient(#0366d6 0%, #ff7f0e 100%)";
-    const gradientStops = parseCssGradient(gradientSrc);
 
+    const gradientStops = parseCssGradient(gradientSrc);
     const seriesPalette: [number, number, number][] = [];
     for (let i = 1; ; i++) {
         const raw = vars[`--psp-charts--series-${i}--color`];

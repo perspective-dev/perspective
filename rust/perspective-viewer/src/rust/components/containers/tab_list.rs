@@ -71,9 +71,9 @@ impl<T: ColumnTab> Component for TabList<T> {
     fn view(&self, ctx: &yew::Context<Self>) -> Html {
         let p = ctx.props();
         let gutter_tabs = p.tabs.iter().enumerate().map(|(idx, tab)| {
-            let mut class = classes!("tab");
+            let mut class = classes!("settings_tab");
             if idx == self.selected_idx {
-                class.push("selected");
+                class.push("selected_tab");
             }
 
             let onclick = ctx.link().callback(move |_| TabListMsg::SetSelected(idx));
@@ -88,13 +88,7 @@ impl<T: ColumnTab> Component for TabList<T> {
         html! {
             <>
                 <LocalStyle href={css!("containers/tabs")} />
-                <div class="tab-gutter">
-                    { for gutter_tabs }
-                    <span class="tab tab-padding">
-                        <div class="tab-title">{ "\u{00a0}" }</div>
-                        <div class="tab-border" />
-                    </span>
-                </div>
+                <div id="settings_tab_bar">{ for gutter_tabs }</div>
                 <div id="format-tab" class="tab-content scrollable">
                     { ctx.props().children.iter().nth(self.selected_idx) }
                 </div>

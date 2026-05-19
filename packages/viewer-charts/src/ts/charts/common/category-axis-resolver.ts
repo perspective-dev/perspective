@@ -184,7 +184,7 @@ function formatLevelValue(
  * uses `""` at index 0 as the rollup-row sentinel — this preserves the
  * existing skip-rollup loop's `s !== ""` check.
  */
-function synthesizeStringLevel(
+export function synthesizeStringLevel(
     rp: ColumnData,
     numRows: number,
     levelType: string,

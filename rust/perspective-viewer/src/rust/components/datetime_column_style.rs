@@ -39,7 +39,6 @@ use crate::utils::WeakScope;
 pub struct DatetimeColumnStyleProps {
     pub enable_time_config: bool,
     pub config: Option<DatetimeColumnStyleConfig>,
-    pub default_config: DatetimeColumnStyleDefaultConfig,
 
     #[prop_or_default]
     pub on_change: Callback<ColumnConfigFieldUpdate>,
@@ -60,9 +59,7 @@ impl ModalLink<DatetimeColumnStyle> for DatetimeColumnStyleProps {
 
 impl PartialEq for DatetimeColumnStyleProps {
     fn eq(&self, other: &Self) -> bool {
-        self.enable_time_config == other.enable_time_config
-            && self.config == other.config
-            && self.default_config == other.default_config
+        self.enable_time_config == other.enable_time_config && self.config == other.config
     }
 }
 

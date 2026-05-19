@@ -12,7 +12,6 @@
 
 import type { HeatmapChart } from "./heatmap";
 import type { HeatmapCell } from "./heatmap-build";
-import { formatTickValue } from "../../layout/ticks";
 import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
 import type { CategoricalLevel } from "../../axis/categorical-axis";
 
@@ -260,7 +259,8 @@ export function renderHeatmapTooltip(chart: HeatmapChart): void {
         lines.push(yPath);
     }
 
-    lines.push(`Value: ${formatTickValue(cell.value)}`);
+    const valueFmt = chart.getColumnFormatter(chart._columnSlots[0], "value");
+    lines.push(`Value: ${valueFmt(cell.value)}`);
 
     const theme = chart._resolveTheme();
     renderCanvasTooltip(

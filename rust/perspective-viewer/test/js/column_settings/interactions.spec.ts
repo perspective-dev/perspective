@@ -80,6 +80,10 @@ const TEST_SPEC: Record<string, TestSpec> = {
         },
         actions: ["open"],
         outputs: {
+            // The Style tab requires the column to be in
+            // `view_config.columns` (see `column_settings_sidebar.rs`
+            // `show_styles`); inactive expression columns only see
+            // Attributes.
             expr_col: {
                 tabs: ["Attributes"],
                 selectedTab: "Attributes",
@@ -96,6 +100,9 @@ const TEST_SPEC: Record<string, TestSpec> = {
             table_col: {
                 closed: true,
             },
+            // Deactivating drops the column from `view_config.columns`,
+            // which removes the Style tab; the sidebar stays open on
+            // the expression with only Attributes left.
             expr_col: {
                 tabs: ["Attributes"],
                 selectedTab: "Attributes",
@@ -285,12 +292,12 @@ async function checkOutput(
     ) => {
         if (selectedTab === "") {
             await view.columnSettingsSidebar.container
-                .locator(".tab.selected .tab-title")
+                .locator(".settings_tab.selected_tab .tab-title")
                 .first()
                 .waitFor();
         } else {
             await view.columnSettingsSidebar.container
-                .locator(`.tab.selected #${selectedTab}`)
+                .locator(`.settings_tab.selected_tab #${selectedTab}`)
                 .waitFor();
         }
 
@@ -602,6 +609,10 @@ test.describe("Unique Behaviors", () => {
                     ? view.settingsPanel.groupbyInput
                     : view.settingsPanel.splitbyInput,
             );
+            // Dragging a table column onto group_by/split_by removes
+            // it from `view_config.columns` (so `show_styles` is false
+            // → no Style tab); a non-expression column has no
+            // Attributes tab either, so the sidebar closes.
             await checkOutput(view, { closed: true }, state_snapshot);
         });
     }

@@ -20,6 +20,7 @@ test.beforeEach(async ({ page }) => {
         }
     });
 });
+
 export async function checkTab(
     columnSettingsSidebar: ColumnSettingsSidebar,
     active: boolean,
@@ -33,12 +34,15 @@ export async function checkTab(
     if (active) {
         if (expression) {
             if (hasStyles) {
+                expect(titles.length).toBe(2);
                 expect(await titles[0].getAttribute("id")).toBe("Style");
                 expect(await titles[1].getAttribute("id")).toBe("Attributes");
             } else {
+                expect(titles.length).toBe(1);
                 expect(await titles[0].getAttribute("id")).toBe("Attributes");
             }
         } else {
+            expect(titles.length).toBe(1);
             expect(await titles[0].getAttribute("id")).toBe("Style");
         }
     } else {
@@ -72,12 +76,12 @@ test.describe("Column Settings Sidebar", () => {
 
         firstCol.editBtn.waitFor();
         await firstCol.editBtn.click();
-        await checkTab(view.columnSettingsSidebar, true, false, false);
+        await checkTab(view.columnSettingsSidebar, true, false);
 
         await activeColumns.scrollToBottom();
         exprCol.editBtn.waitFor();
         await exprCol.editBtn.click();
-        await checkTab(view.columnSettingsSidebar, true, true, false);
+        await checkTab(view.columnSettingsSidebar, true, true);
     });
     test("edit button > opens sidebar for inactive expression columns", async ({
         page,
@@ -255,15 +259,13 @@ test.describe("Column Settings Sidebar", () => {
                 .getAttribute("id");
         };
         expect(await selectedTab()).toBe("Style");
-
-        // expect -ve color input on color range is present and has valid default value
         const getFgColorNeg = async () => {
             return view.columnSettingsSidebar.styleTab.container.locator(
-                "#foreground-neg",
+                "input.neg_fg_color",
             );
         };
-        let fgColorNeg = await getFgColorNeg();
 
+        let fgColorNeg = await getFgColorNeg();
         expect(fgColorNeg).toBeTruthy();
         expect(fgColorNeg).toBeVisible();
         expect(fgColorNeg).toBeEditable();

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 viewBox="0 0 80 70" style="enable-background:new 0 0 80 70;" xml:space="preserve" width="40" height="35">
+<style type="text/css">
+	.st0{fill:#042121;}
+</style>
+<g id="Layer_1">
+	<g>
+		<path class="st0" d="M11,58c-0.6,0-1-0.4-1-1V10H8v47c0,1.7,1.3,3,3,3h61v-2H11z"/>
+		<circle class="st0" cx="28" cy="38" r="2.5"/>
+		<circle class="st0" cx="28" cy="38" r="6" fill="none" stroke="#042121" stroke-width="0.9" opacity="0.7"/>
+		<circle class="st0" cx="28" cy="38" r="10" fill="none" stroke="#042121" stroke-width="0.6" opacity="0.4"/>
+		<circle class="st0" cx="28" cy="38" r="14" fill="none" stroke="#042121" stroke-width="0.45" opacity="0.22"/>
+		<circle class="st0" cx="52" cy="30" r="2.5"/>
+		<circle class="st0" cx="52" cy="30" r="6" fill="none" stroke="#042121" stroke-width="0.9" opacity="0.7"/>
+		<circle class="st0" cx="52" cy="30" r="10" fill="none" stroke="#042121" stroke-width="0.6" opacity="0.4"/>
+		<circle class="st0" cx="52" cy="30" r="14" fill="none" stroke="#042121" stroke-width="0.45" opacity="0.22"/>
+		<circle class="st0" cx="62" cy="46" r="1.6"/>
+		<circle class="st0" cx="62" cy="46" r="4" fill="none" stroke="#042121" stroke-width="0.7" opacity="0.55"/>
+		<circle class="st0" cx="62" cy="46" r="7" fill="none" stroke="#042121" stroke-width="0.45" opacity="0.3"/>
+	</g>
+</g>
+</svg>

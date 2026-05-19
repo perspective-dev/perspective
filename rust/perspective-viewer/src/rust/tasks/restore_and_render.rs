@@ -83,24 +83,39 @@ pub fn restore_and_render(
         session.update_view_config(view_config)?;
         let draw_task = renderer.draw(async {
             task.await?;
-            renderer.apply_pending_plugin()?;
+            let plugin_swapped = renderer.apply_pending_plugin()?;
             let plugin = renderer.get_active_plugin()?;
-            let plugin_update = if let Some(x) = plugin_config {
-                wasm_bindgen::JsValue::from_serde_ext(&*x).unwrap()
-            } else {
-                plugin.save()?
-            };
 
-            presentation.update_columns_configs(columns_config);
-            let columns_config = presentation.all_columns_configs();
-            let filtered = crate::queries::filter_columns_for_active_plugin(
-                &columns_config,
-                &renderer,
-                &session,
-            )
-            .await;
+            // Apply incoming updates into the now-active plugin's
+            // bucket on `Renderer`. Per-plugin storage means no
+            // schema filter is needed before restore — foreign keys
+            // cannot appear in the bucket by construction. The
+            // renderer methods also strip schema-default entries so
+            // restored maps containing default values produce an
+            // empty bucket (correct: bucket-empty ⇒ reads-default).
+            let view_config_snapshot = session.get_view_config().clone();
+            let plugin_config_changed =
+                renderer.update_plugin_config(&view_config_snapshot, plugin_config);
 
-            plugin.restore(&plugin_update, Some(&filtered))?;
+            let changed = plugin_config_changed
+                || renderer.update_columns_configs(&view_config_snapshot, &session, columns_config);
+
+            // Force a materialized restore when the plugin just
+            // swapped — `commit_plugin_idx` already restored from the
+            // raw bucket, but the materialized restore is needed for
+            // schema-revealed `include: true` defaults to reach the
+            // plugin before its first draw.
+            if changed || plugin_swapped {
+                let plugin_config_snapshot = renderer.get_plugin_config();
+                let plugin_update =
+                    wasm_bindgen::JsValue::from_serde_ext(&plugin_config_snapshot).unwrap();
+                let columns_config =
+                    renderer.all_columns_configs_materialized(&view_config_snapshot, &session);
+                plugin.restore(&plugin_update, Some(&columns_config))?;
+                if plugin_config_changed {
+                    renderer.plugin_config_changed.emit(plugin_config_snapshot);
+                }
+            }
 
             // The previous call which acquired the lock errored, so skip this render
             if let Some(error) = session.get_error() {

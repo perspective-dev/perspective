@@ -29,7 +29,6 @@ use web_sys::HtmlElement;
 use crate::components::viewer::{PerspectiveViewerMsg, PerspectiveViewerProps};
 use crate::config::*;
 use crate::custom_events::*;
-use crate::dragdrop::*;
 use crate::js::*;
 use crate::presentation::*;
 use crate::queries::*;
@@ -131,7 +130,6 @@ impl PerspectiveViewerElement {
             session: session.clone(),
             renderer: renderer.clone(),
             presentation: presentation.clone(),
-            dragdrop: DragDrop::new(&elem),
         });
 
         let state = props.clone();

@@ -141,7 +141,55 @@ export class HeatmapChart extends AbstractChart {
                     this._renderChromeOverlay();
                 }
             },
+            onPin: (mx: number, my: number) => {
+                // Refresh the hit-test at the click coords so the pin
+                // path doesn't depend on the RAF-throttled hover state
+                // — see comment in `series.ts` `onPin`.
+                handleHeatmapHover(this, mx, my);
+                if (this._hoveredCell) {
+                    void this._emitHeatmapClickSelect(
+                        this._hoveredCell.xIdx,
+                        this._hoveredCell.yIdx,
+                    );
+                }
+            },
+            onUnpin: () => {
+                this.emitUnselect();
+            },
         };
+    }
+
+    /**
+     * Resolve a clicked heatmap cell into a `PerspectiveClickDetail`
+     * and emit both `perspective-click` and
+     * `perspective-global-filter selected:true`. `xIdx` indexes the
+     * outer (group-by) hierarchy; `yIdx` indexes the column-side
+     * hierarchy (split-by + value-column splits). Each level is read
+     * directly from the pre-resolved `_xLevels` / `_yLevels` labels.
+     *
+     * Representative source row: `xIdx + _rowOffset` — the row in the
+     * pivoted view that owns this category. Sufficient for the
+     * `row.{col}` lookups consumers typically do; not authoritative for
+     * cells that aggregate across many source rows.
+     */
+    private async _emitHeatmapClickSelect(
+        xIdx: number,
+        yIdx: number,
+    ): Promise<void> {
+        const groupByValues: (string | null)[] = this._xLevels.map(
+            (level) => level.labels[xIdx] ?? null,
+        );
+        const splitByValues: (string | null)[] = this._yLevels
+            .slice(0, this._splitBy.length)
+            .map((level) => level.labels[yIdx] ?? null);
+
+        const colorColumn = this._columnSlots[0] ?? "";
+        await this.emitClickAndSelect({
+            rowIdx: xIdx + this._rowOffset,
+            columnName: colorColumn,
+            groupByValues,
+            splitByValues,
+        });
     }
 
     async uploadAndRender(

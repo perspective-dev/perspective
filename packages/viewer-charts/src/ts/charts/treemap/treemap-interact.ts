@@ -11,9 +11,8 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { TreemapChart } from "./treemap";
-import { NULL_NODE } from "../common/node-store";
+import { NULL_NODE, ancestorNames } from "../common/node-store";
 import { PADDING_LABEL, rebuildBreadcrumbs } from "./treemap-layout";
-import { formatTickValue } from "../../layout/ticks";
 import {
     renderTreemapFrame,
     renderTreemapChromeOverlay,
@@ -173,6 +172,7 @@ export function handleTreemapClick(
 ): void {
     if (chart._pinnedNodeId !== NULL_NODE) {
         dismissTreemapPinnedTooltip(chart);
+        chart.emitUnselect();
         return;
     }
 
@@ -185,6 +185,10 @@ export function handleTreemapClick(
         ) {
             if (region.nodeId !== chart._currentRootId) {
                 drillTo(chart, region.nodeId);
+                // Breadcrumb is chrome — no `perspective-click`. The
+                // drill-up pops one or more levels off the host's
+                // cached filter stack via `selected: false`.
+                chart.emitUnselect();
             }
 
             return;
@@ -195,11 +199,57 @@ export function handleTreemapClick(
 
     if (branchId !== NULL_NODE && inHeader) {
         drillTo(chart, branchId);
+        void emitTreemapNodeEvent(chart, branchId, "branch");
     } else if (leafId !== NULL_NODE) {
         showTreemapPinnedTooltip(chart, leafId);
+        void emitTreemapNodeEvent(chart, leafId, "leaf");
     } else if (branchId !== NULL_NODE) {
         drillTo(chart, branchId);
+        void emitTreemapNodeEvent(chart, branchId, "branch");
     }
+}
+
+/**
+ * Build a click detail from a treemap node id and emit both
+ * `perspective-click` and `perspective-global-filter selected:true`.
+ *
+ * For leaves, the source-view row index is `store.leafRowIdx[id]` and
+ * the row payload is populated via `_lazyRows`. For branches, no
+ * source row exists (the branch is a rollup), so `rowIdx: null` and
+ * the row payload is `{}` — only the filter path is meaningful.
+ *
+ * The path is walked via `ancestorNames` and split into split-by
+ * prefix + group-by levels using `_splitBy.length` as the boundary.
+ * Faceted mode (`facet_mode === "grid"` with non-empty `_splitBy`)
+ * keeps the depth-0 ancestor name as the split prefix.
+ */
+async function emitTreemapNodeEvent(
+    chart: TreemapChart,
+    nodeId: number,
+    kind: "leaf" | "branch",
+): Promise<void> {
+    const store = chart._nodeStore;
+    const path = ancestorNames(store, nodeId);
+    const isFaceted =
+        chart._splitBy.length > 0 && chart._facetConfig.facet_mode === "grid";
+    const splitByValues: (string | null)[] = isFaceted
+        ? path.slice(0, chart._splitBy.length)
+        : [];
+    const groupByValues: (string | null)[] = isFaceted
+        ? path.slice(
+              chart._splitBy.length,
+              chart._splitBy.length + chart._groupBy.length,
+          )
+        : path.slice(0, chart._groupBy.length);
+
+    const rowIdx = kind === "leaf" ? (store.leafRowIdx[nodeId] ?? null) : null;
+
+    await chart.emitClickAndSelect({
+        rowIdx: rowIdx != null && rowIdx >= 0 ? rowIdx : null,
+        columnName: chart._sizeName,
+        groupByValues,
+        splitByValues,
+    });
 }
 
 export function handleTreemapDblClick(
@@ -207,7 +257,12 @@ export function handleTreemapDblClick(
     mx: number,
     my: number,
 ): void {
+    const wasPinned = chart._pinnedNodeId !== NULL_NODE;
     dismissTreemapPinnedTooltip(chart);
+    if (wasPinned) {
+        chart.emitUnselect();
+    }
+
     const { leafId, branchId } = hitTest(chart, mx, my);
     const store = chart._nodeStore;
     let target = branchId;
@@ -224,8 +279,10 @@ export function handleTreemapDblClick(
         store.firstChild[target] !== NULL_NODE
     ) {
         drillTo(chart, target);
+        void emitTreemapNodeEvent(chart, target, "branch");
         if (leafId !== NULL_NODE && store.firstChild[leafId] === NULL_NODE) {
             showTreemapPinnedTooltip(chart, leafId);
+            void emitTreemapNodeEvent(chart, leafId, "leaf");
         }
     }
 }
@@ -339,13 +396,15 @@ export async function buildTreemapTooltipLines(
         lines.push(store.name[nodeId]);
     }
 
-    lines.push(`Value: ${formatTickValue(store.value[nodeId])}`);
+    const sizeFmt = chart.getColumnFormatter(chart._sizeName, "value");
+    lines.push(`Value: ${sizeFmt(store.value[nodeId])}`);
 
     // Color value (numeric branch): stored on the node at insert
     // time, so it's always available without a view fetch.
     if (chart._colorName && !isNaN(store.colorValue[nodeId])) {
+        const colorFmt = chart.getColumnFormatter(chart._colorName, "value");
         lines.push(
-            `${chart._colorName}: ${formatTickValue(store.colorValue[nodeId])}`,
+            `${chart._colorName}: ${colorFmt(store.colorValue[nodeId])}`,
         );
     }
 
@@ -369,7 +428,9 @@ export async function buildTreemapTooltipLines(
             }
 
             if (typeof value === "number") {
-                lines.push(`${name}: ${formatTickValue(value)}`);
+                lines.push(
+                    `${name}: ${chart.getColumnFormatter(name, "value")(value)}`,
+                );
             } else {
                 lines.push(`${name}: ${value}`);
             }

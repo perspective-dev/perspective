@@ -50,6 +50,17 @@ export interface TooltipCallbacks {
      * that don't bind a handler simply ignore the event.
      */
     onDblClick?(mx: number, my: number): void;
+
+    /**
+     * Fires when an active pin is dismissed by a click on the
+     * already-pinned target (the "click again to unpin" gesture in
+     * `dispatchClick`). Chart impls hook this to emit a
+     * `perspective-global-filter` with `selected: false`. Does *not*
+     * fire on the implicit dismiss inside `pin()` that replaces an
+     * existing pin — that path is followed by a fresh `onPin` which
+     * emits its own `selected: true`.
+     */
+    onUnpin?(): void;
 }
 
 export interface RenderTooltipOptions {
@@ -88,6 +99,45 @@ export interface HostSink {
     ): void;
     dismiss(): void;
     setCursor(cursor: string): void;
+
+    /**
+     * Forward a `perspective-click` to the host. Optional — only the
+     * worker-bound `MessageHostSink` implements it; `DomHostSink` (the
+     * host-side consumer of pin/dismiss) never sees user-event calls,
+     * so omits the implementation.
+     */
+    emitUserClick?(detail: UserClickPayload): void;
+
+    /**
+     * Forward a `perspective-global-filter` to the host with the
+     * `selected: true` / `selected: false` semantics. The host owns the
+     * `removeConfigs` history (mirrors datagrid's
+     * `model._last_insert_configs`); the sink only ships the new state.
+     */
+    emitUserSelect?(payload: UserSelectPayload): void;
+}
+
+/**
+ * Plain-object payload for `HostSink.emitUserClick`. Matches
+ * `PerspectiveClickDetail` byte-for-byte; defined locally to avoid a
+ * cycle through `event-detail.ts`.
+ */
+export interface UserClickPayload {
+    row: Record<string, unknown>;
+    column_names: string[];
+    config: { filter?: unknown[] };
+}
+
+/**
+ * Plain-object payload for `HostSink.emitUserSelect`. The host
+ * transport reconstructs a `PerspectiveSelectDetail` class instance
+ * from this plus its cached `_lastInsertConfig`.
+ */
+export interface UserSelectPayload {
+    selected: boolean;
+    row: Record<string, unknown>;
+    column_names: string[];
+    insertConfig: { filter?: unknown[] };
 }
 
 /**
@@ -209,7 +259,9 @@ export class TooltipController {
         }
 
         if (this._pinned) {
+            const cb = this._callbacks;
             this.dismiss();
+            cb.onUnpin?.();
             return;
         }
 

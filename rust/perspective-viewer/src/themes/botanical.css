@@ -85,25 +85,8 @@ perspective-viewer[theme="Botanical"] {
         #5a9e4b 100%
     );
 
-    /* perspective-viewer-botanical--openlayers */
-    --psp-openlayers--tile-url: "http://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
-    --psp-openlayers--attribution--filter: invert(1) hue-rotate(180deg);
-    --psp-openlayers--element--background: #1e3420;
-    --psp-openlayers--category-1--color: rgb(90, 158, 75);
-    --psp-openlayers--category-2--color: rgb(206, 176, 104);
-    --psp-openlayers--category-3--color: rgb(160, 110, 180);
-    --psp-openlayers--category-4--color: rgb(80, 170, 150);
-    --psp-openlayers--category-5--color: rgb(140, 170, 90);
-    --psp-openlayers--category-6--color: rgb(200, 120, 140);
-    --psp-openlayers--category-7--color: rgb(100, 150, 190);
-    --psp-openlayers--category-8--color: rgb(210, 140, 80);
-    --psp-openlayers--category-9--color: rgb(130, 120, 190);
-    --psp-openlayers--category-10--color: rgb(170, 200, 110);
-    --psp-openlayers--gradient--background: linear-gradient(
-        #e8836a 0%,
-        #1a2e1a 50%,
-        #5a9e4b 100%
-    );
+    --psp-charts--map-tiles--url: "http://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
+    --psp-charts--map-tiles--attribution-: "I <3 Open Source";
 }
 
 perspective-copy-menu[theme="Botanical"],

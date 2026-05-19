@@ -11,8 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 mod agg_depth_selector;
-mod primitive_field;
-mod stub;
+pub(crate) mod primitive_field;
 mod symbol;
 
 use std::collections::HashMap;
@@ -25,7 +24,6 @@ use self::agg_depth_selector::*;
 use self::primitive_field::{
     BoolField, ColorField, ColorRangeField, EnumField, NumberFieldPrimitive,
 };
-use crate::components::column_settings_sidebar::style_tab::stub::Stub;
 use crate::components::column_settings_sidebar::style_tab::symbol::SymbolStyle;
 use crate::components::datetime_column_style::DatetimeColumnStyle;
 use crate::components::number_series_style::NumberSeriesStyle;
@@ -39,7 +37,7 @@ use crate::presentation::Presentation;
 use crate::queries::{fetch_column_abs_max, get_column_config_schema};
 use crate::renderer::Renderer;
 use crate::session::Session;
-use crate::tasks::send_plugin_config;
+use crate::tasks::send_column_config;
 use crate::utils::PtrEqRc;
 
 #[derive(Clone, PartialEq, Properties)]
@@ -94,19 +92,13 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
         }
     });
 
-    let raw_config = props.presentation.get_columns_config(&props.column_name);
+    let raw_config = props.renderer.get_columns_config(&props.column_name);
     let on_change = {
         let state = props.clone();
         let column_name = props.column_name.clone();
         let revision = revision.clone();
         yew::Callback::from(move |config: crate::config::ColumnConfigFieldUpdate| {
-            send_plugin_config(
-                &state.session,
-                &state.renderer,
-                &state.presentation,
-                &column_name,
-                config,
-            );
+            send_column_config(&state.session, &state.renderer, &column_name, config);
             revision.set(*revision + 1);
         })
     };
@@ -166,29 +158,23 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                             />
                         }
                     },
-                    ControlSpec::DatetimeFormat {
-                        default: default_config,
-                    } => {
+                    ControlSpec::DatetimeFormat => {
                         let config: Option<DatetimeColumnStyleConfig> = deser_sub(&raw_config);
                         let enable_time_config = props.ty.unwrap() == ColumnType::Datetime;
                         html! {
                             <DatetimeColumnStyle
                                 {enable_time_config}
                                 {config}
-                                {default_config}
                                 on_change={on_change.clone()}
                                 keys={keys.clone()}
                             />
                         }
                     },
-                    ControlSpec::StringFormat {
-                        default: default_config,
-                    } => {
+                    ControlSpec::StringFormat => {
                         let config: Option<StringColumnStyleConfig> = deser_sub(&raw_config);
                         html! {
                             <StringColumnStyle
                                 {config}
-                                {default_config}
                                 on_change={on_change.clone()}
                                 keys={keys.clone()}
                             />
@@ -234,7 +220,6 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                     },
                     ControlSpec::Enum {
                         key,
-                        label,
                         variants,
                         default,
                     } => {
@@ -246,7 +231,6 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                         html! {
                             <EnumField
                                 field_key={key}
-                                {label}
                                 {variants}
                                 {default}
                                 {current}
@@ -254,11 +238,7 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                             />
                         }
                     },
-                    ControlSpec::Bool {
-                        key,
-                        label,
-                        default,
-                    } => {
+                    ControlSpec::Bool { key, default } => {
                         let current = raw_config
                             .as_ref()
                             .and_then(|m| m.get(&key))
@@ -266,18 +246,13 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                         html! {
                             <BoolField
                                 field_key={key}
-                                {label}
                                 {default}
                                 {current}
                                 on_change={on_change.clone()}
                             />
                         }
                     },
-                    ControlSpec::Color {
-                        key,
-                        label,
-                        default,
-                    } => {
+                    ControlSpec::Color { key, default } => {
                         let current = raw_config
                             .as_ref()
                             .and_then(|m| m.get(&key))
@@ -285,7 +260,6 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                         html! {
                             <ColorField
                                 field_key={key}
-                                {label}
                                 {default}
                                 {current}
                                 on_change={on_change.clone()}
@@ -295,7 +269,6 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                     ControlSpec::ColorRange {
                         key_pos,
                         key_neg,
-                        label,
                         default_pos,
                         default_neg,
                         is_gradient,
@@ -312,7 +285,6 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                             <ColorRangeField
                                 field_key_pos={key_pos}
                                 field_key_neg={key_neg}
-                                {label}
                                 {default_pos}
                                 {default_neg}
                                 {current_pos}
@@ -324,7 +296,6 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                     },
                     ControlSpec::Number {
                         key,
-                        label,
                         default,
                         min,
                         max,
@@ -338,7 +309,6 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                         html! {
                             <NumberFieldPrimitive
                                 field_key={key}
-                                {label}
                                 {default}
                                 {current}
                                 {min}
@@ -361,9 +331,8 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
             .collect_vec()
     })
     .unwrap_or_else(|error| {
-        vec![html! {
-            <Stub message="Could not render column styles" error={Some(format!("{error:?}"))} />
-        }]
+        tracing::error!("{}", error);
+        vec![]
     });
 
     html! {

@@ -20,7 +20,7 @@ use serde_json::Value;
 use ts_rs::TS;
 use wasm_bindgen::prelude::*;
 
-use crate::presentation::ColumnConfigMap;
+use crate::renderer::ColumnConfigMap;
 
 /// The state of an entire `custom_elements::PerspectiveViewerElement` component
 /// and its `Plugin`.
@@ -30,7 +30,7 @@ pub struct ViewerConfig<V: TS = String> {
     pub version: V,
     pub columns_config: ColumnConfigMap,
     pub plugin: String,
-    pub plugin_config: Value,
+    pub plugin_config: serde_json::Map<String, Value>,
     pub settings: bool,
     pub table: Option<String>,
     pub theme: Option<String>,
@@ -104,7 +104,7 @@ pub struct ViewerConfigUpdate {
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
-    pub plugin_config: Option<PluginConfig>,
+    pub plugin_config: PluginConfigUpdate,
 
     #[serde(default)]
     #[ts(as = "Option<_>")]
@@ -161,6 +161,7 @@ pub type TitleUpdate = OptionalUpdate<String>;
 pub type TableUpdate = OptionalUpdate<String>;
 pub type VersionUpdate = OptionalUpdate<String>;
 pub type ColumnConfigUpdate = OptionalUpdate<ColumnConfigMap>;
+pub type PluginConfigUpdate = OptionalUpdate<serde_json::Map<String, Value>>;
 
 /// Handles `{}` when included as a field with `#[serde(default)]`.
 impl<T: Clone> Default for OptionalUpdate<T> {

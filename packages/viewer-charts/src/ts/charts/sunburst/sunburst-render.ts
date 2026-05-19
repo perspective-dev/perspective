@@ -702,6 +702,7 @@ function drawStaticChrome(
                 },
                 stops,
                 theme,
+                chart.getColumnFormatter(chart._colorName, "value"),
             );
         }
     } else if (
@@ -739,6 +740,7 @@ function drawStaticChrome(
             },
             stops,
             theme,
+            chart.getColumnFormatter(chart._colorName, "value"),
         );
     }
 

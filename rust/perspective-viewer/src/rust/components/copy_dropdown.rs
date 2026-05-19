@@ -41,8 +41,7 @@ impl Component for CopyDropDownMenu {
     }
 
     fn view(&self, ctx: &Context<Self>) -> yew::virtual_dom::VNode {
-        let plugin = ctx.props().renderer.get_active_plugin().unwrap();
-        let is_chart = plugin.name().as_str() != "Datagrid";
+        let is_chart = ctx.props().renderer.is_chart();
         let has_selection = ctx.props().renderer.get_selection().is_some();
         html! {
             <>

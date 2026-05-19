@@ -10,12 +10,17 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { CssBounds, HostSink } from "./tooltip-controller";
+import type {
+    CssBounds,
+    HostSink,
+    UserClickPayload,
+    UserSelectPayload,
+} from "./tooltip-controller";
 
 /**
  * Envelope shape sent by `MessageHostSink`. The transport translates
  * each one into a corresponding `WorkerMsg` (`pinTooltip` /
- * `dismissTooltip` / `setCursor`).
+ * `dismissTooltip` / `setCursor` / `userClick` / `userSelect`).
  */
 export type HostSinkEnvelope =
     | {
@@ -27,14 +32,15 @@ export type HostSinkEnvelope =
           };
       }
     | { kind: "dismiss" }
-    | { kind: "setCursor"; cursor: string };
+    | { kind: "setCursor"; cursor: string }
+    | { kind: "userClick"; payload: UserClickPayload }
+    | { kind: "userSelect"; payload: UserSelectPayload };
 
 /**
- * `HostSink` that posts pin / dismiss / setCursor intents over a
- * `postMessage`-style channel. The host-side transport listens for
- * these envelopes and drives a `DomHostSink` on the host document —
- * the renderer scope has no DOM in worker mode and uses the same
- * channel in-process for symmetry.
+ * `HostSink` that posts pin / dismiss / setCursor / user-event intents
+ * over a `postMessage`-style channel. The host-side transport listens
+ * for these envelopes and drives a `DomHostSink` for pin/dismiss and
+ * dispatches `CustomEvent`s on the viewer for user events.
  */
 export class MessageHostSink implements HostSink {
     private _send: (msg: HostSinkEnvelope) => void;
@@ -57,5 +63,13 @@ export class MessageHostSink implements HostSink {
 
     setCursor(cursor: string): void {
         this._send({ kind: "setCursor", cursor });
+    }
+
+    emitUserClick(payload: UserClickPayload): void {
+        this._send({ kind: "userClick", payload });
+    }
+
+    emitUserSelect(payload: UserSelectPayload): void {
+        this._send({ kind: "userSelect", payload });
     }
 }

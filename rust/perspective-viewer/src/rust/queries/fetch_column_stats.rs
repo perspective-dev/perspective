@@ -69,6 +69,7 @@ pub async fn resolve_abs_max(
     if !is_numeric_column(metadata, col_name) {
         return None;
     }
+
     let view = view?;
     let (min, max) = view.get_min_max(col_name.to_string()).await.ok()?;
     let v = min_max_to_abs_max(&min, &max)?;

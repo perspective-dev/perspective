@@ -36,7 +36,7 @@ pub use self::metadata::{MetadataRef, SessionMetadata, SessionMetadataRc};
 pub use self::props::{SessionProps, TableLoadState};
 pub use self::view_subscription::ViewStats;
 use self::view_subscription::*;
-use crate::js::plugin::*;
+use crate::config::PluginStaticConfig;
 use crate::utils::*;
 
 /// Per-column numeric stats sourced from `View::get_min_max`. Keyed by
@@ -362,10 +362,10 @@ impl Session {
         }
     }
 
-    pub fn update_column_defaults(&self, requirements: &ViewConfigRequirements) {
+    pub fn update_column_defaults(&self, config_static: &PluginStaticConfig) {
         if self.borrow().config.columns.is_empty() {
             let mut update = ViewConfigUpdate::default();
-            self.set_update_column_defaults(&mut update, requirements);
+            self.set_update_column_defaults(&mut update, config_static);
             self.borrow_mut().config.apply_update(update);
         }
     }
@@ -486,13 +486,13 @@ impl Session {
     pub fn set_update_column_defaults(
         &self,
         config_update: &mut ViewConfigUpdate,
-        requirements: &ViewConfigRequirements,
+        config_static: &PluginStaticConfig,
     ) {
         use self::column_defaults_update::*;
         config_update.set_update_column_defaults(
             &self.metadata(),
             &self.get_view_config().columns,
-            requirements,
+            config_static,
         )
     }
 

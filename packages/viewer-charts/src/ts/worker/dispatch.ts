@@ -27,6 +27,10 @@ export function dispatch(r: WorkerRenderer, msg: ControlMsg): void {
         case "setColumnsConfig":
             r.chartImpl.setColumnsConfig?.(msg.cfg);
             break;
+        case "setPluginConfig":
+            r.chartImpl.setPluginConfig?.(msg.cfg);
+            r.redraw();
+            break;
         case "setBufferMaxCapacity":
             r.glManager.bufferPool.maxCapacity = msg.n;
             break;
@@ -59,6 +63,9 @@ export function dispatch(r: WorkerRenderer, msg: ControlMsg): void {
                 kind: "zoomChanged",
                 isDefault: r.allZoomsDefault(),
             });
+            break;
+        case "resetExpandedDomain":
+            r.resetExpandedDomain();
             break;
         case "interaction":
             r.onInteraction(msg.event);

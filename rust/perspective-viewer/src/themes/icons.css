@@ -76,8 +76,11 @@ perspective-string-column-style {
 
     /* Plugin Selector */
     --psp-plugin-selector--candlestick--content: url(../svg/mega-menu-icons-candlestick.svg);
+    --psp-plugin-selector--density--content: url(../svg/mega-menu-icons-density.svg);
     --psp-plugin-selector--heatmap--content: url(../svg/mega-menu-icons-heatmap.svg);
     --psp-plugin-selector--map-scatter--content: url(../svg/mega-menu-icons-map-scatter.svg);
+    --psp-plugin-selector--map-line--content: url(../svg/mega-menu-icons-map-line.svg);
+    --psp-plugin-selector--map-density--content: url(../svg/mega-menu-icons-map-density.svg);
     --psp-plugin-selector--ohlc--content: url(../svg/mega-menu-icons-ohlc.svg);
     --psp-plugin-selector--sunburst--content: url(../svg/mega-menu-icons-sunburst.svg);
     --psp-plugin-selector--treemap--content: url(../svg/mega-menu-icons-treemap.svg);

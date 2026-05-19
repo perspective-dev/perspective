@@ -33,14 +33,13 @@ pub async fn get_viewer_config(
     } else {
         session.get_view_config().clone()
     };
-    let js_plugin = renderer.get_active_plugin()?;
     let settings = presentation.is_settings_open();
-    let plugin = js_plugin.name();
-    let plugin_config: serde_json::Value = js_plugin.save()?.into_serde_ext()?;
+    let plugin = renderer.metadata().name.clone();
+    let plugin_config = renderer.get_plugin_config();
     let theme = presentation.get_selected_theme_name().await;
     let title = session.get_title();
     let table = session.get_table().map(|x| x.get_name().to_owned());
-    let columns_config = presentation.all_columns_configs();
+    let columns_config = renderer.all_columns_configs();
     Ok(ViewerConfig {
         version,
         plugin,

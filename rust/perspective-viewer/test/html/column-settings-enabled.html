@@ -11,12 +11,13 @@
             import "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
 
             class TestColumnSettingsPlugin extends customElements.get("perspective-viewer-plugin") {
-                get name() {
-                    return "test column settings";
-                }
-
-                can_render_column_styles(type, _group) {
-                    return type !== "boolean";
+                get_static_config() {
+                    return {
+                        name: "test column settings",
+                        select_mode: "select",
+                        config_column_names: [],
+                        can_render_column_styles: true,
+                    };
                 }
 
                 column_style_controls(type, group) {

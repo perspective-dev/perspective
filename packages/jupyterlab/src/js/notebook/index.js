@@ -12,7 +12,6 @@
 
 import "@perspective-dev/viewer-datagrid";
 import "@perspective-dev/viewer-charts";
-import "@perspective-dev/viewer-openlayers";
 
 import { load_css } from "./css";
 import { PerspectiveView } from "../view";

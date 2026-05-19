@@ -131,6 +131,17 @@
                 }
             }
 
+            .plugin-select-item[data-plugin="Density"] > .icon {
+                -webkit-mask-image: var(
+                    --psp-plugin-selector--density--content
+                );
+                mask-image: var(--psp-plugin-selector--density--content);
+                &:before {
+                    content: var(--psp-plugin-selector--density--content);
+                    visibility: hidden;
+                }
+            }
+
             .plugin-select-item[data-plugin="Map Scatter"] > .icon {
                 -webkit-mask-image: var(
                     --psp-plugin-selector--map-scatter--content
@@ -138,6 +149,28 @@
                 mask-image: var(--psp-plugin-selector--map-scatter--content);
                 &:before {
                     content: var(--psp-plugin-selector--map-scatter--content);
+                    visibility: hidden;
+                }
+            }
+
+            .plugin-select-item[data-plugin="Map Line"] > .icon {
+                -webkit-mask-image: var(
+                    --psp-plugin-selector--map-line--content
+                );
+                mask-image: var(--psp-plugin-selector--map-line--content);
+                &:before {
+                    content: var(--psp-plugin-selector--map-line--content);
+                    visibility: hidden;
+                }
+            }
+
+            .plugin-select-item[data-plugin="Map Density"] > .icon {
+                -webkit-mask-image: var(
+                    --psp-plugin-selector--map-density--content
+                );
+                mask-image: var(--psp-plugin-selector--map-density--content);
+                &:before {
+                    content: var(--psp-plugin-selector--map-density--content);
                     visibility: hidden;
                 }
             }

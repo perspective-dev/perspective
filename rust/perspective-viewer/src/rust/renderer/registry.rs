@@ -21,6 +21,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::*;
 
+use crate::config::{ColumnSelectMode, PluginStaticConfig};
 use crate::js::plugin::*;
 
 thread_local! {
@@ -28,10 +29,8 @@ thread_local! {
 }
 
 pub struct PluginRecord {
-    name: String,
-    category: String,
     tag_name: String,
-    priority: i32,
+    config: Rc<PluginStaticConfig>,
 }
 
 /// A global registry of all plugins that have been registered.
@@ -59,13 +58,27 @@ pub impl LocalKey<Rc<RefCell<Vec<PluginRecord>>>> {
         .unwrap()
     }
 
+    /// Returns the cached `PluginStaticConfig`s for every registered
+    /// plugin, in registration order. The renderer reads these at
+    /// activation time instead of calling back into JS for each field.
+    fn plugin_configs(&'static self) -> Vec<Rc<PluginStaticConfig>> {
+        register_default();
+        self.with(|plugins| {
+            plugins
+                .borrow()
+                .iter()
+                .map(|plugin| plugin.config.clone())
+                .collect()
+        })
+    }
+
     fn default_plugin_name(&'static self) -> String {
         register_default();
         self.with(|plugins| {
             plugins
                 .borrow()
                 .iter()
-                .map(|plugin| plugin.name.to_owned())
+                .map(|plugin| plugin.config.name.clone())
                 .next()
                 .unwrap()
         })
@@ -77,9 +90,15 @@ pub impl LocalKey<Rc<RefCell<Vec<PluginRecord>>>> {
             plugins.borrow().iter().fold(
                 HashMap::<String, Vec<String>>::default(),
                 |mut acc, plugin| {
-                    acc.entry(plugin.category.to_owned())
+                    let category = plugin
+                        .config
+                        .category
+                        .clone()
+                        .unwrap_or_else(|| "Custom".to_owned());
+
+                    acc.entry(category)
                         .or_default()
-                        .push(plugin.name.to_owned());
+                        .push(plugin.config.name.clone());
                     acc
                 },
             )
@@ -94,13 +113,10 @@ pub impl LocalKey<Rc<RefCell<Vec<PluginRecord>>>> {
 
         self.with(|plugin| {
             let plugin_inst = create_plugin(tag_name);
+            let config = Rc::new(plugin_inst.read_static_config());
             let record = PluginRecord {
                 tag_name: tag_name.to_owned(),
-                name: plugin_inst.name(),
-                category: plugin_inst
-                    .category()
-                    .unwrap_or_else(|| "Custom".to_owned()),
-                priority: plugin_inst.priority().unwrap_or_default(),
+                config,
             };
 
             let mut plugins = plugin.borrow_mut();
@@ -111,7 +127,12 @@ pub impl LocalKey<Rc<RefCell<Vec<PluginRecord>>>> {
             }
 
             plugins.push(record);
-            plugins.sort_by(|a, b| Ord::cmp(&b.priority, &a.priority));
+            plugins.sort_by(|a, b| {
+                Ord::cmp(
+                    &b.config.priority.unwrap_or(0),
+                    &a.config.priority.unwrap_or(0),
+                )
+            });
         });
     }
 
@@ -125,10 +146,14 @@ fn register_default() {
     PLUGIN_REGISTRY.with(|plugins| {
         if plugins.borrow().is_empty() {
             plugins.borrow_mut().push(PluginRecord {
-                name: "Debug".to_owned(),
-                category: "Custom".to_owned(),
                 tag_name: "perspective-viewer-plugin".to_owned(),
-                priority: -1,
+                config: Rc::new(PluginStaticConfig {
+                    name: "Debug".to_owned(),
+                    category: Some("Custom".to_owned()),
+                    select_mode: ColumnSelectMode::Select,
+                    priority: Some(-1),
+                    ..PluginStaticConfig::default()
+                }),
             })
         }
     })

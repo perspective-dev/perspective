@@ -24,10 +24,10 @@ import { computeSlotGeometry } from "../common/band-layout";
 import {
     resolveChartType,
     resolveStack,
+    resolveAltAxis,
     type ChartType,
     type ColumnChartConfig,
 } from "./series-type";
-import { AUTO_ALT_Y_AXIS } from "../../config";
 
 const DUAL_Y_RATIO_THRESHOLD = 50;
 
@@ -232,6 +232,33 @@ export interface SeriesPipelineInput {
     defaultChartType?: ChartType;
 
     /**
+     * Plugin-config knobs consumed by the build pipeline. Pulled from
+     * the chart impl's `_pluginConfig` (sourced from the host's
+     * `plugin_config_schema` / `restore({ plugin_config })`):
+     *
+     *  - `autoAltYAxis` — auto-split aggregates onto a secondary Y
+     *    axis when their magnitude ratio exceeds
+     *    `DUAL_Y_RATIO_THRESHOLD`. Replaces the `AUTO_ALT_Y_AXIS`
+     *    compile-time toggle.
+     *  - `bandInnerFrac` / `barInnerPad` — band-slot geometry forwarded
+     *    to `computeSlotGeometry`. Replace the `BAND_INNER_FRAC` /
+     *    `BAR_INNER_PAD` constants.
+     */
+    autoAltYAxis: boolean;
+    bandInnerFrac: number;
+    barInnerPad: number;
+
+    /**
+     * Anchor value-axis extents to zero. When `true` (bar / area
+     * default), `leftDomain` / `rightDomain` are guaranteed to enclose
+     * `0` so bars and areas render against their natural baseline.
+     * When `false` (line / scatter default), the domain is the raw
+     * `min`/`max` of the data — the axis tightens around the visible
+     * variation. Maps directly to `PluginConfig.include_zero`.
+     */
+    includeZero: boolean;
+
+    /**
      * Reusable scratch — pipeline writes records into these in place
      * and zero-fills the stack ladder. Pass the previous build's
      * outputs to amortize allocation across data reloads.
@@ -326,6 +353,10 @@ export function buildSeriesPipeline(
         groupByTypes,
         columnsConfig,
         defaultChartType,
+        autoAltYAxis,
+        bandInnerFrac,
+        barInnerPad,
+        includeZero,
         scratchBars,
         scratchPosStack,
         scratchNegStack,
@@ -422,9 +453,18 @@ export function buildSeriesPipeline(
         }
     }
 
+    // `aggExtents` accumulates per-aggregate value ranges for the
+    // dual-axis split heuristic below. `includeZero` decides whether
+    // the range starts anchored at zero (bar / area: the bar grows
+    // from the zero baseline, so it's part of the natural extent) or
+    // open (line / scatter: extent is the raw `min`..`max`).
     const aggExtents: { min: number; max: number }[] = [];
     for (let k = 0; k < M; k++) {
-        aggExtents.push({ min: 0, max: 0 });
+        aggExtents.push(
+            includeZero
+                ? { min: 0, max: 0 }
+                : { min: Infinity, max: -Infinity },
+        );
     }
 
     const N = numCategories;
@@ -466,7 +506,7 @@ export function buildSeriesPipeline(
     // Per-band slot geometry — `computeSlotGeometry` returns values in
     // band-relative units (band width = 1). In numeric mode scale by
     // the data-unit band width derived above.
-    const baseSlot = computeSlotGeometry(M);
+    const baseSlot = computeSlotGeometry(M, bandInnerFrac, barInnerPad);
     const slotWidth = baseSlot.slotWidth * numericBandWidth;
     const halfWidth = baseSlot.halfWidth * numericBandWidth;
 
@@ -605,12 +645,14 @@ export function buildSeriesPipeline(
                         ext.max = v;
                     }
 
-                    if (0 < ext.min) {
-                        ext.min = 0;
-                    }
+                    if (includeZero) {
+                        if (0 < ext.min) {
+                            ext.min = 0;
+                        }
 
-                    if (0 > ext.max) {
-                        ext.max = 0;
+                        if (0 > ext.max) {
+                            ext.max = 0;
+                        }
                     }
 
                     // Non-stacking bar/area still needs a record so the
@@ -642,7 +684,7 @@ export function buildSeriesPipeline(
     bars.count = barWrite;
 
     let hasRightAxis = false;
-    if (AUTO_ALT_Y_AXIS && M >= 2) {
+    if (autoAltYAxis && M >= 2) {
         const extents: number[] = new Array(M);
         let maxExt = 0;
         let minExt = Infinity;
@@ -681,10 +723,40 @@ export function buildSeriesPipeline(
         }
     }
 
-    // Axis domains: stack records contribute y0/y1; non-stacking samples
-    // contribute raw values against the zero baseline.
-    const leftExtent = { min: 0, max: 0 };
-    const rightExtent = { min: 0, max: 0 };
+    // Per-column `alt_axis` override — always wins over the auto
+    // split. Runs unconditionally so it works even when
+    // `autoAltYAxis` is off or there's only a single aggregate.
+    let forcedRight = false;
+    for (let k = 0; k < M; k++) {
+        if (resolveAltAxis(aggregates[k], columnsConfig)) {
+            for (const s of series) {
+                if (s.aggIdx === k) {
+                    s.axis = 1;
+                    forcedRight = true;
+                }
+            }
+        }
+    }
+
+    if (forcedRight) {
+        for (let i = 0; i < bars.count; i++) {
+            bars.axis[i] = series[bars.seriesId[i]].axis;
+        }
+
+        hasRightAxis = true;
+    }
+
+    // Axis domains: stack records contribute y0/y1; non-stacking
+    // samples contribute raw values. When `includeZero` is true the
+    // domain starts anchored at zero so bar / area glyphs always have
+    // their baseline in view; when false the domain opens to
+    // `[Infinity, -Infinity]` and closes around the data extent.
+    const leftExtent = includeZero
+        ? { min: 0, max: 0 }
+        : { min: Infinity, max: -Infinity };
+    const rightExtent = includeZero
+        ? { min: 0, max: 0 }
+        : { min: Infinity, max: -Infinity };
     for (let i = 0; i < bars.count; i++) {
         const ext = bars.axis[i] === 0 ? leftExtent : rightExtent;
         const y0 = bars.y0[i];
@@ -730,12 +802,26 @@ export function buildSeriesPipeline(
         }
     }
 
-    if (leftExtent.min === 0 && leftExtent.max === 0) {
+    // Empty-data fallback: an untouched extent still sits at its
+    // sentinel state. `includeZero=true` initializes to `{0, 0}`;
+    // `includeZero=false` initializes to `{Infinity, -Infinity}`.
+    // Either way, collapse to `{0, 1}` so axis rendering has a finite
+    // domain to work with.
+    const leftEmpty =
+        !isFinite(leftExtent.min) ||
+        !isFinite(leftExtent.max) ||
+        (leftExtent.min === 0 && leftExtent.max === 0);
+    if (leftEmpty) {
+        leftExtent.min = 0;
         leftExtent.max = 1;
     }
 
+    const rightEmpty =
+        !isFinite(rightExtent.min) ||
+        !isFinite(rightExtent.max) ||
+        (rightExtent.min === 0 && rightExtent.max === 0);
     const rightDomain: { min: number; max: number } | null = hasRightAxis
-        ? rightExtent.min === 0 && rightExtent.max === 0
+        ? rightEmpty
             ? { min: 0, max: 1 }
             : rightExtent
         : null;

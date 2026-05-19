@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-//! Read-only async derivations across the engine handles.
+//! Read-only async utilities across the engine handles.
 //!
 //! Each function in this module reads from one or more of [`Session`],
 //! [`Renderer`], [`Presentation`] and produces a derived value without

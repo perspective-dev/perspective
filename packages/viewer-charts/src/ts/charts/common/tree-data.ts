@@ -39,6 +39,7 @@
 
 import type { ColumnDataMap, ColumnData } from "../../data/view-reader";
 import { buildSplitGroups } from "../../data/split-groups";
+import { synthesizeStringLevel } from "./category-axis-resolver";
 import { NULL_NODE } from "./node-store";
 import type { TreeChartBase } from "./tree-chart";
 
@@ -263,11 +264,23 @@ export function processTreeChunk(
     const rpCols: { indices: Int32Array; dictionary: string[] }[] = [];
     for (let n = 0; ; n++) {
         const rp = columns.get(`__ROW_PATH_${n}__`);
-        if (!rp || rp.type !== "string" || !rp.indices || !rp.dictionary) {
+        if (!rp) {
             break;
         }
 
-        rpCols.push({ indices: rp.indices, dictionary: rp.dictionary });
+        if (rp.type === "string" && rp.indices && rp.dictionary) {
+            rpCols.push({ indices: rp.indices, dictionary: rp.dictionary });
+        } else if (rp.values) {
+            // Non-string group_by (integer / float / date / datetime /
+            // boolean) — synthesize a string-indexed dictionary so the
+            // tree insertion loop can treat every level uniformly.
+            // Uses the same formatter as `resolveCategoryAxis`.
+            const levelName = chart._groupBy[n];
+            const levelType = chart._groupByTypes[levelName] ?? "string";
+            rpCols.push(synthesizeStringLevel(rp, rp.values.length, levelType));
+        } else {
+            break;
+        }
     }
 
     const hasGroupBy = rpCols.length > 0;
