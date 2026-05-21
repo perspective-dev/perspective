@@ -133,8 +133,3 @@ pub struct StringColumnStyleConfig {
     #[serde(default)]
     pub color: Option<String>,
 }
-
-#[derive(Debug, Clone, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct StringColumnStyleDefaultConfig {
-    pub color: String,
-}

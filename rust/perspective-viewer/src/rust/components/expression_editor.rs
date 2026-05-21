@@ -18,6 +18,7 @@ use yew::prelude::*;
 use super::form::code_editor::*;
 use super::style::LocalStyle;
 use crate::session::{Session, SessionMetadata, SessionMetadataRc};
+use crate::tasks::{ExprValidation, validate_expression};
 use crate::*;
 
 #[derive(Properties, PartialEq, Clone)]
@@ -45,7 +46,7 @@ pub struct ExpressionEditorProps {
 #[derive(Debug)]
 pub enum ExpressionEditorMsg {
     SetExpr(Rc<String>),
-    ValidateComplete(Option<ExprValidationError>),
+    ValidateComplete(ExprValidation),
 }
 
 /// Expression editor component `CodeEditor` and a button toolbar.
@@ -53,6 +54,13 @@ pub struct ExpressionEditor {
     expr: Rc<String>,
     error: Option<ExprValidationError>,
     oninput: Callback<Rc<String>>,
+    /// Monotonically increasing request id used to drop stale
+    /// validation results when the user types faster than the engine
+    /// can validate.
+    validation_req_id: u64,
+    /// The id of the most recently dispatched validation; the result
+    /// is only applied when its echoed id matches.
+    last_dispatched_req_id: u64,
 }
 
 impl Component for ExpressionEditor {
@@ -69,6 +77,8 @@ impl Component for ExpressionEditor {
             error: None,
             expr,
             oninput,
+            validation_req_id: 0,
+            last_dispatched_req_id: 0,
         }
     }
 
@@ -77,23 +87,25 @@ impl Component for ExpressionEditor {
             ExpressionEditorMsg::SetExpr(val) => {
                 ctx.props().on_input.emit(val.clone());
                 self.expr = val.clone();
-                clone!(ctx.props().session);
-                ctx.link().send_future(async move {
-                    match session.validate_expr(&val).await {
-                        Ok(x) => ExpressionEditorMsg::ValidateComplete(x),
-                        Err(err) => {
-                            web_sys::console::error_1(&format!("{err:?}").into());
-                            ExpressionEditorMsg::ValidateComplete(None)
-                        },
-                    }
-                });
-
+                self.validation_req_id += 1;
+                self.last_dispatched_req_id = self.validation_req_id;
+                let cb = ctx.link().callback(ExpressionEditorMsg::ValidateComplete);
+                validate_expression(
+                    &ctx.props().session,
+                    cb,
+                    self.validation_req_id,
+                    (*val).clone(),
+                );
                 true
             },
-            ExpressionEditorMsg::ValidateComplete(err) => {
-                self.error = err;
+            ExpressionEditorMsg::ValidateComplete(result) => {
+                if result.req_id != self.last_dispatched_req_id {
+                    // Stale result from a superseded request — ignore.
+                    return false;
+                }
+                self.error = result.error;
                 if self.error.is_none() {
-                    maybe!({
+                    let _: Option<bool> = try {
                         let alias = ctx.props().alias.as_ref()?;
                         let session = &ctx.props().session;
                         let old = ctx.props().metadata.get_expression_by_alias(alias)?;
@@ -102,8 +114,8 @@ impl Component for ExpressionEditor {
                             .metadata_mut()
                             .set_edit_by_alias(alias, self.expr.to_string());
 
-                        Some(is_edited)
-                    });
+                        is_edited
+                    };
 
                     ctx.props().on_validate.emit(true);
                 } else {

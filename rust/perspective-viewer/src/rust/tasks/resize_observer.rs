@@ -22,7 +22,6 @@ use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::root::Root;
 use crate::session::{Session, TableLoadState};
-use crate::tasks::*;
 use crate::utils::*;
 
 pub struct ResizeObserverHandle {
@@ -83,32 +82,6 @@ struct ResizeObserverState {
     on_resize: Callback<()>,
 }
 
-impl HasRenderer for ResizeObserverState {
-    fn renderer(&self) -> &Renderer {
-        &self.renderer
-    }
-}
-
-impl HasSession for ResizeObserverState {
-    fn session(&self) -> &Session {
-        &self.session
-    }
-}
-
-impl HasPresentation for ResizeObserverState {
-    fn presentation(&self) -> &'_ crate::presentation::Presentation {
-        &self.presentation
-    }
-}
-
-impl StateProvider for ResizeObserverState {
-    type State = ResizeObserverState;
-
-    fn clone_state(&self) -> Self::State {
-        self.clone()
-    }
-}
-
 impl ResizeObserverState {
     fn on_resize(&mut self, entries: &js_sys::Array) {
         let is_visible = self
@@ -124,16 +97,16 @@ impl ResizeObserverState {
             let content_height = content.height().floor() as i32;
             let resized = self.width != content_width || self.height != content_height;
             if resized && is_visible {
-                let state = self.clone_state();
+                let state = self.clone();
                 clone!(self.on_resize);
                 ApiFuture::spawn_throttled(async move {
                     let needs_render = state
-                        .renderer()
+                        .renderer
                         .clone()
                         .with_lock(async {
-                            Ok(!state.renderer().is_plugin_activated()?
+                            Ok(!state.renderer.is_plugin_activated()?
                                 && matches!(
-                                    state.session().has_table(),
+                                    state.session.has_table(),
                                     Some(TableLoadState::Loaded)
                                 ))
                         })
@@ -141,9 +114,14 @@ impl ResizeObserverState {
 
                     if needs_render {
                         state.presentation.reset_attached();
-                        state.update_and_render(Default::default())?.await?;
+                        super::update_and_render(
+                            &state.session,
+                            &state.renderer,
+                            Default::default(),
+                        )?
+                        .await?;
                     } else {
-                        state.renderer().resize().await?;
+                        state.renderer.resize().await?;
                     }
 
                     on_resize.emit(());

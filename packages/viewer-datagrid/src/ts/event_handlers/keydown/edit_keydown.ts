@@ -68,7 +68,10 @@ function getPos(elem: ContentEditableElement): number {
         const _range = (elem.getRootNode() as Document)
             .getSelection()
             ?.getRangeAt(0);
-        if (!_range) return 0;
+        if (!_range) {
+            return 0;
+        }
+
         const range = _range.cloneRange();
         range.selectNodeContents(elem);
         range.setEnd(_range.endContainer, _range.endOffset);
@@ -87,7 +90,10 @@ const moveSelection = lock(async function (
     dy: number,
 ): Promise<void> {
     const meta = table.getMeta(active_cell);
-    if (!meta || meta.type !== "body") return;
+    if (!meta || meta.type !== "body") {
+        return;
+    }
+
     const num_columns = model._column_paths.length;
     const num_rows = model._num_rows;
     const selected_position = selected_position_map.get(table);
@@ -167,6 +173,7 @@ export function keydownListener(
                     1,
                 );
             }
+
             break;
         case "ArrowLeft":
             if (getPos(target as ContentEditableElement) === 0) {
@@ -180,6 +187,7 @@ export function keydownListener(
                     0,
                 );
             }
+
             break;
         case "ArrowUp":
             event.preventDefault();
@@ -200,6 +208,7 @@ export function keydownListener(
                     0,
                 );
             }
+
             break;
         case "ArrowDown":
             event.preventDefault();

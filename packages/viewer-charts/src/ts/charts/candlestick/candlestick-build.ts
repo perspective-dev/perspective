@@ -12,9 +12,15 @@
 
 import type { ColumnDataMap } from "../../data/view-reader";
 import { buildSplitGroups } from "../../data/split-groups";
-import type { CategoricalLevel } from "../../chrome/categorical-axis";
-import { resolveCategoryAxis } from "../common/category-axis";
-import { computeSlotGeometry, slotCenter } from "../common/band-layout";
+import type { CategoricalLevel } from "../../axis/categorical-axis";
+import {
+    resolveAxisMode,
+    resolveCategoryAxis,
+    resolveNumericCategoryDomain,
+    type AxisMode,
+    type NumericCategoryDomain,
+} from "../common/category-axis-resolver";
+import { computeSlotGeometry } from "../common/band-layout";
 
 export interface CandleSeriesInfo {
     seriesId: number;
@@ -23,6 +29,12 @@ export interface CandleSeriesInfo {
     label: string;
 }
 
+/**
+ * Logical candle record. Synthesized on demand from {@link CandleColumns}
+ * via {@link readCandleRecord} for tooltip / hover paths. The pipeline
+ * never materializes these — see `CandleColumns` for the columnar
+ * storage that replaces the legacy `CandleRecord[]`.
+ */
 export interface CandleRecord {
     catIdx: number;
     splitIdx: number;
@@ -36,38 +48,170 @@ export interface CandleRecord {
     isUp: boolean;
 }
 
+/**
+ * Columnar storage for the candle record set. Replaces the legacy
+ * `CandleRecord[]` to avoid per-record POJO allocation at scale.
+ *
+ * Records are appended in `(splitIdx, catIdx)` order as the pipeline
+ * loop is structured (outer split, inner category) — both `xCenter` and
+ * `catIdx` are monotonically non-decreasing within a split, which the
+ * hit-test uses for binary-search narrowing.
+ *
+ * `count` is the active record count; the underlying typed arrays may
+ * be over-allocated for capacity reuse across builds.
+ */
+export interface CandleColumns {
+    count: number;
+    catIdx: Int32Array;
+    splitIdx: Int32Array;
+    seriesId: Int32Array;
+    xCenter: Float64Array;
+    halfWidth: Float64Array;
+    open: Float64Array;
+    close: Float64Array;
+    high: Float64Array;
+    low: Float64Array;
+
+    /**
+     * 1 = up (close ≥ open), 0 = down.
+     */
+    isUp: Uint8Array;
+}
+
+export function emptyCandleColumns(): CandleColumns {
+    return {
+        count: 0,
+        catIdx: new Int32Array(0),
+        splitIdx: new Int32Array(0),
+        seriesId: new Int32Array(0),
+        xCenter: new Float64Array(0),
+        halfWidth: new Float64Array(0),
+        open: new Float64Array(0),
+        close: new Float64Array(0),
+        high: new Float64Array(0),
+        low: new Float64Array(0),
+        isUp: new Uint8Array(0),
+    };
+}
+
+/**
+ * Reuse `prev`'s typed arrays when capacity is sufficient, else allocate
+ * fresh. Resets `count` to 0; pipeline writes from index 0.
+ */
+export function ensureCandleColumnsCapacity(
+    prev: CandleColumns | null,
+    capacity: number,
+): CandleColumns {
+    if (prev && prev.catIdx.length >= capacity) {
+        prev.count = 0;
+        return prev;
+    }
+
+    return {
+        count: 0,
+        catIdx: new Int32Array(capacity),
+        splitIdx: new Int32Array(capacity),
+        seriesId: new Int32Array(capacity),
+        xCenter: new Float64Array(capacity),
+        halfWidth: new Float64Array(capacity),
+        open: new Float64Array(capacity),
+        close: new Float64Array(capacity),
+        high: new Float64Array(capacity),
+        low: new Float64Array(capacity),
+        isUp: new Uint8Array(capacity),
+    };
+}
+
+/**
+ * Synthesize a {@link CandleRecord} POJO for record `i`. Used by
+ * tooltip / pinned tooltip / hover return paths; not called in any
+ * frame-rate hot loop.
+ */
+export function readCandleRecord(cols: CandleColumns, i: number): CandleRecord {
+    return {
+        catIdx: cols.catIdx[i],
+        splitIdx: cols.splitIdx[i],
+        seriesId: cols.seriesId[i],
+        xCenter: cols.xCenter[i],
+        halfWidth: cols.halfWidth[i],
+        open: cols.open[i],
+        close: cols.close[i],
+        high: cols.high[i],
+        low: cols.low[i],
+        isUp: cols.isUp[i] !== 0,
+    };
+}
+
 export interface CandlestickPipelineInput {
     columns: ColumnDataMap;
     numRows: number;
     columnSlots: (string | null)[];
     groupBy: string[];
     splitBy: string[];
+
+    /**
+     * Source-column types for `group_by` columns. Same shape as the bar
+     * pipeline — used to stringify non-string row-paths and to enable
+     * numeric-axis mode for a single non-string non-boolean group_by.
+     */
+    groupByTypes: Record<string, string>;
+
+    /**
+     * Band-slot geometry knobs sourced from
+     * {@link PluginConfig.band_inner_frac} / `bar_inner_pad`. Forwarded
+     * to `computeSlotGeometry`. Replace the `BAND_INNER_FRAC` /
+     * `BAR_INNER_PAD` constants.
+     */
+    bandInnerFrac: number;
+    barInnerPad: number;
+
+    /**
+     * Reusable scratch — pipeline writes records into the typed arrays
+     * in place. Pass the previous build's columns to amortize
+     * allocation across data reloads.
+     */
+    scratchCandles?: CandleColumns | null;
 }
+
+export type { NumericCategoryDomain };
 
 export interface CandlestickPipelineResult {
     splitPrefixes: string[];
     rowPaths: CategoricalLevel[];
     numCategories: number;
     rowOffset: number;
+
+    /**
+     * Axis mode discriminator (see bar-build for semantics).
+     */
+    axisMode: AxisMode;
+    numericCategoryDomain: NumericCategoryDomain | null;
+
+    /**
+     * Per-category X position (real data units) in numeric mode.
+     */
+    categoryPositions: Float64Array | null;
     series: CandleSeriesInfo[];
-    candles: CandleRecord[];
+    candles: CandleColumns;
     yDomain: { min: number; max: number };
 }
 
-const EMPTY: CandlestickPipelineResult = {
+const EMPTY_RESULT: Omit<CandlestickPipelineResult, "candles"> = {
     splitPrefixes: [],
     rowPaths: [],
     numCategories: 0,
     rowOffset: 0,
+    axisMode: { mode: "category" },
+    numericCategoryDomain: null,
+    categoryPositions: null,
     series: [],
-    candles: [],
     yDomain: { min: 0, max: 1 },
 };
 
 /**
- * Pure pipeline: turn a raw `ColumnDataMap` into `CandleRecord[]`.
- *
- * Column slots (Open / Close / High / Low) mirror d3fc's convention:
+ * Pure pipeline: turn a raw `ColumnDataMap` into a columnar
+ * {@link CandleColumns}. Column slots (Open / Close / High / Low) mirror
+ * d3fc's convention:
  *   - `Open` is required.
  *   - `Close` falls back to the next row's Open (last row: own Open).
  *   - `High` falls back to `max(open, close)`.
@@ -79,10 +223,24 @@ const EMPTY: CandlestickPipelineResult = {
 export function buildCandlestickPipeline(
     input: CandlestickPipelineInput,
 ): CandlestickPipelineResult {
-    const { columns, numRows, columnSlots, groupBy, splitBy } = input;
+    const {
+        columns,
+        numRows,
+        columnSlots,
+        groupBy,
+        splitBy,
+        groupByTypes,
+        bandInnerFrac,
+        barInnerPad,
+        scratchCandles,
+    } = input;
+    const axisMode = resolveAxisMode(groupBy, groupByTypes);
 
     const openBase = columnSlots[0] || "";
-    if (!openBase) return EMPTY;
+    if (!openBase) {
+        return { ...EMPTY_RESULT, candles: emptyCandleColumns() };
+    }
+
     const closeBase = columnSlots[1] || "";
     const highBase = columnSlots[2] || "";
     const lowBase = columnSlots[3] || "";
@@ -92,28 +250,46 @@ export function buildCandlestickPipeline(
     const splitPrefixes: string[] = [];
     if (splitBy.length > 0) {
         const aggregates = [openBase];
-        if (closeBase) aggregates.push(closeBase);
-        if (highBase) aggregates.push(highBase);
-        if (lowBase) aggregates.push(lowBase);
-        for (const g of buildSplitGroups(columns, [openBase], aggregates)) {
-            if (g.colNames.has(openBase)) splitPrefixes.push(g.prefix);
+        if (closeBase) {
+            aggregates.push(closeBase);
         }
-        if (splitPrefixes.length === 0) splitPrefixes.push("");
+
+        if (highBase) {
+            aggregates.push(highBase);
+        }
+
+        if (lowBase) {
+            aggregates.push(lowBase);
+        }
+
+        for (const g of buildSplitGroups(columns, [openBase], aggregates)) {
+            if (g.colNames.has(openBase)) {
+                splitPrefixes.push(g.prefix);
+            }
+        }
+
+        if (splitPrefixes.length === 0) {
+            splitPrefixes.push("");
+        }
     } else {
         splitPrefixes.push("");
     }
 
+    const levelTypes = groupBy.map((name) => groupByTypes[name] ?? "string");
     const { rowPaths, numCategories, rowOffset } = resolveCategoryAxis(
         columns,
         numRows,
         groupBy.length,
+        levelTypes,
     );
     if (numCategories === 0) {
         return {
-            ...EMPTY,
+            ...EMPTY_RESULT,
+            axisMode,
             splitPrefixes,
             rowPaths,
             rowOffset,
+            candles: emptyCandleColumns(),
         };
     }
 
@@ -129,20 +305,44 @@ export function buildCandlestickPipeline(
         });
     }
 
-    const { slotWidth, halfWidth } = computeSlotGeometry(P);
+    // Numeric-mode category positions — read from `__ROW_PATH_0__` so
+    // candles anchor at real data values (e.g. ms-since-epoch) instead
+    // of logical category indices.
+    let categoryPositions: Float64Array | null = null;
+    let numericCategoryDomain: NumericCategoryDomain | null = null;
+    let numericBandWidth = 1;
+    if (axisMode.mode === "numeric" && numCategories > 0) {
+        const rp = columns.get("__ROW_PATH_0__");
+        const resolved = resolveNumericCategoryDomain(
+            rp?.values,
+            numCategories,
+            rowOffset,
+            groupBy[0] ?? "",
+            axisMode.numericType === "date" ||
+                axisMode.numericType === "datetime",
+        );
+        if (resolved) {
+            categoryPositions = resolved.categoryPositions;
+            numericCategoryDomain = resolved.numericCategoryDomain;
+            numericBandWidth = resolved.numericCategoryDomain.bandWidth;
+        }
+    }
 
-    // Per-series column references (resolved once per frame, not per
-    // row). For each split, the candle value reads come out of typed
-    // arrays with no repeated map lookups.
+    const baseSlot = computeSlotGeometry(P, bandInnerFrac, barInnerPad);
+    const slotWidth = baseSlot.slotWidth * numericBandWidth;
+    const halfWidth = baseSlot.halfWidth * numericBandWidth;
+    const halfP = (P - 1) / 2;
+
+    // Per-series column references (resolved once, not per row).
     const seriesCols: {
-        openCol: Float32Array | Int32Array;
-        closeCol: Float32Array | Int32Array | null;
-        highCol: Float32Array | Int32Array | null;
-        lowCol: Float32Array | Int32Array | null;
-        openValid: Uint8Array | undefined;
-        closeValid: Uint8Array | undefined;
-        highValid: Uint8Array | undefined;
-        lowValid: Uint8Array | undefined;
+        openCol: ArrayLike<unknown> | null;
+        closeCol: ArrayLike<unknown> | null;
+        highCol: ArrayLike<unknown> | null;
+        lowCol: ArrayLike<unknown> | null;
+        openValid: Uint8Array | null;
+        closeValid: Uint8Array | null;
+        highValid: Uint8Array | null;
+        lowValid: Uint8Array | null;
     }[] = [];
     for (let p = 0; p < P; p++) {
         const prefix = splitPrefixes[p];
@@ -150,19 +350,19 @@ export function buildCandlestickPipeline(
             prefix === "" ? base : `${prefix}|${base}`;
         const openCol = columns.get(nm(openBase));
         if (!openCol?.values) {
-            // Skip this split if Open is unresolvable.
             seriesCols.push({
-                openCol: new Float32Array(0),
+                openCol: null,
                 closeCol: null,
                 highCol: null,
                 lowCol: null,
-                openValid: undefined,
-                closeValid: undefined,
-                highValid: undefined,
-                lowValid: undefined,
+                openValid: null,
+                closeValid: null,
+                highValid: null,
+                lowValid: null,
             });
             continue;
         }
+
         const closeCol = closeBase ? columns.get(nm(closeBase)) : null;
         const highCol = highBase ? columns.get(nm(highBase)) : null;
         const lowCol = lowBase ? columns.get(nm(lowBase)) : null;
@@ -171,45 +371,70 @@ export function buildCandlestickPipeline(
             closeCol: closeCol?.values ?? null,
             highCol: highCol?.values ?? null,
             lowCol: lowCol?.values ?? null,
-            openValid: openCol.valid,
-            closeValid: closeCol?.valid,
-            highValid: highCol?.valid,
-            lowValid: lowCol?.valid,
+            openValid: openCol.valid ?? null,
+            closeValid: closeCol?.valid ?? null,
+            highValid: highCol?.valid ?? null,
+            lowValid: lowCol?.valid ?? null,
         });
     }
 
-    const candles: CandleRecord[] = [];
+    // Pre-allocate columnar candle storage at N*P upper bound. The
+    // pipeline emits at most one record per (split, cat) cell.
+    const cap = numCategories * P;
+    const candles = ensureCandleColumnsCapacity(scratchCandles ?? null, cap);
+    let write = 0;
+
     let yMin = Infinity;
     let yMax = -Infinity;
 
     const N = numCategories;
 
-    const isValid = (valid: Uint8Array | undefined, row: number): boolean => {
-        if (!valid) return true;
-        return !!((valid[row >> 3] >> (row & 7)) & 1);
-    };
-
     for (let p = 0; p < P; p++) {
         const sc = seriesCols[p];
-        if (sc.openCol.length === 0) continue;
+        const openCol = sc.openCol;
+        if (!openCol) {
+            continue;
+        }
+
+        const closeCol = sc.closeCol;
+        const highCol = sc.highCol;
+        const lowCol = sc.lowCol;
+        const openValid = sc.openValid;
+        const closeValid = sc.closeValid;
+        const highValid = sc.highValid;
+        const lowValid = sc.lowValid;
+        const slotOffset = (p - halfP) * slotWidth;
 
         for (let catI = 0; catI < N; catI++) {
             const row = catI + rowOffset;
-            if (!isValid(sc.openValid, row)) continue;
-            const open = sc.openCol[row] as number;
-            if (!isFinite(open)) continue;
 
-            // d3fc's getNextOpen fallback: use the next row's open as
-            // close; on the last row, fall back to own open (yielding a
-            // degenerate zero-height candle, as in d3fc).
+            // Inlined valid-bit test (was a closure in the legacy build).
+            if (openValid && !((openValid[row >> 3] >> (row & 7)) & 1)) {
+                continue;
+            }
+
+            const open = openCol[row] as number;
+            if (!isFinite(open)) {
+                continue;
+            }
+
+            // Close fallback: explicit close column → next row's open →
+            // own open (degenerate). Each branch inlines the validity
+            // check to avoid a per-row closure.
             let close: number;
-            if (sc.closeCol && isValid(sc.closeValid, row)) {
-                const v = sc.closeCol[row] as number;
+            if (
+                closeCol &&
+                (!closeValid || ((closeValid[row >> 3] >> (row & 7)) & 1) !== 0)
+            ) {
+                const v = closeCol[row] as number;
                 close = isFinite(v) ? v : open;
             } else {
                 const nextRow = catI < N - 1 ? catI + 1 + rowOffset : row;
-                if (isValid(sc.openValid, nextRow)) {
-                    const v = sc.openCol[nextRow] as number;
+                if (
+                    !openValid ||
+                    ((openValid[nextRow >> 3] >> (nextRow & 7)) & 1) !== 0
+                ) {
+                    const v = openCol[nextRow] as number;
                     close = isFinite(v) ? v : open;
                 } else {
                     close = open;
@@ -217,40 +442,54 @@ export function buildCandlestickPipeline(
             }
 
             let high: number;
-            if (sc.highCol && isValid(sc.highValid, row)) {
-                const v = sc.highCol[row] as number;
-                high = isFinite(v) ? v : Math.max(open, close);
+            if (
+                highCol &&
+                (!highValid || ((highValid[row >> 3] >> (row & 7)) & 1) !== 0)
+            ) {
+                const v = highCol[row] as number;
+                high = isFinite(v) ? v : open > close ? open : close;
             } else {
-                high = Math.max(open, close);
+                high = open > close ? open : close;
             }
 
             let low: number;
-            if (sc.lowCol && isValid(sc.lowValid, row)) {
-                const v = sc.lowCol[row] as number;
-                low = isFinite(v) ? v : Math.min(open, close);
+            if (
+                lowCol &&
+                (!lowValid || ((lowValid[row >> 3] >> (row & 7)) & 1) !== 0)
+            ) {
+                const v = lowCol[row] as number;
+                low = isFinite(v) ? v : open < close ? open : close;
             } else {
-                low = Math.min(open, close);
+                low = open < close ? open : close;
             }
 
-            const xCenter = slotCenter(catI, p, P, slotWidth);
-            const isUp = close >= open;
-            candles.push({
-                catIdx: catI,
-                splitIdx: p,
-                seriesId: p,
-                xCenter,
-                halfWidth,
-                open,
-                close,
-                high,
-                low,
-                isUp,
-            });
+            const center = categoryPositions ? categoryPositions[catI] : catI;
+            const xCenter = center + slotOffset;
+            const isUp = close >= open ? 1 : 0;
 
-            if (low < yMin) yMin = low;
-            if (high > yMax) yMax = high;
+            candles.catIdx[write] = catI;
+            candles.splitIdx[write] = p;
+            candles.seriesId[write] = p;
+            candles.xCenter[write] = xCenter;
+            candles.halfWidth[write] = halfWidth;
+            candles.open[write] = open;
+            candles.close[write] = close;
+            candles.high[write] = high;
+            candles.low[write] = low;
+            candles.isUp[write] = isUp;
+            write++;
+
+            if (low < yMin) {
+                yMin = low;
+            }
+
+            if (high > yMax) {
+                yMax = high;
+            }
         }
     }
+
+    candles.count = write;
 
     if (!isFinite(yMin) || !isFinite(yMax)) {
         yMin = 0;
@@ -267,6 +506,9 @@ export function buildCandlestickPipeline(
         rowPaths,
         numCategories,
         rowOffset,
+        axisMode,
+        numericCategoryDomain,
+        categoryPositions,
         series,
         candles,
         yDomain: { min: yMin, max: yMax },

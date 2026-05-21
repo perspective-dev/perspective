@@ -70,7 +70,7 @@ test.describe("Events", () => {
             expressions: {},
             filter: [],
             plugin: "Debug",
-            plugin_config: null,
+            plugin_config: {},
             group_by: ["State"],
             group_rollup_mode: "rollup",
             settings: true,

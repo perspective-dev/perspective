@@ -73,7 +73,7 @@ export default async function (obj: any) {
                 },
             );
 
-            // e.message = getExceptionMessage(e);
+            // @ts-ignore This is helpful for debugging
             e.message = "Unexpected internal error";
             throw e;
         },

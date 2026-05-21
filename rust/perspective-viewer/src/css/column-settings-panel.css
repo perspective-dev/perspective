@@ -131,15 +131,32 @@
         content: var(--psp-label--time-style--content, "Time Style");
     }
 
-    label#foreground-label:before {
-        content: var(--psp-label--foreground--content, "Foreground");
+    label#number_fg_mode-label:before {
+        content: var(--psp-label--number-fg-mode--content, "Foreground");
     }
 
-    label#background-label:before {
-        content: var(--psp-label--background--content, "Background");
+    label#pos_fg_color-label:before {
+        content: var(--psp-label--number-fg-mode--content, "Foreground");
     }
 
-    label#chart-type-label:before {
+    label#number_bg_mode-label:before {
+        content: var(--psp-label--number-fg-mode--content, "Background");
+    }
+
+    label#pos_bg_color-label:before {
+        content: var(--psp-label--pos-bg-color--content, "Background");
+    }
+
+    label#datetime_color_mode-label:before {
+        content: var(--psp-label--datetime-color-mode--content, "Color");
+    }
+
+    label#string_color_mode-label:before {
+        content: var(--psp-label--string-color-mode--content, "Color");
+    }
+
+    label#chart-type-label:before,
+    label#chart_type-label:before {
         content: var(--psp-label--chart-type--content, "Chart Type");
     }
 
@@ -189,8 +206,12 @@
         content: var(--psp-label--aggregate-depth--content, "Aggregate Depth");
     }
 
-    label#max-value-label:before {
-        content: var(--psp-label--max-value--content, "Max Value");
+    label#fg_gradient-label:before {
+        content: var(--psp-label--fg-gradient--content, "Max Value");
+    }
+
+    label#bg_gradient-label:before {
+        content: var(--psp-label--bg-gradient--content, "Max Value");
     }
 
     label#rounding-priority-label:before {

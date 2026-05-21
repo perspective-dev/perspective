@@ -10,21 +10,24 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+//! Copy/export side effects: render the current `View` to one of the
+//! supported [`ExportMethod`] formats and return a [`Blob`] / [`JsValue`].
+
 use std::collections::HashSet;
 
 use base64::prelude::*;
 use futures::join;
 use itertools::Itertools;
 use perspective_client::ViewWindow;
-use perspective_js::utils::ApiResult;
-use wasm_bindgen::{JsCast, JsValue, intern};
-use wasm_bindgen_futures::JsFuture;
+use perspective_js::utils::*;
+use wasm_bindgen::{JsCast, JsValue};
 
-use super::export_app;
-use super::export_method::*;
-use super::get_viewer_config::*;
-use super::structural::*;
+use crate::config::ExportMethod;
 use crate::js::JsPerspectiveViewerPlugin;
+use crate::presentation::Presentation;
+use crate::queries::{export_app, get_viewer_config};
+use crate::renderer::Renderer;
+use crate::session::Session;
 use crate::utils::*;
 
 fn tag_name_to_package(plugin: &JsPerspectiveViewerPlugin) -> String {
@@ -33,162 +36,179 @@ fn tag_name_to_package(plugin: &JsPerspectiveViewerPlugin) -> String {
     Itertools::intersperse(tag_parts, "-".to_owned()).collect::<String>()
 }
 
-/// A model trait for Copy/Export UI task behavior,
-///
-/// Export functionality, for downloads and copy-to-clipboard, are mostly shared
-/// behavior, but require access to a few state objects depending on which
-/// format is desired.  The `CopyExportModel` groups this functionality in a
-/// shared location, rather than distributing in the various state objects
-/// that are relevent per-format.
-pub trait CopyExportModel:
-    HasSession + HasRenderer + HasPresentation + GetViewerConfigModel
-{
-    async fn html_as_jsvalue(&self) -> ApiResult<JsValue> {
-        let view_config = self.get_viewer_config();
-        let session = self.session().clone();
-        let plugins = self
-            .renderer()
-            .get_all_plugins()
-            .iter()
-            .map(tag_name_to_package)
-            .collect::<HashSet<String>>()
-            .into_iter()
-            .collect::<Vec<_>>();
+/// Render the current view as a self-contained HTML document (Arrow data +
+/// JSON layout embedded as base64 + JSON, with `<script type=module>` imports
+/// for the active plugins).
+pub async fn html_as_jsvalue(
+    session: &Session,
+    renderer: &Renderer,
+    presentation: &Presentation,
+) -> ApiResult<JsValue> {
+    let view_config = get_viewer_config(session, renderer, presentation);
+    let plugins = renderer
+        .get_all_plugins()
+        .iter()
+        .map(tag_name_to_package)
+        .collect::<HashSet<String>>()
+        .into_iter()
+        .collect::<Vec<_>>();
 
-        let (arrow, config) = join!(session.arrow_as_vec(true, None), view_config);
-        let arrow = arrow?;
-        let mut config = config?;
-        config.settings = false;
-        let js_config = serde_json::to_string(&config)?;
-        let html = export_app::render(&BASE64_STANDARD.encode(arrow), &js_config, &plugins);
-        Ok(js_sys::JsString::from(html.trim()).into())
-    }
+    let (arrow, config) = join!(
+        crate::queries::arrow_as_vec(session, true, None),
+        view_config
+    );
+    let arrow = arrow?;
+    let mut config = config?;
+    config.settings = false;
+    let js_config = serde_json::to_string(&config)?;
+    let html = export_app::render(&BASE64_STANDARD.encode(arrow), &js_config, &plugins);
+    Ok(js_sys::JsString::from(html.trim()).into())
+}
 
-    /// Create a blob of this plugin's `.png` rendering by calling the
-    /// `Plugin::render` method dynamically (as it may not exist e.g. for
-    /// datagrid).
-    ///
-    /// # Errors
-    ///
-    /// It is assumed that `Plugin::render` exists on the plugin's Custom
-    /// Element.
-    async fn png_as_jsvalue(&self) -> ApiResult<web_sys::Blob> {
-        let renderer = self.renderer().clone();
-        let plugin = renderer.get_active_plugin()?;
-        let render = js_sys::Reflect::get(&plugin, &intern("render").into())?;
-        let render_fun = render.unchecked_into::<js_sys::Function>();
-        let png = render_fun.call0(&plugin)?;
-        let result = JsFuture::from(png.unchecked_into::<js_sys::Promise>())
+/// Render the current view as a `.png` `Blob` via the active plugin's
+/// `render` method (typically only available for chart plugins).
+pub async fn png_as_jsvalue(session: &Session, renderer: &Renderer) -> ApiResult<web_sys::Blob> {
+    let plugin = renderer.get_active_plugin()?;
+    let view: perspective_client::View = session
+        .get_view()
+        .ok_or(ApiError::from(ApiErrorType::NoTableError))?;
+
+    let png = plugin.render(view.into(), None).await?;
+    Ok(png)
+}
+
+/// Render the current view as a `.txt` `Blob` via the active plugin's
+/// `render` method (typically used for the datagrid).
+pub async fn txt_as_jsvalue(
+    session: &Session,
+    renderer: &Renderer,
+    viewport: Option<ViewWindow>,
+) -> ApiResult<web_sys::Blob> {
+    let plugin = renderer.get_active_plugin()?;
+    let view: perspective_client::View = session
+        .get_view()
+        .ok_or(ApiError::from(ApiErrorType::NoTableError))?;
+
+    let txt = plugin
+        .render(view.into(), viewport.map(|x| x.into()))
+        .await?;
+
+    Ok(txt)
+}
+
+/// Generate a result `Blob` for all types of [`ExportMethod`].
+pub async fn export_method_to_blob(
+    session: &Session,
+    renderer: &Renderer,
+    presentation: &Presentation,
+    method: ExportMethod,
+) -> ApiResult<web_sys::Blob> {
+    let viewport = renderer.get_selection();
+
+    match method {
+        ExportMethod::Csv => crate::queries::csv_as_jsvalue(session, false, None)
             .await?
-            .unchecked_into();
-        Ok(result)
-    }
-
-    async fn txt_as_jsvalue(&self, viewport: Option<ViewWindow>) -> ApiResult<web_sys::Blob> {
-        let renderer = self.renderer().clone();
-        let plugin = renderer.get_active_plugin()?;
-        let render = js_sys::Reflect::get(&plugin, &intern("render").into())?;
-        let render_fun = render.unchecked_into::<js_sys::Function>();
-        let txt = render_fun.call1(&plugin, &serde_wasm_bindgen::to_value(&viewport)?)?;
-        let result = JsFuture::from(txt.unchecked_into::<js_sys::Promise>())
+            .as_blob(),
+        ExportMethod::CsvSelected => crate::queries::csv_as_jsvalue(session, false, viewport)
             .await?
-            .unchecked_into();
-        Ok(result)
-    }
-
-    /// Generate a result `Blob` for all types of `ExportMethod`.
-    async fn export_method_to_blob(&self, method: ExportMethod) -> ApiResult<web_sys::Blob> {
-        let viewport = self.renderer().get_selection();
-
-        match method {
-            ExportMethod::Csv => self.session().csv_as_jsvalue(false, None).await?.as_blob(),
-            ExportMethod::CsvSelected => self
-                .session()
-                .csv_as_jsvalue(false, viewport)
+            .as_blob(),
+        ExportMethod::CsvAll => crate::queries::csv_as_jsvalue(session, true, None)
+            .await?
+            .as_blob(),
+        ExportMethod::Json => crate::queries::json_as_jsvalue(session, false, None)
+            .await?
+            .as_blob(),
+        ExportMethod::JsonSelected => crate::queries::json_as_jsvalue(session, false, viewport)
+            .await?
+            .as_blob(),
+        ExportMethod::JsonAll => crate::queries::json_as_jsvalue(session, true, None)
+            .await?
+            .as_blob(),
+        ExportMethod::Ndjson => crate::queries::ndjson_as_jsvalue(session, false, None)
+            .await?
+            .as_blob(),
+        ExportMethod::NdjsonSelected => crate::queries::ndjson_as_jsvalue(session, false, viewport)
+            .await?
+            .as_blob(),
+        ExportMethod::NdjsonAll => crate::queries::ndjson_as_jsvalue(session, true, None)
+            .await?
+            .as_blob(),
+        ExportMethod::Arrow => crate::queries::arrow_as_jsvalue(session, false, None)
+            .await?
+            .as_blob(),
+        ExportMethod::ArrowSelected => crate::queries::arrow_as_jsvalue(session, false, viewport)
+            .await?
+            .as_blob(),
+        ExportMethod::ArrowAll => crate::queries::arrow_as_jsvalue(session, true, None)
+            .await?
+            .as_blob(),
+        ExportMethod::Html => html_as_jsvalue(session, renderer, presentation)
+            .await?
+            .as_blob(),
+        ExportMethod::Plugin if renderer.is_chart() => png_as_jsvalue(session, renderer).await,
+        ExportMethod::Plugin => txt_as_jsvalue(session, renderer, viewport).await,
+        ExportMethod::JsonConfig => js_sys::JSON::stringify(
+            &get_viewer_config(session, renderer, presentation)
                 .await?
-                .as_blob(),
-            ExportMethod::CsvAll => self.session().csv_as_jsvalue(true, None).await?.as_blob(),
-            ExportMethod::Json => self.session().json_as_jsvalue(false, None).await?.as_blob(),
-            ExportMethod::JsonSelected => self
-                .session()
-                .json_as_jsvalue(false, viewport)
-                .await?
-                .as_blob(),
-            ExportMethod::JsonAll => self.session().json_as_jsvalue(true, None).await?.as_blob(),
-            ExportMethod::Ndjson => self
-                .session()
-                .ndjson_as_jsvalue(false, None)
-                .await?
-                .as_blob(),
-            ExportMethod::NdjsonSelected => self
-                .session()
-                .ndjson_as_jsvalue(false, viewport)
-                .await?
-                .as_blob(),
-            ExportMethod::NdjsonAll => self
-                .session()
-                .ndjson_as_jsvalue(true, None)
-                .await?
-                .as_blob(),
-            ExportMethod::Arrow => self
-                .session()
-                .arrow_as_jsvalue(false, None)
-                .await?
-                .as_blob(),
-            ExportMethod::ArrowSelected => self
-                .session()
-                .arrow_as_jsvalue(false, viewport)
-                .await?
-                .as_blob(),
-            ExportMethod::ArrowAll => self.session().arrow_as_jsvalue(true, None).await?.as_blob(),
-            ExportMethod::Html => self.html_as_jsvalue().await?.as_blob(),
-            ExportMethod::Plugin if self.renderer().is_chart() => self.png_as_jsvalue().await,
-            ExportMethod::Plugin => self.txt_as_jsvalue(viewport).await,
-            ExportMethod::JsonConfig => {
-                js_sys::JSON::stringify(&self.get_viewer_config().await?.encode()?)?.as_blob()
-            },
-        }
-    }
-
-    /// Generate a result `Blob` for all types of `ExportMethod`.
-    async fn export_method_to_jsvalue(&self, method: ExportMethod) -> ApiResult<JsValue> {
-        let viewport = self.renderer().get_selection();
-
-        Ok(match method {
-            ExportMethod::Csv => self.session().csv_as_jsvalue(false, None).await?.into(),
-            ExportMethod::CsvSelected => {
-                self.session().csv_as_jsvalue(false, viewport).await?.into()
-            },
-            ExportMethod::CsvAll => self.session().csv_as_jsvalue(true, None).await?.into(),
-            ExportMethod::Json => self.session().json_as_jsvalue(false, None).await?.into(),
-            ExportMethod::JsonSelected => self
-                .session()
-                .json_as_jsvalue(false, viewport)
-                .await?
-                .into(),
-            ExportMethod::JsonAll => self.session().json_as_jsvalue(true, None).await?.into(),
-            ExportMethod::Ndjson => self.session().ndjson_as_jsvalue(false, None).await?.into(),
-            ExportMethod::NdjsonSelected => self
-                .session()
-                .ndjson_as_jsvalue(false, viewport)
-                .await?
-                .into(),
-            ExportMethod::NdjsonAll => self.session().ndjson_as_jsvalue(true, None).await?.into(),
-            ExportMethod::Arrow => self.session().arrow_as_jsvalue(false, None).await?.into(),
-            ExportMethod::ArrowSelected => self
-                .session()
-                .arrow_as_jsvalue(false, viewport)
-                .await?
-                .into(),
-            ExportMethod::ArrowAll => self.session().arrow_as_jsvalue(true, None).await?.into(),
-            ExportMethod::Html => self.html_as_jsvalue().await?,
-            ExportMethod::Plugin if self.renderer().is_chart() => {
-                self.png_as_jsvalue().await?.into()
-            },
-            ExportMethod::Plugin => self.txt_as_jsvalue(viewport).await?.into(),
-            ExportMethod::JsonConfig => self.get_viewer_config().await?.encode()?,
-        })
+                .encode()?,
+        )?
+        .as_blob(),
     }
 }
 
-impl<T: HasRenderer + HasSession + HasPresentation> CopyExportModel for T {}
+/// Generate a result `JsValue` for all types of [`ExportMethod`].
+pub async fn export_method_to_jsvalue(
+    session: &Session,
+    renderer: &Renderer,
+    presentation: &Presentation,
+    method: ExportMethod,
+) -> ApiResult<JsValue> {
+    let viewport = renderer.get_selection();
+
+    Ok(match method {
+        ExportMethod::Csv => crate::queries::csv_as_jsvalue(session, false, None)
+            .await?
+            .into(),
+        ExportMethod::CsvSelected => crate::queries::csv_as_jsvalue(session, false, viewport)
+            .await?
+            .into(),
+        ExportMethod::CsvAll => crate::queries::csv_as_jsvalue(session, true, None)
+            .await?
+            .into(),
+        ExportMethod::Json => crate::queries::json_as_jsvalue(session, false, None)
+            .await?
+            .into(),
+        ExportMethod::JsonSelected => crate::queries::json_as_jsvalue(session, false, viewport)
+            .await?
+            .into(),
+        ExportMethod::JsonAll => crate::queries::json_as_jsvalue(session, true, None)
+            .await?
+            .into(),
+        ExportMethod::Ndjson => crate::queries::ndjson_as_jsvalue(session, false, None)
+            .await?
+            .into(),
+        ExportMethod::NdjsonSelected => crate::queries::ndjson_as_jsvalue(session, false, viewport)
+            .await?
+            .into(),
+        ExportMethod::NdjsonAll => crate::queries::ndjson_as_jsvalue(session, true, None)
+            .await?
+            .into(),
+        ExportMethod::Arrow => crate::queries::arrow_as_jsvalue(session, false, None)
+            .await?
+            .into(),
+        ExportMethod::ArrowSelected => crate::queries::arrow_as_jsvalue(session, false, viewport)
+            .await?
+            .into(),
+        ExportMethod::ArrowAll => crate::queries::arrow_as_jsvalue(session, true, None)
+            .await?
+            .into(),
+        ExportMethod::Html => html_as_jsvalue(session, renderer, presentation).await?,
+        ExportMethod::Plugin if renderer.is_chart() => {
+            png_as_jsvalue(session, renderer).await?.into()
+        },
+        ExportMethod::Plugin => txt_as_jsvalue(session, renderer, viewport).await?.into(),
+        ExportMethod::JsonConfig => get_viewer_config(session, renderer, presentation)
+            .await?
+            .encode()?,
+    })
+}

@@ -1,20 +1,42 @@
 {
     "name": "@perspective-dev/viewer",
     "version": "4.4.1",
-    "description": "The `<perspective-viewer>` Custom Element, frontend for Perspective.js",
+    "description": "The `<perspective-viewer>` Custom Element, frontend for Perspective",
+    "keywords": [
+        "perspective",
+        "data",
+        "analytics",
+        "visualization",
+        "datagrid",
+        "charts",
+        "web-component",
+        "wasm",
+        "arrow"
+    ],
+    "homepage": "https://perspective.finos.org",
     "repository": {
         "type": "git",
         "url": "https://github.com/perspective-dev/perspective"
     },
     "type": "module",
     "license": "Apache-2.0",
+    "sideEffects": true,
     "unpkg": "dist/cdn/perspective-viewer.js",
     "jsdelivr": "dist/cdn/perspective-viewer.js",
     "exports": {
         ".": {
             "types": "./dist/esm/perspective-viewer.d.ts",
+            "import": "./dist/esm/perspective-viewer.js",
             "default": "./dist/esm/perspective-viewer.js"
         },
+        "./inline": {
+            "types": "./dist/esm/perspective-viewer.d.ts",
+            "import": "./dist/esm/perspective-viewer.inline.js",
+            "default": "./dist/esm/perspective-viewer.inline.js"
+        },
+        "./themes": "./dist/css/themes.css",
+        "./themes/*.css": "./dist/css/*.css",
+        "./themes/intl/*.css": "./dist/css/intl/*.css",
         "./dist/*": "./dist/*",
         "./src/*": "./src/*",
         "./test/*": "./test/*",

@@ -11,51 +11,102 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { WebGLContextManager } from "../../webgl/context-manager";
-import type { CandlestickChart } from "./candlestick";
+import type { CandlestickChart, CandlestickAutoFitCache } from "./candlestick";
 import { PlotLayout } from "../../layout/plot-layout";
-import { resolveTheme } from "../../theme/theme";
 import { sampleGradient } from "../../theme/gradient";
 import { renderInPlotFrame } from "../../webgl/plot-frame";
 import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
 import { computeNiceTicks } from "../../layout/ticks";
-import { type AxisDomain } from "../../chrome/numeric-axis";
-import { renderBarAxesChrome, renderBarGridlines } from "../../chrome/bar-axis";
+import { type AxisDomain } from "../../axis/numeric-axis";
+import {
+    renderBarAxesChrome,
+    renderBarGridlines,
+    type BarCategoryAxis,
+} from "../../axis/bar-axis";
 import {
     measureCategoricalAxisHeight,
     type CategoricalDomain,
-} from "../../chrome/categorical-axis";
-import { drawCandlesticks } from "./glyphs/draw-candlesticks";
-import { drawOHLC } from "./glyphs/draw-ohlc";
+} from "../../axis/categorical-axis";
 import { buildCandlestickTooltipLines } from "./candlestick-interact";
 import {
     computeVisibleExtent,
     type VisibleExtent,
 } from "../common/visible-extent";
 
+/**
+ * Resolve up/down body colors from `theme.gradientStops`. Cached on the
+ * chart via `_upDownColorKey` (reference identity of the stops array)
+ * — only `restyle()` (which clears the theme cache via
+ * `invalidateTheme`) or a data load with a fresh theme triggers
+ * resampling. Legacy code re-sampled every frame.
+ */
+export function ensureUpDownColors(chart: CandlestickChart): void {
+    const theme = chart._resolveTheme();
+    const stops = theme.gradientStops;
+    if (chart._upDownColorKey === stops) {
+        return;
+    }
+
+    const upSample = sampleGradient(stops, 1.0);
+    const downSample = sampleGradient(stops, 0.0);
+    chart._upColor = [upSample[0], upSample[1], upSample[2]];
+    chart._downColor = [downSample[0], downSample[1], downSample[2]];
+    chart._upDownColorKey = stops;
+}
+
+/**
+ * Drop persistent body / wick / OHLC vertex buffers. Subsequent draws
+ * no-op until the next {@link rebuildGlyphBuffers} call.
+ */
+export function invalidateGlyphBuffers(chart: CandlestickChart): void {
+    chart._glyphs.bodyWick.invalidateBuffers(chart);
+    chart._glyphs.ohlc.invalidateBuffers(chart);
+}
+
+/**
+ * Rebuild the persistent body / wick / OHLC vertex buffers. Reads
+ * `_candles` (columnar) plus the cached `_upColor` / `_downColor` to
+ * populate the GPU buffers exactly once per data load. Subsequent pan/
+ * zoom redraws bind + dispatch with no uploads.
+ */
+export function rebuildGlyphBuffers(
+    chart: CandlestickChart,
+    glManager: WebGLContextManager,
+): void {
+    chart._glyphs.bodyWick.rebuildBuffers(chart, glManager);
+    chart._glyphs.ohlc.rebuildBuffers(chart, glManager);
+}
+
 export function renderCandlestickFrame(
     chart: CandlestickChart,
     glManager: WebGLContextManager,
 ): void {
     const gl = glManager.gl;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = glManager.dpr;
     const cssWidth = gl.canvas.width / dpr;
     const cssHeight = gl.canvas.height / dpr;
-    if (cssWidth <= 0 || cssHeight <= 0) return;
-    if (chart._numCategories === 0) return;
+    if (cssWidth <= 0 || cssHeight <= 0) {
+        return;
+    }
 
-    const themeEl = (chart._gridlineCanvas!.getRootNode() as ShadowRoot).host;
-    const theme = resolveTheme(themeEl);
+    if (chart._numCategories === 0) {
+        return;
+    }
+
+    const theme = chart._resolveTheme();
 
     // Up/down colors sampled at the extremes of the theme gradient.
-    // Matches the sign-aware convention (value 0 → gradient midpoint,
-    // positive → top of gradient, negative → bottom).
-    const upSample = sampleGradient(theme.gradientStops, 1.0);
-    const downSample = sampleGradient(theme.gradientStops, 0.0);
-    chart._upColor = [upSample[0], upSample[1], upSample[2]];
-    chart._downColor = [downSample[0], downSample[1], downSample[2]];
+    // Cached on the chart — `ensureUpDownColors` is a no-op when the
+    // gradient-stops reference matches the previous call. `restyle()`
+    // clears the cache via `invalidateTheme`, and the data-load path
+    // refreshes it before rebuilding glyph buffers.
+    ensureUpDownColors(chart);
 
-    const xDomainMin = -0.5;
-    const xDomainMax = chart._numCategories - 0.5;
+    const numericCat = chart._categoryAxisMode === "numeric";
+    const xDomainMin = numericCat ? chart._numericCategoryDomain!.min : -0.5;
+    const xDomainMax = numericCat
+        ? chart._numericCategoryDomain!.max
+        : chart._numCategories - 0.5;
     if (chart._zoomController) {
         chart._zoomController.setBaseDomain(
             xDomainMin,
@@ -64,6 +115,7 @@ export function renderCandlestickFrame(
             chart._yDomain.max,
         );
     }
+
     const vis = chart._zoomController
         ? chart._zoomController.getVisibleDomain()
         : {
@@ -90,27 +142,40 @@ export function renderCandlestickFrame(
 
     const hasXLabel = chart._groupBy.length > 0;
 
-    const estLeft = 55 + 16;
-    const estRight = 16;
-    const estPlotWidth = Math.max(1, cssWidth - estLeft - estRight);
     const provisionalDomain: CategoricalDomain = {
         levels: chart._rowPaths,
         numRows: chart._numCategories,
         levelLabels: chart._groupBy.slice(),
     };
-    const bottomExtra = measureCategoricalAxisHeight(
-        provisionalDomain,
-        estPlotWidth,
-    );
 
-    const layout = new PlotLayout(cssWidth, cssHeight, {
-        hasXLabel,
-        hasYLabel: true,
-        hasLegend: false,
-        bottomExtra,
-    });
+    let layout: PlotLayout;
+    if (numericCat) {
+        layout = new PlotLayout(cssWidth, cssHeight, {
+            hasXLabel,
+            hasYLabel: true,
+            hasLegend: false,
+            bottomExtra: 24,
+        });
+    } else {
+        const estLeft = 55 + 16;
+        const estRight = 16;
+        const estPlotWidth = Math.max(1, cssWidth - estLeft - estRight);
+        const bottomExtra = measureCategoricalAxisHeight(
+            provisionalDomain,
+            estPlotWidth,
+        );
+        layout = new PlotLayout(cssWidth, cssHeight, {
+            hasXLabel,
+            hasYLabel: true,
+            hasLegend: false,
+            bottomExtra,
+        });
+    }
+
     chart._lastLayout = layout;
-    if (chart._zoomController) chart._zoomController.updateLayout(layout);
+    if (chart._zoomController) {
+        chart._zoomController.updateLayout(layout);
+    }
 
     const projection = layout.buildProjectionMatrix(
         vis.xMin,
@@ -118,6 +183,10 @@ export function renderCandlestickFrame(
         vis.yMin,
         vis.yMax,
         "y",
+        undefined,
+        undefined,
+        chart._categoryOrigin,
+        0,
     );
 
     const yTicks = computeNiceTicks(vis.yMin, vis.yMax, 6);
@@ -131,20 +200,29 @@ export function renderCandlestickFrame(
     };
 
     if (chart._gridlineCanvas) {
-        renderBarGridlines(chart._gridlineCanvas, layout, yTicks, theme);
+        renderBarGridlines(
+            chart._gridlineCanvas,
+            layout,
+            yTicks,
+            theme,
+            glManager.dpr,
+        );
     }
 
-    renderInPlotFrame(gl, layout, () => {
+    renderInPlotFrame(gl, layout, glManager.dpr, () => {
         if (chart._defaultChartType === "ohlc") {
-            drawOHLC(chart, gl, glManager, projection);
+            chart._glyphs.ohlc.draw(chart, gl, glManager, projection);
         } else {
-            drawCandlesticks(chart, gl, glManager, projection);
+            chart._glyphs.bodyWick.draw(chart, gl, glManager, projection);
         }
     });
 
     chart._lastXDomain = xDomain;
     chart._lastYDomain = yDomain;
     chart._lastYTicks = yTicks;
+    chart._lastCatTicks = numericCat
+        ? computeNiceTicks(vis.xMin, vis.xMax, 6)
+        : null;
     renderCandlestickChromeOverlay(chart);
 }
 
@@ -152,43 +230,95 @@ export function renderCandlestickChromeOverlay(chart: CandlestickChart): void {
     if (
         !chart._chromeCanvas ||
         !chart._lastLayout ||
-        !chart._lastXDomain ||
         !chart._lastYDomain ||
         !chart._lastYTicks
-    )
+    ) {
         return;
+    }
 
-    const theme = resolveTheme(chart._chromeCanvas);
+    const theme = chart._resolveTheme();
+    let catAxis: BarCategoryAxis;
+    if (
+        chart._categoryAxisMode === "numeric" &&
+        chart._numericCategoryDomain &&
+        chart._lastCatTicks
+    ) {
+        catAxis = {
+            mode: "numeric",
+            domain: {
+                min: chart._numericCategoryDomain.min,
+                max: chart._numericCategoryDomain.max,
+                isDate: chart._numericCategoryDomain.isDate,
+                label: chart._numericCategoryDomain.label,
+            },
+            ticks: chart._lastCatTicks,
+        };
+    } else if (chart._lastXDomain) {
+        catAxis = { mode: "category", domain: chart._lastXDomain };
+    } else {
+        return;
+    }
+
+    // OHLC value axis: all four price columns share the value axis;
+    // pick the first available (Open is always present, the rest can
+    // be null per `candlestick-build.ts`).
+    const valueColumn =
+        chart._columnSlots[0] ??
+        chart._columnSlots[1] ??
+        chart._columnSlots[2] ??
+        chart._columnSlots[3];
+    const xColumn = chart._groupBy[0];
     renderBarAxesChrome(
         chart._chromeCanvas,
-        chart._lastXDomain,
+        catAxis,
         chart._lastYDomain,
         chart._lastYTicks,
         chart._lastLayout,
         theme,
+        chart._glManager?.dpr ?? 1,
+        undefined,
+        undefined,
+        false,
+        {
+            value: chart.getColumnFormatter(valueColumn, "tick"),
+            category: chart.getColumnFormatter(xColumn, "tick"),
+        },
     );
 
-    if (chart._hoveredIdx >= 0 && chart._hoveredIdx < chart._candles.length) {
+    if (chart._hoveredIdx >= 0 && chart._hoveredIdx < chart._candles.count) {
         renderCandlestickTooltip(chart);
     }
 }
 
 function renderCandlestickTooltip(chart: CandlestickChart): void {
-    if (!chart._chromeCanvas || !chart._lastLayout) return;
-    const candle = chart._candles[chart._hoveredIdx];
-    if (!candle) return;
+    if (!chart._chromeCanvas || !chart._lastLayout) {
+        return;
+    }
+
+    const i = chart._hoveredIdx;
+    const candles = chart._candles;
+    if (i < 0 || i >= candles.count) {
+        return;
+    }
 
     const layout = chart._lastLayout;
-    const pos = layout.dataToPixel(
-        candle.xCenter,
-        (candle.high + candle.low) / 2,
+    const xCenter = candles.xCenter[i];
+    const yMid = (candles.high[i] + candles.low[i]) / 2;
+    const pos = layout.dataToPixel(xCenter, yMid);
+    const lines = buildCandlestickTooltipLines(chart, i);
+    const theme = chart._resolveTheme();
+    renderCanvasTooltip(
+        chart._chromeCanvas,
+        pos,
+        lines,
+        layout,
+        theme,
+        chart._glManager?.dpr ?? 1,
+        {
+            crosshair: false,
+            highlightRadius: 0,
+        },
     );
-    const lines = buildCandlestickTooltipLines(chart, candle);
-    const theme = resolveTheme(chart._chromeCanvas);
-    renderCanvasTooltip(chart._chromeCanvas, pos, lines, layout, theme, {
-        crosshair: false,
-        highlightRadius: 0,
-    });
 }
 
 /**
@@ -198,8 +328,7 @@ function renderCandlestickTooltip(chart: CandlestickChart): void {
  * `chart._autoFitCache`; hover-only redraws hit the cache.
  *
  * Cache lifetime: reset on data upload ([candlestick.ts]
- * `uploadAndRender`). No legend / hidden-series path exists on this
- * chart, so no additional invalidation is required today.
+ * `uploadAndRender`).
  */
 function computeVisibleCandleExtent(
     chart: CandlestickChart,
@@ -208,25 +337,51 @@ function computeVisibleCandleExtent(
 ): VisibleExtent {
     const cache = chart._autoFitCache;
     if (cache && cache.xMin === visXMin && cache.xMax === visXMax) {
-        // Cache hit — return the stored extent as a VisibleExtent.
         return cache;
     }
 
-    const next =
-        cache ?? ({} as NonNullable<CandlestickChart["_autoFitCache"]>);
+    const next = cache ?? newCandlestickAutoFitCache();
     next.xMin = visXMin;
     next.xMax = visXMax;
-    computeVisibleExtent(
-        chart._candles,
-        visXMin,
-        visXMax,
-        (c, out) => {
-            out.cat = c.xCenter;
-            out.lo = c.low;
-            out.hi = c.high;
-        },
-        next,
-    );
+
+    // Walk the columnar storage directly; the legacy form built a
+    // closure adapter per call, defeating monomorphism in
+    // `computeVisibleExtent`.
+    const candles = chart._candles;
+    let lo = Infinity;
+    let hi = -Infinity;
+    let hasFit = false;
+    const xC = candles.xCenter;
+    const lows = candles.low;
+    const highs = candles.high;
+    for (let j = 0; j < candles.count; j++) {
+        const cx = xC[j];
+        if (cx < visXMin || cx > visXMax) {
+            continue;
+        }
+
+        if (lows[j] < lo) {
+            lo = lows[j];
+        }
+
+        if (highs[j] > hi) {
+            hi = highs[j];
+        }
+
+        hasFit = true;
+    }
+
+    next.min = hasFit ? lo : 0;
+    next.max = hasFit ? hi : 1;
+    next.hasFit = hasFit;
     chart._autoFitCache = next;
+
+    // Reference suppression — `computeVisibleExtent` retained for the
+    // shared common helper but no longer used in this fast path.
+    void computeVisibleExtent;
     return next;
+}
+
+function newCandlestickAutoFitCache(): CandlestickAutoFitCache {
+    return { xMin: 0, xMax: 0, min: 0, max: 1, hasFit: false };
 }

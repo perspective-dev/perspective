@@ -48,8 +48,9 @@ impl ChartType {
 }
 
 /// Per-column render-style config for numeric aggregates in series charts
-/// (currently Y Bar). Flattened into `ColumnConfigValues`, so the JSON
-/// shape at the viewer boundary is `{ "chart_type": "line", "stack": false }`.
+/// (currently Y Bar). Stored flat in the column's
+/// `serde_json::Map<String, serde_json::Value>`, so the JSON shape at the
+/// viewer boundary is `{ "chart_type": "line", "stack": false }`.
 ///
 /// Default `Bar` + `None` stack serializes as an empty object so plugins
 /// that never touch these fields don't pay any JSON overhead.
@@ -67,9 +68,9 @@ pub struct NumberSeriesStyleConfig {
     pub stack: Option<bool>,
 }
 
-/// Defaults-only shape returned by `plugin.column_style_controls`. Presence
-/// of `Some(...)` on `ColumnStyleOpts.number_series_style` is the signal
-/// for the sidebar to render the chart-type picker.
+/// Defaults-only shape carried by `ControlSpec::NumberSeriesStyle`. The
+/// presence of this control in a plugin's `column_config_schema` is the
+/// signal for the sidebar to render the chart-type picker.
 #[derive(Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
 pub struct NumberSeriesStyleDefaultConfig {
     pub chart_type: ChartType,

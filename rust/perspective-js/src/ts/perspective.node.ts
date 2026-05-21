@@ -121,7 +121,7 @@ export async function cwd_static_file_handler(
     request: http.IncomingMessage,
     response: http.ServerResponse<http.IncomingMessage>,
     assets = ["./"],
-    { debug = true } = {},
+    { debug = false } = {},
 ) {
     let url =
         request.url
@@ -143,10 +143,12 @@ export async function cwd_static_file_handler(
                     if (debug) {
                         console.log(`200 ${url}`);
                     }
+
                     response.writeHead(200, {
                         "Content-Type": contentType,
                         "Access-Control-Allow-Origin": "*",
                     });
+
                     if (extname === ".arrow" || extname === ".feather") {
                         response.end(content, "utf8");
                     } else {

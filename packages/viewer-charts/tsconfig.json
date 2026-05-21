@@ -7,7 +7,7 @@
         "outDir": "./dist/esm",
         "rootDir": "./src/ts",
         "moduleResolution": "bundler",
-        "skipLibCheck": true,
+        "skipLibCheck": false,
         "resolveJsonModule": true,
         "strict": true,
         "noImplicitAny": true,

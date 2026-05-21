@@ -10,11 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type {
-    ColumnOverrides,
-    DatagridPluginElement,
-    RegularTable,
-} from "../types.js";
+import type { ColumnOverrides, DatagridPluginElement } from "../types.js";
 
 interface RegularTableWithOverrides {
     restoreColumnSizes(overrides: Record<number, number | undefined>): void;
@@ -60,6 +56,7 @@ export function restore_column_size_overrides(
                 | undefined;
         } else {
             const index = this.model!._column_paths.indexOf(key);
+
             // Skip keys that don't resolve to a known column — e.g. on the
             // first draw after `activate`, `_column_paths` has not yet been
             // populated by the data listener, so we leave any existing
@@ -68,6 +65,7 @@ export function restore_column_size_overrides(
             if (index === -1) {
                 continue;
             }
+
             overrides[index + tree_header_offset] = old_sizes[key] as
                 | number
                 | undefined;

@@ -20,7 +20,9 @@ import { NULL_NODE, type NodeStore } from "../common/node-store";
  */
 const MIN_VISIBLE_ARC_AREA = 4;
 
-/** Inner radius: reserved for the current-root drill-up target. */
+/**
+ * Inner radius: reserved for the current-root drill-up target.
+ */
 const INNER_RING_PX = 30;
 
 /**
@@ -38,7 +40,10 @@ function maxDepthBelow(store: NodeStore, currentRootId: number): number {
         sp--;
         const id = stack[sp];
         const d = store.depth[id] - baseDepth;
-        if (d > maxDepth) maxDepth = d;
+        if (d > maxDepth) {
+            maxDepth = d;
+        }
+
         for (
             let c = store.firstChild[id];
             c !== NULL_NODE;
@@ -49,9 +54,11 @@ function maxDepthBelow(store: NodeStore, currentRootId: number): number {
                 bigger.set(stack);
                 stack = bigger;
             }
+
             stack[sp++] = c;
         }
     }
+
     return maxDepth;
 }
 
@@ -100,7 +107,10 @@ function partitionChildren(
     baseDepth: number,
 ): void {
     const totalValue = store.value[parentId];
-    if (totalValue <= 0) return;
+    if (totalValue <= 0) {
+        return;
+    }
+
     const span = a1 - a0;
 
     let cursor = a0;
@@ -110,7 +120,10 @@ function partitionChildren(
         c = store.nextSibling[c]
     ) {
         const v = store.value[c];
-        if (v <= 0) continue;
+        if (v <= 0) {
+            continue;
+        }
+
         const frac = v / totalValue;
         const childA0 = cursor;
         const childA1 = cursor + span * frac;
@@ -130,7 +143,9 @@ function partitionChildren(
         const midR = (childR0 + childR1) / 2;
         const arcLen = arcSpan * midR; // pixel length along arc
         const area = arcLen * ringWidth;
-        if (area < MIN_VISIBLE_ARC_AREA) continue;
+        if (area < MIN_VISIBLE_ARC_AREA) {
+            continue;
+        }
 
         if (store.firstChild[c] !== NULL_NODE) {
             partitionChildren(
@@ -181,6 +196,7 @@ export function collectVisibleArcsAppend(
     if (!chart._visibleNodeIds || chart._visibleNodeIds.length < store.count) {
         chart._visibleNodeIds = new Int32Array(store.count);
     }
+
     const out = chart._visibleNodeIds;
     let outIdx = startOffset;
 
@@ -191,7 +207,9 @@ export function collectVisibleArcsAppend(
     while (sp > 0) {
         sp--;
         const id = stack[sp];
-        if (value[id] <= 0) continue;
+        if (value[id] <= 0) {
+            continue;
+        }
 
         out[outIdx++] = id;
 
@@ -199,7 +217,9 @@ export function collectVisibleArcsAppend(
         const midR = (r0[id] + r1[id]) / 2;
         const arcLen = arcSpan * midR;
         const ringWidth = r1[id] - r0[id];
-        if (arcLen * ringWidth < MIN_VISIBLE_ARC_AREA) continue;
+        if (arcLen * ringWidth < MIN_VISIBLE_ARC_AREA) {
+            continue;
+        }
 
         for (let c = firstChild[id]; c !== NULL_NODE; c = nextSibling[c]) {
             if (sp >= stack.length) {
@@ -207,6 +227,7 @@ export function collectVisibleArcsAppend(
                 bigger.set(stack);
                 stack = bigger;
             }
+
             stack[sp++] = c;
         }
     }

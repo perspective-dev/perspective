@@ -481,6 +481,34 @@ impl Client {
         Ok(Table(self.client.open_table(entity_id).await?))
     }
 
+    /// Unsafely gets a [`View`] by raw ID, useful for JavaScript multi-threaded
+    /// (via Web Worker) context where a standard `View` cannot otherwise be
+    /// shared because its wrapper is not serializable.
+    ///
+    /// # Safety
+    ///
+    /// This method is unsafe because the lifetime of a [`View`] is bound to
+    /// the [`Client`] which created it.
+    ///
+    /// The caller must guarantee that `entity_id` corresponds to a live
+    /// [`crate::View`] on the connected server (obtained from another
+    /// [`Client`]'s [`crate::View::get_name`] and forwarded across the
+    /// serialization boundary).
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// const view = client.__unsafe_open_view(name_from_main_thread);
+    /// const cols = await view.to_columns();
+    /// ```
+    #[wasm_bindgen]
+    pub fn __unsafe_open_view(&self, entity_id: String) -> crate::view::View {
+        crate::view::View(perspective_client::View::new(
+            entity_id,
+            self.client.clone(),
+        ))
+    }
+
     /// Retrieves the names of all tables that this client has access to.
     ///
     /// `name` is a string identifier unique to the [`Table`] (per [`Client`]),

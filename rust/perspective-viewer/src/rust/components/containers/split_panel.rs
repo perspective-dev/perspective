@@ -20,7 +20,7 @@ use yew::html::Scope;
 use yew::prelude::*;
 
 use crate::components::style::LocalStyle;
-use crate::{css, maybe};
+use crate::css;
 
 #[derive(Properties, Default)]
 pub struct SplitPanelProps {
@@ -359,14 +359,14 @@ impl Drop for ResizingState {
     /// `body`. Without this, the `Closure` objects would not leak, but the
     /// document will continue to call them, causing runtime exceptions.
     fn drop(&mut self) {
-        let result: ApiResult<()> = maybe! {
+        let result: ApiResult<()> = (|| {
             let mousemove = self.mousemove.as_ref().unchecked_ref();
             global::body().remove_event_listener_with_callback("mousemove", mousemove)?;
             let mouseup = self.mouseup.as_ref().unchecked_ref();
             global::body().remove_event_listener_with_callback("mouseup", mouseup)?;
             self.release_cursor()?;
             Ok(())
-        };
+        })();
 
         result.expect("Drop failed")
     }

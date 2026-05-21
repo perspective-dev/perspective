@@ -51,16 +51,16 @@ impl CaretPosition for web_sys::HtmlElement {
     }
 
     fn get_caret_position(&self) -> Option<u32> {
-        maybe! {
+        (|| -> ApiResult<u32> {
             let root = self.get_root_node().unchecked_into::<web_sys::Document>();
             let selection = root.get_selection()?.into_apierror()?;
             if selection.range_count() > 0 {
                 let range = selection.get_range_at(0)?;
-                range.end_offset()
+                Ok(range.end_offset()?)
             } else {
-                Err(wasm_bindgen::JsValue::UNDEFINED)
+                Err(wasm_bindgen::JsValue::UNDEFINED.into())
             }
-        }
+        })()
         .ok()
     }
 }

@@ -12,32 +12,27 @@
 
 use perspective_client::config::ViewConfigUpdate;
 use perspective_js::utils::ApiError;
-use wasm_bindgen::JsValue;
 use web_sys::*;
 use yew::prelude::*;
 
-use crate::custom_events::CustomEvents;
 use crate::renderer::Renderer;
-use crate::session::{Session, TableErrorState, TableLoadState, ViewStats};
+use crate::session::{Session, SessionProps, TableLoadState};
 use crate::utils::*;
 
 /// Value-prop version: no PubSub subscriptions, no reducer.
 /// The parent (`StatusBar`) re-renders this component whenever
-/// `update_count`, `error`, or `stats` change (via root's
-/// `IncrementUpdateCount` / `DecrementUpdateCount` / `UpdateSession` messages).
+/// `session_props.error/has_table/stats` or `update_count` change (via
+/// root's `IncrementUpdateCount` / `DecrementUpdateCount` / `UpdateSession`
+/// messages).
 #[derive(PartialEq, Properties)]
 pub struct StatusIndicatorProps {
-    pub custom_events: CustomEvents,
     pub renderer: Renderer,
     pub session: Session,
     /// Number of in-flight renders (>0 → "updating" spinner).
     pub update_count: u32,
-    /// Full error state (if any), used for the error dialog and reconnect.
-    pub error: Option<TableErrorState>,
-    /// Whether a table has been loaded.
-    pub has_table: Option<TableLoadState>,
-    /// Row/column statistics — used to distinguish "loading" from "connected".
-    pub stats: Option<ViewStats>,
+    /// Snapshot of session value props — read for `error`, `has_table`,
+    /// `stats` to derive the icon state.
+    pub session_props: SessionProps,
 }
 
 /// An indicator component which displays the current status of the perspective
@@ -46,19 +41,22 @@ pub struct StatusIndicatorProps {
 #[function_component]
 pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
     let has_table_cells = props
+        .session_props
         .stats
         .as_ref()
         .and_then(|s| s.num_table_cells)
         .is_some();
 
-    let state = if let Some(err) = &props.error {
+    let state = if let Some(err) = &props.session_props.error {
         StatusIconState::Errored(
             err.message(),
             err.stacktrace(),
             err.kind(),
             err.is_reconnect(),
         )
-    } else if !has_table_cells && matches!(props.has_table, Some(TableLoadState::Loading)) {
+    } else if !has_table_cells
+        && matches!(props.session_props.has_table, Some(TableLoadState::Loading))
+    {
         StatusIconState::Loading
     } else if props.update_count > 0 {
         StatusIconState::Updating
@@ -78,13 +76,8 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
     };
 
     let onclick = use_async_callback(
-        (
-            props.session.clone(),
-            props.renderer.clone(),
-            props.custom_events.clone(),
-            state.clone(),
-        ),
-        async move |_: MouseEvent, (session, renderer, custom_events, state)| {
+        (props.session.clone(), props.renderer.clone(), state.clone()),
+        async move |_: MouseEvent, (session, renderer, state)| {
             match &state {
                 StatusIconState::Errored(..) => {
                     session.reconnect().await?;
@@ -96,7 +89,7 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
                         .await?;
                 },
                 StatusIconState::Normal => {
-                    custom_events.dispatch_event("status-indicator-click", JsValue::UNDEFINED)?;
+                    session.status_indicator_clicked.emit(());
                 },
                 _ => {},
             };

@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import EXAMPLES from "../data/features.js";
-import { SUPERSTORE_TABLE } from "../data/superstore.js";
+import { WORKER, SUPERSTORE_TABLE } from "../data/superstore.js";
 import { getColorMode, getPerspectiveTheme } from "./theme.js";
 
 function showOverlay(index: number) {
@@ -31,9 +31,10 @@ function showOverlay(index: number) {
     document.body.appendChild(overlay);
 
     SUPERSTORE_TABLE.then((table: any) => {
-        viewer.load(table);
+        viewer.load(WORKER);
         viewer.restore({
             plugin: "Datagrid",
+            table: "superstore",
             group_by: [],
             expressions: {},
             split_by: [],
@@ -61,9 +62,7 @@ export async function initGallery(container: HTMLElement) {
     img.alt = "Perspective feature gallery";
     img.src = `/features/montage${isDark ? "_dark" : "_light"}.png`;
     img.addEventListener("click", (event: MouseEvent) => {
-        const col = Math.floor(
-            (event.offsetX / img.offsetWidth) * map.columns,
-        );
+        const col = Math.floor((event.offsetX / img.offsetWidth) * map.columns);
         const row = Math.floor((event.offsetY / img.offsetHeight) * rows);
         const tileIndex = row * map.columns + col;
         const featureIndex = map.order[tileIndex];

@@ -91,7 +91,9 @@ export async function activate(
             area: SelectionArea,
             isDeselect: boolean,
         ) => {
-            if (model._edit_mode !== "SELECT_ROW_TREE") return;
+            if (model._edit_mode !== "SELECT_ROW_TREE") {
+                return;
+            }
 
             // Store the selected row identity on the model so it persists
             // even when the selected row scrolls out of the viewport.

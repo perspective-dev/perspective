@@ -10,14 +10,15 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+import type { Context2D } from "../canvas-types";
 import { PlotLayout } from "../../layout/plot-layout";
 import type { Theme } from "../../theme/theme";
 import type {
     CategoricalDomain,
     CategoricalLevel,
-} from "../../chrome/categorical-axis";
-import { runsInRange } from "../../chrome/categorical-axis-core";
-import { truncateLabel } from "../../chrome/label-geometry";
+} from "../../axis/categorical-axis";
+import { runsInRange } from "../../axis/categorical-axis-core";
+import { truncateLabel } from "../../axis/label-geometry";
 
 interface LevelTickLayout {
     size: number; // width in CSS pixels consumed by this level
@@ -46,9 +47,10 @@ function effectiveLevels(
     levels: CategoricalLevel[],
     opts?: CategoricalYAxisOptions,
 ): CategoricalLevel[] {
-    if (opts?.skipLeafLevel && levels.length > 1) {
+    if (opts?.skipLeafLevel && levels.length > 0) {
         return levels.slice(0, -1);
     }
+
     return levels;
 }
 
@@ -92,6 +94,7 @@ export function measureCategoricalYLevels(
             result.push({ size: w });
         }
     }
+
     return result;
 }
 
@@ -105,10 +108,16 @@ export function measureCategoricalAxisWidth(
     opts?: CategoricalYAxisOptions,
 ): number {
     const levels = effectiveLevels(domain.levels, opts);
-    if (domain.numRows === 0 || levels.length === 0) return 55;
+    if (domain.numRows === 0 || levels.length === 0) {
+        return 55;
+    }
+
     const levelLayouts = measureCategoricalYLevels(domain, opts);
     let total = 0;
-    for (const l of levelLayouts) total += l.size;
+    for (const l of levelLayouts) {
+        total += l.size;
+    }
+
     return total;
 }
 
@@ -122,14 +131,16 @@ function getLeafText(level: CategoricalLevel, row: number): string {
  * caller alongside the X axis.
  */
 export function renderCategoricalYTicks(
-    ctx: CanvasRenderingContext2D,
+    ctx: Context2D,
     layout: PlotLayout,
     domain: CategoricalDomain,
     theme: Theme,
     opts?: CategoricalYAxisOptions,
 ): void {
     const levels = effectiveLevels(domain.levels, opts);
-    if (domain.numRows === 0 || levels.length === 0) return;
+    if (domain.numRows === 0 || levels.length === 0) {
+        return;
+    }
 
     const { tickColor, labelColor, fontFamily } = theme;
     const { plotRect: plot } = layout;
@@ -144,9 +155,12 @@ export function renderCategoricalYTicks(
     // Visible Y range from the (possibly zoomed) padded Y domain.
     const visMin = Math.max(0, Math.ceil(layout.paddedYMin));
     const visMax = Math.min(domain.numRows - 1, Math.floor(layout.paddedYMax));
-    if (visMax < visMin) return;
+    if (visMax < visMin) {
+        return;
+    }
 
     const L = levels.length;
+
     // Cursor walks from the plot's left edge leftward, innermost (leaf)
     // level closest to the plot, outer levels further left.
     let xCursor = plot.x;
@@ -201,7 +215,7 @@ export function renderCategoricalYTicks(
 }
 
 function renderLeafLevel(
-    ctx: CanvasRenderingContext2D,
+    ctx: Context2D,
     layout: PlotLayout,
     level: CategoricalLevel,
     visMin: number,
@@ -218,10 +232,14 @@ function renderLeafLevel(
     ctx.beginPath();
     for (let r = visMin; r <= visMax; r++) {
         const py = categoryIndexToPixelY(layout, r);
-        if (py < plot.y - 1 || py > plot.y + plot.height + 1) continue;
+        if (py < plot.y - 1 || py > plot.y + plot.height + 1) {
+            continue;
+        }
+
         ctx.moveTo(bandRight, py);
         ctx.lineTo(bandRight - TICK_SIZE, py);
     }
+
     ctx.stroke();
 
     ctx.font = `${LABEL_FONT_PX}px ${fontFamily}`;
@@ -230,17 +248,26 @@ function renderLeafLevel(
     const labelMaxWidth = bandRight - TICK_SIZE - 4 - bandLeft - 4;
     for (let r = visMin; r <= visMax; r++) {
         const py = categoryIndexToPixelY(layout, r);
-        if (py < plot.y - 1 || py > plot.y + plot.height + 1) continue;
+        if (py < plot.y - 1 || py > plot.y + plot.height + 1) {
+            continue;
+        }
+
         const text = getLeafText(level, r);
-        if (!text) continue;
+        if (!text) {
+            continue;
+        }
+
         const truncated = truncateLabel(ctx, text, labelMaxWidth);
-        if (!truncated) continue;
+        if (!truncated) {
+            continue;
+        }
+
         ctx.fillText(truncated, bandRight - TICK_SIZE - 4, py);
     }
 }
 
 function renderOuterLevel(
-    ctx: CanvasRenderingContext2D,
+    ctx: Context2D,
     layout: PlotLayout,
     level: CategoricalLevel,
     visMin: number,
@@ -252,7 +279,9 @@ function renderOuterLevel(
 ): void {
     const plot = layout.plotRect;
     const runs = runsInRange(level.runs, visMin, visMax);
-    if (runs.length === 0) return;
+    if (runs.length === 0) {
+        return;
+    }
 
     ctx.strokeStyle = tickColor;
     ctx.fillStyle = tickColor;
@@ -268,16 +297,20 @@ function renderOuterLevel(
         const yLo = Math.max(yTop, yBot);
         const clippedHi = Math.max(plot.y, yHi);
         const clippedLo = Math.min(plot.y + plot.height, yLo);
-        if (clippedLo <= clippedHi) continue;
+        if (clippedLo <= clippedHi) {
+            continue;
+        }
 
         ctx.moveTo(bracketX, clippedHi);
         ctx.lineTo(bracketX, clippedLo);
+
         // Boundary ticks pointing inward (toward the plot).
         ctx.moveTo(bracketX, clippedHi);
         ctx.lineTo(bracketX + 3, clippedHi);
         ctx.moveTo(bracketX, clippedLo);
         ctx.lineTo(bracketX + 3, clippedLo);
     }
+
     ctx.stroke();
 
     // Centered run label, rotated -90° so long labels fit in a narrow band.
@@ -289,15 +322,23 @@ function renderOuterLevel(
         const yLo = Math.max(yTop, yBot);
         const clippedHi = Math.max(plot.y, yHi);
         const clippedLo = Math.min(plot.y + plot.height, yLo);
-        if (clippedLo <= clippedHi) continue;
+        if (clippedLo <= clippedHi) {
+            continue;
+        }
+
         const cy = (clippedHi + clippedLo) / 2;
         const cx = bandLeft + (bandRight - bandLeft - 3) / 2;
 
         const text = run.label;
-        if (!text) continue;
+        if (!text) {
+            continue;
+        }
+
         const span = clippedLo - clippedHi - 4;
         const truncated = truncateLabel(ctx, text, Math.max(0, span));
-        if (!truncated) continue;
+        if (!truncated) {
+            continue;
+        }
 
         ctx.save();
         ctx.translate(cx, cy);

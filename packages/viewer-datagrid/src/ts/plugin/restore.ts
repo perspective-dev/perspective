@@ -92,16 +92,20 @@ export function restore(
         }
     }
 
-    if ("edit_mode" in token && token.edit_mode) {
-        if (EDIT_MODES.indexOf(token.edit_mode) !== -1) {
+    if ("edit_mode" in token) {
+        if (EDIT_MODES.indexOf(token.edit_mode!) !== -1) {
             toggle_edit_mode.call(this, token.edit_mode);
         } else {
             console.error("Unknown edit mode " + token.edit_mode);
         }
+    } else {
+        toggle_edit_mode.call(this, "READ_ONLY");
     }
 
     if ("scroll_lock" in token) {
         toggle_scroll_lock.call(this, token.scroll_lock);
+    } else {
+        toggle_scroll_lock.call(this, false);
     }
 
     const datagrid = this.regular_table;

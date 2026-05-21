@@ -10,14 +10,16 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use std::collections::HashMap;
+
 use perspective_client::config::*;
 
-use crate::js::plugin::ViewConfigRequirements;
+use crate::config::PluginStaticConfig;
 use crate::session::column_defaults_update::ViewConfigUpdateExt;
 use crate::session::drag_drop_update::ViewConfigExt as DragDropExt;
 use crate::session::metadata::SessionMetadataRc;
 use crate::session::replace_expression_update::ViewConfigExt as ReplaceExprExt;
-use crate::session::{TableErrorState, ViewStats};
+use crate::session::{ColumnStats, TableErrorState, ViewStats};
 use crate::utils::*;
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -55,6 +57,13 @@ pub struct SessionProps {
     /// expression info, etc. from this snapshot instead of borrowing
     /// `Session`'s `RefCell` directly.
     pub metadata: SessionMetadataRc,
+
+    /// Snapshot of the per-column stats cache (currently `abs_max`
+    /// only), populated lazily by the `fetch_column_abs_max` task.
+    /// Cleared whenever `view_config` changes; rebuilt on each
+    /// `to_props()` call when the root component re-renders in
+    /// response to `column_stats_changed`.
+    pub column_stats: PtrEqRc<HashMap<String, ColumnStats>>,
 }
 
 impl SessionProps {
@@ -109,7 +118,7 @@ impl SessionProps {
         index: usize,
         drop: DragTarget,
         drag: DragEffect,
-        requirements: &ViewConfigRequirements,
+        config_static: &PluginStaticConfig,
     ) -> ViewConfigUpdate {
         let col_type = self
             .metadata
@@ -122,7 +131,7 @@ impl SessionProps {
             index,
             drop,
             drag,
-            requirements,
+            config_static,
             self.metadata.get_features().unwrap(),
         )
     }
@@ -132,12 +141,12 @@ impl SessionProps {
     pub fn set_update_column_defaults(
         &self,
         config_update: &mut ViewConfigUpdate,
-        requirements: &ViewConfigRequirements,
+        config_static: &PluginStaticConfig,
     ) {
         config_update.set_update_column_defaults(
             &self.metadata,
             &self.all_columns().into_iter().map(Some).collect::<Vec<_>>(),
-            requirements,
+            config_static,
         )
     }
 

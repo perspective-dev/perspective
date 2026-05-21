@@ -26,7 +26,6 @@
         "packages/react",
         "packages/viewer-datagrid",
         "packages/viewer-charts",
-        "packages/viewer-openlayers",
         "packages/workspace",
         "packages/jupyterlab",
         "packages/cli",
@@ -47,16 +46,17 @@
         "@perspective-dev/viewer": "workspace:^",
         "@perspective-dev/viewer-charts": "workspace:^",
         "@perspective-dev/viewer-datagrid": "workspace:^",
-        "@perspective-dev/viewer-openlayers": "workspace:^",
         "@perspective-dev/workspace": "workspace:^",
         "@playwright/experimental-ct-react": "catalog:",
         "@playwright/test": "catalog:",
         "chalk": "catalog:",
         "dotenv": "catalog:",
+        "eslint": "catalog:",
         "husky": "catalog:",
         "npm-run-all": "catalog:",
         "prettier": "catalog:",
-        "tsx": "catalog:"
+        "tsx": "catalog:",
+        "typescript-eslint": "catalog:"
     },
     "pnpm": {
         "overrides": {

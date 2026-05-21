@@ -17,23 +17,34 @@
  * candles, …) are laid out side by side with a small inner padding.
  */
 
-/** Fraction of a category's band width actually covered by slots. */
-export const BAND_INNER_FRAC = 0.5;
-
-/** Relative padding between adjacent slots within a band. */
-export const BAR_INNER_PAD = 0.1;
-
 export interface SlotGeometry {
-    /** Width (in data-space units) of a single slot. */
+    /**
+     * Width (in data-space units) of a single slot.
+     */
     slotWidth: number;
-    /** Half the drawable width of each slot after inner padding. */
+
+    /**
+     * Half the drawable width of each slot after inner padding.
+     */
     halfWidth: number;
 }
 
-/** Compute slot geometry for `numSlots` rectangles per category band. */
-export function computeSlotGeometry(numSlots: number): SlotGeometry {
-    const slotWidth = BAND_INNER_FRAC / Math.max(1, numSlots);
-    const halfWidth = (slotWidth * (1 - BAR_INNER_PAD)) / 2;
+/**
+ * Compute slot geometry for `numSlots` rectangles per category band.
+ *
+ * `bandInnerFrac` is the fraction of each category's band width
+ * actually covered by slots; `barInnerPad` is the relative padding
+ * between adjacent slots within a band. Both come from
+ * {@link PluginConfig.band_inner_frac} / `bar_inner_pad`. Defaults
+ * match the previous hard-coded constants (0.5 / 0.1).
+ */
+export function computeSlotGeometry(
+    numSlots: number,
+    bandInnerFrac: number = 0.5,
+    barInnerPad: number = 0.1,
+): SlotGeometry {
+    const slotWidth = bandInnerFrac / Math.max(1, numSlots);
+    const halfWidth = (slotWidth * (1 - barInnerPad)) / 2;
     return { slotWidth, halfWidth };
 }
 

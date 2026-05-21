@@ -11,11 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { save_column_size_overrides } from "../model/column_overrides.js";
-import type {
-    DatagridPluginElement,
-    DatagridPluginConfig,
-    EditMode,
-} from "../types.js";
+import type { DatagridPluginElement, DatagridPluginConfig } from "../types.js";
 
 export function save(
     this: DatagridPluginElement,

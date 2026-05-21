@@ -68,6 +68,7 @@ protobuf-src = { version = "2.1.1", optional = true }
 arrow-array = { version = "57.3.0", default-features = false }
 arrow-ipc = { version = "57.3.0", default-features = false }
 arrow-schema = { version = "57.3.0", default-features = false }
+arrow-select = { version = "57.3.0", default-features = false }
 async-lock = { version = "2.5.0" }
 futures = { version = "0.3.28" }
 indexmap = { version = "2.2.6", features = ["serde"] }

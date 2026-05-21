@@ -150,8 +150,6 @@ function set_runnable() {
     window.run.disabled = false;
 }
 
-const heatmap_plugin = await window.viewer.getPlugin("Heatmap");
-heatmap_plugin.max_cells = 100000;
 make_range(xmin, xmax, "X");
 make_range(ymin, ymax, "Y");
 window.resolution.addEventListener("input", set_runnable);

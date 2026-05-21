@@ -26,7 +26,6 @@
         "@perspective-dev/viewer": "workspace:",
         "@perspective-dev/viewer-charts": "workspace:",
         "@perspective-dev/viewer-datagrid": "workspace:",
-        "@perspective-dev/viewer-openlayers": "workspace:",
         "@perspective-dev/workspace": "workspace:",
         "commander": "catalog:",
         "puppeteer": "catalog:"

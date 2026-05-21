@@ -56,54 +56,37 @@ perspective-viewer[theme="Botanical"] {
     --psp-datagrid--neg-cell--color: #ebac21;
 
     /* perspective-viewer-botanical--webgl */
-    --psp-webgl--legend--color: #b8c9ad;
-    --psp-webgl--treemap--labels: #e0ead8;
-    --psp-webgl--treemap--hover-highlight: #e0ead8;
-    --psp-webgl--tooltip--color: #e0ead8;
-    --psp-webgl--axis-ticks--color: #b8c9ad;
-    --psp-webgl--axis-lines--color: #526b4a;
-    --psp-webgl--gridline--color: #2a4228;
-    --psp-webgl--tooltip--background: rgba(30, 52, 32, 1);
-    --psp-webgl--tooltip--border-color: #1a2e1a;
-    --psp-webgl--legend--background: var(--psp--background-color);
+    --psp-charts--legend--color: #b8c9ad;
+    --psp-charts--treemap--labels: #e0ead8;
+    --psp-charts--treemap--hover-highlight: #e0ead8;
+    --psp-charts--tooltip--color: #e0ead8;
+    --psp-charts--axis-ticks--color: #b8c9ad;
+    --psp-charts--axis-lines--color: #526b4a;
+    --psp-charts--gridline--color: #2a4228;
+    --psp-charts--tooltip--background: rgba(30, 52, 32, 1);
+    --psp-charts--tooltip--border-color: #1a2e1a;
+    --psp-charts--legend--background: var(--psp--background-color);
 
-    --psp-webgl--series--color: rgb(90, 158, 75);
-    --psp-webgl--series-1--color: rgb(90, 158, 75);
-    --psp-webgl--series-2--color: rgb(206, 176, 104);
-    --psp-webgl--series-3--color: rgb(160, 110, 180);
-    --psp-webgl--series-4--color: rgb(80, 170, 150);
-    --psp-webgl--series-5--color: rgb(140, 170, 90);
-    --psp-webgl--series-6--color: rgb(200, 120, 140);
-    --psp-webgl--series-7--color: rgb(100, 150, 190);
-    --psp-webgl--series-8--color: rgb(210, 140, 80);
-    --psp-webgl--series-9--color: rgb(130, 120, 190);
-    --psp-webgl--series-10--color: rgb(170, 200, 110);
+    --psp-charts--series--color: rgb(90, 158, 75);
+    --psp-charts--series-1--color: rgb(90, 158, 75);
+    --psp-charts--series-2--color: rgb(206, 176, 104);
+    --psp-charts--series-3--color: rgb(160, 110, 180);
+    --psp-charts--series-4--color: rgb(80, 170, 150);
+    --psp-charts--series-5--color: rgb(140, 170, 90);
+    --psp-charts--series-6--color: rgb(200, 120, 140);
+    --psp-charts--series-7--color: rgb(100, 150, 190);
+    --psp-charts--series-8--color: rgb(210, 140, 80);
+    --psp-charts--series-9--color: rgb(130, 120, 190);
+    --psp-charts--series-10--color: rgb(170, 200, 110);
 
-    --psp-webgl--gradient--background: linear-gradient(
+    --psp-charts--gradient--background: linear-gradient(
         #e8836a 0%,
         #1a2e1a 50%,
         #5a9e4b 100%
     );
 
-    /* perspective-viewer-botanical--openlayers */
-    --psp-openlayers--tile-url: "http://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
-    --psp-openlayers--attribution--filter: invert(1) hue-rotate(180deg);
-    --psp-openlayers--element--background: #1e3420;
-    --psp-openlayers--category-1--color: rgb(90, 158, 75);
-    --psp-openlayers--category-2--color: rgb(206, 176, 104);
-    --psp-openlayers--category-3--color: rgb(160, 110, 180);
-    --psp-openlayers--category-4--color: rgb(80, 170, 150);
-    --psp-openlayers--category-5--color: rgb(140, 170, 90);
-    --psp-openlayers--category-6--color: rgb(200, 120, 140);
-    --psp-openlayers--category-7--color: rgb(100, 150, 190);
-    --psp-openlayers--category-8--color: rgb(210, 140, 80);
-    --psp-openlayers--category-9--color: rgb(130, 120, 190);
-    --psp-openlayers--category-10--color: rgb(170, 200, 110);
-    --psp-openlayers--gradient--background: linear-gradient(
-        #e8836a 0%,
-        #1a2e1a 50%,
-        #5a9e4b 100%
-    );
+    --psp-charts--map-tiles--url: "http://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
+    --psp-charts--map-tiles--attribution-: "I <3 Open Source";
 }
 
 perspective-copy-menu[theme="Botanical"],

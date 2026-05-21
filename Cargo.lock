@@ -2095,6 +2095,7 @@ dependencies = [
  "arrow-array",
  "arrow-ipc",
  "arrow-schema",
+ "arrow-select",
  "async-lock",
  "futures",
  "getrandom 0.3.4",

@@ -27,7 +27,7 @@ use crate::components::containers::select::{Select, SelectItem};
 use crate::components::filter_dropdown::{FilterDropDownElement, FilterDropDownPortal};
 use crate::components::style::LocalStyle;
 use crate::css;
-use crate::dragdrop::*;
+use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::drag_drop_update::*;
 use crate::session::*;
@@ -56,7 +56,7 @@ pub struct ConfigSelectorProps {
     // State
     pub session: Session,
     pub renderer: Renderer,
-    pub dragdrop: DragDrop,
+    pub presentation: Presentation,
 }
 
 impl PartialEq for ConfigSelectorProps {
@@ -97,7 +97,7 @@ impl Component for ConfigSelector {
             .callback(|x: (String, DragTarget, DragEffect, usize)| {
                 ConfigSelectorMsg::Drop(x.0, x.1, x.2, x.3)
             });
-        let drop_sub = Rc::new(ctx.props().dragdrop.drop_received.add_listener(cb));
+        let drop_sub = Rc::new(ctx.props().presentation.drop_received.add_listener(cb));
 
         let filter_dropdown = FilterDropDownElement::new(ctx.props().session.clone());
         let column_dropdown = ColumnDropDownElement::new(ctx.props().session.clone());
@@ -112,14 +112,14 @@ impl Component for ConfigSelector {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             ConfigSelectorMsg::DragOver(index, action) => {
-                let should_render = ctx.props().dragdrop.notify_drag_enter(action, index);
+                let should_render = ctx.props().presentation.notify_drag_enter(action, index);
                 if should_render {
                     ctx.props().ondragenter.emit(());
                 }
                 should_render
             },
             ConfigSelectorMsg::DragLeave(action) => {
-                ctx.props().dragdrop.notify_drag_leave(action);
+                ctx.props().presentation.notify_drag_leave(action);
                 true
             },
             ConfigSelectorMsg::Close(index, DragTarget::Sort) => {
@@ -569,7 +569,7 @@ impl Component for ConfigSelector {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let ConfigSelectorProps {
-            dragdrop,
+            presentation,
             renderer,
             session,
             ..
@@ -588,8 +588,8 @@ impl Component for ConfigSelector {
         }
 
         let dragend = Callback::from({
-            let dragdrop = dragdrop.clone();
-            move |_event| dragdrop.notify_drag_end()
+            let presentation = presentation.clone();
+            move |_event| presentation.notify_drag_end()
         });
 
         let metadata = &ctx.props().metadata;
@@ -642,8 +642,8 @@ impl Component for ConfigSelector {
                             parent={ctx.link().clone()}
                             column_dropdown={column_dropdown.clone()}
                             exclude={config.group_by.iter().cloned().collect::<HashSet<_>>()}
-                            is_dragover={ctx.props().dragdrop.is_dragover(DragTarget::GroupBy)}
-                            {dragdrop}
+                            is_dragover={ctx.props().presentation.is_dragover(DragTarget::GroupBy)}
+                            {presentation}
                         >
                             { for config.group_by.iter().map(|group_by| {
                                 html_nested! {
@@ -651,7 +651,7 @@ impl Component for ConfigSelector {
                                         action={DragTarget::GroupBy}
                                         column={group_by.clone()}
                                         metadata={metadata.clone()}
-                                        {dragdrop}
+                                        {presentation}
                                         opt_session={session}
                                     >
                                     </PivotColumn>
@@ -675,8 +675,8 @@ impl Component for ConfigSelector {
                             parent={ctx.link().clone()}
                             column_dropdown={column_dropdown.clone()}
                             exclude={config.split_by.iter().cloned().collect::<HashSet<_>>()}
-                            is_dragover={dragdrop.is_dragover(DragTarget::SplitBy)}
-                            {dragdrop}
+                            is_dragover={presentation.is_dragover(DragTarget::SplitBy)}
+                            {presentation}
                         >
                             { for config.split_by.iter().map(|split_by| {
                             html_nested! {
@@ -684,7 +684,7 @@ impl Component for ConfigSelector {
                                     action={ DragTarget::SplitBy }
                                     column={ split_by.clone() }
                                     metadata={metadata.clone()}
-                                    {dragdrop}
+                                    {presentation}
                                     opt_session={session}>
                                 </PivotColumn>
                             }
@@ -698,10 +698,10 @@ impl Component for ConfigSelector {
                             parent={ctx.link().clone()}
                             column_dropdown={column_dropdown.clone()}
                             exclude={config.sort.iter().map(|x| x.0.clone()).collect::<HashSet<_>>()}
-                            is_dragover={dragdrop.is_dragover(DragTarget::Sort).map(|(index, name)| {
+                            is_dragover={presentation.is_dragover(DragTarget::Sort).map(|(index, name)| {
                             (index, Sort(name, SortDir::Asc))
                         })}
-                            {dragdrop}
+                            {presentation}
                         >
                             { for config.sort.iter().enumerate().map(|(idx, sort)| {
                             html_nested! {
@@ -710,7 +710,7 @@ impl Component for ConfigSelector {
                                     sort={ sort.clone() }
                                     view_config={config.clone()}
                                     metadata={metadata.clone()}
-                                    {dragdrop}
+                                    {presentation}
                                     {renderer}
                                     {session}>
                                 </SortColumn>
@@ -725,10 +725,10 @@ impl Component for ConfigSelector {
                             parent={ctx.link().clone()}
                             {column_dropdown}
                             exclude={config.filter.iter().map(|x| x.column().to_string()).collect::<HashSet<_>>()}
-                            is_dragover={dragdrop.is_dragover(DragTarget::Filter).map(|(index, name)| {
+                            is_dragover={presentation.is_dragover(DragTarget::Filter).map(|(index, name)| {
                             (index, Filter::new(&name, "", FilterTerm::Scalar(Scalar::Null)))
                         })}
-                            {dragdrop}
+                            {presentation}
                         >
                             { for config.filter.iter().enumerate().map(|(idx, filter)| {
                                 let filter_keydown = ctx.link()
@@ -742,7 +742,7 @@ impl Component for ConfigSelector {
                                         on_keydown={ filter_keydown }
                                         view_config={config.clone()}
                                         metadata={metadata.clone()}
-                                        {dragdrop}
+                                        {presentation}
                                         {renderer}
                                         {session}>
                                     </FilterColumn>

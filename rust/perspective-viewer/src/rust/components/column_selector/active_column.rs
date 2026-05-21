@@ -23,12 +23,11 @@ use super::expr_edit_button::*;
 use crate::components::column_dropdown::ColumnDropDownElement;
 use crate::components::column_selector::{EmptyColumn, InvalidColumn};
 use crate::components::type_icon::TypeIcon;
-use crate::dragdrop::*;
-use crate::js::plugin::*;
-use crate::presentation::ColumnLocator;
+use crate::config::ColumnSelectMode;
+use crate::presentation::{ColumnLocator, Presentation};
+use crate::queries::*;
 use crate::renderer::*;
 use crate::session::*;
-use crate::tasks::*;
 use crate::utils::*;
 
 #[derive(Clone, Properties)]
@@ -85,7 +84,7 @@ pub struct ActiveColumnProps {
 
     /// State
     pub session: Session,
-    pub dragdrop: DragDrop,
+    pub presentation: Presentation,
     pub renderer: Renderer,
 }
 
@@ -232,7 +231,7 @@ impl Component for ActiveColumn {
 
                 (
                     label.clone(),
-                    ColumnState::Named(ctx.props().dragdrop.get_drag_column().unwrap()),
+                    ColumnState::Named(ctx.props().presentation.get_drag_column().unwrap()),
                 )
             },
             ActiveColumnState {
@@ -333,10 +332,10 @@ impl Component for ActiveColumn {
                 let ondragend = &ctx.props().ondragend.reform(|_| ());
                 let ondragstart = ctx.link().callback({
                     let event_name = name.to_owned();
-                    let dragdrop = ctx.props().dragdrop.clone();
+                    let presentation = ctx.props().presentation.clone();
                     move |event: DragEvent| {
-                        dragdrop.set_drag_image(&event).unwrap();
-                        dragdrop.notify_drag_start(
+                        presentation.set_drag_image(&event).unwrap();
+                        presentation.notify_drag_start(
                             event_name.to_string(),
                             DragEffect::Move(DragTarget::Active),
                         );
@@ -352,7 +351,7 @@ impl Component for ActiveColumn {
 
                 let is_expression = ctx.props().is_expression;
                 let show_edit_btn = ctx.props().show_edit_btn;
-                let mut class = ctx.props().renderer.metadata().mode.css();
+                let mut class = ctx.props().renderer.metadata().select_mode.css();
                 if is_required {
                     class.push("required");
                 };
@@ -435,14 +434,9 @@ impl ActiveColumnProps {
     /// - `shift` whether to toggle or select this column.
     fn deactivate_column(&self, name: String, shift: bool) {
         let mut columns = self.view_config.columns.clone();
-        let max_cols = self
-            .renderer
-            .metadata()
-            .names
-            .as_ref()
-            .map_or(0, |x| x.len());
+        let max_cols = self.renderer.metadata().config_column_names.len();
 
-        match self.renderer.metadata().mode {
+        match self.renderer.metadata().select_mode {
             ColumnSelectMode::Toggle => {
                 let index = columns
                     .iter()
@@ -466,7 +460,7 @@ impl ActiveColumnProps {
     }
 
     fn get_is_required(&self, idx: usize) -> bool {
-        let min_cols = self.renderer.metadata().min.unwrap_or(0);
+        let min_cols = self.renderer.metadata().min_config_columns.unwrap_or(0);
         idx < min_cols
     }
 

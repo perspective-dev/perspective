@@ -10,6 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+import { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 import type {
     DatagridModel,
     DatagridPluginElement,
@@ -26,7 +27,10 @@ export const EDIT_MODES: readonly EditMode[] = [
 ] as const;
 
 function isSelectRowTreeAvailable(model?: DatagridModel): boolean {
-    if (!model) return false;
+    if (!model) {
+        return false;
+    }
+
     return (
         model._config.group_by.length > 0 &&
         model._config.group_rollup_mode !== "flat"
@@ -45,10 +49,11 @@ export function toggle_edit_mode(
             EDIT_MODES[idx] === "SELECT_ROW_TREE" &&
             !isSelectRowTreeAvailable(this.model)
         );
+
         mode = EDIT_MODES[idx];
     }
 
-    (this.parentElement as any)?.setSelection?.();
+    (this.parentElement as HTMLPerspectiveViewerElement)?.setSelection?.();
     this._edit_mode = mode;
     if (this.model) {
         this.model._edit_mode = mode;
@@ -58,6 +63,10 @@ export function toggle_edit_mode(
             dirty: true,
         };
     }
+
+    (this.parentElement as HTMLPerspectiveViewerElement)?.restore?.({
+        plugin_config: { edit_mode: mode },
+    });
 
     if (this._edit_button !== undefined) {
         this._edit_button.dataset.editMode = mode;

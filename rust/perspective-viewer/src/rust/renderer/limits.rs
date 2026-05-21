@@ -12,7 +12,7 @@
 
 use perspective_js::utils::ApiError;
 
-use crate::js::plugin::*;
+use crate::config::PluginStaticConfig;
 
 /// The row/column limits computed for the current view and plugin
 /// configuration.
@@ -31,14 +31,19 @@ pub struct RenderLimits {
     pub max_rows: Option<usize>,
 }
 
+/// Compute the row/column caps for `view` against the plugin's static
+/// limits. `render_warning` is the renderer-state flag controlling
+/// whether the warning is currently armed; when `false`, an oversized
+/// view renders uncapped (the user has dismissed the warning).
 pub async fn get_row_and_col_limits(
     view: &perspective_client::View,
-    plugin_metadata: &ViewConfigRequirements,
+    config: &PluginStaticConfig,
+    render_warning: bool,
 ) -> Result<RenderLimits, ApiError> {
     let dimensions = view.dimensions().await?;
     let num_cols = dimensions.num_view_columns as usize;
     let num_rows = dimensions.num_view_rows as usize;
-    match (plugin_metadata.max_columns, plugin_metadata.render_warning) {
+    match (config.max_columns, render_warning) {
         (Some(_), false) => Ok(RenderLimits {
             is_update: false,
             num_cols,
@@ -60,7 +65,7 @@ pub async fn get_row_and_col_limits(
                 }
             });
 
-            let max_rows = plugin_metadata.max_cells.map(|max_cells| {
+            let max_rows = config.max_cells.map(|max_cells| {
                 match max_cols {
                     Some(max_cols) => max_cells as f64 / max_cols as f64,
                     None => max_cells as f64 / num_cols as f64,

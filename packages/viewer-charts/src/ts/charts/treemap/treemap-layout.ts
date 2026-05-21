@@ -13,13 +13,7 @@
 import type { TreemapChart } from "./treemap";
 import { NodeStore, NULL_NODE } from "../common/node-store";
 
-export interface BreadcrumbRegion {
-    nodeId: number;
-    x0: number;
-    y0: number;
-    x1: number;
-    y1: number;
-}
+export type { BreadcrumbRegion } from "../common/tree-chrome";
 
 export const PADDING_OUTER = 1;
 export const PADDING_LABEL = 14;
@@ -41,7 +35,7 @@ export {
  */
 const MIN_VISIBLE_AREA = 4; // 2×2 px
 
-// ── Squarify layout ──────────────────────────────────────────────────────
+//  Squarify layout
 
 /**
  * Order-preserving treemap layout. Walks the linked-list child graph
@@ -63,10 +57,14 @@ export function squarify(
     store.x1[id] = Math.round(x1);
     store.y1[id] = Math.round(y1);
 
-    if (store.firstChild[id] === NULL_NODE) return;
+    if (store.firstChild[id] === NULL_NODE) {
+        return;
+    }
 
     const area = (x1 - x0) * (y1 - y0);
-    if (area < MIN_VISIBLE_AREA) return;
+    if (area < MIN_VISIBLE_AREA) {
+        return;
+    }
 
     const relDepth = store.depth[id] - baseDepth;
     const showHeader =
@@ -80,7 +78,9 @@ export function squarify(
     const iy0 = store.y0[id] + padTop;
     const ix1 = store.x1[id] - padOuter;
     const iy1 = store.y1[id] - padOuter;
-    if (ix1 <= ix0 || iy1 <= iy0) return;
+    if (ix1 <= ix0 || iy1 <= iy0) {
+        return;
+    }
 
     let activeCount = 0;
     for (
@@ -92,7 +92,10 @@ export function squarify(
             scratch[activeCount++] = c;
         }
     }
-    if (activeCount === 0) return;
+
+    if (activeCount === 0) {
+        return;
+    }
 
     layoutOrdered(
         store,
@@ -123,7 +126,10 @@ function layoutOrdered(
     showBranchHeader: boolean,
 ): void {
     const n = hi - lo;
-    if (n === 0) return;
+    if (n === 0) {
+        return;
+    }
+
     if (n === 1) {
         squarify(
             store,
@@ -140,7 +146,10 @@ function layoutOrdered(
     }
 
     let totalValue = 0;
-    for (let i = lo; i < hi; i++) totalValue += store.value[nodes[i]];
+    for (let i = lo; i < hi; i++) {
+        totalValue += store.value[nodes[i]];
+    }
+
     const halfValue = totalValue / 2;
 
     let cumulative = 0;
@@ -156,7 +165,10 @@ function layoutOrdered(
     }
 
     let leftValue = 0;
-    for (let i = lo; i < splitIdx; i++) leftValue += store.value[nodes[i]];
+    for (let i = lo; i < splitIdx; i++) {
+        leftValue += store.value[nodes[i]];
+    }
+
     const fraction = leftValue / totalValue;
 
     const rw = x1 - x0;
@@ -220,7 +232,7 @@ function layoutOrdered(
     }
 }
 
-// ── Collect visible ──────────────────────────────────────────────────────
+//  Collect visible
 
 /**
  * Walk from `startId` depth-first, emitting every descendant whose rect
@@ -271,6 +283,7 @@ export function collectVisibleAppend(
     if (!chart._visibleNodeIds || chart._visibleNodeIds.length < store.count) {
         chart._visibleNodeIds = new Int32Array(store.count);
     }
+
     const out = chart._visibleNodeIds;
 
     let outIdx = startOffset;
@@ -282,17 +295,23 @@ export function collectVisibleAppend(
     while (sp > 0) {
         sp--;
         const id = stack[sp];
-        if (value[id] <= 0) continue;
+        if (value[id] <= 0) {
+            continue;
+        }
 
         if (depth[id] >= baseDepth) {
             out[outIdx++] = id;
         }
 
-        if (depth[id] - baseDepth >= maxDepth) continue;
+        if (depth[id] - baseDepth >= maxDepth) {
+            continue;
+        }
 
         const w = x1[id] - x0[id];
         const h = y1[id] - y0[id];
-        if (w * h < MIN_VISIBLE_AREA) continue;
+        if (w * h < MIN_VISIBLE_AREA) {
+            continue;
+        }
 
         for (let c = firstChild[id]; c !== NULL_NODE; c = nextSibling[c]) {
             if (sp >= stack.length) {
@@ -300,6 +319,7 @@ export function collectVisibleAppend(
                 bigger.set(stack);
                 stack = bigger;
             }
+
             stack[sp++] = c;
         }
     }

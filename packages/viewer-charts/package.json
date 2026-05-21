@@ -39,7 +39,9 @@
         "@perspective-dev/viewer": "workspace:",
         "@perspective-dev/esbuild-plugin": "workspace:",
         "@perspective-dev/test": "workspace:",
+        "@types/node": "catalog:",
         "lightningcss": "catalog:",
-        "typescript": "catalog:"
+        "typescript": "catalog:",
+        "webpack-glsl-minify": "1.5.0"
     }
 }

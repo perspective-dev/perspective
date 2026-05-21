@@ -14,17 +14,19 @@ use perspective_client::clone;
 use yew::{Callback, Html, Properties, function_component, html};
 
 use crate::components::form::number_field::NumberField;
-use crate::config::ColumnConfigValueUpdate;
+use crate::config::ColumnConfigFieldUpdate;
 
 // ░░░█▀█░█▀▄░█▀█░█▀█░█▀▀░█▀▄░▀█▀░▀█▀░█▀▀░█▀▀░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 // ░░░█▀▀░█▀▄░█░█░█▀▀░█▀▀░█▀▄░░█░░░█░░█▀▀░▀▀█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 // ░░░▀░░░▀░▀░▀▀▀░▀░░░▀▀▀░▀░▀░░▀░░▀▀▀░▀▀▀░▀▀▀░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 #[derive(Properties, PartialEq)]
 pub struct AggregateDepthSelectorProps {
-    pub on_change: Callback<ColumnConfigValueUpdate>,
+    pub on_change: Callback<ColumnConfigFieldUpdate>,
     pub value: u32,
     pub group_by_depth: u32,
     pub column_name: String,
+    #[prop_or_default]
+    pub keys: Vec<String>,
 }
 
 #[function_component]
@@ -36,12 +38,18 @@ pub fn AggregateDepthSelector(props: &AggregateDepthSelectorProps) -> Html {
     });
 
     let on_change = yew::use_callback(
-        (state.setter(), props.on_change.clone()),
+        (state.setter(), props.on_change.clone(), props.keys.clone()),
         |x: Option<f64>, deps| {
-            deps.0.set(x.unwrap_or_default() as u32);
-            deps.1.emit(ColumnConfigValueUpdate::AggregateDepth(
-                x.unwrap_or_default() as u32,
-            ))
+            let depth = x.unwrap_or_default() as u32;
+            deps.0.set(depth);
+            let mut value = serde_json::Map::new();
+            if depth > 0 {
+                value.insert("aggregate_depth".to_owned(), serde_json::json!(depth));
+            }
+            deps.1.emit(ColumnConfigFieldUpdate {
+                keys: deps.2.clone(),
+                value,
+            })
         },
     );
 

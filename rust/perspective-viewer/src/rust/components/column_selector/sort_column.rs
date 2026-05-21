@@ -17,7 +17,7 @@ use yew::prelude::*;
 
 use crate::components::containers::dragdrop_list::*;
 use crate::components::type_icon::TypeIcon;
-use crate::dragdrop::*;
+use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::*;
 use crate::utils::*;
@@ -36,7 +36,7 @@ pub struct SortColumnProps {
     // State
     pub session: Session,
     pub renderer: Renderer,
-    pub dragdrop: DragDrop,
+    pub presentation: Presentation,
 }
 
 impl PartialEq for SortColumnProps {
@@ -105,17 +105,17 @@ impl Component for SortColumn {
 
         let dragstart = Callback::from({
             let event_name = ctx.props().sort.0.to_owned();
-            let dragdrop = ctx.props().dragdrop.clone();
+            let presentation = ctx.props().presentation.clone();
             move |event: DragEvent| {
-                dragdrop.set_drag_image(&event).unwrap();
-                dragdrop
+                presentation.set_drag_image(&event).unwrap();
+                presentation
                     .notify_drag_start(event_name.to_string(), DragEffect::Move(DragTarget::Sort))
             }
         });
 
         let dragend = Callback::from({
-            let dragdrop = ctx.props().dragdrop.clone();
-            move |_event| dragdrop.notify_drag_end()
+            let presentation = ctx.props().presentation.clone();
+            move |_event| presentation.notify_drag_end()
         });
 
         let col_type = ctx

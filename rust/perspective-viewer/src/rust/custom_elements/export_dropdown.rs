@@ -23,6 +23,8 @@ use super::viewer::PerspectiveViewerElement;
 use crate::components::export_dropdown::ExportDropDownMenu;
 use crate::components::portal::PortalModal;
 use crate::components::style::StyleProvider;
+use crate::config::*;
+use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::*;
 use crate::tasks::*;
@@ -132,43 +134,49 @@ impl ExportDropDownMenuElement {
     }
 
     pub fn __set_model(&self, parent: &PerspectiveViewerElement) {
-        self.set_config_model(parent)
+        self.set_config_model(&parent.session, &parent.renderer, &parent.presentation)
     }
 
     pub fn connected_callback(&self) {}
 }
 
 impl ExportDropDownMenuElement {
-    pub fn new_from_model<A>(model: &A) -> Self
-    where
-        A: GetViewerConfigModel + StateProvider,
-        <A as StateProvider>::State: HasPresentation + HasRenderer + HasSession,
-    {
+    pub fn new_from_model(
+        session: &Session,
+        renderer: &Renderer,
+        presentation: &Presentation,
+    ) -> Self {
         let dropdown = global::document()
             .create_element("perspective-export-menu")
             .unwrap()
             .unchecked_into::<HtmlElement>();
 
         let elem = Self::new(dropdown);
-        elem.set_config_model(model);
+        elem.set_config_model(session, renderer, presentation);
         elem
     }
 
-    fn set_config_model<A>(&self, model: &A)
-    where
-        A: GetViewerConfigModel + StateProvider,
-        <A as StateProvider>::State: HasPresentation + HasRenderer + HasSession,
-    {
+    fn set_config_model(
+        &self,
+        session: &Session,
+        renderer: &Renderer,
+        presentation: &Presentation,
+    ) {
         let callback = Callback::from({
-            let model = model.clone_state();
+            let session = session.clone();
+            let renderer = renderer.clone();
+            let presentation = presentation.clone();
             let target = self.target.clone();
             let root = self.root.clone();
             move |x: ExportFile| {
                 if !x.name.is_empty() {
-                    clone!(target, root, model);
+                    clone!(target, root, session, renderer, presentation);
                     spawn_local(async move {
-                        let val = model.export_method_to_blob(x.method).await.unwrap();
-                        let is_chart = model.renderer().is_chart();
+                        let val =
+                            export_method_to_blob(&session, &renderer, &presentation, x.method)
+                                .await
+                                .unwrap();
+                        let is_chart = renderer.is_chart();
                         download(&x.as_filename(is_chart), &val).unwrap();
                         *target.borrow_mut() = None;
                         if let Some(root) = root.borrow().as_ref() {
@@ -179,8 +187,8 @@ impl ExportDropDownMenuElement {
             }
         });
 
-        let renderer = model.renderer().clone();
-        let session = model.session().clone();
+        let renderer = renderer.clone();
+        let session = session.clone();
         let init = ShadowRootInit::new(ShadowRootMode::Open);
         let shadow_root = self
             .elem

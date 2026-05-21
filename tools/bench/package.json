@@ -15,12 +15,15 @@
     },
     "scripts": {
         "bench_js": "node --experimental-wasm-memory64 basic_suite.mjs",
-        "bench_python": "node --experimental-wasm-memory64 python_suite.mjs"
+        "bench_python": "node --experimental-wasm-memory64 python_suite.mjs",
+        "bench_charts": "node --experimental-wasm-memory64 charts_suite.mjs"
     },
     "author": "",
     "license": "Apache-2.0",
     "devDependencies": {
         "@perspective-dev/client": "workspace:",
+        "@perspective-dev/viewer-charts": "workspace:",
+        "@playwright/test": "catalog:",
         "microtime": "catalog:",
         "superstore-arrow": "catalog:",
         "zx": "catalog:"

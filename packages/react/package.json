@@ -1,13 +1,28 @@
 {
     "name": "@perspective-dev/react",
     "version": "4.4.1",
-    "description": "",
-    "main": "index.js",
-    "keywords": [],
-    "author": "",
-    "license": "ISC",
+    "description": "React component wrappers for `<perspective-viewer>` and `<perspective-workspace>`",
+    "keywords": [
+        "perspective",
+        "react",
+        "data",
+        "analytics",
+        "visualization"
+    ],
+    "homepage": "https://perspective-dev.github.io",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/perspective-dev/perspective"
+    },
+    "license": "Apache-2.0",
+    "sideEffects": false,
     "exports": {
-        ".": "./dist/esm/index.js"
+        ".": {
+            "types": "./dist/esm/index.d.ts",
+            "import": "./dist/esm/index.js",
+            "default": "./dist/esm/index.js"
+        },
+        "./package.json": "./package.json"
     },
     "type": "module",
     "scripts": {

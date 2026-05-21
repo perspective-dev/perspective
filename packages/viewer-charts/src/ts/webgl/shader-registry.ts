@@ -10,6 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+import type { ShaderSpec } from "./shader-manifest";
+
 type GL = WebGL2RenderingContext | WebGLRenderingContext;
 
 export class ShaderRegistry {
@@ -20,9 +22,28 @@ export class ShaderRegistry {
         this._gl = gl;
     }
 
+    /**
+     * Compile + link every program in `specs` eagerly. Used by
+     * `WebGLContextManager` when constructed with `precompile: true`
+     * so the first-frame path doesn't pay the compile cost inline.
+     *
+     * Compilation is synchronous and serial — single-digit ms per
+     * program on a modern GPU. With `KHR_parallel_shader_compile`
+     * (browser-supported but not yet wired here) the work could be
+     * dispatched to driver threads; today we accept the wall-time
+     * cost in exchange for simpler code and a deterministic init.
+     */
+    precompile(specs: readonly ShaderSpec[]): void {
+        for (const spec of specs) {
+            this.getOrCreate(spec.name, spec.vert, spec.frag);
+        }
+    }
+
     getOrCreate(name: string, vertSrc: string, fragSrc: string): WebGLProgram {
         let program = this._programs.get(name);
-        if (program) return program;
+        if (program) {
+            return program;
+        }
 
         const gl = this._gl;
 
@@ -70,6 +91,7 @@ export class ShaderRegistry {
         for (const program of this._programs.values()) {
             this._gl.deleteProgram(program);
         }
+
         this._programs.clear();
     }
 }

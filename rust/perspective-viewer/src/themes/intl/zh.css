@@ -54,11 +54,11 @@ perspective-dropdown {
     --psp-label--copy-button--content: "复制";
     --psp-label--export-button--content: "出口";
     --psp-label--reset-button--content: "重置";
-    --psp-label--edit-mode-read-only--content: "Read Only";
-    --psp-label--edit-mode-edit--content: "Text Edit";
-    --psp-label--edit-mode-select-row--content: "Select Row";
-    --psp-label--edit-mode-select-column--content: "Select Column";
-    --psp-label--edit-mode-select-region--content: "Select Region";
+    --psp-label--edit-mode-read-only--content: "只读";
+    --psp-label--edit-mode-edit--content: "文本编辑";
+    --psp-label--edit-mode-select-row--content: "选择行";
+    --psp-label--edit-mode-select-column--content: "选择列";
+    --psp-label--edit-mode-select-region--content: "选择区域";
     --psp-label--scroll-lock-toggle--content: "自由滚动";
     --psp-label--scroll-lock-alt-toggle--content: "对齐滚动";
 
@@ -70,15 +70,24 @@ perspective-dropdown {
     --psp-label--time-style--content: "时间风格";
     --psp-label--foreground--content: "前景";
     --psp-label--background--content: "背景";
+    --psp-label--number-fg-mode--content: "前景";
+    --psp-label--number-bg-mode--content: "背景";
+    --psp-label--pos-bg-color--content: "背景";
+    --psp-label--datetime-color-mode--content: "颜色";
+    --psp-label--string-color-mode--content: "颜色";
     --psp-label--series--content: "系列";
     --psp-label--color-range--content: "颜色范围";
     --psp-label--style--content: "风格";
+    --psp-label--stack--content: "堆叠";
+    --psp-label--alt-axis--content: "副轴";
     --psp-label--minimum-integer-digits--content: "最小整数位数";
     --psp-label--rounding-increment--content: "舍入增量";
     --psp-label--notation--content: "符号";
     --psp-label--use-grouping--content: "使用分组";
     --psp-label--sign-display--content: "标志展示";
     --psp-label--max-value--content: "最大值";
+    --psp-label--fg-gradient--content: "最大值";
+    --psp-label--bg-gradient--content: "最大值";
     --psp-label--rounding-priority--content: "舍入优先级";
     --psp-label--rounding-mode--content: "舍入模式";
     --psp-label--trailing-zero-display--content: "尾随零显示";
@@ -98,5 +107,32 @@ perspective-dropdown {
     /* Tabs */
     --psp-label--style-tab--content: "风格";
     --psp-label--attributes-tab--content: "属性";
-    --psp-label--debug-tab--content: "Debug JSON";
+    --psp-label--query-tab--content: "查询";
+    --psp-label--plugin-tab--content: "插件";
+    --psp-label--debug-tab--content: "JSON";
+
+    /* Plugin settings */
+    --psp-label--edit-mode--content: "编辑模式";
+    --psp-label--scroll-lock--content: "滚动锁定";
+    --psp-label--chart-type--content: "图表类型";
+
+    /* Plugin settings — viewer-charts */
+    --psp-label--auto-alt-y-axis--content: "自动双Y轴";
+    --psp-label--facet-mode--content: "分面模式";
+    --psp-label--facet-zoom-mode--content: "分面缩放";
+    --psp-label--series-zoom-mode--content: "系列缩放";
+    --psp-label--line-width-px--content: "线宽";
+    --psp-label--point-size-px--content: "点大小";
+    --psp-label--band-inner-frac--content: "带宽";
+    --psp-label--bar-inner-pad--content: "条形间距";
+    --psp-label--wick-width-px--content: "影线宽度";
+    --psp-label--ohlc-line-width-px--content: "OHLC线宽";
+    --psp-label--include-zero--content: "包含零";
+    --psp-label--domain-mode--content: "域模式";
+    --psp-label--gradient-color-mode--content: "颜色模式";
+    --psp-label--gradient-radius-px--content: "渐变半径";
+    --psp-label--gradient-intensity--content: "强度";
+    --psp-label--gradient-heat-max--content: "最大热度";
+    --psp-label--map-tile-provider--content: "地图提供商";
+    --psp-label--map-tile-alpha--content: "地图不透明度";
 }

@@ -63,6 +63,9 @@ pub struct ScrollPanelProps {
 
     #[prop_or_default]
     pub drop: Callback<DragEvent>,
+
+    #[prop_or_default]
+    pub omit_autosize_div: bool,
 }
 
 impl ScrollPanelProps {
@@ -146,16 +149,25 @@ impl Component for ScrollPanel {
                 self.viewport_width = 0.0;
                 self.calculate_window_content(ctx)
             },
+
+            // TODO don't hardcode pixel offsets - fix the CSS container to not
+            // require pixel offsets to work.
             ScrollPanelMsg::UpdateViewportDimensions => {
                 let viewport = self.viewport_elem(ctx);
                 let rect = viewport.get_bounding_client_rect();
                 let viewport_height = rect.height() - 8.0;
-                let viewport_width = self.viewport_width.max(rect.width() - 6.0);
+                let scroll_offset = if ctx.props().omit_autosize_div {
+                    0.0
+                } else {
+                    6.0
+                };
+
+                let viewport_width = self.viewport_width.max(rect.width() - scroll_offset);
                 let re_render = self.viewport_height != viewport_height
                     || self.viewport_width != viewport_width;
 
                 self.viewport_height = rect.height() - 8.0;
-                self.viewport_width = self.viewport_width.max(rect.width() - 6.0);
+                self.viewport_width = self.viewport_width.max(rect.width() - scroll_offset);
                 ctx.props().on_auto_width.emit(self.viewport_width);
                 re_render
             },
@@ -218,11 +230,13 @@ impl Component for ScrollPanel {
                 >
                     <div class="scroll-panel-container" style={window_style}>
                         { for windowed_items.iter().cloned().map(Html::from) }
-                        <div
-                            key="__scroll-panel-auto-width__"
-                            class="scroll-panel-auto-width"
-                            style={width_style}
-                        />
+                        if !ctx.props().omit_autosize_div {
+                            <div
+                                key="__scroll-panel-auto-width__"
+                                class="scroll-panel-auto-width"
+                                style={width_style}
+                            />
+                        }
                     </div>
                     <div class="scroll-panel-content" style={content_style} />
                 </div>

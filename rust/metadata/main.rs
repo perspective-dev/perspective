@@ -36,13 +36,14 @@ use perspective_client::{
     TableInitOptions, UpdateOptions, ViewWindow,
 };
 use perspective_js::TypedArrayWindow;
-use perspective_viewer::config::{ViewerConfig, ViewerConfigUpdate};
+use perspective_viewer::config::{PluginStaticConfig, ViewerConfig, ViewerConfigUpdate};
 use ts_rs::TS;
 
 pub fn generate_type_bindings_viewer() -> Result<(), Box<dyn Error>> {
     let path = std::env::current_dir()?.join("../perspective-viewer/src/ts/ts-rs");
     ViewerConfigUpdate::export_all_to(&path)?;
     ViewerConfig::<String>::export_all_to(&path)?;
+    PluginStaticConfig::export_all_to(&path)?;
     OnUpdateData::export_all_to(&path)?;
     Ok(())
 }

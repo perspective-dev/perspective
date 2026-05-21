@@ -36,6 +36,7 @@ pub async fn activate_plugin<T>(
     if html_plugin.parent_node().is_none() {
         html_plugin.style().set_property("opacity", "0")?;
         viewer.append_child(html_plugin)?;
+        plugin.restyle();
     }
 
     let result = task.await;

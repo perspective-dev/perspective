@@ -128,33 +128,23 @@ pub(crate) async fn decode_and_call(
                 js_dicts.set(col_idx as u32, JsValue::NULL);
             },
             DataType::Date32 => {
+                // Datetime values are always emitted as Float64 — narrowing
+                // epoch-ms to f32 collapses ~256 ms of resolution at modern
+                // timestamps, so the `float32` flag is intentionally ignored
+                // for date/timestamp columns.
                 let typed = col.as_primitive::<Date32Type>();
-                if float32 {
-                    f32_storage.push(
-                        typed
-                            .values()
-                            .iter()
-                            .map(|&v| v as f32 * 86_400_000.0)
-                            .collect(),
-                    );
-                } else {
-                    f64_storage.push(
-                        typed
-                            .values()
-                            .iter()
-                            .map(|&v| v as f64 * 86_400_000.0)
-                            .collect(),
-                    );
-                }
+                f64_storage.push(
+                    typed
+                        .values()
+                        .iter()
+                        .map(|&v| v as f64 * 86_400_000.0)
+                        .collect(),
+                );
                 js_dicts.set(col_idx as u32, JsValue::NULL);
             },
             DataType::Timestamp(TimeUnit::Millisecond, _) => {
                 let typed = col.as_primitive::<TimestampMillisecondType>();
-                if float32 {
-                    f32_storage.push(typed.values().iter().map(|&v| v as f32).collect());
-                } else {
-                    f64_storage.push(typed.values().iter().map(|&v| v as f64).collect());
-                }
+                f64_storage.push(typed.values().iter().map(|&v| v as f64).collect());
                 js_dicts.set(col_idx as u32, JsValue::NULL);
             },
             DataType::Int64 => {
@@ -207,15 +197,12 @@ pub(crate) async fn decode_and_call(
         let col = batch.column(col_idx);
         let uses_f32_storage = matches!(
             (col.data_type(), float32),
-            (DataType::Float64, true)
-                | (DataType::Date32, true)
-                | (DataType::Timestamp(TimeUnit::Millisecond, _), true)
-                | (DataType::Int64, true),
+            (DataType::Float64, true) | (DataType::Int64, true),
         );
         let uses_f64_storage = matches!(
             (col.data_type(), float32),
-            (DataType::Date32, false)
-                | (DataType::Timestamp(TimeUnit::Millisecond, _), false)
+            (DataType::Date32, _)
+                | (DataType::Timestamp(TimeUnit::Millisecond, _), _)
                 | (DataType::Int64, false),
         );
 

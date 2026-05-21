@@ -18,7 +18,10 @@ export async function expandCollapseHandler(
     event: MouseEvent,
 ): Promise<void> {
     const meta = regularTable.getMeta(event.target as HTMLElement);
-    if (!meta || meta.type !== "row_header") return;
+    if (!meta || meta.type !== "row_header") {
+        return;
+    }
+
     const is_collapse = (event.target as Element).classList.contains(
         "psp-tree-label-collapse",
     );

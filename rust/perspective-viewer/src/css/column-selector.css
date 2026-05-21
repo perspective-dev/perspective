@@ -334,14 +334,14 @@
         padding: var(--column_type--padding, 0px 0px 0px 0px);
         position: absolute;
         height: 28px;
-        top: -28px;
+        top: -30px;
         display: inline-flex;
         align-items: flex-end;
         content: var(--psp-label--all-columns--content, "All Columns");
     }
 
     #sub-columns .scroll-panel-container {
-        margin-top: 28px;
+        margin-top: 30px;
         margin-bottom: 4px;
     }
 
@@ -364,6 +364,7 @@
     #active-columns {
         display: flex;
         padding-bottom: 8px;
+        padding-top: 6px;
     }
 
     #active-columns,

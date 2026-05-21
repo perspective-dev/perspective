@@ -40,7 +40,7 @@ const RESULT = {
     filter: [],
     group_by: [],
     plugin: "Debug",
-    plugin_config: null,
+    plugin_config: {},
     settings: false,
     sort: [],
     split_by: [],

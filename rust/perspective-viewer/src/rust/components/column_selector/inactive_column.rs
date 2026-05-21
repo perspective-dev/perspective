@@ -18,9 +18,8 @@ use yew::prelude::*;
 
 use super::expr_edit_button::*;
 use crate::components::type_icon::TypeIcon;
-use crate::dragdrop::*;
-use crate::js::plugin::*;
-use crate::presentation::ColumnLocator;
+use crate::config::ColumnSelectMode;
+use crate::presentation::{ColumnLocator, Presentation};
 use crate::renderer::*;
 use crate::session::*;
 use crate::utils::*;
@@ -61,7 +60,7 @@ pub struct InactiveColumnProps {
     pub on_open_expr_panel: Callback<ColumnLocator>,
 
     // State
-    pub dragdrop: DragDrop,
+    pub presentation: Presentation,
     pub session: Session,
     pub renderer: Renderer,
 }
@@ -135,10 +134,10 @@ impl Component for InactiveColumn {
         let ondragend = ctx.props().ondragend.reform(|_| {});
         let ondragstart = ctx.link().callback({
             let event_name = ctx.props().name.to_owned();
-            let dragdrop = ctx.props().dragdrop.clone();
+            let presentation = ctx.props().presentation.clone();
             move |event: DragEvent| {
-                dragdrop.set_drag_image(&event).unwrap();
-                dragdrop.notify_drag_start(event_name.to_string(), DragEffect::Copy);
+                presentation.set_drag_image(&event).unwrap();
+                presentation.notify_drag_start(event_name.to_string(), DragEffect::Copy);
                 MouseLeave(true)
             }
         });
@@ -150,7 +149,7 @@ impl Component for InactiveColumn {
 
         let is_expression = ctx.props().is_expression;
 
-        let is_active_class = ctx.props().renderer.metadata().mode.css();
+        let is_active_class = ctx.props().renderer.metadata().select_mode.css();
         let mut class = classes!("column-selector-column");
         if !ctx.props().visible {
             class.push("column-selector-column-hidden");
@@ -199,19 +198,14 @@ impl InactiveColumnProps {
     /// - `shift` whether to toggle or select this column.
     pub fn activate_column(&self, name: String, shift: bool) {
         let mut columns = self.view_config.columns.clone();
-        let max_cols = self
-            .renderer
-            .metadata()
-            .names
-            .as_ref()
-            .map_or(0, |x| x.len());
+        let max_cols = self.renderer.metadata().config_column_names.len();
 
         // Don't treat `None` at the end of the column list as columns, we'll refill
         // these later
         if let Some(last_filled) = columns.iter().rposition(|x| !x.is_none()) {
             columns.truncate(last_filled + 1);
 
-            let mode = self.renderer.metadata().mode;
+            let mode = self.renderer.metadata().select_mode;
             if (mode == ColumnSelectMode::Select) ^ shift {
                 columns.clear();
             } else {

@@ -29,21 +29,36 @@ import {
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 
 function arraysChanged<T>(a: T[], b: T[]): boolean {
-    if (a.length !== b.length) return true;
-    for (let i = 0; i < a.length; i++) {
-        if (a[i] !== b[i]) return true;
+    if (a.length !== b.length) {
+        return true;
     }
+
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) {
+            return true;
+        }
+    }
+
     return false;
 }
 
 function nestedArraysChanged<T>(a: T[][], b: T[][]): boolean {
-    if (a.length !== b.length) return true;
+    if (a.length !== b.length) {
+        return true;
+    }
+
     for (let i = 0; i < a.length; i++) {
-        if (a[i].length !== b[i].length) return true;
+        if (a[i].length !== b[i].length) {
+            return true;
+        }
+
         for (let j = 0; j < a[i].length; j++) {
-            if (a[i][j] !== b[i][j]) return true;
+            if (a[i][j] !== b[i][j]) {
+                return true;
+            }
         }
     }
+
     return false;
 }
 
@@ -75,6 +90,7 @@ class ElemFactoryImpl implements ElemFactory {
         if (!this._elements[this._index]) {
             this._elements[this._index] = document.createElement(this._name);
         }
+
         const elem = this._elements[this._index];
         this._index += 1;
         return elem;
@@ -216,6 +232,7 @@ export async function createModel(
         }),
         _series_color_map: new Map<string, string>(),
         _series_color_seed: new Map<string, number>(),
+
         // get_psp_type,
         _div_factory: extend._div_factory || new ElemFactoryImpl("div"),
     }) as DatagridModel;

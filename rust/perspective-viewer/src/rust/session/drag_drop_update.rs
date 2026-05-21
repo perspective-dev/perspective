@@ -12,7 +12,7 @@
 
 use perspective_client::config::*;
 
-use crate::js::plugin::ViewConfigRequirements;
+use crate::config::PluginStaticConfig;
 use crate::utils::{DragEffect, DragTarget};
 
 #[allow(clippy::too_many_arguments)]
@@ -27,23 +27,23 @@ pub impl ViewConfig {
         index: usize,
         drop: DragTarget,
         drag: DragEffect,
-        requirements: &ViewConfigRequirements,
+        config_static: &PluginStaticConfig,
         features: &perspective_client::Features,
     ) -> ViewConfigUpdate {
         let mut config = self.clone();
         let mut update = ViewConfigUpdate::default();
-        let is_to_swap = requirements.is_swap(index);
+        let is_to_swap = config_static.is_swap(index);
         let from_index = config
             .columns
             .iter()
             .position(|x| x.as_ref() == Some(&column));
 
         let is_from_required = from_index
-            .and_then(|x| requirements.min.map(|z| x < z))
+            .and_then(|x| config_static.min_config_columns.map(|z| x < z))
             .unwrap_or_default();
 
         let is_from_swap = from_index
-            .map(|x| requirements.is_swap(x))
+            .map(|x| config_static.is_swap(x))
             .unwrap_or_default();
 
         let is_to_empty = config
@@ -104,11 +104,11 @@ pub impl ViewConfig {
                     if is_to_swap || is_from_required {
                         let column = Some(column);
                         config.columns.extend(std::iter::repeat_n(None, {
-                            let fill_to = requirements
-                                .names
-                                .as_ref()
-                                .map(|x| std::cmp::max(x.len() - 1, index))
-                                .unwrap_or(index);
+                            let fill_to = if config_static.config_column_names.is_empty() {
+                                index
+                            } else {
+                                std::cmp::max(config_static.config_column_names.len() - 1, index)
+                            };
 
                             if fill_to >= (config.columns.len() - 1) {
                                 fill_to + 1 - config.columns.len()

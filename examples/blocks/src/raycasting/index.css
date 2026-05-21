@@ -21,9 +21,9 @@ perspective-viewer {
 }
 
 perspective-viewer[theme="Pro Dark"] {
-    --d3fc-positive--gradient: linear-gradient(
-        #242526,
-        #071952 1%,
+    --d3fc-charts--gradient--background: linear-gradient(
+        #242526 50%,
+        #071952,
         #088395,
         #35a29f,
         #f2f7a1
@@ -31,9 +31,9 @@ perspective-viewer[theme="Pro Dark"] {
 }
 
 perspective-viewer[theme="Pro Light"] {
-    --d3fc-positive--gradient: linear-gradient(
-        #ffffff,
-        #071952 1%,
+    --d3fc-charts--gradient--background: linear-gradient(
+        #ffffff 50%,
+        #071952,
         #088395,
         #35a29f,
         #f2f7a1

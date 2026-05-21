@@ -78,25 +78,25 @@ perspective-viewer[theme="Phosphor"] {
     --psp-datagrid--neg-cell--color: var(--theme-red);
 
     /* perspective-viewer-phosphor--webgl */
-    --psp-webgl--legend--color: var(--theme-green-mid);
-    --psp-webgl--treemap--labels: var(--theme-green-mid);
-    --psp-webgl--treemap--hover-highlight: #ff6600;
-    --psp-webgl--tooltip--color: var(--theme-green-mid);
-    --psp-webgl--axis-ticks--color: var(--theme-green-mid);
-    --psp-webgl--axis-lines--color: var(--theme-green-dim);
-    --psp-webgl--gridline--color: var(--theme-green-dark);
-    --psp-webgl--tooltip--background: var(--theme-green-dark);
-    --psp-webgl--tooltip--border-color: var(--theme-green-bright);
-    --psp-webgl--legend--background: var(--psp--background-color);
+    --psp-charts--legend--color: var(--theme-green-mid);
+    --psp-charts--treemap--labels: var(--theme-green-mid);
+    --psp-charts--treemap--hover-highlight: #ff6600;
+    --psp-charts--tooltip--color: var(--theme-green-mid);
+    --psp-charts--axis-ticks--color: var(--theme-green-mid);
+    --psp-charts--axis-lines--color: var(--theme-green-dim);
+    --psp-charts--gridline--color: var(--theme-green-dark);
+    --psp-charts--tooltip--background: var(--theme-green-dark);
+    --psp-charts--tooltip--border-color: var(--theme-green-bright);
+    --psp-charts--legend--background: var(--psp--background-color);
 
-    --psp-webgl--series--color: #00ff41;
-    --psp-webgl--series-1--color: #00ff41;
-    --psp-webgl--series-2--color: #00bfff;
-    --psp-webgl--series-3--color: #ff0055;
-    --psp-webgl--series-4--color: #ffd700;
-    --psp-webgl--series-5--color: #7fffd4;
+    --psp-charts--series--color: #00ff41;
+    --psp-charts--series-1--color: #00ff41;
+    --psp-charts--series-2--color: #00bfff;
+    --psp-charts--series-3--color: #ff0055;
+    --psp-charts--series-4--color: #ffd700;
+    --psp-charts--series-5--color: #7fffd4;
 
-    --psp-webgl--gradient--background: linear-gradient(
+    --psp-charts--gradient--background: linear-gradient(
         #ff3333 0%,
         #1a1a2e 50%,
         #00cc66 100%

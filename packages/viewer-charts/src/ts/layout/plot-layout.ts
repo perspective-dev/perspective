@@ -28,6 +28,7 @@ export interface PlotLayoutOptions {
     hasXLabel: boolean;
     hasYLabel: boolean;
     hasLegend: boolean;
+
     /**
      * Additional CSS-pixel height reserved at the bottom of the plot for a
      * hierarchical / rotated categorical X axis. Overrides the default 24px
@@ -147,7 +148,7 @@ export class PlotLayout {
      *
      * `clamp`, when set, names the axis that carries the *value* (as
      * opposed to categorical / positional) data. Today it only affects
-     * `requireZero`; both axes always receive symmetric 2% padding.
+     * `requireZero`; both axes always receive symmetric `padRatio` padding.
      *
      * `requireZero`, when true, guarantees that the unpadded value `0`
      * falls inside the clamped axis's final domain. For all-positive
@@ -155,6 +156,11 @@ export class PlotLayout {
      * axis line); for all-negative data the maximum is pinned at `0`;
      * for data that already straddles zero, nothing changes. Pairs with
      * `clamp`, and is a no-op when `clamp` is unset.
+     *
+     * `padRatio` controls the symmetric cosmetic pad on both axes
+     * (default 2%). Charts that want plot edges flush with the axes
+     * (e.g. heatmap, whose cell rects already span the exact domain)
+     * pass `0`.
      */
     buildProjectionMatrix(
         xMin: number,
@@ -163,14 +169,23 @@ export class PlotLayout {
         yMax: number,
         clamp?: "x" | "y",
         requireZero?: boolean,
+        padRatio: number = 0.02,
+        xOrigin: number = 0,
+        yOrigin: number = 0,
     ): Float32Array {
-        // Symmetric 2% cosmetic padding on both axes.
+        // Symmetric cosmetic padding on both axes (default 2%).
         let xRange = xMax - xMin;
         let yRange = yMax - yMin;
-        if (xRange === 0) xRange = 1;
-        if (yRange === 0) yRange = 1;
-        const xPad = xRange * 0.02;
-        const yPad = yRange * 0.02;
+        if (xRange === 0) {
+            xRange = 1;
+        }
+
+        if (yRange === 0) {
+            yRange = 1;
+        }
+
+        const xPad = xRange * padRatio;
+        const yPad = yRange * padRatio;
 
         // Evaluate the zero-snap condition against the *pre-pad*
         // values so that an exact-zero boundary (e.g. bar pipelines
@@ -199,6 +214,7 @@ export class PlotLayout {
             yMax = 0;
             yMin -= yPad;
         }
+
         if (snapXMin) {
             xMin = 0;
             xMax += xPad;
@@ -219,11 +235,18 @@ export class PlotLayout {
         const clipBottom = (2 * this.margins.bottom) / this.cssHeight - 1;
         const clipTop = 1 - (2 * this.margins.top) / this.cssHeight;
 
-        // Scale and translate: data [min,max] → clip [clipMin, clipMax]
+        // Scale and translate: rebased data [(min-origin), (max-origin)]
+        // → clip [clipMin, clipMax]. Callers that ship rebased values to
+        // the GPU pass the origin they used; for ordinary numeric data
+        // both origins default to 0 and the math collapses to the
+        // legacy `tx = clipLeft - sx*xMin` form. With a datetime axis
+        // the origin lifts ~1.7e12 out of `tx` before the f32
+        // narrowing in the matrix below, keeping shader cancellation
+        // precision-safe down to sub-millisecond granularity.
         const sx = (clipRight - clipLeft) / (xMax - xMin);
         const sy = (clipTop - clipBottom) / (yMax - yMin);
-        const tx = clipLeft - sx * xMin;
-        const ty = clipBottom - sy * yMin;
+        const tx = clipLeft - sx * (xMin - xOrigin);
+        const ty = clipBottom - sy * (yMin - yOrigin);
 
         // Column-major 4x4 matrix
         // prettier-ignore

@@ -12,6 +12,7 @@
 
 import { AbstractChart } from "../chart-base";
 import { NodeStore, NULL_NODE } from "./node-store";
+import { LazyTooltip } from "../../interaction/lazy-tooltip";
 
 /**
  * Shared state for hierarchical charts (treemap, sunburst). Holds the
@@ -23,7 +24,7 @@ import { NodeStore, NULL_NODE } from "./node-store";
  * layout modules can read/write them without friction.
  */
 export abstract class TreeChartBase extends AbstractChart {
-    // ── Shared column-slot resolution ────────────────────────────────────
+    //  Shared column-slot resolution
     _sizeName = "";
     _colorName = "";
 
@@ -37,7 +38,7 @@ export abstract class TreeChartBase extends AbstractChart {
      */
     _colorMode: "empty" | "numeric" | "series" = "empty";
 
-    // ── Tree storage (SOA + linked-list children) ────────────────────────
+    //  Tree storage (SOA + linked-list children)
     _nodeStore: NodeStore = new NodeStore();
     _rootId: number = NULL_NODE;
     _currentRootId: number = NULL_NODE;
@@ -49,31 +50,27 @@ export abstract class TreeChartBase extends AbstractChart {
      */
     _childLookup: Map<number, Map<string, number>> = new Map();
 
-    // ── Streaming-insert row counter ─────────────────────────────────────
+    //  Streaming-insert row counter
     // Source-view row offset tracked across chunks so `leafRowIdx` on
     // each leaf points back to the correct view row for lazy tooltip
     // fetches via `AbstractChart._lazyRows`.
     _rowCount = 0;
 
-    // ── Color extents / categorical key table ───────────────────────────
+    //  Color extents / categorical key table
     _colorMin = Infinity;
     _colorMax = -Infinity;
     _uniqueColorLabels: Map<string, number> = new Map();
 
-    // ── Visible-node cache (populated per frame by layout/collect) ──────
+    //  Visible-node cache (populated per frame by layout/collect) ──────
     _visibleNodeIds: Int32Array | null = null;
     _visibleNodeCount = 0;
 
     /**
-     * Cached hover-tooltip lines, filled in asynchronously when a
-     * lazy row fetch resolves. `null` means "not yet available" — the
-     * chrome overlay skips the in-chart tooltip box in that state.
-     * `_hoveredTooltipNodeId` records the node the cached lines are
-     * for so the render path can tell stale cache entries apart from
-     * fresh ones.
+     * Lazy-tooltip cache. `lines` is `null` until the async row fetch
+     * resolves; the controller's serial dance drops stale results so
+     * rapid mouse motion doesn't paint out-of-date text. The render
+     * path consults `hoveredTarget` to verify cached lines belong to
+     * the currently hovered node before painting.
      */
-    _hoveredTooltipLines: string[] | null = null;
-    _hoveredTooltipNodeId: number = -1;
-    _hoveredTooltipSerial = 0;
-    _pinnedTooltipSerial = 0;
+    _lazyTooltip = new LazyTooltip<number>();
 }

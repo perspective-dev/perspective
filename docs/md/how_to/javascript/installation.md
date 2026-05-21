@@ -13,16 +13,14 @@ which modules they need. The main modules are:
   includes the core data engine module as a dependency.
 
 `<perspective-viewer>` by itself only implements a trivial debug renderer, which
-prints the currently configured `view()` as a CSV. Plugin modules for popular
-JavaScript libraries, such as [d3fc](https://d3fc.io/), are packaged separately
-and must be imported individually.
+prints the currently configured `view()` as a CSV. Plugin modules are packaged
+separately and must be imported individually.
 
 - `@perspective-dev/viewer-datagrid`
   A custom high-performance data-grid component based on HTML `<table>`.
 
 - `@perspective-dev/viewer-charts`
-  A `<perspective-viewer>` plugin for the [d3fc](https://d3fc.io) charting
-  library.
+  A set of charting components base on WebGL.
 
 When imported after `@perspective-dev/viewer`, the plugin modules will register
 themselves automatically, and the renderers they export will be available in the
@@ -44,7 +42,7 @@ installed separately. All Plugins are optional - but a `<perspective-viewer>`
 without Plugins would be rather boring!
 
 ```bash
-$ npm add @perspective-dev/viewer-charts @perspective-dev/viewer-datagrid @perspective-dev/viewer-openlayers
+$ npm add @perspective-dev/viewer-charts @perspective-dev/viewer-datagrid
 ```
 
 ## Node.js

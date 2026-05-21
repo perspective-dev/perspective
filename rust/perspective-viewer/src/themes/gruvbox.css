@@ -60,21 +60,21 @@ perspective-viewer[theme="Gruvbox Light"] {
     --psp-datagrid--neg-cell--color: var(--theme-red);
 
     /* perspective-viewer-gruvbox-light--webgl */
-    --psp-webgl--axis-ticks--color: var(--theme-fg1);
-    --psp-webgl--gridline--color: var(--theme-bg2);
-    --psp-webgl--series--color: var(--theme-blue);
-    --psp-webgl--series-1--color: var(--theme-blue);
-    --psp-webgl--series-2--color: var(--theme-red);
-    --psp-webgl--series-3--color: var(--theme-green);
-    --psp-webgl--series-4--color: var(--theme-purple);
-    --psp-webgl--series-5--color: var(--theme-aqua);
-    --psp-webgl--series-6--color: var(--theme-alt-blue);
-    --psp-webgl--series-7--color: var(--theme-alt-red);
-    --psp-webgl--series-8--color: var(--theme-alt-green);
-    --psp-webgl--series-9--color: var(--theme-alt-purple);
-    --psp-webgl--series-10--color: var(--theme-alt-aqua);
+    --psp-charts--axis-ticks--color: var(--theme-fg1);
+    --psp-charts--gridline--color: var(--theme-bg2);
+    --psp-charts--series--color: var(--theme-blue);
+    --psp-charts--series-1--color: var(--theme-blue);
+    --psp-charts--series-2--color: var(--theme-red);
+    --psp-charts--series-3--color: var(--theme-green);
+    --psp-charts--series-4--color: var(--theme-purple);
+    --psp-charts--series-5--color: var(--theme-aqua);
+    --psp-charts--series-6--color: var(--theme-alt-blue);
+    --psp-charts--series-7--color: var(--theme-alt-red);
+    --psp-charts--series-8--color: var(--theme-alt-green);
+    --psp-charts--series-9--color: var(--theme-alt-purple);
+    --psp-charts--series-10--color: var(--theme-alt-aqua);
 
-    --psp-webgl--gradient--background: linear-gradient(
+    --psp-charts--gradient--background: linear-gradient(
         var(--theme-alt-red),
         var(--theme-red),
         var(--theme-bg1),

@@ -54,28 +54,28 @@ perspective-viewer[theme="Monokai"] {
     --psp-datagrid--neg-cell--color: #ff9485;
 
     /* perspective-viewer-pro-dark--webgl (overrides) */
-    --psp-webgl--legend--color: #c5c9d0;
-    --psp-webgl--treemap--labels: white;
-    --psp-webgl--treemap--hover-highlight: white;
-    --psp-webgl--tooltip--color: white;
-    --psp-webgl--axis-ticks--color: #c5c9d0;
-    --psp-webgl--axis-lines--color: #61656e;
-    --psp-webgl--gridline--color: #3b3f46;
-    --psp-webgl--tooltip--background: rgba(42, 44, 47, 1);
-    --psp-webgl--tooltip--border-color: #242526;
-    --psp-webgl--legend--background: var(--psp--background-color);
-    --psp-webgl--series--color: rgb(71, 120, 194);
-    --psp-webgl--series-1--color: rgb(71, 120, 194);
-    --psp-webgl--series-2--color: rgb(204, 120, 48);
-    --psp-webgl--series-3--color: rgb(158, 84, 192);
-    --psp-webgl--series-4--color: rgb(51, 150, 153);
-    --psp-webgl--series-5--color: rgb(102, 114, 143);
-    --psp-webgl--series-6--color: rgb(211, 103, 189);
-    --psp-webgl--series-7--color: rgb(109, 124, 77);
-    --psp-webgl--series-8--color: rgb(221, 99, 103);
-    --psp-webgl--series-9--color: rgb(120, 104, 206);
-    --psp-webgl--series-10--color: rgb(23, 166, 123);
-    --psp-webgl--gradient--background: linear-gradient(
+    --psp-charts--legend--color: #c5c9d0;
+    --psp-charts--treemap--labels: white;
+    --psp-charts--treemap--hover-highlight: white;
+    --psp-charts--tooltip--color: white;
+    --psp-charts--axis-ticks--color: #c5c9d0;
+    --psp-charts--axis-lines--color: #61656e;
+    --psp-charts--gridline--color: #3b3f46;
+    --psp-charts--tooltip--background: rgba(42, 44, 47, 1);
+    --psp-charts--tooltip--border-color: #242526;
+    --psp-charts--legend--background: var(--psp--background-color);
+    --psp-charts--series--color: rgb(71, 120, 194);
+    --psp-charts--series-1--color: rgb(71, 120, 194);
+    --psp-charts--series-2--color: rgb(204, 120, 48);
+    --psp-charts--series-3--color: rgb(158, 84, 192);
+    --psp-charts--series-4--color: rgb(51, 150, 153);
+    --psp-charts--series-5--color: rgb(102, 114, 143);
+    --psp-charts--series-6--color: rgb(211, 103, 189);
+    --psp-charts--series-7--color: rgb(109, 124, 77);
+    --psp-charts--series-8--color: rgb(221, 99, 103);
+    --psp-charts--series-9--color: rgb(120, 104, 206);
+    --psp-charts--series-10--color: rgb(23, 166, 123);
+    --psp-charts--gradient--background: linear-gradient(
         #dd6367 0%,
         #242526 50%,
         #3289c8 100%
@@ -135,27 +135,27 @@ perspective-viewer[theme="Monokai"] {
     }
 
     /* perspective-viewer-monokai--webgl */
-    --psp-webgl--treemap--labels: #d6d6d6;
-    --psp-webgl--treemap--hover-highlight: #2d2a2e;
+    --psp-charts--treemap--labels: #d6d6d6;
+    --psp-charts--treemap--hover-highlight: #2d2a2e;
 
-    --psp-webgl--axis-ticks--color: #d6d6d6;
-    --psp-webgl--gridline--color: #444444;
-    --psp-webgl--series--color: #78dce8;
-    --psp-webgl--series-1--color: #78dce8;
-    --psp-webgl--series-2--color: #ff6188;
-    --psp-webgl--series-3--color: #fc9867;
-    --psp-webgl--series-4--color: #ffd866;
-    --psp-webgl--series-5--color: #a9dc76;
+    --psp-charts--axis-ticks--color: #d6d6d6;
+    --psp-charts--gridline--color: #444444;
+    --psp-charts--series--color: #78dce8;
+    --psp-charts--series-1--color: #78dce8;
+    --psp-charts--series-2--color: #ff6188;
+    --psp-charts--series-3--color: #fc9867;
+    --psp-charts--series-4--color: #ffd866;
+    --psp-charts--series-5--color: #a9dc76;
 
-    --psp-webgl--series-6--color: #ab9df2;
-    --psp-webgl--series-7--color: #66d9ef;
-    --psp-webgl--series-8--color: #f92672;
-    --psp-webgl--series-9--color: #fd971f;
-    --psp-webgl--series-10--color: #e6db74;
-    --psp-webgl--series-11--color: #a6e22e;
-    --psp-webgl--series-12--color: #ae81ff;
+    --psp-charts--series-6--color: #ab9df2;
+    --psp-charts--series-7--color: #66d9ef;
+    --psp-charts--series-8--color: #f92672;
+    --psp-charts--series-9--color: #fd971f;
+    --psp-charts--series-10--color: #e6db74;
+    --psp-charts--series-11--color: #a6e22e;
+    --psp-charts--series-12--color: #ae81ff;
 
-    --psp-webgl--gradient--background: linear-gradient(
+    --psp-charts--gradient--background: linear-gradient(
         #ff6188 0%,
         #272822 50%,
         #78dce8 100%

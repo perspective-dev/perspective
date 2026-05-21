@@ -10,6 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+import type { Context2D } from "../canvas-types";
 import type { WebGLContextManager } from "../../webgl/context-manager";
 import type { TreemapChart } from "./treemap";
 import { NULL_NODE } from "../common/node-store";
@@ -18,84 +19,23 @@ import {
     collectVisible,
     collectVisibleAppend,
 } from "./treemap-layout";
-import { resolveTheme, readSeriesPalette } from "../../theme/theme";
+import { Theme } from "../../theme/theme";
 import { resolvePalette, type Vec3 } from "../../theme/palette";
-import {
-    colorValueToT,
-    sampleGradient,
-    type GradientStop,
-} from "../../theme/gradient";
-import {
-    renderLegend,
-    renderCategoricalLegend,
-    renderCategoricalLegendAt,
-} from "../../chrome/legend";
+import { type GradientStop } from "../../theme/gradient";
+import { renderLegend, renderCategoricalLegend } from "../../axis/legend";
 import { PlotLayout } from "../../layout/plot-layout";
 import { buildFacetGrid } from "../../layout/facet-grid";
+import { leafColor, leafRGBA, luminance } from "../common/leaf-color";
 import treemapVert from "../../shaders/treemap.vert.glsl";
 import treemapFrag from "../../shaders/treemap.frag.glsl";
+import { withChromeCache } from "../common/chrome-cache";
+import { wrapLabel } from "../../axis/label-geometry";
+import {
+    renderBreadcrumbs as renderTreeBreadcrumbs,
+    renderTreeTooltip,
+} from "../common/tree-chrome";
 
 type GL = WebGL2RenderingContext | WebGLRenderingContext;
-
-function luminance(r: number, g: number, b: number): number {
-    return 0.299 * r + 0.587 * g + 0.114 * b;
-}
-
-function sampleRGB(stops: GradientStop[], t: number): [number, number, number] {
-    const c = sampleGradient(stops, t);
-    return [c[0], c[1], c[2]];
-}
-
-/**
- * Resolve a leaf's fill color according to the chart's color mode:
- *   - `"numeric"` — sign-aware gradient sample via `colorValueToT`.
- *   - `"series"` / `"empty"` — discrete palette lookup keyed by the
- *     node's `colorLabel` (composite of group_by levels in series mode;
- *     `""` in empty mode, which maps to `palette[0]`).
- *
- * Returns RGB only; the alpha channel is applied separately by
- * `leafRGBA` using `negativeAlpha` for leaves whose raw size was
- * negative.
- */
-function leafColor(
-    chart: TreemapChart,
-    nodeId: number,
-    stops: GradientStop[],
-    palette: Vec3[],
-): [number, number, number] {
-    const store = chart._nodeStore;
-    const colorValue = store.colorValue[nodeId];
-    if (
-        chart._colorMode === "numeric" &&
-        !isNaN(colorValue) &&
-        chart._colorMax > chart._colorMin
-    ) {
-        return sampleRGB(
-            stops,
-            colorValueToT(colorValue, chart._colorMin, chart._colorMax),
-        );
-    }
-    const idx = chart._uniqueColorLabels.get(store.colorLabel[nodeId]) ?? 0;
-    return palette[idx % palette.length] ?? [0, 0, 0];
-}
-
-/**
- * `leafColor` + an alpha channel. Negative-size leaves receive
- * `negativeAlpha` (mirrors `theme.areaOpacity` for area charts) so
- * they stay visually distinguishable from positive leaves without
- * disappearing.
- */
-function leafRGBA(
-    chart: TreemapChart,
-    nodeId: number,
-    stops: GradientStop[],
-    palette: Vec3[],
-    negativeAlpha: number,
-): [number, number, number, number] {
-    const rgb = leafColor(chart, nodeId, stops, palette);
-    const alpha = chart._nodeStore.sizeSign[nodeId] < 0 ? negativeAlpha : 1.0;
-    return [rgb[0], rgb[1], rgb[2], alpha];
-}
 
 /**
  * Full-frame treemap render: layout → WebGL rects → chrome overlay.
@@ -109,14 +49,16 @@ export function renderTreemapFrame(
     chart: TreemapChart,
     glManager: WebGLContextManager,
 ): void {
-    if (chart._currentRootId === NULL_NODE) return;
+    if (chart._currentRootId === NULL_NODE) {
+        return;
+    }
 
     const gl = glManager.gl;
-    const cssWidth = (gl.canvas as HTMLCanvasElement).getBoundingClientRect()
-        .width;
-    const cssHeight = (gl.canvas as HTMLCanvasElement).getBoundingClientRect()
-        .height;
-    if (cssWidth <= 0 || cssHeight <= 0) return;
+    const cssWidth = glManager.cssWidth;
+    const cssHeight = glManager.cssHeight;
+    if (cssWidth <= 0 || cssHeight <= 0) {
+        return;
+    }
 
     const store = chart._nodeStore;
     const hasSplits =
@@ -181,17 +123,16 @@ export function renderTreemapFrame(
         };
     }
 
-    const themeEl = chart._gridlineCanvas || chart._chromeCanvas!;
-    const theme = resolveTheme(themeEl);
+    const theme = chart._resolveTheme();
     const stops = theme.gradientStops;
     const palette = resolvePalette(
-        readSeriesPalette(themeEl),
+        theme.seriesPalette,
         stops,
         Math.max(1, chart._uniqueColorLabels.size),
     );
 
     if (chart._gridlineCanvas) {
-        const gCtx = chart._gridlineCanvas.getContext("2d");
+        const gCtx = chart._gridlineCanvas.getContext("2d") as Context2D | null;
         if (gCtx) {
             gCtx.clearRect(
                 0,
@@ -253,6 +194,7 @@ function layoutFaceted(
     legendW: number,
 ): void {
     const store = chart._nodeStore;
+
     // Collect the facet roots in declaration order (= top-level children
     // of the synthetic root). Skip zero-value facets.
     const facetIds: number[] = [];
@@ -262,7 +204,10 @@ function layoutFaceted(
         c !== NULL_NODE;
         c = store.nextSibling[c]
     ) {
-        if (store.value[c] <= 0) continue;
+        if (store.value[c] <= 0) {
+            continue;
+        }
+
         facetIds.push(c);
         labels.push(store.name[c]);
     }
@@ -283,17 +228,20 @@ function layoutFaceted(
 
     ensureVisibleMetadata(chart);
     const baseArr = chart._visibleBaseDepths!;
-    const rootArr = chart._visibleRootIds!;
 
     let outIdx = 0;
     for (let i = 0; i < facetIds.length; i++) {
         const facetId = facetIds[i];
         const cell = grid.cells[i];
-        if (!cell) continue;
+        if (!cell) {
+            continue;
+        }
+
         const label = store.name[facetId];
         const drillRoot = chart._facetDrillRoots.get(label) ?? facetId;
         const baseDepth = store.depth[drillRoot];
         const plot = cell.layout.plotRect;
+
         // Shift by breadcrumb band — `buildFacetGrid` works in a
         // local coord system starting at (0,0), but we need absolute
         // canvas coords for squarify's rect.
@@ -315,18 +263,22 @@ function layoutFaceted(
             baseDepth,
             outIdx,
         );
+
         // Ensure metadata arrays are wide enough after the append.
         if (baseArr.length < nextIdx) {
             ensureVisibleMetadata(chart);
         }
+
         const baseArr2 = chart._visibleBaseDepths!;
         const rootArr2 = chart._visibleRootIds!;
         for (let k = outIdx; k < nextIdx; k++) {
             baseArr2[k] = baseDepth;
             rootArr2[k] = drillRoot;
         }
+
         outIdx = nextIdx;
     }
+
     chart._visibleNodeCount = outIdx;
 }
 
@@ -335,6 +287,7 @@ function ensureVisibleMetadata(chart: TreemapChart): void {
     if (!chart._visibleBaseDepths || chart._visibleBaseDepths.length < need) {
         chart._visibleBaseDepths = new Int32Array(need);
     }
+
     if (!chart._visibleRootIds || chart._visibleRootIds.length < need) {
         chart._visibleRootIds = new Int32Array(need);
     }
@@ -362,10 +315,16 @@ function generateAndUploadTreemap(
     let rectCount = 0;
     for (let i = 0; i < n; i++) {
         const id = ids[i];
-        if (id === rootOf(i)) continue;
+        if (id === rootOf(i)) {
+            continue;
+        }
+
         const w = store.x1[id] - store.x0[id];
         const h = store.y1[id] - store.y0[id];
-        if (w < 1 || h < 1) continue;
+        if (w < 1 || h < 1) {
+            continue;
+        }
+
         if (store.firstChild[id] === NULL_NODE) {
             rectCount++;
         } else if (store.depth[id] - baseDepthOf(i) === 1) {
@@ -374,6 +333,7 @@ function generateAndUploadTreemap(
     }
 
     const positions = new Float32Array(rectCount * 6 * 2);
+
     // 4 floats per vertex (RGBA) — negative-size leaves emit with a
     // reduced alpha (= `theme.areaOpacity`); everything else is opaque.
     const colors = new Float32Array(rectCount * 6 * 4);
@@ -381,14 +341,19 @@ function generateAndUploadTreemap(
 
     for (let i = 0; i < n; i++) {
         const id = ids[i];
-        if (id === rootOf(i)) continue;
+        if (id === rootOf(i)) {
+            continue;
+        }
+
         const sx0 = store.x0[id];
         const sy0 = store.y0[id];
         const sx1 = store.x1[id];
         const sy1 = store.y1[id];
         const w = sx1 - sx0;
         const h = sy1 - sy0;
-        if (w < 1 || h < 1) continue;
+        if (w < 1 || h < 1) {
+            continue;
+        }
 
         if (store.firstChild[id] === NULL_NODE) {
             const color = leafRGBA(chart, id, stops, palette, negativeAlpha);
@@ -435,7 +400,10 @@ function generateAndUploadTreemap(
 
     chart._vertexCount = vi;
 
-    if (!chart._positionBuffer) chart._positionBuffer = gl.createBuffer();
+    if (!chart._positionBuffer) {
+        chart._positionBuffer = gl.createBuffer();
+    }
+
     gl.bindBuffer(gl.ARRAY_BUFFER, chart._positionBuffer);
     gl.bufferData(
         gl.ARRAY_BUFFER,
@@ -443,7 +411,10 @@ function generateAndUploadTreemap(
         gl.DYNAMIC_DRAW,
     );
 
-    if (!chart._colorBuffer) chart._colorBuffer = gl.createBuffer();
+    if (!chart._colorBuffer) {
+        chart._colorBuffer = gl.createBuffer();
+    }
+
     gl.bindBuffer(gl.ARRAY_BUFFER, chart._colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, colors.subarray(0, vi * 4), gl.DYNAMIC_DRAW);
 }
@@ -492,146 +463,122 @@ function emitRect(
  * tooltip + highlight on top.
  */
 export function renderTreemapChromeOverlay(chart: TreemapChart): void {
-    if (!chart._chromeCanvas || chart._currentRootId === NULL_NODE) return;
-
-    const canvas = chart._chromeCanvas;
-    const dpr = window.devicePixelRatio || 1;
-
-    const domRect = canvas.getBoundingClientRect();
-    const cssWidth = domRect.width;
-    const cssHeight = domRect.height;
-    const targetW = Math.round(cssWidth * dpr);
-    const targetH = Math.round(cssHeight * dpr);
-    if (canvas.width !== targetW || canvas.height !== targetH) {
-        canvas.width = targetW;
-        canvas.height = targetH;
-        chart._chromeCacheDirty = true;
+    if (!chart._chromeCanvas || chart._currentRootId === NULL_NODE) {
+        return;
     }
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    if (chart._chromeCacheDirty) {
-        chart._chromeCache?.close();
-        chart._chromeCache = null;
-        chart._chromeCacheDirty = false;
-        // Bump the generation so any in-flight `createImageBitmap`
-        // for a previous static draw (including one from a prior
-        // dataset) resolves into the stale branch below.
-        const gen = ++chart._chromeCacheGen;
-        drawStaticChrome(chart, ctx, dpr, cssWidth, cssHeight);
-
-        createImageBitmap(canvas).then((bmp) => {
-            if (chart._chromeCacheGen === gen) {
-                // Newer draw already landed — discard our snapshot
-                // rather than overwriting whatever is current.
-                chart._chromeCache?.close();
-                chart._chromeCache = bmp;
-            } else {
-                bmp.close();
-            }
-        });
-    } else if (chart._chromeCache) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(chart._chromeCache, 0, 0);
+    const glManager = chart._glManager;
+    if (!glManager) {
+        return;
     }
+
+    const { dpr, cssWidth, cssHeight } = glManager;
 
     const highlightId =
         chart._pinnedNodeId !== NULL_NODE
             ? chart._pinnedNodeId
             : chart._hoveredNodeId;
-    if (highlightId !== NULL_NODE) {
-        ctx.save();
-        ctx.scale(dpr, dpr);
-        const theme = resolveTheme(canvas);
-        const { fontFamily, labelColor: textColor } = theme;
-        const store = chart._nodeStore;
 
-        renderHoverHighlight(ctx, store, highlightId);
+    withChromeCache(
+        chart,
+        chart._chromeCanvas,
+        dpr,
+        cssWidth,
+        cssHeight,
+        (ctx) => drawStaticChrome(chart, ctx, dpr, cssWidth, cssHeight),
+        highlightId !== NULL_NODE
+            ? (ctx) => {
+                  const theme = chart._resolveTheme();
+                  const { fontFamily } = theme;
+                  const store = chart._nodeStore;
 
-        const ids = chart._visibleNodeIds!;
-        const n = chart._visibleNodeCount;
-        const baseArr = chart._visibleBaseDepths;
-        const rootArr = chart._visibleRootIds;
-        for (let i = 0; i < n; i++) {
-            const id = ids[i];
-            const rootId = rootArr ? rootArr[i] : chart._currentRootId;
-            if (id === rootId || store.firstChild[id] === NULL_NODE) continue;
-            const nw = store.x1[id] - store.x0[id];
-            const nh = store.y1[id] - store.y0[id];
-            const baseDepth = baseArr
-                ? baseArr[i]
-                : store.depth[chart._currentRootId];
-            const relDepth = store.depth[id] - baseDepth;
-            if (relDepth === 1) {
-                renderBranchLabel(
-                    ctx,
-                    store,
-                    id,
-                    nw,
-                    nh,
-                    fontFamily,
-                    textColor,
-                    !chart._showBranchHeader,
-                );
-            } else if (relDepth === 2) {
-                renderBranchLabel(
-                    ctx,
-                    store,
-                    id,
-                    nw,
-                    nh,
-                    fontFamily,
-                    textColor,
-                    true,
-                );
-            }
-        }
+                  renderHoverHighlight(ctx, store, highlightId);
 
-        if (store.firstChild[highlightId] === NULL_NODE) {
-            const themeEl = chart._gridlineCanvas || canvas;
-            const innerTheme = resolveTheme(themeEl);
-            const stops = innerTheme.gradientStops;
-            const palette = resolvePalette(
-                readSeriesPalette(themeEl),
-                stops,
-                Math.max(1, chart._uniqueColorLabels.size),
-            );
-            const hw = store.x1[highlightId] - store.x0[highlightId];
-            const hh = store.y1[highlightId] - store.y0[highlightId];
-            renderNodeLabel(
-                chart,
-                ctx,
-                highlightId,
-                hw,
-                hh,
-                fontFamily,
-                stops,
-                palette,
-                true,
-            );
-        }
+                  const ids = chart._visibleNodeIds!;
+                  const n = chart._visibleNodeCount;
+                  const baseArr = chart._visibleBaseDepths;
+                  const rootArr = chart._visibleRootIds;
+                  for (let i = 0; i < n; i++) {
+                      const id = ids[i];
+                      const rootId = rootArr
+                          ? rootArr[i]
+                          : chart._currentRootId;
+                      if (id === rootId || store.firstChild[id] === NULL_NODE) {
+                          continue;
+                      }
 
-        if (
-            chart._pinnedNodeId === NULL_NODE &&
-            chart._hoveredNodeId !== NULL_NODE
-        ) {
-            renderTreemapTooltip(
-                chart,
-                ctx,
-                chart._hoveredNodeId,
-                cssWidth,
-                cssHeight,
-                fontFamily,
-            );
-        }
-        ctx.restore();
-    }
+                      const nw = store.x1[id] - store.x0[id];
+                      const nh = store.y1[id] - store.y0[id];
+                      const baseDepth = baseArr
+                          ? baseArr[i]
+                          : store.depth[chart._currentRootId];
+                      const relDepth = store.depth[id] - baseDepth;
+                      if (relDepth === 1) {
+                          renderBranchLabel(
+                              ctx,
+                              store,
+                              id,
+                              nw,
+                              nh,
+                              theme,
+                              !chart._showBranchHeader,
+                          );
+                      } else if (relDepth === 2) {
+                          renderBranchLabel(
+                              ctx,
+                              store,
+                              id,
+                              nw,
+                              nh,
+                              theme,
+                              true,
+                          );
+                      }
+                  }
+
+                  if (store.firstChild[highlightId] === NULL_NODE) {
+                      const stops = theme.gradientStops;
+                      const palette = resolvePalette(
+                          theme.seriesPalette,
+                          stops,
+                          Math.max(1, chart._uniqueColorLabels.size),
+                      );
+                      const hw = store.x1[highlightId] - store.x0[highlightId];
+                      const hh = store.y1[highlightId] - store.y0[highlightId];
+                      renderNodeLabel(
+                          chart,
+                          ctx,
+                          highlightId,
+                          hw,
+                          hh,
+                          fontFamily,
+                          stops,
+                          palette,
+                          true,
+                      );
+                  }
+
+                  if (
+                      chart._pinnedNodeId === NULL_NODE &&
+                      chart._hoveredNodeId !== NULL_NODE
+                  ) {
+                      renderTreemapTooltip(
+                          chart,
+                          ctx,
+                          chart._hoveredNodeId,
+                          cssWidth,
+                          cssHeight,
+                          fontFamily,
+                      );
+                  }
+              }
+            : null,
+    );
 }
 
 function drawStaticChrome(
     chart: TreemapChart,
-    ctx: CanvasRenderingContext2D,
+    ctx: Context2D,
     dpr: number,
     cssWidth: number,
     cssHeight: number,
@@ -642,12 +589,11 @@ function drawStaticChrome(
     ctx.save();
     ctx.scale(dpr, dpr);
 
-    const themeEl = chart._gridlineCanvas || canvas;
-    const theme = resolveTheme(themeEl);
+    const theme = chart._resolveTheme();
     const { fontFamily, labelColor: textColor } = theme;
     const stops = theme.gradientStops;
     const palette = resolvePalette(
-        readSeriesPalette(themeEl),
+        theme.seriesPalette,
         stops,
         Math.max(1, chart._uniqueColorLabels.size),
     );
@@ -661,15 +607,22 @@ function drawStaticChrome(
     for (let i = 0; i < n; i++) {
         const id = ids[i];
         const rootId = rootArr ? rootArr[i] : chart._currentRootId;
-        if (id === rootId || store.firstChild[id] !== NULL_NODE) continue;
+        if (id === rootId || store.firstChild[id] !== NULL_NODE) {
+            continue;
+        }
+
         const w = store.x1[id] - store.x0[id];
         const h = store.y1[id] - store.y0[id];
         renderNodeLabel(chart, ctx, id, w, h, fontFamily, stops, palette);
     }
+
     for (let i = 0; i < n; i++) {
         const id = ids[i];
         const rootId = rootArr ? rootArr[i] : chart._currentRootId;
-        if (id === rootId || store.firstChild[id] === NULL_NODE) continue;
+        if (id === rootId || store.firstChild[id] === NULL_NODE) {
+            continue;
+        }
+
         const w = store.x1[id] - store.x0[id];
         const h = store.y1[id] - store.y0[id];
         const baseDepth = baseArr
@@ -683,26 +636,16 @@ function drawStaticChrome(
                 id,
                 w,
                 h,
-                fontFamily,
-                textColor,
+                theme,
                 !chart._showBranchHeader,
             );
         } else if (relDepth === 2) {
-            renderBranchLabel(
-                ctx,
-                store,
-                id,
-                w,
-                h,
-                fontFamily,
-                textColor,
-                true,
-            );
+            renderBranchLabel(ctx, store, id, w, h, theme, true);
         }
     }
 
     if (chart._breadcrumbIds.length > 1) {
-        renderBreadcrumbs(chart, ctx, cssWidth, fontFamily, textColor);
+        renderTreeBreadcrumbs(chart, ctx, cssWidth, fontFamily, textColor);
     }
 
     // Legend: numeric mode → gradient bar; series mode with 2+ unique
@@ -719,6 +662,7 @@ function drawStaticChrome(
             legendLayout,
             chart._uniqueColorLabels,
             palette,
+            theme,
         );
     } else if (
         chart._colorMode === "numeric" &&
@@ -738,6 +682,8 @@ function drawStaticChrome(
                 label: chart._colorName,
             },
             stops,
+            theme,
+            chart.getColumnFormatter(chart._colorName, "value"),
         );
     }
 
@@ -759,7 +705,7 @@ function drawStaticChrome(
 
 function renderNodeLabel(
     chart: TreemapChart,
-    ctx: CanvasRenderingContext2D,
+    ctx: Context2D,
     nodeId: number,
     w: number,
     h: number,
@@ -772,7 +718,9 @@ function renderNodeLabel(
     const PAD = 4;
     const LINE_HEIGHT = 1.3;
 
-    if (w < 30 || h < 14) return;
+    if (w < 30 || h < 14) {
+        return;
+    }
 
     const store = chart._nodeStore;
     const fillColor = leafColor(chart, nodeId, stops, palette);
@@ -787,15 +735,20 @@ function renderNodeLabel(
           : "rgba(255,255,255,0.55)";
 
     const fontSize = Math.min(MAX_FONT, Math.floor(h / 2));
-    if (fontSize < 7) return;
+    if (fontSize < 7) {
+        return;
+    }
+
     ctx.font = `${fontSize}px ${fontFamily}`;
 
     const maxW = w - PAD * 2;
     const lineH = fontSize * LINE_HEIGHT;
     const maxLines = Math.max(1, Math.floor((h - PAD * 2) / lineH));
 
-    const lines = wrapText(ctx, store.name[nodeId], maxW, maxLines);
-    if (lines.length === 0) return;
+    const lines = wrapLabel(ctx, store.name[nodeId], maxW, maxLines);
+    if (lines.length === 0) {
+        return;
+    }
 
     const blockH = lines.length * lineH;
     const startY = store.y0[nodeId] + (h - blockH) / 2 + lineH / 2;
@@ -809,76 +762,13 @@ function renderNodeLabel(
     }
 }
 
-function wrapText(
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    maxW: number,
-    maxLines: number,
-): string[] {
-    if (maxLines <= 0 || maxW <= 0) return [];
-
-    if (ctx.measureText(text).width <= maxW) return [text];
-
-    const lines: string[] = [];
-    let remaining = text;
-
-    while (remaining.length > 0 && lines.length < maxLines) {
-        const isLastLine = lines.length === maxLines - 1;
-
-        let fitLen = remaining.length;
-        while (
-            fitLen > 0 &&
-            ctx.measureText(remaining.slice(0, fitLen)).width > maxW
-        ) {
-            fitLen--;
-        }
-        if (fitLen === 0) fitLen = 1;
-
-        if (fitLen === remaining.length) {
-            lines.push(remaining);
-            break;
-        }
-
-        let breakAt = fitLen;
-        const spaceIdx = remaining.lastIndexOf(" ", fitLen);
-        if (spaceIdx > 0) breakAt = spaceIdx;
-
-        if (isLastLine) {
-            lines.push(truncateWithEllipsis(ctx, remaining, maxW));
-            break;
-        }
-
-        lines.push(remaining.slice(0, breakAt));
-        remaining = remaining.slice(breakAt).trimStart();
-    }
-
-    if (lines.length === 1 && lines[0].length <= 2) return [];
-    return lines;
-}
-
-function truncateWithEllipsis(
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    maxW: number,
-): string {
-    if (ctx.measureText(text).width <= maxW) return text;
-    while (text.length > 1) {
-        text = text.slice(0, -1);
-        if (ctx.measureText(text + "\u2026").width <= maxW) {
-            return text + "\u2026";
-        }
-    }
-    return text;
-}
-
 function renderBranchLabel(
-    ctx: CanvasRenderingContext2D,
+    ctx: Context2D,
     store: import("../common/node-store").NodeStore,
     nodeId: number,
     w: number,
     h: number,
-    fontFamily: string,
-    textColor: string,
+    { fontFamily, labelColor, backgroundColor }: Theme,
     nested: boolean,
 ): void {
     const x0 = store.x0[nodeId];
@@ -886,7 +776,9 @@ function renderBranchLabel(
     const name = store.name[nodeId];
 
     if (nested) {
-        if (w < 60 || h < 30) return;
+        if (w < 60 || h < 30) {
+            return;
+        }
 
         const fontSize = 12;
         ctx.font = `${fontSize}px ${fontFamily}`;
@@ -903,7 +795,10 @@ function renderBranchLabel(
                 }
             }
         }
-        if (text.length <= 3) return;
+
+        if (text.length <= 3) {
+            return;
+        }
 
         ctx.save();
         ctx.beginPath();
@@ -914,16 +809,18 @@ function renderBranchLabel(
         const cy = y0 + h / 2;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = "rgba(0, 0, 0, 0.7)";
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = labelColor;
         ctx.lineJoin = "round";
         ctx.strokeText(text, cx, cy);
-        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+        ctx.fillStyle = backgroundColor;
         ctx.fillText(text, cx, cy);
 
         ctx.restore();
     } else {
-        if (w < 40 || h < 22) return;
+        if (w < 40 || h < 22) {
+            return;
+        }
 
         const fontSize = 11;
         ctx.font = `${fontSize}px ${fontFamily}`;
@@ -941,7 +838,7 @@ function renderBranchLabel(
             }
         }
 
-        ctx.fillStyle = textColor;
+        ctx.fillStyle = labelColor;
         ctx.globalAlpha = 0.85;
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
@@ -950,61 +847,8 @@ function renderBranchLabel(
     }
 }
 
-function renderBreadcrumbs(
-    chart: TreemapChart,
-    ctx: CanvasRenderingContext2D,
-    cssWidth: number,
-    fontFamily: string,
-    textColor: string,
-): void {
-    chart._breadcrumbRegions = [];
-
-    const bgColor = resolveTheme(chart._chromeCanvas!).tooltipBg;
-
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, cssWidth, 24);
-
-    ctx.font = `11px ${fontFamily}`;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-
-    let x = 8;
-    const y = 12;
-    const store = chart._nodeStore;
-
-    for (let i = 0; i < chart._breadcrumbIds.length; i++) {
-        const crumbId = chart._breadcrumbIds[i];
-        const isLast = i === chart._breadcrumbIds.length - 1;
-        const label = store.name[crumbId];
-
-        ctx.fillStyle = textColor;
-        ctx.font = isLast ? `11px ${fontFamily}` : `11px ${fontFamily}`;
-
-        const textW = ctx.measureText(label).width;
-        ctx.fillText(label, x, y);
-
-        chart._breadcrumbRegions.push({
-            nodeId: crumbId,
-            x0: x - 2,
-            y0: 0,
-            x1: x + textW + 2,
-            y1: 24,
-        });
-
-        x += textW;
-
-        if (!isLast) {
-            ctx.fillStyle = textColor;
-            ctx.font = `11px ${fontFamily}`;
-            const sep = " \u203A ";
-            ctx.fillText(sep, x, y);
-            x += ctx.measureText(sep).width;
-        }
-    }
-}
-
 function renderHoverHighlight(
-    ctx: CanvasRenderingContext2D,
+    ctx: Context2D,
     store: import("../common/node-store").NodeStore,
     nodeId: number,
 ): void {
@@ -1020,58 +864,23 @@ function renderHoverHighlight(
 
 function renderTreemapTooltip(
     chart: TreemapChart,
-    ctx: CanvasRenderingContext2D,
+    ctx: Context2D,
     nodeId: number,
     cssWidth: number,
     cssHeight: number,
     fontFamily: string,
 ): void {
-    const theme = resolveTheme(chart._chromeCanvas!);
-    const { tooltipBg, tooltipText, tooltipBorder } = theme;
-
-    // Lines come from the async lazy tooltip fetch kicked off in
-    // `handleTreemapHover`. While a fetch is in flight (or for the
-    // wrong node) this is empty; the tooltip box is skipped until
-    // fresh lines land.
-    const lines =
-        chart._hoveredTooltipNodeId === nodeId
-            ? (chart._hoveredTooltipLines ?? [])
-            : [];
-    if (lines.length === 0) return;
-
-    ctx.font = `11px ${fontFamily}`;
-    const lineHeight = 16;
-    const padding = 8;
-    let maxWidth = 0;
-    for (const line of lines) {
-        const w = ctx.measureText(line).width;
-        if (w > maxWidth) maxWidth = w;
-    }
-    const boxW = maxWidth + padding * 2;
-    const boxH = lines.length * lineHeight + padding * 2 - 4;
-
     const store = chart._nodeStore;
     const cx = (store.x0[nodeId] + store.x1[nodeId]) / 2;
     const cy = (store.y0[nodeId] + store.y1[nodeId]) / 2;
-    let tx = cx + 12;
-    let ty = cy - boxH - 8;
-    if (tx + boxW > cssWidth) tx = cx - boxW - 12;
-    if (tx < 0) tx = 4;
-    if (ty < 0) ty = cy + 12;
-    if (ty + boxH > cssHeight) ty = cssHeight - boxH - 4;
-
-    ctx.fillStyle = tooltipBg;
-    ctx.strokeStyle = tooltipBorder;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(tx, ty, boxW, boxH, 4);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = tooltipText;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    for (let i = 0; i < lines.length; i++) {
-        ctx.fillText(lines[i], tx + padding, ty + padding + i * lineHeight);
-    }
+    renderTreeTooltip(
+        chart,
+        ctx,
+        nodeId,
+        cx,
+        cy,
+        cssWidth,
+        cssHeight,
+        fontFamily,
+    );
 }

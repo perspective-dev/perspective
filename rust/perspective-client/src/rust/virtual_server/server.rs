@@ -16,6 +16,7 @@ use indexmap::IndexMap;
 use prost::Message as ProstMessage;
 use prost::bytes::{Bytes, BytesMut};
 
+use super::data::RowPathStyle;
 use super::error::VirtualServerError;
 use super::handler::VirtualServerHandler;
 use crate::config::{ViewConfig, ViewConfigUpdate};
@@ -322,7 +323,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     .view_get_data(msg.entity_id.as_str(), config, &schema, &viewport)
                     .await?;
 
-                let rows = cols.render_to_rows();
+                let rows = cols.render_to_rows(RowPathStyle::PerLevel);
                 let mut csv = String::new();
                 if let Some(first_row) = rows.first() {
                     let headers: Vec<&str> = first_row.keys().map(|k| k.as_str()).collect();
@@ -350,7 +351,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     .view_get_data(msg.entity_id.as_str(), config, &schema, &viewport)
                     .await?;
 
-                let rows = cols.render_to_rows();
+                let rows = cols.render_to_rows(RowPathStyle::PerLevel);
                 let ndjson_string = rows
                     .iter()
                     .map(serde_json::to_string)
@@ -369,7 +370,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     .view_get_data(msg.entity_id.as_str(), config, &schema, &viewport)
                     .await?;
 
-                let rows = cols.render_to_rows();
+                let rows = cols.render_to_rows(RowPathStyle::Sidecar);
                 let json_string = serde_json::to_string(&rows)
                     .map_err(|e| VirtualServerError::InvalidJSON(std::sync::Arc::new(e)))?;
 
@@ -385,7 +386,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     .await?;
 
                 let json_string = cols
-                    .render_to_columns_json()
+                    .render_to_columns_json(RowPathStyle::Sidecar)
                     .map_err(|e| VirtualServerError::Other(e.to_string()))?;
 
                 respond!(msg, ViewToColumnsStringResp { json_string })

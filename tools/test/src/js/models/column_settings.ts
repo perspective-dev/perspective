@@ -33,14 +33,21 @@ export class ColumnSettingsSidebar {
         this.attributesTab = new AttributesTab(this.container);
         this.styleTab = new StyleTab(this.container);
         this.closeBtn = viewer.locator("#column_settings_close_button");
-        this.tabTitle = view.container.locator(
-            ".tab:not(.tab-padding) .tab-title",
-        );
+        // Tab DOM now uses `.settings_tab` / `.settings_tab.selected_tab`
+        // (see `containers/tab_list.rs`); the previous `.tab-padding`
+        // filler span was removed, so no `:not(.tab-padding)` filter is
+        // needed. These class names are shared with the viewer's query
+        // tabbar (`#query_tabbar_tab`), so the locators are scoped to
+        // `this.container` (the sidebar root) to avoid strict-mode
+        // collisions across the two tab implementations.
+        this.tabTitle = this.container.locator(".settings_tab .tab-title");
         this.nameInputWrapper = view.container.locator(
             ".sidebar_header_contents",
         );
         this.nameInput = view.container.locator("input.sidebar_header_title");
-        this.selectedTab = view.container.locator(".tab.selected");
+        this.selectedTab = this.container.locator(
+            ".settings_tab.selected_tab",
+        );
         this.typeIcon = this.container.locator(".type-icon");
     }
 
@@ -48,7 +55,7 @@ export class ColumnSettingsSidebar {
         let locator = this.container.locator("#" + name);
         await locator.click({ timeout: 1000 });
         await this.container
-            .locator(`.tab.selected #${name}`)
+            .locator(`.settings_tab.selected_tab #${name}`)
             .waitFor({ timeout: 1000 });
     }
 

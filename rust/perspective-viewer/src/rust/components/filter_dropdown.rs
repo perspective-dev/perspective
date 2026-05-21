@@ -103,7 +103,8 @@ impl FilterDropDownElement {
                     old_column = self.column
                 );
                 ApiFuture::spawn(async move {
-                    let fetched = session.get_column_values(column.1.clone()).await?;
+                    let fetched =
+                        crate::queries::get_column_values(&session, column.1.clone()).await?;
                     *all_values.borrow_mut() = Some(fetched);
                     let values = filter_values(&input, &all_values, &exclude);
                     let should_hide = values.len() == 1 && values[0] == input;

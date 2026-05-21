@@ -17,7 +17,6 @@ use perspective_js::utils::{ApiFuture, JsValueSerdeExt};
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
-use crate::components::containers::trap_door_panel::TrapDoorPanel;
 use crate::components::form::code_editor::CodeEditor;
 use crate::components::style::LocalStyle;
 use crate::css;
@@ -25,7 +24,6 @@ use crate::js::{MimeType, copy_to_clipboard, paste_from_clipboard};
 use crate::presentation::*;
 use crate::renderer::*;
 use crate::session::*;
-use crate::tasks::*;
 use crate::utils::*;
 
 #[derive(Clone, PartialEq, Properties)]
@@ -33,24 +31,17 @@ pub struct DebugPanelProps {
     pub presentation: Presentation,
     pub renderer: Renderer,
     pub session: Session,
-}
 
-impl HasPresentation for DebugPanelProps {
-    fn presentation(&self) -> &Presentation {
-        &self.presentation
-    }
-}
+    /// Trap-door width pinned by the parent `SettingsPanel` so switching
+    /// tabs doesn't shrink the panel. Threaded into the hidden sizer
+    /// `<div class="scroll-panel-auto-width">`.
+    #[prop_or_default]
+    pub initial_width: f64,
 
-impl HasRenderer for DebugPanelProps {
-    fn renderer(&self) -> &Renderer {
-        &self.renderer
-    }
-}
-
-impl HasSession for DebugPanelProps {
-    fn session(&self) -> &Session {
-        &self.session
-    }
+    /// Fires once on mount with this panel's measured natural width.
+    /// Routed up to `SettingsPanel` which keeps the running max.
+    #[prop_or_default]
+    pub on_auto_width: Callback<f64>,
 }
 
 #[function_component(DebugPanel)]
@@ -59,6 +50,18 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
     let error = use_state_eq(|| Option::<ExprValidationError>::None);
     let select_all = use_memo((), |()| PubSub::default());
     let modified = use_state_eq(|| false);
+
+    // Measure natural width on mount and route up to `SettingsPanel`.
+    let sizer = use_node_ref();
+    use_effect_with(expr.clone(), {
+        let sizer = sizer.clone();
+        let on_auto_width = props.on_auto_width.clone();
+        move |_| {
+            if let Some(elem) = sizer.cast::<web_sys::HtmlElement>() {
+                on_auto_width.emit(elem.get_bounding_client_rect().width());
+            }
+        }
+    });
 
     use_effect_with((expr.setter(), props.clone()), {
         clone!(error, modified);
@@ -166,16 +169,12 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
             <LocalStyle href={css!("containers/tabs")} />
             <LocalStyle href={css!("form/debug")} />
             <div id="debug-panel-overflow">
-                <TrapDoorPanel id="debug-panel" class="sidebar_column">
-                    <div class="tab-gutter">
-                        <span class="tab selected">
-                            <div id="Debug" class="tab-title" />
-                            <div class="tab-border" />
-                        </span>
-                        <span class="tab tab-padding">
-                            <div class="tab-title" />
-                            <div class="tab-border" />
-                        </span>
+                <div id="debug-panel" class="sidebar_column" ref={sizer}>
+                    <div id="debug-panel-controls">
+                        <button disabled={!*modified} onclick={onapply}>{ "Apply" }</button>
+                        <button disabled={!*modified} onclick={onreset}>{ "Reset" }</button>
+                        <button onclick={oncopy}>{ "Copy" }</button>
+                        <button onclick={onpaste}>{ "Paste" }</button>
                     </div>
                     <div id="debug-panel-editor">
                         <CodeEditor
@@ -187,13 +186,11 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                             error={(*error).clone()}
                         />
                     </div>
-                    <div id="debug-panel-controls">
-                        <button disabled={!*modified} onclick={onapply}>{ "Apply" }</button>
-                        <button disabled={!*modified} onclick={onreset}>{ "Reset" }</button>
-                        <button onclick={oncopy}>{ "Copy" }</button>
-                        <button onclick={onpaste}>{ "Paste" }</button>
-                    </div>
-                </TrapDoorPanel>
+                    <div
+                        class="scroll-panel-auto-width"
+                        style={format!("width:{}px", props.initial_width)}
+                    />
+                </div>
             </div>
         </>
     }
@@ -203,7 +200,12 @@ impl DebugPanelProps {
     fn set_text(&self, setter: UseStateSetter<Rc<String>>) {
         let props = self.clone();
         ApiFuture::spawn(async move {
-            let config = props.get_viewer_config().await?;
+            let config = crate::queries::get_viewer_config(
+                &props.session,
+                &props.renderer,
+                &props.presentation,
+            )
+            .await?;
             let json = JsValue::from_serde_ext(&config)?;
             let js_string =
                 js_sys::JSON::stringify_with_replacer_and_space(&json, &JsValue::NULL, &2.into())?;
@@ -238,7 +240,15 @@ impl DebugPanelProps {
         ApiFuture::spawn(async move {
             match serde_json::from_str(&text) {
                 Ok(config) => {
-                    match props.restore_and_render(config, async { Ok(()) }).await {
+                    match crate::tasks::restore_and_render(
+                        &props.session,
+                        &props.renderer,
+                        &props.presentation,
+                        config,
+                        async { Ok(()) },
+                    )
+                    .await
+                    {
                         Ok(_) => {
                             modified.set(false);
                         },

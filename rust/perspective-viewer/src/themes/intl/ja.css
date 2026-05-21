@@ -55,11 +55,11 @@ perspective-dropdown {
     --psp-label--copy-button--content: "コピー";
     --psp-label--export-button--content: "輸出";
     --psp-label--reset-button--content: "リセット";
-    --psp-label--edit-mode-read-only--content: "Read Only";
-    --psp-label--edit-mode-edit--content: "Text Edit";
-    --psp-label--edit-mode-select-row--content: "Select Row";
-    --psp-label--edit-mode-select-column--content: "Select Column";
-    --psp-label--edit-mode-select-region--content: "Select Region";
+    --psp-label--edit-mode-read-only--content: "読み取り専用";
+    --psp-label--edit-mode-edit--content: "テキスト編集";
+    --psp-label--edit-mode-select-row--content: "行を選択";
+    --psp-label--edit-mode-select-column--content: "列を選択";
+    --psp-label--edit-mode-select-region--content: "範囲を選択";
     --psp-label--scroll-lock-toggle--content: "フリースクロ​​ール";
     --psp-label--scroll-lock-alt-toggle--content: "スクロールを揃える";
 
@@ -71,15 +71,24 @@ perspective-dropdown {
     --psp-label--time-style--content: "時間スタイル";
     --psp-label--foreground--content: "前景";
     --psp-label--background--content: "背景";
+    --psp-label--number-fg-mode--content: "前景";
+    --psp-label--number-bg-mode--content: "背景";
+    --psp-label--pos-bg-color--content: "背景";
+    --psp-label--datetime-color-mode--content: "色";
+    --psp-label--string-color-mode--content: "色";
     --psp-label--series--content: "シリーズ";
     --psp-label--color-range--content: "色の範囲";
     --psp-label--style--content: "スタイル";
+    --psp-label--stack--content: "スタック";
+    --psp-label--alt-axis--content: "副軸";
     --psp-label--minimum-integer-digits--content: "整数の最小桁数";
     --psp-label--rounding-increment--content: "丸め増分";
     --psp-label--notation--content: "表記";
     --psp-label--use-grouping--content: "グループ化を使用する";
     --psp-label--sign-display--content: "サインディスプレイ";
     --psp-label--max-value--content: "最大値";
+    --psp-label--fg-gradient--content: "最大値";
+    --psp-label--bg-gradient--content: "最大値";
     --psp-label--rounding-priority--content: "丸めの優先順位";
     --psp-label--rounding-mode--content: "丸めモード";
     --psp-label--trailing-zero-display--content: "末尾ゼロの表示";
@@ -98,5 +107,32 @@ perspective-dropdown {
     /* Tabs */
     --psp-label--style-tab--content: "スタイル";
     --psp-label--attributes-tab--content: "属性";
-    --psp-label--debug-tab--content: "Debug JSON";
+    --psp-label--query-tab--content: "クエリ";
+    --psp-label--plugin-tab--content: "プラグイン";
+    --psp-label--debug-tab--content: "JSON";
+
+    /* Plugin settings */
+    --psp-label--edit-mode--content: "編集モード";
+    --psp-label--scroll-lock--content: "スクロールロック";
+    --psp-label--chart-type--content: "チャートの種類";
+
+    /* Plugin settings — viewer-charts */
+    --psp-label--auto-alt-y-axis--content: "自動デュアルY軸";
+    --psp-label--facet-mode--content: "ファセットモード";
+    --psp-label--facet-zoom-mode--content: "ファセットズーム";
+    --psp-label--series-zoom-mode--content: "系列ズーム";
+    --psp-label--line-width-px--content: "線の幅";
+    --psp-label--point-size-px--content: "点のサイズ";
+    --psp-label--band-inner-frac--content: "バンド幅";
+    --psp-label--bar-inner-pad--content: "バー間隔";
+    --psp-label--wick-width-px--content: "ヒゲの幅";
+    --psp-label--ohlc-line-width-px--content: "OHLC線の幅";
+    --psp-label--include-zero--content: "ゼロを含める";
+    --psp-label--domain-mode--content: "ドメインモード";
+    --psp-label--gradient-color-mode--content: "カラーモード";
+    --psp-label--gradient-radius-px--content: "グラデーション半径";
+    --psp-label--gradient-intensity--content: "強度";
+    --psp-label--gradient-heat-max--content: "最大ヒート";
+    --psp-label--map-tile-provider--content: "地図プロバイダー";
+    --psp-label--map-tile-alpha--content: "地図の不透明度";
 }

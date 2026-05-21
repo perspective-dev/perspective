@@ -28,20 +28,13 @@ varying float v_color_t;
 varying float v_point_size;
 
 void main() {
-    // Unused-slot sentinel: the per-series slotted buffer leaves tails
-    // filled with `a_color_value = -1` so a single draw can cover all
-    // series. Collapse those vertices to clip-discard. The sentinel is
-    // only exposed in multi-series mode, where `a_color_value` holds a
-    // non-negative series index; single-series draws bound the count to
-    // valid rows and never reach this branch.
-    if(a_color_value < 0.0) {
-        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-        gl_PointSize = 0.0;
-        v_point_size = 0.0;
-        v_color_t = 0.0;
-        return;
-    }
-
+    // No unused-slot discard: tight per-series draws in `points.ts`
+    // already bound `gl.drawArrays(gl.POINTS, s*cap, count[s])` to
+    // valid rows, so the shader never sees a tail slot. A historical
+    // sentinel branch here culled `a_color_value < 0.0`, which under
+    // current dispatch silently dropped real numeric color data
+    // whenever the user's color column legitimately went negative
+    // (e.g., a diverging `Profit` column).
     gl_Position = u_projection * vec4(a_position, 0.0, 1.0);
 
     float sizeRange = u_size_range.y - u_size_range.x;

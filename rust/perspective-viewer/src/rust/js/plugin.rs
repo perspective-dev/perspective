@@ -10,12 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_client::config::GroupRollupMode;
+use perspective_js::JsViewWindow;
 use perspective_js::utils::*;
-use serde::*;
 use wasm_bindgen::prelude::*;
 
-use crate::presentation::ColumnConfigMap;
+use crate::config::PluginStaticConfig;
+use crate::renderer::ColumnConfigMap;
 
 /// Perspective FFI
 #[wasm_bindgen]
@@ -25,55 +25,31 @@ extern "C" {
     #[derive(Clone)]
     pub type JsPerspectiveViewer;
 
-    #[wasm_bindgen(method)]
-    pub fn get_model(this: &JsPerspectiveViewer) -> JsValue;
-
     #[derive(Clone)]
     pub type JsPerspectiveViewerPlugin;
 
-    #[wasm_bindgen(method, getter)]
-    pub fn name(this: &JsPerspectiveViewerPlugin) -> String;
+    #[derive(Clone)]
+    pub type JsPluginStaticConfig;
 
-    #[wasm_bindgen(method, getter)]
-    pub fn category(this: &JsPerspectiveViewerPlugin) -> Option<String>;
+    /// The static configuration of the plugin which defines the basic
+    /// integration with `perspective-viewer`. Called once per plugin at
+    /// registration time and cached — the result must be stable for
+    /// the lifetime of the application.
+    #[wasm_bindgen(method)]
+    pub fn get_static_config(this: &JsPerspectiveViewerPlugin) -> JsPluginStaticConfig;
 
-    #[wasm_bindgen(method, getter)]
-    pub fn max_columns(this: &JsPerspectiveViewerPlugin) -> Option<usize>;
+    /// Returns the per-column schema describing which controls to render
+    /// in the sidebar Style tab and the keys each control owns in the
+    /// column's persisted config map. `column_stats` carries cached
+    /// per-column numeric stats (currently `{ abs_max?: number }`);
+    /// fields are populated lazily and may be missing on the first
+    /// call — the view re-renders and re-queries the schema once the
+    /// async fetch resolves.
+    #[wasm_bindgen(method, catch, js_name = column_config_schema)]
+    pub fn _column_config_schema(this: &JsPerspectiveViewerPlugin, view_type: &str, group: Option<&str>, column_name: &str, current_value: &JsValue, view_config: &JsValue, column_stats: &JsValue) -> ApiResult<JsValue>;
 
-    #[wasm_bindgen(method, getter)]
-    pub fn max_cells(this: &JsPerspectiveViewerPlugin) -> Option<usize>;
-
-    // TODO This can be an internal property
-    #[wasm_bindgen(method, getter)]
-    pub fn render_warning(this: &JsPerspectiveViewerPlugin) -> Option<bool>;
-
-    #[wasm_bindgen(method, setter)]
-    pub fn set_render_warning(this: &JsPerspectiveViewerPlugin, val: bool);
-
-    #[wasm_bindgen(method, getter)]
-    pub fn select_mode(this: &JsPerspectiveViewerPlugin) -> JsValue;
-
-    #[wasm_bindgen(method, getter)]
-    pub fn min_config_columns(this: &JsPerspectiveViewerPlugin) -> Option<usize>;
-
-    #[wasm_bindgen(method, getter)]
-    pub fn config_column_names(this: &JsPerspectiveViewerPlugin) -> Option<js_sys::Array>;
-
-    #[wasm_bindgen(method, getter)]
-    pub fn priority(this: &JsPerspectiveViewerPlugin) -> Option<i32>;
-
-    #[wasm_bindgen(method, getter)]
-    pub fn group_rollups(this: &JsPerspectiveViewerPlugin) -> Option<js_sys::Array>;
-
-    /// Don't call this method directly. Instead, call the corresponding method on the PluginColumnStyles model.
-    #[wasm_bindgen(method, catch)]
-    pub fn can_render_column_styles(this: &JsPerspectiveViewerPlugin, view_type: &str, group: Option<&str>) -> ApiResult<bool>;
-
-    #[wasm_bindgen(method, catch)]
-    pub fn column_style_controls(this: &JsPerspectiveViewerPlugin, view_type: &str, group: Option<&str>) -> ApiResult<JsValue>;
-
-    #[wasm_bindgen(method, catch)]
-    pub fn save(this: &JsPerspectiveViewerPlugin) -> ApiResult<JsValue>;
+    #[wasm_bindgen(method, catch, js_name = plugin_config_schema)]
+    pub fn _plugin_config_schema(this: &JsPerspectiveViewerPlugin, view_config: &JsValue) -> ApiResult<JsValue>;
 
     #[wasm_bindgen(method, js_name=restore, catch)]
     pub fn _restore(this: &JsPerspectiveViewerPlugin, token: &JsValue, columns_config: &JsValue) -> ApiResult<()>;
@@ -81,11 +57,17 @@ extern "C" {
     #[wasm_bindgen(method)]
     pub fn delete(this: &JsPerspectiveViewerPlugin);
 
-    #[wasm_bindgen(method, catch)]
-    pub async fn restyle(
+    #[wasm_bindgen(method)]
+    pub fn restyle(
         this: &JsPerspectiveViewerPlugin,
-        view: perspective_js::View
-    ) -> ApiResult<JsValue>;
+    );
+
+    #[wasm_bindgen(method, catch)]
+    pub async fn render(
+        this: &JsPerspectiveViewerPlugin,
+        view: perspective_js::View,
+        viewport: Option<JsViewWindow>,
+    ) -> ApiResult<web_sys::Blob>;
 
     #[wasm_bindgen(method, catch)]
     pub async fn draw(
@@ -113,7 +95,21 @@ extern "C" {
 
 }
 
+impl From<JsPluginStaticConfig> for PluginStaticConfig {
+    fn from(value: JsPluginStaticConfig) -> Self {
+        value.into_serde_ext().expect("Invalid plugin config")
+    }
+}
+
 impl JsPerspectiveViewerPlugin {
+    /// Read and deserialize the plugin's static config. Should only
+    /// be called once per plugin (at registration time); cache the
+    /// result and read fields off the cached value rather than
+    /// reaching back through the FFI.
+    pub fn read_static_config(&self) -> PluginStaticConfig {
+        self.get_static_config().into()
+    }
+
     pub fn restore(
         &self,
         token: &JsValue,
@@ -121,73 +117,5 @@ impl JsPerspectiveViewerPlugin {
     ) -> ApiResult<()> {
         let columns_config = JsValue::from_serde_ext(&columns_config).unwrap();
         self._restore(token, &columns_config)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub enum ColumnSelectMode {
-    #[default]
-    Toggle,
-    Select,
-}
-
-impl ColumnSelectMode {
-    pub fn css(&self) -> yew::Classes {
-        match self {
-            Self::Toggle => yew::classes!("toggle-mode", "is_column_active"),
-            Self::Select => yew::classes!("select-mode", "is_column_active"),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ViewConfigRequirements {
-    pub min: Option<usize>,
-    pub names: Option<Vec<String>>,
-    pub mode: ColumnSelectMode,
-    pub max_columns: Option<usize>,
-    pub max_cells: Option<usize>,
-    pub name: String,
-    pub render_warning: bool,
-    group_rollups: Option<Vec<GroupRollupMode>>,
-}
-
-impl ViewConfigRequirements {
-    pub fn is_swap(&self, index: usize) -> bool {
-        self.names
-            .as_ref()
-            .map(|x| index < x.len() - 1)
-            .unwrap_or(false)
-    }
-
-    pub fn get_group_rollups(&self, rollup_features: &[GroupRollupMode]) -> Vec<GroupRollupMode> {
-        self.group_rollups
-            .clone()
-            .map(|x| {
-                x.into_iter()
-                    .filter(|y| rollup_features.is_empty() || rollup_features.contains(y))
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-}
-
-impl JsPerspectiveViewerPlugin {
-    pub fn get_requirements(&self) -> ApiResult<ViewConfigRequirements> {
-        Ok(ViewConfigRequirements {
-            min: self.min_config_columns(),
-            mode: self.select_mode().into_serde_ext()?,
-            names: self
-                .config_column_names()
-                .map(|x| x.into_serde_ext().unwrap()),
-            max_columns: self.max_columns(),
-            max_cells: self.max_cells(),
-            name: self.name(),
-            render_warning: self.render_warning().unwrap_or(true),
-            group_rollups: self
-                .group_rollups()
-                .map(|x| x.into_serde_ext::<Vec<GroupRollupMode>>().unwrap()),
-        })
     }
 }

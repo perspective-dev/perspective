@@ -22,7 +22,7 @@ use yew::prelude::*;
 use crate::components::column_dropdown::ColumnDropDownElement;
 use crate::components::column_selector::{EmptyColumn, InPlaceColumn, InvalidColumn};
 use crate::components::type_icon::TypeIcon;
-use crate::dragdrop::*;
+use crate::presentation::{DragDropContainer, Presentation};
 use crate::utils::DragTarget;
 
 #[derive(Properties, Derivative)]
@@ -35,7 +35,7 @@ where
 {
     pub parent: Scope<T>,
 
-    pub dragdrop: DragDrop,
+    pub presentation: Presentation,
     pub name: &'static str,
     pub column_dropdown: ColumnDropDownElement,
     pub exclude: HashSet<String>,
@@ -185,11 +185,11 @@ where
         );
 
         let drop = Callback::from({
-            let dragdrop = ctx.props().dragdrop.clone();
+            let presentation = ctx.props().presentation.clone();
             let link = ctx.link().clone();
             move |event| {
                 link.send_message(DragDropListMsg::Freeze(false));
-                dragdrop.notify_drop(&event);
+                presentation.notify_drop(&event);
             }
         });
 
@@ -210,7 +210,7 @@ where
                 let is_append = index == columns.len();
                 let is_self_move = ctx
                     .props()
-                    .dragdrop
+                    .presentation
                     .get_drag_target()
                     .map(|x| V::is_self_move(x))
                     .unwrap_or_default();

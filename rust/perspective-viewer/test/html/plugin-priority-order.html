@@ -6,22 +6,22 @@
             await customElements.whenDefined("perspective-viewer-plugin");
             const BASE = customElements.get("perspective-viewer-plugin");
             class TestChartPluginHighPriority extends BASE {
-                get name() {
-                    return "HighPriority";
-                }
-
-                get priority() {
-                    return 10;
+                get_static_config() {
+                    return {
+                        name: "HighPriority",
+                        config_column_names: [],
+                        priority: 10,
+                    };
                 }
             }
 
             class TestChartPluginLowPriority extends BASE {
-                get name() {
-                    return "LowPriority";
-                }
-
-                get priority() {
-                    return -10;
+                get_static_config() {
+                    return {
+                        name: "LowPriority",
+                        config_column_names: [],
+                        priority: -10,
+                    };
                 }
             }
 

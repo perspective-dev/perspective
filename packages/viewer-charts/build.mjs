@@ -11,16 +11,41 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { NodeModulesExternal } from "@perspective-dev/esbuild-plugin/external.js";
+import { WorkerPlugin } from "@perspective-dev/esbuild-plugin/worker.js";
 import { build } from "@perspective-dev/esbuild-plugin/build.js";
 import { transform as transformCss } from "lightningcss";
 import { execSync } from "node:child_process";
 import * as fs from "node:fs/promises";
 
-// TODO: if shader payload ever becomes a measured bottleneck, swap this
-// regex minifier for an AST-based tool (e.g. `glsl-minifier`) to get
-// identifier mangling on locals/varyings. Uniform/attribute names are
-// resolved by string from JS via `getUniformLocation` / `getAttribLocation`,
-// so only locals are safe to rename.
+import { GlslMinify as AstGlslMinify } from "webpack-glsl-minify/build/minify.js";
+
+/**
+ * Pull every identifier the JS code might resolve by string out of the
+ * unminified shader source so we can hand them to the AST minifier's
+ * `nomangle` list. `preserveUniforms: true` already covers `uniform`
+ * declarations, and the minifier auto-preserves `varying` / `in` /
+ * `out` names. The one category the minifier won't infer is the
+ * GLSL ES 1.00 `attribute` declaration in vertex shaders — those are
+ * the names `getAttribLocation` queries, so we surface them here.
+ */
+function extractPreservedNames(src) {
+    const names = new Set();
+    const attrRe =
+        /\battribute\s+(?:highp\s+|mediump\s+|lowp\s+)?\S+\s+([a-zA-Z_][\w]*)/g;
+    let m;
+    while ((m = attrRe.exec(src))) {
+        names.add(m[1]);
+    }
+    return [...names];
+}
+
+// AST-based GLSL minifier. Mangles function locals and non-`main`
+// function names; preserves uniforms, attributes, varyings, and `gl_*`
+// built-ins (the chart impls resolve those by string via
+// `getUniformLocation` / `getAttribLocation`). Saves ~7% of the
+// bundled shader payload over the prior regex pass, and parses
+// `#`-directives natively so the previous newline-preservation hack
+// is no longer needed.
 const GlslMinify = () => ({
     name: "glsl-minify",
     setup(build) {
@@ -29,13 +54,21 @@ const GlslMinify = () => ({
             if (process.env.PSP_DEBUG) {
                 return { contents: src, loader: "text" };
             }
-            const min = src
-                .replace(/\/\*[\s\S]*?\*\//g, "")
-                .replace(/\/\/[^\n]*/g, "")
-                .replace(/\s+/g, " ")
-                .replace(/\s*([;,(){}\[\]=+\-*/<>!&|^~?])\s*/g, "$1")
-                .trim();
-            return { contents: min, loader: "text" };
+            const minifier = new AstGlslMinify(
+                {
+                    preserveDefines: true,
+                    preserveUniforms: true,
+                    preserveVariables: false,
+                    nomangle: extractPreservedNames(src),
+                    output: "source",
+                    esModule: false,
+                    stripVersion: false,
+                },
+                undefined,
+                undefined,
+            );
+            const { sourceCode } = await minifier.execute(src);
+            return { contents: sourceCode, loader: "text" };
         });
     },
 });
@@ -72,7 +105,30 @@ const BUILD = [
         define: {
             global: "window",
         },
-        plugins: [NodeModulesExternal(), GlslMinify(), LightningCssMinify()],
+        plugins: [
+            NodeModulesExternal(),
+            WorkerPlugin({
+                inline: !process.env.PSP_DEBUG,
+                plugins: [GlslMinify(), LightningCssMinify()],
+                loader: {
+                    ".css": "text",
+                    ".glsl": "text",
+                },
+                additionalOptions: {
+                    minifyWhitespace: !process.env.PSP_DEBUG,
+                    minifyIdentifiers: !process.env.PSP_DEBUG,
+                    mangleProps: process.env.PSP_DEBUG
+                        ? undefined
+                        : /^[_#]|^(plotRect|paddedX(?:Min|Max)|paddedY(?:Min|Max)|dataToPixel|tickColor|labelColor|axisLineColor|gridlineColor|legendText|legendBorder|tooltipBg|tooltipText|tooltipBorder|areaOpacity|heatmapGapPx|sunburstGapPx|gradientStops|seriesPalette|bufferPool)$/,
+                    reserveProps: /(handle_response|__unsafe_open_view)/,
+                },
+            }),
+            GlslMinify(),
+            LightningCssMinify(),
+        ],
+        // minifyWhitespace: !process.env.PSP_DEBUG,
+        // minifyIdentifiers: !process.env.PSP_DEBUG,
+        // mangleProps: process.env.PSP_DEBUG ? false : /^[_#]/,
         format: "esm",
         loader: {
             ".css": "text",
@@ -85,10 +141,35 @@ const BUILD = [
         define: {
             global: "window",
         },
-        plugins: [GlslMinify(), LightningCssMinify()],
-        minifyWhitespace: !process.env.PSP_DEBUG,
-        minifyIdentifiers: !process.env.PSP_DEBUG,
-        mangleProps: process.env.PSP_DEBUG ? false : /^[_#]/,
+        // minifyWhitespace: !process.env.PSP_DEBUG,
+        // minifyIdentifiers: !process.env.PSP_DEBUG,
+        // mangleProps: process.env.PSP_DEBUG ? false : /^[_#]/,
+        plugins: [
+            WorkerPlugin({
+                // Inline (Blob URL) for prod, file mode for debug —
+                // file mode preserves source maps + real paths in
+                // DevTools so worker breakpoints work.
+                inline: !process.env.PSP_DEBUG,
+                plugins: [GlslMinify(), LightningCssMinify()],
+                loader: {
+                    ".css": "text",
+                    ".glsl": "text",
+                },
+                additionalOptions: {
+                    minifyWhitespace: !process.env.PSP_DEBUG,
+                    minifyIdentifiers: !process.env.PSP_DEBUG,
+                    mangleProps: process.env.PSP_DEBUG
+                        ? undefined
+                        : /^[_#]|^(plotRect|paddedX(?:Min|Max)|paddedY(?:Min|Max)|dataToPixel|tickColor|labelColor|axisLineColor|gridlineColor|legendText|legendBorder|tooltipBg|tooltipText|tooltipBorder|areaOpacity|heatmapGapPx|sunburstGapPx|gradientStops|seriesPalette|bufferPool)$/,
+                    reserveProps: /(handle_response|__unsafe_open_view)/,
+                },
+            }),
+            GlslMinify(),
+            LightningCssMinify(),
+        ],
+        // minifyWhitespace: !process.env.PSP_DEBUG,
+        // minifyIdentifiers: !process.env.PSP_DEBUG,
+        // mangleProps: process.env.PSP_DEBUG ? false : /^[_#]/,
         format: "esm",
         loader: {
             ".css": "text",

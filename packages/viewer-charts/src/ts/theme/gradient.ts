@@ -12,7 +12,9 @@
 
 import { parseCSSColorToVec3 } from "../utils/css";
 
-/** A single stop on a parsed CSS gradient. `offset` ∈ [0, 1]. */
+/**
+ * A single stop on a parsed CSS gradient. `offset` ∈ [0, 1].
+ */
 export interface GradientStop {
     offset: number;
     color: [number, number, number, number]; // RGBA, each ∈ [0, 1]
@@ -35,16 +37,30 @@ const DEFAULT_STOPS: GradientStop[] = [
 export function parseCssGradient(
     src: string | null | undefined,
 ): GradientStop[] {
-    if (!src) return DEFAULT_STOPS.slice();
+    if (!src) {
+        return DEFAULT_STOPS.slice();
+    }
+
     const trimmed = src.trim();
-    if (!trimmed) return DEFAULT_STOPS.slice();
+    if (!trimmed) {
+        return DEFAULT_STOPS.slice();
+    }
 
     // Strip the `linear-gradient(` wrapper. Bail out if we don't find it.
     const openIdx = trimmed.indexOf("(");
-    if (openIdx < 0) return DEFAULT_STOPS.slice();
-    if (!/^linear-gradient\s*\(/i.test(trimmed)) return DEFAULT_STOPS.slice();
+    if (openIdx < 0) {
+        return DEFAULT_STOPS.slice();
+    }
+
+    if (!/^linear-gradient\s*\(/i.test(trimmed)) {
+        return DEFAULT_STOPS.slice();
+    }
+
     const closeIdx = trimmed.lastIndexOf(")");
-    if (closeIdx <= openIdx) return DEFAULT_STOPS.slice();
+    if (closeIdx <= openIdx) {
+        return DEFAULT_STOPS.slice();
+    }
+
     const body = trimmed.substring(openIdx + 1, closeIdx);
 
     // Split on commas at depth 0 (respecting nested `rgb(...)` / `rgba(...)` /
@@ -54,13 +70,16 @@ export function parseCssGradient(
     let start = 0;
     for (let i = 0; i < body.length; i++) {
         const ch = body[i];
-        if (ch === "(") depth++;
-        else if (ch === ")") depth--;
-        else if (ch === "," && depth === 0) {
+        if (ch === "(") {
+            depth++;
+        } else if (ch === ")") {
+            depth--;
+        } else if (ch === "," && depth === 0) {
             parts.push(body.substring(start, i));
             start = i + 1;
         }
     }
+
     parts.push(body.substring(start));
 
     // First part may be a direction (`to right`, `90deg`, `to bottom right`)
@@ -82,7 +101,10 @@ export function parseCssGradient(
 
     for (let i = startIdx; i < parts.length; i++) {
         const piece = parts[i].trim();
-        if (!piece) continue;
+        if (!piece) {
+            continue;
+        }
+
         // Peel off an optional trailing `<number>%` or `<number>px`.
         const pctMatch = piece.match(/\s([\-\d.]+)%\s*$/);
         const color = pctMatch
@@ -97,7 +119,10 @@ export function parseCssGradient(
         }
     }
 
-    if (stops.length === 0) return DEFAULT_STOPS.slice();
+    if (stops.length === 0) {
+        return DEFAULT_STOPS.slice();
+    }
+
     if (stops.length === 1) {
         // Single stop → solid color. Duplicate across [0, 1] so sampling works.
         const [r, g, b] = stops[0].color;
@@ -109,15 +134,25 @@ export function parseCssGradient(
 
     // Fill in missing offsets by linear interpolation of neighbours with
     // known positions (CSS implicit-position semantics).
-    if (stops[0].offset === null) stops[0].offset = 0;
-    if (stops[stops.length - 1].offset === null)
+    if (stops[0].offset === null) {
+        stops[0].offset = 0;
+    }
+
+    if (stops[stops.length - 1].offset === null) {
         stops[stops.length - 1].offset = 1;
+    }
 
     for (let i = 1; i < stops.length - 1; i++) {
-        if (stops[i].offset !== null) continue;
+        if (stops[i].offset !== null) {
+            continue;
+        }
+
         // Find next known offset.
         let j = i + 1;
-        while (j < stops.length && stops[j].offset === null) j++;
+        while (j < stops.length && stops[j].offset === null) {
+            j++;
+        }
+
         const before = stops[i - 1].offset!;
         const after = stops[j].offset!;
         const span = j - (i - 1);
@@ -125,6 +160,7 @@ export function parseCssGradient(
             stops[k].offset =
                 before + ((k - (i - 1)) / span) * (after - before);
         }
+
         i = j - 1;
     }
 
@@ -150,21 +186,31 @@ export function sampleGradient(
     stops: GradientStop[],
     t: number,
 ): [number, number, number, number] {
-    if (stops.length === 0) return [0, 0, 0, 1];
-    if (t <= stops[0].offset)
+    if (stops.length === 0) {
+        return [0, 0, 0, 1];
+    }
+
+    if (t <= stops[0].offset) {
         return stops[0].color.slice() as [number, number, number, number];
+    }
+
     const last = stops[stops.length - 1];
-    if (t >= last.offset)
+    if (t >= last.offset) {
         return last.color.slice() as [number, number, number, number];
+    }
 
     // Bisect for the interval containing `t`.
     let lo = 0;
     let hi = stops.length - 1;
     while (hi - lo > 1) {
         const mid = (lo + hi) >> 1;
-        if (stops[mid].offset <= t) lo = mid;
-        else hi = mid;
+        if (stops[mid].offset <= t) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
     }
+
     const a = stops[lo];
     const b = stops[hi];
     const span = b.offset - a.offset;
@@ -190,7 +236,10 @@ export function colorValueToT(
     colorMin: number,
     colorMax: number,
 ): number {
-    if (!isFinite(value) || colorMin === colorMax) return 0.5;
+    if (!isFinite(value) || colorMin === colorMax) {
+        return 0.5;
+    }
+
     let denom: number;
     if (colorMin >= 0) {
         denom = colorMax;
@@ -199,13 +248,17 @@ export function colorValueToT(
     } else {
         denom = Math.max(-colorMin, colorMax);
     }
-    if (denom <= 0) return 0.5;
+
+    if (denom <= 0) {
+        return 0.5;
+    }
+
     const t = 0.5 + 0.5 * (value / denom);
     return t < 0 ? 0 : t > 1 ? 1 : t;
 }
 
 /**
- * Convert a discrete series palette (from `--psp-webgl--series-N--color`)
+ * Convert a discrete series palette (from `--psp-charts--series-N--color`)
  * into a `GradientStop[]` with stops at `i / (N - 1)`. The resulting
  * stops can feed `buildGradientLUT` / `ensureGradientTexture` / any
  * other code path that already accepts a gradient — so categorical
@@ -217,7 +270,10 @@ export function colorValueToT(
 export function paletteToStops(
     palette: [number, number, number][],
 ): GradientStop[] {
-    if (palette.length === 0) return DEFAULT_STOPS.slice();
+    if (palette.length === 0) {
+        return DEFAULT_STOPS.slice();
+    }
+
     if (palette.length === 1) {
         const [r, g, b] = palette[0];
         return [
@@ -225,6 +281,7 @@ export function paletteToStops(
             { offset: 1, color: [r, g, b, 1] },
         ];
     }
+
     const denom = palette.length - 1;
     return palette.map(([r, g, b], i) => ({
         offset: i / denom,
@@ -250,5 +307,6 @@ export function buildGradientLUT(
         out[i * 4 + 2] = Math.round(c[2] * 255);
         out[i * 4 + 3] = Math.round(c[3] * 255);
     }
+
     return out;
 }

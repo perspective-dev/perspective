@@ -19,8 +19,9 @@ perspective-viewer {
 
 perspective-viewer[theme="Pro Light"],
 perspective-viewer[theme="Pro Dark"] {
-    --psp-d3fc--pos-gradient--background: linear-gradient(
-        #94d0ff,
+    --psp-charts--gradient--background: linear-gradient(
+        #000 0%,
+        #94d0ff 50%,
         #8795e8,
         #966bff,
         #ad8cff,
@@ -80,8 +81,9 @@ perspective-viewer[theme="Pro Dark"] {
 span,
 input,
 button {
-    font-family: "ui-monospace", "SFMono-Regular", "SF Mono", "Menlo",
-        "Consolas", "Liberation Mono", monospace;
+    font-family:
+        "ui-monospace", "SFMono-Regular", "SF Mono", "Menlo", "Consolas",
+        "Liberation Mono", monospace;
     font-size: 12px;
     background: none;
     margin: 0px;
@@ -104,8 +106,9 @@ input {
 }
 
 input[type="number"] {
-    font-family: "ui-monospace", "SFMono-Regular", "SF Mono", "Menlo",
-        "Consolas", "Liberation Mono", monospace;
+    font-family:
+        "ui-monospace", "SFMono-Regular", "SF Mono", "Menlo", "Consolas",
+        "Liberation Mono", monospace;
 }
 
 input:focus {
@@ -157,6 +160,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 input[type="range"]::-moz-range-thumb {
     -webkit-appearance: none;
+    appearance: none;
     pointer-events: all;
     width: 6px;
     height: 24px;
@@ -171,8 +175,12 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 input[type="range"]::-webkit-slider-thumb:active {
-    box-shadow: inset 0 0 3px #387bbe, 0 0 9px #387bbe;
-    -webkit-box-shadow: inset 0 0 3px #387bbe, 0 0 9px #387bbe;
+    box-shadow:
+        inset 0 0 3px #387bbe,
+        0 0 9px #387bbe;
+    -webkit-box-shadow:
+        inset 0 0 3px #387bbe,
+        0 0 9px #387bbe;
 }
 /* 
 input[type="number"] {

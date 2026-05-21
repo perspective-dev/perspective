@@ -22,7 +22,7 @@ mod generic_sql_model;
 mod handler;
 mod server;
 
-pub use data::{SetVirtualDataColumn, VirtualDataCell, VirtualDataSlice};
+pub use data::{RowPathStyle, SetVirtualDataColumn, VirtualDataCell, VirtualDataSlice};
 pub use error::{ResultExt, VirtualServerError};
 pub use features::{AggSpec, Features};
 pub use generic_sql_model::{

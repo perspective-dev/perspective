@@ -13,9 +13,14 @@
 import type { ColumnDataMap } from "./view-reader";
 
 export interface SplitGroup {
-    /** Composite prefix (e.g., "East", "East|Enterprise" for multi-level). */
+    /**
+     * Composite prefix (e.g., "East", "East|Enterprise" for multi-level).
+     */
     prefix: string;
-    /** Map of base column name → full Arrow column name ("prefix|base"). */
+
+    /**
+     * Map of base column name → full Arrow column name ("prefix|base").
+     */
     colNames: Map<string, string>;
 }
 
@@ -34,11 +39,20 @@ export function buildSplitGroups(
 ): SplitGroup[] {
     const prefixCols = new Map<string, Set<string>>();
     for (const key of columns.keys()) {
-        if (key.startsWith("__")) continue;
+        if (key.startsWith("__")) {
+            continue;
+        }
+
         const pipeIdx = key.lastIndexOf("|");
-        if (pipeIdx === -1) continue;
+        if (pipeIdx === -1) {
+            continue;
+        }
+
         const prefix = key.substring(0, pipeIdx);
-        if (!prefixCols.has(prefix)) prefixCols.set(prefix, new Set());
+        if (!prefixCols.has(prefix)) {
+            prefixCols.set(prefix, new Set());
+        }
+
         prefixCols.get(prefix)!.add(key);
     }
 
@@ -47,25 +61,37 @@ export function buildSplitGroups(
         const resolved = new Map<string, string>();
         let ok = true;
         for (const base of requiredBases) {
-            if (!base) continue;
+            if (!base) {
+                continue;
+            }
+
             const full = `${prefix}|${base}`;
             const col = columns.get(full);
             if (!keys.has(full) || !col?.values) {
                 ok = false;
                 break;
             }
+
             resolved.set(base, full);
         }
-        if (!ok) continue;
+
+        if (!ok) {
+            continue;
+        }
 
         for (const base of optionalBases) {
-            if (!base) continue;
+            if (!base) {
+                continue;
+            }
+
             const full = `${prefix}|${base}`;
             if (keys.has(full) && columns.get(full)?.values) {
                 resolved.set(base, full);
             }
         }
+
         out.push({ prefix, colNames: resolved });
     }
+
     return out;
 }

@@ -33,13 +33,24 @@ export interface VisibleExtent {
 }
 
 export interface VisibleExtentRecord {
-    /** Position on the categorical axis — compared to the visible window. */
+    /**
+     * Position on the categorical axis — compared to the visible window.
+     */
     cat: number;
-    /** Low bound of the value-axis extent for this record. */
+
+    /**
+     * Low bound of the value-axis extent for this record.
+     */
     lo: number;
-    /** High bound of the value-axis extent for this record. */
+
+    /**
+     * High bound of the value-axis extent for this record.
+     */
     hi: number;
-    /** True to skip this record (hidden series / wrong axis / etc.). */
+
+    /**
+     * True to skip this record (hidden series / wrong axis / etc.).
+     */
     skip: boolean;
 }
 
@@ -63,23 +74,37 @@ export function computeVisibleExtent<T>(
 ): VisibleExtent {
     let min = Infinity;
     let max = -Infinity;
+
     // Reuse a single scratch record across the walk. `extract` mutates
     // it in place — zero allocations per iteration.
     const scratch: VisibleExtentRecord = { cat: 0, lo: 0, hi: 0, skip: false };
     for (let i = 0; i < items.length; i++) {
         scratch.skip = false;
         extract(items[i], scratch);
-        if (scratch.skip) continue;
-        if (scratch.cat < visCatMin || scratch.cat > visCatMax) continue;
-        if (scratch.lo < min) min = scratch.lo;
-        if (scratch.hi > max) max = scratch.hi;
+        if (scratch.skip) {
+            continue;
+        }
+
+        if (scratch.cat < visCatMin || scratch.cat > visCatMax) {
+            continue;
+        }
+
+        if (scratch.lo < min) {
+            min = scratch.lo;
+        }
+
+        if (scratch.hi > max) {
+            max = scratch.hi;
+        }
     }
+
     const hasFit = isFinite(min) && isFinite(max);
     if (hasFit && min === max) {
         const pad = Math.abs(min) || 1;
         min -= pad;
         max += pad;
     }
+
     out.min = min;
     out.max = max;
     out.hasFit = hasFit;

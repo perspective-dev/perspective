@@ -33,7 +33,6 @@ const IS_PLAYWRIGHT = get_scope().reduce(
             "viewer",
             "viewer-datagrid",
             "viewer-charts",
-            "viewer-openlayers",
             "viewer-workspace",
             "workspace",
             "jupyterlab",

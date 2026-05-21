@@ -26,7 +26,10 @@ pub struct NumberSeriesStyleProps {
     pub default_config: NumberSeriesStyleDefaultConfig,
 
     #[prop_or_default]
-    pub on_change: Callback<ColumnConfigValueUpdate>,
+    pub on_change: Callback<ColumnConfigFieldUpdate>,
+
+    #[prop_or_default]
+    pub keys: Vec<String>,
 
     #[prop_or_default]
     weak_link: WeakScope<NumberSeriesStyle>,
@@ -51,7 +54,7 @@ pub enum NumberSeriesStyleMsg {
 
 /// Form control for the per-column `chart_type` + `stack` picker. Rendered
 /// inside the column-settings sidebar when the active plugin returns a
-/// `NumberSeriesStyleDefaultConfig` from its `column_style_controls` hook.
+/// `ControlSpec::NumberSeriesStyle` from its `column_config_schema` hook.
 pub struct NumberSeriesStyle {
     config: NumberSeriesStyleConfig,
 }
@@ -137,13 +140,22 @@ impl Component for NumberSeriesStyle {
 }
 
 impl NumberSeriesStyle {
-    /// Dispatch the current config as an update. When the config matches
-    /// the default (Bar + no stack override), send `None` so the field is
-    /// omitted entirely from the serialized `ColumnConfigValues`.
+    /// Dispatch the current config as an update. The default (Bar + no
+    /// stack override) round-trips as an empty JSON object via
+    /// `skip_serializing_if`, which means a field-level reset for this
+    /// schema field.
     fn dispatch_config(&self, ctx: &Context<Self>) {
-        let update = Some(self.config.clone()).filter(|c| c != &NumberSeriesStyleConfig::default());
-        ctx.props()
-            .on_change
-            .emit(ColumnConfigValueUpdate::NumberSeriesStyle(update));
+        let value = if self.config == NumberSeriesStyleConfig::default() {
+            serde_json::Map::new()
+        } else {
+            match serde_json::to_value(&self.config) {
+                Ok(serde_json::Value::Object(m)) => m,
+                _ => serde_json::Map::new(),
+            }
+        };
+        ctx.props().on_change.emit(ColumnConfigFieldUpdate {
+            keys: ctx.props().keys.clone(),
+            value,
+        });
     }
 }

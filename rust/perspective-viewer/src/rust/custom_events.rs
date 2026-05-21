@@ -10,249 +10,206 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use std::cell::RefCell;
-use std::ops::Deref;
-use std::rc::Rc;
+//! Wire engine PubSub fanout to JavaScript `CustomEvent` dispatch on the host
+//! element. [`wire_custom_events`] is the single subscription site; every
+//! `perspective-*` `CustomEvent` originates from a PubSub fire on `Session`,
+//! `Renderer`, or `Presentation`.
 
 use perspective_client::{ViewWindow, clone};
 use perspective_js::json;
+use perspective_js::utils::{ApiResult, JsValueSerdeExt};
 use wasm_bindgen::prelude::*;
 use web_sys::*;
-use yew::html::ImplicitClone;
 
-use crate::config::*;
 use crate::js::JsPerspectiveViewerPlugin;
 use crate::presentation::Presentation;
-use crate::renderer::*;
+use crate::queries::get_viewer_config;
+use crate::renderer::{ColumnConfigMap, Renderer};
 use crate::session::Session;
-use crate::tasks::*;
-use crate::utils::*;
-use crate::*;
+use crate::utils::{AddListener, Subscription};
 
-/// A collection of [`Subscription`]s which should trigger an event on the
-/// JavaScript Custom Element as a [`CustomEvent`].  There are no public methods
-/// on `CustomElements`, but when it is `drop()` the Custom Element will no
-/// longer dispatch events such as `"perspective-config-change"`.
-#[derive(Clone)]
-pub struct CustomEvents(Rc<(CustomEventsDataRc, [Subscription; 8])>);
+/// Dispatch a JS `CustomEvent` named `perspective-{name}` on `elem`.
+fn dispatch_event<T: Into<JsValue>>(elem: &HtmlElement, name: &str, event: T) -> ApiResult<()> {
+    let event_init = web_sys::CustomEventInit::new();
+    event_init.set_detail(&event.into());
+    let event = web_sys::CustomEvent::new_with_event_init_dict(
+        format!("perspective-{}", name).as_str(),
+        &event_init,
+    )?;
 
-impl ImplicitClone for CustomEvents {}
-
-impl PartialEq for CustomEvents {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
+    elem.dispatch_event(&event)?;
+    Ok(())
 }
 
-#[derive(Clone)]
-struct CustomEventsDataRc(Rc<CustomEventsData>);
+fn dispatch_column_settings_open_changed(
+    elem: &HtmlElement,
+    open: bool,
+    column_name: Option<String>,
+) {
+    let event_init = web_sys::CustomEventInit::new();
+    event_init.set_detail(&JsValue::from(
+        json!({"open": open, "column_name": column_name}),
+    ));
+    let event = web_sys::CustomEvent::new_with_event_init_dict(
+        "perspective-toggle-column-settings",
+        &event_init,
+    );
 
-impl Deref for CustomEventsDataRc {
-    type Target = CustomEventsData;
-
-    fn deref(&self) -> &CustomEventsData {
-        &self.0
-    }
+    elem.dispatch_event(&event.unwrap()).unwrap();
 }
 
-struct CustomEventsData {
-    elem: HtmlElement,
-    session: Session,
-    renderer: Renderer,
-    presentation: Presentation,
-    last_dispatched: RefCell<Option<ViewerConfig>>,
+fn dispatch_plugin_changed(elem: &HtmlElement, plugin: &JsPerspectiveViewerPlugin) {
+    let event_init = web_sys::CustomEventInit::new();
+    event_init.set_detail(plugin);
+    let event =
+        web_sys::CustomEvent::new_with_event_init_dict("perspective-plugin-update", &event_init);
+
+    elem.dispatch_event(&event.unwrap()).unwrap();
 }
 
-impl HasPresentation for CustomEventsData {
-    fn presentation(&self) -> &Presentation {
-        &self.presentation
-    }
-}
+/// Per-element memoized config-change dispatcher. Reads/writes the dedup
+/// cell on `presentation.last_dispatched_config` so each viewer instance
+/// has its own cache — without this, a second viewer reloading the same
+/// table the first viewer used would have its initial `config-update`
+/// suppressed.
+fn dispatch_config_update(
+    elem: &HtmlElement,
+    session: &Session,
+    renderer: &Renderer,
+    presentation: &Presentation,
+) {
+    clone!(session, renderer, presentation);
+    let elem = elem.clone();
+    perspective_js::utils::ApiFuture::spawn(async move {
+        let viewer_config = get_viewer_config(&session, &renderer, &presentation).await?;
+        if viewer_config.view_config != Default::default()
+            && Some(&viewer_config) != presentation.last_dispatched_config.borrow().as_ref()
+        {
+            let json_config = JsValue::from_serde_ext(&viewer_config)?;
+            let event_init = web_sys::CustomEventInit::new();
+            event_init.set_detail(&json_config);
+            let event = web_sys::CustomEvent::new_with_event_init_dict(
+                "perspective-config-update",
+                &event_init,
+            );
 
-impl HasRenderer for CustomEventsData {
-    fn renderer(&self) -> &Renderer {
-        &self.renderer
-    }
-}
+            *presentation.last_dispatched_config.borrow_mut() = Some(viewer_config);
+            elem.dispatch_event(&event.unwrap()).unwrap();
+        }
 
-impl HasSession for CustomEventsData {
-    fn session(&self) -> &Session {
-        &self.session
-    }
-}
-
-impl CustomEvents {
-    pub fn new(
-        elem: &HtmlElement,
-        session: &Session,
-        renderer: &Renderer,
-        presentation: &Presentation,
-    ) -> Self {
-        let data = CustomEventsDataRc(Rc::new(CustomEventsData {
-            elem: elem.clone(),
-            session: session.clone(),
-            renderer: renderer.clone(),
-            presentation: presentation.clone(),
-            last_dispatched: Default::default(),
-        }));
-
-        let theme_sub = presentation.theme_config_updated.add_listener({
-            clone!(data);
-            move |_| data.clone().dispatch_config_update()
-        });
-
-        let settings_sub = presentation.settings_open_changed.add_listener({
-            clone!(data);
-            move |open: bool| {
-                data.dispatch_event("toggle-settings", open).unwrap();
-                data.clone().dispatch_config_update();
-            }
-        });
-
-        let before_settings_sub = presentation.settings_before_open_changed.add_listener({
-            clone!(data);
-            move |open: bool| {
-                data.dispatch_event("toggle-settings-before", open).unwrap();
-                // data.clone().dispatch_config_update();
-            }
-        });
-
-        let column_settings_sub = presentation.column_settings_open_changed.add_listener({
-            clone!(data);
-            move |(open, column_name)| {
-                data.dispatch_column_settings_open_changed(open, column_name);
-                // column_settings is ethereal; do not change the config
-            }
-        });
-
-        let plugin_sub = renderer.plugin_changed.add_listener({
-            clone!(data);
-            move |plugin| {
-                data.dispatch_plugin_changed(&plugin);
-                data.clone().dispatch_config_update();
-            }
-        });
-
-        let view_sub = session.view_created.add_listener({
-            clone!(data);
-            move |_| data.clone().dispatch_config_update()
-        });
-
-        let title_sub = session.title_changed.add_listener({
-            clone!(data);
-            move |_| data.clone().dispatch_config_update()
-        });
-
-        let unload_sub = session.table_unloaded.add_listener({
-            clone!(data);
-            move |x: bool| {
-                if !x {
-                    data.clone()
-                        .dispatch_event("table-delete-before", JsValue::UNDEFINED)
-                        .unwrap();
-                } else {
-                    data.clone()
-                        .dispatch_event("table-delete", JsValue::UNDEFINED)
-                        .unwrap()
-                }
-            }
-        });
-
-        Self(Rc::new((data, [
-            theme_sub,
-            before_settings_sub,
-            settings_sub,
-            column_settings_sub,
-            plugin_sub,
-            view_sub,
-            title_sub,
-            unload_sub,
-        ])))
-    }
-
-    pub fn dispatch_column_style_changed(&self, config: &JsValue) -> ApiResult<()> {
-        self.dispatch_event("column-style-change", config)?;
-        self.0.0.clone().dispatch_config_update();
         Ok(())
-    }
-
-    pub fn dispatch_select(&self, view_window: Option<&ViewWindow>) -> ApiResult<()> {
-        self.dispatch_event("select", &serde_wasm_bindgen::to_value(&view_window)?)?;
-        self.0.0.clone().dispatch_config_update();
-        Ok(())
-    }
-
-    pub fn dispatch_event<T>(&self, name: &str, event: T) -> ApiResult<()>
-    where
-        T: Into<JsValue>,
-    {
-        self.0.0.dispatch_event(name, event)
-    }
-
-    pub fn dispatch_raw_event(&self, event: &web_sys::CustomEvent) -> ApiResult<bool> {
-        self.0.0.elem.dispatch_event(event).map_err(|e| e.into())
-    }
+    });
 }
 
-impl CustomEventsDataRc {
-    pub fn dispatch_event<T>(&self, name: &str, event: T) -> ApiResult<()>
-    where
-        T: Into<JsValue>,
-    {
-        let event_init = web_sys::CustomEventInit::new();
-        event_init.set_detail(&event.into());
-        let event = web_sys::CustomEvent::new_with_event_init_dict(
-            format!("perspective-{}", name).as_str(),
-            &event_init,
-        )?;
+/// Wire PubSub channels on `session`, `renderer`, and `presentation` to the
+/// `perspective-*` `CustomEvent` set on `elem`. The returned
+/// `Vec<Subscription>` must be kept alive for the lifetime of the element;
+/// dropping it detaches all listeners.
+pub fn wire_custom_events(
+    elem: &HtmlElement,
+    session: &Session,
+    renderer: &Renderer,
+    presentation: &Presentation,
+) -> Vec<Subscription> {
+    let theme_sub = presentation.theme_config_updated.add_listener({
+        clone!(elem, session, renderer, presentation);
+        move |_| dispatch_config_update(&elem, &session, &renderer, &presentation)
+    });
 
-        self.elem.dispatch_event(&event)?;
-        Ok(())
-    }
+    let settings_sub = presentation.settings_open_changed.add_listener({
+        clone!(elem, session, renderer, presentation);
+        move |open: bool| {
+            dispatch_event(&elem, "toggle-settings", open).unwrap();
+            dispatch_config_update(&elem, &session, &renderer, &presentation);
+        }
+    });
 
-    fn dispatch_column_settings_open_changed(&self, open: bool, column_name: Option<String>) {
-        let event_init = web_sys::CustomEventInit::new();
-        event_init.set_detail(&JsValue::from(
-            json!( {"open": open, "column_name": column_name} ),
-        ));
-        let event = web_sys::CustomEvent::new_with_event_init_dict(
-            "perspective-toggle-column-settings",
-            &event_init,
-        );
+    let before_settings_sub = presentation.settings_before_open_changed.add_listener({
+        clone!(elem);
+        move |open: bool| {
+            dispatch_event(&elem, "toggle-settings-before", open).unwrap();
+        }
+    });
 
-        self.elem.dispatch_event(&event.unwrap()).unwrap();
-    }
+    let column_settings_sub = presentation.column_settings_open_changed.add_listener({
+        clone!(elem);
+        move |(open, column_name)| {
+            dispatch_column_settings_open_changed(&elem, open, column_name);
+            // column_settings is ethereal; do not change the config
+        }
+    });
 
-    fn dispatch_plugin_changed(&self, plugin: &JsPerspectiveViewerPlugin) {
-        let event_init = web_sys::CustomEventInit::new();
-        event_init.set_detail(plugin);
-        let event = web_sys::CustomEvent::new_with_event_init_dict(
-            "perspective-plugin-update",
-            &event_init,
-        );
+    let plugin_sub = renderer.plugin_changed.add_listener({
+        clone!(elem, session, renderer, presentation);
+        move |plugin| {
+            dispatch_plugin_changed(&elem, &plugin);
+            dispatch_config_update(&elem, &session, &renderer, &presentation);
+        }
+    });
 
-        self.elem.dispatch_event(&event.unwrap()).unwrap();
-    }
+    let view_sub = session.view_created.add_listener({
+        clone!(elem, session, renderer, presentation);
+        move |_| dispatch_config_update(&elem, &session, &renderer, &presentation)
+    });
 
-    fn dispatch_config_update(self) {
-        ApiFuture::spawn(async move {
-            let viewer_config = self.get_viewer_config().await?;
-            if viewer_config.view_config != Default::default()
-                && Some(&viewer_config) != self.last_dispatched.borrow().as_ref()
-            {
-                let json_config = JsValue::from_serde_ext(&viewer_config)?;
-                let event_init = web_sys::CustomEventInit::new();
-                event_init.set_detail(&json_config);
-                let event = web_sys::CustomEvent::new_with_event_init_dict(
-                    "perspective-config-update",
-                    &event_init,
-                );
+    let title_sub = session.title_changed.add_listener({
+        clone!(elem, session, renderer, presentation);
+        move |_| dispatch_config_update(&elem, &session, &renderer, &presentation)
+    });
 
-                *self.last_dispatched.borrow_mut() = Some(viewer_config);
-                self.elem.dispatch_event(&event.unwrap()).unwrap();
+    let unload_sub = session.table_unloaded.add_listener({
+        clone!(elem);
+        move |x: bool| {
+            if !x {
+                dispatch_event(&elem, "table-delete-before", JsValue::UNDEFINED).unwrap();
+            } else {
+                dispatch_event(&elem, "table-delete", JsValue::UNDEFINED).unwrap()
             }
+        }
+    });
 
-            Ok(())
-        });
-    }
+    let select_sub = renderer.selection_changed.add_listener({
+        clone!(elem, session, renderer, presentation);
+        move |window: Option<ViewWindow>| {
+            let detail = JsValue::from_serde_ext(&window).unwrap();
+            dispatch_event(&elem, "select", &detail).unwrap();
+            dispatch_config_update(&elem, &session, &renderer, &presentation);
+        }
+    });
+
+    let column_style_sub = renderer.column_style_changed.add_listener({
+        clone!(elem, session, renderer, presentation);
+        move |cfg: ColumnConfigMap| {
+            let detail = JsValue::from_serde_ext(&cfg).unwrap();
+            dispatch_event(&elem, "column-style-change", &detail).unwrap();
+            dispatch_config_update(&elem, &session, &renderer, &presentation);
+        }
+    });
+
+    let status_click_sub = session.status_indicator_clicked.add_listener({
+        clone!(elem);
+        move |_| dispatch_event(&elem, "status-indicator-click", JsValue::UNDEFINED).unwrap()
+    });
+
+    let statusbar_ptr_sub = presentation.statusbar_pointer_event.add_listener({
+        clone!(elem);
+        move |event: PointerEvent| {
+            dispatch_event(&elem, &format!("statusbar-{}", event.type_()), &event).unwrap();
+        }
+    });
+
+    vec![
+        theme_sub,
+        before_settings_sub,
+        settings_sub,
+        column_settings_sub,
+        plugin_sub,
+        view_sub,
+        title_sub,
+        unload_sub,
+        select_sub,
+        column_style_sub,
+        status_click_sub,
+        statusbar_ptr_sub,
+    ]
 }

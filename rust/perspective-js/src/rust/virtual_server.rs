@@ -372,7 +372,7 @@ impl VirtualServerHandler for JsServerHandler {
 
         let handler = self.0.clone();
         let view_id = view_id.to_string();
-        let config_value = serde_wasm_bindgen::to_value(config).unwrap();
+        let config_value = JsValue::from_serde_ext(config).unwrap();
         let config = config.clone();
         Box::pin(async move {
             let this = JsServerHandler(handler);
@@ -493,7 +493,7 @@ impl VirtualServerHandler for JsServerHandler {
         let handler = self.0.clone();
         let view_id = view_id.to_string();
         let column_name = column_name.to_string();
-        let config_js = serde_wasm_bindgen::to_value(config).unwrap();
+        let config_js = JsValue::from_serde_ext(config).unwrap();
         Box::pin(async move {
             let this = JsServerHandler(handler);
             let args = Array::new();
@@ -518,8 +518,8 @@ impl VirtualServerHandler for JsServerHandler {
         let handler = self.0.clone();
         let view_id = view_id.to_string();
         let window: JsViewPort = viewport.clone().into();
-        let config_value = serde_wasm_bindgen::to_value(config).unwrap();
-        let window_value = serde_wasm_bindgen::to_value(&window).unwrap();
+        let config_value = JsValue::from_serde_ext(config).unwrap();
+        let window_value = JsValue::from_serde_ext(&window).unwrap();
         let schema_value = JsValue::from_serde_ext(&schema).unwrap();
 
         Box::pin(async move {

@@ -37,6 +37,7 @@ export function applyFocusStyle(
                 if (host.activeElement !== td) {
                     td.focus({ preventScroll: true });
                 }
+
                 return;
             }
         }
@@ -82,6 +83,7 @@ export function focusSelectedCell(
                     if (host.activeElement !== cell) {
                         (cell as HTMLElement).focus({ preventScroll: true });
                     }
+
                     return true;
                 }
             }

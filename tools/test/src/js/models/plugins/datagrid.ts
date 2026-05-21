@@ -46,8 +46,8 @@ export class RegularTable {
     }
 
     async getTitleIdx(name: string) {
-        let ths = await this.realTitles.all();
-        for (let [i, locator] of ths.entries()) {
+        const ths = await this.realTitles.all();
+        for (const [i, locator] of ths.entries()) {
             if ((await locator.innerText()) === name) {
                 this.element.evaluate(
                     (_, i) => console.log("getTitleIdx returned:", i),
@@ -56,20 +56,22 @@ export class RegularTable {
                 return i;
             }
         }
+
         return -1;
     }
 
     async getEditBtnByName(name: string) {
-        let n = await this.getTitleIdx(name);
+        const n = await this.getTitleIdx(name);
         expect(n).not.toBe(-1);
         return this.editBtnRow.locator("th").nth(n);
     }
+
     /**
      * Takes the name of a column and returns a locator for the first corresponding TD in the body.
      * @param name
      */
     async getFirstCellByColumnName(name: string) {
-        let n = await this.getTitleIdx(name);
+        const n = await this.getTitleIdx(name);
         expect(n).not.toBe(-1);
         return this.table.locator("tbody tr").first().locator("td").nth(n);
     }

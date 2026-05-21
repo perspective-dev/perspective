@@ -15,16 +15,27 @@ function niceNum(value: number, round: boolean): number {
     const frac = value / Math.pow(10, exp);
     let nice: number;
     if (round) {
-        if (frac < 1.5) nice = 1;
-        else if (frac < 3) nice = 2;
-        else if (frac < 7) nice = 5;
-        else nice = 10;
+        if (frac < 1.5) {
+            nice = 1;
+        } else if (frac < 3) {
+            nice = 2;
+        } else if (frac < 7) {
+            nice = 5;
+        } else {
+            nice = 10;
+        }
     } else {
-        if (frac <= 1) nice = 1;
-        else if (frac <= 2) nice = 2;
-        else if (frac <= 5) nice = 5;
-        else nice = 10;
+        if (frac <= 1) {
+            nice = 1;
+        } else if (frac <= 2) {
+            nice = 2;
+        } else if (frac <= 5) {
+            nice = 5;
+        } else {
+            nice = 10;
+        }
     }
+
     return nice * Math.pow(10, exp);
 }
 
@@ -39,17 +50,22 @@ export function computeNiceTicks(
     max: number,
     targetCount: number,
 ): number[] {
-    if (targetCount < 1) targetCount = 1;
+    if (targetCount < 1) {
+        targetCount = 1;
+    }
+
     const range = niceNum(max - min, false);
     const step = niceNum(range / targetCount, true);
     const tickMin = Math.ceil(min / step) * step;
     const tickMax = Math.floor(max / step) * step;
 
     const ticks: number[] = [];
+
     // Use epsilon to avoid floating point overshoot
     for (let t = tickMin; t <= tickMax + step * 0.001; t += step) {
         ticks.push(t);
     }
+
     return ticks;
 }
 
@@ -59,12 +75,30 @@ export function computeNiceTicks(
  */
 export function formatTickValue(val: number): string {
     const abs = Math.abs(val);
-    if (abs === 0) return "0";
-    if (abs >= 1e9) return (val / 1e9).toFixed(1) + "B";
-    if (abs >= 1e6) return (val / 1e6).toFixed(1) + "M";
-    if (abs >= 1e3) return (val / 1e3).toFixed(1) + "K";
-    if (Number.isInteger(val)) return val.toString();
-    if (abs >= 1) return val.toFixed(1);
+    if (abs === 0) {
+        return "0";
+    }
+
+    if (abs >= 1e9) {
+        return (val / 1e9).toFixed(1) + "B";
+    }
+
+    if (abs >= 1e6) {
+        return (val / 1e6).toFixed(1) + "M";
+    }
+
+    if (abs >= 1e3) {
+        return (val / 1e3).toFixed(1) + "K";
+    }
+
+    if (Number.isInteger(val)) {
+        return val.toString();
+    }
+
+    if (abs >= 1) {
+        return val.toFixed(1);
+    }
+
     return val.toFixed(2);
 }
 
@@ -74,7 +108,9 @@ export function formatTickValue(val: number): string {
  */
 export function formatDateTickValue(val: number, stepMs?: number): string {
     const d = new Date(val);
-    if (isNaN(d.getTime())) return formatTickValue(val);
+    if (isNaN(d.getTime())) {
+        return formatTickValue(val);
+    }
 
     // If step is provided, choose precision based on tick interval
     if (stepMs !== undefined && stepMs > 0) {
@@ -89,6 +125,7 @@ export function formatDateTickValue(val: number, stepMs?: number): string {
                 month: "short",
             });
         }
+
         if (stepMs >= DAY) {
             // Daily — show month and day
             return d.toLocaleDateString(undefined, {
@@ -96,6 +133,7 @@ export function formatDateTickValue(val: number, stepMs?: number): string {
                 day: "numeric",
             });
         }
+
         if (stepMs >= HOUR) {
             // Hourly
             return d.toLocaleString(undefined, {
@@ -104,6 +142,7 @@ export function formatDateTickValue(val: number, stepMs?: number): string {
                 hour: "numeric",
             });
         }
+
         if (stepMs >= MINUTE) {
             // Minutes
             return d.toLocaleTimeString(undefined, {
@@ -111,6 +150,7 @@ export function formatDateTickValue(val: number, stepMs?: number): string {
                 minute: "2-digit",
             });
         }
+
         // Sub-minute
         return d.toLocaleTimeString(undefined, {
             hour: "numeric",

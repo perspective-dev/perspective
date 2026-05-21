@@ -27,7 +27,9 @@ export function applyColumnHeaderStyles(
     regularTable: RegularTableElement,
     viewer: HTMLPerspectiveViewerElement,
 ): void {
-    if (headerRows.length === 0) return;
+    if (headerRows.length === 0) {
+        return;
+    }
 
     // Style selected column for settings panel
     const selectedColumn = model._column_settings_selected_column;
@@ -68,7 +70,9 @@ export function applyColumnHeaderStyles(
             for (let i = 0; i < titlesRow.cells.length; i++) {
                 const title = titlesRow.cells[i]?.element;
                 const editBtn = editBtnsRow.cells[i]?.element;
-                if (!title || !editBtn) continue;
+                if (!title || !editBtn) {
+                    continue;
+                }
 
                 const open = title.textContent === selectedColumn;
                 title.classList.toggle("psp-menu-open", open);

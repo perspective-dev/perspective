@@ -96,6 +96,7 @@ export function createConsolidatedStyleListener(
                         metadata,
                     });
                 }
+
                 groupHeaderRows.push(rowData);
             }
         }

@@ -12,58 +12,14 @@
  */
 
 :host {
-    .tab-gutter {
-        border-color: var(--psp-inactive--color, #6e6e6e);
-        display: flex;
-
-        .tab.tab-padding {
-            flex: 1;
-            cursor: unset;
-            .tab-title {
-                border-right: none;
-            }
-            .tab-border {
-                border-right: none;
-            }
-        }
-
-        .tab {
-            /* TODO: This needs to be a variable color. Which one? */
-            background: rgba(0, 0, 0, 0.125);
-            border-right: 1px solid var(--psp-inactive--color, #6e6e6e);
-            user-select: none;
-            cursor: pointer;
-
-            .tab-title {
-                font-size: 10px;
-                padding: 10px;
-                border-bottom: 1px solid var(--psp-inactive--color, #6e6e6e);
-            }
-            .tab-border {
-                height: 2px;
-                width: 100%;
-                background-color: var(--psp-inactive--color, #6e6e6e);
-                margin-top: 1px;
-            }
-
-            &.selected {
-                background: unset;
-                border-bottom: 1px transparent;
-
-                .tab-title {
-                    border-bottom: 1px transparent;
-                    border-right: none;
-                }
-                .tab-border {
-                    background-color: transparent;
-                    border-right: none;
-                }
-            }
-        }
-    }
-
     #format-tab {
         overflow: scroll;
+    }
+
+    #plugin-tab {
+        overflow-x: hidden;
+        overflow-y: scroll;
+        padding: 12px 0 0 0;
     }
 
     .tab-content {
@@ -72,11 +28,11 @@
         display: flex;
         flex-direction: column;
         .tab-section:last-child {
-            padding: 12px 8px 12px 8px;
+            padding: 12px 0px 12px 8px;
         }
 
         .tab-section {
-            padding: 12px 8px 0px 8px;
+            padding: 12px 0px 0px 8px;
             flex: 0 0 auto;
             overflow: hidden;
         }

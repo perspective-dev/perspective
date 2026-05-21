@@ -13,13 +13,22 @@
 import type { View } from "@perspective-dev/client";
 
 export interface ColumnData {
-    type: "float32" | "int32" | "string";
-    values?: Float32Array | Int32Array;
-    /** Dictionary key indices for string columns. */
+    type: "float32" | "float64" | "int32" | "string";
+    values?: Float32Array | Float64Array | Int32Array;
+
+    /**
+     * Dictionary key indices for string columns.
+     */
     indices?: Int32Array;
-    /** Dictionary values for string columns. */
+
+    /**
+     * Dictionary values for string columns.
+     */
     dictionary?: string[];
-    /** Arrow validity bitfield (1 bit per row). */
+
+    /**
+     * Arrow validity bitfield (1 bit per row).
+     */
     valid?: Uint8Array;
 }
 
@@ -75,12 +84,12 @@ export async function viewToColumnDataMap(
                 } else if (vals instanceof Int32Array) {
                     result.set(name, { type: "int32", values: vals, valid });
                 } else if (vals instanceof Float64Array) {
-                    // Float64 without float32 mode — narrow for WebGL
-                    result.set(name, {
-                        type: "float32",
-                        values: new Float32Array(vals),
-                        valid,
-                    });
+                    // Datetime/Date columns are emitted as Float64 to keep
+                    // millisecond precision; numeric Float64 also lands here
+                    // when `float32` mode is off. Keep them as f64 — the
+                    // chart's CPU mirrors and extents will rebase to f32 at
+                    // upload time.
+                    result.set(name, { type: "float64", values: vals, valid });
                 } else {
                     // Fallback: treat as float32
                     // TODO: Instance check if this needs a copy?

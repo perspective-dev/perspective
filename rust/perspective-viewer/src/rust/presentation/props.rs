@@ -13,6 +13,14 @@
 use crate::presentation::OpenColumnSettings;
 use crate::utils::PtrEqRc;
 
+/// Value-semantic snapshot of the drag/drop state threaded through the
+/// component tree for visual feedback (drag-highlight CSS classes).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct DragDropProps {
+    /// Column name currently being dragged, if a drag is in progress.
+    pub column: Option<String>,
+}
+
 /// Value-semantic snapshot of the presentation/UI state used by the root
 /// component to drive `is_settings_open`, `selected_theme`, and
 /// `available_themes` into child components via plain props.

@@ -1,29 +1,53 @@
 {
     "name": "@perspective-dev/client",
     "version": "4.4.1",
-    "description": "",
+    "description": "Client for Perspective, a high-performance WASM engine with reactive Tables, Views, and joins.",
+    "keywords": [
+        "perspective",
+        "data",
+        "analytics",
+        "streaming",
+        "wasm",
+        "arrow",
+        "duckdb",
+        "clickhouse"
+    ],
+    "homepage": "https://perspective-dev.github.io",
     "repository": {
         "type": "git",
         "url": "https://github.com/perspective-dev/perspective"
     },
     "type": "module",
     "license": "Apache-2.0",
+    "sideEffects": false,
     "unpkg": "dist/cdn/perspective.js",
     "jsdelivr": "dist/cdn/perspective.js",
     "exports": {
         ".": {
             "node": {
                 "types": "./dist/esm/perspective.node.d.ts",
+                "import": "./dist/esm/perspective.node.js",
                 "default": "./dist/esm/perspective.node.js"
             },
             "types": "./dist/esm/perspective.browser.d.ts",
+            "import": "./dist/esm/perspective.js",
             "default": "./dist/esm/perspective.js"
         },
         "./node": {
             "types": "./dist/esm/perspective.node.d.ts",
+            "import": "./dist/esm/perspective.node.js",
             "default": "./dist/esm/perspective.node.js"
         },
-        "./virtual_servers/*": "./dist/esm/virtual_servers/*",
+        "./inline": {
+            "types": "./dist/esm/perspective.browser.d.ts",
+            "import": "./dist/esm/perspective.inline.js",
+            "default": "./dist/esm/perspective.inline.js"
+        },
+        "./virtual_servers/*": {
+            "types": "./dist/esm/virtual_servers/*.d.ts",
+            "import": "./dist/esm/virtual_servers/*.js",
+            "default": "./dist/esm/virtual_servers/*.js"
+        },
         "./dist/*": "./dist/*",
         "./src/*": "./src/*",
         "./test/*": "./test/*",

@@ -10,75 +10,94 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+//! Apply a [`ViewConfigUpdate`] to the active [`Session`], validate it, then
+//! draw with the active [`Renderer`].  The companion `*_callback` helpers
+//! return [`yew::Callback`]s suitable for wiring as Yew child-component
+//! props.
+
 use perspective_client::config::ViewConfigUpdate;
 use yew::prelude::*;
 
-use super::structural::*;
 use crate::renderer::Renderer;
 use crate::session::Session;
 use crate::utils::*;
 use crate::*;
 
-/// A model trait for updating both `View` state and completing a render.
-///
-/// While `Renderer` manages the plugin and thus the render call itself, the
-/// current `View` is handled by the `Session` which must be validated and
-/// locked while drawing is in progress.  `UpdateAndRender` provides methods
-/// that synchronize this behavior, so these methods should be used to initiate
-/// rendering of the current `Plugin` and `View`.
-pub trait UpdateAndRender: HasRenderer + HasSession {
-    /// Create a `Callback` that renders from the current `View` and `Plugin`.
-    fn render_callback(&self) -> Callback<()> {
-        clone!(self.session(), self.renderer());
-        Callback::from(move |_| {
-            clone!(session, renderer);
-            ApiFuture::spawn(async move {
-                renderer.draw(async { Ok(session.get_view()) }).await?;
-                Ok(())
-            })
+/// Create a [`Callback`] that renders from the current `View` and `Plugin`.
+pub fn render_callback(session: &Session, renderer: &Renderer) -> Callback<()> {
+    clone!(session, renderer);
+    Callback::from(move |_| {
+        clone!(session, renderer);
+        ApiFuture::spawn(async move {
+            renderer.draw(async { Ok(session.get_view()) }).await?;
+            Ok(())
         })
-    }
+    })
+}
 
-    /// Create a `Callback` that resizes from the current `View` and `Plugin`.
-    fn resize_callback(&self) -> Callback<()> {
-        clone!(self.renderer(), self.session());
-        Callback::from(move |_| {
-            clone!(renderer, session);
-            ApiFuture::spawn(async move {
-                if !renderer.is_plugin_activated()? {
-                    update_and_render(session, renderer).await?
-                } else {
-                    renderer.resize().await?;
-                }
+/// Create a [`Callback`] that resizes from the current `View` and `Plugin`.
+pub fn resize_callback(session: &Session, renderer: &Renderer) -> Callback<()> {
+    clone!(session, renderer);
+    Callback::from(move |_| {
+        clone!(renderer, session);
+        ApiFuture::spawn(async move {
+            if !renderer.is_plugin_activated()? {
+                update_and_render_inner(session, renderer).await?
+            } else {
+                renderer.resize().await?;
+            }
 
-                Ok(())
-            })
+            Ok(())
         })
-    }
+    })
+}
 
-    /// Apply a `ViewConfigUpdate` to the current `View` and render.
-    fn update_and_render(&self, update: ViewConfigUpdate) -> ApiResult<ApiFuture<()>> {
-        self.session().update_view_config(update)?;
-        clone!(self.session(), self.renderer());
-        Ok(ApiFuture::new(update_and_render(session, renderer)))
-    }
+/// Apply a `ViewConfigUpdate` to the current `View` and render.
+pub fn update_and_render(
+    session: &Session,
+    renderer: &Renderer,
+    update: ViewConfigUpdate,
+) -> ApiResult<ApiFuture<()>> {
+    session.update_view_config(update)?;
+    clone!(session, renderer);
+    Ok(ApiFuture::new(update_and_render_inner(session, renderer)))
+}
 
-    fn just_render(&self) -> ApiResult<ApiFuture<()>> {
-        clone!(self.session(), self.renderer());
-        Ok(ApiFuture::new(update_and_render(session, renderer)))
-    }
+/// Re-render the current `View` and `Plugin` without applying a new
+/// `ViewConfigUpdate`.
+pub fn just_render(session: &Session, renderer: &Renderer) -> ApiResult<ApiFuture<()>> {
+    clone!(session, renderer);
+    Ok(ApiFuture::new(update_and_render_inner(session, renderer)))
 }
 
 #[tracing::instrument(level = "debug", skip(session, renderer))]
-async fn update_and_render(session: Session, renderer: Renderer) -> ApiResult<()> {
+async fn update_and_render_inner(session: Session, renderer: Renderer) -> ApiResult<()> {
     // The previous call which acquired the lock errored, so skip this render
     if session.get_error().is_some() {
         return Ok(());
     }
 
-    renderer.apply_pending_plugin()?;
+    let plugin_swapped = renderer.apply_pending_plugin()?;
+    if plugin_swapped {
+        // `commit_plugin_idx` already restored the new plugin from its
+        // raw bucket; re-run with the materialized snapshot so any
+        // `include: true` schema defaults (e.g. Datagrid's
+        // `fg_gradient` when `number_fg_mode = "bar"`) make it into
+        // the plugin's state before the first draw. The Session is in
+        // scope here but not at `commit_plugin_idx`'s call sites in
+        // the column-selector tree, so we do the second restore at
+        // the caller instead of plumbing `&Session` through every
+        // `apply_pending_plugin` site.
+        let view_config_snapshot = session.get_view_config().clone();
+        let plugin_token = wasm_bindgen::JsValue::from_serde_ext(&renderer.get_plugin_config())
+            .unwrap_or(wasm_bindgen::JsValue::NULL);
+        let columns_config =
+            renderer.all_columns_configs_materialized(&view_config_snapshot, &session);
+        renderer
+            .get_active_plugin()?
+            .restore(&plugin_token, Some(&columns_config))?;
+    }
+
     let view = session.validate().await?;
     renderer.draw(view.create_view()).await
 }
-
-impl<T: HasRenderer + HasSession> UpdateAndRender for T {}

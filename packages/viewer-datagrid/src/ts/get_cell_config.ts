@@ -12,6 +12,7 @@
 
 import type { View, ViewConfig, Filter, Scalar } from "@perspective-dev/client";
 import type { CellConfigResult } from "./types.js";
+import { isMetaColumn } from "./model/meta_columns.js";
 
 interface ModelWithViewAndConfig {
     _view: View;
@@ -42,8 +43,14 @@ export default async function getCellConfig(
         })
         .filter((x): x is Filter => x !== undefined);
 
-    const column_index = group_by.length > 0 ? col_idx + 1 : col_idx;
-    const column_paths = Object.keys(r[0])[column_index];
+    // Filter out *all* meta columns before indexing into the row's
+    // keys — the DuckDB virtual server's JSON output now includes
+    // per-level `__ROW_PATH_<n>__` columns alongside the
+    // `__ROW_PATH__` sidecar, so the previous `+1` skip (which
+    // assumed exactly one leading meta column) lands on a meta key
+    // when group_by has multiple levels.
+    const user_keys = Object.keys(r[0]).filter((k) => !isMetaColumn(k));
+    const column_paths = user_keys[col_idx];
     const result: CellConfigResult = {
         row: r[0] as Record<string, unknown>,
         column_names: [],
@@ -60,7 +67,7 @@ export default async function getCellConfig(
                 return pivot_value ? [pivot, "==", pivot_value] : undefined;
             })
             .filter((x): x is Filter => x !== undefined)
-            .filter(([, , value]) => value !== "__ROW_PATH__");
+            .filter(([, , value]) => !isMetaColumn(value as string));
     }
 
     const filter = _config.filter.concat(row_filters).concat(column_filters);

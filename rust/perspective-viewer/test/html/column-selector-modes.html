@@ -11,20 +11,13 @@
             import "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
 
             class TestChartPlugin extends customElements.get("perspective-viewer-plugin") {
-                get name() {
-                    return "test chart";
-                }
-
-                get select_mode() {
-                    return "toggle";
-                }
-
-                get config_column_names() {
-                    return ["X Axis", "Y Axis", "Color", "Size", "Tooltip"];
-                }
-
-                get min_config_columns() {
-                    return 2;
+                get_static_config() {
+                    return {
+                        name: "test chart",
+                        select_mode: "toggle",
+                        config_column_names: ["X Axis", "Y Axis", "Color", "Size", "Tooltip"],
+                        min_config_columns: 2,
+                    };
                 }
             }
 

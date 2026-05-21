@@ -21,9 +21,9 @@ use crate::components::copy_dropdown::CopyDropDownMenu;
 use crate::components::export_dropdown::ExportDropDownMenu;
 use crate::components::portal::PortalModal;
 use crate::components::status_bar_counter::StatusBarRowsCounter;
-use crate::custom_events::CustomEvents;
+use crate::config::*;
 use crate::js::*;
-use crate::presentation::Presentation;
+use crate::presentation::{Presentation, PresentationProps};
 use crate::renderer::*;
 use crate::session::*;
 use crate::tasks::*;
@@ -42,27 +42,21 @@ pub struct StatusBarProps {
     #[prop_or_default]
     pub on_settings: Option<Callback<()>>,
 
-    // Value props threaded from the root's `SessionProps`.
-    // Using these avoids PubSub subscriptions for table_loaded / table_errored.
-    pub has_table: Option<TableLoadState>,
-    pub is_errored: bool,
-    pub stats: Option<ViewStats>,
-    /// In-flight render counter and full error, threaded to `StatusIndicator`.
-    pub update_count: u32,
-    pub error: Option<TableErrorState>,
-    /// Title string from session — threaded to avoid title_changed
-    /// subscription.
-    pub title: Option<String>,
-    /// Theme state from presentation — threaded to avoid theme_config_updated /
-    /// visibility_changed subscriptions.
+    /// Snapshots threaded from root.  Component reads `has_table`, `stats`,
+    /// `error`, `title` from session_props; `selected_theme`,
+    /// `available_themes`, `is_workspace` from presentation_props.
+    pub session_props: SessionProps,
+    pub presentation_props: PresentationProps,
+
+    /// Derived from root: `settings_open && has_table_loaded`.  Used
+    /// here to drive the title-input enabled state and the theme picker
+    /// visibility.
     pub is_settings_open: bool,
-    pub selected_theme: Option<String>,
-    pub available_themes: PtrEqRc<Vec<String>>,
-    /// Whether this viewer is hosted inside a `<perspective-workspace>`.
-    pub is_workspace: bool,
+
+    /// In-flight render counter, threaded to `StatusIndicator`.
+    pub update_count: u32,
 
     // State
-    pub custom_events: CustomEvents,
     pub session: Session,
     pub renderer: Renderer,
     pub presentation: Presentation,
@@ -71,48 +65,10 @@ pub struct StatusBarProps {
 impl PartialEq for StatusBarProps {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
-            && self.has_table == other.has_table
-            && self.is_errored == other.is_errored
-            && self.stats == other.stats
-            && self.update_count == other.update_count
-            && self.error == other.error
-            && self.title == other.title
+            && self.session_props == other.session_props
+            && self.presentation_props == other.presentation_props
             && self.is_settings_open == other.is_settings_open
-            && self.selected_theme == other.selected_theme
-            && self.available_themes == other.available_themes
-            && self.is_workspace == other.is_workspace
-    }
-}
-
-impl HasCustomEvents for StatusBarProps {
-    fn custom_events(&self) -> &CustomEvents {
-        &self.custom_events
-    }
-}
-
-impl HasPresentation for StatusBarProps {
-    fn presentation(&self) -> &Presentation {
-        &self.presentation
-    }
-}
-
-impl HasRenderer for StatusBarProps {
-    fn renderer(&self) -> &Renderer {
-        &self.renderer
-    }
-}
-
-impl HasSession for StatusBarProps {
-    fn session(&self) -> &Session {
-        &self.session
-    }
-}
-
-impl StateProvider for StatusBarProps {
-    type State = StatusBarProps;
-
-    fn clone_state(&self) -> Self::State {
-        self.clone()
+            && self.update_count == other.update_count
     }
 }
 
@@ -155,7 +111,7 @@ impl Component for StatusBar {
             export_ref: NodeRef::default(),
             input_ref: NodeRef::default(),
             statusbar_ref: NodeRef::default(),
-            title: ctx.props().title.clone(),
+            title: ctx.props().session_props.title.clone(),
             copy_target: None,
             export_target: None,
         }
@@ -165,119 +121,117 @@ impl Component for StatusBar {
         // Keep the local title in sync with the prop whenever the session title
         // changes externally (e.g. restore() call) or the settings panel opens /
         // closes (which resets the input element).
-        if ctx.props().title != old_props.title
+        if ctx.props().session_props.title != old_props.session_props.title
             || ctx.props().is_settings_open != old_props.is_settings_open
         {
-            self.title = ctx.props().title.clone();
+            self.title = ctx.props().session_props.title.clone();
         }
         true
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
-        maybe_log_or_default!(Ok(match msg {
-            StatusBarMsg::Reset(event) => {
-                let all = event.shift_key();
-                ctx.props().on_reset.emit(all);
-                false
-            },
-            StatusBarMsg::ResetTheme => {
-                let presentation = ctx.props().presentation.clone();
-                let session = ctx.props().session.clone();
-                let renderer = ctx.props().renderer.clone();
-                ApiFuture::spawn(async move {
-                    presentation.reset_theme().await?;
-                    let view = session.get_view().into_apierror()?;
-                    renderer.restyle_all(&view).await
-                });
-                true
-            },
-            StatusBarMsg::SetTheme(theme_name) => {
-                let presentation = ctx.props().presentation.clone();
-                let session = ctx.props().session.clone();
-                let renderer = ctx.props().renderer.clone();
-                ApiFuture::spawn(async move {
-                    presentation.set_theme_name(Some(&theme_name)).await?;
-                    let view = session.get_view().into_apierror()?;
-                    renderer.restyle_all(&view).await
-                });
+        let r: ApiResult<bool> = (|| {
+            Ok(match msg {
+                StatusBarMsg::Reset(event) => {
+                    let all = event.shift_key();
+                    ctx.props().on_reset.emit(all);
+                    false
+                },
+                StatusBarMsg::ResetTheme => {
+                    update_theme(
+                        &ctx.props().session,
+                        &ctx.props().renderer,
+                        &ctx.props().presentation,
+                        None,
+                    );
+                    true
+                },
+                StatusBarMsg::SetTheme(theme_name) => {
+                    update_theme(
+                        &ctx.props().session,
+                        &ctx.props().renderer,
+                        &ctx.props().presentation,
+                        Some(theme_name),
+                    );
+                    false
+                },
+                StatusBarMsg::Export => {
+                    self.export_target = self.export_ref.cast::<HtmlElement>();
+                    true
+                },
+                StatusBarMsg::Copy => {
+                    self.copy_target = self.copy_ref.cast::<HtmlElement>();
+                    true
+                },
+                StatusBarMsg::CloseExport => {
+                    self.export_target = None;
+                    true
+                },
+                StatusBarMsg::CloseCopy => {
+                    self.copy_target = None;
+                    true
+                },
+                StatusBarMsg::Eject => {
+                    ctx.props().presentation.on_eject.emit(());
+                    false
+                },
+                StatusBarMsg::Noop => {
+                    self.title = ctx.props().session_props.title.clone();
+                    true
+                },
+                StatusBarMsg::TitleInputEvent => {
+                    let elem = self.input_ref.cast::<HtmlInputElement>().into_apierror()?;
+                    let title = elem.value();
+                    let title = if title.trim().is_empty() {
+                        None
+                    } else {
+                        Some(title)
+                    };
 
-                false
-            },
-            StatusBarMsg::Export => {
-                self.export_target = self.export_ref.cast::<HtmlElement>();
-                true
-            },
-            StatusBarMsg::Copy => {
-                self.copy_target = self.copy_ref.cast::<HtmlElement>();
-                true
-            },
-            StatusBarMsg::CloseExport => {
-                self.export_target = None;
-                true
-            },
-            StatusBarMsg::CloseCopy => {
-                self.copy_target = None;
-                true
-            },
-            StatusBarMsg::Eject => {
-                ctx.props().presentation().on_eject.emit(());
-                false
-            },
-            StatusBarMsg::Noop => {
-                self.title = ctx.props().title.clone();
-                true
-            },
-            StatusBarMsg::TitleInputEvent => {
-                let elem = self.input_ref.cast::<HtmlInputElement>().into_apierror()?;
-                let title = elem.value();
-                let title = if title.trim().is_empty() {
-                    None
-                } else {
-                    Some(title)
-                };
+                    self.title = title;
+                    true
+                },
+                StatusBarMsg::TitleChangeEvent => {
+                    let elem = self.input_ref.cast::<HtmlInputElement>().into_apierror()?;
+                    let title = elem.value();
+                    let title = if title.trim().is_empty() {
+                        None
+                    } else {
+                        Some(title)
+                    };
 
-                self.title = title;
-                true
-            },
-            StatusBarMsg::TitleChangeEvent => {
-                let elem = self.input_ref.cast::<HtmlInputElement>().into_apierror()?;
-                let title = elem.value();
-                let title = if title.trim().is_empty() {
-                    None
-                } else {
-                    Some(title)
-                };
+                    ctx.props().session.set_title(title);
+                    false
+                },
+                StatusBarMsg::PointerEvent(event) => {
+                    if event.target().map(JsValue::from)
+                        == self.statusbar_ref.cast::<HtmlElement>().map(JsValue::from)
+                    {
+                        ctx.props().presentation.statusbar_pointer_event.emit(event);
+                    }
 
-                ctx.props().session().set_title(title);
-                false
-            },
-            StatusBarMsg::PointerEvent(event) => {
-                if event.target().map(JsValue::from)
-                    == self.statusbar_ref.cast::<HtmlElement>().map(JsValue::from)
-                {
-                    ctx.props()
-                        .custom_events()
-                        .dispatch_event(format!("statusbar-{}", event.type_()).as_str(), &event)?;
-                }
-
-                false
-            },
-        }))
+                    false
+                },
+            })
+        })();
+        r.unwrap_or_else(|e| {
+            web_sys::console::warn_1(&e.into());
+            Default::default()
+        })
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let Self::Properties {
-            custom_events,
             presentation,
             renderer,
             session,
             ..
         } = ctx.props();
 
-        let has_table = ctx.props().has_table.clone();
-        let is_errored = ctx.props().is_errored;
+        let has_table = ctx.props().session_props.has_table.clone();
+        let is_errored = ctx.props().session_props.is_errored();
         let is_settings_open = ctx.props().is_settings_open;
-        let title = &ctx.props().title;
+        let title = &ctx.props().session_props.title;
 
         let mut is_updating_class_name = classes!();
         if title.is_some() {
@@ -310,13 +264,13 @@ impl Component for StatusBar {
         let is_menu = matches!(has_table, Some(TableLoadState::Loaded))
             && ctx.props().on_settings.as_ref().is_none();
         let is_title = is_menu
-            || ctx.props().is_workspace
+            || ctx.props().presentation_props.is_workspace
             || title.is_some()
             || is_errored
             || presentation.is_active(&self.input_ref.cast::<Element>());
 
         let is_settings = title.is_some()
-            || ctx.props().is_workspace
+            || ctx.props().presentation_props.is_workspace
             || !matches!(has_table, Some(TableLoadState::Loaded))
             || is_errored
             || is_settings_open
@@ -330,12 +284,21 @@ impl Component for StatusBar {
                 let link = link.clone();
                 spawn_local(async move {
                     let mime = x.method.mimetype(x.is_chart);
-                    let task = props.export_method_to_blob(x.method);
+                    let task = export_method_to_blob(
+                        &props.session,
+                        &props.renderer,
+                        &props.presentation,
+                        x.method,
+                    );
                     let result = copy_to_clipboard(task, mime).await;
-                    crate::maybe_log!({
+                    let r = (|| -> ApiResult<()> {
                         result?;
                         link.send_message(StatusBarMsg::CloseCopy);
-                    })
+                        Ok(())
+                    })();
+                    if let Err(e) = r {
+                        web_sys::console::warn_1(&e.into());
+                    }
                 })
             })
         };
@@ -347,8 +310,15 @@ impl Component for StatusBar {
                 if !x.name.is_empty() {
                     clone!(props, link);
                     spawn_local(async move {
-                        let val = props.export_method_to_blob(x.method).await.unwrap();
-                        let is_chart = props.renderer().is_chart();
+                        let val = export_method_to_blob(
+                            &props.session,
+                            &props.renderer,
+                            &props.presentation,
+                            x.method,
+                        )
+                        .await
+                        .unwrap();
+                        let is_chart = props.renderer.is_chart();
                         download(&x.as_filename(is_chart), &val).unwrap();
                         link.send_message(StatusBarMsg::CloseExport);
                     })
@@ -370,13 +340,10 @@ impl Component for StatusBar {
                         {onpointerdown}
                     >
                         <StatusIndicator
-                            {custom_events}
                             {renderer}
                             {session}
                             update_count={ctx.props().update_count}
-                            error={ctx.props().error.clone()}
-                            has_table={ctx.props().has_table.clone()}
-                            stats={ctx.props().stats.clone()}
+                            session_props={ctx.props().session_props.clone()}
                         />
                         if is_title {
                             <label
@@ -396,14 +363,14 @@ impl Component for StatusBar {
                             </label>
                         }
                         if is_title {
-                            <StatusBarRowsCounter stats={ctx.props().stats.clone()} />
+                            <StatusBarRowsCounter stats={ctx.props().session_props.stats.clone()} />
                         }
                         <div id="spacer" />
                         if is_menu {
                             <div id="menu-bar" class="section">
                                 <ThemeSelector
-                                    theme={ctx.props().selected_theme.clone()}
-                                    themes={ctx.props().available_themes.clone()}
+                                    theme={ctx.props().presentation_props.selected_theme.clone()}
+                                    themes={ctx.props().presentation_props.available_themes.clone()}
                                     on_change={ctx.link().callback(StatusBarMsg::SetTheme)}
                                     on_reset={ctx.link().callback(|_| StatusBarMsg::ResetTheme)}
                                 />
@@ -454,7 +421,7 @@ impl Component for StatusBar {
                         target={self.copy_target.clone()}
                         own_focus=true
                         on_close={on_close_copy}
-                        theme={ctx.props().selected_theme.clone().unwrap_or_default()}
+                        theme={ctx.props().presentation_props.selected_theme.clone().unwrap_or_default()}
                     >
                         <CopyDropDownMenu renderer={renderer.clone()} callback={on_copy_select} />
                     </PortalModal>
@@ -463,7 +430,7 @@ impl Component for StatusBar {
                         target={self.export_target.clone()}
                         own_focus=true
                         on_close={on_close_export}
-                        theme={ctx.props().selected_theme.clone().unwrap_or_default()}
+                        theme={ctx.props().presentation_props.selected_theme.clone().unwrap_or_default()}
                     >
                         <ExportDropDownMenu
                             renderer={renderer.clone()}

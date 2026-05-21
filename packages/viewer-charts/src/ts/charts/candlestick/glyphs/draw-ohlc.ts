@@ -12,14 +12,15 @@
 
 import type { WebGLContextManager } from "../../../webgl/context-manager";
 import type { CandlestickChart } from "../candlestick";
-import type { CandleRecord } from "../candlestick-build";
-import { getInstancing } from "../../../webgl/instanced-attrs";
+import {
+    createLineCornerBuffer,
+    getInstancing,
+} from "../../../webgl/instanced-attrs";
+import { compileProgram } from "../../../webgl/program-cache";
 import lineVert from "../../../shaders/line-uniform.vert.glsl";
 import lineFrag from "../../../shaders/line-uniform.frag.glsl";
 
 type GL = WebGL2RenderingContext | WebGLRenderingContext;
-
-const OHLC_LINE_WIDTH_PX = 1.0;
 
 interface OHLCCache {
     program: WebGLProgram;
@@ -34,144 +35,263 @@ interface OHLCCache {
     a_end: number;
 }
 
-function ensureCache(
-    chart: CandlestickChart,
-    glManager: WebGLContextManager,
-): OHLCCache {
-    if (chart._wickCache && (chart._wickCache as any).ohlc) {
-        return (chart._wickCache as any).ohlc as OHLCCache;
+/**
+ * Persistent OHLC vertex buffer state — one buffer per color group
+ * (up / down), each holding 3 line segments per candle (H–L vertical,
+ * open tick, close tick). Built once per data load; pan/zoom redraws
+ * rebind + dispatch with no uploads.
+ */
+interface OHLCBuffers {
+    upBuffer: WebGLBuffer;
+    downBuffer: WebGLBuffer;
+
+    /**
+     * Number of line-segment instances in the up buffer (= 3 × up candle count).
+     */
+    upInstanceCount: number;
+    downInstanceCount: number;
+}
+
+/**
+ * OHLC bar glyph. Owns the OHLC program + per-color persistent segment
+ * buffers built per data load. Co-tenanted with `BodyWickGlyph` on
+ * `CandlestickChart`; only one of the two is active per frame depending
+ * on `_defaultChartType`.
+ */
+export class OHLCGlyph {
+    private _program: OHLCCache | null = null;
+    private _buffers: OHLCBuffers | null = null;
+
+    private ensureProgram(glManager: WebGLContextManager): OHLCCache {
+        if (this._program) {
+            return this._program;
+        }
+
+        const gl = glManager.gl;
+        const cornerBuffer = createLineCornerBuffer(gl);
+        const partial = compileProgram<
+            Omit<OHLCCache, "cornerBuffer" | "segmentBuffer">
+        >(
+            glManager,
+            "line-uniform",
+            lineVert,
+            lineFrag,
+            ["u_projection", "u_color", "u_resolution", "u_line_width"],
+            ["a_corner", "a_start", "a_end"],
+        );
+        this._program = {
+            ...partial,
+            cornerBuffer,
+            segmentBuffer: gl.createBuffer()!,
+        };
+        return this._program;
     }
-    const gl = glManager.gl;
-    const prog = glManager.shaders.getOrCreate(
-        "line-uniform",
-        lineVert,
-        lineFrag,
-    );
-    const cornerBuffer = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, cornerBuffer);
-    gl.bufferData(
-        gl.ARRAY_BUFFER,
-        new Float32Array([0, 1, 2, 3]),
-        gl.STATIC_DRAW,
-    );
-    const cache: OHLCCache = {
-        program: prog,
-        cornerBuffer,
-        segmentBuffer: gl.createBuffer()!,
-        u_projection: gl.getUniformLocation(prog, "u_projection"),
-        u_color: gl.getUniformLocation(prog, "u_color"),
-        u_resolution: gl.getUniformLocation(prog, "u_resolution"),
-        u_line_width: gl.getUniformLocation(prog, "u_line_width"),
-        a_corner: gl.getAttribLocation(prog, "a_corner"),
-        a_start: gl.getAttribLocation(prog, "a_start"),
-        a_end: gl.getAttribLocation(prog, "a_end"),
-    };
-    // Stash alongside any existing wick cache so destroy() can free both.
-    const existing = (chart._wickCache as any) || {};
-    chart._wickCache = { ...existing, ohlc: cache };
-    return cache;
+
+    /**
+     * Drop persistent OHLC vertex buffers. Called from data-load (before
+     * `rebuildBuffers`) and from chart-destroy paths.
+     */
+    invalidateBuffers(chart: CandlestickChart): void {
+        const buf = this._buffers;
+        if (!buf || !chart._glManager) {
+            this._buffers = null;
+            return;
+        }
+
+        const gl = chart._glManager.gl;
+        gl.deleteBuffer(buf.upBuffer);
+        gl.deleteBuffer(buf.downBuffer);
+        this._buffers = null;
+    }
+
+    /**
+     * Pre-build the per-group OHLC instance buffers. Each candle emits 3
+     * line segments (H–L, open tick, close tick); layout per instance is
+     * `[start.x, start.y, end.x, end.y]`. Single GPU upload per group per
+     * data load.
+     */
+    rebuildBuffers(
+        chart: CandlestickChart,
+        glManager: WebGLContextManager,
+    ): void {
+        // Only rebuild when this chart actually paints OHLC. Cheap enough
+        // to always rebuild but skipping avoids two empty GPU buffers on
+        // candlestick instances.
+        if (chart._defaultChartType !== "ohlc") {
+            return;
+        }
+
+        const candles = chart._candles;
+        const gl = glManager.gl;
+        this.ensureProgram(glManager);
+
+        const xOrigin = chart._categoryOrigin;
+        const xC = candles.xCenter;
+        const hw = candles.halfWidth;
+        const open = candles.open;
+        const close = candles.close;
+        const high = candles.high;
+        const low = candles.low;
+        const isUp = candles.isUp;
+
+        let upCount = 0;
+        let downCount = 0;
+        for (let i = 0; i < candles.count; i++) {
+            if (isUp[i] !== 0) {
+                upCount++;
+            } else {
+                downCount++;
+            }
+        }
+
+        const upData = new Float32Array(upCount * 3 * 4);
+        const downData = new Float32Array(downCount * 3 * 4);
+        let upW = 0;
+        let downW = 0;
+
+        for (let i = 0; i < candles.count; i++) {
+            const xc = xC[i] - xOrigin;
+            const o = open[i];
+            const c = close[i];
+            const lo = low[i];
+            const hi = high[i];
+            const halfW = hw[i];
+            const target = isUp[i] !== 0 ? upData : downData;
+            let w = isUp[i] !== 0 ? upW : downW;
+
+            // H–L vertical line.
+            target[w++] = xc;
+            target[w++] = lo;
+            target[w++] = xc;
+            target[w++] = hi;
+
+            // Open tick: left-facing horizontal stub at y=open.
+            target[w++] = xc - halfW;
+            target[w++] = o;
+            target[w++] = xc;
+            target[w++] = o;
+
+            // Close tick: right-facing horizontal stub at y=close.
+            target[w++] = xc;
+            target[w++] = c;
+            target[w++] = xc + halfW;
+            target[w++] = c;
+
+            if (isUp[i] !== 0) {
+                upW = w;
+            } else {
+                downW = w;
+            }
+        }
+
+        const prev = this._buffers;
+        const upBuf = prev?.upBuffer ?? gl.createBuffer()!;
+        const downBuf = prev?.downBuffer ?? gl.createBuffer()!;
+        gl.bindBuffer(gl.ARRAY_BUFFER, upBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, upData, gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, downBuf);
+        gl.bufferData(gl.ARRAY_BUFFER, downData, gl.STATIC_DRAW);
+
+        this._buffers = {
+            upBuffer: upBuf,
+            downBuffer: downBuf,
+            upInstanceCount: upCount * 3,
+            downInstanceCount: downCount * 3,
+        };
+    }
+
+    /**
+     * Bind the persistent up/down OHLC buffers and dispatch one instanced
+     * draw per color group.
+     */
+    draw(
+        chart: CandlestickChart,
+        gl: GL,
+        glManager: WebGLContextManager,
+        projection: Float32Array,
+    ): void {
+        const buf = this._buffers;
+        if (
+            !buf ||
+            (buf.upInstanceCount === 0 && buf.downInstanceCount === 0)
+        ) {
+            return;
+        }
+
+        const cache = this.ensureProgram(glManager);
+        const dpr = glManager.dpr;
+
+        gl.useProgram(cache.program);
+        gl.uniformMatrix4fv(cache.u_projection, false, projection);
+        gl.uniform2f(cache.u_resolution, gl.canvas.width, gl.canvas.height);
+        gl.uniform1f(
+            cache.u_line_width,
+            chart._pluginConfig.ohlc_line_width_px * dpr,
+        );
+
+        const instancing = getInstancing(glManager);
+        const { setDivisor } = instancing;
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, cache.cornerBuffer);
+        gl.enableVertexAttribArray(cache.a_corner);
+        gl.vertexAttribPointer(cache.a_corner, 1, gl.FLOAT, false, 0, 0);
+        setDivisor(cache.a_corner, 0);
+
+        drawGroup(
+            gl,
+            instancing,
+            cache,
+            buf.upBuffer,
+            buf.upInstanceCount,
+            chart._upColor,
+        );
+        drawGroup(
+            gl,
+            instancing,
+            cache,
+            buf.downBuffer,
+            buf.downInstanceCount,
+            chart._downColor,
+        );
+
+        setDivisor(cache.a_start, 0);
+        setDivisor(cache.a_end, 0);
+    }
+
+    destroy(chart: CandlestickChart): void {
+        const gl = chart._glManager?.gl;
+        if (gl) {
+            this.invalidateBuffers(chart);
+            const cache = this._program;
+            if (cache) {
+                gl.deleteBuffer(cache.cornerBuffer);
+                gl.deleteBuffer(cache.segmentBuffer);
+            }
+        }
+
+        this._program = null;
+        this._buffers = null;
+    }
 }
 
-/**
- * OHLC glyph: for each record, three line segments — the vertical H–L
- * line through `xCenter`, a short left-facing tick at `open`, and a
- * short right-facing tick at `close`. Colors bichromatic by `isUp`,
- * identical to candlestick bodies.
- */
-export function drawOHLC(
-    chart: CandlestickChart,
+function drawGroup(
     gl: GL,
-    glManager: WebGLContextManager,
-    projection: Float32Array,
-): void {
-    const candles = chart._candles;
-    if (candles.length === 0) return;
-
-    const cache = ensureCache(chart, glManager);
-
-    drawOHLCGroup(
-        gl,
-        glManager,
-        cache,
-        candles.filter((c) => c.isUp),
-        chart._upColor,
-        projection,
-    );
-    drawOHLCGroup(
-        gl,
-        glManager,
-        cache,
-        candles.filter((c) => !c.isUp),
-        chart._downColor,
-        projection,
-    );
-}
-
-/**
- * Pack all three line segments (H–L, open tick, close tick) for every
- * candle in `group` into a single interleaved instance buffer and
- * issue one instanced draw.
- *
- * Layout per instance (16 bytes = 4 floats): `[ start.x, start.y, end.x, end.y ]`.
- * `3 * group.length` total instances.
- */
-function drawOHLCGroup(
-    gl: GL,
-    glManager: WebGLContextManager,
+    instancing: ReturnType<typeof getInstancing>,
     cache: OHLCCache,
-    group: CandleRecord[],
+    buffer: WebGLBuffer,
+    instanceCount: number,
     color: [number, number, number],
-    projection: Float32Array,
 ): void {
-    if (group.length === 0) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const data = new Float32Array(group.length * 3 * 4);
-    let o = 0;
-    for (let i = 0; i < group.length; i++) {
-        const c = group[i];
-        // H–L vertical line.
-        data[o++] = c.xCenter;
-        data[o++] = c.low;
-        data[o++] = c.xCenter;
-        data[o++] = c.high;
-        // Open tick: left-facing horizontal stub at y=open.
-        data[o++] = c.xCenter - c.halfWidth;
-        data[o++] = c.open;
-        data[o++] = c.xCenter;
-        data[o++] = c.open;
-        // Close tick: right-facing horizontal stub at y=close.
-        data[o++] = c.xCenter;
-        data[o++] = c.close;
-        data[o++] = c.xCenter + c.halfWidth;
-        data[o++] = c.close;
+    if (instanceCount === 0) {
+        return;
     }
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, cache.segmentBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
-
-    gl.useProgram(cache.program);
-    gl.uniformMatrix4fv(cache.u_projection, false, projection);
-    gl.uniform2f(
-        cache.u_resolution,
-        (gl.canvas as HTMLCanvasElement).width,
-        (gl.canvas as HTMLCanvasElement).height,
-    );
-    gl.uniform1f(cache.u_line_width, OHLC_LINE_WIDTH_PX * dpr);
-    gl.uniform4f(cache.u_color, color[0], color[1], color[2], 1.0);
-
-    const instancing = getInstancing(glManager);
-    const { setDivisor } = instancing;
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, cache.cornerBuffer);
-    gl.enableVertexAttribArray(cache.a_corner);
-    gl.vertexAttribPointer(cache.a_corner, 1, gl.FLOAT, false, 0, 0);
-    setDivisor(cache.a_corner, 0);
 
     const instanceStride = 4 * Float32Array.BYTES_PER_ELEMENT;
     const pointSize = 2 * Float32Array.BYTES_PER_ELEMENT;
+    const { setDivisor } = instancing;
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, cache.segmentBuffer);
+    gl.uniform4f(cache.u_color, color[0], color[1], color[2], 1.0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.enableVertexAttribArray(cache.a_start);
     gl.vertexAttribPointer(
         cache.a_start,
@@ -193,8 +313,5 @@ function drawOHLCGroup(
     );
     setDivisor(cache.a_end, 1);
 
-    instancing.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, group.length * 3);
-
-    setDivisor(cache.a_start, 0);
-    setDivisor(cache.a_end, 0);
+    instancing.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, instanceCount);
 }

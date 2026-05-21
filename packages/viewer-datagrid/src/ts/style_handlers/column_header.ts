@@ -72,7 +72,10 @@ export function style_selected_column(
                 if (model._config.columns.length > 1) {
                     for (const r of regularTable.querySelectorAll("td")) {
                         const meta = regularTable.getMeta(r);
-                        if (!meta?.column_header) continue;
+                        if (!meta?.column_header) {
+                            continue;
+                        }
+
                         const isOpen =
                             meta.column_header[
                                 meta.column_header.length - 2
@@ -104,8 +107,9 @@ export function styleColumnHeaderRow(
             !metadata ||
             metadata.type === "body" ||
             metadata.type === "row_header"
-        )
+        ) {
             continue;
+        }
 
         const column_name =
             metadata.column_header?.[model._config.split_by.length];

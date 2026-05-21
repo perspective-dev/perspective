@@ -88,6 +88,12 @@ impl View {
         self.clone()
     }
 
+    #[wasm_bindgen]
+    #[doc(hidden)]
+    pub fn __unsafe_get_name(&self) -> String {
+        self.0.name.clone()
+    }
+
     /// Returns an array of strings containing the column paths of the [`View`]
     /// without any of the source columns.
     ///

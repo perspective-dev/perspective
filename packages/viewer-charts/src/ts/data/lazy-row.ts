@@ -47,7 +47,10 @@ export class LazyRowFetcher {
     }
 
     async fetchRow(rowIdx: number): Promise<LazyRow> {
-        if (!this._view) throw new Error("LazyRowFetcher disposed");
+        if (!this._view) {
+            throw new Error("LazyRowFetcher disposed");
+        }
+
         const cached = this._cache.get(rowIdx);
         if (cached) {
             // LRU touch: re-insert to move to tail.
@@ -55,19 +58,28 @@ export class LazyRowFetcher {
             this._cache.set(rowIdx, cached);
             return cached;
         }
+
         const inflight = this._inFlight.get(rowIdx);
-        if (inflight) return inflight;
+        if (inflight) {
+            return inflight;
+        }
 
         const p = this._fetch(rowIdx);
         this._inFlight.set(rowIdx, p);
         try {
             const result = await p;
-            if (!this._view) return result; // disposed mid-flight
+            if (!this._view) {
+                return result;
+            } // disposed mid-flight
+
             this._cache.set(rowIdx, result);
             if (this._cache.size > this._maxCacheSize) {
                 const oldest = this._cache.keys().next().value;
-                if (oldest !== undefined) this._cache.delete(oldest);
+                if (oldest !== undefined) {
+                    this._cache.delete(oldest);
+                }
             }
+
             return result;
         } finally {
             this._inFlight.delete(rowIdx);
@@ -76,7 +88,10 @@ export class LazyRowFetcher {
 
     private async _fetch(rowIdx: number): Promise<LazyRow> {
         const view = this._view;
-        if (!view) throw new Error("LazyRowFetcher disposed");
+        if (!view) {
+            throw new Error("LazyRowFetcher disposed");
+        }
+
         const row: LazyRow = new Map();
         await (view as any).with_typed_arrays(
             {
@@ -92,7 +107,10 @@ export class LazyRowFetcher {
             ) => {
                 for (let i = 0; i < names.length; i++) {
                     const name = names[i];
-                    if (name.startsWith("__")) continue;
+                    if (name.startsWith("__")) {
+                        continue;
+                    }
+
                     const vals = values[i];
                     const valid = validities[i];
                     const dict = dictionaries[i];

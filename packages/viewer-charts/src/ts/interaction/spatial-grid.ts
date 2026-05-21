@@ -43,6 +43,7 @@ export class SpatialGrid {
             cell = [];
             this._cells.set(key, cell);
         }
+
         cell.push(index);
     }
 
@@ -78,7 +79,10 @@ export class SpatialGrid {
                 cx++
             ) {
                 const cell = this._cells.get(this._cellKey(cx, cy));
-                if (!cell) continue;
+                if (!cell) {
+                    continue;
+                }
+
                 for (const i of cell) {
                     const dx = (xData[i] - dataX) * pxPerDataX;
                     const dy = (yData[i] - dataY) * pxPerDataY;

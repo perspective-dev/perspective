@@ -380,15 +380,57 @@
         }
     }
 
+    .settings_tab_bar_scroll_offset {
+        margin-left: -8px;
+    }
+
+    #settings_tab_bar {
+        display: flex;
+        &:after {
+            content: " ";
+            border-bottom: 1px solid var(--psp-inactive--color);
+            background-color: #00000020;
+            flex: 1 0 auto;
+        }
+
+        .settings_tab {
+            border-right: 1px solid var(--psp-inactive--color);
+            cursor: pointer;
+            padding: 6px 8px;
+            font-size: var(--label--font-size, 0.75em);
+            flex: 0 1 100px;
+            background-color: #00000020;
+            border-bottom: 1px solid var(--psp-inactive--color);
+            color: var(--psp-inactive--color);
+            margin-left: -1px;
+            border-left: 1px solid var(--psp-inactive--color);
+
+            &:hover {
+                color: inherit;
+            }
+        }
+
+        .selected_tab {
+            color: inherit;
+            background-color: transparent;
+            border-bottom: 1px solid transparent;
+            box-shadow: 0px 9px 0px -8px var(--psp-inactive--color);
+            height: calc(100% - 1px);
+        }
+    }
+
     .split-panel.orient-reverse
         > .split-panel-child:not(:last-child):not(.is-width-override) {
         max-width: 300px;
     }
 
     .sidebar_header {
-        min-height: var(
-            --psp-plugin-selector--height,
-            var(--psp-status-bar--height, 48px)
+        min-height: calc(
+            var(
+                    --psp-plugin-selector--height,
+                    var(--psp-status-bar--height, 48px)
+                ) +
+                1px
         );
         overflow: hidden;
         display: flex;
@@ -412,5 +454,25 @@
         margin-top: 1px;
         flex-shrink: 0;
         flex-grow: 0;
+    }
+
+    #query_tabbar_tab:before {
+        content: var(--psp-label--query-tab--content);
+    }
+
+    #plugin_tabbar_tab:before {
+        content: var(--psp-label--plugin-tab--content);
+    }
+
+    #debug_tabbar_tab:before {
+        content: var(--psp-label--debug-tab--content);
+    }
+
+    label#stack-label:before {
+        content: var(--psp-label--stack--content, "Stack");
+    }
+
+    label#alt_axis-label:before {
+        content: var(--psp-label--alt-axis--content, "Alt Axis");
     }
 }
