@@ -877,12 +877,6 @@ t_stree::update_shape_from_static(const t_dtree_ctx& ctx) {
         if (iter == m_nodes->get<by_pidx_hash>().end()) {
             // create node and enqueue
             sptidx = genidx();
-            t_uindex aggsize = m_aggregates->size();
-            if (sptidx == aggsize) {
-                double scale = 1.3;
-                t_uindex new_size = scale * aggsize;
-                m_aggregates->extend(new_size);
-            }
 
             t_uindex dst_ridx = gen_aggidx();
 
@@ -1105,7 +1099,7 @@ t_stree::gen_aggidx() {
     t_uindex rval = m_cur_aggidx;
     ++m_cur_aggidx;
     if (rval >= cur_cap) {
-        double nrows = ceil(.3 * double(rval));
+        double nrows = ceil(1.3 * double(rval));
         m_aggregates->extend(static_cast<t_uindex>(nrows));
     }
 

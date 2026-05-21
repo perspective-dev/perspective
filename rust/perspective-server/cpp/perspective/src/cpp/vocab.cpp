@@ -70,18 +70,40 @@ t_vocab::string_exists(const char* c, t_uindex& interned) const {
     return true;
 }
 
+bool
+t_vocab::string_exists(
+    const char* c, std::size_t hash, t_uindex& interned
+) const {
+    auto iter = m_map.find(c, hash);
+
+    if (iter == m_map.end()) {
+        return false;
+    }
+
+    interned = iter->second;
+    return true;
+}
+
 t_uindex
 t_vocab::get_interned(const char* s) {
+    std::size_t bytelength = strlen(s);
+    return get_interned(s, bytelength, boost::hash_range(s, s + bytelength));
+}
+
+t_uindex
+t_vocab::get_interned(
+    const char* s, std::size_t bytelength, std::size_t hash
+) {
 #ifdef PSP_COLUMN_VERIFY
     PSP_VERBOSE_ASSERT(s != 0, "Null string");
 #endif
 
-    t_sidxmap::iterator iter = m_map.find(s);
+    t_sidxmap::iterator iter = m_map.find(s, hash);
 
     t_uindex idx;
     t_uindex bidx;
     t_uindex eidx;
-    t_uindex len = strlen(s) + 1;
+    t_uindex len = bytelength + 1;
 
     if (iter == m_map.end()) {
         idx = genidx();
