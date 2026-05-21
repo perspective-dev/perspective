@@ -57,10 +57,15 @@ public:
 
     t_uindex get_interned(const std::string& s);
     t_uindex get_interned(const char* s);
+    t_uindex
+    get_interned(const char* s, std::size_t bytelength, std::size_t hash);
     void copy_vocabulary(const t_vocab& other);
     const char* unintern_c(t_uindex idx) const;
 
     bool string_exists(const char* c, t_uindex& interned) const;
+    bool string_exists(
+        const char* c, std::size_t hash, t_uindex& interned
+    ) const;
 
     void reserve(size_t total_string_size, size_t string_count);
 
