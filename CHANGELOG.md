@@ -1,3 +1,30 @@
+# [v4.5.0](https://github.com/perspective-dev/perspective/releases/tag/v4.5.0)
+
+_21 May 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.4.1...v4.5.0))
+
+**Breaking**
+
+- New plugin API, `viewer-charts` features, replace `@perspective-dev/viewer-openlayers` [#3176](https://github.com/finos/perspective/pull/3176)
+- Rename `@perspective-dev/viewer-charts`, add missing chart types [#3166](https://github.com/finos/perspective/pull/3166)
+
+Features
+
+- Add `coalesce` [#3172](https://github.com/finos/perspective/pull/3172)
+- Multi-chart rendering for `@perspective-dev/charts` [#3168](https://github.com/finos/perspective/pull/3168)
+- Add `View::with_typed_arrays` API [#3165](https://github.com/finos/perspective/pull/3165)
+
+Fixes
+
+- Fix `expressions` memory leak [#3177](https://github.com/finos/perspective/pull/3177)
+- Fix multi-batch Arrow null validity bug [#3171](https://github.com/finos/perspective/pull/3171)
+- Fix Safari rendering bug [#3162](https://github.com/finos/perspective/pull/3162)
+- Fix multi-column aggregates by expressions [#3161](https://github.com/finos/perspective/pull/3161)
+
+Misc
+
+- Update security docs [#3173](https://github.com/finos/perspective/pull/3173)
+- Add WebGL chart plugin with scatter, line, and treemap [#3160](https://github.com/finos/perspective/pull/3160)
+
 # [v4.4.1](https://github.com/perspective-dev/perspective/releases/tag/v4.4.1)
 
 _14 April 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.4.0...v4.4.1))
