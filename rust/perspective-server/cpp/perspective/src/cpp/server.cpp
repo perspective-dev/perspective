@@ -1453,6 +1453,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             number_opts.add_aggregates()->set_name("distinct count");
             number_opts.add_aggregates()->set_name("dominant");
             number_opts.add_aggregates()->set_name("first");
+            number_opts.add_aggregates()->set_name("gmv");
             number_opts.add_aggregates()->set_name("high");
             number_opts.add_aggregates()->set_name("low");
             number_opts.add_aggregates()->set_name("max");

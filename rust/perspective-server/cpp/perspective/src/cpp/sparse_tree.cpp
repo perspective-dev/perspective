@@ -1815,6 +1815,67 @@ t_stree::update_agg_table(
                 );
                 dst->set_scalar(dst_ridx, new_value);
             } break;
+            case AGGTYPE_GMV: {
+                // Leaf nodes: plain `sum` of the underlying rows.
+                // Non-leaf nodes: sum over immediate children of
+                // `abs(sum(child_subtree))`. The child sums are recomputed
+                // from the gstate rather than read from already-populated
+                // child rows, so the parent does not see the abs-rolled-up
+                // child value — it sees the child's raw signed sum.
+                old_value.set(dst->get_scalar(dst_ridx));
+                const auto& col_name = spec.get_dependencies()[0].name();
+                auto dst_dtype = dst->get_dtype();
+                auto sum_reducer = [dst_dtype](std::vector<t_tscalar>& values
+                                   ) -> t_tscalar {
+                    if (values.empty()) {
+                        return mknone();
+                    }
+                    t_tscalar v;
+                    v.set(std::uint64_t(0));
+                    v.m_type = dst_dtype;
+                    for (const auto& x : values) {
+                        if (x.is_nan()) {
+                            continue;
+                        }
+                        v = v.add(x.coerce_numeric_dtype(dst_dtype));
+                    }
+                    return v;
+                };
+
+                if (is_leaf(nidx)) {
+                    auto pkeys = get_pkeys(nidx);
+                    new_value.set(
+                        reduce_from_gstate<std::function<
+                            t_tscalar(std::vector<t_tscalar>&)>>(
+                            gstate,
+                            expression_master_table,
+                            col_name,
+                            pkeys,
+                            sum_reducer
+                        )
+                    );
+                } else {
+                    t_tscalar rval;
+                    rval.set(std::uint64_t(0));
+                    rval.m_type = dst_dtype;
+                    for (auto cidx : get_child_idx(nidx)) {
+                        auto cpkeys = get_pkeys(cidx);
+                        t_tscalar csum = reduce_from_gstate<std::function<
+                            t_tscalar(std::vector<t_tscalar>&)>>(
+                            gstate,
+                            expression_master_table,
+                            col_name,
+                            cpkeys,
+                            sum_reducer
+                        );
+                        if (csum.is_valid() && !csum.is_nan()) {
+                            rval = rval.add(csum.abs());
+                        }
+                    }
+                    new_value.set(rval);
+                }
+                dst->set_scalar(dst_ridx, new_value);
+            } break;
             case AGGTYPE_MUL: {
                 old_value.set(dst->get_scalar(dst_ridx));
                 auto pkeys = get_pkeys(nidx);

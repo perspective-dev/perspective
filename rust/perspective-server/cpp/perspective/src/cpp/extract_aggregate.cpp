@@ -54,6 +54,7 @@ extract_aggregate(
         case AGGTYPE_SUM:
         case AGGTYPE_SUM_ABS:
         case AGGTYPE_ABS_SUM:
+        case AGGTYPE_GMV:
         case AGGTYPE_SUM_NOT_NULL:
         case AGGTYPE_MUL:
         case AGGTYPE_COUNT:
