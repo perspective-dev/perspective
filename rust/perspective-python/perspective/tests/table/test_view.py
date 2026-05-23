@@ -536,6 +536,39 @@ class TestView(object):
             "MV": [10000, 5900, -2000, -3200, 700, 7100, 800, -2400, -3900],
         }
 
+    def test_view_aggregate_gmv_split_by(self):
+        data = {
+            "division": [
+                "D1", "D2", "D1", "D2", "D1", "D2", "D1", "D2", "D1", "D2",
+                "D1", "D2", "D1", "D2", "D1", "D2", "D1", "D2", "D1", "D2",
+            ],
+            "symbol": [
+                "AAPL", "GOOG", "MSFT", "AAPL", "GOOG", "MSFT", "AAPL",
+                "GOOG", "MSFT", "AAPL", "GOOG", "MSFT", "AAPL", "GOOG",
+                "MSFT", "AAPL", "GOOG", "MSFT", "AAPL", "GOOG",
+            ],
+            "MV": [
+                1500, 1200, 1300, 1400, 1600, 1100, 1700, 1800, 1900, 2000,
+                -2100, -2200, -2300, -2400, -2500, -2600, -2700, -2800,
+                -2900, -3000,
+            ],
+        }
+
+        tbl = Table(data)
+        view = tbl.view(
+            aggregates={"MV": "gmv"},
+            group_by=["division"],
+            split_by=["symbol"],
+            columns=["MV"],
+        )
+
+        assert view.to_columns() == {
+            "__ROW_PATH__": [[], ["D1"], ["D2"]],
+            "AAPL|MV": [2800, -2000, 800],
+            "GOOG|MV": [5600, -3200, -2400],
+            "MSFT|MV": [4600, 700, -3900],
+        }
+
     def test_view_aggregate_mean_from_schema(self):
         data = [
             {"a": "a", "x": 1, "y": 200},

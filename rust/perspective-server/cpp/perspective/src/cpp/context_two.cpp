@@ -77,6 +77,19 @@ t_ctx2::init() {
         );
 
         m_trees[treeidx]->init();
+
+        // Tell the tree how many of its `m_pivots` are row pivots and
+        // what the next missing row pivot is (if any). AGGTYPE_GMV uses
+        // this to roll up across row dimensions that aren't embedded in
+        // this particular tree — e.g. m_trees[0] has no row pivots, so
+        // a tree-leaf at e.g. [AAPL] needs to be partitioned by
+        // `row_pivots[0]` from the gstate to compute the gmv value.
+        const auto& row_pivots = m_config.get_row_pivots();
+        std::string next_row_pivot;
+        if (treeidx < row_pivots.size()) {
+            next_row_pivot = row_pivots[treeidx].colname();
+        }
+        m_trees[treeidx]->set_gmv_row_pivot_meta(treeidx, next_row_pivot);
     }
 
     m_rtraversal = std::make_shared<t_traversal>(rtree());
@@ -1171,6 +1184,15 @@ t_ctx2::reset(bool reset_expressions) {
         );
         m_trees[treeidx]->init();
         m_trees[treeidx]->set_deltas_enabled(get_feature_state(CTX_FEAT_DELTA));
+
+        // See [t_ctx2::init] — gmv needs to know how many row pivots
+        // this particular tree carries vs. what's still in the gstate.
+        const auto& row_pivots = m_config.get_row_pivots();
+        std::string next_row_pivot;
+        if (treeidx < row_pivots.size()) {
+            next_row_pivot = row_pivots[treeidx].colname();
+        }
+        m_trees[treeidx]->set_gmv_row_pivot_meta(treeidx, next_row_pivot);
     }
 
     m_rtraversal = std::make_shared<t_traversal>(rtree());
