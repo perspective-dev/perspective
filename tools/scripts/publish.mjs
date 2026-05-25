@@ -12,6 +12,7 @@
 
 import { Octokit } from "octokit";
 import fs from "node:fs/promises";
+import { execSync } from "child_process";
 
 import "zx/globals";
 
@@ -62,6 +63,11 @@ async function download_release_assets(releases) {
     );
 }
 
+const SH_ENV = {
+    env: process.env,
+    stdio: "inherit",
+};
+
 async function publish_release_assets(releases) {
     if (process.env.COMMIT) {
         for (const release of releases) {
@@ -70,9 +76,9 @@ async function publish_release_assets(releases) {
                     release.name.endsWith("tar.gz")) &&
                 release.name.indexOf("wasm") === -1
             ) {
-                $.sync`twine upload ${release.name}`;
+                execSync(`twine upload ${release.name}`, SH_ENV);
             } else if (release.name.endsWith(".tgz")) {
-                $.sync`npm publish ${release.name}`;
+                execSync(`npm publish ${release.name}`, SH_ENV);
             } else {
                 console.log(`Skipping  "${release.name}"`);
             }
@@ -80,12 +86,35 @@ async function publish_release_assets(releases) {
 
         await $`mkdir -p rust/target/package && mv *.crate rust/target/package`;
 
-        await $`cargo publish -p perspective-server --allow-dirty --no-verify`;
-        await $`cargo publish -p perspective-client --allow-dirty --no-verify`;
-        await $`cargo publish -p perspective-python --allow-dirty --no-verify`;
-        await $`cargo publish -p perspective-js --allow-dirty --no-verify`;
-        await $`cargo publish -p perspective-viewer --allow-dirty --no-verify`;
-        await $`cargo publish -p perspective --allow-dirty --no-verify`;
+        execSync(
+            `cargo publish -p perspective-server --allow-dirty --no-verify`,
+            SH_ENV,
+        );
+
+        execSync(
+            `cargo publish -p perspective-client --allow-dirty --no-verify`,
+            SH_ENV,
+        );
+
+        execSync(
+            `cargo publish -p perspective-python --allow-dirty --no-verify`,
+            SH_ENV,
+        );
+
+        execSync(
+            `cargo publish -p perspective-js --allow-dirty --no-verify`,
+            SH_ENV,
+        );
+
+        execSync(
+            `cargo publish -p perspective-viewer --allow-dirty --no-verify`,
+            SH_ENV,
+        );
+
+        execSync(
+            `cargo publish -p perspective --allow-dirty --no-verify`,
+            SH_ENV,
+        );
     } else {
         console.warn(`COMMIT not specified, aborting`);
     }

@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/viewer-charts",
-    "version": "4.3.0",
+    "version": "4.5.0",
     "description": "Perspective.js WebGL Plugin",
     "unpkg": "./dist/cdn/perspective-viewer-charts.js",
     "jsdelivr": "./dist/cdn/perspective-viewer-charts.js",

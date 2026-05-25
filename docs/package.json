@@ -8,6 +8,7 @@
         "start": "node server.mjs",
         "serve": "node server.mjs",
         "clean": "rm -rf dist",
+        "deploy": "node deploy.mjs",
         "mdbook": "docker compose run --rm mdbook build"
     },
     "dependencies": {
