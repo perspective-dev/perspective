@@ -22,8 +22,6 @@ import {
 import { Theme } from "../../theme/theme";
 import { resolvePalette, type Vec3 } from "../../theme/palette";
 import { type GradientStop } from "../../theme/gradient";
-import { renderLegend, renderCategoricalLegend } from "../../axis/legend";
-import { PlotLayout } from "../../layout/plot-layout";
 import { buildFacetGrid } from "../../layout/facet-grid";
 import { leafColor, leafRGBA, luminance } from "../common/leaf-color";
 import treemapVert from "../../shaders/treemap.vert.glsl";
@@ -32,6 +30,7 @@ import { withChromeCache } from "../common/chrome-cache";
 import { wrapLabel } from "../../axis/label-geometry";
 import {
     renderBreadcrumbs as renderTreeBreadcrumbs,
+    renderTreeColorLegend,
     renderTreeTooltip,
 } from "../common/tree-chrome";
 
@@ -648,44 +647,15 @@ function drawStaticChrome(
         renderTreeBreadcrumbs(chart, ctx, cssWidth, fontFamily, textColor);
     }
 
-    // Legend: numeric mode → gradient bar; series mode with 2+ unique
-    // labels → categorical swatches. Empty mode (and single-label series)
-    // suppress the legend entirely.
-    if (chart._colorMode === "series" && chart._uniqueColorLabels.size > 1) {
-        const legendLayout = new PlotLayout(cssWidth, cssHeight, {
-            hasXLabel: false,
-            hasYLabel: false,
-            hasLegend: true,
-        });
-        renderCategoricalLegend(
-            canvas,
-            legendLayout,
-            chart._uniqueColorLabels,
-            palette,
-            theme,
-        );
-    } else if (
-        chart._colorMode === "numeric" &&
-        chart._colorMin < chart._colorMax
-    ) {
-        const legendLayout = new PlotLayout(cssWidth, cssHeight, {
-            hasXLabel: false,
-            hasYLabel: false,
-            hasLegend: true,
-        });
-        renderLegend(
-            canvas,
-            legendLayout,
-            {
-                min: chart._colorMin,
-                max: chart._colorMax,
-                label: chart._colorName,
-            },
-            stops,
-            theme,
-            chart.getColumnFormatter(chart._colorName, "value"),
-        );
-    }
+    renderTreeColorLegend(
+        chart,
+        canvas,
+        palette,
+        stops,
+        theme,
+        cssWidth,
+        cssHeight,
+    );
 
     // Per-facet titles (rendered over the layout; painted in the static
     // chrome bitmap so they appear alongside leaf labels).

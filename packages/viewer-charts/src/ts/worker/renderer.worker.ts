@@ -177,41 +177,11 @@ export class WorkerRenderer {
         this.chartImpl.setView?.(view);
         this.glManager.bufferPool.maxCapacity = msg.bufferMaxCapacity;
         this.glManager.resize(msg.cssWidth, msg.cssHeight, msg.dpr);
-        const hostSink = new MessageHostSink((envelope) => {
-            switch (envelope.kind) {
-                case "pin":
-                    this.post({
-                        kind: "pinTooltip",
-                        lines: envelope.payload.lines,
-                        pos: envelope.payload.pos,
-                        bounds: envelope.payload.bounds,
-                    });
-                    break;
-                case "dismiss":
-                    this.post({ kind: "dismissTooltip" });
-                    break;
-                case "setCursor":
-                    this.post({ kind: "setCursor", cursor: envelope.cursor });
-                    break;
-                case "userClick":
-                    this.post({
-                        kind: "userClick",
-                        detail: envelope.payload as any,
-                    });
-                    break;
-                case "userSelect":
-                    this.post({
-                        kind: "userSelect",
-                        selected: envelope.payload.selected,
-                        row: envelope.payload.row,
-                        column_names: envelope.payload.column_names,
-                        insertConfig: envelope.payload.insertConfig as any,
-                    });
-                    break;
-            }
-        });
-
-        this.chartImpl.attachTooltip?.(hostSink);
+        // `MessageHostSink` emits `WorkerMsg`s directly — no translation
+        // needed here.
+        this.chartImpl.attachTooltip?.(
+            new MessageHostSink((msg) => this.post(msg)),
+        );
     }
 
     setViewByName(name: string): void {
@@ -309,13 +279,9 @@ export class WorkerRenderer {
                 }
             }
         } catch (err) {
-            // Any unexpected throw — proxy hiccup, chart-impl mutation
-            // failure, RAF chain rejection — must not leak past the
-            // outer fire-and-forget caller (`dispatch` does not await
-            // this method). Surface to the worker console; the host's
-            // pending promise still gets resolved via the `finally`
-            // ack below so `draw()` can't deadlock on a renderer error.
-            console.error("loadAndRender failed", err);
+            if ((err + "").indexOf("View not found") === -1) {
+                console.error("loadAndRender failed", err);
+            }
         } finally {
             this.post({ kind: "loadAndRenderAck", msgId: msg.msgId });
         }
@@ -417,10 +383,8 @@ export class WorkerRenderer {
 
     /**
      * Hit-test the cursor against the chart's facet grid (in faceted
-     * mode) or its current layout (single-plot). Mirrors the resolver
-     * `_setupZoomRouter` builds on the host for in-process mode — the
-     * worker owns the facet grid and controllers, so the resolution
-     * runs here.
+     * mode) or its current layout (single-plot). The worker owns the
+     * facet grid and controllers, so the resolution runs here.
      */
     private _resolveTarget(mx: number, my: number): ZoomTarget | null {
         const chart = this.chartImpl as any;

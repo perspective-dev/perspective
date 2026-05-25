@@ -56,8 +56,6 @@ function categoryIndexToPixelY(layout: PlotLayout, index: number): number {
     return layout.dataToPixel(0, index).py;
 }
 
-export const categoryIndexToPixel = categoryIndexToPixelX;
-
 function leafLevelLayout(
     numRows: number,
     longestCharCount: number,

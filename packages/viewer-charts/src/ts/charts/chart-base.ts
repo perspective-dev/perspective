@@ -46,6 +46,14 @@ import type { ViewConfig } from "@perspective-dev/client";
 import { resolveThemeFromVars, type Theme } from "../theme/theme";
 import { requestRender as scheduleRender } from "../render/scheduler";
 
+// TODO I don't know if this is the behavior we want. On the plus side, this
+// ad-hoc formatter scales well to small and large data ranges, making a good
+// guess at the right format without user input. On the minus side, this
+// behavior is inconsistent with datagrid and the rest of the app, and the ad-hoc
+// surprising behavior when overriding one field in `number_format` and suddenly
+// the entire formatter is replaced.
+const REGRESSION_BEHAVIOR = true;
+
 /**
  * Locale-aware fallback formatter applied to numeric tooltip / legend
  * values when the column has no `number_format` configured. Two
@@ -55,9 +63,12 @@ import { requestRender as scheduleRender } from "../render/scheduler";
 const DEFAULT_VALUE_FORMATTER: (v: number) => string = ((): ((
     v: number,
 ) => string) => {
-    return formatTickValue;
-    // const intl = createNumberFormatter("float");
-    // return (v) => intl.format(v);
+    if (REGRESSION_BEHAVIOR) {
+        return formatTickValue;
+    } else {
+        const intl = createNumberFormatter("float");
+        return (v) => intl.format(v);
+    }
 })();
 
 /**
@@ -69,9 +80,12 @@ const DEFAULT_VALUE_FORMATTER: (v: number) => string = ((): ((
 const DEFAULT_DATETIME_FORMATTER: (v: number) => string = ((): ((
     v: number,
 ) => string) => {
-    return formatDateTickValue;
-    // const intl = createDatetimeFormatter();
-    // return (v) => intl.format(v);
+    if (REGRESSION_BEHAVIOR) {
+        return formatDateTickValue;
+    } else {
+        const intl = createDatetimeFormatter();
+        return (v) => intl.format(v);
+    }
 })();
 
 /**

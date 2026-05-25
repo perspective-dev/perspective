@@ -86,6 +86,22 @@ pub fn restore_and_render(
             let plugin_swapped = renderer.apply_pending_plugin()?;
             let plugin = renderer.get_active_plugin()?;
 
+            // The previous call which acquired the lock errored, so skip this render
+            if let Some(error) = session.get_error() {
+                return Err(error);
+            }
+
+            // Validate + create the view BEFORE applying
+            // columns_config / plugin_config updates, so the
+            // strip-on-write and materialize passes see fresh
+            // `expression_schema` and `view_schema`, and the
+            // materialize warm step can call `View::get_min_max`
+            // against a view that knows about any new expression
+            // columns. Previously this happened after the strip,
+            // which silently dropped any `columns_config` entry
+            // keyed by a new expression column.
+            let view = session.validate().await?.create_view().await?;
+
             // Apply incoming updates into the now-active plugin's
             // bucket on `Renderer`. Per-plugin storage means no
             // schema filter is needed before restore — foreign keys
@@ -96,9 +112,9 @@ pub fn restore_and_render(
             let view_config_snapshot = session.get_view_config().clone();
             let plugin_config_changed =
                 renderer.update_plugin_config(&view_config_snapshot, plugin_config);
-
-            let changed = plugin_config_changed
-                || renderer.update_columns_configs(&view_config_snapshot, &session, columns_config);
+            let columns_config_changed =
+                renderer.update_columns_configs(&view_config_snapshot, &session, columns_config);
+            let changed = plugin_config_changed || columns_config_changed;
 
             // Force a materialized restore when the plugin just
             // swapped — `commit_plugin_idx` already restored from the
@@ -109,24 +125,19 @@ pub fn restore_and_render(
                 let plugin_config_snapshot = renderer.get_plugin_config();
                 let plugin_update =
                     wasm_bindgen::JsValue::from_serde_ext(&plugin_config_snapshot).unwrap();
-                let columns_config =
-                    renderer.all_columns_configs_materialized(&view_config_snapshot, &session);
+                let columns_config = renderer
+                    .all_columns_configs_materialized(&view_config_snapshot, &session)
+                    .await;
                 plugin.restore(&plugin_update, Some(&columns_config))?;
                 if plugin_config_changed {
                     renderer.plugin_config_changed.emit(plugin_config_snapshot);
                 }
             }
 
-            // The previous call which acquired the lock errored, so skip this render
-            if let Some(error) = session.get_error() {
-                return Err(error);
-            }
-
-            let view = session.validate().await?.create_view().await;
             if !presentation.is_visible() {
                 Ok(None)
             } else {
-                view
+                Ok(view)
             }
         });
 

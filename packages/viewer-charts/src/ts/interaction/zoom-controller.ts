@@ -108,6 +108,15 @@ export class ZoomController {
     private _lockAxis: "x" | "y" | null = null;
     private _lockAspect = false;
 
+    // Opt-in "pin" flags. When set, `setBaseDomain` preserves the
+    // axis's *absolute* visible center across a base swap — the
+    // pre-existing rebase math. Default-cleared: data updates "follow"
+    // (preserve normalized translate, so the visible window tracks the
+    // data fractionally). Wire to a paused-frame review feature when
+    // one exists; no current caller flips these.
+    private _xPinned = false;
+    private _yPinned = false;
+
     private _element: HTMLElement | null = null;
     private _layout: PlotLayout | null = null;
     private _onUpdate: (() => void) | null = null;
@@ -121,9 +130,8 @@ export class ZoomController {
     private _onPointerMove: ((e: PointerEvent) => void) | null = null;
     private _onPointerUp: ((e: PointerEvent) => void) | null = null;
 
-    // Per-controller mutators used by `ZoomRouter` to apply wheel/pan
-    // events without going through `attach`. Live below under "Router
-    // helpers" for the facet-aware zoom path.
+    // Per-controller mutators used by `applyWheel` / `applyPan`
+    // (zoom-router.ts) for the facet-aware zoom path.
     get lockedAxis(): "x" | "y" | null {
         return this._lockAxis;
     }
@@ -159,28 +167,27 @@ export class ZoomController {
     }
 
     /**
-     * Update the base (full-data) domain that this controller's
-     * normalized translate is interpreted against, while preserving
-     * the *absolute* center of any user-applied pan.
+     * Update the base (full-data) domain. Each axis is handled
+     * independently:
      *
-     * `_normTX` / `_normTY` are stored as fractions of the base
-     * range, not absolute coordinates. A naive "swap base, keep
-     * normTranslate" update reinterprets the same fraction against a
-     * new range, so when an external `draw()` updates the extent
-     * (via `processCartesianChunk` → `setZoomBaseDomain`) the user's
-     * pan-offset visible center jumps to a different absolute
-     * position. With concurrent pan events feeding in offsets that
-     * were computed against the old base, the jump can project the
-     * visible center past the data entirely, leaving `_fullRender`
-     * to draw zero glyphs onto a freshly-cleared canvas — a blank
-     * bitmap reaches the host as a flicker.
+     *  - If the axis is at default (no user pan or zoom on this axis),
+     *    just swap the new base in — no further math needed.
+     *  - If the axis has been explicitly *pinned* (`pinAxis("x" | "y")`),
+     *    preserve its *absolute* visible center across the swap:
+     *    re-solve `_normT` so the data-space center is unchanged.
+     *    This is paused-frame-review semantics — the user has marked a
+     *    region of interest and wants it to stay put even as new data
+     *    flows in. No current caller pins, but the API is here so the
+     *    default rule below doesn't bake the choice in.
+     *  - Otherwise (the default — "follow"): keep `_normT` as-is and
+     *    just swap the new base. The visible window's *fractional*
+     *    position is preserved, so sliding windows slide with the data
+     *    and extending windows grow proportionally with the data.
      *
-     * When the user is in default state (no pan, no zoom — fresh
-     * controller, or just-reset), no rebase is needed; just swap the
-     * base and let the chart auto-fit to the new data. Otherwise
-     * recompute `_normTX` / `_normTY` so the visible center stays at
-     * the same absolute (data-coordinate) position before and after
-     * the swap.
+     * Per-axis handling matters because `_scaleX/_normTX` and
+     * `_scaleY/_normTY` are independent. A user who panned X to scroll
+     * through time should not force Y onto the rebase path — Y data
+     * updates should still flow through cleanly.
      */
     setBaseDomain(
         xMin: number,
@@ -188,32 +195,57 @@ export class ZoomController {
         yMin: number,
         yMax: number,
     ): void {
-        if (this.isDefault()) {
+        const newRangeX = xMax - xMin;
+        if (this.isXDefault() || !this._xPinned) {
             this._baseXMin = xMin;
             this._baseXMax = xMax;
-            this._baseYMin = yMin;
-            this._baseYMax = yMax;
-            return;
+        } else {
+            const oldRangeX = this._baseXMax - this._baseXMin;
+            const oldCx =
+                (this._baseXMin + this._baseXMax) / 2 +
+                this._normTX * oldRangeX;
+            this._baseXMin = xMin;
+            this._baseXMax = xMax;
+            this._normTX =
+                newRangeX > 0 ? (oldCx - (xMin + xMax) / 2) / newRangeX : 0;
         }
 
-        const oldRangeX = this._baseXMax - this._baseXMin;
-        const oldRangeY = this._baseYMax - this._baseYMin;
-        const oldCx =
-            (this._baseXMin + this._baseXMax) / 2 + this._normTX * oldRangeX;
-        const oldCy =
-            (this._baseYMin + this._baseYMax) / 2 + this._normTY * oldRangeY;
-
-        this._baseXMin = xMin;
-        this._baseXMax = xMax;
-        this._baseYMin = yMin;
-        this._baseYMax = yMax;
-
-        const newRangeX = xMax - xMin;
         const newRangeY = yMax - yMin;
-        this._normTX =
-            newRangeX > 0 ? (oldCx - (xMin + xMax) / 2) / newRangeX : 0;
-        this._normTY =
-            newRangeY > 0 ? (oldCy - (yMin + yMax) / 2) / newRangeY : 0;
+        if (this.isYDefault() || !this._yPinned) {
+            this._baseYMin = yMin;
+            this._baseYMax = yMax;
+        } else {
+            const oldRangeY = this._baseYMax - this._baseYMin;
+            const oldCy =
+                (this._baseYMin + this._baseYMax) / 2 +
+                this._normTY * oldRangeY;
+            this._baseYMin = yMin;
+            this._baseYMax = yMax;
+            this._normTY =
+                newRangeY > 0 ? (oldCy - (yMin + yMax) / 2) / newRangeY : 0;
+        }
+    }
+
+    /**
+     * Mark an axis as "pinned" so subsequent `setBaseDomain` calls
+     * preserve its *absolute* visible center (paused-frame-review
+     * semantics). Default-cleared on construction; both axes follow
+     * data growth fractionally until explicitly pinned.
+     */
+    pinAxis(axis: "x" | "y"): void {
+        if (axis === "x") {
+            this._xPinned = true;
+        } else {
+            this._yPinned = true;
+        }
+    }
+
+    unpinAxis(axis: "x" | "y"): void {
+        if (axis === "x") {
+            this._xPinned = false;
+        } else {
+            this._yPinned = false;
+        }
     }
 
     /**
@@ -234,13 +266,16 @@ export class ZoomController {
         }
     }
 
+    isXDefault(): boolean {
+        return this._scaleX === 1 && this._normTX === 0;
+    }
+
+    isYDefault(): boolean {
+        return this._scaleY === 1 && this._normTY === 0;
+    }
+
     isDefault(): boolean {
-        return (
-            this._scaleX === 1 &&
-            this._scaleY === 1 &&
-            this._normTX === 0 &&
-            this._normTY === 0
-        );
+        return this.isXDefault() && this.isYDefault();
     }
 
     getVisibleDomain(): {
@@ -300,14 +335,15 @@ export class ZoomController {
                 return;
             }
 
-            // Data coordinate under cursor before zoom
-            const domain = this.getVisibleDomain();
-            const dataX =
-                domain.xMin +
-                ((mouseX - plot.x) / plot.width) * (domain.xMax - domain.xMin);
-            const dataY =
-                domain.yMax -
-                ((mouseY - plot.y) / plot.height) * (domain.yMax - domain.yMin);
+            // Cursor position as a fraction of the plot rect — the
+            // anchor point that should stay visually fixed across the
+            // zoom mutation below. `fracY` is 0 at top, 1 at bottom
+            // (screen coords); Y data axis is inverted, hence the
+            // `0.5 - fracY` form below.
+            const fracX = (mouseX - plot.x) / plot.width;
+            const fracY = (mouseY - plot.y) / plot.height;
+            const oldScaleX = this._scaleX;
+            const oldScaleY = this._scaleY;
 
             // Zoom factor — skip the locked axis so its scale stays
             // pinned at 1.
@@ -326,25 +362,26 @@ export class ZoomController {
                 );
             }
 
-            // Adjust translate so the data point under cursor stays put
-            const newDomain = this.getVisibleDomain();
-            const newDataX =
-                newDomain.xMin +
-                ((mouseX - plot.x) / plot.width) *
-                    (newDomain.xMax - newDomain.xMin);
-            const newDataY =
-                newDomain.yMax -
-                ((mouseY - plot.y) / plot.height) *
-                    (newDomain.yMax - newDomain.yMin);
-
-            const bxRange = this._baseXMax - this._baseXMin;
-            const byRange = this._baseYMax - this._baseYMin;
-            if (this._lockAxis !== "x" && bxRange > 0) {
-                this._normTX += (dataX - newDataX) / bxRange;
+            // Cursor-anchored zoom: keep the data point under the
+            // cursor visually fixed. Derivation, for X:
+            //   dataX(scale) = mid + normTX*baseRange
+            //                + (fracX - 0.5) * baseRange/scale
+            // After mutating scale (normTX unchanged), the cursor data
+            // coord shifts. Re-anchoring is `normTX +=
+            // (oldDataX - newDataX) / baseRange`; the `baseRange`
+            // terms cancel to:
+            //   normTXDelta = (fracX - 0.5) * (1/oldScale - 1/newScale)
+            // Base-independent — a concurrent `setBaseDomain` mid-
+            // handler can't corrupt the anchor math. Y axis is screen-
+            // inverted, hence `(0.5 - fracY)`.
+            if (this._lockAxis !== "x" && oldScaleX !== this._scaleX) {
+                this._normTX +=
+                    (fracX - 0.5) * (1 / oldScaleX - 1 / this._scaleX);
             }
 
-            if (this._lockAxis !== "y" && byRange > 0) {
-                this._normTY += (dataY - newDataY) / byRange;
+            if (this._lockAxis !== "y" && oldScaleY !== this._scaleY) {
+                this._normTY +=
+                    (0.5 - fracY) * (1 / oldScaleY - 1 / this._scaleY);
             }
 
             this._onUpdate!();
@@ -379,19 +416,19 @@ export class ZoomController {
             this._lastPointerX = e.clientX;
             this._lastPointerY = e.clientY;
 
-            const domain = this.getVisibleDomain();
+            // Pan as a fraction is `dx / (plotWidth * scaleX)` —
+            // independent of the current base range. The chained form
+            // (`pixels → data delta → fraction-of-base`) cancels the
+            // `baseRange` terms algebraically; computing the cancelled
+            // form directly means a concurrent `setBaseDomain` swap
+            // mid-gesture cannot corrupt the pan math.
             const plot = this._layout!.plotRect;
-            const dataPerPixelX = (domain.xMax - domain.xMin) / plot.width;
-            const dataPerPixelY = (domain.yMax - domain.yMin) / plot.height;
-
-            const bxRange = this._baseXMax - this._baseXMin;
-            const byRange = this._baseYMax - this._baseYMin;
-            if (this._lockAxis !== "x" && bxRange > 0) {
-                this._normTX -= (dx * dataPerPixelX) / bxRange;
+            if (this._lockAxis !== "x" && plot.width > 0) {
+                this._normTX -= dx / (plot.width * this._scaleX);
             }
 
-            if (this._lockAxis !== "y" && byRange > 0) {
-                this._normTY += (dy * dataPerPixelY) / byRange;
+            if (this._lockAxis !== "y" && plot.height > 0) {
+                this._normTY += dy / (plot.height * this._scaleY);
             }
 
             this._onUpdate!();

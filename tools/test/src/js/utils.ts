@@ -160,11 +160,13 @@ export const getSvgContentString = (selector: string) => async (page: Page) => {
 export async function compareContentsToSnapshot(
     contents: string,
 ): Promise<void> {
-    const cleanedContents = contents
-        .replace(/style=""/g, "")
-        .replace(/(min-|max-)?(width|height): *\d+\.*\d+(px)?;? */g, "");
+    // contents = contents
+    //     .replace(/(min-|max-)?(width|height): *\d+\.*\d+(px)?;? */g, "")
+    //     .replace(/style=""/g, "");
 
-    const formatted = await prettier.format(cleanedContents, {
+    contents = contents.replace(/style=""/g, "");
+
+    const formatted = await prettier.format(contents, {
         parser: "html",
     });
 

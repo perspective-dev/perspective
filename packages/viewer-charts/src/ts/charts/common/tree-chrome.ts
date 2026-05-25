@@ -10,7 +10,17 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Context2D } from "../canvas-types";
+import type { Canvas2D, Context2D } from "../canvas-types";
+import type { PlotRect } from "../../layout/plot-layout";
+import { PlotLayout } from "../../layout/plot-layout";
+import type { GradientStop } from "../../theme/gradient";
+import type { Vec3 } from "../../theme/palette";
+import type { Theme } from "../../theme/theme";
+import {
+    renderCategoricalLegend,
+    renderCategoricalLegendAt,
+    renderLegend,
+} from "../../axis/legend";
 import type { TreeChartBase } from "./tree-chart";
 import { drawTooltipBox } from "./draw-tooltip-box";
 
@@ -120,4 +130,79 @@ export function renderTreeTooltip(
         cssHeight,
         fontFamily,
     );
+}
+
+/**
+ * Paint a color legend (categorical swatches or numeric gradient bar)
+ * for a tree chart. Shared by sunburst + treemap; both consult
+ * `_colorMode` / `_uniqueColorLabels.size` / `_colorMin..max` the same
+ * way.
+ *
+ * `categoricalRect`, when non-null, is used as the explicit rect for
+ * the categorical-swatch variant (sunburst's faceted mode passes
+ * `FacetGrid.legendRect` here). Numeric mode always derives from a
+ * synthetic single-plot `PlotLayout` to match the legacy per-chart
+ * branch — its gradient bar's vertical span doesn't fit the
+ * categorical legend's compact rect.
+ *
+ * Returns silently when the color slot is empty, when categorical mode
+ * has only one label, or when numeric mode has a degenerate
+ * (`min >= max`) extent.
+ */
+export function renderTreeColorLegend(
+    chart: TreeChartBase,
+    canvas: Canvas2D,
+    palette: Vec3[],
+    stops: GradientStop[],
+    theme: Theme,
+    cssWidth: number,
+    cssHeight: number,
+    categoricalRect: PlotRect | null = null,
+): void {
+    if (chart._colorMode === "series" && chart._uniqueColorLabels.size > 1) {
+        if (categoricalRect) {
+            renderCategoricalLegendAt(
+                canvas,
+                categoricalRect,
+                chart._uniqueColorLabels,
+                palette,
+                theme,
+            );
+        } else {
+            renderCategoricalLegend(
+                canvas,
+                syntheticLegendLayout(cssWidth, cssHeight),
+                chart._uniqueColorLabels,
+                palette,
+                theme,
+            );
+        }
+    } else if (
+        chart._colorMode === "numeric" &&
+        chart._colorMin < chart._colorMax
+    ) {
+        renderLegend(
+            canvas,
+            syntheticLegendLayout(cssWidth, cssHeight),
+            {
+                min: chart._colorMin,
+                max: chart._colorMax,
+                label: chart._colorName,
+            },
+            stops,
+            theme,
+            chart.getColumnFormatter(chart._colorName, "value"),
+        );
+    }
+}
+
+function syntheticLegendLayout(
+    cssWidth: number,
+    cssHeight: number,
+): PlotLayout {
+    return new PlotLayout(cssWidth, cssHeight, {
+        hasXLabel: false,
+        hasYLabel: false,
+        hasLegend: true,
+    });
 }

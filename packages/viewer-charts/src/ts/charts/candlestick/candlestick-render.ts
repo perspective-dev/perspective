@@ -125,13 +125,14 @@ export function renderCandlestickFrame(
               yMax: chart._yDomain.max,
           };
 
-    // Auto-fit the price axis to the visible X window. Skipped at
-    // default zoom (the refit equals `_yDomain` there and would only
-    // churn baselines).
+    // Auto-fit the price axis to the visible X window. Skipped when X
+    // is at default zoom (the refit equals `_yDomain` there and would
+    // only churn baselines) — Y-axis pan/zoom alone shouldn't trigger
+    // an X-window refit.
     if (
         chart._autoFitValue &&
         chart._zoomController &&
-        !chart._zoomController.isDefault()
+        !chart._zoomController.isXDefault()
     ) {
         const fit = computeVisibleCandleExtent(chart, vis.xMin, vis.xMax);
         if (fit.hasFit) {

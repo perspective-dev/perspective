@@ -41,7 +41,6 @@ export function dispatch(r: WorkerRenderer, msg: ControlMsg): void {
             r.redraw();
             break;
         case "resize":
-            console.log("resize");
             r.resize(msg.cssWidth, msg.cssHeight, msg.dpr);
             r.redraw();
             break;

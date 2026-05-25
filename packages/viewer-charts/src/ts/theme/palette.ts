@@ -18,10 +18,7 @@ export type Vec3 = [number, number, number];
  * Build a series palette of length `count` by sampling the theme gradient
  * at evenly-spaced offsets. For count == 1 returns the 50% stop.
  */
-export function interpolatePalette(
-    stops: GradientStop[],
-    count: number,
-): Vec3[] {
+function interpolatePalette(stops: GradientStop[], count: number): Vec3[] {
     if (count <= 0) {
         return [];
     }

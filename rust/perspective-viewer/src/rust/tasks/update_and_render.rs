@@ -78,6 +78,13 @@ async fn update_and_render_inner(session: Session, renderer: Renderer) -> ApiRes
     }
 
     let plugin_swapped = renderer.apply_pending_plugin()?;
+
+    // Validate + create the view BEFORE the plugin-swap materialize
+    // so the schema query sees fresh `expression_schema` /
+    // `view_schema` and `resolve_abs_max` has a bound view that
+    // knows about any new expression columns.
+    let view = session.validate().await?.create_view().await?;
+
     if plugin_swapped {
         // `commit_plugin_idx` already restored the new plugin from its
         // raw bucket; re-run with the materialized snapshot so any
@@ -91,13 +98,13 @@ async fn update_and_render_inner(session: Session, renderer: Renderer) -> ApiRes
         let view_config_snapshot = session.get_view_config().clone();
         let plugin_token = wasm_bindgen::JsValue::from_serde_ext(&renderer.get_plugin_config())
             .unwrap_or(wasm_bindgen::JsValue::NULL);
-        let columns_config =
-            renderer.all_columns_configs_materialized(&view_config_snapshot, &session);
+        let columns_config = renderer
+            .all_columns_configs_materialized(&view_config_snapshot, &session)
+            .await;
         renderer
             .get_active_plugin()?
             .restore(&plugin_token, Some(&columns_config))?;
     }
 
-    let view = session.validate().await?;
-    renderer.draw(view.create_view()).await
+    renderer.draw(async { Ok(view) }).await
 }

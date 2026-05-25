@@ -78,4 +78,61 @@ test.describe("Zoom", () => {
         await waitOneFrame(page);
         await expectViewerScreenshot(page);
     });
+
+    // Datetime-axis dynamic-zoom refit. With a numeric category axis
+    // (single `date` / `datetime` / `integer` / `float` group_by), the
+    // zoom controller's visible domain is in *absolute data units*
+    // (e.g. ~1.7e12 for a datetime). The auto-fit lookup needs to map
+    // that back to catIdx via `_categoryPositions` — without that map,
+    // the value-axis refit silently no-ops and `"dynamic"` looks
+    // identical to `"fixed"` on every datetime-axis chart.
+    test.describe("datetime x axis", () => {
+        test("Y Line wheel zoom refits value axis (dynamic)", async ({
+            page,
+        }) => {
+            await restoreChart(page, {
+                plugin: "Y Line",
+                columns: ["Profit"],
+                group_by: ["Order Date"],
+                plugin_config: { series_zoom_mode: "dynamic" },
+            });
+
+            await page.mouse.move(PLOT_CX, PLOT_CY);
+            await page.mouse.wheel(0, -500);
+            await waitOneFrame(page);
+            await expectViewerScreenshot(page);
+        });
+
+        test("Y Line wheel zoom keeps value axis pinned (fixed)", async ({
+            page,
+        }) => {
+            await restoreChart(page, {
+                plugin: "Y Line",
+                columns: ["Profit"],
+                group_by: ["Order Date"],
+                plugin_config: { series_zoom_mode: "fixed" },
+            });
+
+            await page.mouse.move(PLOT_CX, PLOT_CY);
+            await page.mouse.wheel(0, -500);
+            await waitOneFrame(page);
+            await expectViewerScreenshot(page);
+        });
+
+        test("Y Bar wheel zoom refits value axis (dynamic)", async ({
+            page,
+        }) => {
+            await restoreChart(page, {
+                plugin: "Y Bar",
+                columns: ["Sales"],
+                group_by: ["Order Date"],
+                plugin_config: { series_zoom_mode: "dynamic" },
+            });
+
+            await page.mouse.move(PLOT_CX, PLOT_CY);
+            await page.mouse.wheel(0, -500);
+            await waitOneFrame(page);
+            await expectViewerScreenshot(page);
+        });
+    });
 });

@@ -12,7 +12,7 @@
 
 import type { ColumnDataMap } from "../../data/view-reader";
 import type { WebGLContextManager } from "../../webgl/context-manager";
-import { TreeChartBase } from "../common/tree-chart";
+import { TreeChartBase, firstNonMetadataColumn } from "../common/tree-chart";
 import { NULL_NODE } from "../common/node-store";
 import {
     type BreadcrumbRegion,
@@ -32,21 +32,6 @@ export interface TreemapLocations {
     u_resolution: WebGLUniformLocation | null;
     a_position: number;
     a_color: number;
-}
-
-/**
- * Sentinel fallback for the Size slot when the user hasn't picked one:
- * use the first non-metadata column in the incoming view. Treemap
- * still needs *some* numeric-ish column to size rects.
- */
-function firstNonMetadataColumn(columns: ColumnDataMap): string {
-    for (const k of columns.keys()) {
-        if (!k.startsWith("__")) {
-            return k;
-        }
-    }
-
-    return "";
 }
 
 /**

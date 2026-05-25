@@ -13,16 +13,15 @@
 import type { InteractionEvent } from "../transport/protocol";
 
 /**
- * Worker-mode counterpart to {@link ZoomRouter}. Captures wheel /
- * pointer events on the GL canvas, normalizes coords to canvas-relative
- * CSS pixels, and emits semantic {@link InteractionEvent}s to the
- * Renderer over its transport. The Renderer (running in a Web Worker)
- * owns the `ZoomController`s and runs the actual hit-test + apply
- * logic — see `applyWheel` / `applyPan` in `zoom-router.ts`.
+ * Captures wheel / pointer events on the GL canvas, normalizes coords
+ * to canvas-relative CSS pixels, and emits semantic
+ * {@link InteractionEvent}s to the Renderer over its transport. The
+ * Renderer owns the `ZoomController`s and runs the actual hit-test +
+ * apply logic — see `applyWheel` / `applyPan` in `zoom-router.ts`.
  *
  * Pointer capture is set on `pointerdown` and released on `pointerup`
  * so drags continue to deliver `pointermove` events when the cursor
- * leaves the canvas, matching the in-process `ZoomRouter` behavior.
+ * leaves the canvas.
  */
 export class RawEventForwarder {
     private _element: HTMLElement | null = null;
@@ -47,11 +46,10 @@ export class RawEventForwarder {
             const mx = e.clientX - rect.left;
             const my = e.clientY - rect.top;
 
-            // Match `ZoomRouter`: only consume the wheel event if the
-            // cursor is over the canvas. `preventDefault` is fired
-            // unconditionally so the page does not scroll while the
-            // chart is hovered — the worker may still no-op if the
-            // cursor is outside any facet's plot rect.
+            // `preventDefault` is fired unconditionally so the page
+            // does not scroll while the chart is hovered — the worker
+            // may still no-op if the cursor is outside any facet's
+            // plot rect.
             e.preventDefault();
             emit({ type: "wheel", mx, my, deltaY: e.deltaY });
         };
