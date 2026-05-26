@@ -1016,7 +1016,6 @@ parse_format_options(
     std::uint32_t max_cols = num_columns + (sides == 0 ? 0 : 1);
     std::uint32_t max_rows = num_rows;
     std::uint32_t psp_offset = sides > 0 || column_only ? 1 : 0;
-    std::uint32_t hidden = num_hidden;
 
     out.end_row = std::min(
         max_rows,
@@ -1025,12 +1024,12 @@ parse_format_options(
             : (viewport_height != 0 ? out.start_row + viewport_height : max_rows
             )
     );
+
     out.end_col = std::min(
         max_cols,
-        (viewport.has_end_col()
-             ? viewport.end_col() + psp_offset
-             : (viewport_width != 0 ? out.start_col + viewport_width : max_cols)
-        ) * (hidden + 1)
+        viewport.has_end_col()
+            ? viewport.end_col() + psp_offset
+            : (viewport_width != 0 ? out.start_col + viewport_width : max_cols)
     );
 
     return out;
@@ -2375,7 +2374,12 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
 
             auto num_view_columns = 0;
             const auto real_size = config->get_columns().size();
-            if (ncols > 0 && real_size > 0) {
+            if (view->sides() == 2) {
+                // ctx2's `num_columns()` already excludes hidden sort
+                // columns (option B): visible-only is the value we want
+                // to report.
+                num_view_columns = ncols;
+            } else if (ncols > 0 && real_size > 0) {
                 num_view_columns = ncols
                     - (ncols / (config->get_columns().size() + num_hidden))
                         * num_hidden;
