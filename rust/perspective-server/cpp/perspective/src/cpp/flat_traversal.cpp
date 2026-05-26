@@ -284,8 +284,7 @@ t_ftrav::step_end() {
     // Fast path: if no incremental work happened this step, `m_index` and
     // `m_pkeyidx` are already in their final shape (either unchanged, or
     // populated directly via `bulk_load_append`). Skip the O(N) rebuild.
-    if (m_step_inserts == 0 && m_step_deletes == 0) {
-        m_new_elems.clear();
+    if (m_step_inserts == 0 && m_step_deletes == 0 && m_new_elems.empty()) {
         return;
     }
 
