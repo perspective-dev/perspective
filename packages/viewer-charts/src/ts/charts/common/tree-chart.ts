@@ -11,8 +11,24 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { AbstractChart } from "../chart-base";
+import type { ColumnDataMap } from "../../data/view-reader";
 import { NodeStore, NULL_NODE } from "./node-store";
 import { LazyTooltip } from "../../interaction/lazy-tooltip";
+
+/**
+ * Sentinel fallback for the Size slot when the user hasn't picked one:
+ * use the first non-metadata column in the incoming view. Tree charts
+ * still need *some* numeric-ish column to size geometry.
+ */
+export function firstNonMetadataColumn(columns: ColumnDataMap): string {
+    for (const k of columns.keys()) {
+        if (!k.startsWith("__")) {
+            return k;
+        }
+    }
+
+    return "";
+}
 
 /**
  * Shared state for hierarchical charts (treemap, sunburst). Holds the

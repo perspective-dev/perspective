@@ -548,8 +548,15 @@ impl Component for PerspectiveViewer {
                             skip_empty=true
                             initial_size={self.settings_panel_width_override}
                             on_reset={ctx.link().callback(|_| SettingsPanelSizeUpdate(None))}
-                            on_resize={on_split_panel_resize.clone()}
-                            on_resize_finished={render_callback(&ctx.props().session, &ctx.props().renderer)}
+                            on_resize={{
+                                let size_cb = on_split_panel_resize.clone();
+                                let resize_cb = resize_callback(&ctx.props().session, &ctx.props().renderer);
+                                move |x| {
+                                    size_cb.emit(x);
+                                    resize_cb.emit(());
+                                }
+                            }}
+                            on_resize_finished={resize_callback(&ctx.props().session, &ctx.props().renderer)}
                         >
                             { settings_panel }
                             <div id="main_column_container">

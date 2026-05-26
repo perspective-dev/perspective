@@ -350,14 +350,15 @@ export function renderBarFrame(
     }
 
     // Auto-fit the value axis to the visible categorical window. Gated
-    // on `_autoFitValue` + non-default zoom: at default zoom the refit
-    // result always equals `_leftDomain`/`_rightDomain`, so walking
-    // would be wasted work (and would shift test baselines).
-    if (
-        chart._autoFitValue &&
-        chart._zoomController &&
-        !chart._zoomController.isDefault()
-    ) {
+    // on `_autoFitValue` + the categorical axis being non-default: the
+    // refit only narrows when the categorical axis is itself zoomed
+    // (otherwise the visible window equals the data extent and the
+    // refit collapses back to `_leftDomain`/`_rightDomain`). Vertical
+    // charts put the category on X; horizontal charts put it on Y.
+    const catNonDefault = horizontal
+        ? !chart._zoomController?.isYDefault()
+        : !chart._zoomController?.isXDefault();
+    if (chart._autoFitValue && chart._zoomController && catNonDefault) {
         const fit = computeVisibleValueExtent(chart, visCatMin, visCatMax);
         if (fit.hasLeft) {
             visValMin = fit.leftMin;
@@ -880,11 +881,34 @@ function computeVisibleValueExtent(
     let hasRight = false;
 
     if (buckets.n > 0) {
-        // Clamp to the populated [0, n-1] range. `visCat*` is in
-        // continuous coords (numeric or category index space), so
-        // floor/ceil to integer bucket indices.
-        const lo = Math.max(0, Math.floor(visCatMin));
-        const hi = Math.min(buckets.n - 1, Math.ceil(visCatMax));
+        // Resolve the visible catIdx range. Category mode: `visCat*` are
+        // already in catIdx space, so floor/ceil into `[0, n-1]`.
+        // Numeric mode (`date | datetime | integer | float` group_by):
+        // `visCat*` are absolute data values from the zoom controller's
+        // visible domain — for a datetime axis they're ~1.7e12-magnitude
+        // timestamps. A blind `Math.floor(visCatMin)` of that gives `lo
+        // ≫ n`, the loop body never executes, and the value-axis refit
+        // silently no-ops (chart looks the same horizontally-zoomed as
+        // unzoomed). Map the data range back to catIdx via the sorted
+        // `_categoryPositions`. See [series-interact.ts:239-250] for the
+        // parallel hit-test branch.
+        const positions = chart._categoryPositions;
+        let lo: number;
+        let hi: number;
+        if (positions) {
+            const r = mapDomainToCatRange(
+                positions,
+                buckets.n,
+                visCatMin,
+                visCatMax,
+            );
+            lo = r.lo;
+            hi = r.hi;
+        } else {
+            lo = Math.max(0, Math.floor(visCatMin));
+            hi = Math.min(buckets.n - 1, Math.ceil(visCatMax));
+        }
+
         const lMin = buckets.leftMin;
         const lMax = buckets.leftMax;
         const rMin = buckets.rightMin;
@@ -935,6 +959,59 @@ function computeVisibleValueExtent(
     next.hasRight = hasRight;
     chart._autoFitCache = next;
     return next;
+}
+
+/**
+ * Map a numeric visible domain `[visMin, visMax]` to the inclusive catIdx
+ * range `[lo, hi]` that intersects it, using a sorted `categoryPositions`
+ * vector (ASC, per the pivot order). Returns an empty range (`lo > hi`)
+ * when the domain misses every category.
+ *
+ * Edges are expanded by one catIdx on each side so a category whose
+ * center sits just outside the visible window — but whose band-half
+ * still overlaps it — still contributes to the auto-fit extent.
+ */
+function mapDomainToCatRange(
+    positions: Float64Array,
+    n: number,
+    visMin: number,
+    visMax: number,
+): { lo: number; hi: number } {
+    if (n === 0 || visMin > visMax) {
+        return { lo: 0, hi: -1 };
+    }
+
+    // Lower bound: smallest idx where positions[idx] >= visMin.
+    let l = 0;
+    let r = n;
+    while (l < r) {
+        const m = (l + r) >>> 1;
+        if (positions[m] < visMin) {
+            l = m + 1;
+        } else {
+            r = m;
+        }
+    }
+
+    const lo = Math.max(0, l - 1);
+
+    // Upper bound: smallest idx where positions[idx] > visMax (`l` after
+    // loop). `l` itself is one past the last in-range catIdx, so the
+    // inclusive `hi` for an exactly-overlapping band is `l - 1`; the
+    // `+1`-then-clamp expands by one to capture partial-overlap bands.
+    l = 0;
+    r = n;
+    while (l < r) {
+        const m = (l + r) >>> 1;
+        if (positions[m] <= visMax) {
+            l = m + 1;
+        } else {
+            r = m;
+        }
+    }
+
+    const hi = Math.min(n - 1, l);
+    return { lo, hi };
 }
 
 function newSeriesAutoFitCache(): SeriesAutoFitCache {

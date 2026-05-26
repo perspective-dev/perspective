@@ -33,6 +33,7 @@ import {
 } from "./candlestick-interact";
 import { BodyWickGlyph } from "./glyphs/draw-candlesticks";
 import { OHLCGlyph } from "./glyphs/draw-ohlc";
+import { expandDomainInPlace } from "../common/expand-domain";
 
 /**
  * Per-frame memo of the auto-fit Y extent for a {@link CandlestickChart},
@@ -266,38 +267,18 @@ export class CandlestickChart extends CategoricalYChart {
             scratchCandles: this._candles,
         });
         // `domain_mode: "expand"` post-build union — mirrors the series
-        // pipeline. Mutate the pipeline result in place so the
+        // pipeline. `expandDomainInPlace` mutates `result.*` so the
         // assignments below pick up the grown extent automatically.
         if (this._pluginConfig.domain_mode === "expand") {
-            if (this._expandedYDomain) {
-                result.yDomain.min = Math.min(
-                    this._expandedYDomain.min,
-                    result.yDomain.min,
-                );
-                result.yDomain.max = Math.max(
-                    this._expandedYDomain.max,
-                    result.yDomain.max,
-                );
-            }
-
-            this._expandedYDomain = { ...result.yDomain };
-
+            this._expandedYDomain = expandDomainInPlace(
+                this._expandedYDomain,
+                result.yDomain,
+            );
             if (result.numericCategoryDomain) {
-                if (this._expandedCategoryDomain) {
-                    result.numericCategoryDomain.min = Math.min(
-                        this._expandedCategoryDomain.min,
-                        result.numericCategoryDomain.min,
-                    );
-                    result.numericCategoryDomain.max = Math.max(
-                        this._expandedCategoryDomain.max,
-                        result.numericCategoryDomain.max,
-                    );
-                }
-
-                this._expandedCategoryDomain = {
-                    min: result.numericCategoryDomain.min,
-                    max: result.numericCategoryDomain.max,
-                };
+                this._expandedCategoryDomain = expandDomainInPlace(
+                    this._expandedCategoryDomain,
+                    result.numericCategoryDomain,
+                );
             }
         } else {
             this._expandedYDomain = null;

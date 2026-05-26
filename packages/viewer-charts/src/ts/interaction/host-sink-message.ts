@@ -11,6 +11,13 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type {
+    DismissTooltipMsg,
+    PinTooltipMsg,
+    SetCursorMsg,
+    UserClickMsg,
+    UserSelectMsg,
+} from "../transport/protocol";
+import type {
     CssBounds,
     HostSink,
     UserClickPayload,
@@ -18,29 +25,24 @@ import type {
 } from "./tooltip-controller";
 
 /**
- * Envelope shape sent by `MessageHostSink`. The transport translates
- * each one into a corresponding `WorkerMsg` (`pinTooltip` /
- * `dismissTooltip` / `setCursor` / `userClick` / `userSelect`).
+ * The subset of `WorkerMsg`s that flow chart → host through a
+ * `MessageHostSink`. Identical to the worker-side post payloads so the
+ * sink can ship them straight to `WorkerRenderer.post` with no
+ * intermediate translation.
  */
 export type HostSinkEnvelope =
-    | {
-          kind: "pin";
-          payload: {
-              lines: string[];
-              pos: { px: number; py: number };
-              bounds: CssBounds;
-          };
-      }
-    | { kind: "dismiss" }
-    | { kind: "setCursor"; cursor: string }
-    | { kind: "userClick"; payload: UserClickPayload }
-    | { kind: "userSelect"; payload: UserSelectPayload };
+    | PinTooltipMsg
+    | DismissTooltipMsg
+    | SetCursorMsg
+    | UserClickMsg
+    | UserSelectMsg;
 
 /**
  * `HostSink` that posts pin / dismiss / setCursor / user-event intents
- * over a `postMessage`-style channel. The host-side transport listens
- * for these envelopes and drives a `DomHostSink` for pin/dismiss and
- * dispatches `CustomEvent`s on the viewer for user events.
+ * over a `postMessage`-style channel as `WorkerMsg`s. The host-side
+ * transport listens for these and drives a `DomHostSink` for
+ * pin/dismiss and dispatches `CustomEvent`s on the viewer for user
+ * events.
  */
 export class MessageHostSink implements HostSink {
     private _send: (msg: HostSinkEnvelope) => void;
@@ -54,11 +56,11 @@ export class MessageHostSink implements HostSink {
         pos: { px: number; py: number },
         bounds: CssBounds,
     ): void {
-        this._send({ kind: "pin", payload: { lines, pos, bounds } });
+        this._send({ kind: "pinTooltip", lines, pos, bounds });
     }
 
     dismiss(): void {
-        this._send({ kind: "dismiss" });
+        this._send({ kind: "dismissTooltip" });
     }
 
     setCursor(cursor: string): void {
@@ -66,10 +68,19 @@ export class MessageHostSink implements HostSink {
     }
 
     emitUserClick(payload: UserClickPayload): void {
-        this._send({ kind: "userClick", payload });
+        // `UserClickPayload` is structurally identical to
+        // `PerspectiveClickDetail`; the cast carries the `config`
+        // field's looser inner shape without affecting runtime data.
+        this._send({ kind: "userClick", detail: payload as any });
     }
 
     emitUserSelect(payload: UserSelectPayload): void {
-        this._send({ kind: "userSelect", payload });
+        this._send({
+            kind: "userSelect",
+            selected: payload.selected,
+            row: payload.row,
+            column_names: payload.column_names,
+            insertConfig: payload.insertConfig as any,
+        });
     }
 }

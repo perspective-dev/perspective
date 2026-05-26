@@ -27,25 +27,37 @@ function git(args: string[], cwd: string) {
     execFileSync("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
 }
 
-function remoteHasRef(remoteUrl: string, ref: string): boolean {
+function remoteHasRef(
+    remoteUrl: string,
+    ref: string,
+    // token: string | undefined,
+): boolean {
     try {
-        const out = execFileSync(
-            "git",
-            ["ls-remote", "--heads", remoteUrl, ref],
-            { stdio: ["ignore", "pipe", "pipe"] },
-        )
+        const args: string[] = [
+            "-c",
+            "http.https://github.com/.extraheader=",
+            "ls-remote",
+            "--heads",
+            remoteUrl,
+            ref,
+        ];
+        const out = execFileSync("git", args, {
+            stdio: ["ignore", "pipe", "pipe"],
+        })
             .toString()
             .trim();
         return out.length > 0;
-    } catch {
+    } catch (e) {
+        console.error(e);
         return false;
     }
 }
 
 function buildRemoteUrl(repo: string, token: string | undefined): string {
     if (token) {
-        return `https://x-access-token:${token}@github.com/${repo}.git`;
+        return `https://${token}@github.com/${repo}.git`;
     }
+
     return `git@github.com:${repo}.git`;
 }
 
@@ -106,6 +118,8 @@ export async function fetchSnapshots(): Promise<void> {
         execFileSync(
             "git",
             [
+                "-c",
+                "http.https://github.com/.extraheader=",
                 "clone",
                 "--depth",
                 "1",

@@ -16,8 +16,6 @@ import type { SunburstChart } from "./sunburst";
 import { NULL_NODE } from "../common/node-store";
 import { resolvePalette, type Vec3 } from "../../theme/palette";
 import { type GradientStop } from "../../theme/gradient";
-import { renderLegend, renderCategoricalLegend } from "../../axis/legend";
-import { PlotLayout } from "../../layout/plot-layout";
 import { leafColor, leafRGBA, luminance } from "../common/leaf-color";
 import arcVert from "../../shaders/sunburst-arc.vert.glsl";
 import arcFrag from "../../shaders/sunburst-arc.frag.glsl";
@@ -29,10 +27,10 @@ import {
     INNER_RING_PX,
 } from "./sunburst-layout";
 import { buildFacetGrid } from "../../layout/facet-grid";
-import { renderCategoricalLegendAt } from "../../axis/legend";
 import { withChromeCache } from "../common/chrome-cache";
 import {
     renderBreadcrumbs as renderTreeBreadcrumbs,
+    renderTreeColorLegend,
     renderTreeTooltip,
 } from "../common/tree-chrome";
 
@@ -669,80 +667,20 @@ function drawStaticChrome(
         renderTreeBreadcrumbs(chart, ctx, cssWidth, fontFamily, textColor);
     }
 
-    // Legend. In faceted mode use the grid's explicit rect; otherwise
-    // derive from a synthetic single-plot layout.
-    if (faceted && chart._facetGrid?.legendRect) {
-        if (
-            chart._colorMode === "series" &&
-            chart._uniqueColorLabels.size > 1
-        ) {
-            renderCategoricalLegendAt(
-                canvas,
-                chart._facetGrid.legendRect,
-                chart._uniqueColorLabels,
-                palette,
-                theme,
-            );
-        } else if (
-            chart._colorMode === "numeric" &&
-            chart._colorMin < chart._colorMax
-        ) {
-            const legendLayout = new PlotLayout(cssWidth, cssHeight, {
-                hasXLabel: false,
-                hasYLabel: false,
-                hasLegend: true,
-            });
-            renderLegend(
-                canvas,
-                legendLayout,
-                {
-                    min: chart._colorMin,
-                    max: chart._colorMax,
-                    label: chart._colorName,
-                },
-                stops,
-                theme,
-                chart.getColumnFormatter(chart._colorName, "value"),
-            );
-        }
-    } else if (
-        chart._colorMode === "series" &&
-        chart._uniqueColorLabels.size > 1
-    ) {
-        const legendLayout = new PlotLayout(cssWidth, cssHeight, {
-            hasXLabel: false,
-            hasYLabel: false,
-            hasLegend: true,
-        });
-        renderCategoricalLegend(
-            canvas,
-            legendLayout,
-            chart._uniqueColorLabels,
-            palette,
-            theme,
-        );
-    } else if (
-        chart._colorMode === "numeric" &&
-        chart._colorMin < chart._colorMax
-    ) {
-        const legendLayout = new PlotLayout(cssWidth, cssHeight, {
-            hasXLabel: false,
-            hasYLabel: false,
-            hasLegend: true,
-        });
-        renderLegend(
-            canvas,
-            legendLayout,
-            {
-                min: chart._colorMin,
-                max: chart._colorMax,
-                label: chart._colorName,
-            },
-            stops,
-            theme,
-            chart.getColumnFormatter(chart._colorName, "value"),
-        );
-    }
+    // Legend. Faceted mode passes `FacetGrid.legendRect` so the
+    // categorical-swatch variant lands in the dedicated grid slot;
+    // numeric gradient always derives from a synthetic single-plot
+    // layout (its vertical bar doesn't fit the compact rect).
+    renderTreeColorLegend(
+        chart,
+        canvas,
+        palette,
+        stops,
+        theme,
+        cssWidth,
+        cssHeight,
+        faceted ? (chart._facetGrid?.legendRect ?? null) : null,
+    );
 
     ctx.restore();
 }

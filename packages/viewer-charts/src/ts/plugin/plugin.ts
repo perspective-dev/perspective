@@ -38,173 +38,85 @@ import { RENDER_BLIT_MODE } from "../config";
 const FACET_CONFIG_DEFAULTS: FacetConfig = { ...DEFAULT_FACET_CONFIG };
 
 /**
- * Build a UI control spec for one plugin-config field. Mirrors the
- * shape `column_config_schema` already returns (datagrid). Numeric
- * fields get a `Number` control with min/max clamps; fractions get a
- * 0..1 range; enums + booleans pass through their variant list.
+ * Static UI-control spec per `plugin_config` field. Mirrors the shape
+ * `column_config_schema` already returns (datagrid). The runtime default
+ * is sourced separately from the chart-type-effective defaults at
+ * `fieldSpec` call time so per-chart overrides like
+ * `include_zero=true` for Y Bar / Y Area / X Bar surface in the UI.
  */
+type FieldSpec =
+    | { kind: "Bool" }
+    | {
+          kind: "Enum";
+          variants: ReadonlyArray<{ value: string; label: string }>;
+      }
+    | { kind: "Number"; min: number; max: number; step?: number };
+
+const FIELD_SCHEMAS: Record<PluginConfigField, FieldSpec> = {
+    auto_alt_y_axis: { kind: "Bool" },
+    include_zero: { kind: "Bool" },
+    domain_mode: {
+        kind: "Enum",
+        variants: [
+            { value: "fit", label: "Fit" },
+            { value: "expand", label: "Expand" },
+        ],
+    },
+    facet_mode: {
+        kind: "Enum",
+        variants: [
+            { value: "grid", label: "Grid" },
+            { value: "overlay", label: "Overlay" },
+        ],
+    },
+    facet_zoom_mode: {
+        kind: "Enum",
+        variants: [
+            { value: "shared", label: "Shared" },
+            { value: "independent", label: "Independent" },
+        ],
+    },
+    series_zoom_mode: {
+        kind: "Enum",
+        variants: [
+            { value: "dynamic", label: "Dynamic" },
+            { value: "fixed", label: "Fixed" },
+        ],
+    },
+    line_width_px: { kind: "Number", min: 0.5, step: 0.5, max: 16 },
+    point_size_px: { kind: "Number", min: 1, max: 32 },
+    band_inner_frac: { kind: "Number", min: 0.1, max: 1, step: 0.01 },
+    bar_inner_pad: { kind: "Number", min: 0, max: 0.9, step: 0.01 },
+    wick_width_px: { kind: "Number", min: 0.5, step: 0.5, max: 8 },
+    ohlc_line_width_px: { kind: "Number", min: 0.5, step: 0.5, max: 8 },
+    gradient_radius_px: { kind: "Number", min: 2, step: 1, max: 256 },
+    gradient_intensity: { kind: "Number", min: 0.05, step: 0.05, max: 4 },
+    gradient_heat_max: { kind: "Number", min: 0.1, step: 0.1, max: 64 },
+    gradient_color_mode: {
+        kind: "Enum",
+        variants: [
+            { value: "mean", label: "Mean (density-weighted)" },
+            { value: "density", label: "Density only" },
+            { value: "extreme", label: "Extremes" },
+            { value: "signed", label: "Signed sum" },
+        ],
+    },
+    map_tile_provider: {
+        kind: "Enum",
+        variants: [
+            { value: "carto-positron", label: "Light (Positron)" },
+            { value: "carto-dark-matter", label: "Dark Matter" },
+            { value: "carto-voyager", label: "Voyager" },
+        ],
+    },
+    map_tile_alpha: { kind: "Number", min: 0, max: 1, step: 0.05 },
+};
+
 function fieldSpec(
     key: PluginConfigField,
     defaults: PluginConfig,
 ): Record<string, unknown> & { kind: string } {
-    switch (key) {
-        case "auto_alt_y_axis":
-            return { kind: "Bool", key, default: defaults.auto_alt_y_axis };
-        case "include_zero":
-            return { kind: "Bool", key, default: defaults.include_zero };
-        case "domain_mode":
-            return {
-                kind: "Enum",
-                key,
-                default: defaults.domain_mode,
-                variants: [
-                    { value: "fit", label: "Fit" },
-                    { value: "expand", label: "Expand" },
-                ],
-            };
-        case "facet_mode":
-            return {
-                kind: "Enum",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.facet_mode,
-                variants: [
-                    { value: "grid", label: "Grid" },
-                    { value: "overlay", label: "Overlay" },
-                ],
-            };
-        case "facet_zoom_mode":
-            return {
-                kind: "Enum",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.facet_zoom_mode,
-                variants: [
-                    { value: "shared", label: "Shared" },
-                    { value: "independent", label: "Independent" },
-                ],
-            };
-        case "series_zoom_mode":
-            return {
-                kind: "Enum",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.series_zoom_mode,
-                variants: [
-                    { value: "dynamic", label: "Dynamic" },
-                    { value: "fixed", label: "Fixed" },
-                ],
-            };
-        case "line_width_px":
-            return {
-                kind: "Number",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.line_width_px,
-                min: 0.5,
-                step: 0.5,
-                max: 16,
-            };
-        case "point_size_px":
-            return {
-                kind: "Number",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.point_size_px,
-                min: 1,
-                max: 32,
-            };
-        case "band_inner_frac":
-            return {
-                kind: "Number",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.band_inner_frac,
-                min: 0.1,
-                max: 1,
-                step: 0.01,
-            };
-        case "bar_inner_pad":
-            return {
-                kind: "Number",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.bar_inner_pad,
-                min: 0,
-                max: 0.9,
-                step: 0.01,
-            };
-        case "wick_width_px":
-            return {
-                kind: "Number",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.wick_width_px,
-                min: 0.5,
-                step: 0.5,
-                max: 8,
-            };
-        case "ohlc_line_width_px":
-            return {
-                kind: "Number",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.ohlc_line_width_px,
-                min: 0.5,
-                step: 0.5,
-                max: 8,
-            };
-        case "gradient_radius_px":
-            return {
-                kind: "Number",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.gradient_radius_px,
-                min: 2,
-                step: 1,
-                max: 256,
-            };
-        case "gradient_intensity":
-            return {
-                kind: "Number",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.gradient_intensity,
-                min: 0.05,
-                step: 0.05,
-                max: 4,
-            };
-        case "gradient_heat_max":
-            return {
-                kind: "Number",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.gradient_heat_max,
-                min: 0.1,
-                step: 0.1,
-                max: 64,
-            };
-        case "gradient_color_mode":
-            return {
-                kind: "Enum",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.gradient_color_mode,
-                variants: [
-                    { value: "mean", label: "Mean (density-weighted)" },
-                    { value: "density", label: "Density only" },
-                    { value: "extreme", label: "Extremes" },
-                    { value: "signed", label: "Signed sum" },
-                ],
-            };
-        case "map_tile_provider":
-            return {
-                kind: "Enum",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.map_tile_provider,
-                variants: [
-                    { value: "carto-positron", label: "Light (Positron)" },
-                    { value: "carto-dark-matter", label: "Dark Matter" },
-                    { value: "carto-voyager", label: "Voyager" },
-                ],
-            };
-        case "map_tile_alpha":
-            return {
-                kind: "Number",
-                key,
-                default: DEFAULT_PLUGIN_CONFIG.map_tile_alpha,
-                min: 0,
-                max: 1,
-                step: 0.05,
-            };
-    }
+    return { ...FIELD_SCHEMAS[key], key, default: defaults[key] };
 }
 
 const GLOBAL_STYLES = (() => {
@@ -597,28 +509,6 @@ export class HTMLPerspectiveViewerWebGLPluginElement
     restyle() {
         this._renderer?.invalidateTheme();
         return 5;
-    }
-
-    save() {
-        const state: any = {};
-        const zoom = this._renderer?.saveZoom();
-        if (zoom) {
-            state.zoom = zoom;
-        }
-
-        // Only emit the keys this chart actually consumes.
-        const cfg: Partial<PluginConfig> = {};
-        for (const key of this._chartType.applicable_plugin_fields) {
-            // `key` is `PluginConfigField` = `keyof PluginConfig`, so this
-            // indexed assignment is type-safe without a cast.
-            (cfg[key] as PluginConfig[typeof key]) = this._pluginConfig[key];
-        }
-
-        if (Object.keys(cfg).length > 0) {
-            state.plugin_config = cfg;
-        }
-
-        return state;
     }
 
     async render(view: View): Promise<Blob> {

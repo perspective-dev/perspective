@@ -31,7 +31,7 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::rc::Rc;
 
-use futures::future::select_all;
+use futures::future::{join_all, select_all};
 use perspective_client::config::ViewConfig;
 use perspective_client::utils::*;
 use perspective_client::{View, ViewWindow};
@@ -52,6 +52,7 @@ pub use self::registry::*;
 use self::render_timer::*;
 use crate::config::*;
 use crate::js::plugin::*;
+use crate::queries::resolve_abs_max;
 use crate::session::Session;
 use crate::utils::*;
 
@@ -239,12 +240,69 @@ impl Renderer {
     /// `include` fields off other fields (e.g. Datagrid's
     /// `fg_gradient` revealed when `number_fg_mode = "bar"`) will
     /// reach the plugin without their default value populated.
-    pub fn all_columns_configs_materialized(
+    ///
+    /// `async` because per-column stats (e.g. `abs_max` for Datagrid's
+    /// `fg_gradient`) may need to be fetched before the schema's
+    /// `default` is meaningful. Pass 1 sync-scans the schema for any
+    /// column whose `include: true` Number key is missing from its
+    /// entry AND has no cached stats — `view_config_changed` clears the
+    /// stats cache, so "missing in cache" subsumes "stale". Pass 2
+    /// blocks on a parallel `resolve_abs_max` for that set, then runs
+    /// the materialize loop with the now-warm cache. Columns never
+    /// touched in a stats-dependent mode never trigger a fetch.
+    pub async fn all_columns_configs_materialized(
         &self,
         view_config: &ViewConfig,
         session: &Session,
     ) -> ColumnConfigMap {
         let mut configs = self.all_columns_configs();
+
+        // Pass 1: identify columns whose schema demands an `include:
+        // true` Number default we don't have stats for.
+        let mut to_warm: Vec<String> = vec![];
+        for (col, entry) in &configs {
+            if session
+                .get_column_stats(col)
+                .and_then(|s| s.abs_max)
+                .is_some()
+            {
+                continue;
+            }
+            let Ok(schema) =
+                self.query_column_config_schema(view_config, session, col, Some(entry))
+            else {
+                continue;
+            };
+            let needs_warm = schema.fields.iter().any(|f| {
+                matches!(
+                    f,
+                    ControlSpec::Number {
+                        key,
+                        include: Some(true),
+                        ..
+                    } if !entry.contains_key(key)
+                )
+            });
+            if needs_warm {
+                to_warm.push(col.clone());
+            }
+        }
+
+        // Block on the (typically tiny) warm set. Clone the metadata
+        // and resolve the view ref *before* the .await — `metadata()`
+        // returns a live `Ref<>` guard that must not cross an await
+        // boundary.
+        if !to_warm.is_empty() {
+            let metadata = session.metadata().clone();
+            let view = session.get_view();
+            let futs = to_warm
+                .iter()
+                .map(|c| resolve_abs_max(session, &metadata, view.as_ref(), c.as_str()));
+            join_all(futs).await;
+        }
+
+        // Pass 2: materialize. With stats now in cache, the schema
+        // returns a real `default` instead of the placeholder `0`.
         for (col, entry) in &mut configs {
             let Ok(schema) =
                 self.query_column_config_schema(view_config, session, col, Some(entry))
@@ -345,6 +403,8 @@ impl Renderer {
                         if let Ok(schema) =
                             self.query_column_config_schema(view_config, session, &col, Some(&cfg))
                         {
+                            let active = schema.active_keys();
+                            cfg.retain(|k, _| active.contains(k));
                             strip_default_values(&schema, &mut cfg);
                         }
 
@@ -468,13 +528,15 @@ impl Renderer {
     /// the columns-config write paths (strip-on-write) and the
     /// restore-prep snapshot (materialize-on-read).
     ///
-    /// Reads the cached `ColumnStats` (populated by the StyleTab's
-    /// `fetch_column_abs_max` task and cleared on `view_config_changed`)
+    /// Reads the cached `ColumnStats` (cleared on `view_config_changed`)
     /// so plugins emit gradient defaults against the column's current
-    /// `abs_max` instead of falling back to `0`. Cache cold ⇒ stats
-    /// pass through as missing and the plugin uses its `?? 0` fallback;
-    /// `include: true` fields are still preserved via
-    /// [`matches_declared_default`]'s short-circuit.
+    /// `abs_max` instead of falling back to `0`.
+    /// [`Self::all_columns_configs_materialized`] warms the cache on
+    /// demand before materializing `include: true` Number fields, so
+    /// the restore path always observes a real default; sync callers
+    /// (column-config strip-on-write) may still see a missing stats
+    /// pass-through and the plugin's `?? 0` fallback, but those writes
+    /// re-strip on the next render cycle.
     fn query_column_config_schema(
         &self,
         view_config: &ViewConfig,
@@ -549,6 +611,8 @@ impl Renderer {
             OptionalUpdate::Update(mut map) => {
                 let mut changed = false;
                 if let Some(s) = &schema {
+                    let active = s.active_keys();
+                    map.retain(|k, _| active.contains(k));
                     // Default-valued entries in a restore payload
                     // semantically reset the key — strip from the
                     // map AND clear any existing override in the

@@ -10,42 +10,31 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_client::clone;
-use perspective_js::utils::*;
+/**
+ * Numeric extent — used by series + candlestick build pipelines for
+ * value / category axis domains.
+ */
+export interface Domain {
+    min: number;
+    max: number;
+}
 
-use crate::config::ColumnConfigFieldUpdate;
-use crate::renderer::Renderer;
-use crate::session::Session;
+/**
+ * Union `next` (a freshly-computed extent) with `prev` (the prior
+ * accumulator) IN PLACE on `next`, then return a fresh copy to store
+ * back as the new accumulator. Idempotent when `prev` is null — `next`
+ * is left untouched.
+ *
+ * Used by the `domain_mode: "expand"` mirror-back step in the series /
+ * candlestick / cartesian build pipelines: mutating `next` in place
+ * means every downstream assignment that reads from the pipeline
+ * result struct automatically picks up the grown extent.
+ */
+export function expandDomainInPlace(prev: Domain | null, next: Domain): Domain {
+    if (prev) {
+        next.min = Math.min(prev.min, next.min);
+        next.max = Math.max(prev.max, next.max);
+    }
 
-/// Apply a [`ColumnConfigFieldUpdate`] from the Plugin-settings tab to
-/// the active plugin's bucket on [`Renderer`], then re-`restore` the
-/// plugin with the merged token and trigger a render.
-///
-/// Per-plugin buckets mean no schema filter is needed before restore —
-/// keys from a different plugin physically cannot appear in this
-/// plugin's bucket. Schema-default stripping is handled inside
-/// [`Renderer::update_plugin_config_field`].
-///
-/// Column-style updates go through [`super::send_column_config`].
-pub fn send_plugin_config(session: &Session, renderer: &Renderer, update: ColumnConfigFieldUpdate) {
-    let view_config = session.get_view_config().clone();
-    let changed = renderer.update_plugin_config_field(&view_config, update);
-    clone!(session, renderer);
-    ApiFuture::spawn(async move {
-        if changed {
-            let plugin_config = renderer.get_plugin_config();
-            let plugin_token = wasm_bindgen::JsValue::from_serde_ext(&plugin_config).unwrap();
-            let view_config_snapshot = session.get_view_config().clone();
-            let columns_configs = renderer
-                .all_columns_configs_materialized(&view_config_snapshot, &session)
-                .await;
-            renderer
-                .get_active_plugin()?
-                .restore(&plugin_token, Some(&columns_configs))?;
-            renderer.update(session.get_view()).await?;
-            renderer.plugin_config_changed.emit(plugin_config);
-        }
-
-        Ok(())
-    })
+    return { min: next.min, max: next.max };
 }

@@ -12,7 +12,10 @@
 
 import type { FacetConfig, PluginConfig } from "../charts/chart";
 import type { PerspectiveClickDetail } from "../event-detail";
+import type { ThemeSnapshot } from "../theme/theme";
 import type { ViewConfig } from "@perspective-dev/client";
+
+export type { ThemeSnapshot };
 
 /**
  * Worker-mode control-channel messages. Distinct from the perspective
@@ -221,14 +224,6 @@ export interface FontFaceDescriptor {
     featureSettings?: string;
     display?: string;
 }
-
-/**
- * Theme values resolved on the host via `getComputedStyle` and shipped
- * to the renderer scope, which has no DOM. Decoded by the chart via
- * `theme/theme.ts::resolveThemeFromVars`. Plain map for
- * structured-clone.
- */
-export type ThemeSnapshot = Record<string, string>;
 
 export interface SetViewByNameMsg {
     kind: "setViewByName";

@@ -41,6 +41,8 @@ import { resolvePalette } from "../../theme/palette";
 import { LineGlyph } from "./glyphs/draw-lines";
 import { ScatterGlyph } from "./glyphs/draw-scatter";
 import { AreaGlyph } from "./glyphs/draw-areas";
+import { createQuadCornerBuffer } from "../../webgl/instanced-attrs";
+import { expandDomainInPlace } from "../common/expand-domain";
 import barVert from "../../shaders/bar.vert.glsl";
 import barFrag from "../../shaders/bar.frag.glsl";
 
@@ -451,13 +453,7 @@ export class SeriesChart extends CategoricalYChart {
                 a_axis: gl.getAttribLocation(p, "a_axis"),
             };
 
-            this._cornerBuffer = gl.createBuffer()!;
-            gl.bindBuffer(gl.ARRAY_BUFFER, this._cornerBuffer);
-            gl.bufferData(
-                gl.ARRAY_BUFFER,
-                new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]),
-                gl.STATIC_DRAW,
-            );
+            this._cornerBuffer = createQuadCornerBuffer(gl);
         }
 
         const result = buildSeriesPipeline({
@@ -483,57 +479,29 @@ export class SeriesChart extends CategoricalYChart {
             scratchNegStack: this._negStackScratch,
         });
 
-        // `domain_mode: "expand"` post-build union. Mutate the pipeline
-        // result struct in place so every downstream assignment below
-        // (`_leftDomain`, `_rightDomain`, `_numericCategoryDomain`,
-        // `_categoryOrigin`) automatically picks up the grown extent.
+        // `domain_mode: "expand"` post-build union. Each call mutates
+        // the pipeline result in place so the downstream assignments
+        // below (`_leftDomain`, `_rightDomain`, `_numericCategoryDomain`,
+        // `_categoryOrigin`) automatically pick up the grown extent.
         // `"fit"` (or a fresh reset) leaves the result untouched and
         // clears the accumulators so the next toggle starts fresh.
         if (this._pluginConfig.domain_mode === "expand") {
-            if (this._expandedLeftDomain) {
-                result.leftDomain.min = Math.min(
-                    this._expandedLeftDomain.min,
-                    result.leftDomain.min,
-                );
-                result.leftDomain.max = Math.max(
-                    this._expandedLeftDomain.max,
-                    result.leftDomain.max,
-                );
-            }
-
-            this._expandedLeftDomain = { ...result.leftDomain };
-
+            this._expandedLeftDomain = expandDomainInPlace(
+                this._expandedLeftDomain,
+                result.leftDomain,
+            );
             if (result.rightDomain) {
-                if (this._expandedRightDomain) {
-                    result.rightDomain.min = Math.min(
-                        this._expandedRightDomain.min,
-                        result.rightDomain.min,
-                    );
-                    result.rightDomain.max = Math.max(
-                        this._expandedRightDomain.max,
-                        result.rightDomain.max,
-                    );
-                }
-
-                this._expandedRightDomain = { ...result.rightDomain };
+                this._expandedRightDomain = expandDomainInPlace(
+                    this._expandedRightDomain,
+                    result.rightDomain,
+                );
             }
 
             if (result.numericCategoryDomain) {
-                if (this._expandedCategoryDomain) {
-                    result.numericCategoryDomain.min = Math.min(
-                        this._expandedCategoryDomain.min,
-                        result.numericCategoryDomain.min,
-                    );
-                    result.numericCategoryDomain.max = Math.max(
-                        this._expandedCategoryDomain.max,
-                        result.numericCategoryDomain.max,
-                    );
-                }
-
-                this._expandedCategoryDomain = {
-                    min: result.numericCategoryDomain.min,
-                    max: result.numericCategoryDomain.max,
-                };
+                this._expandedCategoryDomain = expandDomainInPlace(
+                    this._expandedCategoryDomain,
+                    result.numericCategoryDomain,
+                );
             }
         } else {
             this._expandedLeftDomain = null;

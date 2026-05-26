@@ -12,7 +12,7 @@
 
 import type { ColumnDataMap } from "../../data/view-reader";
 import type { WebGLContextManager } from "../../webgl/context-manager";
-import { TreeChartBase } from "../common/tree-chart";
+import { TreeChartBase, firstNonMetadataColumn } from "../common/tree-chart";
 import { NULL_NODE } from "../common/node-store";
 import {
     processTreeChunk,
@@ -39,20 +39,6 @@ export interface SunburstLocations {
     a_angles: number;
     a_radii: number;
     a_color: number;
-}
-
-/**
- * Sentinel fallback for the Size slot when the user hasn't picked one:
- * use the first non-metadata column in the incoming view.
- */
-function firstNonMetadataColumn(columns: ColumnDataMap): string {
-    for (const k of columns.keys()) {
-        if (!k.startsWith("__")) {
-            return k;
-        }
-    }
-
-    return "";
 }
 
 /**

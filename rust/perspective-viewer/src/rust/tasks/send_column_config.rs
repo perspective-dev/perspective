@@ -38,8 +38,9 @@ pub fn send_column_config(
     clone!(session, renderer);
     ApiFuture::spawn(async move {
         let view_config_snapshot = session.get_view_config().clone();
-        let columns_configs =
-            renderer.all_columns_configs_materialized(&view_config_snapshot, &session);
+        let columns_configs = renderer
+            .all_columns_configs_materialized(&view_config_snapshot, &session)
+            .await;
         let plugin_token =
             wasm_bindgen::JsValue::from_serde_ext(&renderer.get_plugin_config()).unwrap();
         renderer
