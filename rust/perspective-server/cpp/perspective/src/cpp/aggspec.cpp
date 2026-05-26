@@ -247,6 +247,9 @@ t_aggspec::agg_str() const {
         case AGGTYPE_STANDARD_DEVIATION: {
             return "stddev";
         }
+        case AGGTYPE_GMV: {
+            return "gmv";
+        }
         default: {
             PSP_COMPLAIN_AND_ABORT("Unknown agg type");
             return "unknown";
@@ -343,6 +346,7 @@ t_aggspec::get_output_specs(const t_schema& schema) const {
         case AGGTYPE_SUM:
         case AGGTYPE_SUM_ABS:
         case AGGTYPE_ABS_SUM:
+        case AGGTYPE_GMV:
         case AGGTYPE_PCT_SUM_PARENT:
         case AGGTYPE_PCT_SUM_GRAND_TOTAL:
         case AGGTYPE_MUL:

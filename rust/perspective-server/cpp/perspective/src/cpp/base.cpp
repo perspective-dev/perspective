@@ -589,6 +589,9 @@ str_to_aggtype(const std::string& str) {
     if (str == "stddev" || str == "standard deviation") {
         return t_aggtype::AGGTYPE_STANDARD_DEVIATION;
     }
+    if (str == "gmv") {
+        return t_aggtype::AGGTYPE_GMV;
+    }
 
     std::stringstream ss;
     ss << "Encountered unknown aggregate operation: '" << str << "'"

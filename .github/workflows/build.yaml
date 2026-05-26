@@ -28,7 +28,7 @@ on:
             - docs/
             - examples/
             - rust/perspective-python/README.md
-    pull_request_target:
+    pull_request:
         branches:
             - master
     workflow_dispatch:

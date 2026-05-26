@@ -468,6 +468,25 @@ private:
     t_symtable m_symtable;
     bool m_has_delta;
     std::string m_grand_agg_str;
+
+    // Used by AGGTYPE_GMV under split_by. For t_ctx1 (group_by only) the
+    // tree's pivots are exactly the row pivots, so the default
+    // `m_num_row_pivots_in_tree == m_pivots.size()` makes every tree-leaf
+    // a "real" leaf and the next-row-pivot lookup unused. For t_ctx2 each
+    // m_trees[k] is initialized with the row+col split via
+    // `set_gmv_row_pivot_meta(k, next_row_pivot_name)`, so the gmv kernel
+    // can detect a "tree-leaf but row-parent" node and roll up across the
+    // missing row pivot dimension via the gstate.
+    t_uindex m_num_row_pivots_in_tree;
+    std::string m_next_row_pivot_name;
+
+public:
+    void set_gmv_row_pivot_meta(
+        t_uindex num_row_pivots_in_tree,
+        const std::string& next_row_pivot_name
+    );
+    t_uindex get_num_row_pivots_in_tree() const;
+    const std::string& get_next_row_pivot_name() const;
 };
 
 } // end namespace perspective

@@ -293,7 +293,8 @@ enum t_aggtype {
     AGGTYPE_PCT_SUM_PARENT,
     AGGTYPE_PCT_SUM_GRAND_TOTAL,
     AGGTYPE_VARIANCE,
-    AGGTYPE_STANDARD_DEVIATION
+    AGGTYPE_STANDARD_DEVIATION,
+    AGGTYPE_GMV
 };
 
 PERSPECTIVE_EXPORT t_aggtype str_to_aggtype(const std::string& str);
