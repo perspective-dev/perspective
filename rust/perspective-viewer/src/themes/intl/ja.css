@@ -81,6 +81,7 @@ perspective-dropdown {
     --psp-label--style--content: "スタイル";
     --psp-label--stack--content: "スタック";
     --psp-label--alt-axis--content: "副軸";
+    --psp-label--interpolate--content: "補間";
     --psp-label--minimum-integer-digits--content: "整数の最小桁数";
     --psp-label--rounding-increment--content: "丸め増分";
     --psp-label--notation--content: "表記";

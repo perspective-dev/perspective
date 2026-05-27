@@ -38,10 +38,7 @@ import {
 import { buildBarTooltipLines } from "./series-interact";
 
 /**
- * Reusable scratch for bar instance uploads. Sized lazily at the first
- * use; grown on demand. Avoids `new Float32Array(n)` × 7 buffers per
- * legend-toggle / data-load; size is bounded by the bar-typed subset
- * of `_bars.count`.
+ * Reusable scratch for bar instance uploads.
  */
 interface BarInstanceScratch {
     xCenters: Float32Array;
@@ -78,10 +75,7 @@ function ensureBarInstanceScratch(n: number): BarInstanceScratch {
 }
 
 /**
- * Upload bar instance buffers from the columnar `_bars` storage. Filters
- * to bar-typed records only (areas draw as triangle strips). Skips
- * hidden series. Re-called from data-load and legend-toggle paths; the
- * scratch buffers and `_visibleBarIndices` are reused across calls.
+ * Upload bar instance buffers from the columnar `_bars` storage.
  */
 export function uploadBarInstances(
     chart: SeriesChart,
@@ -103,12 +97,6 @@ export function uploadBarInstances(
         const indices = chart._visibleBarIndices;
 
         // Rebase each xCenter by `_categoryOrigin` before f32 narrowing.
-        // For datetime numeric category axes the absolute xCenter is
-        // ~1.7e12 and f32 narrowing collapses adjacent bars onto the
-        // same value; subtracting the origin brings every value into
-        // the seconds range where f32 has full precision. The matching
-        // projection matrix is built with the same origin so the shader
-        // math is consistent.
         const xOrigin = chart._categoryOrigin;
         const series = chart._series;
         const hidden = chart._hiddenSeries;

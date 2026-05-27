@@ -431,6 +431,32 @@ export class HTMLPerspectiveViewerWebGLPluginElement
                     default: false,
                 });
             }
+
+            // Line / area glyphs can bridge interior nulls by linear
+            // interpolation. Bar / scatter ignore the flag.
+            const supports_interpolate =
+                effective_chart_type === "line" ||
+                effective_chart_type === "area";
+
+            if (supports_interpolate) {
+                const variants =
+                    effective_chart_type === "area"
+                        ? [
+                              { value: "skip", label: "Skip" },
+                              { value: "solid", label: "Solid" },
+                          ]
+                        : [
+                              { value: "skip", label: "Skip" },
+                              { value: "solid", label: "Solid" },
+                              { value: "transparent", label: "Transparent" },
+                          ];
+                fields.push({
+                    kind: "Enum",
+                    key: "interpolate",
+                    default: "solid",
+                    variants,
+                });
+            }
         }
 
         // Per-column formatter widgets. Surfaced for every chart type so

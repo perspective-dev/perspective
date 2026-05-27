@@ -13,6 +13,7 @@
 import type { WebGLContextManager } from "../../../webgl/context-manager";
 import type { SeriesChart } from "../series";
 import type { SeriesInfo } from "../series-build";
+import type { InterpolateMode } from "../series-type";
 import { compileProgram } from "../../../webgl/program-cache";
 import areaVert from "../../../shaders/area.vert.glsl";
 import areaFrag from "../../../shaders/area.frag.glsl";
@@ -144,6 +145,7 @@ export class AreaGlyph {
 
         const entries: AreaSeriesEntry[] = [];
         for (const s of areaSeries) {
+            const seriesInfo = chart._series[s.seriesId];
             const strips = collectAreaStrips(
                 s,
                 N,
@@ -155,6 +157,9 @@ export class AreaGlyph {
                 bars.y1,
                 positions,
                 xOrigin,
+                seriesInfo.start,
+                seriesInfo.end,
+                seriesInfo.interpolateMode,
             );
             if (strips.totalVertices === 0) {
                 continue;
@@ -254,6 +259,21 @@ interface CollectedStrips {
  * Reads stacked y0/y1 from the pre-built `barIndex` (cached on the
  * chart at data load) so this hot path doesn't rebuild the map each
  * call.
+ *
+ * The "present" predicate is mode-aware for the unstacked branch:
+ *
+ *   - `mode = "solid"` (also coerced from `"transparent"` for area):
+ *     Pass 2 has populated every cell in `[start, end]`, including
+ *     leading/trailing zero-fills. Treat `c in [start, end]` as
+ *     present and ignore `sampleValid` (the bit is still 0 at
+ *     synthesized cells).
+ *   - `mode = "skip"`: Pass 2 didn't run for this series. Interior
+ *     nulls inside `[start, end]` remain and the strip must break at
+ *     them — use `sampleValid` as the "is present" check, matching
+ *     the pre-feature behavior.
+ *
+ * The stacked branch is unchanged: the `barIndex` lookup already
+ * encodes presence post-stacking.
  */
 function collectAreaStrips(
     s: SeriesInfo,
@@ -266,10 +286,14 @@ function collectAreaStrips(
     barY1: Float64Array,
     positions: Float64Array | null,
     xOrigin: number,
+    seriesStart: number,
+    seriesEnd: number,
+    interpolateMode: InterpolateMode,
 ): CollectedStrips {
     const scratch = ensureStripScratch(N * 4);
     const descriptors: AreaStrip[] = [];
     const seriesBase = s.seriesId * 1_000_000_000;
+    const trustRange = interpolateMode !== "skip";
 
     let write = 0;
     let runStart = 0;
@@ -288,7 +312,12 @@ function collectAreaStrips(
             }
         } else {
             const idx = c * S + s.seriesId;
-            if ((valid[idx >> 3] >> (idx & 7)) & 1) {
+            if (trustRange) {
+                if (c >= seriesStart && c <= seriesEnd) {
+                    top = samples[idx];
+                    present = true;
+                }
+            } else if ((valid[idx >> 3] >> (idx & 7)) & 1) {
                 top = samples[idx];
                 present = true;
             }

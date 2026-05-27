@@ -22,11 +22,27 @@ attribute vec2 a_end;
 // 0 = start+left, 1 = start+right, 2 = end+left, 3 = end+right
 attribute float a_corner;
 
+// Per-segment "is endpoint a real source-data cell" flags. Both vertices
+// of a segment's quad see the same instance values, so `v_seg_alpha`
+// below is constant across the quad — no gradient fade. Read from the
+// per-cell real-flag buffer with offset 0 / 1 (same overlap trick as
+// the bar-line glyph's segment-position attributes).
+attribute float a_real_start;
+attribute float a_real_end;
+
 uniform mat4 u_projection;
 uniform vec2 u_resolution;
 uniform float u_line_width;
 
+// Alpha multiplier applied to any segment whose endpoints are not both
+// real. Set per draw based on the series' interpolate mode:
+//   0.0 = skip        (gaps at synthesized cells)
+//   1.0 = solid       (no visible difference; default for non-line)
+//   0.5 = transparent (50% opacity on segments touching synthesized cells)
+uniform float u_interp_alpha;
+
 varying float v_edge_dist;
+varying float v_seg_alpha;
 
 void main() {
     vec4 clipStart = u_projection * vec4(a_start, 0.0, 1.0);
@@ -51,4 +67,7 @@ void main() {
 
     gl_Position = clipPos + vec4(clipOffset, 0.0, 0.0);
     v_edge_dist = side;
+
+    float bothReal = a_real_start * a_real_end;
+    v_seg_alpha = mix(u_interp_alpha, 1.0, step(0.5, bothReal));
 }

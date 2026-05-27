@@ -30,9 +30,23 @@ interface OHLCCache {
     u_color: WebGLUniformLocation | null;
     u_resolution: WebGLUniformLocation | null;
     u_line_width: WebGLUniformLocation | null;
+
+    /**
+     * `line-uniform` was extended to support the Y-Line `interpolate`
+     * feature with a per-segment alpha multiplier driven by
+     * `a_real_start * a_real_end` and `u_interp_alpha`. The OHLC glyph
+     * doesn't need that — every segment is "real" — so we hold these
+     * locations to neutralize them at draw time (uniform = 1.0,
+     * constant attribute values = 1.0). Without that, an unset uniform
+     * defaults to 0 and the fragment alpha collapses to 0, rendering
+     * the entire OHLC glyph invisible.
+     */
+    u_interp_alpha: WebGLUniformLocation | null;
     a_corner: number;
     a_start: number;
     a_end: number;
+    a_real_start: number;
+    a_real_end: number;
 }
 
 /**
@@ -76,8 +90,14 @@ export class OHLCGlyph {
             "line-uniform",
             lineVert,
             lineFrag,
-            ["u_projection", "u_color", "u_resolution", "u_line_width"],
-            ["a_corner", "a_start", "a_end"],
+            [
+                "u_projection",
+                "u_color",
+                "u_resolution",
+                "u_line_width",
+                "u_interp_alpha",
+            ],
+            ["a_corner", "a_start", "a_end", "a_real_start", "a_real_end"],
         );
         this._program = {
             ...partial,
@@ -228,6 +248,20 @@ export class OHLCGlyph {
             cache.u_line_width,
             chart._pluginConfig.ohlc_line_width_px * dpr,
         );
+
+        // `line-uniform` was extended for the Y-Line interpolate
+        // feature with a per-segment alpha multiplier; neutralize it
+        // here. Constant attribute values (used when the array is
+        // disabled) and uniform are stable for every draw, so set
+        // once after `useProgram`. Disabling the arrays first guards
+        // against a prior Y-Line draw that left them enabled at the
+        // same attribute index (locations are shared because both
+        // programs link from the same source).
+        gl.disableVertexAttribArray(cache.a_real_start);
+        gl.disableVertexAttribArray(cache.a_real_end);
+        gl.vertexAttrib1f(cache.a_real_start, 1.0);
+        gl.vertexAttrib1f(cache.a_real_end, 1.0);
+        gl.uniform1f(cache.u_interp_alpha, 1.0);
 
         const instancing = getInstancing(glManager);
         const { setDivisor } = instancing;

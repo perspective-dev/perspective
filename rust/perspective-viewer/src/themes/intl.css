@@ -132,4 +132,5 @@ perspective-dropdown {
     --psp-label--gradient-heat-max--content: "Heat max";
     --psp-label--map-tile-provider--content: "Map provider";
     --psp-label--map-tile-alpha--content: "Map opacity";
+    --psp-label--interpolate--content: "Interpolate null";
 }

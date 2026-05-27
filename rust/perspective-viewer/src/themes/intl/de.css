@@ -80,6 +80,7 @@ perspective-dropdown {
     --psp-label--style--content: "Stil";
     --psp-label--stack--content: "Stapel";
     --psp-label--alt-axis--content: "Zweite Achse";
+    --psp-label--interpolate--content: "Interpolieren";
     --psp-label--minimum-integer-digits--content: "Mindestanzahl ganzzahliger Ziffern";
     --psp-label--rounding-increment--content: "Rundungsinkrement";
     --psp-label--notation--content: "Notation";
