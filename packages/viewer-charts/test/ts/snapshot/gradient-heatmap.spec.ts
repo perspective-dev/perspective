@@ -55,7 +55,6 @@ test.describe("Density", () => {
             await renderAndCapture(page, {
                 plugin: "Density",
                 columns: ["Quantity", "Profit", "Sales"],
-                settings: true,
                 plugin_config: { gradient_color_mode: "mean" },
             });
         });
@@ -64,7 +63,6 @@ test.describe("Density", () => {
             await renderAndCapture(page, {
                 plugin: "Density",
                 columns: ["Quantity", "Profit", "Sales"],
-                settings: true,
                 plugin_config: { gradient_color_mode: "density" },
             });
         });
@@ -73,7 +71,6 @@ test.describe("Density", () => {
             await renderAndCapture(page, {
                 plugin: "Density",
                 columns: ["Quantity", "Profit", "Profit"],
-                settings: true,
                 plugin_config: { gradient_color_mode: "extreme" },
             });
         });
@@ -82,7 +79,6 @@ test.describe("Density", () => {
             await renderAndCapture(page, {
                 plugin: "Density",
                 columns: ["Quantity", "Profit", "Profit"],
-                settings: true,
                 plugin_config: { gradient_color_mode: "signed" },
             });
         });

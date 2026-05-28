@@ -42,6 +42,7 @@ import { LineGlyph } from "./glyphs/draw-lines";
 import { ScatterGlyph } from "./glyphs/draw-scatter";
 import { AreaGlyph } from "./glyphs/draw-areas";
 import { createQuadCornerBuffer } from "../../webgl/instanced-attrs";
+import { compileProgram } from "../../webgl/program-cache";
 import { expandDomainInPlace } from "../common/expand-domain";
 import barVert from "../../shaders/bar.vert.glsl";
 import barFrag from "../../shaders/bar.frag.glsl";
@@ -432,27 +433,32 @@ export class SeriesChart extends CategoricalYChart {
         }
 
         if (!this._program) {
-            this._program = glManager.shaders.getOrCreate(
+            const compiled = compileProgram<
+                { program: WebGLProgram } & CachedLocations
+            >(
+                glManager,
                 "bar",
                 barVert,
                 barFrag,
+                [
+                    "u_proj_left",
+                    "u_proj_right",
+                    "u_hover_series",
+                    "u_horizontal",
+                ],
+                [
+                    "a_corner",
+                    "a_x_center",
+                    "a_half_width",
+                    "a_y0",
+                    "a_y1",
+                    "a_color",
+                    "a_series_id",
+                    "a_axis",
+                ],
             );
-            const p = this._program;
-            this._locations = {
-                u_proj_left: gl.getUniformLocation(p, "u_proj_left"),
-                u_proj_right: gl.getUniformLocation(p, "u_proj_right"),
-                u_hover_series: gl.getUniformLocation(p, "u_hover_series"),
-                u_horizontal: gl.getUniformLocation(p, "u_horizontal"),
-                a_corner: gl.getAttribLocation(p, "a_corner"),
-                a_x_center: gl.getAttribLocation(p, "a_x_center"),
-                a_half_width: gl.getAttribLocation(p, "a_half_width"),
-                a_y0: gl.getAttribLocation(p, "a_y0"),
-                a_y1: gl.getAttribLocation(p, "a_y1"),
-                a_color: gl.getAttribLocation(p, "a_color"),
-                a_series_id: gl.getAttribLocation(p, "a_series_id"),
-                a_axis: gl.getAttribLocation(p, "a_axis"),
-            };
-
+            this._program = compiled.program;
+            this._locations = compiled;
             this._cornerBuffer = createQuadCornerBuffer(gl);
         }
 

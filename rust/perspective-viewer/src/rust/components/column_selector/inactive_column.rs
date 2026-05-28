@@ -149,7 +149,8 @@ impl Component for InactiveColumn {
 
         let is_expression = ctx.props().is_expression;
 
-        let is_active_class = ctx.props().renderer.metadata().select_mode.css();
+        let mut is_active_class = ctx.props().renderer.metadata().select_mode.css();
+        is_active_class.push("shift-alt-icon");
         let mut class = classes!("column-selector-column");
         if !ctx.props().visible {
             class.push("column-selector-column-hidden");

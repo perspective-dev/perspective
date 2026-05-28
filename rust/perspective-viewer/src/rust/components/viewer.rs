@@ -15,6 +15,8 @@ use std::rc::Rc;
 use futures::channel::oneshot::*;
 use perspective_js::utils::*;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+use web_sys::{FocusEvent, KeyboardEvent};
 use yew::prelude::*;
 
 use super::containers::split_panel::SplitPanel;
@@ -121,6 +123,83 @@ pub struct PerspectiveViewer {
     /// Counts in-flight renders (incremented on `view_config_changed`,
     /// decremented on `view_created`). Threaded to `StatusIndicator`.
     update_count: u32,
+
+    /// Window listeners that toggle the `.shift-active` class on the host
+    /// element while the Shift key is held, making Shift-modified affordances
+    /// (e.g. inactive column add, active column remove, status-bar reset)
+    /// visually discoverable. Stored so the closures outlive `create`.
+    _shift_listeners: ShiftListeners,
+}
+
+struct ShiftListeners {
+    elem: web_sys::HtmlElement,
+    keydown: Closure<dyn FnMut(KeyboardEvent)>,
+    keyup: Closure<dyn FnMut(KeyboardEvent)>,
+    blur: Closure<dyn FnMut(FocusEvent)>,
+}
+
+impl Drop for ShiftListeners {
+    fn drop(&mut self) {
+        let win = global::window();
+        let _ = win.remove_event_listener_with_callback(
+            "keydown",
+            self.keydown.as_ref().unchecked_ref(),
+        );
+        let _ = win.remove_event_listener_with_callback(
+            "keyup",
+            self.keyup.as_ref().unchecked_ref(),
+        );
+        let _ = win.remove_event_listener_with_callback(
+            "blur",
+            self.blur.as_ref().unchecked_ref(),
+        );
+        let _ = self.elem.class_list().remove_1("shift-active");
+    }
+}
+
+fn install_shift_listeners(elem: web_sys::HtmlElement) -> ShiftListeners {
+    let keydown = {
+        let elem = elem.clone();
+        Closure::wrap(Box::new(move |event: KeyboardEvent| {
+            if event.key() == "Shift" {
+                let _ = elem.class_list().add_1("shift-active");
+            }
+        }) as Box<dyn FnMut(KeyboardEvent)>)
+    };
+
+    let keyup = {
+        let elem = elem.clone();
+        Closure::wrap(Box::new(move |event: KeyboardEvent| {
+            if event.key() == "Shift" {
+                let _ = elem.class_list().remove_1("shift-active");
+            }
+        }) as Box<dyn FnMut(KeyboardEvent)>)
+    };
+
+    let blur = {
+        let elem = elem.clone();
+        Closure::wrap(Box::new(move |_: FocusEvent| {
+            let _ = elem.class_list().remove_1("shift-active");
+        }) as Box<dyn FnMut(FocusEvent)>)
+    };
+
+    let win = global::window();
+    let _ = win.add_event_listener_with_callback(
+        "keydown",
+        keydown.as_ref().unchecked_ref(),
+    );
+    let _ = win.add_event_listener_with_callback(
+        "keyup",
+        keyup.as_ref().unchecked_ref(),
+    );
+    let _ = win.add_event_listener_with_callback("blur", blur.as_ref().unchecked_ref());
+
+    ShiftListeners {
+        elem,
+        keydown,
+        keyup,
+        blur,
+    }
 }
 
 impl Component for PerspectiveViewer {
@@ -160,6 +239,8 @@ impl Component for PerspectiveViewer {
             });
         }
 
+        let shift_listeners = install_shift_listeners(elem);
+
         Self {
             _subscriptions: subscriptions,
             column_settings_panel_width_override: None,
@@ -178,6 +259,7 @@ impl Component for PerspectiveViewer {
             presentation_props,
             dragdrop_props: DragDropProps::default(),
             update_count: 0,
+            _shift_listeners: shift_listeners,
         }
     }
 

@@ -26,6 +26,7 @@ import { buildFacetGrid } from "../../layout/facet-grid";
 import { leafColor, leafRGBA, luminance } from "../common/leaf-color";
 import treemapVert from "../../shaders/treemap.vert.glsl";
 import treemapFrag from "../../shaders/treemap.frag.glsl";
+import { compileProgram } from "../../webgl/program-cache";
 import { withChromeCache } from "../common/chrome-cache";
 import { wrapLabel } from "../../axis/label-geometry";
 import {
@@ -110,16 +111,18 @@ export function renderTreemapFrame(
     }
 
     if (!chart._program) {
-        chart._program = glManager.shaders.getOrCreate(
+        const compiled = compileProgram<
+            { program: WebGLProgram } & NonNullable<TreemapChart["_locations"]>
+        >(
+            glManager,
             "treemap",
             treemapVert,
             treemapFrag,
+            ["u_resolution"],
+            ["a_position", "a_color"],
         );
-        chart._locations = {
-            u_resolution: gl.getUniformLocation(chart._program, "u_resolution"),
-            a_position: gl.getAttribLocation(chart._program, "a_position"),
-            a_color: gl.getAttribLocation(chart._program, "a_color"),
-        };
+        chart._program = compiled.program;
+        chart._locations = compiled;
     }
 
     const theme = chart._resolveTheme();

@@ -264,6 +264,7 @@ impl Component for ColumnSettingsPanel {
                     ctx.props().selected_tab,
                     Some(ColumnSettingsTab::Attributes)
                 ),
+            update_on_input: true,
             icon_type: self
                 .maybe_ty
                 .map(|ty| ty.into())

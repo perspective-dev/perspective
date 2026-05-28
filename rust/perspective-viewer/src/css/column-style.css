@@ -27,14 +27,22 @@
             margin: 0px;
         }
 
+        .is-default-value .bool-field-container {
+            background-color: var(--psp--background-color);
+            border: 1px solid var(--psp-inactive--color);
+        }
+
         .bool-field-container {
             display: flex;
-            border: 1px solid var(--psp-inactive--color);
+            border: 1px dashed var(--psp-inactive--color);
             border-radius: 3px;
             align-items: center;
             padding: 0 6px;
             width: 100%;
             cursor: pointer;
+            label {
+                cursor: pointer;
+            }
         }
 
         &.no-style {

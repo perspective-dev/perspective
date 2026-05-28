@@ -19,7 +19,7 @@
         padding: 0px;
         cursor: pointer;
         outline: none;
-        margin: 0 5px;
+        margin: 0;
         display: inline-block;
         background-repeat: no-repeat;
         background-color: var(--psp--color, #ccc);
@@ -86,7 +86,7 @@
             opacity: 0.2s;
         }
 
-        &:hover {
+        &:not(.alternate):hover {
             -webkit-mask-image: var(--psp-icon--checkbox-hover--mask-image);
             mask-image: var(--psp-icon--checkbox-hover--mask-image);
         }

@@ -11,13 +11,19 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { SunburstChart } from "./sunburst";
-import { NULL_NODE, ancestorNames } from "../common/node-store";
-import { rebuildBreadcrumbs } from "../common/tree-data";
+import { NULL_NODE } from "../common/node-store";
 import {
     renderSunburstFrame,
     renderSunburstChromeOverlay,
     facetCenterForNode,
 } from "./sunburst-render";
+import {
+    buildTreeTooltipLines,
+    dismissTreePinnedTooltip,
+    emitTreeNodeEvent,
+    showTreePinnedTooltip,
+    treeDrillTo,
+} from "../common/tree-interact";
 
 export type { BreadcrumbRegion as SunburstBreadcrumbRegion } from "../common/tree-chrome";
 
@@ -194,7 +200,7 @@ export function handleSunburstHover(
         chart._hoveredNodeId = hit;
         if (hit !== NULL_NODE) {
             const serial = chart._lazyTooltip.beginHover(hit);
-            buildSunburstTooltipLines(chart, hit).then((lines) => {
+            buildTreeTooltipLines(chart, hit).then((lines) => {
                 if (chart._lazyTooltip.commitHover(serial, lines)) {
                     renderSunburstChromeOverlay(chart);
                 }
@@ -273,188 +279,36 @@ export function handleSunburstClick(
 
     if (store.firstChild[hit] !== NULL_NODE) {
         drillTo(chart, hit);
-        void emitSunburstNodeEvent(chart, hit, "branch");
+        void emitTreeNodeEvent(chart, hit, "branch");
     } else {
         showSunburstPinnedTooltip(chart, hit);
-        void emitSunburstNodeEvent(chart, hit, "leaf");
+        void emitTreeNodeEvent(chart, hit, "leaf");
     }
 }
 
-/**
- * Counterpart to `emitTreemapNodeEvent` for sunburst. Same path-walk
- * semantics — split-by prefix in faceted mode, group-by levels
- * afterward, leaf row idx from `_nodeStore.leafRowIdx`.
- */
-async function emitSunburstNodeEvent(
-    chart: SunburstChart,
-    nodeId: number,
-    kind: "leaf" | "branch",
-): Promise<void> {
-    const store = chart._nodeStore;
-    const path = ancestorNames(store, nodeId);
-    const isFaceted =
-        chart._splitBy.length > 0 && chart._facetConfig.facet_mode === "grid";
-    const splitByValues: (string | null)[] = isFaceted
-        ? path.slice(0, chart._splitBy.length)
-        : [];
-    const groupByValues: (string | null)[] = isFaceted
-        ? path.slice(
-              chart._splitBy.length,
-              chart._splitBy.length + chart._groupBy.length,
-          )
-        : path.slice(0, chart._groupBy.length);
-
-    const rowIdx = kind === "leaf" ? (store.leafRowIdx[nodeId] ?? null) : null;
-
-    await chart.emitClickAndSelect({
-        rowIdx: rowIdx != null && rowIdx >= 0 ? rowIdx : null,
-        columnName: chart._sizeName,
-        groupByValues,
-        splitByValues,
-    });
-}
-
-/**
- * Drill the clicked facet (or the whole chart in non-facet mode).
- * Faceted drill walks up to the facet root (top-level child of
- * `_rootId`), records the new drill node under that facet's label,
- * and re-renders.
- */
 function drillTo(chart: SunburstChart, nodeId: number): void {
-    const store = chart._nodeStore;
-    if (chart._splitBy.length > 0 && chart._facetConfig.facet_mode === "grid") {
-        let p = nodeId;
-        while (p !== NULL_NODE && store.parent[p] !== chart._rootId) {
-            p = store.parent[p];
-        }
-
-        if (p !== NULL_NODE) {
-            chart._facetDrillRoots.set(store.name[p], nodeId);
-        }
-
-        chart._hoveredNodeId = NULL_NODE;
-        if (chart._glManager) {
-            renderSunburstFrame(chart, chart._glManager);
-        }
-
-        return;
-    }
-
-    chart._currentRootId = nodeId;
-    rebuildBreadcrumbs(chart, nodeId);
-    chart._hoveredNodeId = NULL_NODE;
-    if (chart._glManager) {
-        renderSunburstFrame(chart, chart._glManager);
-    }
+    treeDrillTo(chart, nodeId, () => {
+        if (chart._glManager) renderSunburstFrame(chart, chart._glManager);
+    });
 }
 
 export function showSunburstPinnedTooltip(
     chart: SunburstChart,
     nodeId: number,
 ): void {
-    chart._tooltip.dismiss();
-    chart._pinnedNodeId = nodeId;
-
     const store = chart._nodeStore;
     const midA = (store.a0[nodeId] + store.a1[nodeId]) / 2;
     const midR = (store.r0[nodeId] + store.r1[nodeId]) / 2;
     const { centerX, centerY } = facetCenterForNode(chart, nodeId);
     const cx = centerX + Math.cos(midA) * midR;
     const cy = centerY + Math.sin(midA) * midR;
-
-    // CSS bounds: prefer `glManager` (works in both local and worker
-    // modes, since the worker constructs its own context manager).
-    const cssWidth = chart._glManager?.cssWidth ?? 0;
-    const cssHeight = chart._glManager?.cssHeight ?? 0;
-
-    // Tooltip columns are fetched lazily from the view — the tree
-    // itself only retains ancestor names + aggregated value + color.
-    // Stale resolutions are discarded via the `_pinnedNodeId` check.
-    buildSunburstTooltipLines(chart, nodeId).then((lines) => {
-        if (chart._pinnedNodeId !== nodeId) {
-            return;
-        }
-
-        if (lines.length === 0) {
-            return;
-        }
-
-        chart._tooltip.pin(lines, { px: cx, py: cy }, { cssWidth, cssHeight });
-    });
-
-    chart._hoveredNodeId = NULL_NODE;
-    renderSunburstChromeOverlay(chart);
+    showTreePinnedTooltip(chart, nodeId, { cx, cy }, () =>
+        renderSunburstChromeOverlay(chart),
+    );
 }
 
 export function dismissSunburstPinnedTooltip(chart: SunburstChart): void {
-    chart._tooltip.dismiss();
-    chart._pinnedNodeId = NULL_NODE;
+    dismissTreePinnedTooltip(chart);
 }
 
-export async function buildSunburstTooltipLines(
-    chart: SunburstChart,
-    nodeId: number,
-): Promise<string[]> {
-    const store = chart._nodeStore;
-    const lines: string[] = [];
-
-    // Ancestor path.
-    const pathNames: string[] = [];
-    let p = nodeId;
-    while (store.parent[p] !== NULL_NODE) {
-        pathNames.push(store.name[p]);
-        p = store.parent[p];
-    }
-
-    pathNames.reverse();
-    if (pathNames.length > 0) {
-        lines.push(pathNames.join(" › "));
-    } else {
-        lines.push(store.name[nodeId]);
-    }
-
-    const sizeFmt = chart.getColumnFormatter(chart._sizeName, "value");
-    lines.push(`Value: ${sizeFmt(store.value[nodeId])}`);
-
-    // Color value (numeric branch): stored on the node at insert
-    // time, so it's always available without a view fetch.
-    if (chart._colorName && !isNaN(store.colorValue[nodeId])) {
-        const colorFmt = chart.getColumnFormatter(chart._colorName, "value");
-        lines.push(
-            `${chart._colorName}: ${colorFmt(store.colorValue[nodeId])}`,
-        );
-    }
-
-    const rowIdx = store.leafRowIdx[nodeId];
-    const isLeaf =
-        store.firstChild[nodeId] === NULL_NODE && rowIdx !== NULL_NODE;
-
-    // Extra tooltip columns fetched on demand — see the treemap
-    // counterpart for the same pattern.
-    if (isLeaf && chart._lazyRows) {
-        const row = await chart._lazyRows.fetchRow(rowIdx);
-        for (const [name, value] of row) {
-            if (value === null || value === undefined) {
-                continue;
-            }
-
-            if (name === chart._colorName && !isNaN(store.colorValue[nodeId])) {
-                continue;
-            }
-
-            if (typeof value === "number") {
-                lines.push(
-                    `${name}: ${chart.getColumnFormatter(name, "value")(value)}`,
-                );
-            } else {
-                lines.push(`${name}: ${value}`);
-            }
-        }
-    }
-
-    if (store.firstChild[nodeId] !== NULL_NODE) {
-        lines.push(`Children: ${store.childCount[nodeId]}`);
-    }
-
-    return lines;
-}
+export { buildTreeTooltipLines as buildSunburstTooltipLines } from "../common/tree-interact";

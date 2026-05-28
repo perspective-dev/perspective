@@ -14,6 +14,7 @@ import type { WebGLContextManager } from "../../../webgl/context-manager";
 import type { CartesianChart } from "../cartesian";
 import type { Glyph } from "../glyph";
 import { bindGradientTexture } from "../../../webgl/gradient-texture";
+import { compileProgram } from "../../../webgl/program-cache";
 import { buildPointRowTooltipLines } from "../tooltip-lines";
 import scatterVert from "../../../shaders/scatter.vert.glsl";
 import scatterFrag from "../../../shaders/scatter.frag.glsl";
@@ -53,27 +54,21 @@ export class PointGlyph implements Glyph {
             return;
         }
 
-        const gl = glManager.gl;
-        const program = glManager.shaders.getOrCreate(
+        this._cache = compileProgram<PointCache>(
+            glManager,
             "scatter",
             scatterVert,
             scatterFrag,
-        );
-        this._cache = {
-            program,
-            u_projection: gl.getUniformLocation(program, "u_projection"),
-            u_point_size: gl.getUniformLocation(program, "u_point_size"),
-            u_color_range: gl.getUniformLocation(program, "u_color_range"),
-            u_gradient_lut: gl.getUniformLocation(program, "u_gradient_lut"),
-            u_size_range: gl.getUniformLocation(program, "u_size_range"),
-            u_point_size_range: gl.getUniformLocation(
-                program,
+            [
+                "u_projection",
+                "u_point_size",
+                "u_color_range",
+                "u_gradient_lut",
+                "u_size_range",
                 "u_point_size_range",
-            ),
-            a_position: gl.getAttribLocation(program, "a_position"),
-            a_color_value: gl.getAttribLocation(program, "a_color_value"),
-            a_size_value: gl.getAttribLocation(program, "a_size_value"),
-        };
+            ],
+            ["a_position", "a_color_value", "a_size_value"],
+        );
     }
 
     draw(

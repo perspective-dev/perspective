@@ -11,12 +11,19 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { TreemapChart } from "./treemap";
-import { NULL_NODE, ancestorNames } from "../common/node-store";
-import { PADDING_LABEL, rebuildBreadcrumbs } from "./treemap-layout";
+import { NULL_NODE } from "../common/node-store";
+import { PADDING_LABEL } from "./treemap-layout";
 import {
     renderTreemapFrame,
     renderTreemapChromeOverlay,
 } from "./treemap-render";
+import {
+    buildTreeTooltipLines,
+    dismissTreePinnedTooltip,
+    emitTreeNodeEvent,
+    showTreePinnedTooltip,
+    treeDrillTo,
+} from "../common/tree-interact";
 
 interface HitResult {
     leafId: number;
@@ -152,7 +159,7 @@ export function handleTreemapHover(
             // (mouse moved elsewhere, new view) are dropped by the
             // controller's serial gate.
             const serial = chart._lazyTooltip.beginHover(best);
-            buildTreemapTooltipLines(chart, best).then((lines) => {
+            buildTreeTooltipLines(chart, best).then((lines) => {
                 if (chart._lazyTooltip.commitHover(serial, lines)) {
                     renderTreemapChromeOverlay(chart);
                 }
@@ -199,57 +206,14 @@ export function handleTreemapClick(
 
     if (branchId !== NULL_NODE && inHeader) {
         drillTo(chart, branchId);
-        void emitTreemapNodeEvent(chart, branchId, "branch");
+        void emitTreeNodeEvent(chart, branchId, "branch");
     } else if (leafId !== NULL_NODE) {
         showTreemapPinnedTooltip(chart, leafId);
-        void emitTreemapNodeEvent(chart, leafId, "leaf");
+        void emitTreeNodeEvent(chart, leafId, "leaf");
     } else if (branchId !== NULL_NODE) {
         drillTo(chart, branchId);
-        void emitTreemapNodeEvent(chart, branchId, "branch");
+        void emitTreeNodeEvent(chart, branchId, "branch");
     }
-}
-
-/**
- * Build a click detail from a treemap node id and emit both
- * `perspective-click` and `perspective-global-filter selected:true`.
- *
- * For leaves, the source-view row index is `store.leafRowIdx[id]` and
- * the row payload is populated via `_lazyRows`. For branches, no
- * source row exists (the branch is a rollup), so `rowIdx: null` and
- * the row payload is `{}` — only the filter path is meaningful.
- *
- * The path is walked via `ancestorNames` and split into split-by
- * prefix + group-by levels using `_splitBy.length` as the boundary.
- * Faceted mode (`facet_mode === "grid"` with non-empty `_splitBy`)
- * keeps the depth-0 ancestor name as the split prefix.
- */
-async function emitTreemapNodeEvent(
-    chart: TreemapChart,
-    nodeId: number,
-    kind: "leaf" | "branch",
-): Promise<void> {
-    const store = chart._nodeStore;
-    const path = ancestorNames(store, nodeId);
-    const isFaceted =
-        chart._splitBy.length > 0 && chart._facetConfig.facet_mode === "grid";
-    const splitByValues: (string | null)[] = isFaceted
-        ? path.slice(0, chart._splitBy.length)
-        : [];
-    const groupByValues: (string | null)[] = isFaceted
-        ? path.slice(
-              chart._splitBy.length,
-              chart._splitBy.length + chart._groupBy.length,
-          )
-        : path.slice(0, chart._groupBy.length);
-
-    const rowIdx = kind === "leaf" ? (store.leafRowIdx[nodeId] ?? null) : null;
-
-    await chart.emitClickAndSelect({
-        rowIdx: rowIdx != null && rowIdx >= 0 ? rowIdx : null,
-        columnName: chart._sizeName,
-        groupByValues,
-        splitByValues,
-    });
 }
 
 export function handleTreemapDblClick(
@@ -279,167 +243,34 @@ export function handleTreemapDblClick(
         store.firstChild[target] !== NULL_NODE
     ) {
         drillTo(chart, target);
-        void emitTreemapNodeEvent(chart, target, "branch");
+        void emitTreeNodeEvent(chart, target, "branch");
         if (leafId !== NULL_NODE && store.firstChild[leafId] === NULL_NODE) {
             showTreemapPinnedTooltip(chart, leafId);
-            void emitTreemapNodeEvent(chart, leafId, "leaf");
+            void emitTreeNodeEvent(chart, leafId, "leaf");
         }
     }
 }
 
-/**
- * Drill the current facet (or the whole chart in non-facet mode).
- *
- * In faceted mode, walks up the ancestor chain of `nodeId` until the
- * facet root (a top-level child of `_rootId`) is found, then sets
- * `_facetDrillRoots[facetLabel] = nodeId` so only that facet's
- * subtree re-layouts. Non-facet mode keeps the existing single-
- * `_currentRootId` behavior and rebuilds the breadcrumb trail.
- */
 function drillTo(chart: TreemapChart, nodeId: number): void {
-    const store = chart._nodeStore;
-    if (chart._splitBy.length > 0 && chart._facetConfig.facet_mode === "grid") {
-        // Walk up to find the facet-root ancestor (top-level child of
-        // `_rootId`). Guard against drills that target the synthetic
-        // root or a facet root itself — those would un-drill the facet.
-        let p = nodeId;
-        while (p !== NULL_NODE && store.parent[p] !== chart._rootId) {
-            p = store.parent[p];
-        }
-
-        if (p !== NULL_NODE) {
-            const label = store.name[p];
-            chart._facetDrillRoots.set(label, nodeId);
-        }
-
-        chart._hoveredNodeId = NULL_NODE;
-        if (chart._glManager) {
-            renderTreemapFrame(chart, chart._glManager);
-        }
-
-        return;
-    }
-
-    chart._currentRootId = nodeId;
-    rebuildBreadcrumbs(chart, nodeId);
-    chart._hoveredNodeId = NULL_NODE;
-    if (chart._glManager) {
-        renderTreemapFrame(chart, chart._glManager);
-    }
+    treeDrillTo(chart, nodeId, () => {
+        if (chart._glManager) renderTreemapFrame(chart, chart._glManager);
+    });
 }
 
 export function showTreemapPinnedTooltip(
     chart: TreemapChart,
     nodeId: number,
 ): void {
-    chart._tooltip.dismiss();
-    chart._pinnedNodeId = nodeId;
-
     const store = chart._nodeStore;
     const cx = (store.x0[nodeId] + store.x1[nodeId]) / 2;
     const cy = (store.y0[nodeId] + store.y1[nodeId]) / 2;
-
-    // CSS bounds: prefer `glManager` (works in both local and worker
-    // modes, since the worker constructs its own context manager).
-    const cssWidth = chart._glManager?.cssWidth ?? 0;
-    const cssHeight = chart._glManager?.cssHeight ?? 0;
-
-    // Tooltip columns are fetched lazily from the view — the tree
-    // itself only retains ancestor names + aggregated value + color.
-    // If the user dismisses or re-pins between click and resolve, the
-    // `_pinnedNodeId` check discards the stale result.
-    buildTreemapTooltipLines(chart, nodeId).then((lines) => {
-        if (chart._pinnedNodeId !== nodeId) {
-            return;
-        }
-
-        if (lines.length === 0) {
-            return;
-        }
-
-        chart._tooltip.pin(lines, { px: cx, py: cy }, { cssWidth, cssHeight });
-    });
-
-    chart._hoveredNodeId = NULL_NODE;
-    renderTreemapChromeOverlay(chart);
+    showTreePinnedTooltip(chart, nodeId, { cx, cy }, () =>
+        renderTreemapChromeOverlay(chart),
+    );
 }
 
 export function dismissTreemapPinnedTooltip(chart: TreemapChart): void {
-    chart._tooltip.dismiss();
-    chart._pinnedNodeId = NULL_NODE;
+    dismissTreePinnedTooltip(chart);
 }
 
-/**
- * Build the tooltip for `nodeId`. The node's own name path + aggregate
- * value are derived from the tree; per-row tooltip columns come from
- * the `leafRowIdx` → column-buffer lookup (no per-node `Map`).
- */
-export async function buildTreemapTooltipLines(
-    chart: TreemapChart,
-    nodeId: number,
-): Promise<string[]> {
-    const store = chart._nodeStore;
-    const lines: string[] = [];
-
-    // Name path (ancestors, topmost first, excluding synthetic root).
-    const pathNames: string[] = [];
-    let p = nodeId;
-    while (store.parent[p] !== NULL_NODE) {
-        pathNames.push(store.name[p]);
-        p = store.parent[p];
-    }
-
-    pathNames.reverse();
-    if (pathNames.length > 0) {
-        lines.push(pathNames.join(" \u203A "));
-    } else {
-        lines.push(store.name[nodeId]);
-    }
-
-    const sizeFmt = chart.getColumnFormatter(chart._sizeName, "value");
-    lines.push(`Value: ${sizeFmt(store.value[nodeId])}`);
-
-    // Color value (numeric branch): stored on the node at insert
-    // time, so it's always available without a view fetch.
-    if (chart._colorName && !isNaN(store.colorValue[nodeId])) {
-        const colorFmt = chart.getColumnFormatter(chart._colorName, "value");
-        lines.push(
-            `${chart._colorName}: ${colorFmt(store.colorValue[nodeId])}`,
-        );
-    }
-
-    const rowIdx = store.leafRowIdx[nodeId];
-    const isLeaf =
-        store.firstChild[nodeId] === NULL_NODE && rowIdx !== NULL_NODE;
-
-    // Extra tooltip columns come from the source view row, fetched on
-    // demand via `_lazyRows`. Only leaves correspond to a single view
-    // row; branch nodes aggregate rows and don't carry extra columns.
-    if (isLeaf && chart._lazyRows) {
-        const row = await chart._lazyRows.fetchRow(rowIdx);
-        for (const [name, value] of row) {
-            if (value === null || value === undefined) {
-                continue;
-            }
-
-            if (name === chart._colorName && !isNaN(store.colorValue[nodeId])) {
-                // Already emitted from the retained tree state above.
-                continue;
-            }
-
-            if (typeof value === "number") {
-                lines.push(
-                    `${name}: ${chart.getColumnFormatter(name, "value")(value)}`,
-                );
-            } else {
-                lines.push(`${name}: ${value}`);
-            }
-        }
-    }
-
-    if (store.firstChild[nodeId] !== NULL_NODE) {
-        lines.push(`Children: ${store.childCount[nodeId]}`);
-    }
-
-    return lines;
-}
+export { buildTreeTooltipLines as buildTreemapTooltipLines } from "../common/tree-interact";

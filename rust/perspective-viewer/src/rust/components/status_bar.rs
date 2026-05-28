@@ -377,7 +377,7 @@ impl Component for StatusBar {
                                 <div id="plugin-settings"><slot name="statusbar-extra" /></div>
                                 <span class="hover-target">
                                     <span id="reset" class="button" onmousedown={&onreset}>
-                                        <span class="icon" />
+                                        <span class="icon shift-alt-icon" />
                                         <span class="icon-label" />
                                     </span>
                                 </span>

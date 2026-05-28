@@ -20,6 +20,7 @@ import { leafColor, leafRGBA, luminance } from "../common/leaf-color";
 import arcVert from "../../shaders/sunburst-arc.vert.glsl";
 import arcFrag from "../../shaders/sunburst-arc.frag.glsl";
 import { getInstancing } from "../../webgl/instanced-attrs";
+import { compileProgram } from "../../webgl/program-cache";
 import {
     partitionSunburst,
     collectVisibleArcs,
@@ -292,22 +293,18 @@ function ensureProgram(
     }
 
     const gl = glManager.gl;
-    const prog = glManager.shaders.getOrCreate(
+    const compiled = compileProgram<
+        { program: WebGLProgram } & NonNullable<SunburstChart["_locations"]>
+    >(
+        glManager,
         "sunburst-arc",
         arcVert,
         arcFrag,
+        ["u_center", "u_resolution", "u_border_px"],
+        ["a_strip_t", "a_side", "a_angles", "a_radii", "a_color"],
     );
-    chart._program = prog;
-    chart._locations = {
-        u_center: gl.getUniformLocation(prog, "u_center"),
-        u_resolution: gl.getUniformLocation(prog, "u_resolution"),
-        u_border_px: gl.getUniformLocation(prog, "u_border_px"),
-        a_strip_t: gl.getAttribLocation(prog, "a_strip_t"),
-        a_side: gl.getAttribLocation(prog, "a_side"),
-        a_angles: gl.getAttribLocation(prog, "a_angles"),
-        a_radii: gl.getAttribLocation(prog, "a_radii"),
-        a_color: gl.getAttribLocation(prog, "a_color"),
-    };
+    chart._program = compiled.program;
+    chart._locations = compiled;
 
     // Build the static triangle-strip template once. Layout:
     //   pairs of (strip_t, side) for each of the 2*(N_STEPS+1) vertices.

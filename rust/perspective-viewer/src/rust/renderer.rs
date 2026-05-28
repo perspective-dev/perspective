@@ -35,7 +35,6 @@ use futures::future::{join_all, select_all};
 use perspective_client::config::ViewConfig;
 use perspective_client::utils::*;
 use perspective_client::{View, ViewWindow};
-use perspective_js::json;
 use perspective_js::utils::{ApiResult, JsValueSerdeExt, ResultTApiErrorExt};
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
@@ -168,15 +167,6 @@ impl Renderer {
             render_warning: Cell::new(true),
             on_render_limits_changed: Default::default(),
         }))
-    }
-
-    pub async fn reset(&self, columns_config: Option<&ColumnConfigMap>) -> ApiResult<()> {
-        self.0.borrow_mut().plugins_idx = None;
-        if let Ok(plugin) = self.get_active_plugin() {
-            plugin.restore(&json!({}), columns_config)?;
-        }
-
-        Ok(())
     }
 
     pub fn delete(&self) -> ApiResult<()> {

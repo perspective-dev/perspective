@@ -160,6 +160,7 @@ pub fn BoolField(props: &BoolFieldProps) -> Html {
                 <div class="bool-field-container">
                     <input
                         type="checkbox"
+                        class="alternate"
                         id={format!("{}-checkbox", props.field_key)}
                         checked={current}
                         {oninput}

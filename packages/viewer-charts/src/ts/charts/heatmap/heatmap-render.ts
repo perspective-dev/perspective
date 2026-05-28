@@ -20,6 +20,7 @@ import {
     withScissor,
 } from "../../webgl/plot-frame";
 import { getInstancing } from "../../webgl/instanced-attrs";
+import { compileProgram } from "../../webgl/program-cache";
 import { initCanvas } from "../../axis/canvas";
 import { buildFacetGrid } from "../../layout/facet-grid";
 import {
@@ -236,21 +237,18 @@ function ensureProgram(
     }
 
     const gl = glManager.gl;
-    const program = glManager.shaders.getOrCreate(
+    const compiled = compileProgram<
+        { program: WebGLProgram } & NonNullable<HeatmapChart["_locations"]>
+    >(
+        glManager,
         "heatmap",
         heatmapVert,
         heatmapFrag,
+        ["u_projection", "u_cell_inset", "u_cell_size", "u_gradient_lut"],
+        ["a_corner", "a_cell", "a_color_t"],
     );
-    chart._program = program;
-    chart._locations = {
-        u_projection: gl.getUniformLocation(program, "u_projection"),
-        u_cell_inset: gl.getUniformLocation(program, "u_cell_inset"),
-        u_cell_size: gl.getUniformLocation(program, "u_cell_size"),
-        u_gradient_lut: gl.getUniformLocation(program, "u_gradient_lut"),
-        a_corner: gl.getAttribLocation(program, "a_corner"),
-        a_cell: gl.getAttribLocation(program, "a_cell"),
-        a_color_t: gl.getAttribLocation(program, "a_color_t"),
-    };
+    chart._program = compiled.program;
+    chart._locations = compiled;
 
     const cornerBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, cornerBuffer);

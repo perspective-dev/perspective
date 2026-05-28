@@ -18,6 +18,7 @@ import {
     createLineCornerBuffer,
     getInstancing,
 } from "../../../webgl/instanced-attrs";
+import { compileProgram } from "../../../webgl/program-cache";
 import { formatTickValue, formatDateTickValue } from "../../../layout/ticks";
 import lineVert from "../../../shaders/line.vert.glsl";
 import lineFrag from "../../../shaders/line.frag.glsl";
@@ -56,26 +57,29 @@ export class LineGlyph implements Glyph {
             return;
         }
 
-        const gl = glManager.gl;
-        const program = glManager.shaders.getOrCreate(
+        const partial = compileProgram<Omit<LineCache, "cornerBuffer">>(
+            glManager,
             "line",
             lineVert,
             lineFrag,
+            [
+                "u_projection",
+                "u_resolution",
+                "u_line_width",
+                "u_color_range",
+                "u_gradient_lut",
+            ],
+            [
+                "a_start",
+                "a_end",
+                "a_color_start",
+                "a_color_end",
+                "a_corner",
+            ],
         );
-        const cornerBuffer = createLineCornerBuffer(gl);
         this._cache = {
-            program,
-            cornerBuffer,
-            u_projection: gl.getUniformLocation(program, "u_projection"),
-            u_resolution: gl.getUniformLocation(program, "u_resolution"),
-            u_line_width: gl.getUniformLocation(program, "u_line_width"),
-            u_color_range: gl.getUniformLocation(program, "u_color_range"),
-            u_gradient_lut: gl.getUniformLocation(program, "u_gradient_lut"),
-            a_start: gl.getAttribLocation(program, "a_start"),
-            a_end: gl.getAttribLocation(program, "a_end"),
-            a_color_start: gl.getAttribLocation(program, "a_color_start"),
-            a_color_end: gl.getAttribLocation(program, "a_color_end"),
-            a_corner: gl.getAttribLocation(program, "a_corner"),
+            ...partial,
+            cornerBuffer: createLineCornerBuffer(glManager.gl),
         };
     }
 
