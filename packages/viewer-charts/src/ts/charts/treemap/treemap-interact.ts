@@ -253,7 +253,9 @@ export function handleTreemapDblClick(
 
 function drillTo(chart: TreemapChart, nodeId: number): void {
     treeDrillTo(chart, nodeId, () => {
-        if (chart._glManager) renderTreemapFrame(chart, chart._glManager);
+        if (chart._glManager) {
+            renderTreemapFrame(chart, chart._glManager);
+        }
     });
 }
 

@@ -16,6 +16,7 @@ import type { ZoomConfig } from "../../interaction/zoom-controller";
 import { CategoricalYChart } from "../common/categorical-y-chart";
 import { type PlotRect } from "../../layout/plot-layout";
 import { type AxisDomain } from "../../axis/numeric-axis";
+import type { CategoricalDomain } from "../../axis/categorical-axis";
 import {
     buildSeriesPipeline,
     readBarRecord,
@@ -147,6 +148,22 @@ export class SeriesChart extends CategoricalYChart {
      */
     _primaryValueLabel = "";
     _altValueLabel = "";
+
+    /**
+     * Per-side value-axis mode. `"category"` fires when every
+     * aggregate on that side is post-aggregation `string`-typed
+     * (all-or-nothing rule, evaluated independently for primary and
+     * alt). When set, `_bars[].y0`/`y1` carry dictionary slot indices
+     * instead of numeric values, and the chrome overlay paints a
+     * categorical axis on that side.
+     *
+     * Read by `series-render.ts` to construct the `BarCategoryAxis`
+     * descriptor for the value-axis sides.
+     */
+    _leftValueAxisMode: "numeric" | "category" = "numeric";
+    _rightValueAxisMode: "numeric" | "category" | null = null;
+    _leftValueCategoryDomain: CategoricalDomain | null = null;
+    _rightValueCategoryDomain: CategoricalDomain | null = null;
 
     /**
      * (seriesId * 1e9 + catIdx) → bar-record index in `_bars`. Built once
@@ -591,6 +608,10 @@ export class SeriesChart extends CategoricalYChart {
         this._leftDomain = result.leftDomain;
         this._rightDomain = result.rightDomain;
         this._hasRightAxis = result.hasRightAxis;
+        this._leftValueAxisMode = result.leftValueAxisMode;
+        this._rightValueAxisMode = result.rightValueAxisMode;
+        this._leftValueCategoryDomain = result.leftValueCategoryDomain;
+        this._rightValueCategoryDomain = result.rightValueCategoryDomain;
 
         // Resolve the palette eagerly. Both `uploadBarInstances` (color
         // attribute) and `rebuildGlyphBuffers` (per-series RGB capture)

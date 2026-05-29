@@ -151,8 +151,14 @@ export function showTreePinnedTooltip(
     const cssHeight = chart._glManager?.cssHeight ?? 0;
 
     buildTreeTooltipLines(chart, nodeId).then((lines) => {
-        if (chart._pinnedNodeId !== nodeId) return;
-        if (lines.length === 0) return;
+        if (chart._pinnedNodeId !== nodeId) {
+            return;
+        }
+
+        if (lines.length === 0) {
+            return;
+        }
+
         chart._tooltip.pin(
             lines,
             { px: anchor.cx, py: anchor.cy },

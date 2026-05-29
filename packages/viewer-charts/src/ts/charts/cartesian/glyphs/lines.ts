@@ -69,13 +69,7 @@ export class LineGlyph implements Glyph {
                 "u_color_range",
                 "u_gradient_lut",
             ],
-            [
-                "a_start",
-                "a_end",
-                "a_color_start",
-                "a_color_end",
-                "a_corner",
-            ],
+            ["a_start", "a_end", "a_color_start", "a_color_end", "a_corner"],
         );
         this._cache = {
             ...partial,

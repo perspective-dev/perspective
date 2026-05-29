@@ -272,12 +272,14 @@ export function renderCandlestickChromeOverlay(chart: CandlestickChart): void {
     renderBarAxesChrome(
         chart._chromeCanvas,
         catAxis,
-        chart._lastYDomain,
-        chart._lastYTicks,
+        {
+            mode: "numeric",
+            domain: chart._lastYDomain,
+            ticks: chart._lastYTicks,
+        },
         chart._lastLayout,
         theme,
         chart._glManager?.dpr ?? 1,
-        undefined,
         undefined,
         false,
         {

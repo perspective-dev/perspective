@@ -251,9 +251,19 @@ perspective-viewer.dragging,
  * render target) and the bare selector (light render target) are emitted to
  * cover the runtime branch in datagrid.ts. */
 :host-context(perspective-viewer.shift-active)
-    :is(.psp-header-sort-asc, .psp-header-sort-desc, .psp-header-sort-col-asc, .psp-header-sort-col-desc):after,
+    :is(
+        .psp-header-sort-asc,
+        .psp-header-sort-desc,
+        .psp-header-sort-col-asc,
+        .psp-header-sort-col-desc
+    ):after,
 perspective-viewer.shift-active
-    :is(.psp-header-sort-asc, .psp-header-sort-desc, .psp-header-sort-col-asc, .psp-header-sort-col-desc):after {
+    :is(
+        .psp-header-sort-asc,
+        .psp-header-sort-desc,
+        .psp-header-sort-col-asc,
+        .psp-header-sort-col-desc
+    ):after {
     background-color: var(
         --shift-active--color,
         var(--psp-datagrid--pos-cell--color, #1078d1)

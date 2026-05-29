@@ -86,10 +86,7 @@ pub fn reset_all(
             ..Default::default()
         };
 
-        restore_and_render(&session, &renderer, &presentation, update, async {
-            Ok(())
-        })
-        .await?;
+        restore_and_render(&session, &renderer, &presentation, update, async { Ok(()) }).await?;
 
         if let Some(sender) = sender {
             sender.send(()).unwrap();

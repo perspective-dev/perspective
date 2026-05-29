@@ -318,10 +318,7 @@ export class LineGlyph {
 
             const color = chart._series[s.seriesId].color;
             gl.uniform4f(cache.u_color, color[0], color[1], color[2], 1.0);
-            gl.uniform1f(
-                cache.u_interp_alpha,
-                alphaForMode(s.interpolateMode),
-            );
+            gl.uniform1f(cache.u_interp_alpha, alphaForMode(s.interpolateMode));
 
             gl.enableVertexAttribArray(cache.a_start);
             setDivisor(cache.a_start, 1);

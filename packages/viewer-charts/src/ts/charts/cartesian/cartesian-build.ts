@@ -17,6 +17,49 @@ import type { CartesianChart, SplitGroup } from "./cartesian";
 import { LabelInterner } from "./label-interner";
 
 /**
+ * Resolve a row's string value into a slot index in `dictionary`,
+ * inserting on first encounter. Invalid / missing values land in a
+ * lazily-added `"(null)"` slot — no reserved slot 0 when the data has
+ * no nulls. Shared by the X and Y categorical paths in
+ * `processCartesianChunk`.
+ */
+function lookupCategorySlot(
+    col: ColumnData | null,
+    rowIdx: number,
+    dictionary: string[],
+    seen: Map<string, number>,
+): number {
+    let label: string;
+    if (!col) {
+        label = "(null)";
+    } else {
+        const valid = col.valid;
+        const isValid = valid
+            ? !!((valid[rowIdx >> 3] >> (rowIdx & 7)) & 1)
+            : true;
+        if (!isValid) {
+            label = "(null)";
+        } else if (col.indices && col.dictionary) {
+            label = col.dictionary[col.indices[rowIdx]] ?? "(null)";
+        } else if (col.values) {
+            const v = col.values[rowIdx];
+            label = v == null ? "(null)" : String(v);
+        } else {
+            label = "(null)";
+        }
+    }
+
+    let slot = seen.get(label);
+    if (slot === undefined) {
+        slot = dictionary.length;
+        dictionary.push(label);
+        seen.set(label, slot);
+    }
+
+    return slot;
+}
+
+/**
  * Resolve per-split-prefix column-name tuples. `colorBase`/`sizeBase`
  * are optional (empty string when the corresponding slot is unset).
  */
@@ -121,6 +164,41 @@ export function initCartesianPipeline(
     chart._xLabel = xBase;
     chart._yLabel = yBase;
     chart._xIsRowIndex = !xBase;
+
+    // Post-aggregation `string` columns on X / Y switch the axis to
+    // categorical: per-row slot indices are written into `_xData` /
+    // `_yData` instead of raw values, and the chrome overlay paints a
+    // categorical axis. Reset the per-frame dictionary state here at
+    // chunk 0 so slot 0 is always the first non-null label encountered
+    // in arrival order (matching the perspective view's sort).
+    chart._xIsString = !!xBase && chart._columnTypes[xBase] === "string";
+    chart._yIsString = !!yBase && chart._columnTypes[yBase] === "string";
+    chart._xCategoryDictionary = [];
+    chart._yCategoryDictionary = [];
+    chart._xCategorySeen = new Map();
+    chart._yCategorySeen = new Map();
+    chart._xCategoryDomain = null;
+    chart._yCategoryDomain = null;
+
+    // Categorical axes use 0-based slot indices, so the rebase origin
+    // is fixed at 0. Skipping the NaN-init guard below prevents the
+    // first-seen-slot from being adopted as the origin (which would
+    // shift every other slot's pixel position).
+    if (chart._xIsString) {
+        chart._xOrigin = 0;
+        chart._xMin = 0;
+        chart._xMax = 0;
+        chart._expandedXMin = Infinity;
+        chart._expandedXMax = -Infinity;
+    }
+
+    if (chart._yIsString) {
+        chart._yOrigin = 0;
+        chart._yMin = 0;
+        chart._yMax = 0;
+        chart._expandedYMin = Infinity;
+        chart._expandedYMax = -Infinity;
+    }
 
     // Capture the per-series row budget BEFORE any split expansion. When
     // split_by is active we grow `totalCapacity` to fit `numSplits`
@@ -245,9 +323,16 @@ export function processCartesianChunk(
     // carries the user's selected color column. The color-resolution
     // logic in the inner loop reads uniformly from `ser.colorCol`
     // across both modes.
+    //
+    // `xColData` / `yColData` carry the full `ColumnData` so the
+    // categorical path can read `indices` + `dictionary` for slot
+    // lookup; `xCol` / `yCol` keep the numeric fast path zero-cost
+    // (and stay `null` on string columns where `values` is unset).
     type SeriesSrc = {
         xCol: Float32Array | Float64Array | Int32Array | null;
-        yCol: Float32Array | Float64Array | Int32Array;
+        yCol: Float32Array | Float64Array | Int32Array | null;
+        xColData: ColumnData | null;
+        yColData: ColumnData | null;
         xValid: Uint8Array | undefined;
         yValid: Uint8Array | undefined;
         colorCol: ColumnData | null;
@@ -260,7 +345,11 @@ export function processCartesianChunk(
         for (const sg of chart._splitGroups) {
             const xc = sg.xColName ? columns.get(sg.xColName) : null;
             const yc = columns.get(sg.yColName);
-            if (!yc?.values) {
+            if (!yc) {
+                continue;
+            }
+
+            if (!chart._yIsString && !yc.values) {
                 continue;
             }
 
@@ -273,7 +362,9 @@ export function processCartesianChunk(
                 : null;
             series.push({
                 xCol: xc?.values ?? null,
-                yCol: yc.values,
+                yCol: yc.values ?? null,
+                xColData: xc ?? null,
+                yColData: yc,
                 xValid: xc?.valid,
                 yValid: yc.valid,
                 colorCol: cc,
@@ -284,7 +375,11 @@ export function processCartesianChunk(
     } else {
         const xc = chart._xName ? columns.get(chart._xName) : null;
         const yc = chart._yName ? columns.get(chart._yName) : null;
-        if (!yc?.values) {
+        if (!yc) {
+            return;
+        }
+
+        if (!chart._yIsString && !yc.values) {
             return;
         }
 
@@ -296,7 +391,9 @@ export function processCartesianChunk(
             : null;
         series.push({
             xCol: xc?.values ?? null,
-            yCol: yc.values,
+            yCol: yc.values ?? null,
+            xColData: xc ?? null,
+            yColData: yc,
             xValid: xc?.valid,
             yValid: yc?.valid,
             colorCol: cc,
@@ -386,11 +483,20 @@ export function processCartesianChunk(
         let writeIdx = 0;
         for (let j = 0; j < sourceLength && writeIdx < maxWrite; j++) {
             const i = j;
-            if (ser.yValid && !((ser.yValid[i >> 3] >> (i & 7)) & 1)) {
+            // Numeric axes filter out null/invalid rows entirely;
+            // categorical axes route them into a `"(null)"` slot
+            // instead, so the validity / NaN guards only apply on
+            // the numeric branch.
+            if (
+                !chart._yIsString &&
+                ser.yValid &&
+                !((ser.yValid[i >> 3] >> (i & 7)) & 1)
+            ) {
                 continue;
             }
 
             if (
+                !chart._xIsString &&
                 ser.xCol &&
                 ser.xValid &&
                 !((ser.xValid[i >> 3] >> (i & 7)) & 1)
@@ -402,10 +508,38 @@ export function processCartesianChunk(
                 colorValid !== undefined &&
                 !((colorValid[i >> 3] >> (i & 7)) & 1);
 
-            const rawY = ser.yCol[i] as number;
-            const rawX = ser.xCol ? (ser.xCol[i] as number) : startRow + i;
-            if (isNaN(rawX) || isNaN(rawY)) {
+            let rawY: number;
+            if (chart._yIsString) {
+                rawY = lookupCategorySlot(
+                    ser.yColData,
+                    i,
+                    chart._yCategoryDictionary,
+                    chart._yCategorySeen,
+                );
+            } else if (ser.yCol) {
+                rawY = ser.yCol[i] as number;
+                if (isNaN(rawY)) {
+                    continue;
+                }
+            } else {
                 continue;
+            }
+
+            let rawX: number;
+            if (chart._xIsString) {
+                rawX = lookupCategorySlot(
+                    ser.xColData,
+                    i,
+                    chart._xCategoryDictionary,
+                    chart._xCategorySeen,
+                );
+            } else if (ser.xCol) {
+                rawX = ser.xCol[i] as number;
+                if (isNaN(rawX)) {
+                    continue;
+                }
+            } else {
+                rawX = startRow + i;
             }
 
             // Project raw (x, y) → data-space (x, y). Default is

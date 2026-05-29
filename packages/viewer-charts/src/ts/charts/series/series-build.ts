@@ -12,13 +12,18 @@
 
 import type { ColumnDataMap } from "../../data/view-reader";
 import { buildSplitGroups } from "../../data/split-groups";
-import type { CategoricalLevel } from "../../axis/categorical-axis";
+import type {
+    CategoricalDomain,
+    CategoricalLevel,
+} from "../../axis/categorical-axis";
 import {
     resolveAxisMode,
     resolveCategoryAxis,
     resolveNumericCategoryDomain,
+    resolveValueCategoryDomain,
     type AxisMode,
     type NumericCategoryDomain,
+    type ValueCategoryColumn,
 } from "../common/category-axis-resolver";
 import { computeSlotGeometry } from "../common/band-layout";
 import {
@@ -348,6 +353,26 @@ export interface SeriesPipelineResult {
     leftDomain: { min: number; max: number };
     rightDomain: { min: number; max: number } | null;
     hasRightAxis: boolean;
+
+    /**
+     * Per-axis-side value mode discriminator. `"category"` fires when
+     * every aggregate on that side is post-aggregation `string`-typed
+     * (all-or-nothing rule). Bar y0/y1 then hold dictionary slot
+     * indices and the chrome overlay paints a categorical axis on
+     * that side. `null` for the alt side when there are no series
+     * pinned to alt.
+     */
+    leftValueAxisMode: "numeric" | "category";
+    rightValueAxisMode: "numeric" | "category" | null;
+
+    /**
+     * Single-level `CategoricalDomain` shared across every aggregate
+     * on the corresponding side. Set only when that side's mode is
+     * `"category"`; the chrome renderer in `series-render` materializes
+     * the side's `BarCategoryAxis` from this.
+     */
+    leftValueCategoryDomain: CategoricalDomain | null;
+    rightValueCategoryDomain: CategoricalDomain | null;
 }
 
 function setValidBit(valid: Uint8Array, idx: number): void {
@@ -403,6 +428,10 @@ export function buildSeriesPipeline(
         leftDomain: { min: 0, max: 0 },
         rightDomain: null,
         hasRightAxis: false,
+        leftValueAxisMode: "numeric",
+        rightValueAxisMode: null,
+        leftValueCategoryDomain: null,
+        rightValueCategoryDomain: null,
     };
 
     const aggregates = columnSlots.filter((s): s is string => !!s);
@@ -569,6 +598,102 @@ export function buildSeriesPipeline(
         }
     }
 
+    // Per-aggregate string-ness flag, plus default axis side from the
+    // `columns_config.alt_axis` pin. `series[].axis` may still flip
+    // again via the auto-alt heuristic below, but we suppress that
+    // heuristic entirely once a string aggregate is present (numeric
+    // extent ratios are not defined on categorical data).
+    const aggIsString = new Array<boolean>(M);
+    const defaultAxisSide = new Array<number>(M);
+    let anyStringAgg = false;
+    for (let k = 0; k < M; k++) {
+        const aggName = aggregates[k];
+        const splitKey = splitPrefixes[0];
+        const colName = splitKey === "" ? aggName : `${splitKey}|${aggName}`;
+        aggIsString[k] = columns.get(colName)?.type === "string";
+        defaultAxisSide[k] = resolveAltAxis(aggName, columnsConfig) ? 1 : 0;
+        if (aggIsString[k]) {
+            anyStringAgg = true;
+        }
+    }
+
+    // Per-side categorical resolution. Apply the all-or-nothing rule:
+    // a side becomes categorical only if every aggregate currently
+    // assigned to it (by `defaultAxisSide` — the alt_axis pin) is
+    // string-typed. Auto-alt-axis can't re-assign across modes since
+    // we disable it whenever any string aggregate exists.
+    const primaryAggs: ValueCategoryColumn[] = [];
+    const altAggs: ValueCategoryColumn[] = [];
+    const primaryAggColIdx: number[] = [];
+    const altAggColIdx: number[] = [];
+    for (let k = 0; k < M; k++) {
+        const aggName = aggregates[k];
+        for (let p = 0; p < P; p++) {
+            const splitKey = splitPrefixes[p];
+            const colName =
+                splitKey === "" ? aggName : `${splitKey}|${aggName}`;
+            const colIdx = k * P + p;
+            const entry: ValueCategoryColumn = {
+                name: colName,
+                type: aggIsString[k] ? "string" : "numeric",
+                data: columns.get(colName),
+            };
+            if (defaultAxisSide[k] === 0) {
+                primaryAggs.push(entry);
+                primaryAggColIdx.push(colIdx);
+            } else {
+                altAggs.push(entry);
+                altAggColIdx.push(colIdx);
+            }
+        }
+    }
+
+    const primaryValueAxisLabel = primaryAggs
+        .map((c) => c.name)
+        .filter((s, i, arr) => arr.indexOf(s) === i)
+        .join(", ");
+    const altValueAxisLabel = altAggs
+        .map((c) => c.name)
+        .filter((s, i, arr) => arr.indexOf(s) === i)
+        .join(", ");
+
+    const primaryCategorical =
+        primaryAggs.length > 0
+            ? resolveValueCategoryDomain(
+                  primaryAggs,
+                  numRows,
+                  rowOffset,
+                  primaryValueAxisLabel,
+              )
+            : null;
+    const altCategorical =
+        altAggs.length > 0
+            ? resolveValueCategoryDomain(
+                  altAggs,
+                  numRows,
+                  rowOffset,
+                  altValueAxisLabel,
+              )
+            : null;
+
+    // Per-column slot buffers indexed in the same `colIdx = k * P + p`
+    // space as `colValues`. `colSlots[colIdx]` is non-null exactly when
+    // the side `defaultAxisSide[k]` is categorical and that side's
+    // resolver returned slot buffers.
+    const colSlots: (Int32Array | null)[] = new Array(M * P).fill(null);
+    if (primaryCategorical) {
+        for (let i = 0; i < primaryAggColIdx.length; i++) {
+            colSlots[primaryAggColIdx[i]] =
+                primaryCategorical.perColumnSlots[i];
+        }
+    }
+
+    if (altCategorical) {
+        for (let i = 0; i < altAggColIdx.length; i++) {
+            colSlots[altAggColIdx[i]] = altCategorical.perColumnSlots[i];
+        }
+    }
+
     // Pre-allocate columnar bar storage at N*M*P upper bound. The
     // pipeline emits at most one record per (cat, agg, split) cell;
     // `bars.count` tracks the active prefix.
@@ -587,6 +712,21 @@ export function buildSeriesPipeline(
         for (let k = 0; k < M; k++) {
             for (let p = 0; p < P; p++) {
                 const colIdx = k * P + p;
+
+                // Categorical value-axis branch: `colSlots[colIdx]` is
+                // a per-catI Int32Array of dictionary slot indices, with
+                // `(null)` already routed to its own slot — every row
+                // is a valid sample and stack/extent logic just runs
+                // against the slot integer.
+                const slots = colSlots[colIdx];
+                if (slots) {
+                    const seriesId = k * P + p;
+                    const sampleIdx = catI * S + seriesId;
+                    samples[sampleIdx] = slots[catI];
+                    setValidBit(sampleValid, sampleIdx);
+                    continue;
+                }
+
                 const values = colValues[colIdx];
                 if (!values) {
                     continue;
@@ -626,6 +766,7 @@ export function buildSeriesPipeline(
                 if (first === -1) {
                     first = c;
                 }
+
                 last = c;
             }
         }
@@ -683,9 +824,7 @@ export function buildSeriesPipeline(
                     const xStart = categoryPositions
                         ? categoryPositions[lastValid]
                         : lastValid;
-                    const xEnd = categoryPositions
-                        ? categoryPositions[c]
-                        : c;
+                    const xEnd = categoryPositions ? categoryPositions[c] : c;
                     const dx = xEnd - xStart;
                     for (let g = 1; g < c - lastValid; g++) {
                         const cc = lastValid + g;
@@ -744,16 +883,11 @@ export function buildSeriesPipeline(
 
                 const treatRangeAsValid =
                     s.chartType === "line" ||
-                    (s.chartType === "area" &&
-                        s.interpolateMode !== "skip");
+                    (s.chartType === "area" && s.interpolateMode !== "skip");
                 const sampleIdx = catI * S + seriesId;
                 if (!treatRangeAsValid) {
                     if (
-                        !(
-                            (sampleValid[sampleIdx >> 3] >>
-                                (sampleIdx & 7)) &
-                            1
-                        )
+                        !((sampleValid[sampleIdx >> 3] >> (sampleIdx & 7)) & 1)
                     ) {
                         continue;
                     }
@@ -877,7 +1011,12 @@ export function buildSeriesPipeline(
     bars.count = barWrite;
 
     let hasRightAxis = false;
-    if (autoAltYAxis && M >= 2) {
+    // Auto-alt-axis compares numeric magnitudes; a string aggregate
+    // contributes no extent and would always land on the smaller side.
+    // Skip the heuristic when any aggregate is string and let the
+    // user's explicit `columns_config.alt_axis` pin (resolved below)
+    // be the only axis-side override.
+    if (autoAltYAxis && M >= 2 && !anyStringAgg) {
         const extents: number[] = new Array(M);
         let maxExt = 0;
         let minExt = Infinity;
@@ -988,9 +1127,7 @@ export function buildSeriesPipeline(
         for (let catI = s.start; catI <= s.end; catI++) {
             const sampleIdx = catI * S + seriesId;
             if (!treatRangeAsValid) {
-                if (
-                    !((sampleValid[sampleIdx >> 3] >> (sampleIdx & 7)) & 1)
-                ) {
+                if (!((sampleValid[sampleIdx >> 3] >> (sampleIdx & 7)) & 1)) {
                     continue;
                 }
             }
@@ -1030,6 +1167,34 @@ export function buildSeriesPipeline(
             : rightExtent
         : null;
 
+    // Categorical value-axis: override the numeric extent with the
+    // slot-index range `[0, dictLen-1]`. The chrome renderer paints
+    // the dictionary; the numeric domain we surface is only used by
+    // the projection matrix and pixel mapping, both of which work on
+    // raw slot indices when `*ValueAxisMode === "category"`.
+    const leftValueAxisMode: "numeric" | "category" = primaryCategorical
+        ? "category"
+        : "numeric";
+    const rightValueAxisMode: "numeric" | "category" | null = hasRightAxis
+        ? altCategorical
+            ? "category"
+            : "numeric"
+        : null;
+    const finalLeftDomain =
+        primaryCategorical && primaryCategorical.domain.numRows > 0
+            ? {
+                  min: 0,
+                  max: Math.max(0, primaryCategorical.domain.numRows - 1),
+              }
+            : leftExtent;
+    const finalRightDomain =
+        altCategorical && altCategorical.domain.numRows > 0 && hasRightAxis
+            ? {
+                  min: 0,
+                  max: Math.max(0, altCategorical.domain.numRows - 1),
+              }
+            : rightDomain;
+
     return {
         aggregates,
         splitPrefixes,
@@ -1045,8 +1210,12 @@ export function buildSeriesPipeline(
         negStack,
         samples,
         sampleValid,
-        leftDomain: leftExtent,
-        rightDomain,
+        leftDomain: finalLeftDomain,
+        rightDomain: finalRightDomain,
         hasRightAxis,
+        leftValueAxisMode,
+        rightValueAxisMode,
+        leftValueCategoryDomain: primaryCategorical?.domain ?? null,
+        rightValueCategoryDomain: altCategorical?.domain ?? null,
     };
 }

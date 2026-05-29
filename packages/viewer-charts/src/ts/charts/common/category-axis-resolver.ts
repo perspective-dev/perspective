@@ -11,7 +11,10 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { ColumnDataMap, ColumnData } from "../../data/view-reader";
-import type { CategoricalLevel } from "../../axis/categorical-axis";
+import type {
+    CategoricalDomain,
+    CategoricalLevel,
+} from "../../axis/categorical-axis";
 import { buildGroupRuns } from "../../axis/categorical-axis-core";
 import { formatTickValue, formatDateTickValue } from "../../layout/ticks";
 
@@ -311,4 +314,135 @@ export function resolveCategoryAxis(
             : [];
 
     return { rowPaths, numCategories, rowOffset };
+}
+
+export interface ValueCategoryColumn {
+    /**
+     * Source aggregate column name; used only for the axis label fallback.
+     */
+    name: string;
+
+    /**
+     * Post-aggregation perspective type string from `chart._columnTypes`
+     * (`"string"` is what triggers categorical mode).
+     */
+    type: string;
+
+    /**
+     * The actual `ColumnData` from the view. May be undefined when the
+     * caller couldn't resolve the column (treated as all-null).
+     */
+    data: ColumnData | undefined;
+}
+
+export interface ValueCategoryDomain {
+    /**
+     * Single-level `CategoricalDomain` shared across all input columns.
+     * `levels[0].labels` is the dictionary in slot order.
+     */
+    domain: CategoricalDomain;
+
+    /**
+     * Per-column slot-index buffers. Length === `numCategories`.
+     * Indexed in the same order as the input `columns` array.
+     */
+    perColumnSlots: Int32Array[];
+}
+
+/**
+ * Build a single shared categorical domain across one or more aggregate
+ * columns that land on the same axis side (primary or alt). Implements
+ * the "all-or-nothing per axis side" rule: returns `null` (= caller stays
+ * numeric) when any column is non-string; otherwise returns a single-
+ * level domain with the dictionary built in first-seen row order plus
+ * per-column slot indices the build pipeline writes into its pixel/slot
+ * buffer.
+ *
+ * Null / invalid rows surface as a `"(null)"` slot that's lazily added
+ * to the dictionary on first encounter — no reserved slot 0 when the
+ * data has no missing values.
+ */
+export function resolveValueCategoryDomain(
+    columns: ValueCategoryColumn[],
+    numRows: number,
+    rowOffset: number,
+    axisLabel: string,
+): ValueCategoryDomain | null {
+    if (columns.length === 0) {
+        return null;
+    }
+
+    for (const c of columns) {
+        if (c.type !== "string") {
+            return null;
+        }
+    }
+
+    const numCategories = Math.max(0, numRows - rowOffset);
+    const dictionary: string[] = [];
+    const seen = new Map<string, number>();
+    const perColumnSlots: Int32Array[] = columns.map(
+        () => new Int32Array(numCategories),
+    );
+
+    const slotFor = (s: string): number => {
+        let slot = seen.get(s);
+        if (slot === undefined) {
+            slot = dictionary.length;
+            dictionary.push(s);
+            seen.set(s, slot);
+        }
+
+        return slot;
+    };
+
+    for (let ci = 0; ci < columns.length; ci++) {
+        const col = columns[ci].data;
+        const slots = perColumnSlots[ci];
+        for (let r = 0; r < numCategories; r++) {
+            const rowIdx = r + rowOffset;
+            let label: string;
+            if (!col) {
+                label = "(null)";
+            } else {
+                const valid = col.valid;
+                const isValid = valid
+                    ? !!((valid[rowIdx >> 3] >> (rowIdx & 7)) & 1)
+                    : true;
+                if (!isValid) {
+                    label = "(null)";
+                } else if (col.indices && col.dictionary) {
+                    label = col.dictionary[col.indices[rowIdx]] ?? "(null)";
+                } else if (col.values) {
+                    const v = col.values[rowIdx];
+                    label = v == null ? "(null)" : String(v);
+                } else {
+                    label = "(null)";
+                }
+            }
+
+            slots[r] = slotFor(label);
+        }
+    }
+
+    let maxLabelChars = 0;
+    for (const s of dictionary) {
+        if (s.length > maxLabelChars) {
+            maxLabelChars = s.length;
+        }
+    }
+
+    const level: CategoricalLevel = {
+        labels: dictionary.slice(),
+        runs: [],
+        maxLabelChars,
+    };
+
+    const domain: CategoricalDomain = {
+        levels: [level],
+        numRows: dictionary.length,
+        levelLabels: [axisLabel],
+    };
+
+    return { domain, perColumnSlots };
 }

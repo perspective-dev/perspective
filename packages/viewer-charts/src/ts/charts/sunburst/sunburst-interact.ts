@@ -288,7 +288,9 @@ export function handleSunburstClick(
 
 function drillTo(chart: SunburstChart, nodeId: number): void {
     treeDrillTo(chart, nodeId, () => {
-        if (chart._glManager) renderSunburstFrame(chart, chart._glManager);
+        if (chart._glManager) {
+            renderSunburstFrame(chart, chart._glManager);
+        }
     });
 }
 

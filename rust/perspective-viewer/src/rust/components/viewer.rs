@@ -14,8 +14,8 @@ use std::rc::Rc;
 
 use futures::channel::oneshot::*;
 use perspective_js::utils::*;
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 use web_sys::{FocusEvent, KeyboardEvent};
 use yew::prelude::*;
 
@@ -141,18 +141,11 @@ struct ShiftListeners {
 impl Drop for ShiftListeners {
     fn drop(&mut self) {
         let win = global::window();
-        let _ = win.remove_event_listener_with_callback(
-            "keydown",
-            self.keydown.as_ref().unchecked_ref(),
-        );
-        let _ = win.remove_event_listener_with_callback(
-            "keyup",
-            self.keyup.as_ref().unchecked_ref(),
-        );
-        let _ = win.remove_event_listener_with_callback(
-            "blur",
-            self.blur.as_ref().unchecked_ref(),
-        );
+        let _ = win
+            .remove_event_listener_with_callback("keydown", self.keydown.as_ref().unchecked_ref());
+        let _ =
+            win.remove_event_listener_with_callback("keyup", self.keyup.as_ref().unchecked_ref());
+        let _ = win.remove_event_listener_with_callback("blur", self.blur.as_ref().unchecked_ref());
         let _ = self.elem.class_list().remove_1("shift-active");
     }
 }
@@ -184,14 +177,8 @@ fn install_shift_listeners(elem: web_sys::HtmlElement) -> ShiftListeners {
     };
 
     let win = global::window();
-    let _ = win.add_event_listener_with_callback(
-        "keydown",
-        keydown.as_ref().unchecked_ref(),
-    );
-    let _ = win.add_event_listener_with_callback(
-        "keyup",
-        keyup.as_ref().unchecked_ref(),
-    );
+    let _ = win.add_event_listener_with_callback("keydown", keydown.as_ref().unchecked_ref());
+    let _ = win.add_event_listener_with_callback("keyup", keyup.as_ref().unchecked_ref());
     let _ = win.add_event_listener_with_callback("blur", blur.as_ref().unchecked_ref());
 
     ShiftListeners {

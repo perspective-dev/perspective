@@ -193,6 +193,12 @@ where
             }
         });
 
+        // Held by per-row `ondragenter` closures below so they can re-arm
+        // the `safaridragleave` flag on the container element when the
+        // row stops dragenter from bubbling. See the comment inside the
+        // closure for why this matters.
+        let container_noderef = drag_container.noderef.clone();
+
         let invalid_drag: bool;
         let mut valid_duplicate_drag = false;
 
@@ -253,9 +259,30 @@ where
                     let close = ctx.props().parent.callback(move |_| V::close(idx));
                     let dragenter = ctx.props().parent.callback({
                         let link = ctx.link().clone();
+                        let container_noderef = container_noderef.clone();
                         move |event: DragEvent| {
                             event.stop_propagation();
                             event.prevent_default();
+                            // Safari: `relatedTarget` is always null on
+                            // dragleave, so `dragleave_helper` uses a
+                            // `data-safaridragleave` flag set by the
+                            // container's own dragenter to distinguish
+                            // child-crossing leaves (consume the flag)
+                            // from real leaves (no flag → fire callback).
+                            // The `stop_propagation` above blocks the
+                            // container's dragenter, so the flag would
+                            // never be re-armed after the first consume —
+                            // any further internal boundary crossing
+                            // would demote the state out of
+                            // `DragOverInProgress` and the next drop
+                            // would be silently rejected. Set the flag
+                            // here so each row-targeted dragenter
+                            // refills the pool.
+                            if event.related_target().is_none()
+                                && let Some(elem) = container_noderef.cast::<HtmlElement>()
+                            {
+                                let _ = elem.dataset().set("safaridragleave", "true");
+                            }
                             link.send_message(DragDropListMsg::Freeze(true));
                             V::dragenter(idx)
                         }

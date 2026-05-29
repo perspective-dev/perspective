@@ -34,7 +34,6 @@ import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
 import {
     computeTicks,
     renderGridlines,
-    renderAxesChrome,
     renderCellXAxis,
     renderCellYAxis,
     renderOuterXAxis,
@@ -42,6 +41,14 @@ import {
     type AxisDomain,
 } from "../../axis/numeric-axis";
 import { initCanvas, getScaledContext } from "../../axis/canvas";
+import {
+    type CategoricalDomain,
+    type CategoricalLevel,
+    measureCategoricalAxisHeight,
+    measureCategoricalAxisWidth,
+    renderCategoricalXTicks,
+    renderCategoricalYTicks,
+} from "../../axis/categorical-axis";
 import {
     renderLegend,
     renderLegendAt,
@@ -241,6 +248,88 @@ function buildYDomain(
 }
 
 /**
+ * Wrap a value-axis dictionary into the single-level `CategoricalDomain`
+ * the categorical axis painter expects. Caches by reference identity on
+ * the chart so chrome-overlay redraws on hover don't rebuild the domain.
+ */
+function buildCategoricalDomainFromDict(
+    dictionary: string[],
+    label: string,
+): CategoricalDomain {
+    let maxLabelChars = 0;
+    for (const s of dictionary) {
+        if (s.length > maxLabelChars) {
+            maxLabelChars = s.length;
+        }
+    }
+
+    const level: CategoricalLevel = {
+        labels: dictionary.slice(),
+        runs: [],
+        maxLabelChars,
+    };
+    return {
+        levels: [level],
+        numRows: dictionary.length,
+        levelLabels: [label],
+    };
+}
+
+/**
+ * Dispatch each axis side to the categorical painter when its source
+ * column is post-aggregation `string`-typed, or to the numeric painter
+ * otherwise. Used by both single-plot and faceted (per-cell) chrome
+ * overlays.
+ */
+function renderCartesianCellAxes(
+    chart: CartesianChart,
+    canvas: Canvas2D,
+    layout: PlotLayout,
+    xDomain: AxisDomain,
+    yDomain: AxisDomain,
+    xTicks: number[],
+    yTicks: number[],
+    theme: Theme,
+    dpr: number,
+): void {
+    if (chart._xIsString && chart._xCategoryDomain) {
+        const ctx = getScaledContext(canvas, dpr);
+        if (ctx) {
+            renderCategoricalXTicks(ctx, layout, chart._xCategoryDomain, theme);
+        }
+    } else {
+        renderCellXAxis(
+            canvas,
+            xDomain,
+            layout,
+            xTicks,
+            theme,
+            true,
+            dpr,
+            chart.getColumnFormatter(chart._xName, "tick"),
+        );
+    }
+
+    if (chart._yIsString && chart._yCategoryDomain) {
+        const ctx = getScaledContext(canvas, dpr);
+        if (ctx) {
+            renderCategoricalYTicks(ctx, layout, chart._yCategoryDomain, theme);
+        }
+    } else {
+        renderCellYAxis(
+            canvas,
+            yDomain,
+            layout,
+            yTicks,
+            theme,
+            true,
+            dpr,
+            chart.getColumnFormatter(chart._yName, "tick"),
+        );
+    }
+}
+
+/**
  * Original single-plot render path — all series drawn into one
  * `PlotLayout` with one projection matrix. Used when splits are absent
  * or when `facet_mode === "overlay"`.
@@ -255,10 +344,42 @@ function renderSinglePlotFrame(
     const gl = glManager.gl;
     const { cssWidth, cssHeight, xIsDate, yIsDate, hasColorCol } = ctx;
 
+    // Materialize per-axis categorical domains from the build-pass
+    // dictionaries before measuring gutters — the leaf-rotation budget
+    // in `measureCategoricalAxisHeight` depends on `maxLabelChars`.
+    chart._xCategoryDomain =
+        chart._xIsString && chart._xCategoryDictionary.length > 0
+            ? buildCategoricalDomainFromDict(
+                  chart._xCategoryDictionary,
+                  chart._xLabel || chart._xName || "",
+              )
+            : null;
+    chart._yCategoryDomain =
+        chart._yIsString && chart._yCategoryDictionary.length > 0
+            ? buildCategoricalDomainFromDict(
+                  chart._yCategoryDictionary,
+                  chart._yLabel || chart._yName || "",
+              )
+            : null;
+
+    // One-pass plot-width / plot-height estimate to size the
+    // categorical gutter overrides; same approach as series-render.
+    const estRight = hasColorCol ? 80 : 16;
+    const estLeftPlain = 55 + (chart._yLabel ? 16 : 0);
+    const estPlotWidth = Math.max(1, cssWidth - estLeftPlain - estRight);
+    const leftExtra = chart._yCategoryDomain
+        ? measureCategoricalAxisWidth(chart._yCategoryDomain)
+        : undefined;
+    const bottomExtra = chart._xCategoryDomain
+        ? measureCategoricalAxisHeight(chart._xCategoryDomain, estPlotWidth)
+        : undefined;
+
     const layout = new PlotLayout(cssWidth, cssHeight, {
         hasXLabel: !!chart._xLabel,
         hasYLabel: !!chart._yLabel,
         hasLegend: hasColorCol,
+        leftExtra,
+        bottomExtra,
     });
     chart._lastLayout = layout;
     if (chart._zoomController) {
@@ -279,7 +400,9 @@ function renderSinglePlotFrame(
 
     const xDomain = buildXDomain(chart, domain.xMin, domain.xMax, xIsDate);
     const yDomain = buildYDomain(chart, domain.yMin, domain.yMax, yIsDate);
-    const { xTicks, yTicks } = computeTicks(xDomain, yDomain, layout);
+    const numericTicks = computeTicks(xDomain, yDomain, layout);
+    const xTicks = chart._xIsString ? [] : numericTicks.xTicks;
+    const yTicks = chart._yIsString ? [] : numericTicks.yTicks;
 
     const isMap = chart._renderMode === "map";
 
@@ -349,6 +472,26 @@ function renderFacetedFrame(
     const gl = glManager.gl;
     const { cssWidth, cssHeight, xIsDate, yIsDate } = ctx;
 
+    // Materialize per-axis categorical domains (shared across facets:
+    // the build dictionary is global, so slot N refers to the same
+    // string in every cell). Faceted layout still uses the default
+    // per-cell gutters from `buildFacetGrid` — rotated leaf labels in
+    // tight cells may overflow but won't crash.
+    chart._xCategoryDomain =
+        chart._xIsString && chart._xCategoryDictionary.length > 0
+            ? buildCategoricalDomainFromDict(
+                  chart._xCategoryDictionary,
+                  chart._xLabel || chart._xName || "",
+              )
+            : null;
+    chart._yCategoryDomain =
+        chart._yIsString && chart._yCategoryDictionary.length > 0
+            ? buildCategoricalDomainFromDict(
+                  chart._yCategoryDictionary,
+                  chart._yLabel || chart._yName || "",
+              )
+            : null;
+
     const labels = chart._splitGroups.map((g) => g.prefix);
 
     // Legend: reserve space only when the user wired a color column.
@@ -415,11 +558,15 @@ function renderFacetedFrame(
 
     // Gridlines + per-facet axes use the first cell's layout for tick
     // sampling (all cells have identical plotRect dimensions). Per-facet
-    // rendering then reuses the same tick arrays.
+    // rendering then reuses the same tick arrays. Categorical sides
+    // skip numeric tick computation; the categorical painter handles
+    // its own label placement off the dictionary.
     const sampleLayout = grid.cells[0]?.layout;
-    const { xTicks, yTicks } = sampleLayout
+    const numericFacetTicks = sampleLayout
         ? computeTicks(xDomain, yDomain, sampleLayout)
         : { xTicks: [], yTicks: [] };
+    const xTicks = chart._xIsString ? [] : numericFacetTicks.xTicks;
+    const yTicks = chart._yIsString ? [] : numericFacetTicks.yTicks;
 
     // One-shot destructive prep for the gridline + WebGL canvases.
     // Both phases below are per-facet; calling their destructive
@@ -566,17 +713,16 @@ function renderSinglePlotChromeOverlay(chart: CartesianChart): void {
     if (isMap) {
         chart.renderMapChrome(chart._chromeCanvas!, layout, theme, dpr);
     } else {
-        renderAxesChrome(
+        renderCartesianCellAxes(
+            chart,
             chart._chromeCanvas!,
+            layout,
             chart._lastXDomain!,
             chart._lastYDomain!,
-            layout,
             chart._lastXTicks!,
             chart._lastYTicks!,
             theme,
             dpr,
-            chart.getColumnFormatter(chart._xName, "tick"),
-            chart.getColumnFormatter(chart._yName, "tick"),
         );
     }
 
@@ -633,8 +779,13 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
     // — these already fold in the independent-zoom override (outer
     // axes are incompatible with per-cell viewports), so `sharedX` /
     // `sharedY` true here implies shared-zoom too.
-    const sharedX = chart._lastEffectiveSharedX;
-    const sharedY = chart._lastEffectiveSharedY;
+    //
+    // Categorical axes additionally force per-cell rendering: the
+    // outer-axis painter is numeric-only and the shared dictionary
+    // already produces the same labels in every cell, so a per-cell
+    // categorical axis is equivalent to a shared one visually.
+    const sharedX = chart._lastEffectiveSharedX && !chart._xIsString;
+    const sharedY = chart._lastEffectiveSharedY && !chart._yIsString;
     const independent = chart._facetConfig.zoom_mode === "independent";
 
     // Shared X axis: one outer band across the bottom of the grid,
@@ -689,29 +840,53 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
             : { xTicks: sharedXTicks, yTicks: sharedYTicks };
 
         if (!isMap && !sharedX) {
-            renderCellXAxis(
-                canvas,
-                localX,
-                cell.layout,
-                ticks.xTicks,
-                theme,
-                !!chart._xLabel,
-                dpr,
-                chart.getColumnFormatter(chart._xName, "tick"),
-            );
+            if (chart._xIsString && chart._xCategoryDomain) {
+                const cellCtx = getScaledContext(canvas, dpr);
+                if (cellCtx) {
+                    renderCategoricalXTicks(
+                        cellCtx,
+                        cell.layout,
+                        chart._xCategoryDomain,
+                        theme,
+                    );
+                }
+            } else {
+                renderCellXAxis(
+                    canvas,
+                    localX,
+                    cell.layout,
+                    ticks.xTicks,
+                    theme,
+                    !!chart._xLabel,
+                    dpr,
+                    chart.getColumnFormatter(chart._xName, "tick"),
+                );
+            }
         }
 
         if (!isMap && !sharedY) {
-            renderCellYAxis(
-                canvas,
-                localY,
-                cell.layout,
-                ticks.yTicks,
-                theme,
-                !!chart._yLabel,
-                dpr,
-                chart.getColumnFormatter(chart._yName, "tick"),
-            );
+            if (chart._yIsString && chart._yCategoryDomain) {
+                const cellCtx = getScaledContext(canvas, dpr);
+                if (cellCtx) {
+                    renderCategoricalYTicks(
+                        cellCtx,
+                        cell.layout,
+                        chart._yCategoryDomain,
+                        theme,
+                    );
+                }
+            } else {
+                renderCellYAxis(
+                    canvas,
+                    localY,
+                    cell.layout,
+                    ticks.yTicks,
+                    theme,
+                    !!chart._yLabel,
+                    dpr,
+                    chart.getColumnFormatter(chart._yName, "tick"),
+                );
+            }
         }
 
         if (cell.titleRect) {

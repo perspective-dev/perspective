@@ -21,8 +21,6 @@
  * action is available on the underlying control. `!important` is required
  * to beat per-icon ID-scoped `background-color` rules. */
 :host(.shift-active) .shift-alt-icon {
-    transform: scale(1.5);
-    transition: transform 1s;
     background-color: var(
         --shift-active--color,
         var(--psp-datagrid--pos-cell--color, #1078d1)
@@ -36,9 +34,7 @@
             mask-image: var(--psp-icon--radio-off--mask-image);
 
             &:before {
-                line-height: 0;
                 content: var(--psp-icon--radio-off--mask-image);
-                visibility: hidden;
             }
 
             &:hover {
@@ -52,9 +48,7 @@
             mask-image: var(--psp-icon--checkbox-off--mask-image);
 
             &:before {
-                line-height: 0;
                 content: var(--psp-icon--checkbox-off--mask-image);
-                visibility: hidden;
             }
 
             &:hover {
