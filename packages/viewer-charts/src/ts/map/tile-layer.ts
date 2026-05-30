@@ -18,6 +18,7 @@ import { TileLoader, tileKey } from "./tile-loader";
 import type { TileSource } from "./tile-source";
 import tileVert from "../shaders/tile.vert.glsl";
 import tileFrag from "../shaders/tile.frag.glsl";
+import { compileProgram } from "../webgl/program-cache";
 
 type GL = WebGL2RenderingContext | WebGLRenderingContext;
 
@@ -344,23 +345,22 @@ export class TileLayer {
         }
 
         const gl = glManager.gl;
-        const program = glManager.shaders.getOrCreate(
+        this._program = compileProgram<TileProgramCache>(
+            glManager,
             "map-tile",
             tileVert,
             tileFrag,
+            [
+                "u_projection",
+                "u_extent_min",
+                "u_extent_max",
+                "u_uv_min",
+                "u_uv_max",
+                "u_tile",
+                "u_alpha",
+            ],
+            ["a_corner"],
         );
-
-        this._program = {
-            program,
-            u_projection: gl.getUniformLocation(program, "u_projection"),
-            u_extent_min: gl.getUniformLocation(program, "u_extent_min"),
-            u_extent_max: gl.getUniformLocation(program, "u_extent_max"),
-            u_uv_min: gl.getUniformLocation(program, "u_uv_min"),
-            u_uv_max: gl.getUniformLocation(program, "u_uv_max"),
-            u_tile: gl.getUniformLocation(program, "u_tile"),
-            u_alpha: gl.getUniformLocation(program, "u_alpha"),
-            a_corner: gl.getAttribLocation(program, "a_corner"),
-        };
 
         const buf = gl.createBuffer();
         if (!buf) {

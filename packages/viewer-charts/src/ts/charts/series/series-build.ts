@@ -12,21 +12,28 @@
 
 import type { ColumnDataMap } from "../../data/view-reader";
 import { buildSplitGroups } from "../../data/split-groups";
-import type { CategoricalLevel } from "../../axis/categorical-axis";
+import type {
+    CategoricalDomain,
+    CategoricalLevel,
+} from "../../axis/categorical-axis";
 import {
     resolveAxisMode,
     resolveCategoryAxis,
     resolveNumericCategoryDomain,
+    resolveValueCategoryDomain,
     type AxisMode,
     type NumericCategoryDomain,
+    type ValueCategoryColumn,
 } from "../common/category-axis-resolver";
 import { computeSlotGeometry } from "../common/band-layout";
 import {
     resolveChartType,
     resolveStack,
     resolveAltAxis,
+    resolveInterpolate,
     type ChartType,
     type ColumnChartConfig,
+    type InterpolateMode,
 } from "./series-type";
 
 const DUAL_Y_RATIO_THRESHOLD = 50;
@@ -42,6 +49,26 @@ export interface SeriesInfo {
     axis: 0 | 1;
     chartType: ChartType;
     stack: boolean;
+
+    /**
+     * First / last category index this series contributes data to, in
+     * the post-Pass-2 sample grid. For line+any mode and area+solid:
+     * every cell in `[start, end]` has a value (real or synthesized).
+     * For area+skip: `[start, end]` is the real-data extent; interior
+     * cells with `sampleValid=0` are gaps. `start = -1` (with `end = -1`)
+     * means the series has no real samples — downstream skips it.
+     */
+    start: number;
+    end: number;
+
+    /**
+     * Resolved interpolation mode for this aggregate. The build
+     * pipeline reads it to decide whether Pass 2 runs for area
+     * (and which fills to apply); the line glyph reads it at draw
+     * time to set `u_interp_alpha`. Always one of the three modes;
+     * never the legacy boolean form.
+     */
+    interpolateMode: InterpolateMode;
 }
 
 /**
@@ -326,6 +353,26 @@ export interface SeriesPipelineResult {
     leftDomain: { min: number; max: number };
     rightDomain: { min: number; max: number } | null;
     hasRightAxis: boolean;
+
+    /**
+     * Per-axis-side value mode discriminator. `"category"` fires when
+     * every aggregate on that side is post-aggregation `string`-typed
+     * (all-or-nothing rule). Bar y0/y1 then hold dictionary slot
+     * indices and the chrome overlay paints a categorical axis on
+     * that side. `null` for the alt side when there are no series
+     * pinned to alt.
+     */
+    leftValueAxisMode: "numeric" | "category";
+    rightValueAxisMode: "numeric" | "category" | null;
+
+    /**
+     * Single-level `CategoricalDomain` shared across every aggregate
+     * on the corresponding side. Set only when that side's mode is
+     * `"category"`; the chrome renderer in `series-render` materializes
+     * the side's `BarCategoryAxis` from this.
+     */
+    leftValueCategoryDomain: CategoricalDomain | null;
+    rightValueCategoryDomain: CategoricalDomain | null;
 }
 
 function setValidBit(valid: Uint8Array, idx: number): void {
@@ -381,6 +428,10 @@ export function buildSeriesPipeline(
         leftDomain: { min: 0, max: 0 },
         rightDomain: null,
         hasRightAxis: false,
+        leftValueAxisMode: "numeric",
+        rightValueAxisMode: null,
+        leftValueCategoryDomain: null,
+        rightValueCategoryDomain: null,
     };
 
     const aggregates = columnSlots.filter((s): s is string => !!s);
@@ -438,6 +489,11 @@ export function buildSeriesPipeline(
                 defaultChartType,
             );
             const stack = resolveStack(aggName, chartType, columnsConfig);
+            const interpolateMode = resolveInterpolate(
+                aggName,
+                chartType,
+                columnsConfig,
+            );
             series.push({
                 seriesId: k * P + p,
                 aggIdx: k,
@@ -449,6 +505,9 @@ export function buildSeriesPipeline(
                 axis: 0,
                 chartType,
                 stack,
+                start: -1,
+                end: -1,
+                interpolateMode,
             });
         }
     }
@@ -539,6 +598,102 @@ export function buildSeriesPipeline(
         }
     }
 
+    // Per-aggregate string-ness flag, plus default axis side from the
+    // `columns_config.alt_axis` pin. `series[].axis` may still flip
+    // again via the auto-alt heuristic below, but we suppress that
+    // heuristic entirely once a string aggregate is present (numeric
+    // extent ratios are not defined on categorical data).
+    const aggIsString = new Array<boolean>(M);
+    const defaultAxisSide = new Array<number>(M);
+    let anyStringAgg = false;
+    for (let k = 0; k < M; k++) {
+        const aggName = aggregates[k];
+        const splitKey = splitPrefixes[0];
+        const colName = splitKey === "" ? aggName : `${splitKey}|${aggName}`;
+        aggIsString[k] = columns.get(colName)?.type === "string";
+        defaultAxisSide[k] = resolveAltAxis(aggName, columnsConfig) ? 1 : 0;
+        if (aggIsString[k]) {
+            anyStringAgg = true;
+        }
+    }
+
+    // Per-side categorical resolution. Apply the all-or-nothing rule:
+    // a side becomes categorical only if every aggregate currently
+    // assigned to it (by `defaultAxisSide` — the alt_axis pin) is
+    // string-typed. Auto-alt-axis can't re-assign across modes since
+    // we disable it whenever any string aggregate exists.
+    const primaryAggs: ValueCategoryColumn[] = [];
+    const altAggs: ValueCategoryColumn[] = [];
+    const primaryAggColIdx: number[] = [];
+    const altAggColIdx: number[] = [];
+    for (let k = 0; k < M; k++) {
+        const aggName = aggregates[k];
+        for (let p = 0; p < P; p++) {
+            const splitKey = splitPrefixes[p];
+            const colName =
+                splitKey === "" ? aggName : `${splitKey}|${aggName}`;
+            const colIdx = k * P + p;
+            const entry: ValueCategoryColumn = {
+                name: colName,
+                type: aggIsString[k] ? "string" : "numeric",
+                data: columns.get(colName),
+            };
+            if (defaultAxisSide[k] === 0) {
+                primaryAggs.push(entry);
+                primaryAggColIdx.push(colIdx);
+            } else {
+                altAggs.push(entry);
+                altAggColIdx.push(colIdx);
+            }
+        }
+    }
+
+    const primaryValueAxisLabel = primaryAggs
+        .map((c) => c.name)
+        .filter((s, i, arr) => arr.indexOf(s) === i)
+        .join(", ");
+    const altValueAxisLabel = altAggs
+        .map((c) => c.name)
+        .filter((s, i, arr) => arr.indexOf(s) === i)
+        .join(", ");
+
+    const primaryCategorical =
+        primaryAggs.length > 0
+            ? resolveValueCategoryDomain(
+                  primaryAggs,
+                  numRows,
+                  rowOffset,
+                  primaryValueAxisLabel,
+              )
+            : null;
+    const altCategorical =
+        altAggs.length > 0
+            ? resolveValueCategoryDomain(
+                  altAggs,
+                  numRows,
+                  rowOffset,
+                  altValueAxisLabel,
+              )
+            : null;
+
+    // Per-column slot buffers indexed in the same `colIdx = k * P + p`
+    // space as `colValues`. `colSlots[colIdx]` is non-null exactly when
+    // the side `defaultAxisSide[k]` is categorical and that side's
+    // resolver returned slot buffers.
+    const colSlots: (Int32Array | null)[] = new Array(M * P).fill(null);
+    if (primaryCategorical) {
+        for (let i = 0; i < primaryAggColIdx.length; i++) {
+            colSlots[primaryAggColIdx[i]] =
+                primaryCategorical.perColumnSlots[i];
+        }
+    }
+
+    if (altCategorical) {
+        for (let i = 0; i < altAggColIdx.length; i++) {
+            colSlots[altAggColIdx[i]] = altCategorical.perColumnSlots[i];
+        }
+    }
+
     // Pre-allocate columnar bar storage at N*M*P upper bound. The
     // pipeline emits at most one record per (cat, agg, split) cell;
     // `bars.count` tracks the active prefix.
@@ -546,22 +701,32 @@ export function buildSeriesPipeline(
     const bars = ensureBarColumnsCapacity(scratchBars ?? null, barCap);
     let barWrite = 0;
 
+    // Pass 1 — populate the raw sample grid + valid bitset. Stacking
+    // and bar-record emission run in pass 3 (below) so that pass 2
+    // can interpolate interior nulls for line/area series before the
+    // stack accumulator sees them; otherwise an interpolated cell in
+    // a stacked area would not contribute to the running y0/y1 of
+    // subsequent series at the same catIdx.
     for (let catI = 0; catI < N; catI++) {
         const row = catI + rowOffset;
-
-        // Hoist the category center — same value across all (k, p) for
-        // the current catI.
-        const catCenter = categoryPositions ? categoryPositions[catI] : catI;
-
         for (let k = 0; k < M; k++) {
-            const slotOffset = slotOffsets[k];
-            const xCenter = catCenter + slotOffset;
-            const ext = aggExtents[k];
-
             for (let p = 0; p < P; p++) {
-                const seriesId = k * P + p;
-                const s = series[seriesId];
                 const colIdx = k * P + p;
+
+                // Categorical value-axis branch: `colSlots[colIdx]` is
+                // a per-catI Int32Array of dictionary slot indices, with
+                // `(null)` already routed to its own slot — every row
+                // is a valid sample and stack/extent logic just runs
+                // against the slot integer.
+                const slots = colSlots[colIdx];
+                if (slots) {
+                    const seriesId = k * P + p;
+                    const sampleIdx = catI * S + seriesId;
+                    samples[sampleIdx] = slots[catI];
+                    setValidBit(sampleValid, sampleIdx);
+                    continue;
+                }
+
                 const values = colValues[colIdx];
                 if (!values) {
                     continue;
@@ -580,11 +745,155 @@ export function buildSeriesPipeline(
                     continue;
                 }
 
-                // Record the raw value in the unstacked grid for every
-                // glyph that needs it (line, scatter, non-stacking bar/area).
+                const seriesId = k * P + p;
                 const sampleIdx = catI * S + seriesId;
                 samples[sampleIdx] = v;
                 setValidBit(sampleValid, sampleIdx);
+            }
+        }
+    }
+
+    // Compute per-series [start, end] from sampleValid (post-Pass 1).
+    // Drives Pass 2's interpolation range, Pass 3's stack/bar emission,
+    // axis-extent calc, and downstream rendering. Series with no real
+    // samples keep start = end = -1 and are skipped everywhere.
+    for (let seriesId = 0; seriesId < S; seriesId++) {
+        let first = -1;
+        let last = -1;
+        for (let c = 0; c < N; c++) {
+            const idx = c * S + seriesId;
+            if ((sampleValid[idx >> 3] >> (idx & 7)) & 1) {
+                if (first === -1) {
+                    first = c;
+                }
+
+                last = c;
+            }
+        }
+
+        series[seriesId].start = first;
+        series[seriesId].end = last;
+    }
+
+    // Pass 2 — synthesize values for nulls covered by interpolation.
+    // Writes `samples[c]` but deliberately does NOT touch `sampleValid`:
+    // the renderer derives "synthesized cell" from
+    // `c in [start, end] && sampleValid[c] === 0`, so the bit must stay
+    // 0 at synthesized cells. Per-series gating:
+    //
+    //   - line, solid / transparent: interior linear interpolation.
+    //   - area, solid: every synthesized cell (interior null,
+    //     leading/trailing null) gets value 0. Stacked areas above the
+    //     null sit on the unchanged baseline — interpolating to a
+    //     non-zero value here would phantom-lift the upper series at
+    //     the gap. Range collapses to [0, N-1].
+    //   - any series with mode = "skip": skipped (the renderer's
+    //     [start, end] iteration treats interior nulls correctly via
+    //     the sampleValid lookup for area, and shader alpha=0 for line).
+    //   - other chart types: skipped.
+    //
+    // X-axis units for line interpolation match the rendering: numeric
+    // mode uses `categoryPositions[c]`, category mode uses the cat
+    // index. `samples` is freshly allocated each build (Float32Array
+    // zero-init), so interior null cells already hold 0 — area's
+    // "zero-fill interior" is implicit and needs no explicit writes
+    // there; only the leading/trailing range extension is written.
+    for (let seriesId = 0; seriesId < S; seriesId++) {
+        const s = series[seriesId];
+        if (s.start < 0) {
+            continue;
+        }
+
+        if (s.interpolateMode === "skip") {
+            continue;
+        }
+
+        if (s.chartType === "line") {
+            let lastValid = s.start;
+            for (let c = s.start + 1; c <= s.end; c++) {
+                const idx = c * S + seriesId;
+                const ok = (sampleValid[idx >> 3] >> (idx & 7)) & 1;
+                if (!ok) {
+                    continue;
+                }
+
+                if (c - lastValid > 1) {
+                    const startIdx = lastValid * S + seriesId;
+                    const startV = samples[startIdx];
+                    const endV = samples[idx];
+                    const xStart = categoryPositions
+                        ? categoryPositions[lastValid]
+                        : lastValid;
+                    const xEnd = categoryPositions ? categoryPositions[c] : c;
+                    const dx = xEnd - xStart;
+                    for (let g = 1; g < c - lastValid; g++) {
+                        const cc = lastValid + g;
+                        const xMid = categoryPositions
+                            ? categoryPositions[cc]
+                            : cc;
+                        const t = dx === 0 ? 0 : (xMid - xStart) / dx;
+                        samples[cc * S + seriesId] =
+                            startV + (endV - startV) * t;
+                    }
+                }
+
+                lastValid = c;
+            }
+        } else if (s.chartType === "area") {
+            // Leading / trailing zero-fill. Interior nulls already sit
+            // at 0 from Float32Array zero-init; no per-cell write
+            // needed in (s.start, s.end). Range collapses to [0, N-1]
+            // so Pass 3 and the area glyph treat the whole span as
+            // renderable (continuous strip resting on the baseline at
+            // synthesized cells).
+            for (let c = 0; c < s.start; c++) {
+                samples[c * S + seriesId] = 0;
+            }
+
+            for (let c = s.end + 1; c < N; c++) {
+                samples[c * S + seriesId] = 0;
+            }
+
+            s.start = 0;
+            s.end = N - 1;
+        }
+    }
+
+    // Pass 3 — emit stack/bar records and update per-aggregate extents
+    // from the (possibly synthesized) samples grid. The cell-validity
+    // predicate is mode-aware: for line (any mode) and area+solid,
+    // Pass 2 has guaranteed every cell in `[start, end]` carries a
+    // meaningful value (real or synthesized) — `sampleValid` is the
+    // "is real" mask, not the "has value" mask, so we trust the range
+    // alone. For area+skip and bar/scatter, fall back to the original
+    // per-cell `sampleValid` check.
+    for (let catI = 0; catI < N; catI++) {
+        const catCenter = categoryPositions ? categoryPositions[catI] : catI;
+        for (let k = 0; k < M; k++) {
+            const slotOffset = slotOffsets[k];
+            const xCenter = catCenter + slotOffset;
+            const ext = aggExtents[k];
+
+            for (let p = 0; p < P; p++) {
+                const seriesId = k * P + p;
+                const s = series[seriesId];
+                if (catI < s.start || catI > s.end) {
+                    continue;
+                }
+
+                const treatRangeAsValid =
+                    s.chartType === "line" ||
+                    (s.chartType === "area" && s.interpolateMode !== "skip");
+                const sampleIdx = catI * S + seriesId;
+                if (!treatRangeAsValid) {
+                    if (
+                        !((sampleValid[sampleIdx >> 3] >> (sampleIdx & 7)) & 1)
+                    ) {
+                        continue;
+                    }
+                }
+
+                const v = samples[sampleIdx];
 
                 // Stacking-glyph path: emit a record with running y0/y1.
                 if (
@@ -592,7 +901,25 @@ export function buildSeriesPipeline(
                     s.stack
                 ) {
                     if (v === 0) {
-                        continue;
+                        // Non-area, or area+skip: a zero-value record
+                        // is degenerate (zero-height bar / invisible
+                        // strip wedge) and just costs allocation —
+                        // drop it.
+                        //
+                        // Area + non-skip: keep the record so the
+                        // stacked strip stays continuous through
+                        // synthesized cells (interior zero-fill +
+                        // leading / trailing zero-fill). `y1 = y0`
+                        // makes it a zero-height vertex pair in the
+                        // strip; posStack doesn't increment, so the
+                        // series above stacks on the unchanged
+                        // baseline.
+                        if (
+                            s.chartType !== "area" ||
+                            s.interpolateMode === "skip"
+                        ) {
+                            continue;
+                        }
                     }
 
                     const stackIdx = catI * M + k;
@@ -684,7 +1011,12 @@ export function buildSeriesPipeline(
     bars.count = barWrite;
 
     let hasRightAxis = false;
-    if (autoAltYAxis && M >= 2) {
+    // Auto-alt-axis compares numeric magnitudes; a string aggregate
+    // contributes no extent and would always land on the smaller side.
+    // Skip the heuristic when any aggregate is string and let the
+    // user's explicit `columns_config.alt_axis` pin (resolved below)
+    // be the only axis-side override.
+    if (autoAltYAxis && M >= 2 && !anyStringAgg) {
         const extents: number[] = new Array(M);
         let maxExt = 0;
         let minExt = Infinity;
@@ -784,11 +1116,20 @@ export function buildSeriesPipeline(
             continue; // already counted via bars
         }
 
+        if (s.start < 0) {
+            continue;
+        }
+
+        const treatRangeAsValid =
+            s.chartType === "line" ||
+            (s.chartType === "area" && s.interpolateMode !== "skip");
         const ext = s.axis === 0 ? leftExtent : rightExtent;
-        for (let catI = 0; catI < N; catI++) {
+        for (let catI = s.start; catI <= s.end; catI++) {
             const sampleIdx = catI * S + seriesId;
-            if (!((sampleValid[sampleIdx >> 3] >> (sampleIdx & 7)) & 1)) {
-                continue;
+            if (!treatRangeAsValid) {
+                if (!((sampleValid[sampleIdx >> 3] >> (sampleIdx & 7)) & 1)) {
+                    continue;
+                }
             }
 
             const v = samples[sampleIdx];
@@ -826,6 +1167,34 @@ export function buildSeriesPipeline(
             : rightExtent
         : null;
 
+    // Categorical value-axis: override the numeric extent with the
+    // slot-index range `[0, dictLen-1]`. The chrome renderer paints
+    // the dictionary; the numeric domain we surface is only used by
+    // the projection matrix and pixel mapping, both of which work on
+    // raw slot indices when `*ValueAxisMode === "category"`.
+    const leftValueAxisMode: "numeric" | "category" = primaryCategorical
+        ? "category"
+        : "numeric";
+    const rightValueAxisMode: "numeric" | "category" | null = hasRightAxis
+        ? altCategorical
+            ? "category"
+            : "numeric"
+        : null;
+    const finalLeftDomain =
+        primaryCategorical && primaryCategorical.domain.numRows > 0
+            ? {
+                  min: 0,
+                  max: Math.max(0, primaryCategorical.domain.numRows - 1),
+              }
+            : leftExtent;
+    const finalRightDomain =
+        altCategorical && altCategorical.domain.numRows > 0 && hasRightAxis
+            ? {
+                  min: 0,
+                  max: Math.max(0, altCategorical.domain.numRows - 1),
+              }
+            : rightDomain;
+
     return {
         aggregates,
         splitPrefixes,
@@ -841,8 +1210,12 @@ export function buildSeriesPipeline(
         negStack,
         samples,
         sampleValid,
-        leftDomain: leftExtent,
-        rightDomain,
+        leftDomain: finalLeftDomain,
+        rightDomain: finalRightDomain,
         hasRightAxis,
+        leftValueAxisMode,
+        rightValueAxisMode,
+        leftValueCategoryDomain: primaryCategorical?.domain ?? null,
+        rightValueCategoryDomain: altCategorical?.domain ?? null,
     };
 }

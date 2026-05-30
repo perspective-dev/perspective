@@ -411,7 +411,7 @@ export const DEFAULT_PLUGIN_CONFIG: PluginConfig = {
     facet_zoom_mode: "shared",
     series_zoom_mode: "dynamic",
     include_zero: false,
-    domain_mode: "fit",
+    domain_mode: "expand",
     line_width_px: 2.0,
     point_size_px: 8.0,
     band_inner_frac: 0.5,

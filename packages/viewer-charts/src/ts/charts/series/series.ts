@@ -16,6 +16,7 @@ import type { ZoomConfig } from "../../interaction/zoom-controller";
 import { CategoricalYChart } from "../common/categorical-y-chart";
 import { type PlotRect } from "../../layout/plot-layout";
 import { type AxisDomain } from "../../axis/numeric-axis";
+import type { CategoricalDomain } from "../../axis/categorical-axis";
 import {
     buildSeriesPipeline,
     readBarRecord,
@@ -42,6 +43,7 @@ import { LineGlyph } from "./glyphs/draw-lines";
 import { ScatterGlyph } from "./glyphs/draw-scatter";
 import { AreaGlyph } from "./glyphs/draw-areas";
 import { createQuadCornerBuffer } from "../../webgl/instanced-attrs";
+import { compileProgram } from "../../webgl/program-cache";
 import { expandDomainInPlace } from "../common/expand-domain";
 import barVert from "../../shaders/bar.vert.glsl";
 import barFrag from "../../shaders/bar.frag.glsl";
@@ -146,6 +148,22 @@ export class SeriesChart extends CategoricalYChart {
      */
     _primaryValueLabel = "";
     _altValueLabel = "";
+
+    /**
+     * Per-side value-axis mode. `"category"` fires when every
+     * aggregate on that side is post-aggregation `string`-typed
+     * (all-or-nothing rule, evaluated independently for primary and
+     * alt). When set, `_bars[].y0`/`y1` carry dictionary slot indices
+     * instead of numeric values, and the chrome overlay paints a
+     * categorical axis on that side.
+     *
+     * Read by `series-render.ts` to construct the `BarCategoryAxis`
+     * descriptor for the value-axis sides.
+     */
+    _leftValueAxisMode: "numeric" | "category" = "numeric";
+    _rightValueAxisMode: "numeric" | "category" | null = null;
+    _leftValueCategoryDomain: CategoricalDomain | null = null;
+    _rightValueCategoryDomain: CategoricalDomain | null = null;
 
     /**
      * (seriesId * 1e9 + catIdx) → bar-record index in `_bars`. Built once
@@ -432,27 +450,32 @@ export class SeriesChart extends CategoricalYChart {
         }
 
         if (!this._program) {
-            this._program = glManager.shaders.getOrCreate(
+            const compiled = compileProgram<
+                { program: WebGLProgram } & CachedLocations
+            >(
+                glManager,
                 "bar",
                 barVert,
                 barFrag,
+                [
+                    "u_proj_left",
+                    "u_proj_right",
+                    "u_hover_series",
+                    "u_horizontal",
+                ],
+                [
+                    "a_corner",
+                    "a_x_center",
+                    "a_half_width",
+                    "a_y0",
+                    "a_y1",
+                    "a_color",
+                    "a_series_id",
+                    "a_axis",
+                ],
             );
-            const p = this._program;
-            this._locations = {
-                u_proj_left: gl.getUniformLocation(p, "u_proj_left"),
-                u_proj_right: gl.getUniformLocation(p, "u_proj_right"),
-                u_hover_series: gl.getUniformLocation(p, "u_hover_series"),
-                u_horizontal: gl.getUniformLocation(p, "u_horizontal"),
-                a_corner: gl.getAttribLocation(p, "a_corner"),
-                a_x_center: gl.getAttribLocation(p, "a_x_center"),
-                a_half_width: gl.getAttribLocation(p, "a_half_width"),
-                a_y0: gl.getAttribLocation(p, "a_y0"),
-                a_y1: gl.getAttribLocation(p, "a_y1"),
-                a_color: gl.getAttribLocation(p, "a_color"),
-                a_series_id: gl.getAttribLocation(p, "a_series_id"),
-                a_axis: gl.getAttribLocation(p, "a_axis"),
-            };
-
+            this._program = compiled.program;
+            this._locations = compiled;
             this._cornerBuffer = createQuadCornerBuffer(gl);
         }
 
@@ -585,6 +608,10 @@ export class SeriesChart extends CategoricalYChart {
         this._leftDomain = result.leftDomain;
         this._rightDomain = result.rightDomain;
         this._hasRightAxis = result.hasRightAxis;
+        this._leftValueAxisMode = result.leftValueAxisMode;
+        this._rightValueAxisMode = result.rightValueAxisMode;
+        this._leftValueCategoryDomain = result.leftValueCategoryDomain;
+        this._rightValueCategoryDomain = result.rightValueCategoryDomain;
 
         // Resolve the palette eagerly. Both `uploadBarInstances` (color
         // attribute) and `rebuildGlyphBuffers` (per-series RGB capture)

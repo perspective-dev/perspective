@@ -80,6 +80,7 @@ perspective-dropdown {
     --psp-label--style--content: "风格";
     --psp-label--stack--content: "堆叠";
     --psp-label--alt-axis--content: "副轴";
+    --psp-label--interpolate--content: "插值";
     --psp-label--minimum-integer-digits--content: "最小整数位数";
     --psp-label--rounding-increment--content: "舍入增量";
     --psp-label--notation--content: "符号";

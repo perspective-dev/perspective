@@ -34,6 +34,8 @@ perspective-string-column-style {
     --psp-icon--radio-on--mask-image: url("../svg/radio-on.svg");
     --psp-icon--radio-hover--mask-image: url("../svg/radio-hover.svg");
     --psp-icon--radio-off--mask-image: url("../svg/radio-off.svg");
+    /* --psp-icon--checkbox-checked--mask-image: url("../svg/checkbox-checked-icon.svg");
+    --psp-icon--checkbox-unchecked--mask-image: url("../svg/checkbox-unchecked-icon.svg"); */
     --psp-icon--checkbox-on--mask-image: url("../svg/checkbox-on.svg");
     --psp-icon--checkbox-hover--mask-image: url("../svg/checkbox-hover.svg");
     --psp-icon--checkbox-off--mask-image: url("../svg/checkbox-off.svg");

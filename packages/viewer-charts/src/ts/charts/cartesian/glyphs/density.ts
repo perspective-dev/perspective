@@ -15,6 +15,7 @@ import type { CartesianChart } from "../cartesian";
 import type { Glyph } from "../glyph";
 import { bindGradientTexture } from "../../../webgl/gradient-texture";
 import { getInstancing } from "../../../webgl/instanced-attrs";
+import { compileProgram } from "../../../webgl/program-cache";
 import { buildPointRowTooltipLines } from "../tooltip-lines";
 import splatVert from "../../../shaders/density-splat.vert.glsl";
 import splatFrag from "../../../shaders/density-splat.frag.glsl";
@@ -183,16 +184,6 @@ export class DensityGlyph implements Glyph {
         }
 
         const gl = glManager.gl;
-        const splatProgram = glManager.shaders.getOrCreate(
-            "density-splat",
-            splatVert,
-            splatFrag,
-        );
-        const resolveProgram = glManager.shaders.getOrCreate(
-            "density-resolve",
-            resolveVert,
-            resolveFrag,
-        );
 
         const quadCornerBuffer = gl.createBuffer()!;
         gl.bindBuffer(gl.ARRAY_BUFFER, quadCornerBuffer);
@@ -217,24 +208,28 @@ export class DensityGlyph implements Glyph {
         const heatFramebuffer = gl.createFramebuffer()!;
 
         this._cache = {
-            splat: extractSplatLocations(gl, splatProgram),
+            splat: compileSplatProgram(
+                glManager,
+                "density-splat",
+                splatVert,
+                splatFrag,
+            ),
             extremeSplat: null,
             mrtSplat: null,
-            resolve: {
-                program: resolveProgram,
-                u_heat: gl.getUniformLocation(resolveProgram, "u_heat"),
-                u_extreme: gl.getUniformLocation(resolveProgram, "u_extreme"),
-                u_gradient_lut: gl.getUniformLocation(
-                    resolveProgram,
+            resolve: compileProgram<DensityCache["resolve"]>(
+                glManager,
+                "density-resolve",
+                resolveVert,
+                resolveFrag,
+                [
+                    "u_heat",
+                    "u_extreme",
                     "u_gradient_lut",
-                ),
-                u_heat_max: gl.getUniformLocation(resolveProgram, "u_heat_max"),
-                u_color_mode: gl.getUniformLocation(
-                    resolveProgram,
+                    "u_heat_max",
                     "u_color_mode",
-                ),
-                a_corner: gl.getAttribLocation(resolveProgram, "a_corner"),
-            },
+                ],
+                ["a_corner"],
+            ),
             quadCornerBuffer,
             tripleCornerBuffer,
             heatTexture,
@@ -541,12 +536,12 @@ export class DensityGlyph implements Glyph {
             return cache.extremeSplat;
         }
 
-        const program = glManager.shaders.getOrCreate(
+        cache.extremeSplat = compileSplatProgram(
+            glManager,
             "density-extreme",
             splatVert,
             extremeFrag,
         );
-        cache.extremeSplat = extractSplatLocations(glManager.gl, program);
         return cache.extremeSplat;
     }
 
@@ -568,12 +563,12 @@ export class DensityGlyph implements Glyph {
         // the legacy GLSL 100 splat vert can't link against it because
         // a program's shaders must share a version. Use the paired
         // `density-mrt.vert.glsl` instead — same math, 300 ES dialect.
-        const program = glManager.shaders.getOrCreate(
+        cache.mrtSplat = compileSplatProgram(
+            glManager,
             "density-mrt",
             mrtVert,
             mrtFrag,
         );
-        cache.mrtSplat = extractSplatLocations(glManager.gl, program);
         return cache.mrtSplat;
     }
 
@@ -1088,20 +1083,20 @@ function createAccumTexture(
     return tex;
 }
 
-function extractSplatLocations(
-    gl: WebGL2RenderingContext | WebGLRenderingContext,
-    program: WebGLProgram,
+function compileSplatProgram(
+    glManager: WebGLContextManager,
+    key: string,
+    vert: string,
+    frag: string,
 ): SplatProgramCache {
-    return {
-        program,
-        u_projection: gl.getUniformLocation(program, "u_projection"),
-        u_radius_ndc: gl.getUniformLocation(program, "u_radius_ndc"),
-        u_intensity: gl.getUniformLocation(program, "u_intensity"),
-        u_color_range: gl.getUniformLocation(program, "u_color_range"),
-        a_corner: gl.getAttribLocation(program, "a_corner"),
-        a_position: gl.getAttribLocation(program, "a_position"),
-        a_color_value: gl.getAttribLocation(program, "a_color_value"),
-    };
+    return compileProgram<SplatProgramCache>(
+        glManager,
+        key,
+        vert,
+        frag,
+        ["u_projection", "u_radius_ndc", "u_intensity", "u_color_range"],
+        ["a_corner", "a_position", "a_color_value"],
+    );
 }
 
 /**

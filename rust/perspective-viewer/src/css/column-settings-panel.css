@@ -75,20 +75,22 @@
             border-radius: 3px;
             outline-width: 1px;
             outline-color: var(--psp-inactive--color);
+            padding-left: 4px;
 
             &.editable {
+                outline-style: dashed;
                 &:hover {
                     outline-style: solid;
                     cursor: text;
                 }
             }
-            &:focus {
+            &.editable:focus {
                 outline-style: solid;
                 background: var(--psp--background-color);
             }
-            &.edited {
+            /* &.edited {
                 outline-style: dashed;
-            }
+            } */
             &.invalid {
                 outline-color: var(--psp-error--color);
             }
@@ -162,6 +164,10 @@
 
     label#stack-label:before {
         content: var(--psp-label--stack--content, "Stack");
+    }
+
+    label#interpolate-label:before {
+        content: var(--psp-label--interpolate--content, "Interpolate null");
     }
 
     label#series-label:before {

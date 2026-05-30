@@ -142,6 +142,10 @@ export type BarCategoryAxis =
     | { mode: "category"; domain: CategoricalDomain }
     | { mode: "numeric"; domain: AxisDomain; ticks: number[] };
 
+export type BarValueAxis =
+    | { mode: "category"; domain: CategoricalDomain }
+    | { mode: "numeric"; domain: AxisDomain; ticks: number[] };
+
 /**
  * Render a numeric date-aware axis along the bottom of the plot. Aliases
  * the bar-axis bottom variant so heatmap can share the implementation.
@@ -190,13 +194,11 @@ export interface BarAxesFormatters {
 export function renderBarAxesChrome(
     canvas: Canvas2D,
     catAxis: BarCategoryAxis,
-    valueDomain: AxisDomain,
-    valueTicks: number[],
+    valueAxis: BarValueAxis,
     layout: PlotLayout,
     theme: Theme,
     dpr: number,
-    altDomain?: AxisDomain,
-    altTicks?: number[],
+    altAxis: BarValueAxis | undefined,
     isHorizontal = false,
     formatters: BarAxesFormatters = {},
 ): void {
@@ -212,7 +214,7 @@ export function renderBarAxesChrome(
     ctx.moveTo(plot.x, plot.y);
     ctx.lineTo(plot.x, plot.y + plot.height);
     ctx.lineTo(plot.x + plot.width, plot.y + plot.height);
-    if (altDomain) {
+    if (altAxis) {
         if (isHorizontal) {
             ctx.moveTo(plot.x, plot.y);
             ctx.lineTo(plot.x + plot.width, plot.y);
@@ -238,31 +240,49 @@ export function renderBarAxesChrome(
             );
         }
 
-        drawNumericXAxis(
-            ctx,
-            layout,
-            valueDomain,
-            valueTicks,
-            "bottom",
-            theme,
-            formatters.value,
-        );
-        if (altDomain && altTicks) {
-            const origMin = layout.paddedXMin;
-            const origMax = layout.paddedXMax;
-            layout.paddedXMin = altDomain.min;
-            layout.paddedXMax = altDomain.max;
+        if (valueAxis.mode === "category") {
+            // Categorical value axis on the bottom: reuse the X
+            // categorical painter. Slot indices on the layout's X
+            // domain already place each category at its slot pixel.
+            renderCategoricalXTicks(ctx, layout, valueAxis.domain, theme);
+        } else {
             drawNumericXAxis(
                 ctx,
                 layout,
-                altDomain,
-                altTicks,
-                "top",
+                valueAxis.domain,
+                valueAxis.ticks,
+                "bottom",
                 theme,
-                formatters.alt,
+                formatters.value,
             );
-            layout.paddedXMin = origMin;
-            layout.paddedXMax = origMax;
+        }
+
+        if (altAxis) {
+            // Alt-axis painter expects the layout's X domain to match
+            // the alt domain — temporarily swap in `altDomain.min/max`
+            // for the duration of the call. Categorical alt has no
+            // top-side painter; render with the bottom-side painter
+            // (visual overlap with the primary side — documented
+            // limitation; user-pinned categorical alt is rare).
+            if (altAxis.mode === "category") {
+                renderCategoricalXTicks(ctx, layout, altAxis.domain, theme);
+            } else {
+                const origMin = layout.paddedXMin;
+                const origMax = layout.paddedXMax;
+                layout.paddedXMin = altAxis.domain.min;
+                layout.paddedXMax = altAxis.domain.max;
+                drawNumericXAxis(
+                    ctx,
+                    layout,
+                    altAxis.domain,
+                    altAxis.ticks,
+                    "top",
+                    theme,
+                    formatters.alt,
+                );
+                layout.paddedXMin = origMin;
+                layout.paddedXMax = origMax;
+            }
         }
     } else {
         if (catAxis.mode === "category") {
@@ -278,31 +298,40 @@ export function renderBarAxesChrome(
             );
         }
 
-        drawYAxis(
-            ctx,
-            layout,
-            valueDomain,
-            valueTicks,
-            "left",
-            theme,
-            formatters.value,
-        );
-        if (altDomain && altTicks) {
-            const origMin = layout.paddedYMin;
-            const origMax = layout.paddedYMax;
-            layout.paddedYMin = altDomain.min;
-            layout.paddedYMax = altDomain.max;
+        if (valueAxis.mode === "category") {
+            renderCategoricalYTicks(ctx, layout, valueAxis.domain, theme);
+        } else {
             drawYAxis(
                 ctx,
                 layout,
-                altDomain,
-                altTicks,
-                "right",
+                valueAxis.domain,
+                valueAxis.ticks,
+                "left",
                 theme,
-                formatters.alt,
+                formatters.value,
             );
-            layout.paddedYMin = origMin;
-            layout.paddedYMax = origMax;
+        }
+
+        if (altAxis) {
+            if (altAxis.mode === "category") {
+                renderCategoricalYTicks(ctx, layout, altAxis.domain, theme);
+            } else {
+                const origMin = layout.paddedYMin;
+                const origMax = layout.paddedYMax;
+                layout.paddedYMin = altAxis.domain.min;
+                layout.paddedYMax = altAxis.domain.max;
+                drawYAxis(
+                    ctx,
+                    layout,
+                    altAxis.domain,
+                    altAxis.ticks,
+                    "right",
+                    theme,
+                    formatters.alt,
+                );
+                layout.paddedYMin = origMin;
+                layout.paddedYMax = origMax;
+            }
         }
     }
 }

@@ -355,6 +355,9 @@ impl Component for ActiveColumn {
                 if is_required {
                     class.push("required");
                 };
+                if !is_required {
+                    class.push("shift-alt-icon");
+                }
                 html! {
                     <div
                         class={outer_classes}

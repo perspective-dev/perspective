@@ -16,6 +16,7 @@ import { AbstractChart } from "../chart-base";
 import { SpatialHitTester } from "../../interaction/hit-test";
 import { PlotLayout } from "../../layout/plot-layout";
 import { type AxisDomain } from "../../axis/numeric-axis";
+import type { CategoricalDomain } from "../../axis/categorical-axis";
 import type { GradientTextureCache } from "../../webgl/gradient-texture";
 import type { Glyph } from "./glyph";
 import {
@@ -146,6 +147,32 @@ export class CartesianChart extends AbstractChart {
     _sizeName = "";
     _labelName = "";
     _colorIsString = false;
+
+    /**
+     * When the X (or Y) axis source column is post-aggregation
+     * `string`-typed, the build pipeline writes per-row dictionary slot
+     * indices into `_xData` (or `_yData`) instead of numeric values,
+     * and the render pass dispatches `renderCategoricalXTicks` /
+     * `renderCategoricalYTicks` instead of the numeric axis painter.
+     *
+     * The companion `_xCategoryDictionary` / `_xCategorySeen` pair is
+     * built lazily during `processCartesianChunk` in first-seen row
+     * order; `(null)` is appended on first encounter of an invalid row
+     * rather than reserved at slot 0, so charts without missing values
+     * don't get a phantom slot.
+     *
+     * `_xCategoryDomain` is materialized once per frame in
+     * `cartesian-render` and held for chrome overlay redraws (same
+     * lifecycle as `_lastXDomain` on the numeric path).
+     */
+    _xIsString = false;
+    _yIsString = false;
+    _xCategoryDictionary: string[] = [];
+    _yCategoryDictionary: string[] = [];
+    _xCategorySeen: Map<string, number> = new Map();
+    _yCategorySeen: Map<string, number> = new Map();
+    _xCategoryDomain: CategoricalDomain | null = null;
+    _yCategoryDomain: CategoricalDomain | null = null;
     _splitGroups: SplitGroup[] = [];
 
     //  Data extents
@@ -375,11 +402,23 @@ export class CartesianChart extends AbstractChart {
         // (the prior accumulator); the union is in `_xMin` etc., so we
         // copy it back. Idempotent across multi-chunk uploads — every
         // chunk leaves the accumulator equal to the running union.
+        //
+        // Categorical axes opt out: slot indices are first-seen-order
+        // and only meaningful within a single frame's dictionary, so
+        // expanding across frames would mix dictionaries and shift
+        // every category's slot. Force-fit those axes per frame
+        // instead.
         if (this._pluginConfig.domain_mode === "expand") {
-            this._expandedXMin = this._xMin;
-            this._expandedXMax = this._xMax;
-            this._expandedYMin = this._yMin;
-            this._expandedYMax = this._yMax;
+            if (!this._xIsString) {
+                this._expandedXMin = this._xMin;
+                this._expandedXMax = this._xMax;
+            }
+
+            if (!this._yIsString) {
+                this._expandedYMin = this._yMin;
+                this._expandedYMax = this._yMax;
+            }
+
             this._expandedColorMin = this._colorMin;
             this._expandedColorMax = this._colorMax;
             this._expandedSizeMin = this._sizeMin;

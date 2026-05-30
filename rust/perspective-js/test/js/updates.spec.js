@@ -3404,4 +3404,128 @@ async function match_delta(perspective, delta, expected) {
             await tbl.delete();
         });
     });
+
+    // Regression coverage for the `t_ftrav::step_end` fast-path leak: a
+    // pass containing only `update_row` calls (every pkey already exists)
+    // used to take the fast path because `m_step_inserts` and
+    // `m_step_deletes` are both zero — leaving `m_updated` flags stamped
+    // on `m_index` and dropping the staged replacements from
+    // `m_new_elems`. The next pass that *did* trigger a rebuild (any
+    // `add_row` or `delete_row`) skipped the flagged entries with no
+    // counterpart to reinstate them, and the rows silently disappeared
+    // from the sorted view.
+    test.describe("Update under sorted view", function () {
+        const d1 = +new Date("2024-01-01T00:00:00Z");
+        const d2 = +new Date("2024-01-02T00:00:00Z");
+        const d3 = +new Date("2024-01-03T00:00:00Z");
+        const d4 = +new Date("2024-01-04T00:00:00Z");
+        const d5 = +new Date("2024-01-05T00:00:00Z");
+
+        async function seed(perspective) {
+            const table = await perspective.table(
+                { id: "integer", ts: "datetime", payload: "string" },
+                { index: "id" },
+            );
+            await table.update({
+                id: [1, 2, 3, 4],
+                ts: [d1, d2, d3, d4],
+                payload: ["a", "b", "c", "d"],
+            });
+            return table;
+        }
+
+        test("baseline: update existing rows then append a new row", async function () {
+            const table = await seed(perspective);
+            const view = await table.view({ sort: [["ts", "asc"]] });
+            await table.update({ id: [2, 3], payload: ["bb", "cc"] });
+            await table.update({ id: [5], ts: [d5], payload: ["e"] });
+
+            const cols = await view.to_columns();
+            expect(await view.num_rows()).toEqual(5);
+            expect(cols.id).toEqual([1, 2, 3, 4, 5]);
+            expect(cols.payload).toEqual(["a", "bb", "cc", "d", "e"]);
+            expect(cols.ts).toEqual([d1, d2, d3, d4, d5]);
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("update-only pass is correct on its own", async function () {
+            const table = await seed(perspective);
+            const view = await table.view({ sort: [["ts", "asc"]] });
+            await table.update({ id: [2, 3], payload: ["bb", "cc"] });
+
+            const cols = await view.to_columns();
+            expect(await view.num_rows()).toEqual(4);
+            expect(cols.id).toEqual([1, 2, 3, 4]);
+            expect(cols.payload).toEqual(["a", "bb", "cc", "d"]);
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("multiple update-only passes before an insert", async function () {
+            const table = await seed(perspective);
+            const view = await table.view({ sort: [["ts", "asc"]] });
+            await table.update({ id: [2], payload: ["b1"] });
+            await table.update({ id: [3], payload: ["c1"] });
+            await table.update({ id: [2], payload: ["b2"] });
+
+            await table.update({ id: [5], ts: [d5], payload: ["e"] });
+
+            const cols = await view.to_columns();
+            expect(await view.num_rows()).toEqual(5);
+            expect(cols.id).toEqual([1, 2, 3, 4, 5]);
+            expect(cols.payload).toEqual(["a", "b2", "c1", "d", "e"]);
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("update that changes the sort key, then append", async function () {
+            const table = await seed(perspective);
+            const view = await table.view({ sort: [["ts", "asc"]] });
+            const d_late = +new Date("2024-01-10T00:00:00Z");
+            await table.update({ id: [2], ts: [d_late] });
+
+            await table.update({ id: [5], ts: [d5], payload: ["e"] });
+
+            const cols = await view.to_columns();
+            expect(await view.num_rows()).toEqual(5);
+            expect(cols.id).toEqual([1, 3, 4, 5, 2]);
+            expect(cols.ts).toEqual([d1, d3, d4, d5, d_late]);
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("update-only pass followed by a delete", async function () {
+            const table = await seed(perspective);
+            const view = await table.view({ sort: [["ts", "asc"]] });
+
+            await table.update({ id: [2, 3], payload: ["bb", "cc"] });
+            await table.remove([4]);
+
+            const cols = await view.to_columns();
+            expect(await view.num_rows()).toEqual(3);
+            expect(cols.id).toEqual([1, 2, 3]);
+            expect(cols.payload).toEqual(["a", "bb", "cc"]);
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("no sort: update-only pass + append is unaffected", async function () {
+            const table = await seed(perspective);
+            const view = await table.view();
+
+            await table.update({ id: [2, 3], payload: ["bb", "cc"] });
+            await table.update({ id: [5], ts: [d5], payload: ["e"] });
+
+            expect(await view.num_rows()).toEqual(5);
+
+            await view.delete();
+            await table.delete();
+        });
+    });
 })(perspective);

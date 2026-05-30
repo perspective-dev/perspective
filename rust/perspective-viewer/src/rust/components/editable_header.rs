@@ -28,8 +28,12 @@ pub struct EditableHeaderProps {
     pub initial_value: Option<String>,
     pub placeholder: Rc<String>,
 
+    // TODO remove this pattern
     #[prop_or_default]
     pub reset_count: u8,
+
+    #[prop_or_default]
+    pub update_on_input: bool,
 
     /// Session metadata snapshot — threaded from `SessionProps`.
     pub metadata: SessionMetadataRc,
@@ -163,6 +167,16 @@ impl Component for EditableHeader {
             EditableHeaderMsg::SetNewValue(value)
         });
 
+        let update_on_input = ctx.props().update_on_input;
+        let oninput = ctx.link().batch_callback(move |e: yew::InputEvent| {
+            if update_on_input {
+                let value = e.target_unchecked_into::<HtmlInputElement>().value();
+                vec![EditableHeaderMsg::SetNewValue(value)]
+            } else {
+                vec![]
+            }
+        });
+
         html! {
             <div class={classes} onclick={ctx.link().callback(|_| EditableHeaderMsg::OnClick(()))}>
                 if let Some(icon) = ctx.props().icon_type { <TypeIcon ty={icon} /> }
@@ -173,6 +187,7 @@ impl Component for EditableHeader {
                     disabled={!ctx.props().editable}
                     {onblur}
                     {onkeyup}
+                    {oninput}
                     value={self.value.clone()}
                     placeholder={self.placeholder.clone()}
                 />

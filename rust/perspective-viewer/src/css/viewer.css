@@ -16,8 +16,86 @@
     --psp--color: #ff0000;
 }
 
+/* Shift-key affordance: while the user holds Shift, any mask-image icon
+ * tagged `.shift-alt-icon` recolors to advertise that a Shift-modified
+ * action is available on the underlying control. `!important` is required
+ * to beat per-icon ID-scoped `background-color` rules. */
+:host(.shift-active) .shift-alt-icon {
+    background-color: var(
+        --shift-active--color,
+        var(--psp-datagrid--pos-cell--color, #1078d1)
+    ) !important;
+}
+
+:host(.shift-active) {
+    #sub-columns {
+        .is_column_active.toggle-mode {
+            -webkit-mask-image: var(--psp-icon--radio-off--mask-image);
+            mask-image: var(--psp-icon--radio-off--mask-image);
+
+            &:before {
+                content: var(--psp-icon--radio-off--mask-image);
+            }
+
+            &:hover {
+                -webkit-mask-image: var(--psp-icon--radio-hover--mask-image);
+                mask-image: var(--psp-icon--radio-hover--mask-image);
+            }
+        }
+
+        .is_column_active.select-mode {
+            -webkit-mask-image: var(--psp-icon--checkbox-off--mask-image);
+            mask-image: var(--psp-icon--checkbox-off--mask-image);
+
+            &:before {
+                content: var(--psp-icon--checkbox-off--mask-image);
+            }
+
+            &:hover {
+                -webkit-mask-image: var(--psp-icon--checkbox-hover--mask-image);
+                mask-image: var(--psp-icon--checkbox-hover--mask-image);
+            }
+        }
+    }
+
+    #active-columns {
+        .is_column_active.toggle-mode {
+            -webkit-mask-image: var(--psp-icon--radio-on--mask-image);
+            mask-image: var(--psp-icon--radio-on--mask-image);
+
+            &:before {
+                content: var(--psp-icon--radio-on--mask-image);
+            }
+
+            &:not(.required):hover {
+                -webkit-mask-image: var(--psp-icon--radio-hover--mask-image);
+                mask-image: var(--psp-icon--radio-hover--mask-image);
+            }
+        }
+
+        .is_column_active.select-mode {
+            -webkit-mask-image: var(--psp-icon--checkbox-on--mask-image);
+            mask-image: var(--psp-icon--checkbox-on--mask-image);
+
+            &:before {
+                content: var(--psp-icon--checkbox-on--mask-image);
+            }
+
+            &:not(.required):hover {
+                -webkit-mask-image: var(--psp-icon--checkbox-hover--mask-image);
+                mask-image: var(--psp-icon--checkbox-hover--mask-image);
+            }
+        }
+    }
+}
+
 ::slotted(*) {
     pointer-events: var(--override-content-pointer-events);
+}
+
+:host input[type="number"]::-webkit-inner-spin-button {
+    transform: scale(1.5); /* Makes the arrows 50% larger */
+    filter: invert(1);
 }
 
 :host .sidebar_close_button {
@@ -398,13 +476,13 @@
             cursor: pointer;
             padding: 6px 8px;
             font-size: var(--label--font-size, 0.75em);
+            text-transform: uppercase;
             flex: 0 1 100px;
             background-color: #00000020;
             border-bottom: 1px solid var(--psp-inactive--color);
             color: var(--psp-inactive--color);
             margin-left: -1px;
             border-left: 1px solid var(--psp-inactive--color);
-
             &:hover {
                 color: inherit;
             }

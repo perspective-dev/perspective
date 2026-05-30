@@ -244,6 +244,42 @@ perspective-viewer.dragging,
     mask-image: var(--psp-icon--sort-abs-col-asc--mask-image);
 }
 
+/* Shift-key affordance: while the user holds Shift on the host
+ * `<perspective-viewer>`, sort-arrow mask-image icons and tree
+ * expand/collapse carets recolor to advertise their Shift-modified actions
+ * (abs-sort and depth-level expand/collapse). Both `:host-context` (shadow
+ * render target) and the bare selector (light render target) are emitted to
+ * cover the runtime branch in datagrid.ts. */
+:host-context(perspective-viewer.shift-active)
+    :is(
+        .psp-header-sort-asc,
+        .psp-header-sort-desc,
+        .psp-header-sort-col-asc,
+        .psp-header-sort-col-desc
+    ):after,
+perspective-viewer.shift-active
+    :is(
+        .psp-header-sort-asc,
+        .psp-header-sort-desc,
+        .psp-header-sort-col-asc,
+        .psp-header-sort-col-desc
+    ):after {
+    background-color: var(
+        --shift-active--color,
+        var(--psp-datagrid--pos-cell--color, #1078d1)
+    );
+}
+
+:host-context(perspective-viewer.shift-active)
+    :is(.psp-tree-label-expand, .psp-tree-label-collapse):before,
+perspective-viewer.shift-active
+    :is(.psp-tree-label-expand, .psp-tree-label-collapse):before {
+    color: var(
+        --shift-active--color,
+        var(--psp-datagrid--pos-cell--color, #1078d1)
+    );
+}
+
 tbody th:last-of-type {
     border-right: 1px solid var(--psp-inactive--border-color, #8b868045);
     overflow: hidden;

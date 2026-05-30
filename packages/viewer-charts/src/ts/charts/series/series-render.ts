@@ -29,6 +29,7 @@ import {
     renderBarAxesChrome,
     renderBarGridlines,
     type BarCategoryAxis,
+    type BarValueAxis,
 } from "../../axis/bar-axis";
 import {
     measureCategoricalAxisHeight,
@@ -38,10 +39,7 @@ import {
 import { buildBarTooltipLines } from "./series-interact";
 
 /**
- * Reusable scratch for bar instance uploads. Sized lazily at the first
- * use; grown on demand. Avoids `new Float32Array(n)` × 7 buffers per
- * legend-toggle / data-load; size is bounded by the bar-typed subset
- * of `_bars.count`.
+ * Reusable scratch for bar instance uploads.
  */
 interface BarInstanceScratch {
     xCenters: Float32Array;
@@ -78,10 +76,7 @@ function ensureBarInstanceScratch(n: number): BarInstanceScratch {
 }
 
 /**
- * Upload bar instance buffers from the columnar `_bars` storage. Filters
- * to bar-typed records only (areas draw as triangle strips). Skips
- * hidden series. Re-called from data-load and legend-toggle paths; the
- * scratch buffers and `_visibleBarIndices` are reused across calls.
+ * Upload bar instance buffers from the columnar `_bars` storage.
  */
 export function uploadBarInstances(
     chart: SeriesChart,
@@ -103,12 +98,6 @@ export function uploadBarInstances(
         const indices = chart._visibleBarIndices;
 
         // Rebase each xCenter by `_categoryOrigin` before f32 narrowing.
-        // For datetime numeric category axes the absolute xCenter is
-        // ~1.7e12 and f32 narrowing collapses adjacent bars onto the
-        // same value; subtracting the origin brings every value into
-        // the seconds range where f32 has full precision. The matching
-        // projection matrix is built with the same origin so the shader
-        // math is consistent.
         const xOrigin = chart._categoryOrigin;
         const series = chart._series;
         const hidden = chart._hiddenSeries;
@@ -406,32 +395,58 @@ export function renderBarFrame(
         levelLabels: chart._groupBy.slice(),
     };
 
+    // Categorical value-axis sizing. Y Bar puts the value axis on the
+    // left (so the category labels need extra `leftExtra` width); X Bar
+    // puts it on the bottom (extra `bottomExtra` height for the leaf
+    // labels). We additionally override the category-axis gutter on
+    // the opposite side via the existing `provisionalDomain` path.
+    const valueCatDomain = chart._leftValueCategoryDomain;
+    const valueCatActive =
+        chart._leftValueAxisMode === "category" &&
+        valueCatDomain !== null &&
+        valueCatDomain.numRows > 0;
+
     let layout: PlotLayout;
     if (horizontal) {
-        // Numeric category axis on the Y side: the gutter just needs
-        // standard numeric tick width (~55px), no per-row label
-        // measurement.
+        // X Bar: category axis on the left (Y side), value axis on the
+        // bottom (X side). Categorical value axis grows the bottom
+        // gutter; numeric value axis uses the fixed 24px row.
         const leftExtra = numericCat
             ? 55
             : measureCategoricalAxisWidth(provisionalDomain);
-
+        const estLeft = leftExtra + (hasCatLabel ? 16 : 0);
+        const estRight = hasLegend ? 80 : 16;
+        const estPlotWidthH = Math.max(1, cssWidth - estLeft - estRight);
+        const bottomExtra = valueCatActive
+            ? measureCategoricalAxisHeight(valueCatDomain, estPlotWidthH)
+            : undefined;
         layout = new PlotLayout(cssWidth, cssHeight, {
             hasXLabel: true,
             hasYLabel: hasCatLabel,
             hasLegend,
             leftExtra,
+            bottomExtra,
         });
     } else if (numericCat) {
-        // Numeric category axis on the X side: bottom gutter is a
-        // fixed numeric-axis row (~24px), no leaf-rotation measurement.
+        // Y Bar with numeric category axis on X. Value axis (Y, left)
+        // may still be categorical when all aggregates are string.
+        const leftExtra = valueCatActive
+            ? measureCategoricalAxisWidth(valueCatDomain)
+            : undefined;
         layout = new PlotLayout(cssWidth, cssHeight, {
             hasXLabel: hasCatLabel,
             hasYLabel: true,
             hasLegend,
             bottomExtra: 24,
+            leftExtra,
         });
     } else {
-        const estLeft = 55 + 16;
+        // Y Bar with categorical X. Value axis on the left may be
+        // categorical too — independently sized.
+        const leftExtraBase = valueCatActive
+            ? measureCategoricalAxisWidth(valueCatDomain)
+            : 55;
+        const estLeft = leftExtraBase + 16;
         const estRight = hasLegend ? 80 : 16;
         const estPlotWidth = Math.max(1, cssWidth - estLeft - estRight);
         const bottomExtra = measureCategoricalAxisHeight(
@@ -443,6 +458,7 @@ export function renderBarFrame(
             hasYLabel: true,
             hasLegend,
             bottomExtra,
+            leftExtra: valueCatActive ? leftExtraBase : undefined,
         });
     }
 
@@ -636,16 +652,44 @@ export function renderBarChromeOverlay(chart: SeriesChart): void {
     const primarySeries = chart._series.find((s) => s.axis === 0);
     const altSeries = chart._series.find((s) => s.axis === 1);
     const xColumn = chart._groupBy[0];
+
+    // Discriminate each value-axis side independently: a side becomes
+    // categorical when every aggregate on it is post-aggregation
+    // `string`-typed (the build pipeline already applied this
+    // all-or-nothing rule and stamped `_*ValueAxisMode`).
+    const valueAxis: BarValueAxis =
+        chart._leftValueAxisMode === "category" &&
+        chart._leftValueCategoryDomain
+            ? { mode: "category", domain: chart._leftValueCategoryDomain }
+            : {
+                  mode: "numeric",
+                  domain: chart._lastYDomain,
+                  ticks: chart._lastYTicks,
+              };
+    let altAxis: BarValueAxis | undefined;
+    if (chart._lastAltYDomain && chart._lastAltYTicks) {
+        altAxis =
+            chart._rightValueAxisMode === "category" &&
+            chart._rightValueCategoryDomain
+                ? {
+                      mode: "category",
+                      domain: chart._rightValueCategoryDomain,
+                  }
+                : {
+                      mode: "numeric",
+                      domain: chart._lastAltYDomain,
+                      ticks: chart._lastAltYTicks,
+                  };
+    }
+
     renderBarAxesChrome(
         chart._chromeCanvas,
         catAxis,
-        chart._lastYDomain,
-        chart._lastYTicks,
+        valueAxis,
         chart._lastLayout,
         theme,
         chart._glManager?.dpr ?? 1,
-        chart._lastAltYDomain ?? undefined,
-        chart._lastAltYTicks ?? undefined,
+        altAxis,
         chart._isHorizontal,
         {
             value: chart.getColumnFormatter(

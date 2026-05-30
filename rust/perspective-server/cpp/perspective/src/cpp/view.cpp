@@ -154,11 +154,36 @@ View<t_ctx2>::num_columns() const {
     if (!m_sort.empty()) {
         auto depth = m_column_pivots.size();
         auto col_length = m_ctx->unity_get_column_count();
+
+        // Hidden sort columns (sort keys not in `m_columns`) are
+        // interleaved into unity at the same depth as visible leaves;
+        // filter them out so `num_columns` reports the user-visible
+        // count. The `start_col`/`end_col` viewport math in
+        // `parse_format_options` and the `to_*` writers all index in
+        // this visible-only space.
+        const auto aggs = m_ctx->get_aggregates();
+        std::vector<std::string> aggregate_names(aggs.size());
+        for (auto i = 0; i < aggs.size(); ++i) {
+            aggregate_names[i] = aggs[i].name();
+        }
+
         auto count = 0;
         for (t_uindex i = 0; i < col_length; ++i) {
-            if (m_ctx->unity_get_column_path(i + 1).size() == depth) {
-                count++;
+            if (m_ctx->unity_get_column_path(i + 1).size() != depth) {
+                continue;
             }
+
+            if (!m_hidden_sort.empty()) {
+                const std::string& agg_name =
+                    aggregate_names[i % aggregate_names.size()];
+                if (std::find(
+                        m_hidden_sort.begin(), m_hidden_sort.end(), agg_name
+                    ) != m_hidden_sort.end()) {
+                    continue;
+                }
+            }
+
+            count++;
         }
         return count;
     }
@@ -672,6 +697,13 @@ View<t_ctx2>::get_data(
         /**
          * Perspective generates headers for sorted columns, so we have to
          * skip them in the underlying slice.
+         *
+         * Hidden sort columns (sort keys absent from `m_columns`) are also
+         * interleaved into unity at the same depth as visible leaves —
+         * filter them out here so `column_indices`, `cols`, and the packed
+         * `slice` all index in visible-only space. `start_col`/`end_col`
+         * are user-visible column indices, and downstream `to_*` writers
+         * iterate `slice` without re-applying any hidden-skip modulo.
          */
         t_uindex start_col_index = start_col;
         t_uindex end_col_index = end_col;
@@ -682,14 +714,44 @@ View<t_ctx2>::get_data(
         if (start_col < end_col) {
             auto depth = m_column_pivots.size();
             auto col_length = m_ctx->unity_get_column_count();
-            column_indices.push_back(0);
-            for (t_uindex i = 0; i < col_length; ++i) {
-                if (m_ctx->unity_get_column_path(i + 1).size() == depth) {
-                    column_indices.push_back(i + 1);
-                }
+
+            const auto aggs = m_ctx->get_aggregates();
+            std::vector<std::string> aggregate_names(aggs.size());
+            for (auto i = 0; i < aggs.size(); ++i) {
+                aggregate_names[i] = aggs[i].name();
             }
 
-            cols = column_names(true, depth);
+            column_indices.push_back(0);
+            for (t_uindex i = 0; i < col_length; ++i) {
+                auto col_path = m_ctx->unity_get_column_path(i + 1);
+                if (col_path.size() != depth) {
+                    continue;
+                }
+
+                if (!m_hidden_sort.empty()) {
+                    const std::string& agg_name =
+                        aggregate_names[i % aggregate_names.size()];
+                    if (std::find(
+                            m_hidden_sort.begin(),
+                            m_hidden_sort.end(),
+                            agg_name
+                        ) != m_hidden_sort.end()) {
+                        continue;
+                    }
+                }
+
+                column_indices.push_back(i + 1);
+
+                std::vector<t_tscalar> new_path;
+                for (auto path = col_path.rbegin(); path != col_path.rend();
+                     ++path) {
+                    new_path.push_back(*path);
+                }
+                new_path.push_back(
+                    m_ctx->get_aggregate_name(i % aggregate_names.size())
+                );
+                cols.push_back(new_path);
+            }
 
             // Filter down column indices by user-provided start/end columns
             column_indices = std::vector<t_uindex>(
@@ -1123,6 +1185,16 @@ View<CTX_T>::data_slice_to_batches(
     // the number of hidden sorts, so we can skip hidden sorts.
     // t_uindex num_view_columns = num_columns - m_hidden_sort.size();
     t_uindex num_view_columns = m_columns.size();
+
+    // The modulo skip below is for layouts (currently ctx1 sorted with a
+    // hidden sort key) where the slice still carries hidden columns and
+    // the iteration `tidx + start_col` walks the interleaved/appended
+    // hidden positions. ctx2 sorted views pre-filter hidden columns in
+    // `get_data` and signal that by populating `column_indices` — when
+    // that's the case the slice already contains only visible data and
+    // the modulo would erroneously drop legitimate visible columns.
+    bool slice_is_visible_only = !data_slice->get_column_indices().empty();
+
     std::vector<t_uindex> indices;
     for (auto tidx = 0; tidx < end_col - start_col; ++tidx) {
         auto cidx = tidx + start_col;
@@ -1132,7 +1204,8 @@ View<CTX_T>::data_slice_to_batches(
 
         // Do not output hidden sort columns - they are always at the end
         // of the columns list.
-        if ((num_view_columns + m_hidden_sort.size()) > 0
+        if (!slice_is_visible_only
+            && (num_view_columns + m_hidden_sort.size()) > 0
             && ((cidx - (num_sides > 0 ? 1 : 0))
                 % (num_view_columns + m_hidden_sort.size()))
                 >= num_view_columns) {
@@ -1144,13 +1217,24 @@ View<CTX_T>::data_slice_to_batches(
 
     // TODO For some reason, this parallel call doesn't benefit from
     // parallelism.
+    // When the slice was pre-filtered to visible-only by ctx2's
+    // `get_data` (option B), `cidx` indexes into visible-space
+    // (matching `names` and the flat `slice` layout), but
+    // `get_column_dtype` still expects a unity-column position.
+    // `column_indices` maps visible → unity for that case.
+    const std::vector<t_uindex>& slice_col_indices =
+        data_slice->get_column_indices();
+
     parallel_for(int(indices.size()), [&](auto iidx) {
         // for (auto iidx = 0; iidx < indices.size(); iidx++) {
         auto ccidx = iidx + num_output_row_paths;
         auto cidx = indices[iidx] + start_col;
 
         std::vector<t_tscalar> col_path = names.at(cidx);
-        t_dtype dtype = get_column_dtype(cidx);
+        t_uindex dtype_cidx =
+            slice_is_visible_only ? slice_col_indices.at(cidx - start_col)
+                                  : cidx;
+        t_dtype dtype = get_column_dtype(dtype_cidx);
 
         // mean and weighted mean uses DTYPE_F64PAIR on the aggtable, which
         // is the dtype returned by get_column_dtype. However, in the output
@@ -1621,8 +1705,6 @@ View<CTX_T>::get_row_delta() const {
     std::vector<std::vector<t_tscalar>> paths =
         column_names(true, m_column_pivots.size());
 
-    // num_columns needs to include __ROW_PATH__ for all pivoted contexts
-    t_uindex ncols = num_columns() + m_col_offset;
     t_uindex num_sides = sides();
 
     // Add __ROW_PATH__ to the beginning for column only or for 2-sided
@@ -1633,6 +1715,14 @@ View<CTX_T>::get_row_delta() const {
         row_path.set("__ROW_PATH__");
         paths.insert(paths.begin(), std::vector<t_tscalar>{row_path});
     }
+
+    // `delta.data` is packed against the full unity column layout
+    // (including hidden sort columns), so `ncols`/stride must match
+    // `paths` — *not* `num_columns()`, which for ctx2 sorted views
+    // collapses hidden columns out and would produce a wrong stride.
+    // `data_slice_to_batches`' modulo skip strips hidden columns from
+    // the eventual Arrow output for this path.
+    t_uindex ncols = paths.size();
 
     return std::make_shared<t_data_slice<CTX_T>>(
         m_ctx,
@@ -2139,12 +2229,15 @@ View<t_ctx2>::to_rows(
             writer.EndArray();
         }
 
-        // Columns
+        // Columns. ctx2 row-sorted views pre-filter hidden columns in
+        // `get_data` (signalled by non-empty `column_indices`); for
+        // column-sort-only views the slice still carries them and the
+        // modulo below drops them on the way out.
         for (auto c = start_col + 1; c < end_col; ++c) {
-            if (((c - 1) % (columns_length + hidden)) >= columns_length) {
+            if (slice->get_column_indices().empty()
+                && ((c - 1) % (columns_length + hidden)) >= columns_length) {
                 continue;
             }
-
             writer.Key(column_names[c - (start_col + 1)].c_str());
             auto scalar = slice->get(r, c);
             write_scalar(scalar, is_formatted, writer);
@@ -2477,12 +2570,15 @@ View<t_ctx2>::to_ndjson(
             writer.EndArray();
         }
 
-        // Columns
+        // Columns. ctx2 row-sorted views pre-filter hidden columns in
+        // `get_data` (signalled by non-empty `column_indices`); for
+        // column-sort-only views the slice still carries them and the
+        // modulo below drops them on the way out.
         for (auto c = start_col + 1; c < end_col; ++c) {
-            if (((c - 1) % (columns_length + hidden)) >= columns_length) {
+            if (slice->get_column_indices().empty()
+                && ((c - 1) % (columns_length + hidden)) >= columns_length) {
                 continue;
             }
-
             writer.Key(column_names[c - (start_col + 1)].c_str());
             auto scalar = slice->get(r, c);
             write_scalar(scalar, is_formatted, writer);
@@ -2678,10 +2774,17 @@ View<t_ctx2>::to_columns(
 
     LOG_DEBUG("Using ctx2 to_columns");
 
+    // ctx2 *row-sorted* views go through `get_data`'s sorted branch
+    // which pre-filters hidden sort columns from both `col_names` and
+    // the packed slice (signalled by a non-empty `column_indices`).
+    // Column-sort-only views (no row sort) skip that branch — the slice
+    // still carries hidden columns interleaved at every
+    // `(columns_length + hidden)`-th unity position, and the modulo
+    // below drops them from the output.
+    bool slice_is_visible_only = !slice->get_column_indices().empty();
     for (auto c = start_col + 1; c < end_col; ++c) {
-        // Hidden columns are always at the end of the column names
-        // list, and we need to skip them from the output.
-        if (((c - 1) % (columns_length + hidden)) >= columns_length) {
+        if (!slice_is_visible_only
+            && ((c - 1) % (columns_length + hidden)) >= columns_length) {
             LOG_DEBUG("Skipping column {}" << col_path_to_legacy(col_names[c]));
             continue;
         }

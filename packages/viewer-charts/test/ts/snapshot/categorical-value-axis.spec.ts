@@ -13,74 +13,63 @@
 import { test } from "@perspective-dev/test";
 import { gotoBasic, renderAndCapture } from "../helpers";
 
-test.describe("Density", () => {
+test.describe("Categorical value axis", () => {
     test.beforeEach(async ({ page }) => {
         await gotoBasic(page);
     });
 
-    test("basic x/y", async ({ page }) => {
+    // X/Y Scatter with a `string` X column — the X column type triggers
+    // categorical-X dispatch in `cartesian-build` / `cartesian-render`.
+    // Y stays numeric.
+    test("cartesian categorical X", async ({ page }) => {
         await renderAndCapture(page, {
-            plugin: "Density",
-            columns: ["Quantity", "Profit"],
+            plugin: "X/Y Scatter",
+            columns: ["Category", "Profit"],
         });
     });
 
-    test("with numeric color", async ({ page }) => {
+    // Mirror of the above with the `string` column on Y instead.
+    test("cartesian categorical Y", async ({ page }) => {
         await renderAndCapture(page, {
-            plugin: "Density",
-            columns: ["Quantity", "Profit", "Sales"],
+            plugin: "X/Y Scatter",
+            columns: ["Profit", "Category"],
         });
     });
 
-    test("split_by produces faceted heatmaps", async ({ page }) => {
+    // Both X and Y are `string`-typed: build pipeline writes slot
+    // indices into both axes, render pass dispatches the categorical
+    // painter on both sides. Per the locked decision, points stack at
+    // each (catX, catY) cell center — no jitter / no aggregation.
+    test("cartesian categorical X and Y", async ({ page }) => {
         await renderAndCapture(page, {
-            plugin: "Density",
-            columns: ["Quantity", "Profit"],
-            split_by: ["Category"],
+            plugin: "X/Y Scatter",
+            columns: ["Category", "Region"],
         });
     });
 
-    test("date X axis", async ({ page }) => {
+    // Y Bar with a string-typed value aggregate (`last(Category)`):
+    // `_leftValueAxisMode` switches to `"category"`, bar `y0`/`y1`
+    // carry dictionary slot indices, and the value-axis chrome paints
+    // the categorical Y axis via the broadened `renderBarAxesChrome`.
+    test("y-bar categorical value axis", async ({ page }) => {
         await renderAndCapture(page, {
-            plugin: "Density",
-            columns: ["Order Date", "Profit"],
+            plugin: "Y Bar",
+            columns: ["Category"],
+            group_by: ["State"],
+            aggregates: { Category: "last" },
         });
     });
 
-    //  color_mode variants
-    // Snapshots compare side-by-side on the same fixture so any
-    // regression to one mode's resolve / splat branch is obvious.
-    test.describe("color_mode", () => {
-        test("mean (default, density-weighted average)", async ({ page }) => {
-            await renderAndCapture(page, {
-                plugin: "Density",
-                columns: ["Quantity", "Profit", "Sales"],
-                plugin_config: { gradient_color_mode: "mean" },
-            });
-        });
-
-        test("density (ignores color column)", async ({ page }) => {
-            await renderAndCapture(page, {
-                plugin: "Density",
-                columns: ["Quantity", "Profit", "Sales"],
-                plugin_config: { gradient_color_mode: "density" },
-            });
-        });
-
-        test("extreme (signed max deviation)", async ({ page }) => {
-            await renderAndCapture(page, {
-                plugin: "Density",
-                columns: ["Quantity", "Profit", "Profit"],
-                plugin_config: { gradient_color_mode: "extreme" },
-            });
-        });
-
-        test("signed (net positive vs negative)", async ({ page }) => {
-            await renderAndCapture(page, {
-                plugin: "Density",
-                columns: ["Quantity", "Profit", "Profit"],
-                plugin_config: { gradient_color_mode: "signed" },
-            });
+    // X Bar mirror: categorical value axis lands on the bottom (X)
+    // side and the chart uses the horizontal projection. Verifies the
+    // `_isHorizontal` branch of `renderBarAxesChrome` dispatches the
+    // value side correctly.
+    test("x-bar categorical value axis", async ({ page }) => {
+        await renderAndCapture(page, {
+            plugin: "X Bar",
+            columns: ["Category"],
+            group_by: ["State"],
+            aggregates: { Category: "last" },
         });
     });
 });
