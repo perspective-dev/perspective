@@ -1,3 +1,16 @@
+# [v4.5.1](https://github.com/perspective-dev/perspective/releases/tag/v4.5.1)
+
+_30 May 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.5.0...v4.5.1))
+
+Features
+
+- `&lt;perspective-viewer&gt;` bug fixes and UI polish [#3182](https://github.com/finos/perspective/pull/3182)
+- Add `gmv` aggregate [#3180](https://github.com/finos/perspective/pull/3180)
+
+Fixes
+
+- Fix chart bugs, add deploy scripts [#3181](https://github.com/finos/perspective/pull/3181)
+
 # [v4.5.0](https://github.com/perspective-dev/perspective/releases/tag/v4.5.0)
 
 _21 May 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.4.1...v4.5.0))
@@ -11,6 +24,7 @@ Features
 
 - Add `coalesce` [#3172](https://github.com/finos/perspective/pull/3172)
 - Multi-chart rendering for `@perspective-dev/charts` [#3168](https://github.com/finos/perspective/pull/3168)
+- Add WebGL chart plugin with scatter, line, and treemap [#3160](https://github.com/finos/perspective/pull/3160)
 - Add `View::with_typed_arrays` API [#3165](https://github.com/finos/perspective/pull/3165)
 
 Fixes
@@ -23,7 +37,6 @@ Fixes
 Misc
 
 - Update security docs [#3173](https://github.com/finos/perspective/pull/3173)
-- Add WebGL chart plugin with scatter, line, and treemap [#3160](https://github.com/finos/perspective/pull/3160)
 
 # [v4.4.1](https://github.com/perspective-dev/perspective/releases/tag/v4.4.1)
 
@@ -73,9 +86,9 @@ _10 March 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v
 
 Features
 
+- Support for `group_rollup_mode` Virtual Server and `total` variant. [#3135](https://github.com/finos/perspective/pull/3135)
 - `polars` Virtual Server [#3125](https://github.com/finos/perspective/pull/3125)
 - Fix `split_by` support for rollups in generic SQL [#3127](https://github.com/finos/perspective/pull/3127)
-- Support for `group_rollup_mode` Virtual Server and `total` variant. [#3135](https://github.com/finos/perspective/pull/3135)
 
 Fixes
 
