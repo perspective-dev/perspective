@@ -2997,9 +2997,9 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             const auto heap_size = psp_heap_size();
             sys_info->set_heap_size(heap_size);
             const auto res = mallinfo();
-            sys_info->set_used_size(res.uordblks);
+            sys_info->set_used_size(*reinterpret_cast<const unsigned int*>(&res.uordblks));
 #elif defined(__linux__) && !defined(PSP_ENABLE_WASM)
-            auto res = mallinfo();
+            auto res = mallinfo2();
             sys_info->set_heap_size(res.usmblks);
             sys_info->set_used_size(res.uordblks);
 #elif defined(__APPLE__) && !defined(PSP_ENABLE_WASM)
