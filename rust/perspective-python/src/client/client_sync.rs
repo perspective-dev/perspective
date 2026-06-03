@@ -165,7 +165,7 @@ impl Client {
     /// ```python
     /// table = client.table("x,y\n1,2\n3,4")
     /// ```
-    #[pyo3(signature = (input, limit=None, index=None, name=None, format=None))]
+    #[pyo3(signature = (input, limit=None, index=None, name=None, format=None, on_disk=None))]
     pub fn table(
         &self,
         py: Python<'_>,
@@ -174,10 +174,11 @@ impl Client {
         index: Option<Py<PyString>>,
         name: Option<Py<PyString>>,
         format: Option<Py<PyString>>,
+        on_disk: Option<bool>,
     ) -> PyResult<Table> {
         Ok(Table(
             self.0
-                .table(input, limit, index, name, format)
+                .table(input, limit, index, name, format, on_disk)
                 .py_block_on(py)?,
         ))
     }

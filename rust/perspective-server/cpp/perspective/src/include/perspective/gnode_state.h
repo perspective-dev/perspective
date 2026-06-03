@@ -47,7 +47,11 @@ public:
      * @param input_schema
      * @param output_schema
      */
-    t_gstate(t_schema input_schema, t_schema output_schema);
+    t_gstate(
+        t_schema input_schema,
+        t_schema output_schema,
+        t_backing_store backing_store = BACKING_STORE_MEMORY
+    );
 
     ~t_gstate();
 
@@ -308,6 +312,7 @@ private:
 
     t_schema m_input_schema;  // pkeyed
     t_schema m_output_schema; // tblschema
+    t_backing_store m_backing_store;
 
     bool m_init;
     std::shared_ptr<t_data_table> m_table;

@@ -53,7 +53,8 @@ public:
         std::vector<std::string> column_names,
         std::vector<t_dtype> data_types,
         std::uint32_t limit,
-        std::string index
+        std::string index,
+        t_backing_store backing_store = BACKING_STORE_MEMORY
     );
 
     /**
@@ -207,6 +208,7 @@ public:
     std::uint32_t get_offset() const;
     std::uint32_t get_limit() const;
     const std::string& get_index() const;
+    t_backing_store get_backing_store() const;
 
     // Setters
     void set_column_names(const std::vector<std::string>& column_names);
@@ -225,37 +227,43 @@ public:
     static std::shared_ptr<Table> from_csv(
         const std::string& index,
         std::string&& data,
-        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max()
+        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
+        t_backing_store backing_store = BACKING_STORE_MEMORY
     );
 
     static std::shared_ptr<Table> from_cols(
         const std::string& index,
         std::string&& data,
-        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max()
+        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
+        t_backing_store backing_store = BACKING_STORE_MEMORY
     );
 
     static std::shared_ptr<Table> from_rows(
         const std::string& index,
         std::string&& data,
-        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max()
+        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
+        t_backing_store backing_store = BACKING_STORE_MEMORY
     );
 
     static std::shared_ptr<Table> from_ndjson(
         const std::string& index,
         std::string&& data,
-        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max()
+        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
+        t_backing_store backing_store = BACKING_STORE_MEMORY
     );
 
     static std::shared_ptr<Table> from_schema(
         const std::string& index,
         const t_schema& schema,
-        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max()
+        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
+        t_backing_store backing_store = BACKING_STORE_MEMORY
     );
 
     static std::shared_ptr<Table> from_arrow(
         const std::string& index,
         std::string&& data,
-        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max()
+        std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
+        t_backing_store backing_store = BACKING_STORE_MEMORY
     );
 
     static std::shared_ptr<Table> make_table(
@@ -263,7 +271,8 @@ public:
         const std::vector<t_dtype>& data_types,
         std::uint32_t limit,
         const std::string& index,
-        const std::string_view& data
+        const std::string_view& data,
+        t_backing_store backing_store = BACKING_STORE_MEMORY
     );
 
 private:
@@ -314,6 +323,7 @@ private:
      */
     const std::string m_index;
     bool m_gnode_set;
+    const t_backing_store m_backing_store;
 };
 
 } // namespace perspective

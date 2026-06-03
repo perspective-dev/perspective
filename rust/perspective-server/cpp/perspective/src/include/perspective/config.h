@@ -205,6 +205,19 @@ public:
         return m_grand_agg_str;
     }
 
+    // The backing store for any persistent storage created by the context built
+    // from this config (currently the expression `m_master` table). Inherited
+    // from the parent `Table`'s backing store. Defaults to memory.
+    inline void
+    set_backing_store(t_backing_store backing_store) {
+        m_backing_store = backing_store;
+    }
+
+    inline t_backing_store
+    get_backing_store() const {
+        return m_backing_store;
+    }
+
 protected:
     void populate_sortby(const std::vector<t_pivot>& pivots);
 
@@ -235,6 +248,7 @@ private:
     std::string m_grand_agg_str;
     t_fmode m_fmode;
     bool m_has_pkey_agg;
+    t_backing_store m_backing_store = BACKING_STORE_MEMORY;
 };
 
 } // end namespace perspective

@@ -49,7 +49,11 @@ calc_negate(t_tscalar val) {
     return val.negate();
 }
 
-t_gnode::t_gnode(t_schema input_schema, t_schema output_schema) :
+t_gnode::t_gnode(
+    t_schema input_schema,
+    t_schema output_schema,
+    t_backing_store backing_store
+) :
     m_mode(NODE_PROCESSING_SIMPLE_DATAFLOW)
 #ifdef PSP_PARALLEL_FOR
     ,
@@ -62,6 +66,7 @@ t_gnode::t_gnode(t_schema input_schema, t_schema output_schema) :
     m_init(false),
     m_id(0),
     m_last_input_port_id(0),
+    m_backing_store(backing_store),
     m_pool_cleanup([]() {}) {
     PSP_TRACE_SENTINEL();
     LOG_CONSTRUCTOR("t_gnode");
@@ -98,7 +103,9 @@ void
 t_gnode::init() {
     PSP_TRACE_SENTINEL();
 
-    m_gstate = std::make_shared<t_gstate>(m_input_schema, m_output_schema);
+    m_gstate = std::make_shared<t_gstate>(
+        m_input_schema, m_output_schema, m_backing_store
+    );
     m_gstate->init();
 
     // Create and store the main input port, which is always port 0. The next

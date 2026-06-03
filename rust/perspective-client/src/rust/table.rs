@@ -92,6 +92,13 @@ pub struct TableInitOptions {
     #[serde(default)]
     #[ts(optional)]
     pub limit: Option<u32>,
+
+    /// Back this [`Table`]'s canonical data with the on-disk storage backend
+    /// instead of memory. On native targets this is a memory-mapped file; on
+    /// WASM it is OPFS (Worker only). Defaults to in-memory.
+    #[serde(default)]
+    #[ts(optional)]
+    pub on_disk: Option<bool>,
 }
 
 impl TableInitOptions {
@@ -104,11 +111,14 @@ impl TryFrom<TableOptions> for MakeTableOptions {
     type Error = ClientError;
 
     fn try_from(value: TableOptions) -> Result<Self, Self::Error> {
+        let on_disk = value.on_disk;
         Ok(MakeTableOptions {
+            on_disk,
             make_table_type: match value {
                 TableOptions {
                     index: Some(_),
                     limit: Some(_),
+                    ..
                 } => Err(ClientError::BadTableOptions)?,
                 TableOptions {
                     index: Some(index), ..
@@ -126,6 +136,7 @@ impl TryFrom<TableOptions> for MakeTableOptions {
 pub(crate) struct TableOptions {
     pub index: Option<String>,
     pub limit: Option<u32>,
+    pub on_disk: Option<bool>,
 }
 
 impl From<TableInitOptions> for TableOptions {
@@ -133,6 +144,7 @@ impl From<TableInitOptions> for TableOptions {
         TableOptions {
             index: value.index,
             limit: value.limit,
+            on_disk: value.on_disk,
         }
     }
 }

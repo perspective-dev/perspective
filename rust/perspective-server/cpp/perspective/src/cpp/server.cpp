@@ -105,6 +105,7 @@ make_context(
     auto expressions = view_config->get_used_expressions();
 
     auto cfg = t_config(columns, fterm, filter_op, expressions);
+    cfg.set_backing_store(table->get_backing_store());
     auto ctx0 = std::make_shared<t_ctx0>(*schema, cfg);
     ctx0->init();
     ctx0->sort_by(sortspec);
@@ -137,6 +138,7 @@ make_context(
     auto expressions = view_config->get_used_expressions();
 
     auto cfg = t_config(row_pivots, aggspecs, fterm, filter_op, expressions);
+    cfg.set_backing_store(table->get_backing_store());
     auto ctx1 = std::make_shared<t_ctx1>(*schema, cfg);
 
     ctx1->init();
@@ -196,6 +198,7 @@ make_context(
         expressions,
         column_only
     );
+    cfg.set_backing_store(table->get_backing_store());
     auto ctx2 = std::make_shared<t_ctx2>(*schema, cfg);
 
     ctx2->init();
@@ -1575,6 +1578,16 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     break;
             }
 
+            // On-disk backing is only honored on native builds; WASM/OPFS is
+            // implemented separately, and the JS client warns + falls back to
+            // memory, so DISK should never reach the engine in a WASM build.
+            t_backing_store backing_store = BACKING_STORE_MEMORY;
+#ifndef PSP_ENABLE_WASM
+            if (r.options().on_disk()) {
+                backing_store = BACKING_STORE_DISK;
+            }
+#endif
+
             switch (r.data().data_case()) {
                 case proto::MakeTableData::kFromView: {
                     auto view = m_resources.get_view(r.data().from_view());
@@ -1594,42 +1607,54 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                         dims.end_col
                     );
 
-                    table = Table::from_arrow(index, std::move(*arrow), limit);
+                    table = Table::from_arrow(
+                        index, std::move(*arrow), limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::kFromArrow: {
                     std::string data = r.data().from_arrow();
                     { auto _ = std::move(req); }
 
-                    table = Table::from_arrow(index, std::move(data), limit);
+                    table = Table::from_arrow(
+                        index, std::move(data), limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::kFromCsv: {
                     std::string data = r.data().from_csv();
                     { auto _ = std::move(req); }
 
-                    table = Table::from_csv(index, std::move(data), limit);
+                    table = Table::from_csv(
+                        index, std::move(data), limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::kFromCols: {
                     std::string data = r.data().from_cols();
                     { auto _ = std::move(req); }
 
-                    table = Table::from_cols(index, std::move(data), limit);
+                    table = Table::from_cols(
+                        index, std::move(data), limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::kFromRows: {
                     std::string data = r.data().from_rows();
                     { auto _ = std::move(req); }
 
-                    table = Table::from_rows(index, std::move(data), limit);
+                    table = Table::from_rows(
+                        index, std::move(data), limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::kFromNdjson: {
                     std::string data = r.data().from_ndjson();
                     { auto _ = std::move(req); }
 
-                    table = Table::from_ndjson(index, std::move(data), limit);
+                    table = Table::from_ndjson(
+                        index, std::move(data), limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::kFromSchema: {
@@ -1642,7 +1667,9 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     }
 
                     t_schema table_schema(columns, types);
-                    table = Table::from_schema(index, table_schema, limit);
+                    table = Table::from_schema(
+                        index, table_schema, limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::DATA_NOT_SET: {

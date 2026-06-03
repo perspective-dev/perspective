@@ -54,7 +54,9 @@ t_ctx_grouped_pkey::init() {
     // `t_data_table`s so that each context's expressions are isolated
     // and do not affect other contexts when they are calculated.
     const auto& expressions = m_config.get_expressions();
-    m_expression_tables = std::make_shared<t_expression_tables>(expressions);
+    m_expression_tables = std::make_shared<t_expression_tables>(
+        expressions, m_config.get_backing_store()
+    );
 
     m_init = true;
 }

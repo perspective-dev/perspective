@@ -862,6 +862,24 @@ t_column::clone(const t_mask& mask) const {
 }
 
 void
+t_column::copy_from(const t_column& other) {
+    set_size(other.size());
+    m_data->fill(*other.m_data);
+
+    if (is_status_enabled() && other.is_status_enabled()) {
+        m_status->fill(*other.m_status);
+    }
+
+    if (is_vlen_dtype(get_dtype())) {
+        m_vocab->clone(*other.m_vocab);
+    }
+
+#ifdef PSP_COLUMN_VERIFY
+    verify();
+#endif
+}
+
+void
 t_column::valid_raw_fill() {
     m_status->raw_fill(STATUS_VALID);
 }

@@ -11,11 +11,18 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 #include <perspective/expression_tables.h>
+#include <perspective/utils.h>
+
+#include <utility>
+#ifndef PSP_ENABLE_WASM
+#include <filesystem>
+#endif
 
 namespace perspective {
 
 t_expression_tables::t_expression_tables(
-    const std::vector<std::shared_ptr<t_computed_expression>>& expressions
+    const std::vector<std::shared_ptr<t_computed_expression>>& expressions,
+    t_backing_store backing_store
 ) {
     t_schema schema;
     t_schema transitions_schema;
@@ -26,8 +33,23 @@ t_expression_tables::t_expression_tables(
         transitions_schema.add_column(alias, DTYPE_UINT8);
     }
 
+    // Only the persistent `m_master` table honors on-disk backing; the
+    // transitional tables are per-update scratch (cleared every update, sized
+    // to the update batch) so disk-backing them is pure I/O churn with no
+    // memory-relief benefit, and they stay in memory.
+    std::string master_dirname;
+#ifndef PSP_ENABLE_WASM
+    if (backing_store == BACKING_STORE_DISK) {
+        namespace fs = std::filesystem;
+        fs::path dir =
+            fs::temp_directory_path() / unique_path("perspective_expr_");
+        fs::create_directories(dir);
+        master_dirname = dir.string();
+    }
+#endif
+
     m_master = std::make_shared<t_data_table>(
-        "", "", schema, DEFAULT_EMPTY_CAPACITY, BACKING_STORE_MEMORY
+        "", master_dirname, schema, DEFAULT_EMPTY_CAPACITY, backing_store
     );
     m_flattened = std::make_shared<t_data_table>(
         "", "", schema, DEFAULT_EMPTY_CAPACITY, BACKING_STORE_MEMORY
@@ -68,8 +90,14 @@ t_expression_tables::set_flattened(
     const t_schema& schema = m_flattened->get_schema();
     const std::vector<std::string>& column_names = schema.m_columns;
     for (const auto& colname : column_names) {
-        m_flattened->set_column(
-            colname, flattened->get_column(colname)->clone()
+        // Deep-copy into the (in-memory) transitional column in place rather
+        // than `clone()`-ing the source. `clone()` inherits the source's
+        // backing store via its recipe, and for an on-disk expression
+        // `m_master` that produces a broken disk clone which aliases the
+        // master's backing file. `copy_from` preserves `m_flattened`'s own
+        // (memory) backing store.
+        m_flattened->get_column(colname)->copy_from(
+            *flattened->get_column(colname)
         );
     }
 }

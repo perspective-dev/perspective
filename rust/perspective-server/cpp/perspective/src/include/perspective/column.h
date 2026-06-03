@@ -198,6 +198,16 @@ public:
 
     std::shared_ptr<t_column> clone(const t_mask& mask) const;
 
+    /**
+     * @brief Deep-copy the contents of `other` into this column, preserving
+     * *this* column's backing store (e.g. `BACKING_STORE_DISK`). Unlike
+     * `clone()`, which inherits the source column's backing store, this fills
+     * an already-initialized destination column in place.
+     *
+     * @param other
+     */
+    void copy_from(const t_column& other);
+
     void valid_raw_fill();
     void invalid_raw_fill();
 
