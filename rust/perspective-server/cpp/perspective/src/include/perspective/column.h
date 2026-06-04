@@ -208,6 +208,13 @@ public:
      */
     void copy_from(const t_column& other);
 
+    // Ensure this column's backing stores (data, status, string vocab) are
+    // resident, restoring any the residency manager evicted and stamping LRU
+    // recency. No-op for resident / non-disk columns. Called once when the column
+    // is fetched (`t_data_table::get_column`), so per-element accessors stay
+    // check-free; safe because eviction only happens at request safepoints.
+    void ensure_resident();
+
     void valid_raw_fill();
     void invalid_raw_fill();
 

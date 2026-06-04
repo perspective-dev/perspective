@@ -103,6 +103,24 @@ psp_poll(ProtoServer* server) {
 }
 
 PERSPECTIVE_EXPORT
+std::size_t
+psp_residency_prepare(ProtoServer* server) {
+    return server->residency_prepare();
+}
+
+PERSPECTIVE_EXPORT
+const char*
+psp_residency_victim_fname(ProtoServer* server, std::size_t i) {
+    return server->residency_victim_fname(i);
+}
+
+PERSPECTIVE_EXPORT
+void
+psp_residency_commit(ProtoServer* server) {
+    server->residency_commit();
+}
+
+PERSPECTIVE_EXPORT
 std::uint32_t
 psp_new_session(ProtoServer* server) {
     return server->new_session();

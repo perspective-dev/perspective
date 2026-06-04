@@ -22,9 +22,6 @@
 #include <perspective/utils.h>
 
 #include <utility>
-#ifndef PSP_ENABLE_WASM
-#include <filesystem>
-#endif
 
 namespace perspective {
 
@@ -49,14 +46,9 @@ t_gstate::init() {
     // requested, the column files live in a unique per-table directory under
     // the OS temp directory (native only; WASM/OPFS is handled separately).
     std::string dirname;
-#ifndef PSP_ENABLE_WASM
     if (m_backing_store == BACKING_STORE_DISK) {
-        namespace fs = std::filesystem;
-        fs::path dir = fs::temp_directory_path() / unique_path("perspective_");
-        fs::create_directories(dir);
-        dirname = dir.string();
+        dirname = create_backing_store_dir("perspective_");
     }
-#endif
     m_table = std::make_shared<t_data_table>(
         "", dirname, m_input_schema, DEFAULT_EMPTY_CAPACITY, m_backing_store
     );
@@ -155,17 +147,17 @@ t_gstate::fill_master_table(const std::shared_ptr<t_data_table>& flattened) {
 
     t_uindex ncols = m_table->num_columns();
     auto* master_table = m_table.get();
-    const bool on_disk = m_backing_store == BACKING_STORE_DISK;
+    const bool page_to_disk = m_backing_store == BACKING_STORE_DISK;
 
     parallel_for(
         int(ncols),
-        [&master_table, &master_table_schema, &flattened, on_disk](int idx) {
+        [&master_table, &master_table_schema, &flattened, page_to_disk](int idx) {
             const std::string& column_name = master_table_schema.m_columns[idx];
             auto flattened_column = flattened->get_column_safe(column_name);
             if (!flattened_column) {
                 return;
             }
-            if (on_disk) {
+            if (page_to_disk) {
                 // The master table is on-disk; preserve its disk-backed column
                 // and deep-copy the flattened (in-memory) column's data into
                 // it rather than aliasing the in-memory `shared_ptr`.
@@ -229,17 +221,17 @@ t_gstate::init_from_table(const std::shared_ptr<t_data_table>& source) {
     const t_schema& master_table_schema = m_table->get_schema();
     t_uindex ncols = m_table->num_columns();
     auto* master_table = m_table.get();
-    const bool on_disk = m_backing_store == BACKING_STORE_DISK;
+    const bool page_to_disk = m_backing_store == BACKING_STORE_DISK;
 
     parallel_for(
         int(ncols),
-        [&master_table, &master_table_schema, &source, on_disk](int idx) {
+        [&master_table, &master_table_schema, &source, page_to_disk](int idx) {
             const std::string& column_name = master_table_schema.m_columns[idx];
             auto src_col = source->get_column_safe(column_name);
             if (!src_col) {
                 return;
             }
-            if (on_disk) {
+            if (page_to_disk) {
                 // Preserve the disk-backed master column; deep-copy rather than
                 // aliasing the in-memory source column.
                 master_table->_get_column(column_name)->copy_from(*src_col);

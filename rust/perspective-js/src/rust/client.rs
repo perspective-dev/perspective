@@ -403,20 +403,9 @@ impl Client {
         value: &JsTableInitData,
         options: Option<JsTableInitOptions>,
     ) -> ApiResult<Table> {
-        let mut options = options
+        let options = options
             .into_serde_ext::<Option<TableInitOptions>>()?
             .unwrap_or_default();
-
-        // On-disk (OPFS) backing is not yet implemented for the WebAssembly
-        // engine. Warn and fall back to an in-memory table so callers using the
-        // shared `on_disk` API don't silently get a broken table.
-        if options.on_disk == Some(true) {
-            web_sys::console::warn_1(&JsValue::from_str(
-                "`on_disk` tables are not yet supported in the WebAssembly \
-                 engine; falling back to an in-memory table.",
-            ));
-            options.on_disk = None;
-        }
 
         let args = TableData::from_js_value(value, options.format)?;
         Ok(Table(self.client.table(args, options).await?))

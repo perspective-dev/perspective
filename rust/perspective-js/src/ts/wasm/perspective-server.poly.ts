@@ -12,9 +12,6 @@
 
 import type * as perspective_server from "@perspective-dev/server/dist/wasm/perspective-server.js";
 
-type PspPtr = bigint | number;
-type EmscriptenServer = number;
-
 var out = console.log.bind(console);
 var err = console.error.bind(console);
 
@@ -50,6 +47,151 @@ export default async function (obj: any) {
     let psp_module: perspective_server.MainModule;
     let is_memory64 = false;
     let wasm_memory: WebAssembly.Memory;
+
+    // A `BACKING_STORE_DISK` column's bytes live in wasm linear memory; the
+    // residency manager flushes/loads them to/from OPFS through these imports.
+    const heap = () => new Uint8Array(wasm_memory.buffer);
+    const toAddr = (p: number | bigint) =>
+        is_memory64 ? Number(p as bigint) : (p as number) >>> 0;
+
+    function readCString(p: number | bigint) {
+        const addr = toAddr(p);
+        const h = heap();
+        let end = addr;
+        while (h[end]) ++end;
+        return UTF8Decoder.decode(h.subarray(addr, end));
+    }
+
+    // A `DiskBridge` backs `BACKING_STORE_DISK` columns: `store`/`load` flush and
+    // re-read a column buffer to/from disk synchronously (the only async step,
+    // `ensureOpen`, is hoisted into the JS safepoint between engine calls). The
+    // browser default is OPFS; a host can inject an alternative (e.g. `node:fs`
+    // in `perspective.node.ts`) via `obj.make_disk_bridge`. `store`/`load`/
+    // `remove` receive raw wasm pointers and use the heap helpers; `ensureOpen`
+    // receives a resolved file name string (from `victim_fname`).
+    const disk_helpers = { heap, toAddr, readCString };
+
+    function makeOpfsBridge() {
+        async function opfsOpenFile(name: string, create: boolean) {
+            const parts = name.split("/").filter((s) => s.length > 0);
+            // @ts-ignore — navigator.storage.getDirectory is OPFS, Worker-only.
+            let dir = await navigator.storage.getDirectory();
+            for (let i = 0; i < parts.length - 1; i++) {
+                dir = await dir.getDirectoryHandle(parts[i], { create });
+            }
+            return await dir.getFileHandle(parts[parts.length - 1], { create });
+        }
+
+        // One OPFS `FileSystemSyncAccessHandle` is kept open per disk-backed file
+        // for its lifetime.
+        const handles = new Map<string, any>();
+
+        return {
+            async ensureOpen(name: string) {
+                if (handles.has(name)) {
+                    return;
+                }
+                const fh = await opfsOpenFile(name, true);
+                // @ts-ignore — createSyncAccessHandle is Worker-only OPFS.
+                const ah = await fh.createSyncAccessHandle();
+                handles.set(name, ah);
+            },
+            store(
+                namePtr: number | bigint,
+                dataPtr: number | bigint,
+                len: number,
+            ): number {
+                try {
+                    const ah = handles.get(readCString(namePtr));
+                    if (!ah) {
+                        // `commit` only evicts victims whose handle the safepoint
+                        // just opened, so this should be unreachable.
+                        return -1;
+                    }
+                    ah.truncate(len);
+                    if (len > 0) {
+                        const addr = toAddr(dataPtr);
+                        ah.write(heap().subarray(addr, addr + len), { at: 0 });
+                    }
+                    ah.flush();
+                    return len;
+                } catch (e) {
+                    err("psp_opfs_store failed", e);
+                    return -1;
+                }
+            },
+            load(
+                namePtr: number | bigint,
+                dataPtr: number | bigint,
+                len: number,
+            ): number {
+                try {
+                    if (len <= 0) {
+                        return 0;
+                    }
+                    const ah = handles.get(readCString(namePtr));
+                    // A restore always follows an evict that left the handle open;
+                    // a miss (or never-flushed file) reads as zeros.
+                    if (!ah) {
+                        return 0;
+                    }
+                    const addr = toAddr(dataPtr);
+                    return ah.read(heap().subarray(addr, addr + len), {
+                        at: 0,
+                    });
+                } catch (e) {
+                    return 0;
+                }
+            },
+            remove(namePtr: number | bigint) {
+                try {
+                    const name = readCString(namePtr);
+                    const ah = handles.get(name);
+                    if (ah) {
+                        try {
+                            ah.close();
+                        } catch (e) {
+                            /* already closed */
+                        }
+                        handles.delete(name);
+                    }
+                    // Fire-and-forget the (async) file deletion; the handle is
+                    // closed, so the bytes are no longer referenced.
+                    void (async () => {
+                        try {
+                            const parts = name
+                                .split("/")
+                                .filter((s) => s.length > 0);
+                            // @ts-ignore
+                            let dir = await navigator.storage.getDirectory();
+                            for (let i = 0; i < parts.length - 1; i++) {
+                                dir = await dir.getDirectoryHandle(parts[i], {
+                                    create: false,
+                                });
+                            }
+                            await dir.removeEntry(parts[parts.length - 1]);
+                        } catch (e) {
+                            /* already gone */
+                        }
+                    })();
+                } catch (e) {
+                    /* already gone */
+                }
+            },
+        };
+    }
+
+    // The host may inject a disk bridge (e.g. `node:fs`); otherwise default to
+    // OPFS. Synchronous `store`/`load`/`remove` env imports — no JSPI.
+    const disk = obj.make_disk_bridge
+        ? obj.make_disk_bridge(disk_helpers)
+        : makeOpfsBridge();
+
+    const opfs_imports: Record<string, any> = {
+        psp_opfs_store: disk.store,
+        psp_opfs_load: disk.load,
+        psp_opfs_remove: disk.remove,
+    };
     const module = {
         HaveOffsetConverter() {
             console.error("HaveOffsetConverter");
@@ -211,6 +353,7 @@ export default async function (obj: any) {
             console.error("proc_exit", e);
             return 0;
         },
+        ...opfs_imports,
     };
 
     const x = await obj.instantiateWasm(
@@ -228,14 +371,41 @@ export default async function (obj: any) {
         },
     );
 
+    // No JSPI: every export is exposed verbatim (emscripten `_`-prefixed alias).
+    // Restore is a synchronous import, so `psp_handle_request`/`psp_poll` stay
+    // synchronous WASM calls.
     const extensions: Record<string, any> = {};
     for (const [name, func] of Object.entries(x)) {
         extensions[`_${name}`] = func;
     }
 
+    // JS-driven residency safepoint. The only async OPFS step — opening each
+    // victim's sync access handle — happens HERE, between the two synchronous C++
+    // phases: `prepare` picks the cold victims (no freeing), we open their
+    // handles, then `commit` flushes + frees them (now a synchronous write). The
+    // `engine.ts` server-wide lock serializes this against engine calls. A no-op
+    // when nothing is over budget.
+    const psp_residency_safepoint = async (server: number | bigint) => {
+        const mod = psp_module as any;
+        if (!mod.psp_residency_prepare) {
+            return;
+        }
+        const n = Number(mod.psp_residency_prepare(server));
+        for (let i = 0; i < n; i++) {
+            const fname = readCString(
+                mod.psp_residency_victim_fname(server, i),
+            );
+            if (fname) {
+                await disk.ensureOpen(fname);
+            }
+        }
+        mod.psp_residency_commit(server);
+    };
+
     return {
         ...x,
         ...extensions,
+        psp_residency_safepoint,
         get HEAPU8() {
             // @ts-ignore
             return new Uint8Array(wasm_memory.buffer);

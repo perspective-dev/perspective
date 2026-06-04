@@ -62,9 +62,9 @@ load_stream(
     const uint32_t length,
     std::shared_ptr<arrow::Table>& table
 ) {
-    arrow::io::BufferReader buffer_reader(
+    arrow::io::BufferReader buffer_reader(std::make_shared<arrow::Buffer>(
         reinterpret_cast<const std::uint8_t*>(ptr), length
-    );
+    ));
 
     auto status = arrow::ipc::RecordBatchStreamReader::Open(&buffer_reader);
     if (!status.ok()) {
@@ -92,9 +92,9 @@ load_file(
     const uint32_t length,
     std::shared_ptr<arrow::Table>& table
 ) {
-    arrow::io::BufferReader buffer_reader(
+    arrow::io::BufferReader buffer_reader(std::make_shared<arrow::Buffer>(
         reinterpret_cast<const std::uint8_t*>(ptr), length
-    );
+    ));
 
     auto status = arrow::ipc::RecordBatchFileReader::Open(&buffer_reader);
     if (!status.ok()) {

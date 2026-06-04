@@ -338,7 +338,7 @@ message MakeTableReq {
         // Back this Table's canonical data with the on-disk storage backend
         // (memory-mapped file on native; OPFS on WASM) instead of memory.
         // Orthogonal to `make_table_type`, so it is a standalone field.
-        optional bool on_disk = 3;
+        optional bool page_to_disk = 3;
     }
 }
 message MakeTableResp {}

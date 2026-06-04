@@ -32,6 +32,7 @@ set(CMAKE_MODULE_PATH "${PSP_CMAKE_MODULE_PATH}/modules" ${CMAKE_MODULE_PATH})
 set(MSVC_RUNTIME_LIBRARY MultiThreaded)
 
 option(PSP_WASM64 "Enable WASM Memory64 support" OFF)
+option(PSP_WASM_OPFS "Enable on-disk (OPFS) tables in the browser via the custom `psp_opfs_*` bridge in `perspective-server.poly.ts` (NO_FILESYSTEM + JSPI; no WasmFS, no SharedArrayBuffer). Backwards compatible: the module loads and runs in-memory tables on non-JSPI browsers; on-disk activates only in a JSPI-capable Worker." ON)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(WIN32 ON)
@@ -494,10 +495,12 @@ set(SOURCE_FILES
     ${PSP_CPP_SRC}/src/cpp/sort_specification.cpp
     ${PSP_CPP_SRC}/src/cpp/sparse_tree.cpp
     ${PSP_CPP_SRC}/src/cpp/sparse_tree_node.cpp
+    ${PSP_CPP_SRC}/src/cpp/residency.cpp
     ${PSP_CPP_SRC}/src/cpp/step_delta.cpp
     ${PSP_CPP_SRC}/src/cpp/storage.cpp
     ${PSP_CPP_SRC}/src/cpp/storage_impl_linux.cpp
     ${PSP_CPP_SRC}/src/cpp/storage_impl_osx.cpp
+    ${PSP_CPP_SRC}/src/cpp/storage_impl_wasm.cpp
     ${PSP_CPP_SRC}/src/cpp/storage_impl_win.cpp
     ${PSP_CPP_SRC}/src/cpp/sym_table.cpp
     ${PSP_CPP_SRC}/src/cpp/table.cpp
@@ -544,6 +547,9 @@ set(PSP_EXPORTED_FUNCTIONS
     _psp_is_memory64
     _psp_num_cpus
     _psp_set_num_cpus
+    _psp_residency_prepare
+    _psp_residency_victim_fname
+    _psp_residency_commit
 )
 
 if(PSP_HEAP_INSTRUMENTS)
@@ -566,10 +572,30 @@ if(PSP_PYODIDE)
 else()
 # -s MEMORY_GROWTH_GEOMETRIC_STEP=1.0 \
 # -s MEMORY_GROWTH_GEOMETRIC_CAP=536870912 \
+
+    # On-disk tables in the browser are backed by OPFS via emscripten's WasmFS.
+    # `PSP_WASM_OPFS` swaps the default `NO_FILESYSTEM` (memory-only) build for
+    # `WASMFS` + `FORCE_FILESYSTEM`, and enables the OPFS backend. `JSPI` provides
+    # the synchronous-looking OPFS access the WasmFS OPFS backend needs without
+    # SharedArrayBuffer/cross-origin-isolation (`-pthread`). `JSPI` is backwards
+    # compatible: the module loads and runs in-memory tables fine on non-JSPI
+    # browsers (it has no `main`/async imports wrapped at instantiation); the JSPI
+    # API is only reached when an actual OPFS op runs, i.e. when `page_to_disk` is used
+    # (the JS client gates that on JSPI being present). Closure is incompatible
+    # with the WasmFS JS glue, so it is disabled in that case.
+    if(PSP_WASM_OPFS)
+        set(PSP_FILESYSTEM_FLAGS "-s NO_FILESYSTEM=1 ")
+        set(PSP_CLOSURE_FLAGS "--closure=1 ")
+        add_compile_definitions(PSP_WASM_OPFS_PERSIST=1)
+    else()
+        set(PSP_FILESYSTEM_FLAGS "-s NO_FILESYSTEM=1 ")
+        set(PSP_CLOSURE_FLAGS "--closure=1 ")
+    endif()
+
     set(PSP_WASM_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \
         --no-entry \
-        --closure=1 \
-        -s NO_FILESYSTEM=1 \
+        ${PSP_CLOSURE_FLAGS} \
+        ${PSP_FILESYSTEM_FLAGS} \
         -s ALLOW_MEMORY_GROWTH=1 \
         -s MODULARIZE=1 \
         -s WASM_BIGINT=1 \

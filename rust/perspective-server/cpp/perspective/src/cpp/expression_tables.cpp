@@ -14,9 +14,6 @@
 #include <perspective/utils.h>
 
 #include <utility>
-#ifndef PSP_ENABLE_WASM
-#include <filesystem>
-#endif
 
 namespace perspective {
 
@@ -38,15 +35,9 @@ t_expression_tables::t_expression_tables(
     // to the update batch) so disk-backing them is pure I/O churn with no
     // memory-relief benefit, and they stay in memory.
     std::string master_dirname;
-#ifndef PSP_ENABLE_WASM
-    if (backing_store == BACKING_STORE_DISK) {
-        namespace fs = std::filesystem;
-        fs::path dir =
-            fs::temp_directory_path() / unique_path("perspective_expr_");
-        fs::create_directories(dir);
-        master_dirname = dir.string();
+    if (backing_store == BACKING_STORE_DISK && !expressions.empty()) {
+        master_dirname = create_backing_store_dir("perspective_expr_");
     }
-#endif
 
     m_master = std::make_shared<t_data_table>(
         "", master_dirname, schema, DEFAULT_EMPTY_CAPACITY, backing_store

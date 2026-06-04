@@ -656,6 +656,10 @@ namespace server {
         handle_request(std::uint32_t client_id, const std::string_view& data);
         std::vector<ProtoServerResp<std::string>> poll();
 
+        std::size_t residency_prepare();
+        const char* residency_victim_fname(std::size_t i);
+        void residency_commit();
+
     private:
         void handle_process_table(
             const Request& req,

@@ -31,6 +31,8 @@
 #include <limits>
 #include <memory>
 #include <perspective/server.h>
+#include <perspective/residency.h>
+#include <perspective/opfs.h>
 #include <re2/stringpiece.h>
 #include <string>
 #include <tsl/hopscotch_map.h>
@@ -879,6 +881,15 @@ ProtoServer::handle_request(
         std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
             .count();
 
+#ifndef PSP_ENABLE_WASM
+    // Request safepoint: the response is fully serialized, so no raw column
+    // pointer is live. Trim resident disk-backed buffers to the memory budget.
+    // Native (mmap) evicts inline here. On WASM/OPFS eviction needs an async
+    // handle-open step, so the JS engine drives it (`prepare`/open/`commit`)
+    // after this synchronous call returns — see `engine.ts`/the poly.
+    t_residency_manager::inst().safepoint();
+#endif
+
     return serialized_responses;
 }
 
@@ -937,7 +948,30 @@ ProtoServer::poll() {
         std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
             .count();
 
+    // Request safepoint (see `handle_request`).
+#ifndef PSP_ENABLE_WASM
+    t_residency_manager::inst().safepoint();
+#endif
+
     return out;
+}
+
+// WASM/OPFS safepoint, driven from JS so the async OPFS handle-open step can run
+// between the two synchronous phases. `prepare` selects victims, the JS driver
+// opens each `residency_victim_fname(i)` handle, then `commit` flushes + frees.
+std::size_t
+ProtoServer::residency_prepare() {
+    return t_residency_manager::inst().prepare();
+}
+
+const char*
+ProtoServer::residency_victim_fname(std::size_t i) {
+    return t_residency_manager::inst().victim_fname(i);
+}
+
+void
+ProtoServer::residency_commit() {
+    t_residency_manager::inst().commit();
 }
 
 proto::ColumnType
@@ -1578,15 +1612,12 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     break;
             }
 
-            // On-disk backing is only honored on native builds; WASM/OPFS is
-            // implemented separately, and the JS client warns + falls back to
-            // memory, so DISK should never reach the engine in a WASM build.
-            t_backing_store backing_store = BACKING_STORE_MEMORY;
-#ifndef PSP_ENABLE_WASM
-            if (r.options().on_disk()) {
-                backing_store = BACKING_STORE_DISK;
-            }
-#endif
+            // On-disk backing: native uses a memory-mapped file; WASM uses the
+            // WasmFS/OPFS backend (`storage_impl_wasm.cpp`). The browser JS
+            // bootstrap mounts OPFS at `/perspective` before any table is built.
+            t_backing_store backing_store = r.options().page_to_disk()
+                ? BACKING_STORE_DISK
+                : BACKING_STORE_MEMORY;
 
             switch (r.data().data_case()) {
                 case proto::MakeTableData::kFromView: {
