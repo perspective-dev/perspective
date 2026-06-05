@@ -19,14 +19,20 @@
 #include <perspective/mask.h>
 #include <perspective/sym_table.h>
 #include <perspective/parallel_for.h>
+#include <perspective/utils.h>
 
 #include <utility>
 
 namespace perspective {
 
-t_gstate::t_gstate(t_schema input_schema, t_schema output_schema) :
+t_gstate::t_gstate(
+    t_schema input_schema,
+    t_schema output_schema,
+    t_backing_store backing_store
+) :
     m_input_schema(std::move(input_schema)),
     m_output_schema(std::move(output_schema)),
+    m_backing_store(backing_store),
     m_init(false) {
     LOG_CONSTRUCTOR("t_gstate");
 }
@@ -35,8 +41,16 @@ t_gstate::~t_gstate() { LOG_DESTRUCTOR("t_gstate"); }
 
 void
 t_gstate::init() {
+    // The master `t_data_table` is the canonical copy of the dataset and is the
+    // only table eligible for on-disk backing. When `BACKING_STORE_DISK` is
+    // requested, the column files live in a unique per-table directory under
+    // the OS temp directory (native only; WASM/OPFS is handled separately).
+    std::string dirname;
+    if (m_backing_store == BACKING_STORE_DISK) {
+        dirname = create_backing_store_dir("perspective_");
+    }
     m_table = std::make_shared<t_data_table>(
-        "", "", m_input_schema, DEFAULT_EMPTY_CAPACITY, BACKING_STORE_MEMORY
+        "", dirname, m_input_schema, DEFAULT_EMPTY_CAPACITY, m_backing_store
     );
     m_table->init();
     m_pkcol = m_table->get_column("psp_pkey");
@@ -133,18 +147,27 @@ t_gstate::fill_master_table(const std::shared_ptr<t_data_table>& flattened) {
 
     t_uindex ncols = m_table->num_columns();
     auto* master_table = m_table.get();
+    const bool page_to_disk = m_backing_store == BACKING_STORE_DISK;
 
     parallel_for(
         int(ncols),
-        [&master_table, &master_table_schema, &flattened](int idx) {
-            // Alias each column `shared_ptr` from flattened into `m_table`
-            // rather than deep-cloning.
+        [&master_table, &master_table_schema, &flattened, page_to_disk](int idx) {
             const std::string& column_name = master_table_schema.m_columns[idx];
             auto flattened_column = flattened->get_column_safe(column_name);
             if (!flattened_column) {
                 return;
             }
-            master_table->set_column(idx, std::move(flattened_column));
+            if (page_to_disk) {
+                // The master table is on-disk; preserve its disk-backed column
+                // and deep-copy the flattened (in-memory) column's data into
+                // it rather than aliasing the in-memory `shared_ptr`.
+                master_table->_get_column(column_name)
+                    ->copy_from(*flattened_column);
+            } else {
+                // Alias each column `shared_ptr` from flattened into `m_table`
+                // rather than deep-cloning.
+                master_table->set_column(idx, std::move(flattened_column));
+            }
         }
     );
 
@@ -198,16 +221,23 @@ t_gstate::init_from_table(const std::shared_ptr<t_data_table>& source) {
     const t_schema& master_table_schema = m_table->get_schema();
     t_uindex ncols = m_table->num_columns();
     auto* master_table = m_table.get();
+    const bool page_to_disk = m_backing_store == BACKING_STORE_DISK;
 
     parallel_for(
         int(ncols),
-        [&master_table, &master_table_schema, &source](int idx) {
+        [&master_table, &master_table_schema, &source, page_to_disk](int idx) {
             const std::string& column_name = master_table_schema.m_columns[idx];
             auto src_col = source->get_column_safe(column_name);
             if (!src_col) {
                 return;
             }
-            master_table->set_column(idx, std::move(src_col));
+            if (page_to_disk) {
+                // Preserve the disk-backed master column; deep-copy rather than
+                // aliasing the in-memory source column.
+                master_table->_get_column(column_name)->copy_from(*src_col);
+            } else {
+                master_table->set_column(idx, std::move(src_col));
+            }
         }
     );
 

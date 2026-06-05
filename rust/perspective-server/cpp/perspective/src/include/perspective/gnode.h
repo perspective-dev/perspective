@@ -93,7 +93,11 @@ public:
      * @param input_schema
      * @param output_schema
      */
-    t_gnode(t_schema input_schema, t_schema output_schema);
+    t_gnode(
+        t_schema input_schema,
+        t_schema output_schema,
+        t_backing_store backing_store = BACKING_STORE_MEMORY
+    );
     ~t_gnode();
 
     void init();
@@ -410,6 +414,7 @@ private:
     std::vector<std::shared_ptr<t_port>> m_oports;
     tsl::ordered_map<std::string, t_ctx_handle> m_contexts;
     std::shared_ptr<t_gstate> m_gstate;
+    t_backing_store m_backing_store;
 
     std::chrono::high_resolution_clock::time_point m_epoch;
     std::function<void()> m_pool_cleanup;

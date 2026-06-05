@@ -68,3 +68,4 @@ docs/static/viewer
 docs/static/react
 rust/perspective-server/build
 target/
+dist-gh-pages

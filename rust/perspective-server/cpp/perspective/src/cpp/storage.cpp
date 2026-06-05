@@ -24,6 +24,7 @@ SUPPRESS_WARNINGS_VC(4505)
 #include <perspective/raii.h>
 #include <perspective/raw_types.h>
 #include <perspective/storage.h>
+#include <perspective/opfs.h>
 #include <perspective/tracing.h>
 #include <perspective/utils.h>
 #include <perspective/env_vars.h>
@@ -243,6 +244,7 @@ t_lstore::~t_lstore() {
 
     switch (m_backing_store) {
         case BACKING_STORE_DISK: {
+            t_residency_manager::inst().unregister_store(this);
             destroy_mapping();
             close_file(m_fd);
 
@@ -344,6 +346,11 @@ t_lstore::init() {
     }
 
     m_init = true;
+
+    if (m_backing_store == BACKING_STORE_DISK) {
+        m_residency_tick = g_residency_tick;
+        t_residency_manager::inst().register_store(this);
+    }
 }
 
 void
@@ -360,6 +367,7 @@ void
 t_lstore::reserve_impl(t_uindex capacity, bool allow_shrink) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+    ensure_resident();
     if ((capacity < m_capacity) && !allow_shrink) {
         return;
     }
@@ -517,6 +525,7 @@ t_lstore::get_fname() const {
 void
 t_lstore::push_back(const void* ptr, t_uindex len) {
     PSP_TRACE_SENTINEL();
+    ensure_resident();
     if (m_size + len >= m_capacity) {
         reserve(static_cast<t_uindex>(m_size + len)
         ); // reserve() will multiply by m_resize_factor internally
@@ -535,11 +544,13 @@ t_lstore::push_back(const void* ptr, t_uindex len) {
 
 void*
 t_lstore::get_ptr(t_uindex offset) {
+    ensure_resident();
     return static_cast<void*>(static_cast<unsigned char*>(m_base) + offset);
 }
 
 const void*
 t_lstore::get_ptr(t_uindex offset) const {
+    const_cast<t_lstore*>(this)->ensure_resident();
     return static_cast<void*>(static_cast<unsigned char*>(m_base) + offset);
 }
 
@@ -561,6 +572,7 @@ void
 t_lstore::append(const t_lstore& other) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+    const_cast<t_lstore&>(other).ensure_resident();
     push_back(other.m_base, other.size());
 }
 
@@ -569,6 +581,7 @@ t_lstore::clear() {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
 #ifndef PSP_ENABLE_WASM
+    ensure_resident();
     memset(m_base, 0, size_t(capacity()));
 #endif
     {
@@ -597,10 +610,26 @@ t_lstore::get_recipe() const {
     return rval;
 }
 
+t_lstore_recipe
+t_lstore::get_clone_recipe() const {
+    t_lstore_recipe rval = get_recipe();
+    // `get_recipe()` produces a `from_recipe` recipe that re-maps *this* store's
+    // backing file — correct for serialization/reconstruction, but wrong for
+    // cloning a `BACKING_STORE_DISK` store: the copy would map (and, on
+    // destruction, `rmfile`) the source's file. Clearing `m_from_recipe` makes
+    // the `t_lstore` constructor mint a fresh, independent backing file for the
+    // clone. (Memory stores ignore the file entirely, so this is a no-op there.)
+    if (m_backing_store == BACKING_STORE_DISK) {
+        rval.m_from_recipe = false;
+    }
+    return rval;
+}
+
 void
 t_lstore::fill(const t_lstore& other) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+    const_cast<t_lstore&>(other).ensure_resident();
     reserve(other.size());
     memcpy(m_base, const_cast<void*>(other.m_base), size_t(other.size()));
     set_size(other.size());
@@ -647,12 +676,59 @@ t_lstore::pprint() const {
 
 std::shared_ptr<t_lstore>
 t_lstore::clone() const {
-    auto recipe = get_recipe();
+    auto recipe = get_clone_recipe();
     std::shared_ptr<t_lstore> rval(new t_lstore(recipe));
     rval->init();
     rval->set_size(m_size);
     rval->fill(*this);
     return rval;
+}
+
+void
+t_lstore::evict() {
+    if (m_backing_store != BACKING_STORE_DISK || !m_init || m_base == nullptr) {
+        return;
+    }
+#ifdef PSP_HAS_OPFS_BRIDGE
+    // Flush the resident buffer to OPFS (suspending), then free it. Only valid
+    // from a `promising` safepoint — never mid-request.
+    psp_opfs_store(
+        m_fname.c_str(), m_base, static_cast<int>(capacity())
+    );
+    free(m_base);
+    m_base = nullptr;
+#else
+    // Native: `destroy_mapping()` (`munmap`) writes back the `MAP_SHARED` pages;
+    // the file `m_fd` stays open for a later `restore()`.
+    destroy_mapping();
+    m_base = nullptr;
+#endif
+    ++m_version;
+}
+
+void
+t_lstore::restore() {
+    if (m_backing_store != BACKING_STORE_DISK || !m_init || m_base != nullptr) {
+        return;
+    }
+    // May be called from parallel-for workers within a request (native); the
+    // OPFS path is only entered from the single-threaded promising safepoint.
+    std::lock_guard<std::mutex> lk(t_residency_manager::inst().mutex());
+    if (m_base != nullptr) {
+        return;
+    }
+#ifdef PSP_HAS_OPFS_BRIDGE
+    auto cap = static_cast<size_t>(capacity());
+    m_base = calloc(std::max(cap, static_cast<size_t>(1)), 1);
+    psp_opfs_load(m_fname.c_str(), m_base, static_cast<int>(capacity()));
+#else
+    m_base = create_mapping();
+#endif
+    // Stamp LRU recency at bring-in time. Moved here from `ensure_resident()` so
+    // the per-access hot path reads no residency global (see `storage.h`).
+    m_residency_tick = g_residency_tick;
+    t_residency_manager::inst().note_restore();
+    ++m_version;
 }
 
 } // end namespace perspective

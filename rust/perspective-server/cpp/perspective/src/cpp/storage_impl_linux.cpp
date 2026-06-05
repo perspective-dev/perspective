@@ -12,7 +12,10 @@
 
 #include <perspective/first.h>
 
-#ifdef __linux__
+// NB: `first.h` force-defines `__linux__` on any non-mac/non-win platform,
+// *including emscripten*. Exclude WASM here so `storage_impl_wasm.cpp` (and not
+// this `open`/`mmap` implementation) provides the storage backend on WASM.
+#if defined(__linux__) && !defined(PSP_ENABLE_WASM)
 #include <perspective/base.h>
 #include <perspective/raw_types.h>
 #include <perspective/storage.h>
@@ -107,6 +110,9 @@ t_lstore::resize_mapping(t_uindex cap_new) {
 
 void
 t_lstore::destroy_mapping() {
+    if (m_base == nullptr) {
+        return; // already evicted
+    }
     t_index rc = munmap(m_base, capacity());
     PSP_VERBOSE_ASSERT(!rc, "Failed to destroy mapping");
 }

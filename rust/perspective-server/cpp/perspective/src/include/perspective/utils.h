@@ -50,6 +50,15 @@ str_(const T& value) {
 
 std::string unique_path(const std::string& path_prefix);
 
+/**
+ * @brief Create (and return the path of) a unique directory to hold the column
+ * backing files of a `BACKING_STORE_DISK` table. On native this lives under the
+ * OS temp directory; on WASM it lives under the WasmFS mount root
+ * (`/perspective`, where OPFS is mounted in the browser). `prefix` (e.g.
+ * "perspective_" or "perspective_expr_") names the directory.
+ */
+std::string create_backing_store_dir(const std::string& prefix);
+
 template <typename DATA_T>
 void
 set_to_vec(const std::set<DATA_T>& s, std::vector<DATA_T>& out_v) {

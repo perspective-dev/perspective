@@ -73,12 +73,14 @@ t_column::column_copy_helper(const t_column& other) {
     m_dtype = other.m_dtype;
     m_init = false;
     m_isvlen = other.m_isvlen;
-    m_data = std::make_shared<t_lstore>(other.m_data->get_recipe());
+    // Use clone recipes so that copying a disk-backed column produces a column
+    // with its own independent backing files rather than aliasing `other`'s.
+    m_data = std::make_shared<t_lstore>(other.m_data->get_clone_recipe());
     m_vocab = std::make_shared<t_vocab>(
-        other.m_vocab->get_vlendata()->get_recipe(),
-        other.m_vocab->get_extents()->get_recipe()
+        other.m_vocab->get_vlendata()->get_clone_recipe(),
+        other.m_vocab->get_extents()->get_clone_recipe()
     );
-    m_status = std::make_shared<t_lstore>(other.m_status->get_recipe());
+    m_status = std::make_shared<t_lstore>(other.m_status->get_clone_recipe());
 
     m_size = other.m_size;
     m_status_enabled = other.m_status_enabled;
@@ -859,6 +861,38 @@ t_column::clone(const t_mask& mask) const {
     rval->verify();
 #endif
     return rval;
+}
+
+void
+t_column::ensure_resident() {
+    if (m_data) {
+        m_data->ensure_resident();
+    }
+    if (m_status) {
+        m_status->ensure_resident();
+    }
+    if (m_isvlen && m_vocab) {
+        m_vocab->get_vlendata()->ensure_resident();
+        m_vocab->get_extents()->ensure_resident();
+    }
+}
+
+void
+t_column::copy_from(const t_column& other) {
+    set_size(other.size());
+    m_data->fill(*other.m_data);
+
+    if (is_status_enabled() && other.is_status_enabled()) {
+        m_status->fill(*other.m_status);
+    }
+
+    if (is_vlen_dtype(get_dtype())) {
+        m_vocab->clone(*other.m_vocab);
+    }
+
+#ifdef PSP_COLUMN_VERIFY
+    verify();
+#endif
 }
 
 void

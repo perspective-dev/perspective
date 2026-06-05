@@ -22,6 +22,33 @@ export interface PerspectiveServerOptions {
     on_poll_request?: (x: PerspectiveServer) => Promise<void>;
 }
 
+/**
+ * A server-wide FIFO async mutex.
+ */
+class AsyncLock {
+    private tail: Promise<unknown> = Promise.resolve();
+    run<T>(fn: () => Promise<T> | T): Promise<T> {
+        const result = this.tail.then(fn, fn);
+        this.tail = result.then(
+            () => undefined,
+            () => undefined,
+        );
+
+        return result;
+    }
+}
+
+async function residency_safepoint(
+    mod: MainModule,
+    lock: AsyncLock,
+    server: EmscriptenServer,
+) {
+    const safepoint = (mod as any).psp_residency_safepoint;
+    if (safepoint) {
+        await lock.run(() => safepoint(server));
+    }
+}
+
 export class PerspectivePollThread {
     private poll_handle?: Promise<void>;
     private server: PerspectiveServer;
@@ -63,10 +90,13 @@ export class PerspectiveServer {
     server: EmscriptenServer;
     module: MainModule;
     on_poll_request?: (x: PerspectiveServer) => Promise<void>;
+    lock: AsyncLock;
+
     constructor(module: MainModule, options?: PerspectiveServerOptions) {
         this.clients = new Map();
         this.module = module;
         this.on_poll_request = options?.on_poll_request;
+        this.lock = new AsyncLock();
         this.server = module._psp_new_server(
             !!options?.on_poll_request ? 1 : 0,
         ) as EmscriptenServer;
@@ -85,12 +115,16 @@ export class PerspectiveServer {
             this.server,
             client_id,
             this.clients,
+            this.lock,
             this.on_poll_request && (() => this.on_poll_request!(this)),
         );
     }
 
     async poll() {
-        const polled = this.module._psp_poll(this.server as any);
+        const polled = await this.lock.run(() =>
+            this.module._psp_poll(this.server as any),
+        );
+
         await decode_api_responses(
             this.module,
             polled,
@@ -98,6 +132,8 @@ export class PerspectiveServer {
                 await this.clients.get(msg.client_id)!(msg.data);
             },
         );
+
+        await residency_safepoint(this.module, this.lock, this.server);
     }
 
     delete() {
@@ -111,6 +147,7 @@ export class PerspectiveSession {
         private server: EmscriptenServer,
         private client_id: number,
         private client_map: Map<number, (buffer: Uint8Array) => Promise<void>>,
+        private lock: AsyncLock,
         private on_poll_request?: () => Promise<void>,
     ) {}
 
@@ -119,13 +156,17 @@ export class PerspectiveSession {
             this.mod,
             view,
             async (viewPtr) => {
-                return this.mod._psp_handle_request(
-                    this.server as any,
-                    this.client_id,
-                    viewPtr as any,
-                    this.mod._psp_is_memory64()
-                        ? (BigInt(view.byteLength) as any as number)
-                        : (view.byteLength as any),
+                const len = this.mod._psp_is_memory64()
+                    ? (BigInt(view.byteLength) as any as number)
+                    : (view.byteLength as any);
+
+                return this.lock.run(() =>
+                    this.mod._psp_handle_request(
+                        this.server as any,
+                        this.client_id,
+                        viewPtr as any,
+                        len,
+                    ),
                 );
             },
         );
@@ -139,10 +180,14 @@ export class PerspectiveSession {
         } else {
             await this.poll();
         }
+
+        await residency_safepoint(this.mod, this.lock, this.server);
     }
 
     private async poll() {
-        const polled = this.mod._psp_poll(this.server as any);
+        const polled = await this.lock.run(() =>
+            this.mod._psp_poll(this.server as any),
+        );
         await decode_api_responses(
             this.mod,
             polled,
@@ -172,9 +217,9 @@ async function convert_typed_array_to_pointer(
             : (array.byteLength as any),
     );
 
-    core.HEAPU8.set(array, Number(ptr));
-    const msg = await callback(ptr);
-    core._psp_free(ptr);
+    core.HEAPU8.set(array, Number(ptr) >>> 0);
+    const msg = await callback(Number(ptr) >>> 0);
+    core._psp_free(Number(ptr) >>> 0);
     return msg;
 }
 
@@ -210,7 +255,7 @@ async function decode_api_responses(
     const is_64 = core._psp_is_memory64();
     const response = new DataView(
         core.HEAPU8.buffer,
-        Number(ptr),
+        Number(ptr) >>> 0,
         is_64 ? 12 : 8,
     );
 

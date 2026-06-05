@@ -17,13 +17,38 @@ import type * as perspective_server_t from "@perspective-dev/server/dist/wasm/pe
 export type PspPtr = BigInt | number;
 export type EmscriptenServer = bigint | number;
 
+export interface DiskBridgeHelpers {
+    heap: () => Uint8Array;
+    toAddr: (p: number | bigint) => number;
+    readCString: (p: number | bigint) => string;
+}
+
+export interface CompileOptions {
+    make_disk_bridge?: (helpers: DiskBridgeHelpers) => {
+        store(
+            namePtr: number | bigint,
+            dataPtr: number | bigint,
+            len: number,
+        ): number;
+        load(
+            namePtr: number | bigint,
+            dataPtr: number | bigint,
+            len: number,
+        ): number;
+        remove(namePtr: number | bigint): void;
+        ensureOpen(name: string): Promise<void>;
+    };
+}
+
 export async function compile_perspective(
     wasmBinary: ArrayBuffer,
+    opts?: CompileOptions,
 ): Promise<perspective_server_t.MainModule> {
     const module = await perspective_server.default({
         locateFile(x: any) {
             return x;
         },
+        make_disk_bridge: opts?.make_disk_bridge,
         instantiateWasm: async (
             imports: any,
             receive: (_: WebAssembly.Instance) => void,

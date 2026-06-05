@@ -31,6 +31,8 @@
 #include <limits>
 #include <memory>
 #include <perspective/server.h>
+#include <perspective/residency.h>
+#include <perspective/opfs.h>
 #include <re2/stringpiece.h>
 #include <string>
 #include <tsl/hopscotch_map.h>
@@ -105,6 +107,7 @@ make_context(
     auto expressions = view_config->get_used_expressions();
 
     auto cfg = t_config(columns, fterm, filter_op, expressions);
+    cfg.set_backing_store(table->get_backing_store());
     auto ctx0 = std::make_shared<t_ctx0>(*schema, cfg);
     ctx0->init();
     ctx0->sort_by(sortspec);
@@ -137,6 +140,7 @@ make_context(
     auto expressions = view_config->get_used_expressions();
 
     auto cfg = t_config(row_pivots, aggspecs, fterm, filter_op, expressions);
+    cfg.set_backing_store(table->get_backing_store());
     auto ctx1 = std::make_shared<t_ctx1>(*schema, cfg);
 
     ctx1->init();
@@ -196,6 +200,7 @@ make_context(
         expressions,
         column_only
     );
+    cfg.set_backing_store(table->get_backing_store());
     auto ctx2 = std::make_shared<t_ctx2>(*schema, cfg);
 
     ctx2->init();
@@ -876,6 +881,15 @@ ProtoServer::handle_request(
         std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
             .count();
 
+#ifndef PSP_ENABLE_WASM
+    // Request safepoint: the response is fully serialized, so no raw column
+    // pointer is live. Trim resident disk-backed buffers to the memory budget.
+    // Native (mmap) evicts inline here. On WASM/OPFS eviction needs an async
+    // handle-open step, so the JS engine drives it (`prepare`/open/`commit`)
+    // after this synchronous call returns — see `engine.ts`/the poly.
+    t_residency_manager::inst().safepoint();
+#endif
+
     return serialized_responses;
 }
 
@@ -934,7 +948,30 @@ ProtoServer::poll() {
         std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
             .count();
 
+    // Request safepoint (see `handle_request`).
+#ifndef PSP_ENABLE_WASM
+    t_residency_manager::inst().safepoint();
+#endif
+
     return out;
+}
+
+// WASM/OPFS safepoint, driven from JS so the async OPFS handle-open step can run
+// between the two synchronous phases. `prepare` selects victims, the JS driver
+// opens each `residency_victim_fname(i)` handle, then `commit` flushes + frees.
+std::size_t
+ProtoServer::residency_prepare() {
+    return t_residency_manager::inst().prepare();
+}
+
+const char*
+ProtoServer::residency_victim_fname(std::size_t i) {
+    return t_residency_manager::inst().victim_fname(i);
+}
+
+void
+ProtoServer::residency_commit() {
+    t_residency_manager::inst().commit();
 }
 
 proto::ColumnType
@@ -1575,6 +1612,13 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     break;
             }
 
+            // On-disk backing: native uses a memory-mapped file; WASM uses the
+            // WasmFS/OPFS backend (`storage_impl_wasm.cpp`). The browser JS
+            // bootstrap mounts OPFS at `/perspective` before any table is built.
+            t_backing_store backing_store = r.options().page_to_disk()
+                ? BACKING_STORE_DISK
+                : BACKING_STORE_MEMORY;
+
             switch (r.data().data_case()) {
                 case proto::MakeTableData::kFromView: {
                     auto view = m_resources.get_view(r.data().from_view());
@@ -1594,42 +1638,54 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                         dims.end_col
                     );
 
-                    table = Table::from_arrow(index, std::move(*arrow), limit);
+                    table = Table::from_arrow(
+                        index, std::move(*arrow), limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::kFromArrow: {
                     std::string data = r.data().from_arrow();
                     { auto _ = std::move(req); }
 
-                    table = Table::from_arrow(index, std::move(data), limit);
+                    table = Table::from_arrow(
+                        index, std::move(data), limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::kFromCsv: {
                     std::string data = r.data().from_csv();
                     { auto _ = std::move(req); }
 
-                    table = Table::from_csv(index, std::move(data), limit);
+                    table = Table::from_csv(
+                        index, std::move(data), limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::kFromCols: {
                     std::string data = r.data().from_cols();
                     { auto _ = std::move(req); }
 
-                    table = Table::from_cols(index, std::move(data), limit);
+                    table = Table::from_cols(
+                        index, std::move(data), limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::kFromRows: {
                     std::string data = r.data().from_rows();
                     { auto _ = std::move(req); }
 
-                    table = Table::from_rows(index, std::move(data), limit);
+                    table = Table::from_rows(
+                        index, std::move(data), limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::kFromNdjson: {
                     std::string data = r.data().from_ndjson();
                     { auto _ = std::move(req); }
 
-                    table = Table::from_ndjson(index, std::move(data), limit);
+                    table = Table::from_ndjson(
+                        index, std::move(data), limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::kFromSchema: {
@@ -1642,7 +1698,9 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     }
 
                     t_schema table_schema(columns, types);
-                    table = Table::from_schema(index, table_schema, limit);
+                    table = Table::from_schema(
+                        index, table_schema, limit, backing_store
+                    );
                     break;
                 }
                 case proto::MakeTableData::DATA_NOT_SET: {

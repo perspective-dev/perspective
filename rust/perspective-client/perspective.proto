@@ -334,6 +334,11 @@ message MakeTableReq {
             string make_index_table = 1;
             uint32 make_limit_table = 2;
         };
+
+        // Back this Table's canonical data with the on-disk storage backend
+        // (memory-mapped file on native; OPFS on WASM) instead of memory.
+        // Orthogonal to `make_table_type`, so it is a standalone field.
+        optional bool page_to_disk = 3;
     }
 }
 message MakeTableResp {}

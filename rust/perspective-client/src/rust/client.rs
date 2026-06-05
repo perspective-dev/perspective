@@ -618,6 +618,7 @@ impl Client {
             ClientResp::MakeJoinTableResp(_) => Ok(Table::new(entity_id, client, TableOptions {
                 index: Some(on.to_owned()),
                 limit: None,
+                page_to_disk: None,
             })),
             resp => Err(resp.into()),
         }
@@ -662,6 +663,9 @@ impl Client {
             let options = TableOptions {
                 index: info.index,
                 limit: info.limit,
+                // `page_to_disk` is a server-side property not surfaced in table
+                // info; it does not affect client-side behavior.
+                page_to_disk: None,
             };
 
             let client = self.clone();

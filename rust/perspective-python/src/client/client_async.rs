@@ -167,6 +167,8 @@ impl AsyncClient {
     ///       `"json"`, `"columns"`, `"csv"` or `"arrow"`. This overrides
     ///       language-specific type dispatch behavior, which allows stringified
     ///       and byte array alternative inputs.
+    ///     - `page_to_disk` - Back this [`Table`]'s canonical data with the
+    ///       on-disk (memory-mapped) storage backend instead of memory.
     ///
     /// # Python Examples
     ///
@@ -175,7 +177,7 @@ impl AsyncClient {
     /// ```python
     /// table = await client.table("x,y\n1,2\n3,4")
     /// ```
-    #[pyo3(signature=(input, limit=None, index=None, name=None, format=None))]
+    #[pyo3(signature=(input, limit=None, index=None, name=None, format=None, page_to_disk=None))]
     pub async fn table(
         &self,
         input: Py<PyAny>,
@@ -183,12 +185,14 @@ impl AsyncClient {
         index: Option<Py<PyString>>,
         name: Option<Py<PyString>>,
         format: Option<Py<PyString>>,
+        page_to_disk: Option<bool>,
     ) -> PyResult<AsyncTable> {
         let client = self.client.clone();
         let py_client = Python::with_gil(|_| self.clone());
         let table = Python::with_gil(|py| {
             let mut options = TableInitOptions {
                 name: name.map(|x| x.extract::<String>(py)).transpose()?,
+                page_to_disk,
                 ..TableInitOptions::default()
             };
 

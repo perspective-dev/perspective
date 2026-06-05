@@ -179,6 +179,7 @@ t_data_table::get_column_safe(std::string_view colname) {
     if (idx == -1) {
         return nullptr;
     }
+    ensure_col_resident(idx);
     return m_columns[idx];
 }
 
@@ -187,6 +188,7 @@ t_data_table::get_column(std::string_view colname) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
     t_uindex idx = m_schema.get_colidx(colname.data());
+    ensure_col_resident(idx);
     return m_columns[idx];
 }
 
@@ -195,6 +197,7 @@ t_data_table::get_column(std::string_view colname) const {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
     t_uindex idx = m_schema.get_colidx(colname.data());
+    ensure_col_resident(idx);
     return m_columns[idx];
 }
 
@@ -206,6 +209,7 @@ t_data_table::get_column_safe(std::string_view colname) const {
     if (idx == -1) {
         return nullptr;
     }
+    ensure_col_resident(idx);
     return m_columns[idx];
 }
 
@@ -214,6 +218,7 @@ t_data_table::get_const_column(std::string_view colname) const {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
     t_uindex idx = m_schema.get_colidx(colname.data());
+    ensure_col_resident(idx);
     return m_columns[idx];
 }
 
@@ -225,6 +230,7 @@ t_data_table::get_const_column_safe(std::string_view colname) const {
     if (idx == -1) {
         return nullptr;
     }
+    ensure_col_resident(idx);
     return m_columns[idx];
 }
 
@@ -232,6 +238,7 @@ std::shared_ptr<const t_column>
 t_data_table::get_const_column(t_uindex idx) const {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+    ensure_col_resident(idx);
     return m_columns[idx];
 }
 
@@ -242,6 +249,7 @@ t_data_table::get_const_column_safe(t_uindex idx) const {
     if (idx == -1) {
         return nullptr;
     }
+    ensure_col_resident(idx);
     return m_columns[idx];
 }
 
@@ -250,6 +258,7 @@ t_data_table::get_columns() {
     std::vector<t_column*> rval(m_columns.size());
     t_uindex idx = 0;
     for (const auto& c : m_columns) {
+        ensure_col_resident(idx);
         rval[idx] = c.get();
         ++idx;
     }
@@ -261,6 +270,7 @@ t_data_table::get_const_columns() const {
     std::vector<const t_column*> rval(m_columns.size());
     t_uindex idx = 0;
     for (const auto& c : m_columns) {
+        ensure_col_resident(idx);
         rval[idx] = c.get();
         ++idx;
     }
@@ -273,6 +283,9 @@ t_data_table::extend(t_uindex nelems) {
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
     PSP_VERBOSE_ASSERT(m_init, "Table not inited");
     for (t_uindex idx = 0, loop_end = m_schema.size(); idx < loop_end; ++idx) {
+        // Restore before reallocating: extend/reserve realloc `m_base`, which on
+        // an evicted store would discard its disk-resident data.
+        ensure_col_resident(idx);
         m_columns[idx]->extend_dtype(nelems);
     }
     m_size = std::max(nelems, m_size);
@@ -283,6 +296,7 @@ void
 t_data_table::set_size(t_uindex size) {
     PSP_TRACE_SENTINEL();
     for (t_uindex idx = 0, loop_end = m_schema.size(); idx < loop_end; ++idx) {
+        ensure_col_resident(idx);
         m_columns[idx]->set_size(size);
     }
     m_size = size;
@@ -298,6 +312,7 @@ t_data_table::reserve(t_uindex capacity) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
     for (t_uindex idx = 0, loop_end = m_schema.size(); idx < loop_end; ++idx) {
+        ensure_col_resident(idx);
         m_columns[idx]->reserve(capacity);
     }
     set_capacity(std::max(capacity, m_capacity));
@@ -308,6 +323,7 @@ t_data_table::_get_column(std::string_view colname) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
     t_uindex idx = m_schema.get_colidx(colname.data());
+    ensure_col_resident(idx);
     return m_columns[idx].get();
 }
 
@@ -316,6 +332,7 @@ t_data_table::_get_const_column(std::string_view colname) const {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
     t_uindex idx = m_schema.get_colidx(colname.data());
+    ensure_col_resident(idx);
     return m_columns[idx].get();
 }
 
@@ -323,6 +340,7 @@ const t_column*
 t_data_table::_get_const_column(t_uindex idx) const {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+    ensure_col_resident(idx);
     return m_columns[idx].get();
 }
 
@@ -334,6 +352,7 @@ t_data_table::_get_const_column_safe(std::string_view colname) const {
     if (idx == t_uindex(-1)) {
         return nullptr;
     }
+    ensure_col_resident(idx);
     return m_columns[idx].get();
 }
 

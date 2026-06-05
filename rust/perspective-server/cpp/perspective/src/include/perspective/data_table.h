@@ -249,6 +249,19 @@ protected:
     std::string repr() const;
 
 private:
+    // Residency chokepoint: ensure column `idx` is resident before it is handed
+    // out. Disk-backed tables only (one predicted-not-taken branch otherwise);
+    // every disk-column access fetches the column by name/index first and caches
+    // it (the schema hash-lookup forbids per-row re-fetch), so this runs once per
+    // column per operation — keeping per-element accessors check-free while
+    // preserving fine-grained, per-column lazy restore.
+    inline void
+    ensure_col_resident(t_uindex idx) const {
+        if (m_backing_store == BACKING_STORE_DISK) {
+            m_columns[idx]->ensure_resident();
+        }
+    }
+
     std::string m_name;
     std::string m_dirname;
     t_schema m_schema;

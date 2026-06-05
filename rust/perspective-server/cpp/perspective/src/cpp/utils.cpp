@@ -17,18 +17,61 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <perspective/raw_types.h>
 #include <perspective/base.h>
+#include <perspective/utils.h>
 #include <string>
 #include <chrono>
 #include <sstream>
+#ifdef PSP_ENABLE_WASM
+#include <atomic>
+#include <cstdint>
+#else
+#include <filesystem>
+#endif
 
 #include <perspective/arrow_csv.h>
 namespace perspective {
 
 std::string
 unique_path(const std::string& path_prefix) {
+#ifdef PSP_ENABLE_WASM
+    // `boost::uuids::random_generator()` seeds itself by opening `/dev/urandom`
+    // directly, which aborts under emscripten's `NO_FILESYSTEM`. We don't need
+    // cryptographic randomness for an OPFS key — a process-unique counter,
+    // seeded from wall-clock time (via `clock_time_get`, no filesystem) so keys
+    // differ across reloads, is sufficient.
+    static std::atomic<std::uint64_t> s_counter{
+        static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()
+            )
+                .count()
+        )
+    };
+    std::stringstream ss;
+    ss << path_prefix << s_counter.fetch_add(1);
+    return ss.str();
+#else
     std::stringstream ss;
     ss << path_prefix << boost::uuids::random_generator()();
     return ss.str();
+#endif
+}
+
+std::string
+create_backing_store_dir(const std::string& prefix) {
+#ifdef PSP_ENABLE_WASM
+    // On WASM there is no OS filesystem (NO_FILESYSTEM): this is just a unique
+    // logical path used as the OPFS key prefix for a table's column files. The
+    // actual OPFS directory/file is created lazily by the JS bridge
+    // (`perspective-server.poly.ts` `opfsOpenFile`) when the residency manager
+    // first flushes a column. `/perspective` is the OPFS root namespace.
+    return unique_path(std::string("/perspective/") + prefix);
+#else
+    namespace fs = std::filesystem;
+    fs::path dir = fs::temp_directory_path() / unique_path(prefix);
+    fs::create_directories(dir);
+    return dir.string();
+#endif
 }
 
 template <typename... Formats>
