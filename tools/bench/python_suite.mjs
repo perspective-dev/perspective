@@ -28,6 +28,14 @@ const __dirname = url.fileURLToPath(new URL(".", import.meta.url)).slice(0, -1);
 
 const CLIENT_VERSION = {
     master: "@perspective-dev/client",
+    "4.5.1": "perspective-4-5-1",
+    "4.5.0": "perspective-4-5-0",
+    "4.4.0": "perspective-4-4-0",
+    "4.3.0": "perspective-4-3-0",
+    "4.2.0": "perspective-4-2-0",
+    "4.1.0": "perspective-4-1-0",
+    "4.0.0": "perspective-4-0-0",
+    "3.8.0": "perspective-3-8-0",
     "3.6.0": "perspective-3-6-0",
     "3.5.0": "perspective-3-5-0",
     "3.4.0": "perspective-3-4-0",

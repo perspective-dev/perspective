@@ -57,7 +57,7 @@ t_dtree_ctx::build_aggregates() {
     std::vector<std::string> columns;
     std::vector<t_dtype> dtypes;
 
-    t_schema delta_schema = m_strand_deltas->get_schema();
+    const t_schema& delta_schema = m_strand_deltas->get_schema();
 
     for (const auto& spec : m_aggspecs) {
         auto cinfo = spec.get_output_specs(delta_schema);

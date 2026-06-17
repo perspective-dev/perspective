@@ -367,7 +367,7 @@ void
 t_lstore::reserve_impl(t_uindex capacity, bool allow_shrink) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    ensure_resident();
+    // ensure_resident();
     if ((capacity < m_capacity) && !allow_shrink) {
         return;
     }
@@ -525,7 +525,7 @@ t_lstore::get_fname() const {
 void
 t_lstore::push_back(const void* ptr, t_uindex len) {
     PSP_TRACE_SENTINEL();
-    ensure_resident();
+    // ensure_resident();
     if (m_size + len >= m_capacity) {
         reserve(static_cast<t_uindex>(m_size + len)
         ); // reserve() will multiply by m_resize_factor internally
@@ -544,13 +544,11 @@ t_lstore::push_back(const void* ptr, t_uindex len) {
 
 void*
 t_lstore::get_ptr(t_uindex offset) {
-    ensure_resident();
     return static_cast<void*>(static_cast<unsigned char*>(m_base) + offset);
 }
 
 const void*
 t_lstore::get_ptr(t_uindex offset) const {
-    const_cast<t_lstore*>(this)->ensure_resident();
     return static_cast<void*>(static_cast<unsigned char*>(m_base) + offset);
 }
 
@@ -572,7 +570,7 @@ void
 t_lstore::append(const t_lstore& other) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    const_cast<t_lstore&>(other).ensure_resident();
+    // const_cast<t_lstore&>(other).ensure_resident();
     push_back(other.m_base, other.size());
 }
 
@@ -613,12 +611,6 @@ t_lstore::get_recipe() const {
 t_lstore_recipe
 t_lstore::get_clone_recipe() const {
     t_lstore_recipe rval = get_recipe();
-    // `get_recipe()` produces a `from_recipe` recipe that re-maps *this* store's
-    // backing file — correct for serialization/reconstruction, but wrong for
-    // cloning a `BACKING_STORE_DISK` store: the copy would map (and, on
-    // destruction, `rmfile`) the source's file. Clearing `m_from_recipe` makes
-    // the `t_lstore` constructor mint a fresh, independent backing file for the
-    // clone. (Memory stores ignore the file entirely, so this is a no-op there.)
     if (m_backing_store == BACKING_STORE_DISK) {
         rval.m_from_recipe = false;
     }
@@ -629,7 +621,7 @@ void
 t_lstore::fill(const t_lstore& other) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    const_cast<t_lstore&>(other).ensure_resident();
+    // const_cast<t_lstore&>(other).ensure_resident();
     reserve(other.size());
     memcpy(m_base, const_cast<void*>(other.m_base), size_t(other.size()));
     set_size(other.size());

@@ -137,11 +137,11 @@ t_view_config::get_used_expressions() {
         std::inserter(used_cols, used_cols.end())
     );
 
-    for (auto i : m_filter) {
+    for (const auto& i : m_filter) {
         used_cols.insert(std::get<0>(i));
     }
 
-    for (auto i : m_sort) {
+    for (const auto& i : m_sort) {
         used_cols.insert(i[0]);
     }
 

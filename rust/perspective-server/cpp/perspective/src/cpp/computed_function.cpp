@@ -2330,12 +2330,12 @@ make_datetime::operator()(t_parameter_list parameters) {
 
 index::index(
     const t_gstate::t_mapping& pkey_map,
-    std::shared_ptr<t_data_table> source_table,
+    const std::shared_ptr<t_data_table>& source_table,
     t_uindex& row_idx
 ) :
     exprtk::igeneric_function<t_tscalar>("Z"),
     m_pkey_map(pkey_map),
-    m_source_table(std::move(std::move(source_table))),
+    m_source_table(source_table),
     m_row_idx(row_idx) {}
 
 index::~index() = default;
@@ -2355,13 +2355,13 @@ index::operator()(t_parameter_list parameters) {
 col::col(
     t_expression_vocab& expression_vocab,
     bool is_type_validator,
-    std::shared_ptr<t_data_table> source_table,
+    const std::shared_ptr<t_data_table>& source_table,
     t_uindex& row_idx
 ) :
     exprtk::igeneric_function<t_tscalar>("T"),
     m_expression_vocab(expression_vocab),
     m_is_type_validator(is_type_validator),
-    m_source_table(std::move(std::move(source_table))),
+    m_source_table(source_table),
     m_row_idx(row_idx) {}
 col::~col() = default;
 
@@ -2394,13 +2394,13 @@ col::operator()(t_parameter_list parameters) {
 vlookup::vlookup(
     t_expression_vocab& expression_vocab,
     bool is_type_validator,
-    std::shared_ptr<t_data_table> source_table,
+    const std::shared_ptr<t_data_table>& source_table,
     t_uindex& row_idx
 ) :
     exprtk::igeneric_function<t_tscalar>("TT"),
     m_expression_vocab(expression_vocab),
     m_is_type_validator(is_type_validator),
-    m_source_table(std::move(std::move(source_table))),
+    m_source_table(source_table),
     m_row_idx(row_idx) {}
 vlookup::~vlookup() = default;
 

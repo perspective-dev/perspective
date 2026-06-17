@@ -934,9 +934,7 @@ ArrowLoader::fill_column(
         std::int64_t null_count = array->null_count();
 
         if (null_count == 0) {
-            for (uint32_t i = 0; i < len; ++i) {
-                col->set_valid(offset + i, true);
-            }
+            col->set_valid_range(offset, len);
         } else {
             const uint8_t* null_bitmap = array->null_bitmap_data();
 

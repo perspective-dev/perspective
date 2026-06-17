@@ -126,6 +126,11 @@ public:
 
     void set_valid(t_uindex idx, bool valid);
 
+    // Mark `[offset, offset + len)` as `STATUS_VALID` in one pass. Bulk
+    // equivalent of a `set_valid(i, true)` loop, used for the null-free
+    // chunk fast path in the Arrow loader.
+    void set_valid_range(t_uindex offset, t_uindex len);
+
     void set_status(t_uindex idx, t_status status);
 
     void set_size(t_uindex size);

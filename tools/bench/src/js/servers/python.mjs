@@ -22,6 +22,7 @@ export async function start(path) {
     const ac = new AbortController();
     let proc;
     await $`rm -rf benchmark_venv`;
+
     if (path !== "master") {
         await $`python3 -m venv benchmark_venv`;
         const $$ = $({

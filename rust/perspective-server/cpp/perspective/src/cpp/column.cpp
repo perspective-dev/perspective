@@ -621,6 +621,17 @@ t_column::set_status(t_uindex idx, t_status status) {
 }
 
 void
+t_column::set_valid_range(t_uindex offset, t_uindex len) {
+    if (!is_status_enabled() || len == 0) {
+        return;
+    }
+    static_assert(
+        sizeof(t_status) == 1, "set_valid_range assumes a 1-byte t_status"
+    );
+    std::memset(m_status->get_nth<t_status>(offset), STATUS_VALID, len);
+}
+
+void
 t_column::set_scalar(t_uindex idx, t_tscalar value) {
     COLUMN_CHECK_ACCESS(idx);
     value.m_type = m_dtype;

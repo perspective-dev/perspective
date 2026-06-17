@@ -42,6 +42,12 @@ struct PERSPECTIVE_EXPORT t_expression_error {
 
 class PERSPECTIVE_EXPORT t_computed_expression;
 
+// Per-expression compiled-expression cache (compile-once / rebind-per-call).
+// Defined in computed_expression.cpp and held by `t_computed_expression` via a
+// `mutable unique_ptr` so the compiled exprtk AST and the storage its variable
+// and function nodes point at stay heap-pinned across calls.
+struct t_computed_expression_cache;
+
 class PERSPECTIVE_EXPORT t_computed_expression_parser {
 public:
     t_computed_expression_parser();
@@ -154,6 +160,10 @@ public:
         t_dtype dtype
     );
 
+    // Out-of-line: `m_cache` is a unique_ptr to an incomplete type, so the
+    // destructor must be defined where that type is complete (the .cpp).
+    ~t_computed_expression();
+
     void compute(
         const std::shared_ptr<t_data_table>& source_table,
         const t_gstate::t_mapping& pkey_map,
@@ -176,6 +186,12 @@ private:
     t_computed_expression_parser m_computed_expression_parser;
     std::vector<std::pair<std::string, std::string>> m_column_ids;
     t_dtype m_dtype;
+
+    // Lazily-built compiled-expression cache (see compute()). `mutable` because
+    // compute() is const; `unique_ptr` keeps the cache heap-pinned so exprtk's
+    // bound variable (T*) and function (ifunction*) pointers stay valid across
+    // calls. Invalidated + rebuilt if an input column's dtype is promoted.
+    mutable std::unique_ptr<t_computed_expression_cache> m_cache;
 };
 
 /**

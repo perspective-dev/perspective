@@ -42,7 +42,6 @@ catalog:
     # Dev Dependencies
     "@clickhouse/client-web": "^1.12.0"
     "@duckdb/duckdb-wasm": "1.33.1-dev18.0"
-    "@duckdb/duckdb-wasm-shell": "^1.30.0"
     "@fontsource/roboto-mono": "4.5.10"
     "@iarna/toml": "3.0.0"
     "@jupyterlab/builder": "^4"
