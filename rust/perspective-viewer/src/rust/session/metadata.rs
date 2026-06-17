@@ -95,6 +95,16 @@ impl SessionMetadata {
         Ok(())
     }
 
+    /// Whether `view_schema` has been populated by a prior successful
+    /// `create_view`. Used by `Session::create_view` to force a full
+    /// build on first run even when `is_clean` happens to be true, so
+    /// that downstream consumers (`query_column_config_schema`,
+    /// strip-on-write in `update_columns_configs`) always see a real
+    /// view schema rather than `None`.
+    pub fn has_view_schema(&self) -> bool {
+        self.as_ref().and_then(|s| s.view_schema.as_ref()).is_some()
+    }
+
     pub(super) fn update_expressions(
         &mut self,
         valid_recs: &perspective_client::ExprValidationResult,
@@ -302,7 +312,7 @@ impl SessionMetadata {
                     Some(
                         self.get_expression_columns()
                             .cloned()
-                            .chain(self.get_table_columns()?.clone().into_iter())
+                            .chain(self.get_table_columns()?.clone())
                             .map(move |name| {
                                 self.get_column_table_type(&name)
                                     .map(|coltype| (name, coltype))

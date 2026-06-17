@@ -14,9 +14,6 @@ use perspective_client::config::ColumnType;
 use yew::html::IntoPropValue;
 use yew::{Properties, classes, function_component, html};
 
-use crate::components::style::LocalStyle;
-use crate::css;
-
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum TypeIconType {
     Type(ColumnType),
@@ -31,7 +28,7 @@ pub struct TypeIconProps {
 #[function_component(TypeIcon)]
 pub fn type_icon(p: &TypeIconProps) -> yew::Html {
     let class = classes!(p.ty.to_string(), "type-icon");
-    html! { <><LocalStyle href={css!("type-icon")} /><span {class} /></> }
+    html! { <><span {class} /></> }
 }
 
 impl From<ColumnType> for TypeIconType {

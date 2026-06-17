@@ -80,6 +80,7 @@ perspective-workspace {
     --psp-expression--function--color: #22a0ce;
     --psp-expression--error--color: rgb(255, 136, 136);
     --psp-calendar--filter: invert(1);
+    --psp-input--filter: invert(1);
     --psp-warning--color: #242526;
     --psp-warning--background: var(--psp--color);
 

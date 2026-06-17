@@ -15,12 +15,12 @@ use web_sys::*;
 use yew::prelude::*;
 
 use super::status_indicator::StatusIndicator;
-use super::style::LocalStyle;
 use crate::components::containers::select::*;
 use crate::components::copy_dropdown::CopyDropDownMenu;
 use crate::components::export_dropdown::ExportDropDownMenu;
 use crate::components::portal::PortalModal;
 use crate::components::status_bar_counter::StatusBarRowsCounter;
+use crate::components::style::StyleSurface;
 use crate::config::*;
 use crate::js::*;
 use crate::presentation::{Presentation, PresentationProps};
@@ -332,7 +332,6 @@ impl Component for StatusBar {
         if is_settings {
             html! {
                 <>
-                    <LocalStyle href={css!("status-bar")} />
                     <div
                         ref={&self.statusbar_ref}
                         id={ctx.props().id.clone()}
@@ -418,6 +417,7 @@ impl Component for StatusBar {
                     </div>
                     <PortalModal
                         tag_name="perspective-copy-menu"
+                        surface={StyleSurface::DropdownMenu}
                         target={self.copy_target.clone()}
                         own_focus=true
                         on_close={on_close_copy}
@@ -427,6 +427,7 @@ impl Component for StatusBar {
                     </PortalModal>
                     <PortalModal
                         tag_name="perspective-export-menu"
+                        surface={StyleSurface::DropdownMenu}
                         target={self.export_target.clone()}
                         own_focus=true
                         on_close={on_close_export}

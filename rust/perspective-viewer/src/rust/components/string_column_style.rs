@@ -13,10 +13,8 @@
 use yew::prelude::*;
 
 use super::modal::{ModalLink, SetModalLink};
-use super::style::LocalStyle;
 use crate::components::form::select_enum_field::SelectEnumField;
 use crate::config::*;
-use crate::css;
 use crate::utils::WeakScope;
 
 /// Format-only widget for [`String`] columns. Renders the `format` enum
@@ -91,7 +89,6 @@ impl Component for StringColumnStyle {
         let format_mode_changed = ctx.link().callback(StringColumnStyleMsg::FormatChanged);
         html! {
             <>
-                <LocalStyle href={css!("column-style")} />
                 <div id="column-style-container" class="string-column-style-container">
                     <SelectEnumField<FormatMode>
                         label="format"

@@ -20,9 +20,8 @@ use yew::html::ImplicitClone;
 use yew::prelude::*;
 
 use super::portal::PortalModal;
+use super::style::StyleSurface;
 use crate::utils::*;
-
-static CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/css/function-dropdown.css"));
 
 #[derive(Default)]
 struct FunctionDropDownState {
@@ -158,6 +157,7 @@ impl Component for FunctionDropDownPortal {
             html! {
                 <PortalModal
                     tag_name="perspective-dropdown"
+                    surface={StyleSurface::FunctionDropdown}
                     {target}
                     own_focus=false
                     {on_close}
@@ -211,7 +211,7 @@ fn FunctionDropDownView(props: &FunctionDropDownViewProps) -> Html {
         }
     };
 
-    html! { <><style>{ CSS }</style>{ body }</> }
+    html! { <>{ body }</> }
 }
 
 fn filter_values(input: &str) -> Vec<CompletionItemSuggestion> {

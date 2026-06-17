@@ -19,9 +19,7 @@ use perspective_client::config::ColumnType;
 pub use types::*;
 use yew::{Callback, Component, Properties, html};
 
-use crate::components::style::LocalStyle;
 use crate::config::*;
-use crate::css;
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct CustomNumberFormatProps {
@@ -211,12 +209,7 @@ impl Component for CustomNumberFormat {
 
     fn view(&self, ctx: &yew::prelude::Context<Self>) -> yew::prelude::Html {
         html! {
-            <>
-                <LocalStyle href={css!("column-style")} />
-                { self.style_section(ctx) }
-                { self.digits_section(ctx) }
-                { self.misc_section(ctx) }
-            </>
+            <>{ self.style_section(ctx) }{ self.digits_section(ctx) }{ self.misc_section(ctx) }</>
         }
     }
 }

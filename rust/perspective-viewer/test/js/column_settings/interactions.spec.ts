@@ -353,7 +353,7 @@ async function checkOutput(
 }
 
 test.beforeEach(async ({ page }) => {
-    await page.goto("/tools/test/src/html/basic-test.html");
+    await page.goto("/rust/perspective-viewer/test/html/superstore-debug.html");
     await page.evaluate(async () => {
         while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
             await new Promise((x) => setTimeout(x, 10));
@@ -617,13 +617,13 @@ test.describe("Unique Behaviors", () => {
         });
     }
 
-    test("Datagrid - switching between date and datetime should rerender", async ({
+    test("switching between date and datetime should rerender", async ({
         page,
     }) => {
         const view = new PageView(page);
         await view.restore({
             settings: true,
-            plugin: "Datagrid",
+            plugin: "Debug Styled",
             columns: ["date", "datetime"],
             expressions: { date: "date(0,0,0)", datetime: "now()" },
         });

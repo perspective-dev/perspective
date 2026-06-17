@@ -22,8 +22,6 @@ use yew::prelude::*;
 use yew::virtual_dom::VChild;
 
 use super::scroll_panel_item::ScrollPanelItem;
-use crate::components::style::LocalStyle;
-use crate::css;
 use crate::utils::*;
 
 #[derive(Properties)]
@@ -253,7 +251,7 @@ impl Component for ScrollPanel {
             }
         };
 
-        html! { <><LocalStyle href={css!("containers/scroll-panel")} />{ items }</> }
+        html! { <>{ items }</> }
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, _first_render: bool) {

@@ -154,12 +154,12 @@ impl FontLoaderProps {
                 }
             }
 
-            let fut = async { select_all(block_fonts.into_iter()).await.0 };
+            let fut = async { select_all(block_fonts).await.0 };
             block_promises.push(ApiFuture::new(fut))
         }
 
         if block_promises.len() != preload_fonts.len() {
-            web_sys::console::warn_1(&format!("Missing preload fonts {:?}", &preload_fonts).into());
+            web_sys::console::warn_1(&format!("Missing preload fonts {:?}", preload_fonts).into());
         }
 
         let res = join_all(block_promises)

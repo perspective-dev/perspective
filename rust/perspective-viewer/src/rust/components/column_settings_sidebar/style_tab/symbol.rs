@@ -24,9 +24,7 @@ use yew::{Callback, Html, Properties, html};
 
 use crate::components::column_settings_sidebar::style_tab::symbol::symbol_pairs::PairsList;
 use crate::components::filter_dropdown::{FilterDropDownElement, FilterDropDownPortal};
-use crate::components::style::LocalStyle;
 use crate::config::{ColumnConfigFieldUpdate, KeyValueOpts, SymbolKVPair};
-use crate::css;
 use crate::session::Session;
 
 #[derive(Properties, PartialEq, Clone)]
@@ -126,7 +124,6 @@ impl yew::Component for SymbolStyle {
         let update_pairs = ctx.link().callback(SymbolAttrMsg::UpdatePairs);
         html! {
             <>
-                <LocalStyle href={css!("column-symbol-attributes")} />
                 <PairsList
                     title="Symbols"
                     id="attributes-symbols"

@@ -18,8 +18,6 @@ use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
 use crate::components::form::code_editor::CodeEditor;
-use crate::components::style::LocalStyle;
-use crate::css;
 use crate::js::{MimeType, copy_to_clipboard, paste_from_clipboard};
 use crate::presentation::*;
 use crate::renderer::*;
@@ -166,8 +164,6 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
 
     html! {
         <>
-            <LocalStyle href={css!("containers/tabs")} />
-            <LocalStyle href={css!("form/debug")} />
             <div id="debug-panel-overflow">
                 <div id="debug-panel" class="sidebar_column" ref={sizer}>
                     <div id="debug-panel-controls">

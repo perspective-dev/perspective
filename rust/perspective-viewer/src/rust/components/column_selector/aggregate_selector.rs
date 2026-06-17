@@ -18,8 +18,6 @@ use perspective_js::utils::ApiFuture;
 use yew::prelude::*;
 
 use crate::components::containers::select::*;
-use crate::components::style::LocalStyle;
-use crate::css;
 use crate::renderer::*;
 use crate::session::*;
 use crate::utils::PtrEqRc;
@@ -119,7 +117,6 @@ impl Component for AggregateSelector {
 
         html! {
             <>
-                <LocalStyle href={css!("aggregate-selector")} />
                 <div class="aggregate-selector-wrapper">
                     <Select<Aggregate>
                         wrapper_class="aggregate-selector"

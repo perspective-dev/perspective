@@ -19,9 +19,6 @@ use web_sys::HtmlElement;
 use yew::html::Scope;
 use yew::prelude::*;
 
-use crate::components::style::LocalStyle;
-use crate::css;
-
 #[derive(Properties, Default)]
 pub struct SplitPanelProps {
     pub children: Children,
@@ -201,7 +198,6 @@ impl Component for SplitPanel {
         let count = iter.len();
         let contents = html! {
             <>
-                <LocalStyle href={css!("containers/split-panel")} />
                 for (i, x) in iter {
                     if i == 0 {
                         if count == 1 {

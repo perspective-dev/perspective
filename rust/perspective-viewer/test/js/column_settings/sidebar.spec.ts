@@ -13,7 +13,7 @@
 import { test, expect, PageView, ColumnSettingsSidebar } from "../helpers.ts";
 
 test.beforeEach(async ({ page }) => {
-    await page.goto("/tools/test/src/html/basic-test.html");
+    await page.goto("/rust/perspective-viewer/test/html/superstore-debug.html");
     await page.evaluate(async () => {
         while (!window["__TEST_PERSPECTIVE_READY__"]) {
             await new Promise((x) => setTimeout(x, 10));
@@ -151,11 +151,12 @@ test.describe("Column Settings Sidebar", () => {
         });
 
         await page.waitForFunction(() => {
-            return (
-                document
-                    .querySelector("perspective-viewer-datagrid")
-                    ?.shadowRoot?.querySelectorAll("tbody tr").length! >= 1
-            );
+            // The Debug Styled test plugin renders its row count as text into
+            // the viewer's light DOM; wait for it to reflect the update.
+            const plugin = document
+                .querySelector("perspective-viewer")
+                ?.querySelector("perspective-viewer-debug-styled");
+            return (plugin?.textContent ?? "").includes("rows");
         });
 
         await expect(view.columnSettingsSidebar.container).toBeVisible();
@@ -234,7 +235,7 @@ test.describe("Column Settings Sidebar", () => {
     }) => {
         const view = new PageView(page);
         await view.restore({
-            plugin: "Datagrid",
+            plugin: "Debug Styled",
             columns: ["Row ID", "Postal Code"],
             settings: true,
         });

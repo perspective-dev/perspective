@@ -94,8 +94,8 @@
 }
 
 :host input[type="number"]::-webkit-inner-spin-button {
-    transform: scale(1.5); /* Makes the arrows 50% larger */
-    filter: invert(1);
+    transform: scale(1.5) translateX(-5px); /* Makes the arrows 50% larger */
+    filter: var(--psp-input--filter);
 }
 
 :host .sidebar_close_button {

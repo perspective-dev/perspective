@@ -22,11 +22,10 @@ use yew::prelude::*;
 
 use super::column_selector::InPlaceColumn;
 use super::portal::PortalModal;
+use super::style::StyleSurface;
 use crate::session::Session;
 use crate::utils::*;
 use crate::*;
-
-static CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/css/column-dropdown.css"));
 
 /// Shared state for the column dropdown, updated imperatively.
 #[derive(Default)]
@@ -207,6 +206,7 @@ impl Component for ColumnDropDownPortal {
             html! {
                 <PortalModal
                     tag_name="perspective-dropdown"
+                    surface={StyleSurface::ColumnDropdown}
                     {target}
                     own_focus=false
                     {on_close}
@@ -270,5 +270,5 @@ fn ColumnDropDownView(props: &ColumnDropDownViewProps) -> Html {
         props.width, props.width
     );
 
-    html! { <><style>{ CSS }</style><style>{ position }</style>{ body }</> }
+    html! { <><style>{ position }</style>{ body }</> }
 }

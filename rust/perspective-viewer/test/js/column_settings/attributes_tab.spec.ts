@@ -13,7 +13,7 @@
 import { test, expect, PageView } from "../helpers.ts";
 
 test.beforeEach(async ({ page }) => {
-    await page.goto("/tools/test/src/html/basic-test.html");
+    await page.goto("/rust/perspective-viewer/test/html/superstore-debug.html");
     await page.evaluate(async () => {
         while (!window["__TEST_PERSPECTIVE_READY__"]) {
             await new Promise((x) => setTimeout(x, 10));

@@ -32,6 +32,7 @@ perspective-viewer[theme="Vaporwave"] {
     --psp-expression--function--color: #22a0ce;
     --psp-expression--psp-error--color: rgb(255, 136, 136);
     --psp-calendar--filter: invert(1);
+    --psp-input--filter: invert(1);
     --psp-warning--color: #242526;
     --psp-warning--background: var(--psp--color);
 
@@ -195,6 +196,7 @@ perspective-string-column-style[theme="Vaporwave"] {
     --psp-expression--function--color: #22a0ce;
     --psp-expression--psp-error--color: rgb(255, 136, 136);
     --psp-calendar--filter: invert(1);
+    --psp-input--filter: invert(1);
     --psp-warning--color: #242526;
     --psp-warning--background: var(--psp--color);
     --psp-icon--select-arrow--mask-image: var(

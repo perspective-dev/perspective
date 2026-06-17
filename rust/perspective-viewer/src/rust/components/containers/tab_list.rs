@@ -12,8 +12,6 @@
 
 use yew::{Callback, Children, Component, Html, Properties, classes, html};
 
-use crate::components::style::LocalStyle;
-use crate::css;
 use crate::presentation::ColumnTab;
 
 #[derive(Properties, Debug, PartialEq)]
@@ -87,7 +85,6 @@ impl<T: ColumnTab> Component for TabList<T> {
 
         html! {
             <>
-                <LocalStyle href={css!("containers/tabs")} />
                 <div id="settings_tab_bar">{ for gutter_tabs }</div>
                 <div id="format-tab" class="tab-content scrollable">
                     { ctx.props().children.iter().nth(self.selected_idx) }

@@ -760,7 +760,20 @@ impl ValidSession<'_> {
     /// `update()` subscription, consuming this `ValidSession<'_>` and returning
     /// the original `&Session`.
     pub async fn create_view(&self) -> Result<Option<View>, ApiError> {
-        if !self.0.reset_clean() && !self.0.borrow().is_paused {
+        // Always consume `is_clean` to preserve the "mark up-to-date"
+        // contract of `reset_clean`. Force a full build if no view
+        // schema has been built yet — `query_column_config_schema` (and
+        // downstream `update_columns_configs`) needs a populated
+        // `view_schema` to avoid destructively stripping every key from
+        // incoming `columns_config` payloads. Without this fallback, a
+        // first restore that lands with `is_clean = true` (e.g., when a
+        // prior validate already consumed the flag) would skip the
+        // view-schema-building inner block, leaving the schema empty
+        // and causing strip-on-write to silently zero out
+        // user-supplied column config.
+        let was_clean = self.0.reset_clean();
+        let needs_schema = !self.0.metadata().has_view_schema();
+        if (!was_clean && !self.0.borrow().is_paused) || needs_schema {
             if !self.1 {
                 let config = self.0.borrow().config.clone();
                 if let Some(sub) = &mut self.0.borrow_mut().view_sub.as_mut() {
