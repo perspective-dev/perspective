@@ -178,6 +178,41 @@ export function deferIfDraining(
 }
 
 /**
+ * Drop every scheduler reference to `glManager` — called from
+ * `WebGLContextManager`'s owning renderer at teardown, *before*
+ * `glManager.destroy()` loses the GL context.
+ *
+ * Without this, a frame queued for the next RAF (an `Entry` in
+ * `pending`) or a `deferIfDraining` op still parked in `deferred`
+ * would survive the destroy and, on the next `drain()`, drive
+ * `fullRender` / `present` against a context-lost manager. In blit
+ * mode that surfaces as `endFrame`'s `transferToImageBitmap` throwing
+ * "Cannot transfer to ImageBitmap because WebGL context is lost" —
+ * logged as "scheduler: present failed". In direct mode it's a wasted
+ * paint against a dead context.
+ *
+ * Outstanding waiters for a destroyed manager are resolved (not
+ * rejected): the caller asked to tear the chart down, so its awaited
+ * `draw()` should observe a clean no-op rather than an error it would
+ * have to suppress. An in-flight `present()` (manager in `inFlight`)
+ * is left to unwind on its own — its `finally` clause will not find a
+ * `deferred` entry to flush, and the manager is already gone from
+ * `pending`, so it cannot re-enqueue.
+ */
+export function unregister(glManager: WebGLContextManager): void {
+    const entry = pending.get(glManager);
+    if (entry) {
+        pending.delete(glManager);
+        for (const w of entry.waiters) {
+            w.resolve();
+        }
+    }
+
+    deferred.delete(glManager);
+    inFlight.delete(glManager);
+}
+
+/**
  * Test-only: clear pending state. Production callers must not use
  * this — outstanding waiters are silently dropped.
  */
@@ -230,31 +265,39 @@ export function _resetForTest(): void {
 async function drain(): Promise<void> {
     const snapshot = Array.from(pending.values());
     pending.clear();
-    const ready: Entry[] = [];
+
+    // Group ready entries by the GL context behind each manager. Under
+    // pooled blit mode many managers share one context (one drawing
+    // buffer): their renders MUST serialize — interleaving two charts'
+    // paints into one canvas would corrupt the bitmap the first ships.
+    // In the default 1:1 mode every manager has its own backend, so
+    // every group has exactly one entry and all groups run in parallel,
+    // exactly as before pooling.
+    const groups = new Map<number, Entry[]>();
     for (const entry of snapshot) {
-        try {
-            // Apply any dimension change recorded by
-            // `glManager.requestResize` *before* the paint, in the
-            // same un-yielded synchronous Phase 1 loop. This pairs
-            // the canvas-clearing `canvas.width = N` assignment
-            // with the immediately-following `_fullRender`, so the
-            // browser's compositor only ever observes the canvas
-            // post-paint. In direct/in-process modes the visible
-            // canvas IS the GL canvas, and a clear-without-matching-
-            // paint in the previous task would otherwise present an
-            // empty frame to the user.
-            entry.glManager.applyPendingResize();
-            entry.fullRender();
-            ready.push(entry);
-        } catch (err) {
-            console.error("scheduler: fullRender threw", err);
+        // The browser force-loses the oldest context when a page
+        // exceeds its per-agent WebGL context cap (~16). A frame queued
+        // before that eviction would paint + present against a dead
+        // context; skip it and settle its waiters cleanly rather than
+        // letting `endFrame`'s `transferToImageBitmap` throw.
+        if (entry.glManager.isContextLost()) {
             for (const w of entry.waiters) {
-                w.reject(err);
+                w.resolve();
             }
+
+            continue;
+        }
+
+        const key = entry.glManager.backendId;
+        const group = groups.get(key);
+        if (group) {
+            group.push(entry);
+        } else {
+            groups.set(key, [entry]);
         }
     }
 
-    await Promise.all(ready.map(present));
+    await Promise.all(Array.from(groups.values()).map(presentGroup));
 
     // Now (and only now) clear rafId. If new requests landed during
     // this drain, schedule the next RAF.
@@ -264,16 +307,51 @@ async function drain(): Promise<void> {
     }
 }
 
+/**
+ * Render every entry sharing one GL context, sequentially: each chart
+ * gets the shared drawing buffer to itself for a full
+ * `beginFrame` → `fullRender` → `awaitGpuFence` → `endFrame` (present)
+ * cycle before the next chart touches it. Groups for *different*
+ * contexts run concurrently (via `Promise.all` in `drain`), so K pooled
+ * contexts give K-way parallelism and the 1:1 default keeps full
+ * cross-chart overlap.
+ *
+ * The synchronous prefix of each group (`beginFrame` + `fullRender`)
+ * runs before its first `awaitGpuFence` yields, so when groups run
+ * concurrently all first-chart draws are still submitted before any
+ * fence wait — preserving the GPU overlap the old two-phase drain had.
+ */
+async function presentGroup(entries: Entry[]): Promise<void> {
+    for (const entry of entries) {
+        await present(entry);
+    }
+}
+
 async function present(entry: Entry): Promise<void> {
-    // Mark this glManager as in-flight *synchronously*, before the
-    // first await. `Promise.all(ready.map(present))` calls each
-    // `present` synchronously to collect its returned promise, so
-    // every entry's glManager is registered in `inFlight` before
-    // any fence-wait yields and before any sibling message handler
-    // can run. Mutations posted by sibling handlers (resize, clear)
-    // route through `deferIfDraining` and queue into `deferred`
-    // until the `finally` block flushes them.
+    // Mark this glManager as in-flight *synchronously*, before the first
+    // await, so sibling message handlers' canvas mutations (resize,
+    // clear) route through `deferIfDraining` into `deferred` until the
+    // `finally` flushes them.
     inFlight.add(entry.glManager);
+    try {
+        // Apply the dimension change and (in pooled mode) reset shared
+        // GL state in the same un-yielded step as the paint that fills
+        // the buffer. Pairing the canvas-clearing `canvas.width = N`
+        // with `_fullRender` keeps the compositor from ever observing a
+        // cleared-but-unpainted canvas (visible flicker in direct/in-
+        // process modes, where the visible canvas IS the GL canvas).
+        entry.glManager.beginFrame();
+        entry.fullRender();
+    } catch (err) {
+        console.error("scheduler: fullRender threw", err);
+        for (const w of entry.waiters) {
+            w.reject(err);
+        }
+
+        flushDeferred(entry.glManager);
+        return;
+    }
+
     try {
         await entry.glManager.awaitGpuFence();
         entry.glManager.endFrame();
@@ -296,21 +374,26 @@ async function present(entry: Entry): Promise<void> {
             w.reject(err);
         }
     } finally {
-        // Bitmap shipped (or error reported). Re-open the canvas to
-        // mutations and flush any deferred ops in arrival order.
-        // Deferred ops may call `requestRender`; the resulting
-        // entry queues into `pending` and the drain's tail check
-        // picks it up for the next RAF.
-        inFlight.delete(entry.glManager);
-        const ops = deferred.get(entry.glManager);
-        if (ops) {
-            deferred.delete(entry.glManager);
-            for (const op of ops) {
-                try {
-                    op();
-                } catch (err) {
-                    console.error("scheduler: deferred op threw", err);
-                }
+        flushDeferred(entry.glManager);
+    }
+}
+
+/**
+ * Re-open a glManager's canvas to mutations and flush any ops deferred
+ * during its present, in arrival order. Deferred ops may call
+ * `requestRender`; the resulting entry queues into `pending` and the
+ * drain's tail check picks it up for the next RAF.
+ */
+function flushDeferred(glManager: WebGLContextManager): void {
+    inFlight.delete(glManager);
+    const ops = deferred.get(glManager);
+    if (ops) {
+        deferred.delete(glManager);
+        for (const op of ops) {
+            try {
+                op();
+            } catch (err) {
+                console.error("scheduler: deferred op threw", err);
             }
         }
     }

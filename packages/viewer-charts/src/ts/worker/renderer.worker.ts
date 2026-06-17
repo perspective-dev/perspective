@@ -16,6 +16,8 @@ import type { Client, Table, View } from "@perspective-dev/client";
 
 import type * as wasm_module_type from "@perspective-dev/viewer/dist/wasm/perspective-viewer.js";
 import { WebGLContextManager } from "../webgl/context-manager";
+import { ContextPool } from "../webgl/context-pool";
+import { RENDER_CONTEXT_POOL_SIZE } from "../config";
 import { ChartImplementation } from "../charts/chart";
 import { ZoomController } from "../interaction/zoom-controller";
 import {
@@ -37,7 +39,7 @@ import { viewToColumnDataMap } from "../data/view-reader";
 import { loadFontDeduped } from "./font-loader";
 import { dispatch } from "./dispatch";
 import { installSessionHost } from "./session-host";
-import { deferIfDraining } from "../render/scheduler";
+import { deferIfDraining, unregister } from "../render/scheduler";
 
 /**
  * Sentinel thrown inside the `with_typed_arrays` callback when a newer
@@ -74,6 +76,25 @@ async function resolveChartImpl(
     }
 
     return await factory();
+}
+
+/**
+ * Renderer-scope shared context pool for pooled blit mode. Lazily
+ * created on first use so non-blit / non-pooled scopes never allocate
+ * one. One per renderer scope (the worker, or the main thread in
+ * in-process mode) — `WorkerRenderer`s in the same scope share its K
+ * contexts.
+ */
+let CONTEXT_POOL: ContextPool | null = null;
+
+function getContextPool(precompile: boolean): ContextPool {
+    if (!CONTEXT_POOL) {
+        CONTEXT_POOL = new ContextPool(RENDER_CONTEXT_POOL_SIZE, {
+            precompile,
+        });
+    }
+
+    return CONTEXT_POOL;
 }
 
 export class WorkerRenderer {
@@ -131,20 +152,35 @@ export class WorkerRenderer {
 
         this.chartImpl = new ImplClass();
 
-        // Direct mode hands us the host's transferred `.webgl-canvas`.
-        // Blit mode omits it — the renderer owns its own offscreen
-        // surface and posts each completed frame back as an
-        // `ImageBitmap` via the `endFrame` callback wired below.
-        const glCanvas =
-            msg.glCanvas ??
-            new OffscreenCanvas(
-                Math.max(1, Math.round(msg.cssWidth * msg.dpr)),
-                Math.max(1, Math.round(msg.cssHeight * msg.dpr)),
-            );
+        // Three surfaces, by mode:
+        //  - direct: the host's transferred `.webgl-canvas` (1:1 with a
+        //    context, permanently).
+        //  - pooled blit: borrow one of K shared contexts so live-
+        //    context count stays bounded regardless of chart count.
+        //  - unpooled blit: a private offscreen surface per chart.
+        // Blit modes omit `msg.glCanvas`; the renderer ships each frame
+        // as an `ImageBitmap` via the `endFrame` callback wired below.
+        const pooled =
+            msg.renderMode === "blit" &&
+            !msg.glCanvas &&
+            RENDER_CONTEXT_POOL_SIZE > 0;
 
-        this.glManager = new WebGLContextManager(glCanvas, {
-            precompile: msg.precompileShaders ?? false,
-        });
+        if (pooled) {
+            this.glManager = new WebGLContextManager(
+                getContextPool(msg.precompileShaders ?? false).acquire(),
+            );
+        } else {
+            const glCanvas =
+                msg.glCanvas ??
+                new OffscreenCanvas(
+                    Math.max(1, Math.round(msg.cssWidth * msg.dpr)),
+                    Math.max(1, Math.round(msg.cssHeight * msg.dpr)),
+                );
+
+            this.glManager = new WebGLContextManager(glCanvas, {
+                precompile: msg.precompileShaders ?? false,
+            });
+        }
 
         if (msg.renderMode === "blit") {
             this.glManager.setFrameCallback((bitmap) => {
@@ -528,12 +564,14 @@ export class WorkerRenderer {
      * Composite the three layers into a single PNG `Blob`.
      */
     async snapshotPng(): Promise<Blob> {
-        // Snapshot bypasses the scheduler's drain, so it must
-        // mirror Phase 1's "apply pending resize before paint"
-        // step itself — otherwise a snapshot taken after a resize
-        // message but before the next drain would render at the
-        // previous dimensions.
-        this.glManager.applyPendingResize();
+        // Snapshot bypasses the scheduler's drain, so it must mirror
+        // the per-frame prep itself — apply any pending resize, and in
+        // pooled blit mode size the shared canvas to this chart and
+        // reset shared GL state — otherwise a snapshot taken after a
+        // resize message but before the next drain (or after a co-tenant
+        // chart left the shared canvas at its own size) would render at
+        // the wrong dimensions.
+        this.glManager.beginFrame();
         this.chartImpl._fullRender(this.glManager);
         const gl = this.glManager.gl;
         const glCanvas = gl.canvas as OffscreenCanvas;
@@ -574,6 +612,11 @@ export class WorkerRenderer {
     }
 
     destroy(): void {
+        // Drop any frame this manager still has queued in the
+        // module-level scheduler *before* losing its GL context, so a
+        // next-RAF `drain()` can't paint/present against a dead
+        // context (the "scheduler: present failed" path).
+        unregister(this.glManager);
         this.chartImpl.destroy();
         this.glManager.destroy();
     }

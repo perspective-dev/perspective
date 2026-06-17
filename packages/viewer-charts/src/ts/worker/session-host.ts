@@ -21,6 +21,20 @@ import { dispatch } from "./dispatch";
 
 const RENDERERS = new Map<number, WorkerRenderer>();
 
+/**
+ * Sessions whose `destroy` arrived before their async `bootstrap`
+ * resolved. Bootstrap does multiple awaits (wasm `initSync`, font
+ * loads, `open_table`, lazy chart-impl import); a host that connects
+ * then immediately disconnects a viewer can post `init` and `destroy`
+ * back-to-back, with `destroy` landing while the renderer is still
+ * being built. The plain `RENDERERS.get(sessionId)` lookup in the
+ * destroy branch would miss it and the bootstrap would then register a
+ * renderer (and its WebGL context) that nothing ever tears down —
+ * leaking one context per raced toggle until the browser evicts the
+ * oldest. We tombstone the id here and honor it when bootstrap lands.
+ */
+const PENDING_DESTROY = new Set<number>();
+
 function postSession(
     sessionId: number,
     msg: WorkerMsg,
@@ -89,9 +103,18 @@ export function installSessionHost(
 
             bootstrap(msg as InitMsg, makeSessionPort(sessionId))
                 .then((r) => {
+                    // A `destroy` raced ahead of bootstrap completing —
+                    // honor it now instead of leaking the freshly-built
+                    // renderer + its WebGL context.
+                    if (PENDING_DESTROY.delete(sessionId)) {
+                        dispatch(r, { kind: "destroy" });
+                        return;
+                    }
+
                     RENDERERS.set(sessionId, r);
                 })
                 .catch((err) => {
+                    PENDING_DESTROY.delete(sessionId);
                     postSession(sessionId, {
                         kind: "error",
                         message: String(err),
@@ -105,6 +128,12 @@ export function installSessionHost(
             if (r) {
                 dispatch(r, msg);
                 RENDERERS.delete(sessionId);
+            } else {
+                // Renderer not registered yet — bootstrap is still in
+                // flight. Tombstone the id so the bootstrap `.then`
+                // tears it down on arrival instead of registering a
+                // leaked context.
+                PENDING_DESTROY.add(sessionId);
             }
 
             return;

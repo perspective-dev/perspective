@@ -16,16 +16,18 @@ import {
     run_standard_tests,
     runPerspectiveEventClickTest,
 } from "@perspective-dev/test";
+import type { Page } from "@playwright/test";
 import * as prettier from "prettier";
 
-async function getDatagridContents(page) {
+async function getDatagridContents(page: Page): Promise<string> {
     const raw = await page.evaluate(async () => {
         const datagrid = document.querySelector(
             "perspective-viewer perspective-viewer-datagrid",
-        );
+        ) as any;
         if (!datagrid) {
             return "MISSING DATAGRID";
         }
+
         const regularTable = datagrid.shadowRoot.querySelector("regular-table");
         return regularTable?.innerHTML || "";
     });
@@ -39,13 +41,13 @@ test.describe("Datagrid with superstore data set", () => {
     test.beforeEach(async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
+            await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
             });
         });
@@ -55,7 +57,7 @@ test.describe("Datagrid with superstore data set", () => {
 
     test("Row headers are printed correctly", async ({ page }) => {
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
+            await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
                 group_by: ["Ship Date"],
                 split_by: ["Ship Mode"],
@@ -63,10 +65,7 @@ test.describe("Datagrid with superstore data set", () => {
             });
         });
 
-        compareContentsToSnapshot(
-            await getDatagridContents(page),
-            "row-headers-are-printed-correctly.txt",
-        );
+        await compareContentsToSnapshot(await getDatagridContents(page));
     });
 
     test("Column headers are printed correctly, split_by a date column", async ({
@@ -74,13 +73,13 @@ test.describe("Datagrid with superstore data set", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
+            await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
                 columns: ["Sales", "Profit"],
                 group_by: ["State"],
@@ -89,10 +88,7 @@ test.describe("Datagrid with superstore data set", () => {
             });
         });
 
-        compareContentsToSnapshot(
-            await getDatagridContents(page),
-            "column-headers-are-printed-correctly-split-by-a-date-column.txt",
-        );
+        await compareContentsToSnapshot(await getDatagridContents(page));
     });
 
     test("A filtered-to-empty dataset with group_by and split_by does not error internally", async ({
@@ -100,13 +96,13 @@ test.describe("Datagrid with superstore data set", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
+            await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
                 columns: ["Sales", "Profit"],
                 group_by: ["State"],
@@ -115,10 +111,7 @@ test.describe("Datagrid with superstore data set", () => {
             });
         });
 
-        compareContentsToSnapshot(
-            await getDatagridContents(page),
-            "a-filtered-to-empty-dataset-with-group-by-and-split-by-does-not-error-internally.txt",
-        );
+        await compareContentsToSnapshot(await getDatagridContents(page));
     });
 
     test("An editable datagrid is editable through mouse interaction", async ({
@@ -126,18 +119,28 @@ test.describe("Datagrid with superstore data set", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
+            await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
                 plugin_config: {
                     edit_mode: "EDIT",
                 },
                 columns: ["State", "City", "Customer ID"],
+            });
+
+            const { resolve, promise } = Promise.withResolvers();
+            window.__promise__ = promise;
+            const view = await document
+                .querySelector("perspective-viewer")!
+                .getView();
+
+            await view.on_update(() => {
+                resolve(true);
             });
         });
 
@@ -153,8 +156,9 @@ test.describe("Datagrid with superstore data set", () => {
         );
 
         const result = await page.evaluate(async () => {
+            await window.__promise__;
             const view = await document
-                .querySelector("perspective-viewer")
+                .querySelector("perspective-viewer")!
                 .getView();
             const json = await view.to_json_string({ end_row: 4 });
             return json;
@@ -170,13 +174,13 @@ test.describe("Datagrid with superstore data set", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
-        const td = await page.evaluateHandle(async () => {
-            await document.querySelector("perspective-viewer").restore({
+        const td: any = await page.evaluateHandle(async () => {
+            await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
                 plugin_config: {
                     edit_mode: "EDIT",
@@ -184,18 +188,20 @@ test.describe("Datagrid with superstore data set", () => {
                 columns: ["State", "City", "Customer ID"],
             });
 
-            return document
-                .querySelector("perspective-viewer-datagrid")
-                .shadowRoot.querySelector("table tbody tr td");
+            return (
+                document.querySelector("perspective-viewer-datagrid") as any
+            ).shadowRoot.querySelector("table tbody tr td");
         });
 
         await td.click();
         await td.asElement().fill("Test");
-        await page.evaluate(() => document.activeElement.blur());
+        await page.evaluate(() =>
+            (document.activeElement as HTMLElement | null)?.blur(),
+        );
         const result = await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").flush();
+            await document.querySelector("perspective-viewer")!.flush();
             const view = await document
-                .querySelector("perspective-viewer")
+                .querySelector("perspective-viewer")!
                 .getView();
 
             const json = await view.to_json_string({ end_row: 4 });
@@ -215,36 +221,33 @@ test.describe("Datagrid regressions", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
-        const td = await page.evaluateHandle(async () => {
-            const elem = await document
-                .querySelector("perspective-viewer-datagrid")
-                .shadowRoot.querySelector("regular-table");
+        const td: any = await page.evaluateHandle(async () => {
+            const elem = (
+                document.querySelector("perspective-viewer-datagrid") as any
+            ).shadowRoot.querySelector("regular-table");
             elem.scrollLeft = 5000;
             await elem.draw();
-            return document
-                .querySelector("perspective-viewer-datagrid")
-                .shadowRoot.querySelector("table thead tr th:nth-child(3)");
+            return (
+                document.querySelector("perspective-viewer-datagrid") as any
+            ).shadowRoot.querySelector("table thead tr th:nth-child(3)");
         });
 
         await td.click();
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").flush();
-            const elem = await document
-                .querySelector("perspective-viewer-datagrid")
-                .shadowRoot.querySelector("regular-table");
+            await document.querySelector("perspective-viewer")!.flush();
+            const elem = (
+                document.querySelector("perspective-viewer-datagrid") as any
+            ).shadowRoot.querySelector("regular-table");
             elem.scrollLeft = 0;
             await elem.draw();
         });
 
-        compareContentsToSnapshot(
-            await getDatagridContents(page),
-            "sorting-a-column-does-not-break-viewport-emtadata.txt",
-        );
+        await compareContentsToSnapshot(await getDatagridContents(page));
     });
 });
 
@@ -254,13 +257,13 @@ test.describe("Datagrid with superstore arrow data set", () => {
             "/tools/test/src/html/all-types-small-multi-arrow-test.html",
         );
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
+            await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
             });
         });

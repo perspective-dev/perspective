@@ -125,6 +125,22 @@ const GLOBAL_STYLES = (() => {
     return [sheet];
 })();
 
+/**
+ * Process-global GL presentation strategy, shared by *every* chart-type
+ * plugin in this renderer. Seeded from the build-time {@link RENDER_BLIT_MODE}
+ * and overridable at runtime via
+ * {@link HTMLPerspectiveViewerWebGLPluginElement.setBlitMode}.
+ *
+ * Module scope (not per-instance) on purpose: blit-vs-direct is a
+ * whole-renderer decision — in `"blit"` mode the worker shares a pool of
+ * GL contexts across all charts ([webgl/context-pool.ts]), so a page
+ * can't sensibly mix strategies per chart. Every per-chart-type subclass
+ * registered in [index.ts] reads this one value when it builds its
+ * renderer, so setting it once (before the first chart renders) applies
+ * to all of them.
+ */
+let BLIT_MODE: "direct" | "blit" = RENDER_BLIT_MODE;
+
 export class HTMLPerspectiveViewerWebGLPluginElement
     extends HTMLElement
     implements IPerspectiveViewerPlugin
@@ -139,7 +155,6 @@ export class HTMLPerspectiveViewerWebGLPluginElement
     private _rendererPromise: Promise<RendererTransport> | null = null;
     private _rawEventForwarder: RawEventForwarder | null = null;
     private _generation = 0;
-    private _renderBlitMode: "direct" | "blit" = RENDER_BLIT_MODE;
     private _resetClickAbort: AbortController | null = null;
 
     /**
@@ -257,13 +272,41 @@ export class HTMLPerspectiveViewerWebGLPluginElement
             return this._rendererPromise;
         }
 
-        this._rendererPromise = this._buildRenderer(view).then((r) => {
-            this._renderer = r;
-            this._setupInteraction(r);
-            return r;
-        });
+        // `_buildRenderer` is async — it awaits `getClient`, `getTable`,
+        // and a full worker handshake — so a `disconnectedCallback`
+        // (toggle / chart-type switch) frequently lands *before* this
+        // `.then` runs. At that point `this._renderer` is still null,
+        // so `delete()`'s `if (this._renderer)` teardown is skipped and
+        // the freshly-built transport (and its WebGL context) would be
+        // assigned to a detached element and leak — one context per
+        // raced toggle, until the browser evicts the oldest.
+        //
+        // `delete()` sets `_rendererPromise = null`, so promise identity
+        // is the dispose signal: if `this._rendererPromise` no longer
+        // points at *this* build when it resolves, the element was
+        // deleted (or a reconnect started a newer build) and we destroy
+        // the orphan instead of adopting it. Promise identity — not
+        // `_generation`, which every `draw`/`update` bumps — is the
+        // right token: a rapid draw→update must NOT tear down the
+        // single in-flight build it shares via this memoized promise.
+        const p: Promise<RendererTransport> = this._buildRenderer(view).then(
+            (r) => {
+                if (this._rendererPromise !== p) {
+                    r.destroy();
+                    throw new Error("renderer disposed during init");
+                }
 
-        return this._rendererPromise;
+                this._renderer = r;
+                this._setupInteraction(r);
+                return r;
+            },
+        );
+
+        // Swallow the dispose rejection so it doesn't surface as an
+        // unhandled rejection; `_drawImpl` catches it and bails.
+        p.catch(() => {});
+        this._rendererPromise = p;
+        return p;
     }
 
     /**
@@ -350,15 +393,28 @@ export class HTMLPerspectiveViewerWebGLPluginElement
             },
             pluginConfig: this._pluginConfig,
             defaultChartType: this._chartType.default_chart_type,
-            renderBlitMode: this._renderBlitMode,
+            renderBlitMode: BLIT_MODE,
         });
 
         return transport;
     }
 
-    setBlitMode(mode: "direct" | "blit") {
-        console.assert(this._initialized, "Already initialized");
-        this._renderBlitMode = mode;
+    /**
+     * Select the GL presentation strategy for *all* chart-type plugins
+     * in this renderer. Static + process-global: the value is shared by
+     * every per-chart-type subclass, so it must be set once before the
+     * charts that should use it build their renderers (a renderer reads
+     * {@link BLIT_MODE} at construction in `_buildRenderer`; charts
+     * already built keep their mode until torn down and rebuilt).
+     *
+     * - `"direct"` — each chart owns a GL context 1:1 with its visible
+     *   canvas (lowest latency; bounded by the browser's ~16-context
+     *   cap).
+     * - `"blit"` — charts render off-screen and share a pool of GL
+     *   contexts ([webgl/context-pool.ts]), so a page can exceed the cap.
+     */
+    static setBlitMode(mode: "direct" | "blit") {
+        BLIT_MODE = mode;
     }
 
     get_static_config(): PluginStaticConfig {
@@ -499,7 +555,15 @@ export class HTMLPerspectiveViewerWebGLPluginElement
 
     private async _drawImpl(view: View): Promise<void> {
         const gen = ++this._generation;
-        const renderer = await this._ensureRenderer(view);
+        let renderer: RendererTransport;
+        try {
+            renderer = await this._ensureRenderer(view);
+        } catch {
+            // Renderer was disposed mid-init (element disconnected
+            // during the async build) — nothing to draw.
+            return;
+        }
+
         if (this._generation !== gen) {
             return;
         }

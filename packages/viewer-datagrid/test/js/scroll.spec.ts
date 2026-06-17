@@ -12,16 +12,18 @@
 
 import { test } from "@perspective-dev/test";
 import { compareContentsToSnapshot } from "@perspective-dev/test";
+import type { Page } from "@playwright/test";
 import * as prettier from "prettier";
 
-async function getDatagridContents(page) {
+async function getDatagridContents(page: Page): Promise<string> {
     const raw = await page.evaluate(async () => {
         const datagrid = document.querySelector(
             "perspective-viewer perspective-viewer-datagrid",
-        );
+        ) as any;
         if (!datagrid) {
             return "MISSING DATAGRID";
         }
+
         const regularTable = datagrid.shadowRoot.querySelector("regular-table");
         return regularTable?.innerHTML || "";
     });
@@ -31,11 +33,11 @@ async function getDatagridContents(page) {
     });
 }
 
-async function getScrollState(page) {
+async function getScrollState(page: Page) {
     return await page.evaluate(async () => {
         const datagrid = document.querySelector(
             "perspective-viewer perspective-viewer-datagrid",
-        );
+        ) as any;
         const regularTable = datagrid.shadowRoot.querySelector("regular-table");
         return {
             scrollTop: regularTable.scrollTop,
@@ -48,29 +50,29 @@ async function getScrollState(page) {
     });
 }
 
-async function getVisibleCellData(page) {
+async function getVisibleCellData(page: Page) {
     return await page.evaluate(async () => {
         const datagrid = document.querySelector(
             "perspective-viewer perspective-viewer-datagrid",
-        );
+        ) as any;
         const regularTable = datagrid.shadowRoot.querySelector("regular-table");
         const tbody = regularTable.querySelector("table tbody");
         const thead = regularTable.querySelector("table thead");
 
         const headerCells = Array.from(
             thead.querySelectorAll("tr:last-child th"),
-        ).map((th) => th.textContent.trim());
+        ).map((th: any) => th.textContent.trim());
 
         const firstRow = tbody.querySelector("tr");
         const firstRowCells = firstRow
-            ? Array.from(firstRow.querySelectorAll("td")).map((td) =>
+            ? Array.from(firstRow.querySelectorAll("td")).map((td: any) =>
                   td.textContent.trim(),
               )
             : [];
 
         const lastRow = tbody.querySelector("tr:last-child");
         const lastRowCells = lastRow
-            ? Array.from(lastRow.querySelectorAll("td")).map((td) =>
+            ? Array.from(lastRow.querySelectorAll("td")).map((td: any) =>
                   td.textContent.trim(),
               )
             : [];
@@ -88,13 +90,13 @@ test.describe("Datagrid scroll tests with superstore data", () => {
     test.beforeEach(async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
+            await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
             });
         });
@@ -107,7 +109,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             await page.evaluate(async () => {
                 const datagrid = document.querySelector(
                     "perspective-viewer-datagrid",
-                );
+                ) as any;
 
                 const regularTable =
                     datagrid.shadowRoot.querySelector("regular-table");
@@ -117,7 +119,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").flush();
+                await document.querySelector("perspective-viewer")!.flush();
             });
 
             const scrolledData = await getVisibleCellData(page);
@@ -133,7 +135,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             await page.evaluate(async () => {
                 const datagrid = document.querySelector(
                     "perspective-viewer-datagrid",
-                );
+                ) as any;
                 const regularTable =
                     datagrid.shadowRoot.querySelector("regular-table");
                 regularTable.scrollTop =
@@ -142,7 +144,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").flush();
+                await document.querySelector("perspective-viewer")!.flush();
             });
 
             const scrollState = await getScrollState(page);
@@ -152,10 +154,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
                 scrollState.scrollTop + scrollState.clientHeight,
             ).toBeGreaterThanOrEqual(scrollState.scrollHeight - 1);
 
-            compareContentsToSnapshot(
-                await getDatagridContents(page),
-                "vertical-scroll-to-bottom.txt",
-            );
+            await compareContentsToSnapshot(await getDatagridContents(page));
         });
 
         test("Vertical scroll position is preserved after flush", async ({
@@ -164,7 +163,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             await page.evaluate(async () => {
                 const datagrid = document.querySelector(
                     "perspective-viewer-datagrid",
-                );
+                ) as any;
                 const regularTable =
                     datagrid.shadowRoot.querySelector("regular-table");
                 regularTable.scrollTop = 500;
@@ -172,7 +171,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").flush();
+                await document.querySelector("perspective-viewer")!.flush();
             });
 
             const scrollStateAfterFlush = await getScrollState(page);
@@ -187,7 +186,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             await page.evaluate(async () => {
                 const datagrid = document.querySelector(
                     "perspective-viewer-datagrid",
-                );
+                ) as any;
                 const regularTable =
                     datagrid.shadowRoot.querySelector("regular-table");
                 regularTable.scrollLeft = 450;
@@ -195,7 +194,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").flush();
+                await document.querySelector("perspective-viewer")!.flush();
             });
 
             const scrolledData = await getVisibleCellData(page);
@@ -213,7 +212,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             await page.evaluate(async () => {
                 const datagrid = document.querySelector(
                     "perspective-viewer-datagrid",
-                );
+                ) as any;
                 const regularTable =
                     datagrid.shadowRoot.querySelector("regular-table");
 
@@ -226,7 +225,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").flush();
+                await document.querySelector("perspective-viewer")!.flush();
             });
 
             const scrollState = await getScrollState(page);
@@ -236,10 +235,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
                 scrollState.scrollLeft + scrollState.clientWidth,
             ).toBeGreaterThanOrEqual(scrollState.scrollWidth - 1);
 
-            compareContentsToSnapshot(
-                await getDatagridContents(page),
-                "horizontal-scroll-to-right-edge.txt",
-            );
+            await compareContentsToSnapshot(await getDatagridContents(page));
         });
 
         test("Horizontal scroll position is preserved after flush", async ({
@@ -248,7 +244,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             await page.evaluate(async () => {
                 const datagrid = document.querySelector(
                     "perspective-viewer-datagrid",
-                );
+                ) as any;
                 const regularTable =
                     datagrid.shadowRoot.querySelector("regular-table");
                 regularTable.scrollLeft = 300;
@@ -256,7 +252,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").flush();
+                await document.querySelector("perspective-viewer")!.flush();
             });
 
             const scrollStateAfterFlush = await getScrollState(page);
@@ -273,7 +269,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             await page.evaluate(async () => {
                 const datagrid = document.querySelector(
                     "perspective-viewer-datagrid",
-                );
+                ) as any;
                 const regularTable =
                     datagrid.shadowRoot.querySelector("regular-table");
                 regularTable.scrollTop = 800;
@@ -282,7 +278,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").flush();
+                await document.querySelector("perspective-viewer")!.flush();
             });
 
             const scrolledData = await getVisibleCellData(page);
@@ -297,17 +293,14 @@ test.describe("Datagrid scroll tests with superstore data", () => {
                 initialData.headerCells,
             );
 
-            compareContentsToSnapshot(
-                await getDatagridContents(page),
-                "combined-scroll-viewport.txt",
-            );
+            await compareContentsToSnapshot(await getDatagridContents(page));
         });
 
         test("Scroll to bottom-right corner", async ({ page }) => {
             await page.evaluate(async () => {
                 const datagrid = document.querySelector(
                     "perspective-viewer-datagrid",
-                );
+                ) as any;
                 const regularTable =
                     datagrid.shadowRoot.querySelector("regular-table");
                 regularTable.scrollTop =
@@ -318,7 +311,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").flush();
+                await document.querySelector("perspective-viewer")!.flush();
             });
 
             const scrollState = await getScrollState(page);
@@ -326,10 +319,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             test.expect(scrollState.scrollTop).toBeGreaterThan(0);
             test.expect(scrollState.scrollLeft).toBeGreaterThan(0);
 
-            compareContentsToSnapshot(
-                await getDatagridContents(page),
-                "scroll-to-bottom-right-corner.txt",
-            );
+            await compareContentsToSnapshot(await getDatagridContents(page));
         });
     });
 
@@ -338,7 +328,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             page,
         }) => {
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").restore({
+                await document.querySelector("perspective-viewer")!.restore({
                     plugin: "Datagrid",
                     group_by: ["State", "City"],
                     columns: ["Sales", "Quantity", "Profit"],
@@ -348,7 +338,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             await page.evaluate(async () => {
                 const datagrid = document.querySelector(
                     "perspective-viewer-datagrid",
-                );
+                ) as any;
                 const regularTable =
                     datagrid.shadowRoot.querySelector("regular-table");
                 regularTable.scrollTop = 500;
@@ -356,20 +346,17 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").flush();
+                await document.querySelector("perspective-viewer")!.flush();
             });
 
-            compareContentsToSnapshot(
-                await getDatagridContents(page),
-                "vertical-scroll-with-group-by.txt",
-            );
+            await compareContentsToSnapshot(await getDatagridContents(page));
         });
 
         test("Horizontal scroll with split_by shows correct column groups", async ({
             page,
         }) => {
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").restore({
+                await document.querySelector("perspective-viewer")!.restore({
                     plugin: "Datagrid",
                     split_by: ["Ship Mode"],
                     columns: ["Sales", "Quantity", "Profit"],
@@ -379,7 +366,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             await page.evaluate(async () => {
                 const datagrid = document.querySelector(
                     "perspective-viewer-datagrid",
-                );
+                ) as any;
                 const regularTable =
                     datagrid.shadowRoot.querySelector("regular-table");
                 regularTable.scrollLeft = 300;
@@ -387,13 +374,10 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").flush();
+                await document.querySelector("perspective-viewer")!.flush();
             });
 
-            compareContentsToSnapshot(
-                await getDatagridContents(page),
-                "horizontal-scroll-with-split-by.txt",
-            );
+            await compareContentsToSnapshot(await getDatagridContents(page));
         });
     });
 
@@ -404,7 +388,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             await page.evaluate(async () => {
                 const datagrid = document.querySelector(
                     "perspective-viewer-datagrid",
-                );
+                ) as any;
                 const regularTable =
                     datagrid.shadowRoot.querySelector("regular-table");
                 regularTable.scrollTop = 500;
@@ -413,13 +397,13 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").restore({
+                await document.querySelector("perspective-viewer")!.restore({
                     columns: ["State", "City"],
                 });
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").flush();
+                await document.querySelector("perspective-viewer")!.flush();
             });
 
             const scrollState = await getScrollState(page);
@@ -434,7 +418,7 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             await page.evaluate(async () => {
                 const datagrid = document.querySelector(
                     "perspective-viewer-datagrid",
-                );
+                ) as any;
                 const regularTable =
                     datagrid.shadowRoot.querySelector("regular-table");
                 regularTable.scrollTop = 500;
@@ -442,13 +426,13 @@ test.describe("Datagrid scroll tests with superstore data", () => {
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").restore({
+                await document.querySelector("perspective-viewer")!.restore({
                     filter: [["State", "==", "California"]],
                 });
             });
 
             await page.evaluate(async () => {
-                await document.querySelector("perspective-viewer").flush();
+                await document.querySelector("perspective-viewer")!.flush();
             });
 
             const scrollState = await getScrollState(page);
