@@ -94,9 +94,14 @@ typedef std::vector<t_lstore_recipe> t_lstore_argvec;
 
 #ifdef PSP_STORAGE_VERIFY
 #define STORAGE_CHECK_ACCESS_GET(idx)                                          \
-    PSP_VERBOSE_ASSERT(                                                        \
-        sizeof(T) * idx < (m_capacity + sizeof(T)), "Invalid access"           \
-    );
+    if (!(sizeof(T) * (idx) < (m_capacity + sizeof(T)))) {                     \
+        std::stringstream __psp_oob__;                                         \
+        __psp_oob__ << "Invalid get access in " << repr() << " idx=" << (idx)  \
+                    << " elemsize=" << sizeof(T)                               \
+                    << " byte_offset=" << (sizeof(T) * (idx))                  \
+                    << " m_size=" << m_size << " m_capacity=" << m_capacity;   \
+        PSP_COMPLAIN_AND_ABORT(__psp_oob__.str());                            \
+    }
 #define PSP_CHECK_CAPACITY()                                                   \
     PSP_VERBOSE_ASSERT(                                                        \
         m_size <= m_capacity,                                                  \
@@ -104,7 +109,14 @@ typedef std::vector<t_lstore_recipe> t_lstore_argvec;
         "mismatch"                                                             \
     )
 #define STORAGE_CHECK_ACCESS(idx)                                              \
-    PSP_VERBOSE_ASSERT(sizeof(T) * idx < m_capacity, "Invalid access");
+    if (!(sizeof(T) * (idx) < m_capacity)) {                                   \
+        std::stringstream __psp_oob__;                                         \
+        __psp_oob__ << "Invalid set access in " << repr() << " idx=" << (idx)  \
+                    << " elemsize=" << sizeof(T)                               \
+                    << " byte_offset=" << (sizeof(T) * (idx))                  \
+                    << " m_size=" << m_size << " m_capacity=" << m_capacity;   \
+        PSP_COMPLAIN_AND_ABORT(__psp_oob__.str());                            \
+    }
 #else
 #define STORAGE_CHECK_ACCESS(idx)
 #define STORAGE_CHECK_ACCESS_GET(idx)

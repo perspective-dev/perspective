@@ -162,5 +162,30 @@ test.describe("Arrow", function () {
                 __ROW_PATH__: [[], [null], [""], ["AAAA"]],
             });
         });
+
+        test("Loads a time32 (millisecond) column without overflow", async function () {
+            const expected = Array.from({ length: 64 }, (_, i) => i);
+            const tableData = arrow.tableFromArrays({
+                t: arrow.vectorFromArray(expected, new arrow.TimeMillisecond()),
+            });
+
+            const table = await perspective.table(arrow.tableToIPC(tableData));
+            const view = await table.view();
+            expect(await table.size()).toEqual(64);
+            expect(await view.to_columns()).toEqual({ t: expected });
+            await view.delete();
+            await table.delete();
+        });
+    });
+
+    test.describe("Malformed input", function () {
+        test("Rejects an Arrow with a row count that exceeds 32 bits", async function () {
+            const bytes = new Uint8Array(
+                fs.readFileSync(`${__dirname}/../../arrow/bad_row_count.arrow`),
+            );
+            await expect(perspective.table(bytes)).rejects.toThrow(
+                /row count exceeds maximum supported size/,
+            );
+        });
     });
 });

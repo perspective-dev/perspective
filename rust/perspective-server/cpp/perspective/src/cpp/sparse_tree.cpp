@@ -1238,6 +1238,11 @@ t_stree::update_agg_table(
             case AGGTYPE_WEIGHTED_MEAN: {
                 auto pkeys = get_pkeys(nidx);
 
+                if (spec.get_dependencies().size() < 2) {
+                    dst->set_valid(dst_ridx, false);
+                    break;
+                }
+
                 double nr = 0;
                 double dr = 0;
                 std::vector<t_tscalar> values;
@@ -1618,6 +1623,11 @@ t_stree::update_agg_table(
                     break;
                 }
 
+                if (spec.get_dependencies().size() < 2) {
+                    dst->set_scalar(dst_ridx, new_value);
+                    break;
+                }
+
                 std::vector<t_tscalar> values;
                 read_column_from_gstate(
                     gstate,
@@ -1669,6 +1679,11 @@ t_stree::update_agg_table(
                 old_value.set(dst_scalar);
                 auto pkeys = get_pkeys(nidx);
                 if (pkeys.empty()) {
+                    dst->set_scalar(dst_ridx, new_value);
+                    break;
+                }
+
+                if (spec.get_dependencies().size() < 2) {
                     dst->set_scalar(dst_ridx, new_value);
                     break;
                 }
@@ -2665,23 +2680,20 @@ t_stree::first_last_helper(
         return std::make_pair(mknone(), mknone());
     }
 
+    const auto& deps = spec.get_dependencies();
+    if (deps.size() < 2) {
+        return std::make_pair(mknone(), mknone());
+    }
+
     std::vector<t_tscalar> values;
     std::vector<t_tscalar> sort_values;
 
     read_column_from_gstate(
-        gstate,
-        expression_master_table,
-        spec.get_dependencies()[0].name(),
-        pkeys,
-        values
+        gstate, expression_master_table, deps[0].name(), pkeys, values
     );
 
     read_column_from_gstate(
-        gstate,
-        expression_master_table,
-        spec.get_dependencies()[1].name(),
-        pkeys,
-        sort_values
+        gstate, expression_master_table, deps[1].name(), pkeys, sort_values
     );
 
     auto minmax_idx = get_minmax_idx(sort_values, spec.get_sort_type());

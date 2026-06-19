@@ -1885,6 +1885,11 @@ diff3::operator()(t_parameter_list parameters) {
     t_vector_view v2(parameters[1]);
     t_vector_view out(parameters[2]);
 
+    if (v1.size() < 3 || v2.size() < 3 || out.size() < 3) {
+        rval.m_status = STATUS_CLEAR;
+        return rval;
+    }
+
     t_tscalar o1;
     o1.set(v1[0] - v2[0]);
 
@@ -1912,6 +1917,10 @@ norm3::operator()(t_parameter_list parameters) {
     rval.clear();
     rval.m_type = DTYPE_FLOAT64;
     t_vector_view v1(parameters[0]);
+    if (v1.size() < 3) {
+        rval.m_status = STATUS_CLEAR;
+        return rval;
+    }
     double a = v1[0].to_double();
     double b = v1[1].to_double();
     double c = v1[2].to_double();
@@ -1934,6 +1943,11 @@ cross_product3::operator()(t_parameter_list parameters) {
     t_vector_view v1(parameters[0]);
     t_vector_view v2(parameters[1]);
     t_vector_view out(parameters[2]);
+
+    if (v1.size() < 3 || v2.size() < 3 || out.size() < 3) {
+        rval.m_status = STATUS_CLEAR;
+        return rval;
+    }
 
     // a2 * b3 - a3 * b2
     t_tscalar o1;
@@ -1968,6 +1982,11 @@ dot_product3::operator()(t_parameter_list parameters) {
     // Parameters already validated
     t_vector_view v1(parameters[0]);
     t_vector_view v2(parameters[1]);
+
+    if (v1.size() < 3 || v2.size() < 3) {
+        rval.m_status = STATUS_CLEAR;
+        return rval;
+    }
 
     rval.set(v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]);
     return rval;

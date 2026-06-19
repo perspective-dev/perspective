@@ -19,6 +19,7 @@
 #include <arrow/type_fwd.h>
 #include <cstdint>
 #include <exception>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <perspective/arrow_loader.h>
@@ -209,6 +210,11 @@ ArrowLoader::initialize(const std::uint8_t* ptr, const uint32_t length) {
         load_file(ptr, length, m_table);
     } else {
         load_stream(ptr, length, m_table);
+    }
+
+    const auto validation = m_table->ValidateFull();
+    if (!validation.ok()) {
+        PSP_COMPLAIN_AND_ABORT(validation.ToString());
     }
 
     std::shared_ptr<arrow::Schema> schema = m_table->schema();
@@ -782,9 +788,9 @@ copy_array(
         case arrow::Time32Type::type_id: {
             auto scol = std::static_pointer_cast<arrow::Time32Array>(src);
             std::memcpy(
-                dest->get_nth<std::uint64_t>(offset),
+                dest->get_nth<std::uint32_t>(offset),
                 (void*)scol->raw_values(),
-                len * 8
+                len * 4
             );
         } break;
         // case arrow::Type {
@@ -972,7 +978,16 @@ ArrowLoader::fill_column(
 
 std::uint32_t
 ArrowLoader::row_count() const {
-    return m_table->num_rows();
+    const std::int64_t n = m_table->num_rows();
+    if (n < 0
+        || static_cast<std::uint64_t>(n)
+            > std::numeric_limits<std::uint32_t>::max()) {
+        PSP_COMPLAIN_AND_ABORT(
+            "Arrow table row count exceeds maximum supported size"
+        );
+    }
+
+    return static_cast<std::uint32_t>(n);
 }
 
 std::vector<std::string>

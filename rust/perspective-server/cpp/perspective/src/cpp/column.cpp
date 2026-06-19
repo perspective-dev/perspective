@@ -341,6 +341,7 @@ t_column::size() const {
 
 void
 t_column::set_size(t_uindex size) {
+    reserve(size);
 #ifdef PSP_COLUMN_VERIFY
     PSP_VERBOSE_ASSERT(
         size * get_dtype_size(m_dtype) <= m_data->capacity(),

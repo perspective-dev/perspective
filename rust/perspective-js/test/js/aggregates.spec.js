@@ -164,6 +164,52 @@ const std = (nums) => {
             table.delete();
         });
 
+        test("`first` aggregate with a hidden sort column does not crash", async function () {
+            const table = await perspective.table([
+                { g: "x", v: 1 },
+                { g: "x", v: 2 },
+                { g: "y", v: 3 },
+            ]);
+            const view = await table.view({
+                group_by: ["g"],
+                columns: ["g"],
+                aggregates: { v: "first" },
+                sort: [["v", "desc"]],
+            });
+
+            const result = await view.to_json();
+            const paths = result.map((r) => r.__ROW_PATH__);
+            expect(paths.length).toEqual(3);
+            expect(paths).toContainEqual([]);
+            expect(paths).toContainEqual(["x"]);
+            expect(paths).toContainEqual(["y"]);
+            await view.delete();
+            await table.delete();
+        });
+
+        test("`max by` with a non-visible by-column", async function () {
+            const table = await perspective.table([
+                { g: "x", v: 1, w: 10 },
+                { g: "x", v: 2, w: 20 },
+                { g: "y", v: 3, w: 5 },
+            ]);
+            const view = await table.view({
+                group_by: ["g"],
+                columns: ["v"],
+                aggregates: { v: ["max by", ["w"]] },
+            });
+
+            const result = await view.to_json();
+            // `max by` picks the `v` at the row with the maximum `w`.
+            expect(result).toEqual([
+                { __ROW_PATH__: [], v: 2 },
+                { __ROW_PATH__: ["x"], v: 2 },
+                { __ROW_PATH__: ["y"], v: 3 },
+            ]);
+            await view.delete();
+            await table.delete();
+        });
+
         test("Aggregates are not in columns are ignored", async function () {
             const table = await perspective.table(data);
             const view = await table.view({
