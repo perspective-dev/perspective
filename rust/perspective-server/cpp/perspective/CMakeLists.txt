@@ -207,6 +207,10 @@ if(PSP_PYTHON_BUILD AND MACOS)
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -undefined dynamic_lookup")
 endif()
 
+if(EMSCRIPTEN)
+    set(CMAKE_HAVE_LIBC_PTHREAD TRUE CACHE BOOL "psp: satisfy FindThreads on WASM without enabling pthreads" FORCE)
+endif()
+
 # ######################
 set(psp_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/src/include")
 

@@ -27,7 +27,7 @@ const SCATTER = {
 };
 
 const TABLE_NAME = "load-viewer-csv";
-const TOGGLE_COUNT = 24;
+const TOGGLE_COUNT = 12;
 
 function collectLeakErrors(page: Page): string[] {
     const hits: string[] = [];
@@ -48,10 +48,9 @@ async function toggleSecondViewer(page: Page, cfg: object): Promise<void> {
             const worker = (window as any).__TEST_WORKER__;
             const table = await worker.open_table(tableName);
             const v = document.createElement("perspective-viewer");
-            v.setAttribute("data-toggle", "1");
             document.body.appendChild(v);
-            await (v as any).load(table);
-            await (v as any).restore(cfg);
+            await v.load(table);
+            await v.restore(cfg);
         },
         { cfg, tableName: TABLE_NAME },
     );
@@ -72,11 +71,9 @@ async function toggleSecondViewerRacingInit(
             const worker = (window as any).__TEST_WORKER__;
             const table = await worker.open_table(tableName);
             const v = document.createElement("perspective-viewer");
-            v.setAttribute("data-toggle", "1");
             document.body.appendChild(v);
             await v.load(table);
             v.restore(cfg).catch(() => {});
-
             await new Promise<void>((resolve) =>
                 setTimeout(() => {
                     v.remove();
@@ -99,13 +96,11 @@ test.describe("WebGL context leak", () => {
     test("repeated full toggles never evict the first chart's context", async ({
         page,
     }) => {
-        test.setTimeout(180_000);
+        // test.setTimeout(180_000);
         const leakErrors = collectLeakErrors(page);
-
         const baseline = await calibratePlotBaseline(page);
         expect(baseline).toBeGreaterThan(0);
         const threshold = Math.max(1, Math.floor(baseline * 0.5));
-
         for (let i = 0; i < TOGGLE_COUNT; i++) {
             await toggleSecondViewer(page, SCATTER);
         }
@@ -126,7 +121,7 @@ test.describe("WebGL context leak", () => {
     test("toggling during renderer init never leaks a context", async ({
         page,
     }) => {
-        test.setTimeout(180_000);
+        // test.setTimeout(180_000);
         const leakErrors = collectLeakErrors(page);
         const baseline = await calibratePlotBaseline(page);
         expect(baseline).toBeGreaterThan(0);

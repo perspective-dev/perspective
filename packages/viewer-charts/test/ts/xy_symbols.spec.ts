@@ -10,13 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import {
-    PageView as PspViewer,
-    compareNodes,
-    expect,
-    test,
-} from "@perspective-dev/test";
-import { SymbolPair } from "@perspective-dev/test/src/js/models/column_settings";
+import { PageView as PspViewer, expect, test } from "@perspective-dev/test";
 import { Page } from "@playwright/test";
 
 const symbols = [

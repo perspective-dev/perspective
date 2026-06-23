@@ -52,9 +52,9 @@ impl From<Aggregate> for view_config::AggList {
     fn from(value: Aggregate) -> Self {
         view_config::AggList {
             aggregations: match value {
-                Aggregate::SingleAggregate(x) => vec![format!("{}", x)],
+                Aggregate::SingleAggregate(x) => vec![x],
                 Aggregate::MultiAggregate(x, y) => {
-                    vec![format!("{}", x), format!("{}", y.join(","))]
+                    vec![x, y.join(",")]
                 },
             },
         }

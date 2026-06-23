@@ -68,6 +68,8 @@ export class WebGLContextManager {
      */
     private _yieldChannel: MessageChannel | null = null;
 
+    private _pendingYieldResolve: (() => void) | null = null;
+
     /**
      * @param source A raw canvas (manager constructs and **owns** a
      *   private {@link GLContext}) or an existing shared `GLContext`
@@ -350,6 +352,10 @@ export class WebGLContextManager {
 
                 flags = 0;
                 await this._yieldToTask();
+
+                if (this._destroyed) {
+                    return;
+                }
             }
         } finally {
             gl.deleteSync(fence);
@@ -375,9 +381,15 @@ export class WebGLContextManager {
 
         return new Promise<void>((resolve) => {
             const ch = this._yieldChannel!;
-            ch.port1.addEventListener("message", () => resolve(), {
-                once: true,
-            });
+            this._pendingYieldResolve = resolve;
+            ch.port1.addEventListener(
+                "message",
+                () => {
+                    this._pendingYieldResolve = null;
+                    resolve();
+                },
+                { once: true },
+            );
             ch.port2.postMessage(null);
         });
     }
@@ -387,6 +399,12 @@ export class WebGLContextManager {
         this._frameCallback = null;
         this._disposeRestore();
         this._buffers.releaseAll();
+        if (this._pendingYieldResolve) {
+            const resolve = this._pendingYieldResolve;
+            this._pendingYieldResolve = null;
+            resolve();
+        }
+
         if (this._yieldChannel) {
             this._yieldChannel.port1.close();
             this._yieldChannel.port2.close();

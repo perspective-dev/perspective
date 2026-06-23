@@ -36,13 +36,6 @@ export async function gotoBasic(page: Page): Promise<void> {
     });
 }
 
-/**
- * Restore the viewer with `config`, then wait one animation frame so
- * the chart's scheduled render (`requestRender` → scheduler RAF →
- * `_fullRender`) has fired. By the time this returns, WebGL draw
- * commands have been issued to the GL context and `page.screenshot()`
- * will capture them.
- */
 export async function restoreChart(
     page: Page,
     config: ViewerConfigUpdate,
@@ -50,7 +43,7 @@ export async function restoreChart(
     await page.evaluate(
         async (c) => {
             const viewer = document.querySelector("perspective-viewer")!;
-            await (viewer as any).restore(c);
+            await viewer.restore(c);
         },
         config as unknown as Record<string, unknown>,
     );
