@@ -91,15 +91,15 @@ t_residency_manager::resident_bytes() {
 
 std::size_t
 t_residency_manager::prepare() {
+    refresh_config();
+    std::lock_guard<std::mutex> lk(m_mutex);
     m_pending.clear();
     m_pending_fnames.clear();
 
-    refresh_config();
     if (!g_residency_active) {
         return 0;
     }
 
-    std::lock_guard<std::mutex> lk(m_mutex);
     g_residency_tick = ++m_tick;
     std::size_t resident = 0;
     std::vector<t_lstore*> candidates;
@@ -157,36 +157,18 @@ t_residency_manager::commit() {
         }
 
         n = m_pending.size();
+        m_pending.clear();
+        m_pending_fnames.clear();
     }
 
-    m_pending.clear();
-    m_pending_fnames.clear();
     if (n == 0) {
         return;
     }
-
-    // // TODO: No diagnostics hooks
-    // // Test/diagnostic hook: dump cumulative stats so a harness can confirm
-    // // eviction is actually occurring.
-    // const char* stats_file = std::getenv("PSP_RESIDENCY_STATS_FILE");
-    // if (stats_file != nullptr) {
-    //     FILE* f = std::fopen(stats_file, "w");
-    //     if (f != nullptr) {
-    //         std::fprintf(
-    //             f,
-    //             "evictions=%llu restores=%llu budget=%zu\n",
-    //             static_cast<unsigned long long>(m_evictions),
-    //             static_cast<unsigned long long>(m_restores),
-    //             m_budget
-    //         );
-    //         std::fclose(f);
-    //     }
-    // }
 }
 
 void
 t_residency_manager::safepoint() {
-    // Native (mmap) path: no async handle setup, so both phases run inline.
+    std::lock_guard<std::mutex> lk(m_safepoint_mutex);
     prepare();
     commit();
 }

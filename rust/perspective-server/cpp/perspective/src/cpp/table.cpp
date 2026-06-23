@@ -967,8 +967,7 @@ Table::update_cols(const std::string_view& data, std::uint32_t port_id) {
             PSP_COMPLAIN_AND_ABORT("Can't create table from empty columns")
         }
 
-        nrows = it.value.Size();
-        break;
+        nrows = std::max(nrows, static_cast<t_uindex>(it.value.Size()));
     }
 
     bool is_implicit = m_index.empty();
@@ -1069,7 +1068,7 @@ Table::from_cols(
             is_implicit = false;
         }
 
-        nrows = it.value.Size();
+        nrows = std::max(nrows, static_cast<t_uindex>(it.value.Size()));
         bool found = false;
         for (const auto& column_value : it.value.GetArray()) {
             auto dtype = rapidjson_type_to_dtype(column_value);
@@ -1603,6 +1602,7 @@ Table::from_ndjson(
     // 3.) Fill table
     bool is_finished = false;
     while (!is_finished) {
+        data_table->extend(ii + 1);
         for (const auto& it : document.GetObj()) {
             auto col = data_table->get_column(it.name.GetString());
             const auto* col_name = it.name.GetString();

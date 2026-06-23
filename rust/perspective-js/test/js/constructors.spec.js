@@ -732,6 +732,78 @@ function validate_typed_array(typed_array, column_data) {
                 table.delete();
             }
         });
+
+        test("Table constructor pads short trailing columns with null", async function () {
+            const table = await perspective.table({
+                overflow: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+                short: [1],
+            });
+            const view = await table.view();
+            const result = await view.to_columns();
+            expect(result).toEqual({
+                overflow: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+                short: [1, null, null, null, null, null, null, null, null],
+            });
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Table constructor pads short leading columns with null", async function () {
+            const table = await perspective.table({
+                short: [1],
+                overflow: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+            });
+            const view = await table.view();
+            const result = await view.to_columns();
+            expect(result).toEqual({
+                short: [1, null, null, null, null, null, null, null, null],
+                overflow: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+            });
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Table constructor handles columns of equal length", async function () {
+            const table = await perspective.table({
+                a: [1, 2, 3],
+                b: ["x", "y", "z"],
+            });
+            const view = await table.view();
+            const result = await view.to_columns();
+            expect(result).toEqual({
+                a: [1, 2, 3],
+                b: ["x", "y", "z"],
+            });
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Table update pads short columns with null", async function () {
+            const table = await perspective.table({
+                a: "integer",
+                b: "integer",
+            });
+            await table.update({
+                a: [1, 2, 3, 4, 5],
+                b: [1],
+            });
+            const view = await table.view();
+            const result = await view.to_columns();
+            expect(result).toEqual({
+                a: [1, 2, 3, 4, 5],
+                b: [1, null, null, null, null],
+            });
+
+            // The table must remain usable for subsequent updates.
+            await table.update({ a: [10], b: [20] });
+            const result2 = await view.to_columns();
+            expect(result2).toEqual({
+                a: [1, 2, 3, 4, 5, 10],
+                b: [1, null, null, null, null, 20],
+            });
+            await view.delete();
+            await table.delete();
+        });
     });
 
     test.describe("Formatters", function () {
@@ -917,6 +989,20 @@ function validate_typed_array(typed_array, column_data) {
             expect(result).toEqual([{ v: +data_4[0]["v"] }]);
             view.delete();
             table.delete();
+        });
+
+        test("Handles many objects without newline separators", async function () {
+            const expected = [];
+            for (let i = 0; i < 64; i++) {
+                expected.push({ a: `row-${i}` });
+            }
+            const data = expected.map(JSON.stringify).join("");
+            const table = await perspective.table(data, { format: "ndjson" });
+            const view = await table.view();
+            expect(await table.size()).toEqual(64);
+            expect(await view.to_json()).toEqual(expected);
+            await view.delete();
+            await table.delete();
         });
     });
 

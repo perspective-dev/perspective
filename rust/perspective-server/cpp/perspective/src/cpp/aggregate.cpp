@@ -168,10 +168,9 @@ t_aggregate::init() {
         case AGGTYPE_COUNT: {
             switch (m_icolumns[0]->get_dtype()) {
                 case DTYPE_STR: {
-                    build_aggregate<t_aggimpl_count<
-                        std::uint64_t,
-                        std::uint64_t,
-                        std::uint64_t>>();
+                    build_aggregate<
+                        t_aggimpl_count<t_uindex, std::uint64_t, std::uint64_t>>(
+                    );
                 } break;
                 case DTYPE_TIME:
                 case DTYPE_INT64: {
