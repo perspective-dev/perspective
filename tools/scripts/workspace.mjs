@@ -42,7 +42,7 @@ export function getRustWheelsDir() {
 
 export function getEmscriptenWheelPath() {
     const pspVersion = getWorkspacePackageJson().version.replace("-", ".");
-    const wheeljunk = "cp311-abi3-emscripten_4_0_9_wasm32";
+    const wheeljunk = "cp311-abi3-pyemscripten_2025_0_wasm32";
     return path.join(
         rustWheelsDir,
         `perspective_python-${pspVersion}-${wheeljunk}.whl`,

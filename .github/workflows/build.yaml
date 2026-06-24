@@ -393,7 +393,7 @@ jobs:
                 arch:
                     - x86_64
                 python-version:
-                    - 3.11
+                    - "3.13"
                 node-version: [22.x]
         steps:
             - name: Checkout
@@ -424,6 +424,24 @@ jobs:
                   PACKAGE: "python"
                   CI: 1
 
+            - name: Verify wheel is PyPI-compatible (PEP 783)
+              shell: bash
+              run: |
+                  python -m pip install --quiet --upgrade twine "packaging>=24.2"
+                  shopt -s nullglob
+                  wheels=(rust/target/wheels/*.whl)
+                  if [ ${#wheels[@]} -eq 0 ]; then
+                      echo "::error::no emscripten wheel was produced"; exit 1
+                  fi
+                  for w in "${wheels[@]}"; do
+                      echo "checking $w"
+                      case "$w" in
+                          *pyemscripten_2025_0_wasm32.whl) ;;
+                          *) echo "::error::$w is not tagged pyemscripten_2025_0_wasm32"; exit 1 ;;
+                      esac
+                  done
+                  python -m twine check rust/target/wheels/*.whl
+
             - uses: actions/upload-artifact@v4
               with:
                   name: perspective-python-dist-wasm32-emscripten-${{ matrix.python-version }}
@@ -441,7 +459,7 @@ jobs:
                 arch:
                     - x86_64
                 python-version:
-                    - 3.11
+                    - "3.13"
                 node-version: [22.x]
         steps:
             - name: Checkout
@@ -996,7 +1014,7 @@ jobs:
 
             - uses: actions/download-artifact@v4
               with:
-                  name: perspective-python-dist-wasm32-emscripten-3.11
+                  name: perspective-python-dist-wasm32-emscripten-3.13
 
             - uses: actions/download-artifact@v4
               with:

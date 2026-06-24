@@ -29,8 +29,10 @@ if (!!process.env.PSP_DEBUG) {
     flags = "";
 }
 
-const python_version = process.env.PSP_PYTHON_VERSION || "3.12";
 const is_pyodide = !!process.env.PSP_PYODIDE;
+
+const python_version =
+    process.env.PSP_PYTHON_VERSION || (is_pyodide ? "3.13" : "3.12");
 
 const version = pkg.version;
 
@@ -47,6 +49,8 @@ if (is_pyodide) {
         fs.readFileSync(path.resolve(__dirname, "../../package.json")),
     );
     emsdk_prefix = `cd ${emsdkdir} && . ./emsdk_env.sh && ./emsdk activate ${emscripten} && cd ${cwd} && `;
+    env.MATURIN_PYEMSCRIPTEN_PLATFORM_VERSION =
+        process.env.MATURIN_PYEMSCRIPTEN_PLATFORM_VERSION || "2025_0";
 }
 
 // if not windows
