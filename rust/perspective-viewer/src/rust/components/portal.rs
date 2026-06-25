@@ -20,7 +20,7 @@ use web_sys::*;
 use yew::prelude::*;
 
 use crate::components::modal::ModalOrientation;
-use crate::components::style::StyleProvider;
+use crate::components::style::{StyleProvider, StyleSurface};
 use crate::utils::*;
 
 #[derive(Properties, PartialEq)]
@@ -41,6 +41,9 @@ pub struct PortalModalProps {
     pub tag_name: &'static str,
 
     pub theme: String,
+
+    /// Which popup CSS surface this portal's ShadowRoot adopts.
+    pub surface: StyleSurface,
 }
 
 pub enum PortalModalMsg {
@@ -209,7 +212,7 @@ impl Component for PortalModal {
             <>
                 <style>{ css }</style>
                 <ContextProvider<ModalOrientation> context={self.rev_vert.clone()}>
-                    <StyleProvider root={self.host.clone()}>
+                    <StyleProvider root={self.host.clone()} surface={ctx.props().surface}>
                         { for ctx.props().children.iter() }
                     </StyleProvider>
                 </ContextProvider<ModalOrientation>>

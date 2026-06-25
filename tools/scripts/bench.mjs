@@ -25,5 +25,7 @@ if (scope.includes("viewer-charts")) {
 } else if (scope.includes("client")) {
     await $`pnpm run --recursive --filter bench bench_js`.pipe(process.stdout);
 } else if (scope.includes("python")) {
-    $.sync`pnpm run --recursive --filter bench bench_python`;
+    await $`pnpm run --recursive --filter bench bench_python`.pipe(
+        process.stdout,
+    );
 }

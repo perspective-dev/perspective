@@ -22,9 +22,7 @@ use yew::prelude::*;
 use crate::components::column_settings_sidebar::style_tab::primitive_field::{
     BoolField, ColorField, ColorRangeField, EnumField, NumberFieldPrimitive,
 };
-use crate::components::style::LocalStyle;
 use crate::config::ControlSpec;
-use crate::css;
 use crate::queries::get_plugin_config_schema;
 use crate::renderer::Renderer;
 use crate::session::Session;
@@ -212,9 +210,6 @@ pub fn PluginTab(props: &PluginTabProps) -> Html {
 
     html! {
         <div id="plugin-tab" class="sidebar_column scrollable">
-            <LocalStyle href={css!("column-style")} />
-            <LocalStyle href={css!("plugin-settings-panel")} />
-            <LocalStyle href={css!("containers/tabs")} />
             <div id="plugin-config-container" class="tab-section">{ components }</div>
         </div>
     }

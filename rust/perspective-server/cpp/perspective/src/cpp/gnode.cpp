@@ -719,14 +719,16 @@ t_gnode::send(t_uindex port_id, const t_data_table& fragments) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "Cannot `send` to an uninited gnode.");
 
-    if (m_input_ports.count(port_id) == 0) {
+    // Single lookup instead of `count()` + `operator[]` (which would also
+    // default-insert a null port on a miss).
+    auto port_iter = m_input_ports.find(port_id);
+    if (port_iter == m_input_ports.end()) {
         std::cerr << "Cannot send table to port `" << port_id
                   << "`, which does not exist." << '\n';
         return;
     }
 
-    std::shared_ptr<t_port>& input_port = m_input_ports[port_id];
-    input_port->send(fragments);
+    port_iter->second->send(fragments);
 }
 
 void

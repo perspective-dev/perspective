@@ -12,22 +12,27 @@
 
 import { test, expect } from "@perspective-dev/test";
 import { compareContentsToSnapshot } from "@perspective-dev/test";
+import type { Page } from "@playwright/test";
 
-async function test_column(page, selector, container_class) {
+async function test_column(
+    page: Page,
+    selector: string,
+    container_class: string,
+): Promise<string> {
     const { x, y } = await page.evaluate(async (selector) => {
-        const viewer = document.querySelector("perspective-viewer");
+        const viewer = document.querySelector("perspective-viewer")!;
         await viewer.getTable();
         await viewer.toggleConfig();
-        window.__events__ = [];
+        (window as any).__events__ = [];
         viewer.addEventListener("perspective-config-update", (evt) => {
-            window.__events__.push(evt);
+            (window as any).__events__.push(evt);
         });
 
-        const header_button = viewer
-            .querySelector("perspective-viewer-datagrid")
-            .shadowRoot.querySelector(
-                "regular-table thead tr:last-child th" + selector,
-            );
+        const header_button = (
+            viewer.querySelector("perspective-viewer-datagrid") as any
+        ).shadowRoot.querySelector(
+            "regular-table thead tr:last-child th" + selector,
+        );
 
         const rect = header_button.getBoundingClientRect();
         return {
@@ -53,19 +58,19 @@ test.describe("Column Style Tests", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
+            await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
             });
         });
 
         const { x, y } = await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             // Await the table load
             await viewer.getTable();
 
@@ -73,25 +78,23 @@ test.describe("Column Style Tests", () => {
             await viewer.toggleConfig();
 
             // Register a listener for `perspective-config-update` event
-            window.__events__ = [];
+            (window as any).__events__ = [];
             viewer.addEventListener("perspective-config-update", (evt) => {
                 console.log(evt.type, evt.detail);
-                window.__events__.push(evt);
+                (window as any).__events__.push(evt);
             });
             viewer.addEventListener(
                 "perspective-column-style-change",
                 (evt) => {
                     // console.log(evt.type, evt.detail);
-                    window.__events__.push(evt);
+                    (window as any).__events__.push(evt);
                 },
             );
 
             // Find the column config menu button
-            const header_button = viewer
-                .querySelector("perspective-viewer-datagrid")
-                .shadowRoot.querySelector(
-                    "regular-table thead tr:last-child th",
-                );
+            const header_button = (
+                viewer.querySelector("perspective-viewer-datagrid") as any
+            ).shadowRoot.querySelector("regular-table thead tr:last-child th");
 
             // Get the button coords (slightly lower than center
             // because of the location of the menu button within
@@ -113,7 +116,7 @@ test.describe("Column Style Tests", () => {
 
         const { x: xx, y: yy } = await page.evaluate(async (style_menu) => {
             // Find the 'bar' button
-            const bar_button = style_menu.querySelector("select");
+            const bar_button = style_menu.querySelector("select")!;
 
             // Get its coords
             const rect = bar_button.getBoundingClientRect();
@@ -127,12 +130,12 @@ test.describe("Column Style Tests", () => {
         await page.mouse.click(xx, yy);
 
         const count = await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             // Await the plugin rendering
             await viewer.flush();
 
             // Count the events;
-            return window.__events__.length;
+            return (window as any).__events__.length;
         });
 
         // Expect 1 event
@@ -142,13 +145,13 @@ test.describe("Column Style Tests", () => {
     test.skip("Pulse styling works", async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Row ID", "Sales"],
@@ -177,13 +180,13 @@ test.describe("Column Style Tests", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Row ID", "Sales"],
@@ -211,13 +214,13 @@ test.describe("Column Style Tests", () => {
     test("Column style menu opens for numeric columns", async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
+            await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
             });
         });
@@ -229,13 +232,13 @@ test.describe("Column Style Tests", () => {
     test("Column style label-bar", async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
+            await document.querySelector("perspective-viewer")!.restore({
                 columns_config: {
                     "Row ID": {
                         number_fg_mode: "label-bar",
@@ -258,13 +261,13 @@ test.describe("Column Style Tests", () => {
     test("Column style label-bar on an expression column", async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
+            await document.querySelector("perspective-viewer")!.restore({
                 columns_config: {
                     test: {
                         number_fg_mode: "label-bar",
@@ -289,13 +292,13 @@ test.describe("Column Style Tests", () => {
     test("Column style menu opens for string columns", async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
+            await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
             });
         });
@@ -317,13 +320,13 @@ test.describe("Column Style Tests", () => {
     test("Bar foreground on float column with negatives", async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Row ID", "Profit"],
@@ -345,13 +348,13 @@ test.describe("Column Style Tests", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Row ID", "Profit"],
@@ -373,13 +376,13 @@ test.describe("Column Style Tests", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Row ID", "Profit"],
@@ -409,13 +412,13 @@ test.describe("Column Style Tests", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Row ID", "Profit"],
@@ -427,12 +430,12 @@ test.describe("Column Style Tests", () => {
         });
 
         const { x, y } = await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
-            const editBtn = viewer
-                .querySelector("perspective-viewer-datagrid")
-                .shadowRoot.querySelector(
-                    "#psp-column-edit-buttons th.psp-menu-enabled:nth-child(2) span",
-                );
+            const viewer = document.querySelector("perspective-viewer")!;
+            const editBtn = (
+                viewer.querySelector("perspective-viewer-datagrid") as any
+            ).shadowRoot.querySelector(
+                "#psp-column-edit-buttons th.psp-menu-enabled:nth-child(2) span",
+            );
 
             const rect = editBtn.getBoundingClientRect();
             return {
@@ -473,13 +476,13 @@ test.describe("Column Style Tests", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Row ID", "Sales"],
@@ -501,13 +504,13 @@ test.describe("Column Style Tests", () => {
     test("integer number_format notation renders in grid", async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Row ID"],
@@ -529,13 +532,13 @@ test.describe("Column Style Tests", () => {
     test("string format renders in grid", async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Row ID", "State"],
@@ -555,13 +558,13 @@ test.describe("Column Style Tests", () => {
     test("date date_format renders in grid", async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Row ID", "Order Date"],
@@ -586,13 +589,13 @@ test.describe("Column Style Tests", () => {
     test("datetime date_format renders in grid", async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 // Order Date is a datetime in basic-test fixture.
@@ -625,13 +628,13 @@ test.describe("Column Style Tests", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         const saved = await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Row ID", "Sales"],
@@ -654,13 +657,13 @@ test.describe("Column Style Tests", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         const saved = await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 columns: ["Row ID", "Sales"],
                 plugin_config: { edit_mode: "EDIT" },
@@ -682,13 +685,13 @@ test.describe("Column Style Tests", () => {
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
 
         const [first, second] = await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
+            const viewer = document.querySelector("perspective-viewer")!;
             const payload = {
                 plugin: "Datagrid",
                 columns: ["Row ID", "Sales"],

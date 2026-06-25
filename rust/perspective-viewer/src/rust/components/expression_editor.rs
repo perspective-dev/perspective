@@ -16,10 +16,8 @@ use perspective_client::{ExprValidationError, clone};
 use yew::prelude::*;
 
 use super::form::code_editor::*;
-use super::style::LocalStyle;
 use crate::session::{Session, SessionMetadata, SessionMetadataRc};
 use crate::tasks::{ExprValidation, validate_expression};
-use crate::*;
 
 #[derive(Properties, PartialEq, Clone)]
 pub struct ExpressionEditorProps {
@@ -54,10 +52,12 @@ pub struct ExpressionEditor {
     expr: Rc<String>,
     error: Option<ExprValidationError>,
     oninput: Callback<Rc<String>>,
+
     /// Monotonically increasing request id used to drop stale
     /// validation results when the user types faster than the engine
     /// can validate.
     validation_req_id: u64,
+
     /// The id of the most recently dispatched validation; the result
     /// is only applied when its echoed id matches.
     last_dispatched_req_id: u64,
@@ -131,7 +131,6 @@ impl Component for ExpressionEditor {
         clone!(ctx.props().disabled);
         html! {
             <>
-                <LocalStyle href={css!("expression-editor")} />
                 <label class="item_title">{ "Expression" }</label>
                 <div id="editor-container" class={disabled_class}>
                     <CodeEditor

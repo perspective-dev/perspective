@@ -36,45 +36,11 @@ import {
 const PLOT_CX = 640;
 const PLOT_CY = 360;
 
-/**
- * Pan-blank threshold as a fraction of the quiescent baseline.
- */
 const BLANK_THRESHOLD_FRACTION = 0;
 
-/**
- * Render modes to exercise. Each test in the suite runs twice — one
- * group per mode. `setBlitMode` on the plugin element flips the
- * config on the next renderer construction; we call it after the
- * plugin's first activation (so its `_initialized` assertion passes),
- * then `plugin.delete()` to tear down the default-mode renderer, and
- * re-restore to rebuild in the requested mode.
- *
- * The two modes have meaningfully different compositor behavior:
- *
- *   - `"blit"`: visible canvas is host-side 2D; worker ships
- *     `transferToImageBitmap` bitmaps over postMessage. Bitmap is
- *     fence-synchronized — host blits only fully-painted frames.
- *   - `"direct"`: visible canvas is `transferControlToOffscreen`'d
- *     to the worker; the browser's compositor reads it directly,
- *     unsynchronized with the scheduler's fence. Mid-render and
- *     just-resized states can be observed by the compositor.
- *
- * The same blank-frame invariant must hold under both. Direct-mode
- * tests previously failed when the resize message handler
- * synchronously cleared the visible canvas one task before the next
- * RAF's render landed; the in-RAF resize fix
- * (`glManager.requestResize` + `applyPendingResize` inside Phase 1)
- * pairs the clear with the matching paint in a single un-yielded
- * task so the compositor never observes the cleared intermediate.
- */
 const RENDER_MODES = ["blit", "direct"] as const;
 type RenderMode = (typeof RENDER_MODES)[number];
 
-/**
- * Each chart-type fixture: a viewer config that produces a useful
- * baseline (enough glyphs in the plot region for blank-detection
- * to work), and the per-test scaling for the blank threshold.
- */
 interface ChartFixture {
     name: string;
     config: ViewerConfigUpdate;
@@ -129,60 +95,29 @@ const FIXTURES: ChartFixture[] = [
     },
 ];
 
-/**
- * Setup helper: restore the chart in the requested render mode,
- * calibrate a quiescent baseline, compute the blank-frame threshold.
- *
- * The mode-switching dance:
- *
- *   1. First `restoreChart` activates the plugin (its
- *      `connectedCallback` runs and `_initialized` becomes true)
- *      and builds the renderer in the bundle's default mode.
- *   2. `plugin.setBlitMode(mode)` records the desired mode for the
- *      next renderer build. Calling after step 1 means the
- *      `console.assert(this._initialized, ...)` inside `setBlitMode`
- *      passes silently.
- *   3. `plugin.delete()` destroys the existing renderer transport
- *      so step 4's draw triggers a fresh `_ensureRenderer` →
- *      `_buildRenderer` that picks up the new mode.
- *   4. Second `restoreChart` rebuilds the renderer in the requested
- *      mode and re-renders the chart.
- *
- * Cost: one extra restore per test setup. Worth it to avoid the
- * `console.assert` log noise of a pre-activation `setBlitMode`.
- */
 async function setupChart(
     page: Page,
     fixture: ChartFixture,
     mode: RenderMode,
 ): Promise<{ baseline: number; threshold: number }> {
-    // Step 1: activate the plugin in default mode.
     await restoreChart(page, fixture.config);
 
-    // Steps 2 + 3: switch mode + tear down the default-mode
-    // renderer. The plugin element stays in the DOM; only its
-    // `RendererTransport` is destroyed.
     await page.evaluate(
         ({ mode }) => {
             const viewer = document.querySelector(
                 "perspective-viewer",
             ) as unknown as { getPlugin(): unknown };
             const plugin = viewer.getPlugin() as {
-                setBlitMode(mode: "blit" | "direct"): void;
+                constructor: { setBlitMode(mode: "blit" | "direct"): void };
                 delete(): void;
             };
-            plugin.setBlitMode(mode);
+            plugin.constructor.setBlitMode(mode);
             plugin.delete();
         },
         { mode },
     );
 
-    // Step 4: re-restore. Triggers `draw` → `_ensureRenderer` →
-    // `_buildRenderer` with `_renderBlitMode = mode`.
     await restoreChart(page, fixture.config);
-
-    // Two extra RAFs to make sure all paint has settled before we
-    // measure baseline. `restoreChart` already awaits one.
     await waitOneFrame(page);
     await waitOneFrame(page);
     const baseline = await calibratePlotBaseline(page);

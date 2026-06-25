@@ -17,9 +17,7 @@ use yew::{Callback, Html, Properties, html};
 
 use crate::components::column_settings_sidebar::style_tab::symbol::symbol_pairs_item::PairsListItem;
 use crate::components::filter_dropdown::FilterDropDownElement;
-use crate::components::style::LocalStyle;
 use crate::config::SymbolKVPair;
-use crate::css;
 use crate::utils::PtrEqRc;
 
 #[derive(Properties, PartialEq)]
@@ -84,7 +82,6 @@ impl yew::Component for PairsList {
 
         html! {
             <>
-                <LocalStyle href={css!("containers/pairs-list")} />
                 <div class="pairs-list" id={props.id.clone()} data-label={props.title.clone()}>
                     <ul>{ for main_pairs }</ul>
                 </div>

@@ -23,9 +23,7 @@ use yew::prelude::*;
 use crate::components::containers::dragdrop_list::*;
 use crate::components::containers::select::*;
 use crate::components::filter_dropdown::FilterDropDownElement;
-use crate::components::style::LocalStyle;
 use crate::components::type_icon::TypeIcon;
-use crate::css;
 use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::*;
@@ -348,7 +346,6 @@ impl Component for FilterColumn {
                 ondragstart={dragstart}
                 ondragend={dragend}
             >
-                <LocalStyle href={css!("filter-item")} />
                 <div class="pivot-column-border">
                     <span class="drag-handle icon" />
                     // <TypeIcon ty={ColumnType::String} />

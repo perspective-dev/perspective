@@ -10,7 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-
 /**
  * Load a file as an `ArrayBuffer`, which is useful for loading Apache Arrow
  * Feather files.
@@ -20,7 +19,7 @@
 async function get_buffer(path) {
     if (typeof window !== "undefined") {
         const resp = await fetch(
-            "http://localhost:8080/node_modules/superstore-arrow/superstore.lz4.arrow"
+            "http://localhost:8080/node_modules/superstore-arrow/superstore.lz4.arrow",
         );
 
         return await resp.arrayBuffer();
@@ -34,7 +33,7 @@ async function get_buffer(path) {
 
 const SUPERSTORE_ARROW = await get_buffer("superstore-arrow/superstore.arrow");
 const SUPERSTORE_FEATHER = await get_buffer(
-    "superstore-arrow/superstore.lz4.arrow"
+    "superstore-arrow/superstore.lz4.arrow",
 );
 
 /**

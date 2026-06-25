@@ -20,7 +20,6 @@
 #![feature(stmt_expr_attributes)]
 #![feature(try_blocks)]
 #![allow(async_fn_in_trait)]
-#![feature(more_qualified_paths)]
 #![warn(
     clippy::all,
     clippy::panic_in_result_fn,

@@ -14,10 +14,8 @@ use web_sys::{HtmlInputElement, InputEvent};
 use yew::prelude::*;
 
 use super::modal::{ModalLink, SetModalLink};
-use super::style::LocalStyle;
 use crate::components::form::select_enum_field::SelectEnumField;
 use crate::config::*;
-use crate::css;
 use crate::utils::WeakScope;
 
 #[derive(Properties)]
@@ -125,7 +123,6 @@ impl Component for NumberSeriesStyle {
 
         html! {
             <>
-                <LocalStyle href={css!("column-style")} />
                 <div id="column-style-container" class="number-series-style-container">
                     <SelectEnumField<ChartType>
                         label="chart-type"

@@ -165,6 +165,7 @@ impl Client {
     /// ```python
     /// table = client.table("x,y\n1,2\n3,4")
     /// ```
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (input, limit=None, index=None, name=None, format=None, page_to_disk=None))]
     pub fn table(
         &self,

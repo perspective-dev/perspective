@@ -20,11 +20,10 @@ use yew::html::ImplicitClone;
 use yew::prelude::*;
 
 use super::portal::PortalModal;
+use super::style::StyleSurface;
 use crate::session::Session;
 use crate::utils::*;
 use crate::*;
-
-static CSS: &str = include_str!(concat!(env!("OUT_DIR"), "/css/filter-dropdown.css"));
 
 #[derive(Default)]
 struct FilterDropDownState {
@@ -220,6 +219,7 @@ impl Component for FilterDropDownPortal {
             html! {
                 <PortalModal
                     tag_name="perspective-dropdown"
+                    surface={StyleSurface::FilterDropdown}
                     {target}
                     own_focus=false
                     {on_close}
@@ -267,7 +267,7 @@ fn FilterDropDownView(props: &FilterDropDownViewProps) -> Html {
         }
     };
 
-    html! { <><style>{ CSS }</style>{ body }</> }
+    html! { <>{ body }</> }
 }
 
 fn filter_values(

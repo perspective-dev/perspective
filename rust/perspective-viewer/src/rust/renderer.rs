@@ -544,6 +544,16 @@ impl Renderer {
             .and_then(|idx| names.get(idx))
             .map(|s| s.as_str());
 
+        // If the view schema itself hasn't been built yet (e.g. restore
+        // landed before `create_view` populated `view_schema`), refuse
+        // to answer rather than returning an empty schema. The strip
+        // pass in `update_columns_configs` treats `Err` as "leave the
+        // incoming cfg untouched"; an empty schema, by contrast, would
+        // cause `cfg.retain(|k, _| active.contains(k))` to drop every
+        // key and zero out user-supplied column config.
+        if !session.metadata().has_view_schema() {
+            return Err(JsValue::from("view_schema not initialized").into());
+        }
         let Some(view_type) = session.metadata().get_column_view_type(column_name) else {
             return Ok(ColumnConfigSchema { fields: vec![] });
         };
@@ -1040,7 +1050,7 @@ impl Renderer {
             }),
         ];
 
-        let (x, _, y) = select_all(tasks.into_iter()).await;
+        let (x, _, y) = select_all(tasks).await;
         x.ok_or_else(|| y.into_iter().next().unwrap())
     }
 
@@ -1048,8 +1058,8 @@ impl Renderer {
     async fn resize_with_explicit_dimensions(&self) -> TaskResult {
         let plugin = self.get_active_plugin()?;
         let main_panel: &web_sys::HtmlElement = plugin.unchecked_ref();
-        let new_width = format!("{}px", &self.0.borrow().viewer_elem.client_width());
-        let new_height = format!("{}px", &self.0.borrow().viewer_elem.client_height());
+        let new_width = format!("{}px", self.0.borrow().viewer_elem.client_width());
+        let new_height = format!("{}px", self.0.borrow().viewer_elem.client_height());
         main_panel.style().set_property("width", &new_width)?;
         main_panel.style().set_property("height", &new_height)?;
         let result = plugin.resize().await;

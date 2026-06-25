@@ -12,14 +12,10 @@
 
 use yew::prelude::*;
 
-use crate::components::style::LocalStyle;
-use crate::css;
-
 #[function_component(InvalidColumn)]
 pub fn invalid_column() -> Html {
     html! {
         <div class="pivot-column column-empty column-invalid">
-            <LocalStyle href={css!("empty-column")} />
             <div class="column-invalid-input" />
         </div>
     }

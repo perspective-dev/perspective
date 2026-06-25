@@ -15,6 +15,7 @@
 #include <perspective/sparse_tree.h>
 #include <perspective/arg_sort.h>
 #include <perspective/sort_specification.h>
+#include <tsl/hopscotch_set.h>
 
 namespace perspective {
 
@@ -684,14 +685,101 @@ t_traversal::get_expanded(std::vector<t_index>& expanded_tidx) const {
 
 void
 t_traversal::drop_tree_indices(const std::vector<t_uindex>& indices) {
+    if (indices.empty() || m_nodes->empty()) {
+        return;
+    }
+
+    auto& nodes = *m_nodes;
+    const t_index n = static_cast<t_index>(nodes.size());
+
+    // The previous implementation removed each dropped strand individually: a
+    // linear `tree_index_lookup` (O(N)) plus a mid-vector `erase` (O(N)) and a
+    // per-op `update_sucessors`/`update_ancestors` fix-up, i.e. O(D*N) for D
+    // drops. Instead, mark every dropped subtree and rebuild the pre-order node
+    // vector in a single O(N + D) pass, recomputing the relative-parent
+    // (m_rel_pidx), descendant (m_ndesc) and child (m_nchild) encoding in bulk.
+    // This mirrors the one-pass rebuild `sort_by` already uses.
+    tsl::hopscotch_set<t_index> drop_set;
+    drop_set.reserve(indices.size());
     for (auto idx : indices) {
-        t_index tvidx = tree_index_lookup(idx, 0);
-        if (tvidx == INVALID_INDEX) {
+        drop_set.insert(static_cast<t_index>(idx));
+    }
+
+    // `remap[i]` = number of survivors in [0, i), which is also the new index of
+    // the survivor at old index `i`. A node is dead iff it lies within the
+    // subtree span of any dropped node; because the traversal is pre-order and
+    // dropped subtrees are nested-or-disjoint, a single non-decreasing "dead
+    // watermark" (the last index known to be inside a dropped subtree)
+    // classifies every node in one linear scan. `m_tnid` is unique per traversal
+    // node, so set membership matches what the old per-strand lookup found.
+    std::vector<t_index> remap(n + 1);
+    t_index surv = 0;
+    t_index dead_until = INVALID_INDEX;
+    for (t_index i = 0; i < n; ++i) {
+        if (drop_set.find(nodes[i].m_tnid) != drop_set.end()) {
+            const t_index end = i + static_cast<t_index>(nodes[i].m_ndesc);
+            if (end > dead_until) {
+                dead_until = end;
+            }
+        }
+        remap[i] = surv;
+        if (i > dead_until) {
+            ++surv;
+        }
+    }
+    remap[n] = surv;
+
+    // The root (tnid 0, depth 0) is never a strand and so is never dropped, so
+    // at least it must survive. A future caller dropping the root would empty
+    // the traversal and OOB downstream consumers (e.g. get_expanded_span reads
+    // node 0), so assert the invariant here.
+    PSP_VERBOSE_ASSERT(surv >= 1, "drop_tree_indices dropped the root node");
+
+    if (surv == n) {
+        // No dropped strand was actually present in this traversal.
+        return;
+    }
+
+    // Compact survivors into a fresh pre-order vector, recomputing the relative
+    // encoding from the survivor prefix-sum.
+    std::vector<t_tvnode> new_nodes(surv);
+    for (t_index old_idx = 0; old_idx < n; ++old_idx) {
+        // Alive iff a survivor was counted at this index.
+        if ((remap[old_idx + 1] - remap[old_idx]) != 1) {
             continue;
         }
 
-        remove_subtree(tvidx);
+        const t_index new_idx = remap[old_idx];
+        t_tvnode node = nodes[old_idx];
+
+        // A surviving node's descendants stay contiguous immediately after it,
+        // so count the survivors over its original subtree span
+        // [old_idx, old_end] and subtract the node itself.
+        const t_index old_end = old_idx + static_cast<t_index>(node.m_ndesc);
+        node.m_ndesc =
+            static_cast<t_uindex>(remap[old_end + 1] - remap[old_idx] - 1);
+
+        // A survivor's parent always survives (only whole subtrees are dropped),
+        // so its new parent index is well-defined.
+        if (node.m_depth > 0) {
+            const t_index old_parent = old_idx - node.m_rel_pidx;
+            node.m_rel_pidx = new_idx - remap[old_parent];
+        }
+
+        node.m_nchild = 0; // recomputed in the next pass
+        new_nodes[new_idx] = node;
     }
+
+    // Recompute direct-child counts: each surviving non-root node bumps its
+    // (surviving) parent's count.
+    for (t_index new_idx = 0; new_idx < surv; ++new_idx) {
+        const t_tvnode& node = new_nodes[new_idx];
+        if (node.m_depth > 0) {
+            new_nodes[new_idx - node.m_rel_pidx].m_nchild += 1;
+        }
+    }
+
+    std::swap(nodes, new_nodes);
 }
 
 bool

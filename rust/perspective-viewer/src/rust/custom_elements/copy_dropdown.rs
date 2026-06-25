@@ -22,7 +22,7 @@ use yew::prelude::*;
 use super::viewer::PerspectiveViewerElement;
 use crate::components::copy_dropdown::CopyDropDownMenu;
 use crate::components::portal::PortalModal;
-use crate::components::style::StyleProvider;
+use crate::components::style::{StyleProvider, StyleSurface};
 use crate::config::*;
 use crate::js::*;
 use crate::presentation::Presentation;
@@ -77,9 +77,13 @@ impl Component for CopyDropDownWrapper {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let on_close = ctx.link().callback(|_| CopyDropDownWrapperMsg::Close);
         html! {
-            <StyleProvider root={ctx.props().custom_element.clone()}>
+            <StyleProvider
+                root={ctx.props().custom_element.clone()}
+                surface={StyleSurface::DropdownMenu}
+            >
                 <PortalModal
                     tag_name="perspective-copy-menu"
+                    surface={StyleSurface::DropdownMenu}
                     target={self.target.clone()}
                     own_focus=true
                     {on_close}

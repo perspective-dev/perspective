@@ -20,8 +20,6 @@ use web_sys::*;
 use yew::prelude::*;
 
 use crate::components::filter_dropdown::FilterDropDownElement;
-use crate::components::style::LocalStyle;
-use crate::css;
 
 #[derive(Properties, Derivative)]
 #[derivative(Debug)]
@@ -87,7 +85,6 @@ impl Component for EmptyRow {
 
         html! {
             <div class="pivot-column column-empty">
-                <LocalStyle href={css!("empty-column")} />
                 <input
                     spellcheck="false"
                     ref={self.input_ref.clone()}

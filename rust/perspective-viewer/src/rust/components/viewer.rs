@@ -21,12 +21,11 @@ use yew::prelude::*;
 
 use super::containers::split_panel::SplitPanel;
 use super::font_loader::{FontLoader, FontLoaderProps, FontLoaderStatus};
-use super::style::{LocalStyle, StyleProvider};
+use super::style::StyleProvider;
 use crate::components::column_settings_sidebar::ColumnSettingsPanel;
 use crate::components::main_panel::MainPanel;
 use crate::components::settings_panel::{SelectedTab, SettingsPanel};
 use crate::config::*;
-use crate::css;
 use crate::js::JsPerspectiveViewerPlugin;
 use crate::presentation::{
     ColumnLocator, ColumnSettingsTab, DragDropProps, Presentation, PresentationProps,
@@ -608,7 +607,6 @@ impl Component for PerspectiveViewer {
 
         html! {
             <StyleProvider root={ctx.props().elem.clone()}>
-                <LocalStyle href={css!("viewer")} />
                 <div id="component_container">
                     if is_settings_open {
                         <SplitPanel

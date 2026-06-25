@@ -50,7 +50,7 @@ notify_sparse_tree_common(
         strand_deltas->pprint();
     }
 
-    auto pivots = tree->get_pivots();
+    const auto& pivots = tree->get_pivots();
 
     t_dtree dtree(strands, pivots, tree_sortby);
     dtree.init();

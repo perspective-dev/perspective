@@ -192,10 +192,16 @@ namespace computed_function {
     // Length of the string
     FUNCTION_HEADER(length)
 
+    // NOTE: `index`/`col`/`vlookup` hold `m_source_table` and `m_row_idx` by
+    // reference, not by value, so a single compiled expression can be re-pointed
+    // at a different source table / row on each call without recompiling (see
+    // `t_computed_expression::compute`). The referents must outlive the function
+    // object: the compile-once cache owns stable slots, and the throwaway
+    // precompute/get_dtype stores bind to their local args for their own scope.
     struct index final : public exprtk::igeneric_function<t_tscalar> {
         index(
             const t_pkey_mapping& pkey_map,
-            std::shared_ptr<t_data_table> source_table,
+            const std::shared_ptr<t_data_table>& source_table,
             t_uindex& row_idx
         );
         ~index();
@@ -203,14 +209,14 @@ namespace computed_function {
 
     private:
         const t_pkey_mapping& m_pkey_map;
-        std::shared_ptr<t_data_table> m_source_table;
+        const std::shared_ptr<t_data_table>& m_source_table;
         t_uindex& m_row_idx;
     };
 
     struct col final : public exprtk::igeneric_function<t_tscalar> {
         col(t_expression_vocab& expression_vocab,
             bool is_type_validator,
-            std::shared_ptr<t_data_table> source_table,
+            const std::shared_ptr<t_data_table>& source_table,
             t_uindex& row_idx);
         ~col();
         t_tscalar operator()(t_parameter_list parameters) override;
@@ -218,7 +224,7 @@ namespace computed_function {
     private:
         t_expression_vocab& m_expression_vocab;
         bool m_is_type_validator;
-        std::shared_ptr<t_data_table> m_source_table;
+        const std::shared_ptr<t_data_table>& m_source_table;
         t_uindex& m_row_idx;
     };
 
@@ -226,7 +232,7 @@ namespace computed_function {
         vlookup(
             t_expression_vocab& expression_vocab,
             bool is_type_validator,
-            std::shared_ptr<t_data_table> source_table,
+            const std::shared_ptr<t_data_table>& source_table,
             t_uindex& row_idx
         );
         ~vlookup();
@@ -235,7 +241,7 @@ namespace computed_function {
     private:
         t_expression_vocab& m_expression_vocab;
         bool m_is_type_validator;
-        std::shared_ptr<t_data_table> m_source_table;
+        const std::shared_ptr<t_data_table>& m_source_table;
         t_uindex& m_row_idx;
     };
 

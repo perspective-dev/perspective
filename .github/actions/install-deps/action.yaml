@@ -64,6 +64,17 @@ runs:
           with:
               cmake-version: "3.29.6"
 
+        - name: Setup MSVC environment (Windows)
+          if: ${{ runner.os == 'Windows' }}
+          uses: ilammy/msvc-dev-cmd@v1
+          with:
+              arch: ${{ inputs.arch == 'aarch64' && 'amd64_arm64' || 'x64' }}
+
+        - name: Force Ninja generator (Windows)
+          if: ${{ runner.os == 'Windows' }}
+          shell: bash
+          run: echo "CMAKE_GENERATOR=Ninja" >> "$GITHUB_ENV"
+
         - name: Install pnpm
           uses: pnpm/action-setup@v3
           with:

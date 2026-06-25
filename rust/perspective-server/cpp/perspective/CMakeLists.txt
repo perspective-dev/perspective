@@ -207,6 +207,10 @@ if(PSP_PYTHON_BUILD AND MACOS)
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -undefined dynamic_lookup")
 endif()
 
+if(EMSCRIPTEN)
+    set(CMAKE_HAVE_LIBC_PTHREAD TRUE CACHE BOOL "psp: satisfy FindThreads on WASM without enabling pthreads" FORCE)
+endif()
+
 # ######################
 set(psp_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/src/include")
 
@@ -576,23 +580,12 @@ else()
 # -s MEMORY_GROWTH_GEOMETRIC_STEP=1.0 \
 # -s MEMORY_GROWTH_GEOMETRIC_CAP=536870912 \
 
+    set(PSP_FILESYSTEM_FLAGS "-s NO_FILESYSTEM=1 ")
+    set(PSP_CLOSURE_FLAGS "--closure=1 ")
+
     # On-disk tables in the browser are backed by OPFS via emscripten's WasmFS.
-    # `PSP_WASM_OPFS` swaps the default `NO_FILESYSTEM` (memory-only) build for
-    # `WASMFS` + `FORCE_FILESYSTEM`, and enables the OPFS backend. `JSPI` provides
-    # the synchronous-looking OPFS access the WasmFS OPFS backend needs without
-    # SharedArrayBuffer/cross-origin-isolation (`-pthread`). `JSPI` is backwards
-    # compatible: the module loads and runs in-memory tables fine on non-JSPI
-    # browsers (it has no `main`/async imports wrapped at instantiation); the JSPI
-    # API is only reached when an actual OPFS op runs, i.e. when `page_to_disk` is used
-    # (the JS client gates that on JSPI being present). Closure is incompatible
-    # with the WasmFS JS glue, so it is disabled in that case.
     if(PSP_WASM_OPFS)
-        set(PSP_FILESYSTEM_FLAGS "-s NO_FILESYSTEM=1 ")
-        set(PSP_CLOSURE_FLAGS "--closure=1 ")
         add_compile_definitions(PSP_WASM_OPFS_PERSIST=1)
-    else()
-        set(PSP_FILESYSTEM_FLAGS "-s NO_FILESYSTEM=1 ")
-        set(PSP_CLOSURE_FLAGS "--closure=1 ")
     endif()
 
     set(PSP_WASM_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \

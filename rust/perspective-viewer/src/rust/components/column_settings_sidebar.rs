@@ -31,14 +31,12 @@ use crate::components::containers::sidebar::Sidebar;
 use crate::components::containers::tab_list::TabList;
 use crate::components::editable_header::EditableHeaderProps;
 use crate::components::expression_editor::ExpressionEditorProps;
-use crate::components::style::LocalStyle;
 use crate::components::type_icon::TypeIconType;
 use crate::presentation::{ColumnLocator, ColumnSettingsTab, Presentation};
 use crate::renderer::Renderer;
 use crate::session::{Session, SessionMetadataRc};
 use crate::tasks::{delete_expr, save_expr, update_expr};
 use crate::utils::PtrEqRc;
-use crate::*;
 
 #[derive(Clone, Derivative, Properties)]
 #[derivative(Debug)]
@@ -356,7 +354,6 @@ impl Component for ColumnSettingsPanel {
 
         html! {
             <>
-                <LocalStyle href={css!("column-settings-panel")} />
                 <Sidebar
                     on_close={ctx.props().on_close.clone()}
                     id_prefix="column_settings"

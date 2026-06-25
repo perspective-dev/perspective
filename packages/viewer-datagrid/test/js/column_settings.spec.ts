@@ -15,13 +15,13 @@ import {
     compareNodes,
     expect,
     test,
-} from "../helpers.ts";
+} from "@perspective-dev/test";
 
 test.describe("Datagrid Column Styles", function () {
     test.beforeEach(async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
@@ -67,14 +67,14 @@ test.describe("Datagrid Column Styles", function () {
     });
 });
 
-let runTests = (title: string, beforeEachAndLocalTests: () => void) => {
+const runTests = (title: string, beforeEachAndLocalTests: () => void) => {
     return test.describe(title, () => {
         beforeEachAndLocalTests.call(this);
 
         test("Clicking edit button toggles sidebar", async ({ page }) => {
-            let view = new PspViewer(page);
+            const view = new PspViewer(page);
             await view.openSettingsPanel();
-            let editBtn = view.dataGrid.regularTable.editBtnRow
+            const editBtn = view.dataGrid.regularTable.editBtnRow
                 .locator("th.psp-menu-enabled span")
                 .first();
             await editBtn.click();
@@ -88,20 +88,20 @@ let runTests = (title: string, beforeEachAndLocalTests: () => void) => {
         test("Toggling a column in the sidebar highlights in the plugin", async ({
             page,
         }) => {
-            let view = new PspViewer(page);
-            let table = view.dataGrid.regularTable;
-            let activeColumns = view.settingsPanel.activeColumns;
+            const view = new PspViewer(page);
+            const table = view.dataGrid.regularTable;
+            const activeColumns = view.settingsPanel.activeColumns;
 
             await view.openSettingsPanel();
-            let col = await activeColumns.getFirstVisibleColumn();
-            let name = await col.name.innerText();
+            const col = await activeColumns.getFirstVisibleColumn();
+            const name = await col.name.innerText();
             expect(name).toBeDefined();
 
-            let n = await table.getTitleIdx(name);
+            const n = await table.getTitleIdx(name);
             expect(n).toBeGreaterThan(-1);
 
-            let nthEditBtn = table.realEditBtns.nth(n);
-            let selectedEditBtn = table.editBtnRow
+            const nthEditBtn = table.realEditBtns.nth(n);
+            const selectedEditBtn = table.editBtnRow
                 .locator(".psp-menu-open")
                 .first();
 
@@ -119,15 +119,15 @@ let runTests = (title: string, beforeEachAndLocalTests: () => void) => {
         test("Scrolling the table horizontally keeps the correct column highlighted", async ({
             page,
         }) => {
-            let view = new PspViewer(page);
-            let table = view.dataGrid.regularTable;
+            const view = new PspViewer(page);
+            const table = view.dataGrid.regularTable;
 
-            let thirdTitle = table.columnTitleRow.locator("th").nth(3);
-            let thirdEditBtn = table.editBtnRow.locator("th").nth(3);
-            let selectedTitle = table.columnTitleRow
+            const thirdTitle = table.columnTitleRow.locator("th").nth(3);
+            const thirdEditBtn = table.editBtnRow.locator("th").nth(3);
+            const selectedTitle = table.columnTitleRow
                 .locator(".psp-menu-open")
                 .first();
-            let selectedEditBtn = table.editBtnRow
+            const selectedEditBtn = table.editBtnRow
                 .locator(".psp-menu-open")
                 .first();
 
@@ -164,7 +164,7 @@ runTests("Datagrid Column Styles", () => {
     test.beforeEach(async ({ page }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
@@ -173,56 +173,56 @@ runTests("Datagrid Column Styles", () => {
     // These tests only check that a connection is made between the column settings sidebar
     // and the plugin itself. They do not need to check the exact contents of the plugin.
     test.skip("Numeric styling", async ({ page }) => {
-        let view = new PspViewer(page);
-        let table = view.dataGrid.regularTable;
+        const view = new PspViewer(page);
+        const table = view.dataGrid.regularTable;
 
-        let col = await view.getOrCreateColumnByType("numeric");
+        const col = await view.getOrCreateColumnByType("numeric");
         await col.editBtn.click();
-        let name = await col.name.innerText();
+        const name = await col.name.innerText();
         expect(name).toBeTruthy();
-        let td = await table.getFirstCellByColumnName(name);
+        const td = await table.getFirstCellByColumnName(name);
         await td.waitFor();
 
         // bg style
         await view.columnSettingsSidebar.openTab("Style");
 
-        let oldContents = await td.evaluate((node) => node.innerHTML);
-        let listener = await view.getEventListener(
+        const oldContents = await td.evaluate((node) => node.innerHTML);
+        const listener = await view.getEventListener(
             "perspective-column-style-change",
         );
         await page
             .locator('div[data-value="Decimal"] select')
             .selectOption("Percent");
         expect(await listener()).toBe(true);
-        let newContents = await td.evaluate((node) => node.innerHTML);
+        const newContents = await td.evaluate((node) => node.innerHTML);
         expect(oldContents).not.toBe(newContents);
     });
 
     test.skip("Calendar styling", async ({ page }) => {
-        let view = new PspViewer(page);
-        let table = view.dataGrid.regularTable;
-        let col = await view.getOrCreateColumnByType("calendar");
-        let name = await col.name.innerText();
+        const view = new PspViewer(page);
+        const table = view.dataGrid.regularTable;
+        const col = await view.getOrCreateColumnByType("calendar");
+        const name = await col.name.innerText();
         expect(name).toBeTruthy();
-        let td = await table.getFirstCellByColumnName(name);
+        const td = await table.getFirstCellByColumnName(name);
         await td.waitFor();
 
         // text style
         view.assureColumnSettingsOpen(col);
         await view.columnSettingsSidebar.openTab("Style");
-        let checkbox = view.columnSettingsSidebar.container
+        const checkbox = view.columnSettingsSidebar.container
             .getByRole("checkbox", { disabled: false })
             .first();
 
-        let tdStyle = await td.evaluate((node) => {
+        const tdStyle = await td.evaluate((node) => {
             return node.style.cssText;
         });
-        let listener = await view.getEventListener(
+        const listener = await view.getEventListener(
             "perspective-column-style-change",
         );
         await checkbox.click();
         expect(await listener()).toBe(true);
-        let newStyle = await td.evaluate((node) => {
+        const newStyle = await td.evaluate((node) => {
             return node.style.cssText;
         });
         expect(tdStyle).not.toBe(newStyle);
@@ -233,38 +233,38 @@ runTests("Datagrid Column Styles", () => {
     });
 
     test.skip("String styling", async ({ page }) => {
-        let view = new PspViewer(page);
-        let table = view.dataGrid.regularTable;
+        const view = new PspViewer(page);
+        const table = view.dataGrid.regularTable;
 
-        let col = await view.getOrCreateColumnByType("string");
-        let name = await col.name.innerText();
+        const col = await view.getOrCreateColumnByType("string");
+        const name = await col.name.innerText();
         expect(name).toBeTruthy();
-        let td = await table.getFirstCellByColumnName(name);
+        const td = await table.getFirstCellByColumnName(name);
         await td.waitFor();
 
         // bg color
         await view.assureColumnSettingsOpen(col);
         await view.columnSettingsSidebar.openTab("Style");
-        let container = view.columnSettingsSidebar.container;
-        let checkbox = container.getByRole("checkbox").last();
+        const container = view.columnSettingsSidebar.container;
+        const checkbox = container.getByRole("checkbox").last();
         await checkbox.waitFor();
 
-        let tdStyle = await td.evaluate((node) => node.style.cssText);
-        let listener = await view.getEventListener(
+        const tdStyle = await td.evaluate((node) => node.style.cssText);
+        const listener = await view.getEventListener(
             "perspective-column-style-change",
         );
         await checkbox.check();
         expect(await listener()).toBe(true);
-        let newStyle = await td.evaluate((node) => node.style.cssText);
+        const newStyle = await td.evaluate((node) => node.style.cssText);
         expect(tdStyle).not.toBe(newStyle);
     });
 });
 
 // Keeping the column sidebar open makes this unncessary.
 test.skip("Edit highlights go away when view re-draws", async ({ page }) => {
-    let viewer = new PspViewer(page);
+    const viewer = new PspViewer(page);
     await viewer.openSettingsPanel();
-    let btn = await viewer.dataGrid.regularTable.getEditBtnByName("Row ID");
+    const btn = await viewer.dataGrid.regularTable.getEditBtnByName("Row ID");
     await btn.click();
     await viewer.settingsPanel.groupby("Ship Mode");
     await viewer.columnSettingsSidebar.container.waitFor({
@@ -282,7 +282,7 @@ runTests("Datagrid Column Styles - Split-by", () => {
         await page.goto("/tools/test/src/html/superstore-test.html");
 
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
@@ -294,12 +294,12 @@ runTests("Datagrid Column Styles - Split-by", () => {
         await page.goto("/tools/test/src/html/superstore-test.html");
 
         await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
-        let viewer = new PspViewer(page);
-        let headers = viewer.dataGrid.regularTable.table
+        const viewer = new PspViewer(page);
+        const headers = viewer.dataGrid.regularTable.table
             .locator("thead")
             .filter({
                 hasNot: page
@@ -309,7 +309,8 @@ runTests("Datagrid Column Styles - Split-by", () => {
             });
 
         await viewer.openSettingsPanel();
-        let btn = await viewer.dataGrid.regularTable.getEditBtnByName("Sales");
+        const btn =
+            await viewer.dataGrid.regularTable.getEditBtnByName("Sales");
         await expect(btn).toBeVisible();
         await btn.click();
         await expect(headers).not.toBeAttached();

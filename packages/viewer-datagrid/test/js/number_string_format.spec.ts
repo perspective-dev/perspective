@@ -15,14 +15,14 @@ import {
     compareContentsToSnapshot,
     test,
     expect,
-} from "../helpers.ts";
+} from "@perspective-dev/test";
 
 import { DataGrid } from "@perspective-dev/test/src/js/models/plugins/datagrid.ts";
 
 test.beforeEach(async ({ page }) => {
     await page.goto("/tools/test/src/html/basic-test.html");
     await page.evaluate(async () => {
-        while (!window["__TEST_PERSPECTIVE_READY__"]) {
+        while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
             await new Promise((x) => setTimeout(x, 10));
         }
     });
@@ -53,7 +53,7 @@ test.describe("Number & String Format", () => {
         test.skip(`Rounding Increment doesn't send when ${name} is open`, async ({
             page,
         }) => {
-            let view = new PageView(page);
+            const view = new PageView(page);
             await view.restore({
                 settings: true,
                 plugin: "Datagrid",
@@ -154,7 +154,7 @@ test.describe("Number & String Format", () => {
 
         const decimal = await datagrid.regularTable.table.innerHTML();
         await page.pause();
-        await compareContentsToSnapshot(decimal, ["decimal"]);
+        await compareContentsToSnapshot(decimal);
         await view.restore({
             plugin: "Datagrid",
             columns: ["Profit"],
@@ -170,7 +170,7 @@ test.describe("Number & String Format", () => {
         });
 
         const currency = await datagrid.regularTable.table.innerHTML();
-        await compareContentsToSnapshot(currency, ["currency"]);
+        await compareContentsToSnapshot(currency);
         await view.restore({
             plugin: "Datagrid",
             columns: ["Profit"],
@@ -185,7 +185,7 @@ test.describe("Number & String Format", () => {
         });
 
         const unit = await datagrid.regularTable.table.innerHTML();
-        await compareContentsToSnapshot(unit, ["unit"]);
+        await compareContentsToSnapshot(unit);
         await view.restore({
             plugin: "Datagrid",
             columns: ["Profit"],
@@ -199,6 +199,6 @@ test.describe("Number & String Format", () => {
         });
 
         const data = await datagrid.regularTable.table.innerHTML();
-        await compareContentsToSnapshot(data, ["raw"]);
+        await compareContentsToSnapshot(data);
     });
 });

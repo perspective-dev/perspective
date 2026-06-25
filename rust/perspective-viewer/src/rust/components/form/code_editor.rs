@@ -19,8 +19,6 @@ use yew::prelude::*;
 
 use crate::components::form::highlight::highlight;
 use crate::components::function_dropdown::{FunctionDropDownElement, FunctionDropDownPortal};
-use crate::components::style::LocalStyle;
-use crate::css;
 use crate::exprtk::{Cursor, tokenize};
 use crate::utils::*;
 
@@ -174,7 +172,6 @@ pub fn code_editor(props: &CodeEditorProps) -> Html {
     clone!(props.disabled);
     html! {
         <>
-            <LocalStyle href={css!("form/code-editor")} />
             <div id="editor" {class}>
                 <div id="line_numbers" ref={lineno_ref}>{ line_numbers }</div>
                 <div id="editor-inner" {class}>

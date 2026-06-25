@@ -262,11 +262,11 @@ t_ctx2::get_min_max(const std::string& colname) const {
     std::vector<const t_column*> aggcols(ntrees * n_aggs);
     for (t_uindex treeidx = 0; treeidx < ntrees; ++treeidx) {
         auto* aggtable = m_trees[treeidx]->get_aggtable();
-        t_schema aggschema = aggtable->get_schema();
         for (t_uindex aggidx = 0; aggidx < t_uindex(n_aggs); ++aggidx) {
-            const std::string& aggname = aggschema.m_columns[aggidx];
+            // resolve by column index (== aggidx); skips the name->index map
+            // lookup + temp string and the schema deep-copy.
             aggcols[treeidx * n_aggs + aggidx] =
-                aggtable->_get_const_column(aggname);
+                aggtable->_get_const_column(aggidx);
         }
     }
 
@@ -348,12 +348,11 @@ t_ctx2::get_data(
 
     for (t_uindex treeidx = 0; treeidx < ntrees; ++treeidx) {
         auto* aggtable = m_trees[treeidx]->get_aggtable();
-        t_schema aggschema = aggtable->get_schema();
-
         for (t_uindex aggidx = 0; aggidx < naggs; ++aggidx) {
-            const std::string& aggname = aggschema.m_columns[aggidx];
+            // resolve by column index (== aggidx); skips the per-iteration
+            // name->index map lookup + temp string and the schema deep-copy.
             aggcols[treeidx * naggs + aggidx] =
-                aggtable->_get_const_column(aggname);
+                aggtable->_get_const_column(aggidx);
         }
     }
 
@@ -449,12 +448,11 @@ t_ctx2::get_data(const std::vector<t_uindex>& rows) const {
 
     for (t_uindex treeidx = 0; treeidx < ntrees; ++treeidx) {
         auto* aggtable = m_trees[treeidx]->get_aggtable();
-        t_schema aggschema = aggtable->get_schema();
-
         for (t_uindex aggidx = 0; aggidx < naggs; ++aggidx) {
-            const std::string& aggname = aggschema.m_columns[aggidx];
+            // resolve by column index (== aggidx); skips the per-iteration
+            // name->index map lookup + temp string and the schema deep-copy.
             aggcols[treeidx * naggs + aggidx] =
-                aggtable->_get_const_column(aggname);
+                aggtable->_get_const_column(aggidx);
         }
     }
 
@@ -1133,6 +1131,9 @@ t_ctx2::get_rows_changed() {
     t_uindex ncols = get_num_view_columns();
     std::vector<t_uindex> rows;
     std::vector<std::pair<t_uindex, t_uindex>> cells;
+    if (ncols > 1) {
+        cells.reserve(nrows * (ncols - 1));
+    }
 
     // get cells and imbue with additional information
     for (t_uindex ridx = 0; ridx < nrows; ++ridx) {
@@ -1143,6 +1144,10 @@ t_ctx2::get_rows_changed() {
 
     auto cells_info = resolve_cells(cells);
 
+    // Cells are visited in row-major order and `resolve_cells` preserves it, so
+    // `m_ridx` is non-decreasing across `cells_info`. Tracking the last appended
+    // row dedups in O(1) with no allocation and leaves `rows` already ascending,
+    // replacing both the old O(n^2) `std::find` and the trailing `std::sort`.
     for (const auto& c : cells_info) {
         if (c.m_idx < 0) {
             continue;
@@ -1150,14 +1155,12 @@ t_ctx2::get_rows_changed() {
         const auto& deltas = m_trees[c.m_treenum]->get_deltas();
         auto iterators = deltas->get<by_tc_nidx_aggidx>().equal_range(c.m_idx);
         auto ridx = c.m_ridx;
-        bool unique_ridx =
-            std::find(rows.begin(), rows.end(), ridx) == rows.end();
-        if ((iterators.first != iterators.second) && unique_ridx) {
+        bool has_delta = iterators.first != iterators.second;
+        if (has_delta && (rows.empty() || rows.back() != ridx)) {
             rows.push_back(ridx);
         }
     }
 
-    std::sort(rows.begin(), rows.end());
     return rows;
 }
 

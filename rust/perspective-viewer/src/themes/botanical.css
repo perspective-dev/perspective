@@ -33,6 +33,7 @@ perspective-viewer[theme="Botanical"] {
     --psp-expression--function--color: #7bc96f;
     --psp-expression--psp-error--color: rgb(232, 131, 106);
     --psp-calendar--filter: invert(1);
+    --psp-input--filter: invert(1);
     --psp-warning--color: #1a2e1a;
     --psp-warning--background: var(--psp--color);
 
@@ -110,6 +111,7 @@ perspective-string-column-style[theme="Botanical"] {
     --psp-expression--function--color: #7bc96f;
     --psp-expression--psp-error--color: rgb(232, 131, 106);
     --psp-calendar--filter: invert(1);
+    --psp-input--filter: invert(1);
     --psp-warning--color: #1a2e1a;
     --psp-warning--background: var(--psp--color);
 

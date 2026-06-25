@@ -148,6 +148,8 @@ export const getSvgContentString = (selector: string) => async (page: Page) => {
     return content;
 };
 
+const EXISTING_TITLES = new Map();
+
 /**
  * Compares the content of an HTML element to a snapshot.
  * To generate new snapshots, run `pnpm run test --update-snapshots`.
@@ -171,18 +173,23 @@ export async function compareContentsToSnapshot(
     });
 
     const titlePath = test.info().titlePath;
-    const snapshotPath = [
-        titlePath
-            .slice(1)
-            .map((s) =>
-                s
-                    .trim()
-                    .replace(/[^a-z0-9]+/gi, "-")
-                    .toLowerCase(),
-            )
-            .join("-") + ".txt",
-    ];
+    let snapshotPath = titlePath
+        .slice(1)
+        .map((s) =>
+            s
+                .trim()
+                .replace(/[^a-z0-9]+/gi, "-")
+                .toLowerCase(),
+        )
+        .join("-");
 
+    const count = EXISTING_TITLES.get(snapshotPath) || 0;
+    EXISTING_TITLES.set(snapshotPath, count + 1);
+    if (count > 0) {
+        snapshotPath = `${snapshotPath[0]}_${count}`;
+    }
+
+    snapshotPath = `${snapshotPath}.txt`;
     await expect(formatted).toMatchSnapshot(snapshotPath);
 }
 

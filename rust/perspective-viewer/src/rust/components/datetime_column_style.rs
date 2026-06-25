@@ -23,12 +23,10 @@ use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
 use super::modal::{ModalLink, SetModalLink};
-use super::style::LocalStyle;
 use crate::components::datetime_column_style::custom::DatetimeStyleCustom;
 use crate::components::datetime_column_style::simple::DatetimeStyleSimple;
 use crate::components::form::select_value_field::SelectValueField;
 use crate::config::*;
-use crate::css;
 use crate::utils::WeakScope;
 
 /// Format-only widget for `datetime` columns. Renders the `date_format`
@@ -126,7 +124,6 @@ impl Component for DatetimeColumnStyle {
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
             <>
-                <LocalStyle href={css!("column-style")} />
                 <div id="column-style-container" class="datetime-column-style-container">
                     if ctx.props().enable_time_config {
                         <SelectValueField<String>

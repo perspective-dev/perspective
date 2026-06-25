@@ -152,12 +152,12 @@ t_ctx_grouped_pkey::get_data(
     }
 
     auto* aggtable = m_tree->get_aggtable();
-    t_schema aggschema = aggtable->get_schema();
 
     for (t_uindex aggidx = 0, loop_end = aggcols.size(); aggidx < loop_end;
          ++aggidx) {
-        const std::string& aggname = aggschema.m_columns[aggidx];
-        aggcols[aggidx] = aggtable->_get_const_column(aggname);
+        // resolve by column index (== aggidx); skips the per-iteration
+        // name->index map lookup + temp string and the schema deep-copy.
+        aggcols[aggidx] = aggtable->_get_const_column(aggidx);
     }
 
     const std::vector<t_aggspec>& aggspecs = m_config.get_aggregates();

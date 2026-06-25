@@ -121,7 +121,7 @@ std::pair<t_tscalar, t_tscalar>
 t_ctx1::get_min_max(const std::string& colname) const {
     auto rval = std::make_pair(mknone(), mknone());
     auto* aggtable = m_tree->get_aggtable();
-    t_schema aggschema = aggtable->get_schema();
+    const t_schema& aggschema = aggtable->get_schema();
     const auto* col = aggtable->_get_const_column(colname);
     auto colidx = aggschema.get_colidx(colname);
     auto depth = m_config.get_num_rpivots();
@@ -182,13 +182,14 @@ t_ctx1::get_data(
     std::vector<const t_column*> aggcols(m_config.get_num_aggregates());
 
     auto* aggtable = m_tree->get_aggtable();
-    t_schema aggschema = aggtable->get_schema();
     auto none = mknone();
 
     for (t_uindex aggidx = 0, loop_end = aggcols.size(); aggidx < loop_end;
          ++aggidx) {
-        const std::string& aggname = aggschema.m_columns[aggidx];
-        aggcols[aggidx] = aggtable->_get_const_column(aggname);
+        // `aggidx` is the column's position in the aggtable schema, so resolve
+        // by index — avoids the per-iteration name->index map lookup + a temp
+        // std::string, and the up-front schema deep-copy.
+        aggcols[aggidx] = aggtable->_get_const_column(aggidx);
     }
 
     const std::vector<t_aggspec>& aggspecs = m_config.get_aggregates();
@@ -239,13 +240,14 @@ t_ctx1::get_data(const std::vector<t_uindex>& rows) const {
     std::vector<const t_column*> aggcols(m_config.get_num_aggregates());
 
     auto* aggtable = m_tree->get_aggtable();
-    t_schema aggschema = aggtable->get_schema();
     auto none = mknone();
 
     for (t_uindex aggidx = 0, loop_end = aggcols.size(); aggidx < loop_end;
          ++aggidx) {
-        const std::string& aggname = aggschema.m_columns[aggidx];
-        aggcols[aggidx] = aggtable->_get_const_column(aggname);
+        // `aggidx` is the column's position in the aggtable schema, so resolve
+        // by index — avoids the per-iteration name->index map lookup + a temp
+        // std::string, and the up-front schema deep-copy.
+        aggcols[aggidx] = aggtable->_get_const_column(aggidx);
     }
 
     const std::vector<t_aggspec>& aggspecs = m_config.get_aggregates();
@@ -527,18 +529,18 @@ t_ctx1::get_rows_changed() {
     const auto& deltas = m_tree->get_deltas();
     auto eidx = t_uindex(m_traversal->size());
 
+    // `idx` increases monotonically and is pushed at most once, so `rows` is
+    // already unique and sorted: the per-iteration `std::find` (which made this
+    // O(n^2)) and the trailing `std::sort` were both dead work.
     for (t_uindex idx = 0; idx < eidx; ++idx) {
         t_index ptidx = m_traversal->get_tree_index(idx);
         // Retrieve delta from storage and check if the row has been changed
         auto iterators = deltas->get<by_tc_nidx_aggidx>().equal_range(ptidx);
-        bool unique_ridx =
-            std::find(rows.begin(), rows.end(), idx) == rows.end();
-        if ((iterators.first != iterators.second) && unique_ridx) {
+        if (iterators.first != iterators.second) {
             rows.push_back(idx);
         }
     }
 
-    std::sort(rows.begin(), rows.end());
     return rows;
 }
 
@@ -618,13 +620,14 @@ t_ctx1::pprint() const {
 
     std::vector<const t_column*> aggcols(m_config.get_num_aggregates());
     auto* aggtable = m_tree->get_aggtable();
-    t_schema aggschema = aggtable->get_schema();
     auto none = mknone();
 
     for (t_uindex aggidx = 0, loop_end = aggcols.size(); aggidx < loop_end;
          ++aggidx) {
-        const std::string& aggname = aggschema.m_columns[aggidx];
-        aggcols[aggidx] = aggtable->_get_const_column(aggname);
+        // `aggidx` is the column's position in the aggtable schema, so resolve
+        // by index — avoids the per-iteration name->index map lookup + a temp
+        // std::string, and the up-front schema deep-copy.
+        aggcols[aggidx] = aggtable->_get_const_column(aggidx);
     }
 
     const std::vector<t_aggspec>& aggspecs = m_config.get_aggregates();
@@ -905,8 +908,8 @@ t_ctx1::unity_init_load_step_end() {}
 
 std::shared_ptr<t_data_table>
 t_ctx1::get_table() const {
-    auto schema = m_tree->get_aggtable()->get_schema();
-    auto pivots = m_config.get_row_pivots();
+    const t_schema& schema = m_tree->get_aggtable()->get_schema();
+    const auto& pivots = m_config.get_row_pivots();
     auto tbl = std::make_shared<t_data_table>(schema, m_tree->size());
     tbl->init();
     tbl->extend(m_tree->size());

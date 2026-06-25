@@ -39,10 +39,8 @@ use self::config_selector::ConfigSelector;
 use self::inactive_column::*;
 use super::containers::scroll_panel::*;
 use super::containers::split_panel::{Orientation, SplitPanel};
-use super::style::LocalStyle;
 use crate::components::column_dropdown::{ColumnDropDownElement, ColumnDropDownPortal};
 use crate::components::containers::scroll_panel_item::ScrollPanelItem;
-use crate::css;
 use crate::presentation::{ColumnLocator, DragDropContainer, Presentation};
 use crate::queries::{ActiveColumnState, ActiveColumnStateData, ColumnsIteratorSet};
 use crate::renderer::*;
@@ -519,7 +517,6 @@ impl Component for ColumnSelector {
 
         html! {
             <>
-                <LocalStyle href={css!("column-selector")} />
                 <SplitPanel
                     no_wrap=true
                     on_reset={self.on_reset.callback()}

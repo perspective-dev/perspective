@@ -12,5 +12,5 @@
         "allowImportingTsExtensions": true,
         "typeRoots": ["./node_modules/@types"]
     },
-    "files": ["src/ts/perspective-viewer.ts"]
+    "include": ["./src/ts/**/*"]
 }

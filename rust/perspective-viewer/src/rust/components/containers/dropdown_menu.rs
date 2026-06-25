@@ -17,8 +17,6 @@ use web_sys::*;
 use yew::prelude::*;
 
 use super::select::SelectItem;
-use crate::components::style::LocalStyle;
-use crate::*;
 
 #[derive(Properties, PartialEq)]
 pub struct DropDownMenuProps<T>
@@ -95,7 +93,7 @@ where
             html! { <span class="no-results">{ "No Completions" }</span> }
         };
 
-        html! { <><LocalStyle href={css!("containers/dropdown-menu")} />{ body }</> }
+        html! { <>{ body }</> }
     }
 }
 

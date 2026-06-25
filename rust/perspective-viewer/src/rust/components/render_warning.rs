@@ -12,8 +12,6 @@
 
 use yew::prelude::*;
 
-use super::style::LocalStyle;
-use crate::css;
 use crate::renderer::limits::RenderLimits;
 
 #[derive(Properties, PartialEq)]
@@ -81,7 +79,6 @@ pub fn render_warning(props: &RenderWarningProps) -> Html {
         let onclick = Callback::from(move |_: MouseEvent| on_dismiss.emit(()));
         html! {
             <>
-                <LocalStyle href={css!("render-warning")} />
                 <div
                     class="plugin_information plugin_information--warning"
                     id="plugin_information--size"

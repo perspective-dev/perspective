@@ -10,13 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import {
-    PageView as PspViewer,
-    compareNodes,
-    expect,
-    test,
-} from "../helpers.ts";
-import { SymbolPair } from "@perspective-dev/test/src/js/models/column_settings";
+import { PageView as PspViewer, expect, test } from "@perspective-dev/test";
 import { Page } from "@playwright/test";
 
 const symbols = [
@@ -36,8 +30,8 @@ async function checkSymbolsSection(
     editVal: string,
 ) {
     // setup viewer
-    let viewer = new PspViewer(page);
-    let settingsPanel = await viewer.openSettingsPanel();
+    const viewer = new PspViewer(page);
+    const settingsPanel = await viewer.openSettingsPanel();
     const symbolsEditor = viewer.columnSettingsSidebar.styleTab.symbolsEditor;
     const symbolColumn = settingsPanel.container.locator(
         "div[data-label=Symbol]",
@@ -58,12 +52,12 @@ async function checkSymbolsSection(
 
     // setup symbols
     await symbolsEditor.container.waitFor();
-    let key = symbolsEditor.container.locator(".column_name");
-    let keyInput = symbolsEditor.container.locator("input");
-    let valSelect = symbolsEditor.container.locator("select");
-    let value = symbolsEditor.container.locator("option[selected]");
+    const key = symbolsEditor.container.locator(".column_name");
+    const keyInput = symbolsEditor.container.locator("input");
+    const valSelect = symbolsEditor.container.locator("select");
+    const value = symbolsEditor.container.locator("option[selected]");
 
-    let setKey = async (inputIdx, keyIdx, val) => {
+    const setKey = async (inputIdx, keyIdx, val) => {
         await keyInput.nth(inputIdx).clear();
         await keyInput.nth(inputIdx).type(val);
         await page.locator("perspective-dropdown .selected").waitFor();
@@ -72,7 +66,8 @@ async function checkSymbolsSection(
             val.toLowerCase(),
         );
     };
-    let setValue = async (i, val) => {
+
+    const setValue = async (i, val) => {
         await valSelect.nth(i).selectOption(val);
         expect(await value.nth(i).textContent()).toBe(val);
     };
@@ -84,6 +79,7 @@ async function checkSymbolsSection(
         await setValue(i, symbols[i + 1]);
         expect(await symbolsEditor.getPairsLength()).toBe(i + 2);
     }
+
     // edit
     await symbolsEditor.container.locator(".column_name").first().dblclick();
     await setKey(0, 0, editVal);

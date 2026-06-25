@@ -25,8 +25,6 @@ use crate::components::column_dropdown::{ColumnDropDownElement, ColumnDropDownPo
 use crate::components::containers::dragdrop_list::*;
 use crate::components::containers::select::{Select, SelectItem};
 use crate::components::filter_dropdown::{FilterDropDownElement, FilterDropDownPortal};
-use crate::components::style::LocalStyle;
-use crate::css;
 use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::drag_drop_update::*;
@@ -609,7 +607,6 @@ impl Component for ConfigSelector {
         html! {
             <>
                 <div slot="top_panel" id="top_panel" {class} ondragend={dragend}>
-                    <LocalStyle href={css!("config-selector")} />
                     <div class="pivot_controls">
                         if group_rollups.len() > 1 {
                             <Select<GroupRollupMode>

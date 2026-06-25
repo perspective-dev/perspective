@@ -33,7 +33,27 @@ export const RUNTIME_MODE: "worker" | "inprocess" = "worker";
  *   `ImageBitmap` over the control channel; the host blits the bitmap
  *   into the visible canvas via `drawImage`.
  */
-export const RENDER_BLIT_MODE: "direct" | "blit" = "direct";
+export const RENDER_BLIT_MODE: "direct" | "blit" = "blit";
+
+/**
+ * Number of shared WebGL contexts in pooled blit mode.
+ *
+ * The browser caps live contexts per agent (~16 in Chromium) and
+ * force-loses the oldest past that cap, so a page with more charts than
+ * the cap cannot give each its own context. When `> 0` *and*
+ * `RENDER_BLIT_MODE === "blit"`, every chart borrows one of this many
+ * shared contexts (round-robin, sticky for the chart's lifetime) instead
+ * of allocating its own — decoupling live-context count from chart
+ * count. N charts render through K = this many contexts; the scheduler
+ * serializes renders that land on the same context.
+ *
+ * `0` disables pooling (every chart gets its own context — the original
+ * behavior). Pooling never applies to `"direct"` mode, which renders
+ * into the host's transferred visible canvas and is permanently 1:1 with
+ * a context; keep pages that need more than ~16 simultaneous charts on
+ * `"blit"`.
+ */
+export const RENDER_CONTEXT_POOL_SIZE: number = 4;
 
 /**
  * Strict-mode validation for `BufferPool.upload`.
