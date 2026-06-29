@@ -40,6 +40,7 @@
 
 #if defined(PSP_ENABLE_WASM) || defined(__linux__)
 #include <malloc.h>
+#include <dlfcn.h>
 #endif
 
 #if !defined(WIN32) && !defined(PSP_ENABLE_WASM)
@@ -820,7 +821,7 @@ ProtoServer::handle_request(
 ) {
     const auto start = std::chrono::high_resolution_clock::now();
     proto::Request req_env;
-    req_env.ParseFromString(data);
+    req_env.ParseFromArray(data.data(), data.size());
     std::vector<ProtoServerResp<std::string>> serialized_responses;
     std::vector<proto::Response> responses;
 
@@ -2999,9 +3000,41 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             const auto res = mallinfo();
             sys_info->set_used_size(*reinterpret_cast<const unsigned int*>(&res.uordblks));
 #elif defined(__linux__) && !defined(PSP_ENABLE_WASM)
-            auto res = mallinfo2();
-            sys_info->set_heap_size(res.usmblks);
+#if (__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 33)
+            const auto res = mallinfo2();
+            sys_info->set_heap_size(res.arena);
             sys_info->set_used_size(res.uordblks);
+#else
+            static const auto mallinfo2 = [](){ 
+                    struct mallinfo2 {
+                        size_t arena;     /* Non-mmapped space allocated (bytes) */
+                        size_t ordblks;   /* Number of free chunks */
+                        size_t smblks;    /* Number of free fastbin blocks */
+                        size_t hblks;     /* Number of mmapped regions */
+                        size_t hblkhd;    /* Space allocated in mmapped regions
+                                                (bytes) */
+                        size_t usmblks;   /* See below */
+                        size_t fsmblks;   /* Space in freed fastbin blocks (bytes) */
+                        size_t uordblks;  /* Total allocated space (bytes) */
+                        size_t fordblks;  /* Total free space (bytes) */
+                        size_t keepcost;  /* Top-most, releasable space (bytes) */
+                    };            
+#ifdef _GNU_SOURCE    
+                    return (mallinfo2(*)())dlsym(RTLD_DEFAULT, "mallinfo2");
+#else
+                    return nullptr;
+#endif
+                }();
+            if (mallinfo2) {
+                const auto res = mallinfo2();
+                sys_info->set_heap_size(res.arena);
+                sys_info->set_used_size(res.uordblks);
+            } else { // Fallback to mallinfo if mallinfo2 is not available
+                const auto res = mallinfo();
+                sys_info->set_heap_size(*reinterpret_cast<const unsigned int*>(&res.arena));
+                sys_info->set_used_size(*reinterpret_cast<const unsigned int*>(&res.uordblks));
+            }
+#endif
 #elif defined(__APPLE__) && !defined(PSP_ENABLE_WASM)
             rusage out;
             getrusage(RUSAGE_SELF, &out);
