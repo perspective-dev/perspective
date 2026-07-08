@@ -63,6 +63,27 @@ fn test_table_make_view_simple() {
 }
 
 #[test]
+fn test_table_make_view_preserves_underscores_in_flat_column_alias() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("account_number".to_string())];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(
+        sql.contains("\"account_number\" as \"account_number\""),
+        "expected underscores to be preserved in flat column alias: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("\"account-number\""),
+        "expected hyphenated column alias to be absent: {}",
+        sql
+    );
+}
+
+#[test]
 fn test_table_make_view_with_group_by() {
     let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
     let mut config = ViewConfig::default();
@@ -75,6 +96,28 @@ fn test_table_make_view_with_group_by() {
     assert!(sql.contains("GROUP BY ROLLUP"));
     assert!(sql.contains("__ROW_PATH_0__"));
     assert!(sql.contains("__GROUPING_ID__"));
+}
+
+#[test]
+fn test_table_make_view_preserves_underscores_in_aggregate_column_alias() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("account_number".to_string())];
+    config.group_by = vec!["category".to_string()];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(
+        sql.contains("any_value(\"account_number\") as \"account_number\""),
+        "expected underscores to be preserved in aggregate column alias: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("\"account-number\""),
+        "expected hyphenated column alias to be absent: {}",
+        sql
+    );
 }
 
 #[test]

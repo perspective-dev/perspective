@@ -380,7 +380,7 @@ impl<'a> ViewQueryContext<'a> {
         if self.needs_aggregation() {
             for col in self.config.columns.iter().flatten() {
                 let agg = self.get_aggregate(col);
-                let escaped = col.replace('"', "\"\"").replace("_", "-");
+                let escaped = col.replace('"', "\"\"");
                 clauses.push(format!(
                     "{}({}) as \"{}\"",
                     agg,
@@ -390,7 +390,7 @@ impl<'a> ViewQueryContext<'a> {
             }
         } else if !self.config.columns.is_empty() {
             for col in self.config.columns.iter().flatten() {
-                let escaped = col.replace('"', "\"\"").replace("_", "-");
+                let escaped = col.replace('"', "\"\"");
                 clauses.push(format!("{} as \"{}\"", self.col_name(col), escaped));
             }
         }
