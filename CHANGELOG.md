@@ -1,3 +1,17 @@
+# [v4.5.2](https://github.com/perspective-dev/perspective/releases/tag/v4.5.2)
+
+_9 July 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.5.1...v4.5.2))
+
+Features
+
+- PEP 783 (pypi emscripten wheels) [#3191](https://github.com/finos/perspective/pull/3191)
+- Add `page_to_disk` option, disk-backed columns via OPFS, `mmap` or `node:fs`. [#3185](https://github.com/finos/perspective/pull/3185)
+
+Fixes
+
+- Fix `viewer-charts` context sharing and misc bugs [#3190](https://github.com/finos/perspective/pull/3190)
+- Fix memory safety issues [#3188](https://github.com/finos/perspective/pull/3188)
+
 # [v4.5.1](https://github.com/perspective-dev/perspective/releases/tag/v4.5.1)
 
 _30 May 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.5.0...v4.5.1))

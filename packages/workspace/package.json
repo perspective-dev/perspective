@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/workspace",
-    "version": "4.5.1",
+    "version": "4.5.2",
     "description": "Perspective Workspace",
     "files": [
         "dist/**/*",

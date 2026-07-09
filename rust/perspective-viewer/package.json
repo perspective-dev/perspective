@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/viewer",
-    "version": "4.5.1",
+    "version": "4.5.2",
     "description": "The `<perspective-viewer>` Custom Element, frontend for Perspective",
     "keywords": [
         "perspective",
