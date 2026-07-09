@@ -1859,9 +1859,19 @@ write_scalar(
                 writer.String(scalar.to_string().c_str());
             } else {
                 t_date date_val = scalar.get<t_date>();
-                tm t = date_val.get_tm();
-                time_t epoch_delta = mktime(&t);
-                writer.Int64(epoch_delta * 1000);
+                date::year year{date_val.year()};
+                date::month month{
+                    static_cast<std::uint32_t>(date_val.month() + 1)
+                };
+                date::day day{static_cast<std::uint32_t>(date_val.day())};
+                date::sys_days utc_date =
+                    date::year_month_day(year, month, day);
+                writer.Int64(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        utc_date.time_since_epoch()
+                    )
+                        .count()
+                );
             }
             break;
         }

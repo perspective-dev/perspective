@@ -1109,12 +1109,7 @@ t_tscalar::to_string(bool for_expr) const {
 
                 return ss.str();
             }
-            t_date date_val = get<t_date>();
-            tm t = date_val.get_tm();
-            time_t epoch_delta = mktime(&t);
-            std::chrono::milliseconds timestamp(epoch_delta * 1000);
-            date::sys_time<std::chrono::milliseconds> ts(timestamp);
-            return date::format("%F", ts);
+            return get<t_date>().str();
 
         } break;
         case DTYPE_BOOL: {

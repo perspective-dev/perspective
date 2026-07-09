@@ -11,7 +11,8 @@
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import os
-from datetime import date, datetime
+import time
+from datetime import date, datetime, timezone
 from io import StringIO
 
 import numpy as np
@@ -242,6 +243,27 @@ class TestToFormat(object):
             "a": [util.to_timestamp(dt), util.to_timestamp(dt)],
             "b": [2, 4],
         }
+
+    @mark.skipif(IS_WIN, reason="time.tzset() is not available on Windows")
+    def test_to_columns_date_uses_utc_midnight(self, monkeypatch):
+        original_tz = os.environ.get("TZ")
+        monkeypatch.setenv("TZ", "Europe/Amsterdam")
+        time.tzset()
+
+        try:
+            tbl = Table({"a": "date"})
+            tbl.update({"a": ["2024-01-01"]})
+            expected = int(datetime(2024, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
+            view = tbl.view()
+            assert view.to_columns() == {"a": [expected]}
+            assert view.to_csv() == '"a"\n2024-01-01\n'
+        finally:
+            if original_tz is None:
+                monkeypatch.delenv("TZ")
+            else:
+                monkeypatch.setenv("TZ", original_tz)
+
+            time.tzset()
 
     def test_to_columns_datetime(self, util):
         dt = datetime(2019, 3, 15, 20, 30, 59, 6000)
