@@ -66,6 +66,8 @@ std::int64_t to_gmtime(
     std::int32_t sec
 );
 
+std::tm gmtime_from_epoch_ms(std::int64_t ms);
+
 // Interal details: m_storage stores "microseconds since the
 // epoch-defined-in-the-class".
 // In terms of (non-tm based) inputs/outputs, t_time
@@ -113,8 +115,8 @@ public:
      */
     std::tm get_tm() const;
 
-    std::int32_t
-    gmtime(struct tm& out, std::int64_t secs, std::int32_t offset) const;
+    static std::int32_t
+    gmtime(struct tm& out, std::int64_t secs, std::int32_t offset);
 
     std::int32_t year(const struct tm& t) const;
     std::int32_t month(const struct tm& t) const;

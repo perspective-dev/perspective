@@ -88,7 +88,7 @@ isleap(long int year) {
 }
 
 std::int32_t
-t_time::gmtime(struct tm& out, std::int64_t secs, std::int32_t offset) const {
+t_time::gmtime(struct tm& out, std::int64_t secs, std::int32_t offset) {
     std::int64_t days;
     std::int64_t rem;
     std::int64_t y;
@@ -234,6 +234,18 @@ to_gmtime(
     std::int64_t days = ymd_to_ord(year, month, day) - EPOCH_ORD;
     std::int64_t res = ((days * 24 + hour) * 60 + min) * 60 + sec;
     return static_cast<std::int64_t>(res);
+}
+
+std::tm
+gmtime_from_epoch_ms(std::int64_t ms) {
+    std::tm out{};
+    std::int64_t secs = ms / 1000;
+    if (ms % 1000 < 0) {
+        secs -= 1;
+    }
+
+    t_time::gmtime(out, secs, 0);
+    return out;
 }
 
 t_time&

@@ -977,19 +977,12 @@ hour_of_day::operator()(t_parameter_list parameters) {
     val.set(temp_scalar);
 
     if (val.get_dtype() == DTYPE_TIME) {
-        // Convert the int64 to a milliseconds duration timestamp
-        std::chrono::milliseconds timestamp(val.to_int64());
-
-        // Convert the timestamp to a `sys_time` (alias for `time_point`)
-        date::sys_time<std::chrono::milliseconds> ts(timestamp);
-
-        // Use localtime so that the hour of day is consistent with all
-        // output datetimes, which are in local time
-        std::time_t temp = std::chrono::system_clock::to_time_t(ts);
-        std::tm* t = std::localtime(&temp);
+        // Break down the UTC timestamp in UTC — the host timezone must not
+        // affect engine results (native and WASM builds must agree)
+        std::tm t = gmtime_from_epoch_ms(val.to_int64());
 
         // Get the hour from the resulting `std::tm`
-        rval.set(static_cast<double>(t->tm_hour));
+        rval.set(static_cast<double>(t.tm_hour));
     } else {
         // Hour of day for date column is always 0
         rval.set(0.0);
@@ -1069,19 +1062,12 @@ day_of_week::operator()(t_parameter_list parameters) {
     std::string result;
 
     if (val.get_dtype() == DTYPE_TIME) {
-        // Convert the int64 to a milliseconds duration timestamp
-        std::chrono::milliseconds timestamp(val.to_int64());
-
-        // Convert the timestamp to a `sys_time` (alias for `time_point`)
-        date::sys_time<std::chrono::milliseconds> ts(timestamp);
-
-        // Use localtime so that the hour of day is consistent with all
-        // output datetimes, which are in local time
-        std::time_t temp = std::chrono::system_clock::to_time_t(ts);
-        std::tm* t = std::localtime(&temp);
+        // Break down the UTC timestamp in UTC — the host timezone must not
+        // affect engine results (native and WASM builds must agree)
+        std::tm t = gmtime_from_epoch_ms(val.to_int64());
 
         // Get the weekday from the resulting `std::tm`
-        result = days_of_week[t->tm_wday];
+        result = days_of_week[t.tm_wday];
     } else {
         // Retrieve the `t_date` struct from the scalar
         t_date date_val = val.get<t_date>();
@@ -1153,22 +1139,12 @@ month_of_year::operator()(t_parameter_list parameters) {
     std::string result;
 
     if (val.get_dtype() == DTYPE_TIME) {
-        // Convert the int64 to a milliseconds duration timestamp
-        std::chrono::milliseconds timestamp(val.to_int64());
-
-        // Convert the timestamp to a `sys_time` (alias for `time_point`)
-        date::sys_time<std::chrono::milliseconds> ts(timestamp);
-
-        // Use localtime so that the hour of day is consistent with all
-        // output datetimes, which are in local time
-        std::time_t temp = std::chrono::system_clock::to_time_t(ts);
-        std::tm* t = std::localtime(&temp);
-
-        // Get the month from the resulting `std::tm`
-        auto month = t->tm_mon;
+        // Break down the UTC timestamp in UTC — the host timezone must not
+        // affect engine results (native and WASM builds must agree)
+        std::tm t = gmtime_from_epoch_ms(val.to_int64());
 
         // Get the month string and write into the output column
-        result = months_of_year[month];
+        result = months_of_year[t.tm_mon];
     } else {
         t_date date_val = val.get<t_date>();
 
@@ -1436,28 +1412,10 @@ void
 _day_bucket(t_tscalar& val, t_tscalar& rval) {
     switch (val.get_dtype()) {
         case DTYPE_TIME: {
-            // Convert the int64 to a milliseconds duration timestamp
-            std::chrono::milliseconds ms_timestamp(val.to_int64());
-
-            // Convert the timestamp to a `sys_time` (alias for
-            // `time_point`)
-            date::sys_time<std::chrono::milliseconds> ts(ms_timestamp);
-
-            // Use localtime so that the day of week is consistent with all
-            // output datetimes, which are in local time
-            std::time_t temp = std::chrono::system_clock::to_time_t(ts);
-
-            // Convert to a std::tm
-            std::tm* t = std::localtime(&temp);
-
-            // Get the year and create a new `t_date`
-            auto year = static_cast<std::int32_t>(t->tm_year + 1900);
-
-            // Month in `t_date` is [0-11]
-            std::int32_t month = static_cast<std::uint32_t>(t->tm_mon);
-            auto day = static_cast<std::uint32_t>(t->tm_mday);
-
-            rval.set(t_date(year, month, day));
+            // The UTC calendar day containing the UTC timestamp — the host
+            // timezone must not affect engine results (native and WASM
+            // builds must agree)
+            rval.set(t_date::from_epoch_ms(val.to_int64()));
         } break;
         case DTYPE_DATE:
         default: {
@@ -1503,24 +1461,15 @@ _week_bucket(t_tscalar& val, t_tscalar& rval) {
             rval.set(new_date);
         } break;
         case DTYPE_TIME: {
-            // Convert the int64 to a milliseconds duration timestamp
-            std::chrono::milliseconds timestamp(val.to_int64());
-
-            // Convert the timestamp to a `sys_time` (alias for
-            // `time_point`)
-            date::sys_time<std::chrono::milliseconds> ts(timestamp);
-
-            // Convert the timestamp to local time
-            std::time_t temp = std::chrono::system_clock::to_time_t(ts);
-            std::tm* t = std::localtime(&temp);
-
-            // Take the ymd from the `tm`, now in local time, and create a
+            // Take the ymd of the UTC timestamp in UTC — the host timezone
+            // must not affect engine results — and create a
             // date::year_month_day.
-            date::year year{1900 + t->tm_year};
+            std::tm t = gmtime_from_epoch_ms(val.to_int64());
+            date::year year{1900 + t.tm_year};
 
             // date::month is [1-12], whereas `std::tm::tm_mon` is [0-11]
-            date::month month{static_cast<std::uint32_t>(t->tm_mon) + 1};
-            date::day day{static_cast<std::uint32_t>(t->tm_mday)};
+            date::month month{static_cast<std::uint32_t>(t.tm_mon) + 1};
+            date::day day{static_cast<std::uint32_t>(t.tm_mday)};
             date::year_month_day ymd(year, month, day);
 
             // Convert to a `sys_days` representing no. of days since epoch
@@ -1560,21 +1509,13 @@ _month_bucket(t_tscalar& val, t_tscalar& rval, t_uindex multiplicity) {
             rval.set(t_date(date_val.year(), out_month, 1));
         } break;
         case DTYPE_TIME: {
-            // Convert the int64 to a milliseconds duration
-            // timestamp
-            std::chrono::milliseconds ms_timestamp(val.to_int64());
-
-            // Convert the timestamp to a `sys_time` (alias for
-            // `time_point`)
-            date::sys_time<std::chrono::milliseconds> ts(ms_timestamp);
-
-            // Convert the timestamp to local time
-            std::time_t temp = std::chrono::system_clock::to_time_t(ts);
-            std::tm* t = std::localtime(&temp);
+            // Break down the UTC timestamp in UTC — the host timezone must
+            // not affect engine results
+            std::tm t = gmtime_from_epoch_ms(val.to_int64());
 
             // Use the `tm` to create the `t_date`
-            auto year = static_cast<std::int32_t>(t->tm_year + 1900);
-            std::int32_t month = static_cast<std::uint32_t>(t->tm_mon);
+            auto year = static_cast<std::int32_t>(t.tm_year + 1900);
+            std::int32_t month = static_cast<std::uint32_t>(t.tm_mon);
             if (multiplicity != 1) {
                 month = floor(static_cast<double>(month) / multiplicity)
                     * multiplicity;
@@ -1599,19 +1540,12 @@ _year_bucket(t_tscalar& val, t_tscalar& rval, t_uindex multiplicity) {
             ));
         } break;
         case DTYPE_TIME: {
-            // Convert the int64 to a milliseconds duration timestamp
-            std::chrono::milliseconds ms_timestamp(val.to_int64());
-
-            // Convert the timestamp to a `sys_time` (alias for
-            // `time_point`)
-            date::sys_time<std::chrono::milliseconds> ts(ms_timestamp);
-
-            // Convert the timestamp to local time
-            std::time_t temp = std::chrono::system_clock::to_time_t(ts);
-            std::tm* t = std::localtime(&temp);
+            // Break down the UTC timestamp in UTC — the host timezone must
+            // not affect engine results
+            std::tm t = gmtime_from_epoch_ms(val.to_int64());
 
             // Use the `tm` to create the `t_date`
-            auto year = static_cast<std::int32_t>(t->tm_year + 1900);
+            auto year = static_cast<std::int32_t>(t.tm_year + 1900);
             if (multiplicity != 1) {
                 year = floor(static_cast<double>(year) / multiplicity)
                     * multiplicity;
@@ -1639,27 +1573,13 @@ today() {
     t_tscalar rval;
 
     auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()
-    );
+                   std::chrono::system_clock::now().time_since_epoch()
+    )
+                   .count();
 
-    // Convert the timestamp to a `sys_time` (alias for `time_point`)
-    date::sys_time<std::chrono::milliseconds> ts(now);
-
-    // Use localtime so that the day of week is consistent with all output
-    // datetimes, which are in local time
-    std::time_t temp = std::chrono::system_clock::to_time_t(ts);
-
-    // Convert to a std::tm
-    std::tm* t = std::localtime(&temp);
-
-    // Get the year and create a new `t_date`
-    auto year = static_cast<std::int32_t>(t->tm_year + 1900);
-
-    // Month in `t_date` is [0-11]
-    std::int32_t month = static_cast<std::uint32_t>(t->tm_mon);
-    auto day = static_cast<std::uint32_t>(t->tm_mday);
-
-    rval.set(t_date(year, month, day));
+    // The current UTC calendar day, consistent with `bucket("x", 'D')` of
+    // `now()` — the host timezone must not affect engine results
+    rval.set(t_date::from_epoch_ms(now));
     return rval;
 }
 

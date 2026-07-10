@@ -153,15 +153,14 @@ table = perspective.table(data, index="index")
 
 #### Time Zone Handling
 
-When parsing `"datetime"` strings, times are assumed _local time_ unless an
-explicit timezone offset is parsed. All `"datetime"` columns (regardless of
-input time zone) are _output_ to the user as `datetime.datetime` objects in
-_local time_ according to the Python runtime.
-
-This behavior is consistent with Perspective's behavior in JavaScript. For more
-details, see this in-depth
-[explanation](https://github.com/perspective-dev/perspective/pull/867) of
-`perspective-python` semantics around time zone handling.
+When parsing `"datetime"` strings, times without an explicit timezone offset are
+interpreted as _UTC_; strings with an offset are converted to UTC. All
+`"datetime"` values are stored internally as milliseconds since the Unix epoch
+and are _output_ as integer timestamps from methods like `to_columns()` and
+`to_json()`. `"date"` values are timezone-agnostic calendar days, output as
+integer timestamps at _UTC midnight_ of the calendar day. The host process
+timezone never affects engine results; localization is the display layer's
+responsibility.
 
 ### Callbacks and Events
 

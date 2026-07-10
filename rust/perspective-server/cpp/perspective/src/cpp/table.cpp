@@ -635,8 +635,7 @@ json_into(const rapidjson::Value& value) {
                 PSP_COMPLAIN_AND_ABORT("Could not coerce to date");
             }
         } else if (value.IsInt64()) {
-            auto tt = time_t(value.GetInt64() / 1000);
-            tm = *localtime(&tt);
+            return t_date::from_epoch_ms(value.GetInt64());
         } else {
             PSP_COMPLAIN_AND_ABORT("Could not coerce to date");
         }

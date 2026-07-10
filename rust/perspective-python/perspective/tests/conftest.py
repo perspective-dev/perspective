@@ -10,7 +10,7 @@
 #  ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 import numpy as np
 import pandas as pd
@@ -165,10 +165,23 @@ class Util:
 
     @staticmethod
     def to_timestamp(obj):
-        """Return an integer timestamp based on a date/datetime object."""
+        """Return an integer timestamp based on a date/datetime object.
+
+        A `date` is a timezone-agnostic calendar day and serializes to epoch
+        ms at *UTC* midnight regardless of the host process timezone, so it
+        is converted here in UTC. A naive `datetime` is a wall-clock reading
+        in the process-local timezone (callers express expected instants
+        this way, e.g. `aware.astimezone(TZ).replace(tzinfo=None)`), so it is
+        converted via local `timestamp()`.
+        """
         classname = obj.__class__.__name__
         if classname == "date":
-            return int(datetime(obj.year, obj.month, obj.day).timestamp() * 1000)
+            return int(
+                datetime(
+                    obj.year, obj.month, obj.day, tzinfo=timezone.utc
+                ).timestamp()
+                * 1000
+            )
         elif classname == "datetime":
             return int(obj.timestamp() * 1000)
         else:
