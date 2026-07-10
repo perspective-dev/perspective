@@ -540,6 +540,60 @@ const data3 = {
                 table.delete();
             });
 
+            test("group by with multiple hidden sorts emits all visible columns in to_columns()", async function () {
+                // https://github.com/perspective-dev/perspective/issues/3195
+                const table = await perspective.table({
+                    v1: [1, 2, 3, 4],
+                    v2: [10, 20, 30, 40],
+                    v3: [100, 200, 300, 400],
+                    h1: [1.5, 2.5, 3.5, 4.5],
+                    h2: [4.5, 3.5, 2.5, 1.5],
+                    g: ["a", "a", "b", "b"],
+                });
+                const view = await table.view({
+                    columns: ["v1", "v2", "v3"],
+                    group_by: ["g"],
+                    sort: [
+                        ["h1", "desc"],
+                        ["h2", "desc"],
+                    ],
+                });
+                const result = await view.to_columns();
+                expect(result).toEqual({
+                    __ROW_PATH__: [[], ["b"], ["a"]],
+                    v1: [10, 7, 3],
+                    v2: [100, 70, 30],
+                    v3: [1000, 700, 300],
+                });
+                view.delete();
+                table.delete();
+            });
+
+            test("group by with more hidden sorts than visible columns does not emit hidden columns in to_columns()", async function () {
+                // https://github.com/perspective-dev/perspective/issues/3195
+                const table = await perspective.table({
+                    v1: [1, 2, 3, 4],
+                    h1: [1.5, 2.5, 3.5, 4.5],
+                    h2: [4.5, 3.5, 2.5, 1.5],
+                    g: ["a", "a", "b", "b"],
+                });
+                const view = await table.view({
+                    columns: ["v1"],
+                    group_by: ["g"],
+                    sort: [
+                        ["h1", "desc"],
+                        ["h2", "desc"],
+                    ],
+                });
+                const result = await view.to_columns();
+                expect(result).toEqual({
+                    __ROW_PATH__: [[], ["b"], ["a"]],
+                    v1: [10, 7, 3],
+                });
+                view.delete();
+                table.delete();
+            });
+
             test("split by ['y']", async function () {
                 const table = await perspective.table(data);
                 const view = await table.view({
