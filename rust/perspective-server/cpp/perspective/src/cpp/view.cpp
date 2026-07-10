@@ -2702,7 +2702,7 @@ View<t_ctx1>::to_columns(
     // Hidden columns are always at the end of the column names
     // list, and we need to skip them from the output.
     for (auto c = start_col + 1; c < end_col; ++c) {
-        if ((c - 1) > columns_length - hidden) {
+        if ((c - 1) >= columns_length) {
             continue;
         }
         write_column(
