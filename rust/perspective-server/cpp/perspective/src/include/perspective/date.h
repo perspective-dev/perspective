@@ -79,12 +79,22 @@ public:
     std::int32_t consecutive_day_idx() const;
 
     /**
-     * @brief Return an `std::tm` object. `tm_hour`, `tm_min`, and `tm_sec` are
-     * set to 0.
+     * @brief Milliseconds since the Unix epoch at *UTC* midnight of this
+     * calendar date. This is the serialization convention for `date` values
+     * (matching Arrow's `date32` day arithmetic) — a `t_date` is a timezone-
+     * agnostic calendar day, so the host timezone must never be consulted.
      *
-     * @return std::tm
+     * @return std::int64_t
      */
-    std::tm get_tm() const;
+    std::int64_t as_epoch_ms() const;
+
+    /**
+     * @brief Inverse of `as_epoch_ms`: the UTC calendar date containing
+     * epoch `ms`.
+     *
+     * @return t_date
+     */
+    static t_date from_epoch_ms(std::int64_t ms);
 
     friend bool operator<(const t_date& a, const t_date& b);
     friend bool operator<=(const t_date& a, const t_date& b);

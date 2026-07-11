@@ -12,6 +12,7 @@
 
 #include <perspective/first.h>
 #include <perspective/date.h>
+#include <perspective/time.h>
 
 namespace perspective {
 
@@ -72,19 +73,20 @@ t_date::consecutive_day_idx() const {
         + CUMULATIVE_DAYS[leap_selector][m - 1];
 }
 
-std::tm
-t_date::get_tm() const {
-    std::tm rval;
+std::int64_t
+t_date::as_epoch_ms() const {
+    // `to_gmtime` months are [1-12], `t_date` months are [0-11]
+    return to_gmtime(year(), month() + 1, day(), 0, 0, 0) * 1000;
+}
 
-    rval.tm_year = year() - 1900; // tm years are since 1900
-    rval.tm_mon = month();        // tm months from 0, so no need to decrement
-    rval.tm_mday = day();
-    rval.tm_hour = 0;
-    rval.tm_min = 0;
-    rval.tm_sec = 0;
-    rval.tm_isdst = -1; // let std::mktime decide whether DST is in effect
-
-    return rval;
+t_date
+t_date::from_epoch_ms(std::int64_t ms) {
+    std::tm t = gmtime_from_epoch_ms(ms);
+    return {
+        static_cast<std::int16_t>(t.tm_year + 1900),
+        static_cast<std::int8_t>(t.tm_mon),
+        static_cast<std::int8_t>(t.tm_mday)
+    };
 }
 
 t_date

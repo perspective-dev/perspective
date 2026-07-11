@@ -18,6 +18,7 @@
 #include <perspective/raw_types.h>
 #include <perspective/base.h>
 #include <perspective/utils.h>
+#include <perspective/time.h>
 #include <string>
 #include <chrono>
 #include <sstream>
@@ -97,10 +98,17 @@ parse_date_time(
                             << tm.tm_min << ":" << tm.tm_sec
         );
 
-        std::tm tm_cp = tm;
-        // wtf... std::mktime normalizes the input struct just to get the time
-        // out.
-        tp = std::chrono::system_clock::from_time_t(std::mktime(&tm_cp));
+        // Naive datetime strings are documented to be UTC — `std::mktime`
+        // would interpret the parsed civil time in the host timezone.
+        tp = std::chrono::system_clock::from_time_t(to_gmtime(
+            tm.tm_year + 1900,
+            tm.tm_mon + 1,
+            tm.tm_mday,
+            tm.tm_hour,
+            tm.tm_min,
+            tm.tm_sec
+        ));
+
         if (!ss.eof() && ss.peek() == '.') {
             ss.ignore();
             std::int32_t ms;

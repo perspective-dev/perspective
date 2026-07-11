@@ -128,10 +128,6 @@ const NODE_PACKAGES = [
         packageName: "client",
         testDir: "rust/perspective-js/test/js",
     },
-    {
-        packageName: "client-tz",
-        testDir: "rust/perspective-js/test/tz",
-    },
 ];
 
 const BROWSER_AND_PYTHON_PACKAGES = [

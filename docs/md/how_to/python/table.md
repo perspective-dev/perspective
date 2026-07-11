@@ -79,3 +79,12 @@ Python `datetime` objects are serialized to strings before parsing. Naive
 `datetime` objects (without `tzinfo`) produce strings without timezone
 information and are therefore treated as UTC. Timezone-aware `datetime` objects
 include their offset in the serialized string, which is used to convert to UTC.
+
+`"date"` values are timezone-agnostic calendar days with no time component.
+They are _output_ as integer timestamps at _UTC midnight_ of the calendar day
+(equivalent to Arrow `date32` day arithmetic), and integer timestamp _input_ to
+a `"date"` column is likewise interpreted as UTC. The host process timezone
+never affects `"date"` values — a `Viewer` renders them in UTC, recovering the
+stored calendar day exactly. Datetime expression functions such as
+`bucket("x", 'D')`, `day_of_week("x")` and `hour_of_day("x")` also compute in
+UTC.

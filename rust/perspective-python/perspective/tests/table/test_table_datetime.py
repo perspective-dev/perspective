@@ -1404,9 +1404,8 @@ if os.name != "nt":
             assert result['hour_of_day("a")'] == [0, 11, 19]
 
         def test_table_day_of_week_edge_in_EST(self):
-            """Make sure edge cases are fixed for day of week - if a local
-            time converted to UTC is in the next day, the day of week
-            computation needs to be in local time."""
+            """Naive datetimes parse as UTC and `day_of_week` is computed in
+            UTC, so the host timezone must not shift the result."""
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
 
             table = Table(data)
@@ -1437,9 +1436,8 @@ if os.name != "nt":
             assert result['day_of_week("a")'] == ["6 Friday"]
 
         def test_table_month_of_year_edge_in_EST(self):
-            """Make sure edge cases are fixed for month of year - if a local
-            time converted to UTC is in the next month, the month of year
-            computation needs to be in local time."""
+            """Naive datetimes parse as UTC and `month_of_year` is computed in
+            UTC, so the host timezone must not shift the result."""
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
 
             table = Table(data)
@@ -1470,16 +1468,16 @@ if os.name != "nt":
             assert result['month_of_year("a")'] == ["01 January"]
 
         def test_table_day_bucket_edge_in_EST(self, util):
-            """Make sure edge cases are fixed for day_bucket - if a local
-            time converted to UTC is in the next day, the day_bucket
-            computation needs to be in local time."""
+            """`day_bucket` is computed in UTC and the resulting `date`
+            serializes to UTC midnight, so the host timezone must not shift
+            the bucket or its serialized value."""
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
 
             table = Table(data)
             view = table.view(expressions=["bucket(\"a\", 'D')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'D')"] == [
-                util.to_timestamp(datetime(2020, 1, 31))
+                util.to_timestamp(date(2020, 1, 31))
             ]
 
         def test_table_day_bucket_edge_in_CST(self, util):
@@ -1492,7 +1490,7 @@ if os.name != "nt":
             view = table.view(expressions=["bucket(\"a\", 'D')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'D')"] == [
-                util.to_timestamp(datetime(2020, 1, 31))
+                util.to_timestamp(date(2020, 1, 31))
             ]
 
         def test_table_day_bucket_edge_in_PST(self, util):
@@ -1505,20 +1503,20 @@ if os.name != "nt":
             view = table.view(expressions=["bucket(\"a\", 'D')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'D')"] == [
-                util.to_timestamp(datetime(2020, 1, 31))
+                util.to_timestamp(date(2020, 1, 31))
             ]
 
         def test_table_week_bucket_edge_in_EST(self, util):
-            """Make sure edge cases are fixed for week_bucket - if a local
-            time converted to UTC is in the next day, the week_bucket
-            computation needs to be in local time."""
+            """`week_bucket` is computed in UTC and the resulting `date`
+            serializes to UTC midnight, so the host timezone must not shift
+            the bucket or its serialized value."""
             data = {"a": [datetime(2020, 2, 2, 23, 59)]}
 
             table = Table(data)
             view = table.view(expressions=["bucket(\"a\", 'W')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'W')"] == [
-                util.to_timestamp(datetime(2020, 1, 27))
+                util.to_timestamp(date(2020, 1, 27))
             ]
 
         def test_table_week_bucket_edge_in_CST(self, util):
@@ -1531,7 +1529,7 @@ if os.name != "nt":
             view = table.view(expressions=["bucket(\"a\", 'W')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'W')"] == [
-                util.to_timestamp(datetime(2020, 1, 27))
+                util.to_timestamp(date(2020, 1, 27))
             ]
 
         def test_table_week_bucket_edge_in_PST(self, util):
@@ -1544,7 +1542,7 @@ if os.name != "nt":
             view = table.view(expressions=["bucket(\"a\", 'W')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'W')"] == [
-                util.to_timestamp(datetime(2020, 1, 27))
+                util.to_timestamp(date(2020, 1, 27))
             ]
 
         def test_table_week_bucket_edge_flip_in_EST(self, util):
@@ -1555,7 +1553,7 @@ if os.name != "nt":
             view = table.view(expressions=["bucket(\"a\", 'W')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'W')"] == [
-                util.to_timestamp(datetime(2020, 2, 24))
+                util.to_timestamp(date(2020, 2, 24))
             ]
 
         def test_table_week_bucket_edge_flip_in_CST(self, util):
@@ -1567,7 +1565,7 @@ if os.name != "nt":
             view = table.view(expressions=["bucket(\"a\", 'W')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'W')"] == [
-                util.to_timestamp(datetime(2020, 2, 24))
+                util.to_timestamp(date(2020, 2, 24))
             ]
 
         def test_table_week_bucket_edge_flip_in_PST(self, util):
@@ -1579,20 +1577,20 @@ if os.name != "nt":
             view = table.view(expressions=["bucket(\"a\", 'W')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'W')"] == [
-                util.to_timestamp(datetime(2020, 2, 24))
+                util.to_timestamp(date(2020, 2, 24))
             ]
 
         def test_table_month_bucket_edge_in_EST(self, util):
-            """Make sure edge cases are fixed for month_bucket - if a local
-            time converted to UTC is in the next day, the month_bucket
-            computation needs to be in local time."""
+            """`month_bucket` is computed in UTC and the resulting `date`
+            serializes to UTC midnight, so the host timezone must not shift
+            the bucket or its serialized value."""
             data = {"a": [datetime(2020, 6, 30, 23, 59)]}
 
             table = Table(data)
             view = table.view(expressions=["bucket(\"a\", 'M')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'M')"] == [
-                util.to_timestamp(datetime(2020, 6, 1))
+                util.to_timestamp(date(2020, 6, 1))
             ]
 
         def test_table_month_bucket_edge_in_CST(self, util):
@@ -1605,7 +1603,7 @@ if os.name != "nt":
             view = table.view(expressions=["bucket(\"a\", 'M')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'M')"] == [
-                util.to_timestamp(datetime(2020, 6, 1))
+                util.to_timestamp(date(2020, 6, 1))
             ]
 
         def test_table_month_bucket_edge_in_PST(self, util):
@@ -1618,20 +1616,20 @@ if os.name != "nt":
             view = table.view(expressions=["bucket(\"a\", 'M')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'M')"] == [
-                util.to_timestamp(datetime(2020, 6, 1))
+                util.to_timestamp(date(2020, 6, 1))
             ]
 
         def test_table_year_bucket_edge_in_EST(self, util):
-            """Make sure edge cases are fixed for year_bucket - if a local
-            time converted to UTC is in the next day, the year_bucket
-            computation needs to be in local time."""
+            """`year_bucket` is computed in UTC and the resulting `date`
+            serializes to UTC midnight, so the host timezone must not shift
+            the bucket or its serialized value."""
             data = {"a": [datetime(2019, 12, 31, 23, 59)]}
 
             table = Table(data)
             view = table.view(expressions=["bucket(\"a\", 'Y')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'Y')"] == [
-                util.to_timestamp(datetime(2019, 1, 1))
+                util.to_timestamp(date(2019, 1, 1))
             ]
 
         def test_table_year_bucket_edge_in_CST(self, util):
@@ -1643,7 +1641,7 @@ if os.name != "nt":
             view = table.view(expressions=["bucket(\"a\", 'Y')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'Y')"] == [
-                util.to_timestamp(datetime(2019, 1, 1))
+                util.to_timestamp(date(2019, 1, 1))
             ]
 
         def test_table_year_bucket_edge_in_PST(self, util):
@@ -1655,7 +1653,7 @@ if os.name != "nt":
             view = table.view(expressions=["bucket(\"a\", 'Y')"])
             result = view.to_columns()
             assert result["bucket(\"a\", 'Y')"] == [
-                util.to_timestamp(datetime(2019, 1, 1))
+                util.to_timestamp(date(2019, 1, 1))
             ]
 
 
@@ -1670,18 +1668,18 @@ class TestTableDateTimePivots(object):
         assert view.to_columns() == {
             "__ROW_PATH__": [
                 [],
-                [util.to_timestamp(datetime(2020, 1, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 2, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 3, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 4, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 5, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 6, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 7, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 8, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 9, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 10, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 11, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 12, 15, 0, 0))],
+                [util.to_timestamp(date(2020, 1, 15))],
+                [util.to_timestamp(date(2020, 2, 15))],
+                [util.to_timestamp(date(2020, 3, 15))],
+                [util.to_timestamp(date(2020, 4, 15))],
+                [util.to_timestamp(date(2020, 5, 15))],
+                [util.to_timestamp(date(2020, 6, 15))],
+                [util.to_timestamp(date(2020, 7, 15))],
+                [util.to_timestamp(date(2020, 8, 15))],
+                [util.to_timestamp(date(2020, 9, 15))],
+                [util.to_timestamp(date(2020, 10, 15))],
+                [util.to_timestamp(date(2020, 11, 15))],
+                [util.to_timestamp(date(2020, 12, 15))],
             ],
             "a": [12, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             "b": [78, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
@@ -1697,18 +1695,18 @@ class TestTableDateTimePivots(object):
         assert view.to_columns() == {
             "__ROW_PATH__": [
                 [],
-                [util.to_timestamp(datetime(2020, 1, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 2, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 3, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 4, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 5, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 6, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 7, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 8, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 9, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 10, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 11, 15, 0, 0))],
-                [util.to_timestamp(datetime(2020, 12, 15, 0, 0))],
+                [util.to_timestamp(date(2020, 1, 15))],
+                [util.to_timestamp(date(2020, 2, 15))],
+                [util.to_timestamp(date(2020, 3, 15))],
+                [util.to_timestamp(date(2020, 4, 15))],
+                [util.to_timestamp(date(2020, 5, 15))],
+                [util.to_timestamp(date(2020, 6, 15))],
+                [util.to_timestamp(date(2020, 7, 15))],
+                [util.to_timestamp(date(2020, 8, 15))],
+                [util.to_timestamp(date(2020, 9, 15))],
+                [util.to_timestamp(date(2020, 10, 15))],
+                [util.to_timestamp(date(2020, 11, 15))],
+                [util.to_timestamp(date(2020, 12, 15))],
             ],
             "index": [66, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
             "a": [12, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -1724,7 +1722,7 @@ class TestTableDateTimePivots(object):
         view = table.view(split_by=["a"])
         assert view.to_columns() == {
             "2020-01-15|a": [
-                util.to_timestamp(datetime(2020, 1, 15, 0, 0)),
+                util.to_timestamp(date(2020, 1, 15)),
                 None,
                 None,
                 None,
@@ -1753,7 +1751,7 @@ class TestTableDateTimePivots(object):
             ],
             "2020-02-15|a": [
                 None,
-                util.to_timestamp(datetime(2020, 2, 15, 0, 0)),
+                util.to_timestamp(date(2020, 2, 15)),
                 None,
                 None,
                 None,
@@ -1782,7 +1780,7 @@ class TestTableDateTimePivots(object):
             "2020-03-15|a": [
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 3, 15, 0, 0)),
+                util.to_timestamp(date(2020, 3, 15)),
                 None,
                 None,
                 None,
@@ -1811,7 +1809,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 4, 15, 0, 0)),
+                util.to_timestamp(date(2020, 4, 15)),
                 None,
                 None,
                 None,
@@ -1840,7 +1838,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 5, 15, 0, 0)),
+                util.to_timestamp(date(2020, 5, 15)),
                 None,
                 None,
                 None,
@@ -1869,7 +1867,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 6, 15, 0, 0)),
+                util.to_timestamp(date(2020, 6, 15)),
                 None,
                 None,
                 None,
@@ -1898,7 +1896,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 7, 15, 0, 0)),
+                util.to_timestamp(date(2020, 7, 15)),
                 None,
                 None,
                 None,
@@ -1927,7 +1925,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 8, 15, 0, 0)),
+                util.to_timestamp(date(2020, 8, 15)),
                 None,
                 None,
                 None,
@@ -1956,7 +1954,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 9, 15, 0, 0)),
+                util.to_timestamp(date(2020, 9, 15)),
                 None,
                 None,
                 None,
@@ -1985,7 +1983,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 10, 15, 0, 0)),
+                util.to_timestamp(date(2020, 10, 15)),
                 None,
                 None,
             ],
@@ -2014,7 +2012,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 11, 15, 0, 0)),
+                util.to_timestamp(date(2020, 11, 15)),
                 None,
             ],
             "2020-11-15|b": [
@@ -2043,7 +2041,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 12, 15, 0, 0)),
+                util.to_timestamp(date(2020, 12, 15)),
             ],
             "2020-12-15|b": [
                 None,
@@ -2071,7 +2069,7 @@ class TestTableDateTimePivots(object):
         print(f"XXXX: {view.to_columns()}")
         assert view.to_columns() == {
             "2020-01-15|a": [
-                util.to_timestamp(datetime(2020, 1, 15, 0, 0)),
+                util.to_timestamp(date(2020, 1, 15)),
                 None,
                 None,
                 None,
@@ -2100,7 +2098,7 @@ class TestTableDateTimePivots(object):
             ],
             "2020-02-15|a": [
                 None,
-                util.to_timestamp(datetime(2020, 2, 15, 0, 0)),
+                util.to_timestamp(date(2020, 2, 15)),
                 None,
                 None,
                 None,
@@ -2129,7 +2127,7 @@ class TestTableDateTimePivots(object):
             "2020-03-15|a": [
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 3, 15, 0, 0)),
+                util.to_timestamp(date(2020, 3, 15)),
                 None,
                 None,
                 None,
@@ -2158,7 +2156,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 4, 15, 0, 0)),
+                util.to_timestamp(date(2020, 4, 15)),
                 None,
                 None,
                 None,
@@ -2187,7 +2185,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 5, 15, 0, 0)),
+                util.to_timestamp(date(2020, 5, 15)),
                 None,
                 None,
                 None,
@@ -2216,7 +2214,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 6, 15, 0, 0)),
+                util.to_timestamp(date(2020, 6, 15)),
                 None,
                 None,
                 None,
@@ -2245,7 +2243,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 7, 15, 0, 0)),
+                util.to_timestamp(date(2020, 7, 15)),
                 None,
                 None,
                 None,
@@ -2274,7 +2272,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 8, 15, 0, 0)),
+                util.to_timestamp(date(2020, 8, 15)),
                 None,
                 None,
                 None,
@@ -2303,7 +2301,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 9, 15, 0, 0)),
+                util.to_timestamp(date(2020, 9, 15)),
                 None,
                 None,
                 None,
@@ -2332,7 +2330,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 10, 15, 0, 0)),
+                util.to_timestamp(date(2020, 10, 15)),
                 None,
                 None,
             ],
@@ -2361,7 +2359,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 11, 15, 0, 0)),
+                util.to_timestamp(date(2020, 11, 15)),
                 None,
             ],
             "2020-11-15|b": [
@@ -2390,7 +2388,7 @@ class TestTableDateTimePivots(object):
                 None,
                 None,
                 None,
-                util.to_timestamp(datetime(2020, 12, 15, 0, 0)),
+                util.to_timestamp(date(2020, 12, 15)),
             ],
             "2020-12-15|b": [
                 None,
@@ -2407,3 +2405,140 @@ class TestTableDateTimePivots(object):
                 12,
             ],
         }
+
+
+if hasattr(time, "tzset"):
+
+    class TestTableDateTimeUTC(object):
+        """The engine is timezone-agnostic: `date` values are calendar days
+        that serialize to epoch ms at *UTC* midnight (matching Arrow `date32`
+        day arithmetic), naive datetime strings parse as UTC, and datetime
+        expression functions compute in UTC. None of these results may vary
+        with the host process timezone — the same table must serialize
+        identically on a server in Amsterdam, Tokyo, or New York, and a
+        UTC-pinned client renderer must recover the stored calendar day.
+
+        https://github.com/perspective-dev/perspective/issues/3106
+        """
+
+        def teardown_method(self):
+            os.environ["TZ"] = "UTC"
+            time.tzset()
+
+        @mark.parametrize(
+            "timezone_name",
+            ["UTC", "Europe/Amsterdam", "Asia/Tokyo", "US/Pacific"],
+        )
+        def test_table_date_serializes_to_utc_midnight(self, timezone_name):
+            """Issue #3106: under `mktime`-based serialization, an Amsterdam
+            host serialized 2024-01-01 as 2023-12-31T23:00:00Z, which a UTC
+            renderer displays as the previous day."""
+            os.environ["TZ"] = timezone_name
+            time.tzset()
+
+            table = Table({"a": "date"})
+            table.update({"a": ["2024-01-01"]})
+            assert table.view().to_columns()["a"] == [1704067200000]
+
+        @mark.parametrize(
+            "timezone_name",
+            ["UTC", "Europe/Amsterdam", "Asia/Tokyo", "US/Pacific"],
+        )
+        def test_table_date_formatted_string_is_calendar_day(
+            self, timezone_name
+        ):
+            """The formatted (stringified) output path must print the stored
+            calendar day, not the UTC rendering of a local-midnight
+            instant."""
+            os.environ["TZ"] = timezone_name
+            time.tzset()
+
+            table = Table({"a": "date"})
+            table.update({"a": ["2024-01-01"]})
+            assert (
+                table.view().to_columns_string(formatted=True)
+                == '{"a":["2024-01-01"]}'
+            )
+
+        @mark.parametrize(
+            "timezone_name",
+            ["UTC", "Europe/Amsterdam", "Asia/Tokyo", "US/Pacific"],
+        )
+        def test_table_date_epoch_ms_round_trips(self, timezone_name):
+            """Epoch-ms `date` input is UTC midnight, the same convention as
+            serialization; `localtime`-based parsing read a UTC date as the
+            previous day on hosts west of UTC."""
+            os.environ["TZ"] = timezone_name
+            time.tzset()
+
+            table = Table({"a": "date"})
+            table.update({"a": [1704067200000]})
+            assert table.view().to_columns()["a"] == [1704067200000]
+
+        def test_table_date_group_by_row_path_is_utc_midnight(self, util):
+            os.environ["TZ"] = "Europe/Amsterdam"
+            time.tzset()
+
+            table = Table({"a": [date(2024, 1, 1)], "b": [1]})
+            view = table.view(group_by=["a"])
+            assert view.to_columns()["__ROW_PATH__"] == [
+                [],
+                [util.to_timestamp(date(2024, 1, 1))],
+            ]
+
+        def test_table_day_bucket_edge_in_JST(self, util):
+            """23:59 UTC is already the next day in Asia/Tokyo — the bucket
+            must stay on the UTC calendar day."""
+            os.environ["TZ"] = "Asia/Tokyo"
+            time.tzset()
+
+            data = {"a": [datetime(2020, 1, 31, 23, 59)]}
+            table = Table(data)
+            view = table.view(expressions=["bucket(\"a\", 'D')"])
+            result = view.to_columns()
+            assert result["bucket(\"a\", 'D')"] == [
+                util.to_timestamp(date(2020, 1, 31))
+            ]
+
+        def test_table_day_of_week_edge_in_JST(self):
+            os.environ["TZ"] = "Asia/Tokyo"
+            time.tzset()
+
+            data = {"a": [datetime(2020, 1, 31, 23, 59)]}
+            table = Table(data)
+            view = table.view(expressions=['day_of_week("a")'])
+            result = view.to_columns()
+            assert result['day_of_week("a")'] == ["6 Friday"]
+
+        def test_table_month_of_year_edge_in_JST(self):
+            os.environ["TZ"] = "Asia/Tokyo"
+            time.tzset()
+
+            data = {"a": [datetime(2020, 1, 31, 23, 59)]}
+            table = Table(data)
+            view = table.view(expressions=['month_of_year("a")'])
+            result = view.to_columns()
+            assert result['month_of_year("a")'] == ["01 January"]
+
+        def test_table_hour_of_day_edge_in_JST(self):
+            os.environ["TZ"] = "Asia/Tokyo"
+            time.tzset()
+
+            data = {"a": [datetime(2020, 1, 31, 23, 59)]}
+            table = Table(data)
+            view = table.view(expressions=['hour_of_day("a")'])
+            result = view.to_columns()
+            assert result['hour_of_day("a")'] == [23]
+
+        def test_table_non_iso_datetime_string_parses_as_utc(self, util):
+            """The non-ISO fallback datetime parser must also interpret naive
+            strings as UTC, as documented — `mktime`-based parsing applied
+            the host timezone."""
+            os.environ["TZ"] = "Europe/Amsterdam"
+            time.tzset()
+
+            table = Table({"a": "datetime"})
+            table.update({"a": ["01/31/2020 23:59"]})
+            assert table.view().to_columns()["a"] == [
+                util.to_timestamp(UTC.localize(datetime(2020, 1, 31, 23, 59)))
+            ]

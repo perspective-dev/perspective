@@ -1858,10 +1858,7 @@ write_scalar(
             if (is_formatted) {
                 writer.String(scalar.to_string().c_str());
             } else {
-                t_date date_val = scalar.get<t_date>();
-                tm t = date_val.get_tm();
-                time_t epoch_delta = mktime(&t);
-                writer.Int64(epoch_delta * 1000);
+                writer.Int64(scalar.get<t_date>().as_epoch_ms());
             }
             break;
         }
