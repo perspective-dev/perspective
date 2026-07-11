@@ -28,14 +28,12 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::future::Future;
 use std::ops::Deref;
-use std::pin::Pin;
 use std::rc::Rc;
 
-use futures::future::{join_all, select_all};
+use futures::future::join_all;
 use perspective_client::config::ViewConfig;
-use perspective_client::utils::*;
 use perspective_client::{View, ViewWindow};
-use perspective_js::utils::{ApiResult, JsValueSerdeExt, ResultTApiErrorExt};
+use perspective_js::utils::{ApiFuture, ApiResult, JsValueSerdeExt, ResultTApiErrorExt};
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
 use web_sys::*;
@@ -52,7 +50,7 @@ use self::render_timer::*;
 use crate::config::*;
 use crate::js::plugin::*;
 use crate::queries::resolve_abs_max;
-use crate::session::Session;
+use crate::session::{FreshView, Session};
 use crate::utils::*;
 
 /// A per-column config map. Each inner [`serde_json::Map`] is a flat collection
@@ -69,6 +67,32 @@ pub type ColumnConfigMap = HashMap<String, serde_json::Map<String, serde_json::V
 pub struct PluginScopedConfig {
     pub columns: ColumnConfigMap,
     pub plugin: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Everything a plugin may read back during its render, all belonging to
+/// one snapshot (invariant I5). Built once per bound `View` by the render
+/// pipeline and CACHED on the `Renderer`; pinning it for a run is an `Rc`
+/// clone (cheap enough for resize-tick-rate runs). While pinned, the
+/// per-panel element getters (`getViewConfigPanel`, `getTablePanel`,
+/// `getClientPanel`, `getEditPortPanel`) answer from it — the plugin ABI is
+/// inside the snapshot boundary.
+pub struct RenderContext {
+    pub view_config: Rc<perspective_client::config::ViewConfig>,
+    pub view: perspective_client::View,
+    pub table: perspective_client::Table,
+    pub client: perspective_client::Client,
+    pub edit_port: Option<f64>,
+    pub theme: Option<String>,
+}
+
+/// RAII pin for a [`RenderContext`] — cleared on drop, INCLUDING error
+/// exits, so a failed run can't leak a stale context.
+pub struct ContextPin(Renderer);
+
+impl Drop for ContextPin {
+    fn drop(&mut self) {
+        self.0.0.active_context.borrow_mut().take();
+    }
 }
 
 /// Immutable state
@@ -92,8 +116,66 @@ pub struct RendererData {
     /// dismissable.
     pub render_warning: Cell<bool>,
 
+    /// Count of in-flight [`Renderer::resize_with_dimensions`] /
+    /// [`Renderer::presize_with_box`] presize calls.
+    presize_pending: Cell<u32>,
+
     /// Fires after every draw/update with the computed render limits.
     pub on_render_limits_changed: RefCell<Option<Callback<RenderLimits>>>,
+
+    /// The layout slot name (panel id) under which this renderer mounts its
+    /// plugin in the viewer's light DOM, so multiple panels' plugins can
+    /// coexist there.
+    slot_name: RefCell<Option<String>>,
+
+    /// This panel's selected theme name (per-panel theming), or `None` to
+    /// inherit the element-level (active) theme.
+    theme: RefCell<Option<String>>,
+
+    /// The registry default theme name (first registered), cached here so
+    /// LOCKED draw paths can resolve this panel's EFFECTIVE theme
+    /// synchronously (`Presentation::get_default_theme_name` is async — it
+    /// awaits theme discovery). Seeded by every content-load path before its
+    /// first locked draw (`restore_and_render`, `load()`, the
+    /// resize-observer's deferred first render) and kept fresh by the root's
+    /// `UpdatePresentation` default-theme fan-out and `resetThemes`.
+    default_theme: RefCell<Option<String>>,
+
+    /// Whether the active plugin has completed a draw. An EXPLICIT flag —
+    /// not inferred from DOM connectedness — because plugin elements may be
+    /// mounted eagerly (at panel creation / draw start, before the view
+    /// query resolves), so "in the DOM" no longer implies "has rendered".
+    /// Set by a successful `draw_view`; cleared on plugin swap
+    /// (`commit_plugin_idx`), `dispose` and `delete`.
+    has_drawn: Cell<bool>,
+
+    /// The effective theme stamped at the active plugin's last `--psp-*`
+    /// CSS CAPTURE — its first paint ([`Renderer::draw_view`]) or last
+    /// [`Renderer::restyle_all`]. `None` = no capture has happened. The
+    /// state behind [`Renderer::needs_restyle`]: restyle necessity is a
+    /// comparison against what the plugin actually captured, never
+    /// inferred from which call site mutated a theme record (the
+    /// raycasting boot double render — see
+    /// `PLUGIN_DRAW_INVARIANT_PLAN.md`, captured-theme revision). Same
+    /// lifecycle as [`Self::has_drawn`]: cleared on plugin swap,
+    /// `dispose` and `delete`; written only inside locked dispatches.
+    captured_theme: RefCell<Option<Option<String>>>,
+
+    /// The [`RenderContext`] of the currently-bound `View` (built at bind
+    /// time by the pipeline). Cleared on `dispose`/`delete`.
+    cached_context: RefCell<Option<Rc<RenderContext>>>,
+
+    /// The [`RenderContext`] pinned by the run currently holding the draw
+    /// lock, if any (invariant I5). Managed by [`ContextPin`].
+    active_context: RefCell<Option<Rc<RenderContext>>>,
+
+    /// Whether this renderer's panel is the workspace's ACTIVE panel. Pure
+    /// DATA, written synchronously by `Workspace::set_active`/`insert_panel`;
+    /// the `active` CSS class it drives is applied ONLY inside locked plugin
+    /// dispatches ([`Renderer::stamp_active`], "stamp before draw" — like the
+    /// theme), so activation-dependent chrome and the DOM it styles always
+    /// land in one paint commit.
+    is_active_panel: Cell<bool>,
 }
 
 /// Mutable state
@@ -104,9 +186,6 @@ pub struct RendererMutData {
     plugins_idx: Option<usize>,
     timer: MovingWindowRenderTimer,
     selection: Option<ViewWindow>,
-    pending_plugin: Option<usize>,
-
-    /// Per-plugin config buckets, keyed by plugin name.
     plugin_states: HashMap<String, PluginScopedConfig>,
 }
 
@@ -138,12 +217,6 @@ impl Deref for RendererData {
     }
 }
 
-type TaskResult = ApiResult<JsValue>;
-type TimeoutTask<'a> = Pin<Box<dyn Future<Output = Option<TaskResult>> + 'a>>;
-
-/// How long to await a call to the plugin's `draw()` before resizing.
-static PRESIZE_TIMEOUT: i32 = 500;
-
 impl Renderer {
     pub fn new(viewer_elem: &HtmlElement) -> Self {
         Self(Rc::new(RendererData {
@@ -154,7 +227,6 @@ impl Renderer {
                 plugins_idx: None,
                 selection: None,
                 timer: MovingWindowRenderTimer::default(),
-                pending_plugin: None,
                 plugin_states: HashMap::default(),
             }),
             draw_lock: Default::default(),
@@ -165,12 +237,135 @@ impl Renderer {
             column_style_changed: Default::default(),
             plugin_config_changed: Default::default(),
             render_warning: Cell::new(true),
+            presize_pending: Cell::new(0),
             on_render_limits_changed: Default::default(),
+            slot_name: Default::default(),
+            theme: Default::default(),
+            default_theme: Default::default(),
+            has_drawn: Cell::new(false),
+            captured_theme: Default::default(),
+            cached_context: Default::default(),
+            active_context: Default::default(),
+            is_active_panel: Cell::new(false),
         }))
     }
 
+    /// Set the layout slot name (panel id) under which this renderer mounts its
+    /// plugin in the viewer's light DOM, routed through the matching
+    /// `<regular-layout>` forwarding slot.
+    pub fn set_slot_name(&self, name: &str) {
+        *self.0.slot_name.borrow_mut() = Some(name.to_owned());
+    }
+
+    /// The layout slot name (panel id) for this renderer's plugin, if assigned.
+    pub fn slot_name(&self) -> Option<String> {
+        self.0.slot_name.borrow().clone()
+    }
+
+    /// Set this panel's theme name (`None` = inherit the element-level theme).
+    pub fn set_theme(&self, name: Option<String>) {
+        *self.0.theme.borrow_mut() = name;
+    }
+
+    /// This panel's selected theme name, if any (per-panel theming).
+    pub fn theme(&self) -> Option<String> {
+        self.0.theme.borrow().clone()
+    }
+
+    /// Set the cached registry default theme name (see the field docs on
+    /// [`RendererData`]).
+    pub fn set_default_theme(&self, name: Option<String>) {
+        *self.0.default_theme.borrow_mut() = name;
+    }
+
+    /// The cached registry default theme name.
+    pub fn default_theme(&self) -> Option<String> {
+        self.0.default_theme.borrow().clone()
+    }
+
+    /// This panel's EFFECTIVE theme: its own ([`Self::theme`]), else the
+    /// cached registry default ([`Self::default_theme`]) — the value
+    /// [`Self::stamp_theme`] stamps.
+    pub fn effective_theme(&self) -> Option<String> {
+        self.theme().or_else(|| self.default_theme())
+    }
+
+    /// Whether the active plugin's captured `--psp-*` CSS is STALE — the
+    /// effective theme differs from the one stamped at the plugin's last
+    /// CSS capture (first paint / last restyle). The state-keyed gate for
+    /// every theme-driven `restyle_all` (the `has_drawn` analog for
+    /// `restyle` — `PLUGIN_DRAW_INVARIANT_PLAN.md`, captured-theme
+    /// revision): a caller that just mutated a theme RECORD may not need a
+    /// restyle at all if the plugin's capture already reflects the new
+    /// value (e.g. the same restore also performed the first paint,
+    /// post-stamp). `false` when no capture exists yet — the owed first
+    /// paint captures fresh by construction ("stamp before draw").
+    pub fn needs_restyle(&self) -> bool {
+        match &*self.0.captured_theme.borrow() {
+            Some(captured) => *captured != self.effective_theme(),
+            None => false,
+        }
+    }
+
+    /// Dispose a single panel's renderer: delete its active plugin and remove
+    /// this panel's element(s) from the viewer's light DOM, scoped by
+    /// `slot_name` so sibling panels are untouched (unlike
+    /// [`Self::delete`], which clears the entire light DOM). Removes the
+    /// plugin (`slot=<id>`) and any panel-scoped aux element it mounted
+    /// (e.g. the datagrid toolbar, `slot=statusbar-extra-<id>`).
+    ///
+    /// The teardown is DEFERRED through this renderer's draw lock: spawned
+    /// draws are uncancellable, so a synchronous `plugin.delete()` here could
+    /// land mid-`plugin.draw()`, which the serialized-call contract forbids
+    /// (see [`crate::js::plugin`]). Deferral is invisible — the caller
+    /// (`eject_panel`) has already removed the panel from the `Workspace`, so
+    /// the same commit unmounts its frame and the plugin element sits
+    /// unslotted (unrendered) until teardown lands; panel ids are never
+    /// reused, so it can't collide with a replacement panel's slot. Draws
+    /// still queued behind the lock no-op via the synchronous session reset
+    /// (`get_view()` → `None`).
+    pub fn dispose(&self) -> ApiFuture<()> {
+        self.0.has_drawn.set(false);
+        self.0.captured_theme.borrow_mut().take();
+        self.0.cached_context.borrow_mut().take();
+        let this = self.clone();
+        ApiFuture::new(async move {
+            let renderer = this.clone();
+            this.with_lock(async move {
+                if let Some(plugin) = renderer.active_plugin() {
+                    plugin.delete();
+                }
+
+                let Some(slot) = renderer.slot_name() else {
+                    return Ok(());
+                };
+
+                let viewer = renderer.plugin_data.borrow().viewer_elem.clone();
+                let slots = [slot.clone(), format!("statusbar-extra-{slot}")];
+                let children = viewer.children();
+                let mut idx = children.length();
+                while idx > 0 {
+                    idx -= 1;
+                    if let Some(el) = children.item(idx)
+                        && el.get_attribute("slot").is_some_and(|s| slots.contains(&s))
+                    {
+                        let _ = viewer.remove_child(&el);
+                    }
+                }
+
+                Ok(())
+            })
+            .await
+        })
+    }
+
     pub fn delete(&self) -> ApiResult<()> {
-        self.get_active_plugin().map(|x| x.delete()).unwrap_or_log();
+        self.0.has_drawn.set(false);
+        self.0.captured_theme.borrow_mut().take();
+        self.0.cached_context.borrow_mut().take();
+        if let Some(plugin) = self.active_plugin() {
+            plugin.delete();
+        }
         self.plugin_data.borrow().viewer_elem.set_inner_text("");
         let new_state = Self::new(&self.plugin_data.borrow().viewer_elem);
         std::mem::swap(
@@ -246,9 +441,6 @@ impl Renderer {
         session: &Session,
     ) -> ColumnConfigMap {
         let mut configs = self.all_columns_configs();
-
-        // Pass 1: identify columns whose schema demands an `include:
-        // true` Number default we don't have stats for.
         let mut to_warm: Vec<String> = vec![];
         for (col, entry) in &configs {
             if session
@@ -278,10 +470,6 @@ impl Renderer {
             }
         }
 
-        // Block on the (typically tiny) warm set. Clone the metadata
-        // and resolve the view ref *before* the .await — `metadata()`
-        // returns a live `Ref<>` guard that must not cross an await
-        // boundary.
         if !to_warm.is_empty() {
             let metadata = session.metadata().clone();
             let view = session.get_view();
@@ -291,8 +479,6 @@ impl Renderer {
             join_all(futs).await;
         }
 
-        // Pass 2: materialize. With stats now in cache, the schema
-        // returns a real `default` instead of the placeholder `0`.
         for (col, entry) in &mut configs {
             let Ok(schema) =
                 self.query_column_config_schema(view_config, session, col, Some(entry))
@@ -508,7 +694,7 @@ impl Renderer {
         &self,
         view_config: &ViewConfig,
     ) -> ApiResult<ColumnConfigSchema> {
-        let plugin = self.get_active_plugin()?;
+        let plugin = self.ensure_plugin_selected()?;
         let view_config_js = JsValue::from_serde_ext(view_config).unwrap_or(JsValue::NULL);
         let raw = plugin._plugin_config_schema(&view_config_js)?;
         serde_wasm_bindgen::from_value(raw).map_err(|e| e.into())
@@ -534,7 +720,7 @@ impl Renderer {
         column_name: &str,
         current_value: Option<&serde_json::Map<String, serde_json::Value>>,
     ) -> ApiResult<ColumnConfigSchema> {
-        let plugin = self.get_active_plugin()?;
+        let plugin = self.ensure_plugin_selected()?;
         let plugin_config = self.metadata();
         let names = &plugin_config.config_column_names;
         let group = view_config
@@ -710,18 +896,31 @@ impl Renderer {
         self.0.borrow_mut().plugin_store.plugin_configs().clone()
     }
 
-    /// Gets the currently active plugin.  Calling this method before a plugin
-    /// has been selected will cause the default (first) plugin to be
-    /// selected, and doing so when no plugins have been registered is an
-    /// error.
-    pub fn get_active_plugin(&self) -> ApiResult<JsPerspectiveViewerPlugin> {
-        if self.0.borrow().plugins_idx.is_none() {
-            let _ = self.apply_pending_plugin()?;
-        }
+    /// The currently-selected plugin, or `None` if none has been selected yet.
+    ///
+    /// This is a PURE QUERY (command-query separation): unlike
+    /// [`Self::ensure_plugin_selected`] it never selects a default plugin and
+    /// never triggers the lazy `PluginStore` snapshot before a plugin exists.
+    /// Pre-draw / render-path code MUST use this and handle `None` — selecting
+    /// a plugin on the first render, before the real plugins register,
+    /// permanently pins the per-renderer store to the built-in `Debug`
+    /// (init-order race, surfaces on Safari).
+    pub fn active_plugin(&self) -> Option<JsPerspectiveViewerPlugin> {
+        // Bail on `plugins_idx` BEFORE touching `plugin_store`, so an unselected
+        // renderer never snapshots the registry.
+        let idx = self.0.borrow().plugins_idx?;
+        self.0.borrow_mut().plugin_store.plugins().get(idx).cloned()
+    }
 
-        let idx = self.0.borrow().plugins_idx.unwrap_or(0);
-        let result = self.0.borrow_mut().plugin_store.plugins().get(idx).cloned();
-        Ok(result.ok_or("No Plugin")?)
+    /// Ensure a plugin is selected — the registry default when nothing has
+    /// ever been selected — and return it. The COMMAND half of
+    /// [`Self::active_plugin`]: this is the only path that selects a default and
+    /// snapshots the store, so it must run only when actually drawing (by which
+    /// point real plugins have registered). Errors if no plugins are
+    /// registered.
+    pub fn ensure_plugin_selected(&self) -> ApiResult<JsPerspectiveViewerPlugin> {
+        self.commit_plugin(None)?;
+        Ok(self.active_plugin().ok_or("No Plugin")?)
     }
 
     /// Gets a specific `JsPerspectiveViewerPlugin` by name.
@@ -735,25 +934,136 @@ impl Renderer {
         Ok(result.unwrap())
     }
 
+    /// Whether the active plugin has completed a draw. A query, not a
+    /// command — and an explicit flag rather than the old `is_connected()`
+    /// inference, which eager plugin mounting (an element in the DOM before
+    /// its first draw) would falsify.
     pub fn is_plugin_activated(&self) -> ApiResult<bool> {
-        Ok(self
-            .get_active_plugin()?
-            .unchecked_ref::<HtmlElement>()
-            .is_connected())
+        Ok(self.0.has_drawn.get())
     }
 
-    pub async fn restyle_all(&self, view: &perspective_client::View) -> ApiResult<JsValue> {
-        let plugin = self.get_active_plugin()?;
-        let meta = self.metadata();
-        plugin.restyle();
-        let mut limits =
-            get_row_and_col_limits(view, &meta, self.is_render_warning_enabled()).await?;
-        limits.is_update = false;
-        plugin
-            .draw(view.clone().into(), limits.max_cols, limits.max_rows, false)
-            .await?;
+    /// Mount the selected plugin element into the viewer's light DOM without
+    /// drawing it (see [`activate::mount_plugin`] — idempotent). Pure query:
+    /// a renderer with no selection is a no-op, deferring to the draw path's
+    /// `ensure_plugin_selected`. Used to mount eagerly — at panel creation
+    /// and at locked-draw start — so a slow first view query never leaves an
+    /// empty panel frame. NOTE eager mounting is exactly why
+    /// [`Self::is_plugin_activated`] must be an explicit has-drawn flag, not
+    /// DOM-connectedness.
+    pub fn mount_active_plugin(&self) -> ApiResult<()> {
+        if let Some(plugin) = self.active_plugin() {
+            let viewer_elem = self.0.borrow().viewer_elem.clone();
+            mount_plugin(&viewer_elem, &plugin, self.slot_name().as_deref())?;
+        }
 
-        Ok(JsValue::UNDEFINED)
+        Ok(())
+    }
+
+    /// Record whether this panel is the active panel (data only — see the
+    /// field doc; the CSS class lands at the next locked plugin dispatch).
+    pub fn set_active_flag(&self, is_active: bool) {
+        self.0.is_active_panel.set(is_active);
+    }
+
+    /// Toggle the `active` class on `plugin` from the recorded flag —
+    /// called ONLY from locked plugin-dispatch sites, immediately before the
+    /// dispatch. The class is a pure CSS hook (`:host(.active)` chrome, e.g.
+    /// the datagrid's edit column-header labels); plugins read activation
+    /// state through `getActivePanel()`, never this class. Stamping at
+    /// dispatch bounds any class/DOM disagreement to the one locked draw
+    /// that reconciles them — never applied from an async render pass
+    /// (that left the split unbounded — the activation "wrong-row EDIT"
+    /// artifact).
+    fn stamp_active(&self, plugin: &JsPerspectiveViewerPlugin) {
+        let el = plugin.unchecked_ref::<HtmlElement>();
+        let _ = el
+            .class_list()
+            .toggle_with_force("active", self.0.is_active_panel.get());
+    }
+
+    /// Stamp this panel's effective `theme` attribute — its own
+    /// ([`Self::theme`]), else the cached registry default
+    /// ([`Self::default_theme`]) — onto the active plugin element. The
+    /// plugin reads its `--psp-*` CSS at
+    /// `restyle()`/first-`draw()` time, driven by this attribute (the
+    /// `perspective-viewer [theme="X"]` document rules), so it must be
+    /// stamped BEFORE any plugin style read — the "stamp before restyle"
+    /// invariant. A pure query — no-op when no plugin has been selected yet.
+    pub fn stamp_theme(&self, plugin: Option<&JsPerspectiveViewerPlugin>) {
+        let active_plugin = self.active_plugin();
+        if let Some(plugin) = plugin.or(active_plugin.as_ref()) {
+            let theme_elem = plugin.unchecked_ref::<HtmlElement>();
+            match self.effective_theme() {
+                // Same-value writes are skipped: this now runs on EVERY
+                // locked dispatch (including streaming `update`s), and an
+                // unconditional `setAttribute` would churn attribute-selector
+                // invalidation per frame.
+                Some(theme)
+                    if theme_elem.get_attribute("theme").as_deref() != Some(theme.as_str()) =>
+                {
+                    let _ = theme_elem.set_attribute("theme", &theme);
+                },
+                Some(_) => {},
+                None => {
+                    let _ = theme_elem.remove_attribute("theme");
+                },
+            }
+        }
+    }
+
+    /// Restyle the active plugin and re-draw it from the currently-bound
+    /// `View`, resolved INSIDE the locked section from the cached
+    /// [`RenderContext`] — NEVER from a handle captured at call time, which
+    /// would race a concurrent rebuild (e.g. a plugin switch's column-default
+    /// commit) and restyle a stale, already-deleted `View` (the same rule as
+    /// [`Self::update_lazy`]; the cache is only ever replaced under this same
+    /// lock). A no-op when nothing is bound (never drawn, or disposed).
+    ///
+    /// The whole sequence (theme stamp, `restyle()`, `draw()`) runs under
+    /// this renderer's draw lock so it can never interleave with an in-flight
+    /// `draw`/`update`/`render` on the same plugin element (see
+    /// [`crate::js::plugin`] for the serialized-call contract). Full `lock`
+    /// (not `debounce`) semantics on purpose: a superseding data draw does
+    /// not re-read CSS, so a skipped restyle would strand stale style state.
+    /// No caller may already hold the lock (today: `restyleElement`,
+    /// `resetThemes`, the theme-picker task, `restorePanel`'s own-theme
+    /// tail, and the root's default-theme fan-out).
+    pub async fn restyle_all(&self) -> ApiResult<JsValue> {
+        self.render_task(|guard| async move {
+            let Some(ctx) = self.cached_context() else {
+                return Ok(JsValue::UNDEFINED);
+            };
+
+            // Pin (I5): plugin read-backs during this restyle's draw answer
+            // from the bound view's own state bundle.
+            let _pin = self.pin_context(&guard, ctx.clone());
+            let plugin = self.ensure_plugin_selected()?;
+            let meta = self.metadata();
+            let stamped_theme = self.effective_theme();
+            self.stamp_theme(Some(&plugin));
+            self.stamp_active(&plugin);
+            plugin.restyle();
+            // The CSS re-read just happened (sync) — record the capture
+            // even if the repaint below fails.
+            *self.0.captured_theme.borrow_mut() = Some(stamped_theme);
+            let mut limits =
+                get_row_and_col_limits(&ctx.view, &meta, self.is_render_warning_enabled()).await?;
+            limits.is_update = true;
+            // `update`, NOT `draw`: the `View` is unchanged — only the CSS
+            // its render reads did (`plugin.draw` ⇔ new `View`, see
+            // `PLUGIN_DRAW_INVARIANT_PLAN.md`).
+            plugin
+                .update(
+                    ctx.view.clone().into(),
+                    limits.max_cols,
+                    limits.max_rows,
+                    false,
+                )
+                .await?;
+
+            Ok(JsValue::UNDEFINED)
+        })
+        .await
     }
 
     pub fn set_throttle(&self, val: Option<f64>) {
@@ -777,10 +1087,22 @@ impl Renderer {
         self.0.render_warning.set(false);
     }
 
-    pub fn get_next_plugin_metadata(
+    /// Resolve a [`PluginUpdate`] against the current selection. Returns the
+    /// target plugin's index + static config when the update names a plugin
+    /// (or the registry default, for `SetDefault`) that differs from the
+    /// current selection; `None` when the update is `Missing`, names an
+    /// unknown plugin, or resolves to the already-active one.
+    ///
+    /// PURE query — nothing is staged on the `Renderer`. Thread the returned
+    /// index *into* a locked draw task and commit it there with
+    /// [`Self::commit_plugin`]: plugin-swap intent must never exist outside a
+    /// running draw transaction, or an unrelated draw that wins the lock first
+    /// (e.g. a `table_updated` redraw during a `restore()`) could observe or
+    /// commit a half-applied swap.
+    pub fn resolve_plugin_update(
         &self,
         update: &PluginUpdate,
-    ) -> Option<Rc<PluginStaticConfig>> {
+    ) -> Option<(usize, Rc<PluginStaticConfig>)> {
         let default_plugin_name = PLUGIN_REGISTRY.default_plugin_name();
         let name = match update {
             PluginUpdate::Missing => return None,
@@ -795,47 +1117,43 @@ impl Renderer {
         );
 
         if changed {
-            self.borrow_mut().pending_plugin = Some(idx);
-            self.0
+            let config = self
+                .0
                 .borrow_mut()
                 .plugin_store
                 .plugin_configs()
                 .get(idx)
-                .cloned()
+                .cloned()?;
+            Some((idx, config))
         } else {
             None
         }
     }
 
-    pub fn apply_pending_plugin(&self) -> ApiResult<bool> {
-        let xxx = self.borrow_mut().pending_plugin.take();
-        if let Some(idx) = xxx {
-            let changed = !matches!(
-                self.0.borrow().plugins_idx,
-                Some(selected_idx) if selected_idx == idx
-            );
+    /// Commit a plugin selection previously resolved by
+    /// [`Self::resolve_plugin_update`]. COMMAND — call only from inside a
+    /// locked draw task, so the swap lands atomically with the view rebuild
+    /// and draw it belongs to. `None` ensures *some* plugin is selected (the
+    /// registry default) without changing an existing selection. Returns
+    /// whether the active plugin changed (`None`'s default-selection case
+    /// reports `false`, preserving first-selection semantics for the
+    /// swap-restore pass in the draw tasks).
+    pub fn commit_plugin(&self, idx: Option<usize>) -> ApiResult<bool> {
+        let idx = match idx {
+            Some(idx) => idx,
+            None => {
+                if self.0.borrow().plugins_idx.is_none() {
+                    let name = PLUGIN_REGISTRY.default_plugin_name();
+                    let idx = self
+                        .find_plugin_idx(&name)
+                        .ok_or_else(|| JsValue::from(format!("Unknown plugin '{name}'")))?;
 
-            if changed {
-                self.commit_plugin_idx(idx)?;
-            }
+                    self.commit_plugin_idx(idx)?;
+                }
 
-            Ok(changed)
-        } else {
-            if self.0.borrow().plugins_idx.is_none() {
-                self.set_plugin(Some(&PLUGIN_REGISTRY.default_plugin_name()))?;
-            }
-
-            Ok(false)
-        }
-    }
-
-    fn set_plugin(&self, name: Option<&str>) -> ApiResult<bool> {
-        self.borrow_mut().pending_plugin = None;
-        let default_plugin_name = PLUGIN_REGISTRY.default_plugin_name();
-        let name = name.unwrap_or(default_plugin_name.as_str());
-        let idx = self
-            .find_plugin_idx(name)
-            .ok_or_else(|| JsValue::from(format!("Unknown plugin '{name}'")))?;
+                return Ok(false);
+            },
+        };
 
         let changed = !matches!(
             self.0.borrow().plugins_idx,
@@ -849,11 +1167,16 @@ impl Renderer {
         Ok(changed)
     }
 
-    /// Shared tail of `apply_pending_plugin` / `set_plugin`: switch the
+    /// Shared tail of [`Self::commit_plugin`]: switch the
     /// active plugin to `idx`, swap in its cached `PluginStaticConfig`,
     /// reset the per-plugin render-warning flag, and fire
     /// `plugin_changed`.
     fn commit_plugin_idx(&self, idx: usize) -> ApiResult<()> {
+        // The newly-selected plugin element has not drawn (a swap keeps the
+        // OLD plugin mounted until the new one's draw lands) — and has
+        // captured no CSS.
+        self.0.has_drawn.set(false);
+        self.0.captured_theme.borrow_mut().take();
         self.borrow_mut().plugins_idx = Some(idx);
         let config = self
             .0
@@ -866,7 +1189,10 @@ impl Renderer {
 
         self.borrow_mut().metadata = config.clone();
         self.0.render_warning.set(true);
-        let plugin: JsPerspectiveViewerPlugin = self.get_active_plugin()?;
+        // `commit_plugin_idx` is called *by* the selection path, so it must use
+        // the pure query (never `ensure_plugin_selected`, which would recurse
+        // through `commit_plugin`). `plugins_idx` was just set above.
+        let plugin: JsPerspectiveViewerPlugin = self.active_plugin().ok_or("No Plugin")?;
 
         // Push the newly-activated plugin's stored bucket through
         // `plugin.restore` so the swap immediately reflects any
@@ -891,13 +1217,52 @@ impl Renderer {
         draw_mutex.lock(task).await
     }
 
+    /// The [`RenderContext`] pinned by the run currently holding this
+    /// renderer's draw lock, if any. The per-panel element getters answer
+    /// from this when present (invariant I5).
+    pub fn render_context(&self) -> Option<Rc<RenderContext>> {
+        self.0.active_context.borrow().clone()
+    }
+
+    /// The cached [`RenderContext`] of the currently-bound `View` (set by
+    /// the pipeline at bind time).
+    pub fn cached_context(&self) -> Option<Rc<RenderContext>> {
+        self.0.cached_context.borrow().clone()
+    }
+
+    /// Cache `ctx` as the bound view's context (pipeline, at bind time).
+    pub fn set_cached_context(&self, ctx: Rc<RenderContext>) {
+        *self.0.cached_context.borrow_mut() = Some(ctx);
+    }
+
+    /// Pin `ctx` as the active [`RenderContext`] for the duration of the
+    /// returned RAII guard. Requires the lock witness — a context can only
+    /// be pinned by a locked run.
+    pub fn pin_context(&self, _guard: &RenderGuard, ctx: Rc<RenderContext>) -> ContextPin {
+        *self.0.active_context.borrow_mut() = Some(ctx);
+        ContextPin(self.clone())
+    }
+
+    /// `true` while a run is executing on this renderer's draw lock. Used
+    /// by lock-acquiring public API methods for a debug-build warning (a
+    /// plugin calling one from its render deadlocks — see the
+    /// render-callable contract on [`crate::js::plugin`]).
+    pub fn is_locked(&self) -> bool {
+        self.draw_lock.is_held()
+    }
+
     pub async fn resize(&self) -> ApiResult<()> {
         let draw_mutex = self.draw_lock();
         let timer = self.render_timer();
         draw_mutex
-            .debounce(async {
+            .debounce_with(|_guard| async move {
                 set_timeout(timer.get_throttle()).await?;
-                let jsplugin = self.get_active_plugin()?;
+                // Pure query: nothing drawn yet ⇒ nothing to resize (don't force
+                // selection just to service a resize).
+                let Some(jsplugin) = self.active_plugin() else {
+                    return Ok(());
+                };
+                self.stamp_active(&jsplugin);
                 jsplugin.resize().await?;
                 Ok(())
             })
@@ -905,15 +1270,30 @@ impl Renderer {
     }
 
     pub async fn resize_with_dimensions(&self, width: f64, height: f64) -> ApiResult<()> {
+        // Signal in-flight presize for the whole call (including time spent
+        // waiting on the draw lock) so `table_updated` update-redraws yield to
+        // it (see `presize_pending`). Callers must not drop this future
+        // mid-await (all await it to completion) or the counter would stick.
+        self.0.presize_pending.set(self.0.presize_pending.get() + 1);
+        let result = self.resize_with_dimensions_inner(width, height).await;
+        self.0.presize_pending.set(self.0.presize_pending.get() - 1);
+        result
+    }
+
+    async fn resize_with_dimensions_inner(&self, width: f64, height: f64) -> ApiResult<()> {
         let draw_mutex = self.draw_lock();
-        let timer = self.render_timer();
         draw_mutex
-            .debounce(async {
-                set_timeout(timer.get_throttle()).await?;
-                let plugin = self.get_active_plugin()?;
+            .debounce_with(|_guard| async move {
+                let Some(plugin) = self.active_plugin() else {
+                    return Ok(());
+                };
+
+                self.stamp_active(&plugin);
                 let main_panel: &web_sys::HtmlElement = plugin.unchecked_ref();
                 let rect = main_panel.get_bounding_client_rect();
-                if (height - rect.height()).abs() > 0.5 || (width - rect.width()).abs() > 0.5 {
+                let changed =
+                    (height - rect.height()).abs() > 0.5 || (width - rect.width()).abs() > 0.5;
+                if changed {
                     let new_width = format!("{}px", width);
                     let new_height = format!("{}px", height);
                     main_panel.style().set_property("width", &new_width)?;
@@ -929,143 +1309,323 @@ impl Renderer {
             .await
     }
 
-    /// This will take a future which _should_ create a new view and then will
-    /// draw it. As the `session` closure is asynchronous, it can be cancelled
-    /// by returning `None`.
-    pub async fn draw(
+    /// Pre-size AND pre-position the plugin to its target layout box, so it
+    /// paints at the exact screen rect it will occupy after the pending layout
+    /// commit. `(dx, dy)` is the target grid-track origin minus the current
+    /// one, applied as a `transform: translate` (the plugin's offset within
+    /// its track is constant across a layout transition, so the track delta IS
+    /// the plugin delta).
+    pub async fn presize_with_box(
         &self,
-        session: impl Future<Output = ApiResult<Option<View>>>,
+        dx: f64,
+        dy: f64,
+        width: f64,
+        height: f64,
     ) -> ApiResult<()> {
-        self.draw_plugin(session, false).await
+        self.0.presize_pending.set(self.0.presize_pending.get() + 1);
+        let result = self.presize_with_box_inner(dx, dy, width, height).await;
+        self.0.presize_pending.set(self.0.presize_pending.get() - 1);
+        result
     }
 
-    /// This will update an already existing view
-    pub async fn update(&self, session: Option<View>) -> ApiResult<()> {
-        self.draw_plugin(async { Ok(session) }, true).await
-    }
-
-    async fn draw_plugin(
+    async fn presize_with_box_inner(
         &self,
-        session: impl Future<Output = ApiResult<Option<View>>>,
-        is_update: bool,
+        dx: f64,
+        dy: f64,
+        width: f64,
+        height: f64,
     ) -> ApiResult<()> {
-        let timer = self.render_timer();
-        let task = async move {
-            if is_update {
-                set_timeout(timer.get_throttle()).await?;
-            }
-
-            if let Some(view) = session.await? {
-                timer.capture_time(self.draw_view(&view, is_update)).await
-            } else {
-                tracing::debug!("Render skipped, no `View` attached");
-                Ok(())
-            }
-        };
-
         let draw_mutex = self.draw_lock();
-        if is_update {
-            draw_mutex.debounce(task).await
+        draw_mutex
+            .debounce_with(|_guard| async move {
+                let Some(plugin) = self.active_plugin() else {
+                    return Ok(());
+                };
+
+                self.stamp_active(&plugin);
+                self.clear_presize()?;
+                let main_panel: &web_sys::HtmlElement = plugin.unchecked_ref();
+                let rect = main_panel.get_bounding_client_rect();
+                let size_changed =
+                    (height - rect.height()).abs() > 0.5 || (width - rect.width()).abs() > 0.5;
+
+                let moved = dx.abs() > 0.5 || dy.abs() > 0.5;
+                if size_changed {
+                    main_panel
+                        .style()
+                        .set_property("width", &format!("{width}px"))?;
+                    main_panel
+                        .style()
+                        .set_property("height", &format!("{height}px"))?;
+                }
+
+                if moved {
+                    main_panel
+                        .style()
+                        .set_property("transform", &format!("translate({dx}px, {dy}px)"))?;
+                }
+
+                if size_changed {
+                    plugin.resize().await?;
+                }
+
+                Ok(())
+            })
+            .await
+    }
+
+    /// Remove the inline presize styles applied by [`Self::presize_with_box`].
+    /// Callers run this synchronously in the same task as the layout release
+    /// (`resumeResize` — whose held commit callback runs as a microtask of the
+    /// same task), so no frame can paint between the clear and the new grid
+    /// landing.
+    pub fn clear_presize(&self) -> ApiResult<()> {
+        if let Some(plugin) = self.active_plugin() {
+            let el = plugin.unchecked_ref::<web_sys::HtmlElement>();
+            el.style().set_property("width", "")?;
+            el.style().set_property("height", "")?;
+            el.style().set_property("transform", "")?;
+        }
+
+        Ok(())
+    }
+
+    /// The SINGLE pipeline render entry (invariants I2/I3): run `f` under
+    /// this renderer's draw lock with the [`RenderGuard`] witness. `f`
+    /// composes the run — snapshot, validate, bind, pin context, dispatch
+    /// via [`Self::draw_fresh`]/[`Self::update_bound`] — and everything it
+    /// touches is witnessed.
+    pub async fn render_task<T, F, Fut>(&self, f: F) -> ApiResult<T>
+    where
+        F: FnOnce(RenderGuard) -> Fut,
+        Fut: Future<Output = ApiResult<T>>,
+    {
+        self.draw_lock().lock_with(f).await
+    }
+
+    /// FULL-draw a NEW `View` on the active plugin (`plugin.draw`) — the
+    /// ONLY `plugin.draw` dispatch in the crate, witnessed by both the
+    /// caller's held lock AND the [`FreshView`] token, which only
+    /// `bind_view`'s REBUILD arm and [`Self::promote_first_paint`] mint.
+    /// "Full draw without a new `View`" therefore does not compile (see
+    /// `PLUGIN_DRAW_INVARIANT_PLAN.md`); every other repaint is
+    /// [`Self::update_bound`] (same `View`, re-render) or `resize`
+    /// (geometry/chrome).
+    pub async fn draw_fresh(&self, guard: &RenderGuard, view: FreshView) -> ApiResult<()> {
+        let timer = self.render_timer();
+        timer
+            .capture_time(self.draw_view(guard, view.view(), false))
+            .await
+    }
+
+    /// Repaint the ALREADY-BOUND `view` on the active plugin
+    /// (`plugin.update`): the dispatch for runs that reconciled without
+    /// constructing a `View` (`BindDisposition::Adopted`/`Unchanged`) —
+    /// adopted placeholder configs, no-op-commit repaint idioms (status
+    /// indicator click, toggle-debug, render-warning dismiss). A no-op when
+    /// no plugin has been selected yet (nothing has painted, so nothing
+    /// needs repainting — first paints go through the
+    /// [`Self::promote_first_paint`] → [`Self::draw_fresh`] path).
+    pub async fn update_bound(&self, guard: &RenderGuard, view: &View) -> ApiResult<()> {
+        let timer = self.render_timer();
+        timer.capture_time(self.draw_view(guard, view, true)).await
+    }
+
+    /// Mint the [`FreshView`] full-draw witness for a plugin that has never
+    /// painted the bound `View` — a freshly-selected/swapped plugin element
+    /// (`commit_plugin_idx` clears `has_drawn`) or a first paint deferred by
+    /// visibility gating. `plugin.draw`'s "new `View`" contract is from THIS
+    /// plugin's perspective, so its first paint qualifies even when
+    /// `bind_view` reconciled without a rebuild. `None` when the plugin has
+    /// already drawn it — callers fall back to [`Self::update_bound`].
+    pub fn promote_first_paint(&self, view: &View) -> Option<FreshView> {
+        if !self.0.has_drawn.get() {
+            Some(FreshView::assert_fresh(view.clone()))
         } else {
-            draw_mutex.lock(task).await
+            None
         }
     }
 
-    async fn draw_view(&self, view: &perspective_client::View, is_update: bool) -> ApiResult<()> {
-        let plugin = self.get_active_plugin()?;
+    /// The activation nudge's repaint: stamp the activation class + theme
+    /// and `plugin.resize()` — same `View`, same data, CHROME only (e.g.
+    /// the datagrid's edit column-header row) — in ONE locked dispatch, so
+    /// the class and the DOM it styles land in a single paint commit (the
+    /// two-frame-artifact fix's atomicity requirement). Deliberately NOT
+    /// `plugin.draw`/`update`: activation creates no new `View` and changes
+    /// no data, and for charts a full dispatch is a fetch + multi-blit
+    /// repaint (the stacked-tab regression). Each plugin's `resize()` is
+    /// its cheap repaint-from-retained-state path, and both built-ins skip
+    /// it while hidden — so the OUTGOING (unslotted) panel's nudge is free.
+    pub async fn activation_repaint(&self, _guard: &RenderGuard) -> ApiResult<()> {
+        if let Some(plugin) = self.active_plugin() {
+            self.stamp_active(&plugin);
+            self.stamp_theme(Some(&plugin));
+            let _ = plugin.resize().await?;
+        }
+
+        Ok(())
+    }
+
+    /// Redraw an already-bound view, debounced. The `View` future is
+    /// resolved *lazily*, inside the debounce/draw lock at actual draw time
+    /// rather than captured at call time. Used by the per-panel data-refresh
+    /// subscription so a redraw always renders the `View` currently bound on
+    /// the `Session`, even if a concurrent config rebuild replaced (and
+    /// deleted) the previous `View` after this redraw was scheduled.
+    /// Capturing the `View` eagerly at schedule time instead races that
+    /// rebuild and draws a stale/deleted `View`.
+    pub async fn update_lazy(
+        &self,
+        view: impl Future<Output = ApiResult<Option<View>>>,
+    ) -> ApiResult<()> {
+        let timer = self.render_timer();
+        self.draw_lock()
+            .debounce_with(|guard| async move {
+                set_timeout(timer.get_throttle()).await?;
+                if self.0.presize_pending.get() > 0 {
+                    tracing::debug!("Update skipped, presize pending");
+                    return Ok(());
+                }
+
+                // Mount the plugin element eagerly — BEFORE awaiting the
+                // (possibly slow) view query — so the panel's frame is never
+                // empty while the query runs. Pure query + idempotent.
+                self.mount_active_plugin()?;
+                if let Some(view) = view.await? {
+                    // Update runs pin the bound view's cached context so
+                    // plugin read-backs stay snapshot-consistent (I5).
+                    let _pin = self
+                        .cached_context()
+                        .map(|ctx| self.pin_context(&guard, ctx));
+
+                    let timer = self.render_timer();
+                    timer
+                        .capture_time(self.draw_view(&guard, &view, true))
+                        .await
+                } else {
+                    tracing::debug!("Render skipped, no `View` attached");
+                    Ok(())
+                }
+            })
+            .await
+    }
+
+    /// This will update an already existing view.
+    pub async fn update(&self, session: Option<View>) -> ApiResult<()> {
+        self.update_lazy(async { Ok(session) }).await
+    }
+
+    async fn draw_view(
+        &self,
+        _guard: &RenderGuard,
+        view: &perspective_client::View,
+        is_update: bool,
+    ) -> ApiResult<()> {
+        debug_assert!(
+            !is_update || self.cached_context().is_none() || self.render_context().is_some(),
+            "I5: RenderContext not pinned at plugin dispatch"
+        );
+
+        let plugin = if is_update {
+            match self.active_plugin() {
+                Some(plugin) => plugin,
+                None => return Ok(()),
+            }
+        } else {
+            self.ensure_plugin_selected()?
+        };
+
         let meta = self.metadata();
         let mut limits =
             get_row_and_col_limits(view, &meta, self.is_render_warning_enabled()).await?;
+
         limits.is_update = is_update;
         if let Some(cb) = self.0.on_render_limits_changed.borrow().as_ref() {
             cb.emit(limits);
         }
 
-        let viewer_elem = &self.0.borrow().viewer_elem.clone();
+        let viewer_elem = self.0.borrow().viewer_elem.clone();
+        let slot = self.slot_name();
+        // "Stamp before draw": activation class + effective theme attribute
+        // atomic with this dispatch, so a plugin style read (its first
+        // `draw()` captures the `--psp-*` vars) can never precede them —
+        // including a plugin switch's first draw, whose freshly-created
+        // element no async pass has seen yet.
+        let first_paint = !self.0.has_drawn.get();
+        let stamped_theme = self.effective_theme();
+        self.stamp_active(&plugin);
+        self.stamp_theme(Some(&plugin));
+
+        // Fused stale-CSS restyle ("restyle then draw", captured-theme
+        // revision): when the plugin's captured `--psp-*` vars predate the
+        // theme just stamped, re-read them NOW — sync, inside this locked
+        // dispatch, between the stamp and the render — so the dispatch
+        // below paints new data in the NEW theme in one pass. Without
+        // this, a rebuild bundled with a theme change drew in the OLD
+        // colors (plugins re-read CSS only at `restyle()`/first paint) and
+        // the mutation-site restyle tail then re-rendered everything.
+        // State-keyed, so streaming updates with a fresh capture pay
+        // nothing; recorded immediately (the re-read has happened even if
+        // the render below fails), which also no-ops the tail
+        // (`needs_restyle` → false). A first paint never enters (no
+        // capture exists) — it captures fresh by construction.
+        if self.needs_restyle() {
+            plugin.restyle();
+            *self.0.captured_theme.borrow_mut() = Some(stamped_theme.clone());
+        }
+
         let result = if is_update {
             let task = plugin.update(view.clone().into(), limits.max_cols, limits.max_rows, false);
-            activate_plugin(viewer_elem, &plugin, task).await
+            activate_plugin(_guard, &viewer_elem, &plugin, slot.as_deref(), task).await
         } else {
             let task = plugin.draw(view.clone().into(), limits.max_cols, limits.max_rows, false);
-            activate_plugin(viewer_elem, &plugin, task).await
+            activate_plugin(_guard, &viewer_elem, &plugin, slot.as_deref(), task).await
         };
 
-        if let Err(error) = result.ignore_view_delete() {
-            tracing::warn!("{}", error);
-        }
-
-        remove_inactive_plugin(
-            viewer_elem,
-            &plugin,
-            self.plugin_data.borrow_mut().plugin_store.plugins(),
-        )
-    }
-
-    /// Decide whether to draw plugin or self first based on whether the panel
-    /// is opening or closing, then draw with a timeout.  If the timeout
-    /// triggers, draw self and resolve `on_toggle` but still await the
-    /// completion of the draw task.
-    pub async fn presize(
-        &self,
-        open: bool,
-        panel_task: impl Future<Output = ApiResult<()>>,
-    ) -> ApiResult<JsValue> {
-        let render_task = self.resize_with_timeout(open);
-        let result = if open {
-            panel_task.await?;
-            render_task.await
-        } else {
-            let result = render_task.await;
-            panel_task.await?;
-            result
-        };
-
-        match result {
-            Ok(x) => x,
-            Err(cont) => {
-                tracing::warn!("Presize took longer than {}ms", PRESIZE_TIMEOUT);
-                cont.await.unwrap()
-            },
-        }
-    }
-
-    /// Lock on `resize()` task, in parallel with a timeout.  In the return
-    /// type, `Result::Err` contains the continuation task, which must be
-    /// awaited lest the plugin draw itself never trigger.
-    async fn resize_with_timeout(&self, open: bool) -> Result<TaskResult, TimeoutTask<'_>> {
-        let task = async move {
-            if open {
-                self.get_active_plugin()?.resize().await
-            } else {
-                self.resize_with_explicit_dimensions().await
+        // Record a genuinely-completed draw (a view-delete cancellation does
+        // NOT count — the plugin may hold no content, and the deferred-render
+        // resume paths key off this flag to know a redraw is still owed).
+        if result.is_ok() {
+            self.0.has_drawn.set(true);
+            // A FIRST paint is a CSS capture — record the theme it was
+            // stamped with (`needs_restyle`'s baseline). The value stamped,
+            // not `effective_theme()` at completion: a theme committed
+            // mid-draw must read as STALE against this capture.
+            // Subsequent draws are NOT captures (charts cache theme vars
+            // until `restyle()`), so only the restyle path may overwrite
+            // this record afterwards.
+            if first_paint {
+                *self.0.captured_theme.borrow_mut() = Some(stamped_theme);
             }
-        };
+        }
 
-        let draw_lock = self.draw_lock();
-        let tasks: [TimeoutTask<'_>; 2] = [
-            Box::pin(async move { Some(draw_lock.lock(task).await) }),
-            Box::pin(async {
-                set_timeout(PRESIZE_TIMEOUT).await.unwrap();
-                None
-            }),
-        ];
+        let cleanup = remove_inactive_plugin(
+            &viewer_elem,
+            &plugin,
+            slot.as_deref(),
+            self.plugin_data.borrow_mut().plugin_store.plugins(),
+        );
 
-        let (x, _, y) = select_all(tasks).await;
-        x.ok_or_else(|| y.into_iter().next().unwrap())
-    }
-
-    /// Resize the `<div>` offscreen, then resize the plugin
-    async fn resize_with_explicit_dimensions(&self) -> TaskResult {
-        let plugin = self.get_active_plugin()?;
-        let main_panel: &web_sys::HtmlElement = plugin.unchecked_ref();
-        let new_width = format!("{}px", self.0.borrow().viewer_elem.client_width());
-        let new_height = format!("{}px", self.0.borrow().viewer_elem.client_height());
-        main_panel.style().set_property("width", &new_width)?;
-        main_panel.style().set_property("height", &new_height)?;
-        let result = plugin.resize().await;
-        main_panel.style().set_property("width", "")?;
-        main_panel.style().set_property("height", "")?;
-        result
+        match result.ignore_view_delete() {
+            // A FIRST draw failed — this plugin has never successfully
+            // painted, so the warn-and-continue below would leave the panel
+            // permanently blank with a console warning as its only signal.
+            // Propagate instead: the enclosing restore task surfaces it as a
+            // panel error (`session.set_error` → error overlay), presenting
+            // like a table error. Subsequent-draw failures keep
+            // warn-and-continue — the panel still shows its last good
+            // content, and failing the whole restore transaction for a
+            // repaint hiccup would be worse than the stale frame.
+            Err(error) if !self.0.has_drawn.get() => Err(error),
+            Err(error) => {
+                tracing::warn!("{}", error);
+                cleanup
+            },
+            // `Ok(None)` is a view-delete cancellation — not a failure
+            // (`has_drawn` stays false; the deferred-resume paths owe a
+            // redraw).
+            Ok(_) => cleanup,
+        }
     }
 
     fn draw_lock(&self) -> DebounceMutex {
@@ -1080,10 +1640,6 @@ impl Renderer {
         let short_name = make_short_name(name);
         let mut borrowed = self.0.borrow_mut();
         let configs = borrowed.plugin_store.plugin_configs();
-        // Prefer an exact (normalised) match so e.g. `"Y Line"` doesn't
-        // substring-resolve to `"X/Y Line"` just because it was registered
-        // first. Falls back to `contains` so short/abbreviated names
-        // (`restore({ plugin: "scat" })` → `"scatter"`) still work.
         let short_names: Vec<String> = configs.iter().map(|c| make_short_name(&c.name)).collect();
         if let Some(i) = short_names.iter().position(|n| n == &short_name) {
             return Some(i);
@@ -1107,14 +1663,7 @@ impl Renderer {
     /// suitable for passing as a Yew prop.  Called by the root component
     /// whenever a renderer-related PubSub event fires.
     pub fn to_props(&self, render_limits: Option<RenderLimits>) -> RendererProps {
-        // Guard: don't touch the PluginStore if no plugin has been explicitly
-        // selected yet.  Calling `get_active_plugin()` or `get_all_plugins()`
-        // triggers `PluginStore::init_lazy()`, which snapshots the
-        // PLUGIN_REGISTRY.  If this happens during component `create()` —
-        // before JavaScript has called `registerPlugin()` — the cache will
-        // only contain the default Debug plugin and custom plugins registered
-        // later will never be found.
-        let has_plugin = self.0.borrow().plugins_idx.is_some();
+        let has_plugin = self.active_plugin().is_some();
         if has_plugin {
             let config = self.metadata();
             let plugin_name = Some(config.name.clone());
@@ -1125,8 +1674,8 @@ impl Renderer {
                 .map(|c| c.name.clone())
                 .collect::<Vec<_>>()
                 .into();
-            let plugin_config = PtrEqRc::new(self.get_plugin_config());
 
+            let plugin_config = PtrEqRc::new(self.get_plugin_config());
             RendererProps {
                 plugin_name,
                 config,

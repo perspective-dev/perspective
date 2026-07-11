@@ -87,7 +87,7 @@ pub fn PluginTab(props: &PluginTabProps) -> Html {
         yew::Callback::from(move |update: crate::config::ColumnConfigFieldUpdate| {
             // `send_plugin_config` emits `plugin_config_changed`,
             // which the root component's subscription
-            // (`create_subscriptions`) turns into an `UpdateRenderer`
+            // (`create_active_subscriptions`) turns into an `UpdateRenderer`
             // dispatch carrying a fresh `RendererProps`. Yew's prop
             // diff propagates the new `plugin_config` into this
             // component automatically — no manual revision bump.

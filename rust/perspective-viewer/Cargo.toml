@@ -114,7 +114,7 @@ wasm-bindgen-derive = "0.3.0"
 wasm-bindgen-futures = "0.4.41"
 
 # Web framework
-yew = { version = "0.22.0", features = ["csr"] }
+yew = { version = "0.23.0", features = ["csr"] }
 
 # Browser stdlib bindings
 web-sys.version = "0.3.85"

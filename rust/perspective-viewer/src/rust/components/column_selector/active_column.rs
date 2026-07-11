@@ -13,7 +13,6 @@
 use std::collections::HashSet;
 
 use perspective_client::config::*;
-use perspective_js::utils::ApiFuture;
 use web_sys::*;
 use yew::prelude::*;
 
@@ -28,6 +27,7 @@ use crate::presentation::{ColumnLocator, Presentation};
 use crate::queries::*;
 use crate::renderer::*;
 use crate::session::*;
+use crate::tasks::apply_and_render;
 use crate::utils::*;
 
 #[derive(Clone, Properties)]
@@ -162,11 +162,8 @@ impl Component for ActiveColumn {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("active-column", task);
                     }
                 }
 
@@ -190,11 +187,8 @@ impl Component for ActiveColumn {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("active-column", task);
                     }
                 }
 
@@ -477,13 +471,8 @@ impl ActiveColumnProps {
             ..ViewConfigUpdate::default()
         };
 
-        if self.session.update_view_config(config).is_ok() {
-            let session = self.session.clone();
-            let renderer = self.renderer.clone();
-            ApiFuture::spawn(async move {
-                renderer.apply_pending_plugin()?;
-                renderer.draw(session.validate().await?.create_view()).await
-            });
+        if let Ok(task) = apply_and_render(&self.session, &self.renderer, config) {
+            spawn_owned("active-column", task);
         }
     }
 }

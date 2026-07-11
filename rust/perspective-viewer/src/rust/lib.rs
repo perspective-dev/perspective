@@ -23,10 +23,13 @@
 #![warn(
     clippy::all,
     clippy::panic_in_result_fn,
-    clippy::await_holding_refcell_ref,
     clippy::fallible_impl_from,
     clippy::unneeded_field_pattern
 )]
+// Holding a `Ref` across an `await` is the sibling footgun of the config
+// write-back race this crate was rearchitected against (see
+// `SESSION_CONFIG_COHERENCE_PLAN.md`) — deny, don't warn.
+#![deny(clippy::await_holding_refcell_ref)]
 
 pub mod components;
 pub mod config;
@@ -45,6 +48,7 @@ mod session;
 #[doc(hidden)]
 pub mod tasks;
 pub mod utils;
+mod workspace;
 
 #[macro_use]
 extern crate macro_rules_attribute;

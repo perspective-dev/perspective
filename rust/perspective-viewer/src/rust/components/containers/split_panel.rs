@@ -53,6 +53,36 @@ pub struct SplitPanelProps {
 
     #[prop_or_default]
     pub initial_size: Option<i32>,
+
+    /// When `true`, a divider drag does NOT apply pane sizes directly:
+    /// `MoveResizing` only emits `on_resize` with the proposed dims, and pane
+    /// 0's committed size is driven exclusively by the controlled
+    /// [`Self::size`] prop — set by the parent when it is ready (e.g. after
+    /// pre-rendering panel content at the target size). This is the presize
+    /// gate for continuous divider drags (`PRESIZE_EVERYWHERE_PLAN.md`,
+    /// P1): geometry never outruns content. Only meaningful when the
+    /// resizable pane is child 0 (as in the viewer's `app_panel`).
+    #[prop_or_default]
+    pub deferred: bool,
+
+    /// Controlled committed size for pane 0 (deferred mode). Unlike
+    /// [`Self::initial_size`] (read once at `create`), changes to this prop
+    /// re-derive pane 0's style on every `changed`.
+    #[prop_or_default]
+    pub size: Option<i32>,
+}
+
+/// The fixed-size pane style for a committed size (the complement pane
+/// flex-fills).
+fn size_style(orientation: Orientation, x: i32) -> String {
+    match orientation {
+        Orientation::Horizontal => {
+            format!("max-width:{x}px;min-width:{x}px;width:{x}px")
+        },
+        Orientation::Vertical => {
+            format!("max-height:{x}px;min-height:{x}px;height:{x}px")
+        },
+    }
 }
 
 impl SplitPanelProps {
@@ -67,6 +97,8 @@ impl PartialEq for SplitPanelProps {
             && self.children == other.children
             && self.orientation == other.orientation
             && self.reverse == other.reverse
+            && self.size == other.size
+            && self.deferred == other.deferred
     }
 }
 
@@ -111,15 +143,8 @@ impl Component for SplitPanel {
         let refs = Vec::from_iter(std::iter::repeat_with(Default::default).take(len));
 
         let mut styles = vec![Default::default(); len];
-        if let Some(x) = &ctx.props().initial_size {
-            styles[0] = Some(match ctx.props().orientation {
-                Orientation::Horizontal => {
-                    format!("max-width:{x}px;min-width:{x}px;width:{x}px")
-                },
-                Orientation::Vertical => {
-                    format!("max-height:{x}px;min-height:{x}px;height:{x}px")
-                },
-            });
+        if let Some(x) = ctx.props().size.or(ctx.props().initial_size) {
+            styles[0] = Some(size_style(ctx.props().orientation, x));
         }
 
         Self {
@@ -155,7 +180,12 @@ impl Component for SplitPanel {
                         cb.emit(state.get_dimensions(client_offset));
                     }
 
-                    self.styles[state.index] = state.get_style(client_offset);
+                    // Deferred mode: propose only — the committed size arrives
+                    // back through the controlled `size` prop once the parent
+                    // has pre-rendered content at the target.
+                    if !ctx.props().deferred {
+                        self.styles[state.index] = state.get_style(client_offset);
+                    }
                 }
             },
         };
@@ -173,19 +203,77 @@ impl Component for SplitPanel {
         let new_len = ctx.props().children.len();
         self.refs.resize_with(new_len, Default::default);
         self.styles.resize(new_len, Default::default());
+
+        // Deferred mode: pane 0's style tracks the controlled `size` prop
+        // (`None` = natural width, e.g. after a divider double-click reset).
+        if ctx.props().deferred {
+            self.styles[0] = ctx
+                .props()
+                .size
+                .map(|x| size_style(ctx.props().orientation, x));
+        }
+
         true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let iter = ctx
+        let skip_empty = ctx.props().skip_empty;
+        let orientation = ctx.props().orientation;
+
+        // Pair each *visible* pane with its ORIGINAL child index and key every
+        // pane (and divider) by that stable identity — not its post-filter
+        // position. Toggling one pane in/out (e.g. the settings sidebar) then
+        // never shifts a sibling's key, so Yew reconciles the survivor in place
+        // rather than remounting it. A `MainPanel` remount here would tear down
+        // and recreate the embedded `<regular-layout>` and the `<slot>`s
+        // projecting the plugins — the bug this avoids. Dividers are independent
+        // keyed nodes for the same reason: a divider appearing before a pane must
+        // not alter that pane's own keyed subtree.
+        let panes = ctx
             .props()
             .children
             .iter()
-            .filter(|x| !ctx.props().skip_empty || x != &html! { <></> })
             .enumerate()
+            .filter(|(_, x)| !skip_empty || x != &html! { <></> })
             .collect::<Vec<_>>();
 
-        let orientation = ctx.props().orientation;
+        let last = panes.len().saturating_sub(1);
+        let mut nodes: Vec<Html> = Vec::with_capacity(panes.len() * 2);
+        let mut prev: Option<usize> = None;
+        for (pos, (i, x)) in panes.into_iter().enumerate() {
+            // A divider precedes every visible pane except the first; it resizes
+            // the *previous* visible pane (`prev`, an original index).
+            if let Some(p) = prev {
+                nodes.push(html! {
+                    <SplitPanelDivider
+                        key={format!("divider-{i}")}
+                        i={p}
+                        {orientation}
+                        link={ctx.link().clone()}
+                    />
+                });
+            }
+
+            // The last visible pane flex-fills (rendered bare, no width
+            // override); earlier panes are `SplitPanelChild`s that can carry a
+            // dragged size.
+            nodes.push(if pos == last {
+                html! { <key={i}>{ x }</> }
+            } else {
+                html! {
+                    <SplitPanelChild
+                        key={i}
+                        style={self.styles[i].clone()}
+                        ref_={self.refs[i].clone()}
+                    >
+                        { x }
+                    </SplitPanelChild>
+                }
+            });
+
+            prev = Some(i);
+        }
+
         let mut classes = classes!("split-panel");
         if orientation == Orientation::Vertical {
             classes.push("orient-vertical");
@@ -195,53 +283,7 @@ impl Component for SplitPanel {
             classes.push("orient-reverse");
         }
 
-        let count = iter.len();
-        let contents = html! {
-            <>
-                for (i, x) in iter {
-                    if i == 0 {
-                        if count == 1 {
-                            <key=0>
-                                {x}
-                            </>
-                        } else {
-                            <SplitPanelChild
-                                key=0
-                                style={self.styles[i].clone()}
-                                ref_={self.refs[i].clone()}
-                            >
-                                { x }
-                            </SplitPanelChild>
-                        }
-                    } else if i == count - 1 {
-                        <key={i}>
-                            <SplitPanelDivider
-                                i={i - 1}
-                                orientation={ctx.props().orientation}
-                                link={ctx.link().clone()}
-                            />
-                            { x }
-                        </>
-                    } else {
-                        <key={i}>
-                            <SplitPanelDivider
-                                i={i - 1}
-                                orientation={ctx.props().orientation}
-                                link={ctx.link().clone()}
-                            />
-                            <SplitPanelChild
-                                style={self.styles[i].clone()}
-                                ref_={self.refs[i].clone()}
-                            >
-                                { x }
-                            </SplitPanelChild>
-                        </>
-                    }
-                }
-            </>
-        };
-
-        // TODO consider removing this
+        let contents = html! { <>{ for nodes.into_iter() }</> };
         if ctx.props().no_wrap {
             html! { { contents } }
         } else {

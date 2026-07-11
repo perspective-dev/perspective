@@ -24,6 +24,7 @@ mod plugin_static_config;
 mod string_column_style;
 pub mod view_config;
 mod viewer_config;
+mod workspace_config;
 
 pub use column_config_schema::*;
 pub use columns_config::*;
@@ -35,3 +36,4 @@ pub use plugin_static_config::*;
 pub use string_column_style::*;
 pub use view_config::*;
 pub use viewer_config::*;
+pub use workspace_config::*;

@@ -20,16 +20,19 @@ use crate::config::PluginStaticConfig;
 
 #[extend::ext]
 pub impl ViewConfigUpdate {
-    /// Appends additional columns to the `columns` field of this
-    /// `ViewConfigUpdate` by picking appropriate new columns from the
-    /// `SessionMetadata`, given the necessary column requirements of the
-    /// plugin provided by a `PluginStaticConfig`. For example, an "X/Y
-    /// Scatter" chart needs a minimum of 2 numeric columns to be
-    /// drawable.
-    fn set_update_column_defaults(
+    /// Coerce this update's `group_rollup_mode` to one the plugin accepts
+    /// (`PluginStaticConfig::group_rollup_modes`, feature-filtered). An
+    /// absent mode counts as `Rollup` for the acceptance check, so a plugin
+    /// that only renders `flat` (Treemap / Sunburst) gets it stamped even
+    /// when the update never mentions rollup at all.
+    ///
+    /// Split out of [`Self::set_update_column_defaults`] so same-plugin
+    /// restores can enforce the mode WITHOUT the column-defaulting below —
+    /// that path must not touch `columns` (it would drop non-numeric color
+    /// slots from a partial restore).
+    fn set_update_rollup_defaults(
         &mut self,
         metadata: &SessionMetadata,
-        columns: &[Option<String>],
         config_static: &PluginStaticConfig,
     ) {
         let rollup_features = metadata
@@ -49,6 +52,21 @@ pub impl ViewConfigUpdate {
                 self.group_rollup_mode
             );
         }
+    }
+
+    /// Appends additional columns to the `columns` field of this
+    /// `ViewConfigUpdate` by picking appropriate new columns from the
+    /// `SessionMetadata`, given the necessary column requirements of the
+    /// plugin provided by a `PluginStaticConfig`. For example, an "X/Y
+    /// Scatter" chart needs a minimum of 2 numeric columns to be
+    /// drawable.
+    fn set_update_column_defaults(
+        &mut self,
+        metadata: &SessionMetadata,
+        columns: &[Option<String>],
+        config_static: &PluginStaticConfig,
+    ) {
+        self.set_update_rollup_defaults(metadata, config_static);
 
         if let (None, Some(min_cols)) = (&self.columns, config_static.min_config_columns) {
             let names_len = config_static.config_column_names.len();

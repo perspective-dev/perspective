@@ -26,7 +26,7 @@ use crate::presentation::{ColumnLocator, OpenColumnSettings, Presentation};
 use crate::renderer::*;
 use crate::session::column_defaults_update::*;
 use crate::session::*;
-use crate::tasks::update_and_render;
+use crate::tasks::update_plugin_and_render;
 use crate::utils::*;
 
 #[derive(Clone, Properties)]
@@ -170,9 +170,16 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
             if session.is_errored() {
                 return;
             }
-            let metadata = renderer.get_next_plugin_metadata(&PluginUpdate::Update(plugin_name));
+            // Pure resolve — the swap itself is committed inside the locked
+            // draw task by `update_plugin_and_render`, never staged on the
+            // `Renderer` where a concurrent draw could observe it.
+            let resolved_plugin =
+                renderer.resolve_plugin_update(&PluginUpdate::Update(plugin_name));
             let prev_metadata = renderer.metadata();
-            let plugin_config = metadata.as_deref().unwrap_or(&*prev_metadata);
+            let plugin_config = resolved_plugin
+                .as_ref()
+                .map(|(_, metadata)| &**metadata)
+                .unwrap_or(&*prev_metadata);
             let rollup_features = session_metadata
                 .get_features()
                 .map(|x| x.get_group_rollup_modes())
@@ -190,7 +197,8 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                 plugin_config,
             );
 
-            if let Ok(task) = update_and_render(&session, &renderer, update) {
+            let plugin_idx = resolved_plugin.map(|(idx, _)| idx);
+            if let Ok(task) = update_plugin_and_render(&session, &renderer, update, plugin_idx) {
                 ApiFuture::spawn(task);
             }
 

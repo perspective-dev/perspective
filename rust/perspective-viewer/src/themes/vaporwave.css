@@ -13,11 +13,13 @@
 @import "./defaults.css";
 
 perspective-viewer,
-perspective-viewer[theme="Vaporwave"] {
+perspective-viewer[theme="Vaporwave"],
+perspective-viewer [theme="Vaporwave"] {
     --psp-theme-name: "Vaporwave";
 }
 
-perspective-viewer[theme="Vaporwave"] {
+perspective-viewer[theme="Vaporwave"],
+perspective-viewer [theme="Vaporwave"] {
     /* perspective-viewer-pro-dark--colors (overrides) */
     background-color: #242526;
     color: white;
@@ -175,6 +177,7 @@ perspective-viewer[theme="Vaporwave"] {
     ) !important;
 }
 
+perspective-context-menu[theme="Vaporwave"],
 perspective-copy-menu[theme="Vaporwave"],
 perspective-export-menu[theme="Vaporwave"],
 perspective-dropdown[theme="Vaporwave"],

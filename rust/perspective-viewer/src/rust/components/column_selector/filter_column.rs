@@ -15,7 +15,6 @@ use std::rc::Rc;
 
 use chrono::{Datelike, NaiveDate, TimeZone, Utc};
 use perspective_client::config::*;
-use perspective_js::utils::ApiFuture;
 use wasm_bindgen::JsCast;
 use web_sys::*;
 use yew::prelude::*;
@@ -27,6 +26,7 @@ use crate::components::type_icon::TypeIcon;
 use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::*;
+use crate::tasks::apply_and_render;
 use crate::utils::*;
 
 #[derive(Clone, Properties)]
@@ -448,13 +448,8 @@ impl FilterColumnProps {
             ..ViewConfigUpdate::default()
         };
 
-        if self.session.update_view_config(update).is_ok() {
-            let session = self.session.clone();
-            let renderer = self.renderer.clone();
-            ApiFuture::spawn(async move {
-                renderer.apply_pending_plugin()?;
-                renderer.draw(session.validate().await?.create_view()).await
-            });
+        if let Ok(task) = apply_and_render(&self.session, &self.renderer, update) {
+            spawn_owned("filter-column", task);
         }
     }
 
@@ -526,13 +521,8 @@ impl FilterColumnProps {
                 ..ViewConfigUpdate::default()
             };
 
-            if self.session.update_view_config(update).is_ok() {
-                let session = self.session.clone();
-                let renderer = self.renderer.clone();
-                ApiFuture::spawn(async move {
-                    renderer.apply_pending_plugin()?;
-                    renderer.draw(session.validate().await?.create_view()).await
-                });
+            if let Ok(task) = apply_and_render(&self.session, &self.renderer, update) {
+                spawn_owned("filter-column", task);
             }
         }
     }

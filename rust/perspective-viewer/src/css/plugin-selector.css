@@ -20,7 +20,7 @@
         #plugin_selector_container {
             min-height: var(
                 --psp-plugin-selector--height,
-                var(--psp-status-bar--height, 48px)
+                var(--psp-status-bar--height, 38px)
             );
             display: flex;
             white-space: nowrap;
@@ -48,6 +48,7 @@
             &.open {
                 position: absolute;
                 margin: 0;
+                margin-left: -1px;
                 top: 0;
                 left: 0;
                 right: 0;
@@ -58,15 +59,11 @@
                 z-index: 3;
                 color: var(--psp--color, #042121);
                 /* background: var(--psp--background-color); */
-
-                .plugin-select-item {
-                    padding-left: 8px;
-                }
             }
 
             .plugin-select-item-name {
-                padding-left: 10px;
-                font-size: 1.33333em;
+                padding-left: 4px;
+                font-size: 1.2em;
             }
 
             .plugin-select-item-name:before {
@@ -76,14 +73,14 @@
 
             .plugin-select-item {
                 /* width: 48px; */
-                padding-left: 9px;
+                padding-left: 5px;
                 height: var(
                     --psp-plugin-selector--height,
-                    var(--psp-status-bar--height, 48px)
+                    var(--psp-status-bar--height, 38px)
                 );
                 min-height: var(
                     --psp-plugin-selector--height,
-                    var(--psp-status-bar--height, 48px)
+                    var(--psp-status-bar--height, 38px)
                 );
                 display: flex;
                 align-items: center;

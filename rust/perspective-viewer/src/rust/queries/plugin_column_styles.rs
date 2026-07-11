@@ -37,7 +37,7 @@ pub fn get_plugin_config_schema(
     renderer: &Renderer,
     view_config: &ViewConfig,
 ) -> ApiResult<ColumnConfigSchema> {
-    let plugin = renderer.get_active_plugin()?;
+    let plugin = renderer.ensure_plugin_selected()?;
     let view_config_js =
         wasm_bindgen::JsValue::from_serde_ext(view_config).unwrap_or(wasm_bindgen::JsValue::NULL);
     let raw = plugin._plugin_config_schema(&view_config_js)?;
@@ -60,7 +60,7 @@ pub fn get_column_config_schema(
     current_value: Option<&serde_json::Map<String, serde_json::Value>>,
     abs_max: Option<f64>,
 ) -> ApiResult<ColumnConfigSchema> {
-    let plugin = renderer.get_active_plugin()?;
+    let plugin = renderer.ensure_plugin_selected()?;
     let plugin_config = renderer.metadata();
     let names = &plugin_config.config_column_names;
     let group = view_config

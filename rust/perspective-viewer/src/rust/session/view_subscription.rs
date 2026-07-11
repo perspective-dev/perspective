@@ -36,6 +36,7 @@ pub struct ViewStats {
 struct ViewSubscriptionData {
     view: View,
     config: Rc<ViewConfig>,
+    build_config: Rc<ViewConfig>,
     callback_id: Rc<Cell<u32>>,
     on_stats: Callback<ViewStats>,
     on_update: Option<Callback<()>>,
@@ -104,13 +105,15 @@ impl ViewSubscription {
     ///   `View.on_update()`.
     pub async fn new(
         view: perspective_client::View,
-        config: ViewConfig,
+        config: Rc<ViewConfig>,
+        build_config: Rc<ViewConfig>,
         on_stats: Callback<ViewStats>,
         on_update: Option<Callback<()>>,
     ) -> Result<Self, ApiError> {
         let data = ViewSubscriptionData {
             view,
-            config: config.into(),
+            config,
+            build_config,
             on_stats,
             callback_id: Rc::default(),
             on_update,
@@ -142,10 +145,13 @@ impl ViewSubscription {
     }
 
     /// It is possible to re-use a `ViewSubscription` without a costly
-    /// resubscribe under certain conditions, which still need an updated
-    /// `ViewConfig`.
-    pub fn update_view_config(&mut self, config: Rc<ViewConfig>) {
-        self.data.config = config
+    /// resubscribe when the new config is engine-equivalent to the one the
+    /// bound `View` was built from (placeholder-only differences); the
+    /// snapshots still need updating so reads stay consistent with the run
+    /// that adopted them.
+    pub fn set_configs(&mut self, config: Rc<ViewConfig>, build_config: Rc<ViewConfig>) {
+        self.data.config = config;
+        self.data.build_config = build_config;
     }
 
     /// Getter for the underlying `View()`.
@@ -153,14 +159,22 @@ impl ViewSubscription {
         &self.data.view
     }
 
-    /// Snapshot of the [`ViewConfig`] the bound `View` was constructed
-    /// from (or its operationally-equivalent successor on the
-    /// [`ValidSession::create_view`] fast path). This is the
-    /// [`ViewConfig`] consistent with the data the active plugin is
-    /// currently rendering — not the live session config, which may
-    /// have been mutated synchronously ahead of the next queued draw.
+    /// User-facing snapshot of the [`ViewConfig`] the bound `View` was
+    /// constructed from (the persisted config at build time — global-filter
+    /// overlay excluded). This is the [`ViewConfig`] consistent with the
+    /// data the active plugin is currently rendering — not the live session
+    /// config, which may have been mutated synchronously ahead of the next
+    /// queued run.
     pub fn get_view_config(&self) -> Rc<ViewConfig> {
         self.data.config.clone()
+    }
+
+    /// The EFFECTIVE [`ViewConfig`] the bound `View` was built from
+    /// (persisted config + global-filter overlay at build time). This is
+    /// the value `Session::bind_view` compares a run's snapshot against to
+    /// decide SKIP / REUSE / REBUILD.
+    pub fn build_config(&self) -> Rc<ViewConfig> {
+        self.data.build_config.clone()
     }
 
     /// Delete this `View`. Neglecting to call this method before a

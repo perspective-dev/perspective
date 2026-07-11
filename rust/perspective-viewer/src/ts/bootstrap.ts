@@ -26,12 +26,13 @@ export async function init_client(
 ) {
     // @ts-ignore
     const url = await worker_url.getWorkerURL();
-    if (wasm_module === undefined) {
-        wasm_module = (await import(url)) as typeof wasm_module_type;
-    }
+    const [wasm_module2, module_or_path] = await Promise.all([
+        wasm_module === undefined ? import(url) : wasm_module,
+        load_wasm_stage_0(wasm_binary).then((unzipped) =>
+            WebAssembly.compile(unzipped as BufferSource),
+        ),
+    ]);
 
-    const unzipped = await load_wasm_stage_0(wasm_binary);
-    const module_or_path = await WebAssembly.compile(unzipped as BufferSource);
-    await wasm_module.default({ module_or_path });
-    await wasm_module.init(module_or_path, url);
+    await wasm_module2.default({ module_or_path });
+    await wasm_module2.init(module_or_path, url);
 }

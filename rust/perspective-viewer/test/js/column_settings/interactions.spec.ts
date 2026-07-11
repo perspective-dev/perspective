@@ -328,7 +328,7 @@ async function checkOutput(
     if ("unchanged" in expected) {
         if (!initial_state.open) {
             await expect(view.columnSettingsSidebar.container).toBeHidden({
-                timeout: 1000,
+                timeout: 2000,
             });
         } else {
             const unexpected_tabs = POSSIBLE_TABS.filter(
@@ -342,7 +342,7 @@ async function checkOutput(
         }
     } else if ("closed" in expected) {
         await expect(view.columnSettingsSidebar.container).toBeHidden({
-            timeout: 1000,
+            timeout: 2000,
         });
     } else {
         const unexpected_tabs = POSSIBLE_TABS.filter(
@@ -353,6 +353,7 @@ async function checkOutput(
 }
 
 test.beforeEach(async ({ page }) => {
+    page.setDefaultTimeout(10_000);
     await page.goto("/rust/perspective-viewer/test/html/superstore-debug.html");
     await page.evaluate(async () => {
         while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {

@@ -44,7 +44,7 @@ pub fn send_column_config(
         let plugin_token =
             wasm_bindgen::JsValue::from_serde_ext(&renderer.get_plugin_config()).unwrap();
         renderer
-            .get_active_plugin()?
+            .ensure_plugin_selected()?
             .restore(&plugin_token, Some(&columns_configs))?;
 
         renderer.update(session.get_view()).await?;

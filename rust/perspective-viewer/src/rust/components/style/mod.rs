@@ -58,6 +58,9 @@ fn function_dropdown_bundle() -> &'static str {
 fn dropdown_menu_bundle() -> &'static str {
     include_str!(concat!(env!("OUT_DIR"), "/css/_dropdown_menu.css"))
 }
+fn context_menu_bundle() -> &'static str {
+    include_str!(concat!(env!("OUT_DIR"), "/css/_context_menu.css"))
+}
 
 thread_local! {
     static VIEWER_SHEET: web_sys::CssStyleSheet = make_sheet(viewer_bundle());
@@ -65,6 +68,7 @@ thread_local! {
     static FILTER_DROPDOWN_SHEET: web_sys::CssStyleSheet = make_sheet(filter_dropdown_bundle());
     static FUNCTION_DROPDOWN_SHEET: web_sys::CssStyleSheet = make_sheet(function_dropdown_bundle());
     static DROPDOWN_MENU_SHEET: web_sys::CssStyleSheet = make_sheet(dropdown_menu_bundle());
+    static CONTEXT_MENU_SHEET: web_sys::CssStyleSheet = make_sheet(context_menu_bundle());
 }
 
 fn make_sheet(css: &str) -> web_sys::CssStyleSheet {
@@ -81,5 +85,6 @@ pub(crate) fn surface_sheet(surface: StyleSurface) -> web_sys::CssStyleSheet {
         StyleSurface::FilterDropdown => FILTER_DROPDOWN_SHEET.with(|x| x.clone()),
         StyleSurface::FunctionDropdown => FUNCTION_DROPDOWN_SHEET.with(|x| x.clone()),
         StyleSurface::DropdownMenu => DROPDOWN_MENU_SHEET.with(|x| x.clone()),
+        StyleSurface::ContextMenu => CONTEXT_MENU_SHEET.with(|x| x.clone()),
     }
 }

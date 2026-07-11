@@ -31,6 +31,8 @@
  * @module perspective-viewer
  */
 
+import "regular-layout";
+
 export { IPerspectiveViewerPlugin } from "./plugin";
 export { HTMLPerspectiveViewerPluginElement } from "./plugin";
 

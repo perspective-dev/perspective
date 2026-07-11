@@ -13,11 +13,13 @@
 @import "./defaults.css";
 
 perspective-viewer,
-perspective-viewer[theme="Gruvbox Dark"] {
+perspective-viewer[theme="Gruvbox Dark"],
+perspective-viewer [theme="Gruvbox Dark"] {
     --psp-theme-name: "Gruvbox Dark";
 }
 
-perspective-viewer[theme="Gruvbox Dark"] {
+perspective-viewer[theme="Gruvbox Dark"],
+perspective-viewer [theme="Gruvbox Dark"] {
     /* perspective-viewer-pro-dark--colors (overrides) */
     background-color: #242526;
     color: white;
@@ -167,6 +169,7 @@ perspective-viewer[theme="Gruvbox Dark"] {
     ) !important;
 }
 
+perspective-context-menu[theme="Gruvbox Dark"],
 perspective-copy-menu[theme="Gruvbox Dark"],
 perspective-export-menu[theme="Gruvbox Dark"],
 perspective-dropdown[theme="Gruvbox Dark"] {

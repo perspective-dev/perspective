@@ -13,11 +13,13 @@
 @import "./defaults.css";
 
 perspective-viewer,
-perspective-viewer[theme="Phosphor"] {
+perspective-viewer[theme="Phosphor"],
+perspective-viewer [theme="Phosphor"] {
     --psp-theme-name: "Phosphor";
 }
 
-perspective-viewer[theme="Phosphor"] {
+perspective-viewer[theme="Phosphor"],
+perspective-viewer [theme="Phosphor"] {
     /* perspective-viewer-phosphor--colors */
     --theme-bg0: #0a0a0a;
     --theme-bg1: #0d0d0d;
@@ -124,6 +126,7 @@ perspective-viewer[theme="Phosphor"] {
     );
 }
 
+perspective-context-menu[theme="Phosphor"],
 perspective-copy-menu[theme="Phosphor"],
 perspective-export-menu[theme="Phosphor"],
 perspective-dropdown[theme="Phosphor"],

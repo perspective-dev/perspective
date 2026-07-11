@@ -14,11 +14,13 @@
 
 /* Register theme for auto-detection */
 perspective-viewer,
-perspective-viewer[theme="Pro Dark"] {
+perspective-viewer[theme="Pro Dark"],
+perspective-viewer [theme="Pro Dark"] {
     --psp-theme-name: "Pro Dark";
 }
 
-perspective-viewer[theme="Pro Dark"] {
+perspective-viewer[theme="Pro Dark"],
+perspective-viewer [theme="Pro Dark"] {
     /* perspective-viewer-pro-dark--colors (overrides) */
     background-color: #242526;
     color: white;
@@ -107,6 +109,7 @@ perspective-viewer[theme="Pro Dark"] {
     );
 }
 
+perspective-context-menu[theme="Pro Dark"],
 perspective-copy-menu[theme="Pro Dark"],
 perspective-export-menu[theme="Pro Dark"],
 perspective-dropdown[theme="Pro Dark"],

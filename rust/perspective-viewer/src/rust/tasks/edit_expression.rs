@@ -17,7 +17,7 @@
 use perspective_client::clone;
 use perspective_client::config::{Expression, ViewConfigUpdate};
 
-use super::update_and_render;
+use super::apply_and_render;
 use crate::presentation::{ColumnLocator, ColumnSettingsTab, OpenColumnSettings, Presentation};
 use crate::renderer::Renderer;
 use crate::session::Session;
@@ -39,7 +39,7 @@ pub fn update_expr(
             .to_props()
             .create_replace_expression_update(&old_name, &new_expr);
 
-        update_and_render(&session, &renderer, update)?.await?;
+        apply_and_render(&session, &renderer, update)?.await?;
         presentation.set_open_column_settings(Some(OpenColumnSettings {
             locator: Some(ColumnLocator::Expression(new_expr.name.to_string())),
             tab: Some(ColumnSettingsTab::Attributes),
@@ -62,7 +62,7 @@ pub fn save_expr(
     let task = {
         let mut serde_exprs = session.get_view_config().expressions.clone();
         serde_exprs.insert(&expr);
-        update_and_render(session, renderer, ViewConfigUpdate {
+        apply_and_render(session, renderer, ViewConfigUpdate {
             expressions: Some(serde_exprs),
             ..Default::default()
         })
@@ -90,7 +90,7 @@ pub fn delete_expr(session: &Session, renderer: &Renderer, expr_name: &str) -> A
         ..ViewConfigUpdate::default()
     };
 
-    let task = update_and_render(session, renderer, config)?;
+    let task = apply_and_render(session, renderer, config)?;
     ApiFuture::spawn(task);
     Ok(())
 }

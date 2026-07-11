@@ -201,30 +201,6 @@ export async function compareSVGContentsToSnapshot(
     await compareContentsToSnapshot(svgContent);
 }
 
-export function getWorkspaceLightDOMContents(page: Page): Promise<string> {
-    return page.evaluate(
-        async () => document.querySelector("perspective-workspace")!.outerHTML,
-    );
-}
-
-export function getWorkspaceShadowDOMContents(page: Page): Promise<string> {
-    return page.evaluate(async () => {
-        return document
-            .querySelector("perspective-workspace")!
-            .shadowRoot!.querySelector("#container")!.innerHTML;
-    });
-}
-
-export async function compareLightDOMContents(page: Page) {
-    const contents = await getWorkspaceLightDOMContents(page);
-    await compareContentsToSnapshot(contents);
-}
-
-export async function compareShadowDOMContents(page: Page) {
-    const contents = await getWorkspaceShadowDOMContents(page);
-    await compareContentsToSnapshot(contents);
-}
-
 /**
  * Clicks on an element, passing through shadow roots if necessary.
  * TODO: Playwright already does this with locators.

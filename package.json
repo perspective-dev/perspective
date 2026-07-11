@@ -26,7 +26,6 @@
         "packages/react",
         "packages/viewer-datagrid",
         "packages/viewer-charts",
-        "packages/workspace",
         "packages/jupyterlab",
         "packages/cli",
         "rust/perspective-js",
@@ -46,7 +45,6 @@
         "@perspective-dev/viewer": "workspace:^",
         "@perspective-dev/viewer-charts": "workspace:^",
         "@perspective-dev/viewer-datagrid": "workspace:^",
-        "@perspective-dev/workspace": "workspace:^",
         "@playwright/experimental-ct-react": "catalog:",
         "@playwright/test": "catalog:",
         "chalk": "catalog:",
@@ -57,16 +55,6 @@
         "prettier": "catalog:",
         "tsx": "catalog:",
         "typescript-eslint": "catalog:"
-    },
-    "pnpm": {
-        "overrides": {
-            "d3-array": ">=3 <4",
-            "d3-dispatch": ">=3 <4",
-            "d3-format": ">=3 <4",
-            "d3-scale": ">=4 <5",
-            "d3-selection": ">=3 <4",
-            "d3-transition": ">=3 <4"
-        }
     },
     "scripts": {
         "preinstall": "npx only-allow pnpm",

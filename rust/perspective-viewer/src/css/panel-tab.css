@@ -1,0 +1,127 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+:host([part~="tab"]) {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    height: 100%;
+    min-width: 0;
+    padding: 0 7px 0 12px;
+    cursor: pointer;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    color: var(--psp--color, inherit);
+    background: var(--psp-inactive--border-color, #ffffff) !important;
+    box-shadow:
+        2.25px -2.25px 0 2.25px var(--psp-inactive--border-color),
+        -2.25px -2.25px 0 2.25px var(--psp-inactive--border-color);
+}
+
+:host([part~="tab"].visible) {
+    z-index: 6;
+    background: var(--psp--background-color, #ffffff) !important;
+    box-shadow:
+        2.25px -2.25px 0 2.25px var(--psp--background-color),
+        -2.25px -2.25px 0 2.25px var(--psp--background-color),
+        2.75px -2.75px 0 2.75px var(--psp-inactive--color),
+        0 12.5px 0 -11.5px var(--psp-inactive--border-color);
+}
+
+.psp-tab-grip {
+    flex: 0 0 auto;
+    width: 5px;
+    height: 12px;
+    margin-right: 10px;
+    pointer-events: none;
+    background-color: var(--psp-inactive--color);
+    -webkit-mask-image: var(--psp-icon--column-drag-handle--mask-image);
+    mask-image: var(--psp-icon--column-drag-handle--mask-image);
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+}
+
+.psp-tab-title {
+    flex: 1 1 auto;
+    pointer-events: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.psp-tab-title.placeholder {
+    color: var(--psp-inactive--color);
+}
+
+.psp-tab-title.input-sizer {
+    flex: 1 1 auto;
+    pointer-events: auto;
+    display: inline-block;
+    position: relative;
+    min-width: 24px;
+}
+
+.input-sizer::after {
+    content: attr(data-value) " ";
+    visibility: hidden;
+    white-space: nowrap;
+    padding-right: 2px;
+}
+
+.input-sizer input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-overflow: ellipsis;
+    outline: none;
+}
+
+.psp-tab-close {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 4px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: inherit;
+}
+
+.psp-tab-close::before {
+    content: "";
+
+    /* TODO don't hard-code dimensions */
+    width: 20px;
+    height: 20px;
+    background-color: var(--psp--color);
+    -webkit-mask-image: var(--psp-icon--close--mask-image);
+    mask-image: var(--psp-icon--close--mask-image);
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+}

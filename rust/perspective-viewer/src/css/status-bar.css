@@ -19,14 +19,6 @@
 }
 
 :host {
-    /* When settings open ... */
-    #main_column #status_bar,
-    #main_column #status_bar.titled {
-        input::placeholder {
-            color: var(--psp-inactive--color);
-        }
-    }
-
     #status_bar.settings-closed {
         padding-right: 10px;
     }
@@ -44,85 +36,25 @@
         min-height: auto;
         max-height: none;
         gap: 6px;
-        top: calc((var(--psp-status-bar--height, 48px) - 20px) / 2);
+        top: calc((var(--psp-status-bar--height, 38px) - 20px) / 2);
         right: calc(
-            min(48px, (var(--psp-status-bar--height, 48px) - 20px) / 2)
+            min(48px, (var(--psp-status-bar--height, 38px) - 20px) / 2)
         );
     }
 
     #status_bar {
-        box-shadow: 0 13px 0 -12px var(--psp-inactive--border-color);
-        z-index: 3;
+        box-shadow: 0 1px 0 0px var(--psp-inactive--color);
+        z-index: 6;
         display: var(--psp-status-bar--display, flex);
         gap: 6px;
         align-items: center;
         background: var(--psp--background-color);
-        padding: var(--psp-status-bar--padding, 0 31px 0 8px);
+        padding: var(--psp-status-bar--padding, 0 31px 0 4px);
         position: relative;
-        height: var(--psp-status-bar--height, 48px);
-        min-height: var(--psp-status-bar--height, 48px);
-        max-height: var(--psp-status-bar--height, 48px);
+        height: var(--psp-status-bar--height, 38px);
+        min-height: var(--psp-status-bar--height, 38px);
+        max-height: var(--psp-status-bar--height, 38px);
         border-radius: var(--psp-status-bar--border-radius);
-        #status-bar-placeholder {
-            margin: 0px;
-            margin-right: -5px;
-            pointer-events: none;
-        }
-
-        input {
-            font-size: 1em;
-        }
-
-        input:placeholder-shown + #status-bar-placeholder:before {
-            content: var(--psp-label--untitled--content, "untitled");
-            color: var(--psp-inactive--color);
-        }
-
-        .input-sizer {
-            display: inline-block;
-            align-items: center;
-            position: relative;
-            min-width: 65px;
-            overflow: hidden;
-            padding-top: 0.5px;
-
-            &:after,
-            input,
-            textarea {
-                width: auto;
-                grid-area: 1 / 1;
-                font-family: inherit;
-            }
-
-            input,
-            textarea {
-                position: absolute;
-                left: 0;
-                right: 0;
-                text-overflow: ellipsis;
-                padding: 0;
-                border: none;
-                background: transparent;
-                color: inherit;
-                height: 100%;
-            }
-
-            &:after {
-                content: attr(data-value) " ";
-                color: var(--psp-inactive--color, inherit);
-                visibility: hidden;
-                white-space: nowrap;
-                padding-right: 12px;
-            }
-
-            &:focus-within {
-                textarea:focus,
-                input:focus {
-                    outline: none;
-                }
-            }
-        }
-
         .section {
             display: flex;
             align-items: center;
@@ -143,7 +75,7 @@
             gap: 6px;
             flex: 0 1000 auto;
             overflow: hidden;
-            margin: 0px 10px;
+            margin: 0px 0px;
             pointer-events: none;
             span {
                 margin: 0 !important;
@@ -164,6 +96,68 @@
         #plugin-settings {
             margin-left: auto;
             align-self: stretch;
+        }
+
+        /* Global-filter chips, rendered inline between the row stats and the
+           menu icons (was a dedicated strip above the panels). Shrinks/clips
+           rather than growing the fixed-height bar. */
+        #global_filter_bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 0 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            font-size: 11px;
+
+            /* Beat the status bar's generic `span { margin: 0 14px }`. */
+            span {
+                margin: 0;
+            }
+
+            .global-filter-bar-label {
+                opacity: 0.6;
+                pointer-events: none;
+            }
+
+            .global-filter-bar-chips {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                min-width: 0;
+                overflow: hidden;
+            }
+
+            .global-filter-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 1px 4px 1px 6px;
+                background: var(--psp--background-color, #ffffff);
+                border: 1px solid var(--psp-inactive--color, #c8ccd0);
+                border-radius: 3px;
+                white-space: nowrap;
+            }
+
+            .global-filter-chip-remove {
+                cursor: pointer;
+                opacity: 0.5;
+                font-size: 13px;
+                line-height: 1;
+            }
+
+            .global-filter-chip-remove:hover {
+                opacity: 1;
+            }
+
+            .global-filter-bar-clear {
+                cursor: pointer;
+                opacity: 0.6;
+            }
+
+            .global-filter-bar-clear:hover {
+                opacity: 1;
+            }
         }
 
         span {
@@ -243,8 +237,8 @@
             align-items: center;
             display: flex;
             padding-right: 17px;
-            height: var(--psp-status-bar--height, 48px);
-            min-height: var(--psp-status-bar--height, 48px);
+            height: var(--psp-status-bar--height, 38px);
+            min-height: var(--psp-status-bar--height, 38px);
         }
 
         .error-dialog-stack {

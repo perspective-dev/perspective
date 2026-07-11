@@ -13,11 +13,13 @@
 @import "./defaults.css";
 
 perspective-viewer,
-perspective-viewer[theme="Solarized"] {
+perspective-viewer[theme="Solarized"],
+perspective-viewer [theme="Solarized"] {
     --psp-theme-name: "Solarized";
 }
 
-perspective-viewer[theme="Solarized"] {
+perspective-viewer[theme="Solarized"],
+perspective-viewer [theme="Solarized"] {
     /* perspective-viewer-solarized--colors */
     color: #586e75;
     background-color: #eee8d5;
@@ -61,6 +63,7 @@ x {
     color: #cb4b16;
 }
 
+perspective-context-menu[theme="Solarized"],
 perspective-copy-menu[theme="Solarized"],
 perspective-export-menu[theme="Solarized"],
 perspective-dropdown[theme="Solarized"],

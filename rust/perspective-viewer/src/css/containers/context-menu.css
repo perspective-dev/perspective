@@ -1,0 +1,101 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+/* Panel context menu (right-click a panel). The `<perspective-context-menu>`
+ * host is body-mounted by `PortalModal` (which owns position/z-index inline)
+ * and themed by the document theme rules' modal selector groups — chrome like
+ * `background-color`/`color`/`border` lands on the HOST from `defaults.css` /
+ * each theme's `perspective-context-menu[theme="X"]` group, exactly like the
+ * Copy/Export menus. Only the interior layout + item states live here. */
+
+:host {
+    outline: none;
+    user-select: none;
+    font-size: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.context-menu {
+    display: flex;
+    flex-direction: column;
+    min-width: 120px;
+    padding: 4px 0;
+}
+
+.context-menu-item {
+    position: relative;
+    padding: 4px 12px;
+    cursor: pointer;
+    white-space: nowrap;
+
+    &:hover {
+        background: var(
+            --psp-context-menu--hover--background,
+            var(--psp-active--background, rgba(0, 0, 0, 0.08))
+        );
+        color: var(--psp-context-menu--hover--color, inherit);
+    }
+
+    &.disabled {
+        opacity: 0.4;
+        cursor: default;
+
+        &:hover {
+            background: transparent;
+            color: inherit;
+        }
+    }
+
+    &.has-submenu {
+        display: flex;
+        align-items: center;
+
+        &::after {
+            content: "▸";
+            margin-left: auto;
+            padding-left: 12px;
+        }
+
+        &:hover > .context-menu-submenu {
+            display: flex;
+        }
+    }
+}
+
+/* Hover flyout. Positioned OUTSIDE the host's box, so the host-level theme
+ * chrome (see the :host comment above) doesn't paint it — rebuild the same
+ * chrome from the modal selector groups' vars. Edge-adjacent (`left: 100%`,
+ * no gap) so the pointer never leaves the hover chain crossing into it;
+ * `top: -5px` aligns its first row with the parent row (4px menu padding +
+ * 1px border). */
+.context-menu-submenu {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: -5px;
+    max-height: 50vh;
+    overflow-y: auto;
+    background-color: var(--psp--background-color, white);
+    border: 1px solid var(--psp-inactive--color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Non-interactive group label (e.g. client names in the "New" sub-menu). */
+.context-menu-header {
+    padding: 4px 12px 2px;
+    cursor: default;
+    white-space: nowrap;
+    font-size: 9px;
+    text-transform: uppercase;
+    color: var(--psp-inactive--color, #ababab);
+}

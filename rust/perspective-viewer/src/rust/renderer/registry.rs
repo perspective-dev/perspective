@@ -43,12 +43,12 @@ pub impl LocalKey<Rc<RefCell<Vec<PluginRecord>>>> {
                 let mut elements = vec![];
                 for plugin in plugins.borrow().iter() {
                     let element = create_plugin(&plugin.tag_name);
-                    let style = element.unchecked_ref::<HtmlElement>().style();
-                    style.set_property("position", "absolute")?;
-                    style.set_property("top", "0")?;
-                    style.set_property("right", "0")?;
-                    style.set_property("bottom", "0")?;
-                    style.set_property("left", "0")?;
+                    // let style = element.unchecked_ref::<HtmlElement>().style();
+                    // style.set_property("position", "absolute")?;
+                    // style.set_property("top", "0")?;
+                    // style.set_property("right", "0")?;
+                    // style.set_property("bottom", "0")?;
+                    // style.set_property("left", "0")?;
                     elements.push(element);
                 }
 
