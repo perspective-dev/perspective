@@ -142,6 +142,11 @@ fn cmake_link_deps(cmake_build_dir: &Path) -> Result<(), std::io::Error> {
         cmake_build_dir.display()
     );
 
+    if cfg!(windows) {
+        println!("cargo:rustc-link-lib=shell32");
+        println!("cargo:rustc-link-lib=ole32");
+    }
+
     // println!("cargo:warning=MESSAGE {}/build", cmake_build_dir.display());
     println!("cargo:rustc-link-lib=static=psp");
     link_cmake_static_archives(cmake_build_dir)?;
