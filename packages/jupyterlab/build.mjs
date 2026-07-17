@@ -51,6 +51,7 @@ const TEST_BUILD = {
         ".ttf": "file",
         ".css": "text",
     },
+    external: ["@perspective-dev/viewer"],
     outfile: "dist/esm/lumino.js",
 };
 

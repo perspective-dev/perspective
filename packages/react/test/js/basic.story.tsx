@@ -14,7 +14,6 @@ import perspective from "@perspective-dev/client";
 import perspective_viewer from "@perspective-dev/viewer";
 import "@perspective-dev/viewer-datagrid";
 import "@perspective-dev/viewer-charts";
-import "@perspective-dev/workspace";
 
 // @ts-ignore
 import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wasm?url";
@@ -36,7 +35,6 @@ import SUPERSTORE_ARROW from "superstore-arrow/superstore.lz4.arrow?url";
 import * as React from "react";
 import {
     PerspectiveViewer,
-    PerspectiveWorkspace,
 } from "@perspective-dev/react";
 
 import "@perspective-dev/viewer/dist/css/themes.css";

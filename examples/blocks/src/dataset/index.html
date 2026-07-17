@@ -3,9 +3,8 @@
     <head>
         <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no" />
         <link rel="stylesheet" crossorigin="anonymous" href="/node_modules/@perspective-dev/viewer/dist/css/pro.css" />
-        <link rel="stylesheet" crossorigin="anonymous" href="/node_modules/@perspective-dev/workspace/dist/css/pro.css" />
         <style>
-            perspective-workspace {
+            perspective-viewer {
                 flex: 1;
                 overflow: visible;
                 border: 1px solid #666;
@@ -86,17 +85,16 @@
                     <input id="num_boolean" min="0" max="50" type="number" placeholder="#" value="1" />
                 </div>
             </div>
-            <perspective-workspace id="psp_workspace">
+            <perspective-viewer id="psp_workspace">
                 <!-- <perspective-viewer editable id="viewer"></perspective-viewer>
             <perspective-viewer editable id="stats"></perspective-viewer> -->
-            </perspective-workspace>
+            </perspective-viewer>
         </div>
 
         <script type="module">
             import "/node_modules/@perspective-dev/viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js";
             import "/node_modules/@perspective-dev/viewer-charts/dist/cdn/perspective-viewer-charts.js";
             import "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
-            import "/node_modules/@perspective-dev/workspace/dist/cdn/perspective-workspace.js";
             import perspective from "/node_modules/@perspective-dev/client/dist/cdn/perspective.js";
 
             const client = await perspective.worker();
@@ -180,12 +178,10 @@
 
             const make_del_click_callback = (state) => async () => {
                 if (state.table) {
-                    // await viewer.eject();
-                    // await window.psp_workspace.removeTable("superstore");
-                    for (const viewer of window.psp_workspace.children) {
-                        const cfg = await viewer.save();
+                    for (const name of window.psp_workspace.getPanelNames()) {
+                        const cfg = await window.psp_workspace.savePanel(name);
                         if (cfg.table === "superstore") {
-                            await viewer.eject();
+                            window.psp_workspace.removePanel(name);
                         }
                     }
 

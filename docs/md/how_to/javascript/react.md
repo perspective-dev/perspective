@@ -37,21 +37,3 @@ function App() {
     );
 }
 ```
-
-## `PerspectiveWorkspace`
-
-For multi-viewer layouts, use `PerspectiveWorkspace`:
-
-```typescript
-import { PerspectiveWorkspace } from "@perspective-dev/react";
-
-const WORKSPACE_CONFIG =  // ...
-
-function Dashboard() {
-    return (
-        <PerspectiveWorkspace
-            client={perspective.worker()}
-            config={WORKSPACE_CONFIG} />
-    );
-}
-```

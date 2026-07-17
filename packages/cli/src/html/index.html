@@ -6,14 +6,12 @@
         <title>Perspective CLI</title>
 
         <link rel="stylesheet" crossorigin="anonymous" href="/node_modules/@perspective-dev/viewer/dist/css/pro.css" />
-        <link rel="stylesheet" crossorigin="anonymous" href="/node_modules/@perspective-dev/workspace/dist/css/pro.css" />
 
-        <script type="module" src="/node_modules/@perspective-dev/workspace/dist/cdn/perspective-workspace.js"></script>
         <script type="module" src="/node_modules/@perspective-dev/viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js"></script>
         <script type="module" src="/node_modules/@perspective-dev/viewer-charts/dist/cdn/perspective-viewer-charts.js"></script>
 
         <style>
-            perspective-workspace {
+            perspective-viewer {
                 position: absolute;
                 top: 0;
                 left: 0;
@@ -39,17 +37,14 @@
     </head>
 
     <body>
-        <perspective-workspace id="view1">
-            <perspective-viewer table="data"></perspective-viewer>
-        </perspective-workspace>
+        <perspective-viewer id="view1"></perspective-viewer>
         <script type="module">
             import "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
             import perspective from "/node_modules/@perspective-dev/client/dist/cdn/perspective.js";
 
-            // const WORKER = worker();
             var elem = document.getElementById("view1");
             var worker = await perspective.websocket(location.origin.replace("http", "ws"));
-            elem.tables.set("data", worker.open_table("data_source_one"));
+            await elem.load(worker.open_table("data_source_one"));
         </script>
     </body>
 </html>

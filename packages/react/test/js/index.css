@@ -62,7 +62,7 @@ button {
         flex-direction: row;
     }
 
-    perspective-workspace {
+    perspective-viewer {
         height: 100vh;
     }
 }

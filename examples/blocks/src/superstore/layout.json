@@ -1,38 +1,31 @@
 {
-    "sizes": [1],
-    "detail": {
-        "main": {
-            "type": "split-area",
-            "orientation": "horizontal",
-            "children": [
-                {
-                    "type": "tab-area",
-                    "widgets": [
-                        "PERSPECTIVE_GENERATED_ID_0",
-                        "PERSPECTIVE_GENERATED_ID_1"
-                    ],
-                    "currentIndex": 0
-                },
-                {
-                    "type": "tab-area",
-                    "widgets": ["PERSPECTIVE_GENERATED_ID_2"],
-                    "currentIndex": 0
-                }
-            ],
-            "sizes": [0.5, 0.5]
-        }
+    "layout": {
+        "type": "split-layout",
+        "orientation": "horizontal",
+        "children": [
+            {
+                "type": "tab-layout",
+                "tabs": [
+                    "PERSPECTIVE_GENERATED_ID_0",
+                    "PERSPECTIVE_GENERATED_ID_1"
+                ],
+                "selected": 0
+            },
+            {
+                "type": "tab-layout",
+                "tabs": ["PERSPECTIVE_GENERATED_ID_2"],
+                "selected": 0
+            }
+        ],
+        "sizes": [0.5, 0.5]
     },
-    "mode": "globalFilters",
-    "viewers": {
+    "panels": {
         "PERSPECTIVE_GENERATED_ID_0": {
             "plugin": "datagrid",
             "group_by": ["Region", "State"],
             "split_by": ["Category", "Sub-Category"],
             "columns": ["Sales", "Profit"],
-            "master": false,
-            "name": "Sales Report",
             "table": "superstore",
-            "linked": false,
             "title": "Sales Report 2"
         },
         "PERSPECTIVE_GENERATED_ID_1": {
@@ -60,10 +53,8 @@
                 "Order Date",
                 "Ship Date"
             ],
-            "master": false,
-            "name": "superstore.csv",
             "table": "superstore",
-            "linked": false
+            "title": "superstore.csv"
         },
         "PERSPECTIVE_GENERATED_ID_2": {
             "plugin": "Treemap",
@@ -79,10 +70,8 @@
                     }
                 }
             },
-            "master": false,
-            "title": "Sales Report (by State)",
             "table": "superstore",
-            "linked": false
+            "title": "Sales Report (by State)"
         }
     }
 }

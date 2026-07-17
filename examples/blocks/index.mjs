@@ -28,7 +28,6 @@ const replacements = {
     "@perspective-dev/viewer/dist/cdn/perspective-viewer.js": `@perspective-dev/viewer@${version}/dist/cdn/perspective-viewer.js`,
     "@perspective-dev/viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js": `@perspective-dev/viewer-datagrid@${version}/dist/cdn/perspective-viewer-datagrid.js`,
     "@perspective-dev/viewer-charts/dist/cdn/perspective-viewer-charts.js": `@perspective-dev/viewer-charts@${version}/dist/cdn/perspective-viewer-charts.js`,
-    "@perspective-dev/workspace/dist/cdn/perspective-workspace.js": `@perspective-dev/workspace@${version}/dist/cdn/perspective-workspace.js`,
     "@perspective-dev/server/dist/cdn/perspective.cpp.wasm": `@perspective-dev/client@${version}/dist/cdn/perspective.cpp.wasm`,
     "@perspective-dev/viewer/dist/cdn/perspective.rx.wasm": `@perspective-dev/viewer@${version}/dist/cdn/perspective.rx.wasm`,
     "@perspective-dev/client/dist/cdn/perspective.worker.js": `@perspective-dev/client@${version}/dist/cdn/perspective.worker.js`,
