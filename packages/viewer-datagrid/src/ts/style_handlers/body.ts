@@ -123,30 +123,6 @@ export function applyBodyCellStyles(
             cell_style_row_header(model, regularTable, td, metadata as any);
         }
 
-        // Set data attributes
-        const tr = td.parentElement as HTMLElement;
-        if (tr) {
-            tr.dataset.y = String(metadata.y);
-        }
-
-        if (
-            metadata.type !== "row_header" ||
-            metadata.row_header_x ===
-                (metadata.row_header as unknown[]).length - 1 ||
-            (metadata.row_header as unknown[])[metadata.row_header_x + 1] ===
-                undefined
-        ) {
-            td.dataset.y = String(metadata.y);
-            if (metadata.type !== "row_header") {
-                td.dataset.x = String(metadata.x);
-            } else {
-                delete td.dataset.x;
-            }
-        } else {
-            delete td.dataset.y;
-            delete td.dataset.x;
-        }
-
         // Apply tree selection styling (SELECT_ROW_TREE).
         // psp-select-region-inactive is exclusively a tree-selection class,
         // so always clean it up. psp-select-region is shared with the

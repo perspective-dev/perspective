@@ -154,7 +154,10 @@ export function createDataListener(
         const column_headers: string[][] = [];
         const column_paths: string[] = [];
 
-        const is_settings_open = viewer.hasAttribute("settings");
+        const is_settings_open =
+            viewer.hasAttribute("settings") &&
+            (this._panel === undefined ||
+                viewer.getActivePanel() === this._panel);
         for (
             let ipath = x0;
             ipath < Math.min(x1, this._column_paths.length);

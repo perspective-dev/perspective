@@ -63,7 +63,8 @@ export async function activate(
     view: View,
 ): Promise<void> {
     const viewer = this.parentElement as HTMLPerspectiveViewerElement;
-    const table = await viewer.getTable();
+    const panel = this.getAttribute("slot") ?? undefined;
+    const table = await viewer.getTablePanel(undefined, panel);
 
     if (!this._initialized) {
         this.innerHTML = "";
@@ -78,7 +79,6 @@ export async function activate(
             this.regular_table,
             table,
             view,
-            viewer.getAttribute("theme")!,
         );
 
         if (!this.model) {
@@ -138,6 +138,7 @@ export async function activate(
                 model._last_insert_configs = [config];
             }
 
+            detail.panel = this.getAttribute("slot") ?? undefined;
             await regularTable.draw({ preserve_width: true });
             viewer.dispatchEvent(
                 new CustomEvent<PerspectiveSelectDetail>(
@@ -177,7 +178,12 @@ export async function activate(
         // User event click
         this.regular_table.addEventListener(
             "click",
-            createDispatchClickListener(this.model, this.regular_table, viewer),
+            createDispatchClickListener(
+                this.model,
+                this.regular_table,
+                viewer,
+                this,
+            ),
         );
 
         // tree collapse, expand, edit button headers
@@ -232,22 +238,21 @@ export async function activate(
             "perspective-toggle-column-settings",
             (event: Event) => {
                 const toggleEvent = event as ToggleColumnSettingsEvent;
-                if (this.isConnected) {
-                    style_selected_column(
-                        this.model!,
-                        this.regular_table,
-                        viewer,
-                        toggleEvent.detail.column_name ?? undefined,
-                    );
-                    if (!toggleEvent.detail.open) {
-                        this.model!._column_settings_selected_column =
-                            undefined;
-                        return;
-                    }
-
-                    this.model!._column_settings_selected_column =
-                        toggleEvent.detail.column_name ?? undefined;
+                if (!this.isConnected) {
+                    return;
                 }
+
+                const active = toggleEvent.detail.open && event.target === this;
+                const column = active
+                    ? (toggleEvent.detail.column_name ?? undefined)
+                    : undefined;
+                style_selected_column(
+                    this.model!,
+                    this.regular_table,
+                    viewer,
+                    column,
+                );
+                this.model!._column_settings_selected_column = column;
             },
         );
 
@@ -258,7 +263,6 @@ export async function activate(
             this.regular_table,
             table,
             view,
-            viewer.getAttribute("theme")!,
             this.model,
         );
     }

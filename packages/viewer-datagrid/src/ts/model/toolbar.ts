@@ -40,6 +40,7 @@ function isSelectRowTreeAvailable(model?: DatagridModel): boolean {
 export function toggle_edit_mode(
     this: DatagridPluginElement,
     mode?: EditMode,
+    echo: boolean = true,
 ): void {
     if (typeof mode === "undefined") {
         let idx = EDIT_MODES.indexOf(this._edit_mode);
@@ -53,7 +54,11 @@ export function toggle_edit_mode(
         mode = EDIT_MODES[idx];
     }
 
-    (this.parentElement as HTMLPerspectiveViewerElement)?.setSelection?.();
+    const panel = this.getAttribute("slot") ?? undefined;
+    (this.parentElement as HTMLPerspectiveViewerElement)?.setSelectionPanel?.(
+        undefined,
+        panel,
+    );
     this._edit_mode = mode;
     if (this.model) {
         this.model._edit_mode = mode;
@@ -64,9 +69,14 @@ export function toggle_edit_mode(
         };
     }
 
-    (this.parentElement as HTMLPerspectiveViewerElement)?.restore?.({
-        plugin_config: { edit_mode: mode },
-    });
+    if (echo) {
+        (this.parentElement as HTMLPerspectiveViewerElement)?.restorePanel?.(
+            {
+                plugin_config: { edit_mode: mode },
+            },
+            panel,
+        );
+    }
 
     if (this._edit_button !== undefined) {
         this._edit_button.dataset.editMode = mode;
