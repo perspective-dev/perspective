@@ -52,6 +52,7 @@ rust/perspective-js/src/ts/ts-rs
 rust/perspective-server/build
 rust/perspective-python/LICENSE_THIRDPARTY_cargo.yml
 rust/perspective-python/LICENSE.md
+rust/perspective-python/perspective/widget/static/*.js.map
 rust/perspective-server/docs/lib_gen.md
 rust/perspective-viewer/src/ts/ts-rs
 rust/perspective/src/ts/ts-rs
@@ -69,3 +70,4 @@ docs/static/react
 rust/perspective-server/build
 target/
 dist-gh-pages
+rust/perspective-python/perspective/widget/static

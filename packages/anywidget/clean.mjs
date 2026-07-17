@@ -10,11 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import THEMES from "../../../dist/css/perspective-jupyterlab.css";
+import * as fs from "node:fs";
 
-// Export the required load_ipython_extension
-exports.load_css = () => {
-    const style = document.createElement("style");
-    style.textContent = THEMES;
-    document.head.appendChild(style);
-};
+// The build output is the anywidget bundle in the python package's static dir.
+fs.rmSync("../../rust/perspective-python/perspective/widget/static", {
+    recursive: true,
+    force: true,
+});

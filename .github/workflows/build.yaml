@@ -152,7 +152,7 @@ jobs:
             - name: WebAssembly Build
               run: pnpm run build --ci
               env:
-                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,react"
+                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,react,anywidget"
                   # PSP_USE_CCACHE: 1
 
             - uses: actions/upload-artifact@v4
@@ -167,6 +167,17 @@ jobs:
                       packages/viewer-charts/dist
                       packages/viewer-datagrid/dist
                       packages/react/dist
+
+            # The `PerspectiveWidget` anywidget JS/CSS bundle, needed by any
+            # job which imports `perspective.widget` from the source tree
+            # (the `build_python` wheel is built in parallel with this job and
+            # can't include it; `repack_wheel.mjs` injects it into the wheel).
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: perspective-anywidget-dist
+                  path: |
+                      rust/perspective-python/perspective/widget/static/perspective-anywidget.js
+                      rust/perspective-python/perspective/widget/static/perspective-anywidget.css
 
     # ,-,---.       .    .  .-,--.     .  .
     #  '|___/ . . . |  ,-|   '|__/ . . |- |-. ,-. ,-.
@@ -383,7 +394,10 @@ jobs:
     #                               `-'
     build_emscripten_wheel:
         runs-on: ${{ matrix.os }}
-        needs: [lint_and_docs]
+        # `build_js` for the `perspective-anywidget-dist` artifact, so that
+        # maturin's `include` packages the widget bundle into the wheel
+        # (jupyterlite has no repack step, unlike the native wheels).
+        needs: [lint_and_docs, build_js]
         strategy:
             fail-fast: false
             matrix:
@@ -416,6 +430,14 @@ jobs:
                   manylinux: "false"
                   skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
 
+            # Place the anywidget bundle in-tree _before_ maturin runs, so the
+            # pyproject.toml `include` rules package it into the wheel —
+            # without it `import perspective.widget` fails under jupyterlite.
+            - uses: actions/download-artifact@v4
+              with:
+                  name: perspective-anywidget-dist
+                  path: rust/perspective-python/perspective/widget/static
+
             - name: Python Build Pyodide
               run: pnpm install && pnpm run build
               env:
@@ -438,6 +460,10 @@ jobs:
                           *pyemscripten_2025_0_wasm32.whl) ;;
                           *) echo "::error::$w is not tagged pyemscripten_2025_0_wasm32"; exit 1 ;;
                       esac
+                      unzip -l "$w" | grep 'perspective/widget/static/perspective-anywidget.js' \
+                          || { echo "::error::$w is missing the anywidget JS bundle"; exit 1; }
+                      unzip -l "$w" | grep 'perspective/widget/static/perspective-anywidget.css' \
+                          || { echo "::error::$w is missing the anywidget CSS bundle"; exit 1; }
                   done
                   python -m twine check rust/target/wheels/*.whl
 
@@ -576,7 +602,10 @@ jobs:
             - name: Build extension
               run: pnpm run build
               env:
-                  PACKAGE: "jupyterlab"
+                  # `anywidget` builds the widget bundle into the python static
+                  # dir; `jupyterlab` builds the renderers labextension. Order
+                  # matters: anywidget first so the static bundle exists.
+                  PACKAGE: "anywidget,jupyterlab"
 
             - run: node tools/scripts/repack_wheel.mjs
 
@@ -604,25 +633,19 @@ jobs:
             - uses: ./.github/actions/install-wheel
               if: ${{ runner.os == 'Linux' }}
 
+            - uses: ./.github/actions/install-wheel
+              if: ${{ runner.os == 'Linux' }}
+              with:
+                  inplace: "false"
+
+            # jlab_start.ts passes an explicit `--config`, so no
+            # `jupyter lab --generate-config` is needed.
             - name: Run Jupyter Tests
               if: ${{ runner.os == 'Linux' }}
-              run: pnpm run test --fetch-snapshots
+              run: pnpm run test --jupyter
               env:
                   PACKAGE: "jupyterlab"
-                  PSP_SNAPSHOT_REPO: ${{ vars.PSP_SNAPSHOT_REPO }}
-                  PSP_SNAPSHOT_TOKEN: ${{ secrets.PSP_SNAPSHOT_TOKEN }}
-                  PSP_SNAPSHOT_REF: ${{ github.head_ref || github.ref_name }}
-                  # PSP_USE_CCACHE: 1
 
-            - name: Run Jupyter Integration Tests
-              if: ${{ false }}
-              # if: ${{ runner.os == 'Linux' }}
-              run: |
-                  jupyter lab --generate-config
-                  pnpm run test --jupyter
-              env:
-                  PACKAGE: "jupyterlab"
-                  # PSP_USE_CCACHE: 1
 
     #  ,--,--'      .    ,-_/              .---.               .
     #  `- | ,-. ,-. |-   '  | ,-. .  , ,-. \___  ,-. ,-. . ,-. |-
@@ -690,7 +713,7 @@ jobs:
     #                          /|
     #                         `-'
     test_python:
-        needs: [build_python]
+        needs: [build_python, build_js]
         runs-on: ${{ matrix.os }}
         strategy:
             fail-fast: false
@@ -746,6 +769,17 @@ jobs:
                   name: perspective-python-dist-${{ matrix.arch }}-${{ matrix.os }}-${{ matrix.python-version }}
 
             - uses: ./.github/actions/install-wheel
+
+            # `pytest` imports `perspective` from the source tree (the wheel
+            # replaces it wholesale via `install-wheel`'s `pip install
+            # --target`, hence _after_ that step), and `perspective.widget`
+            # requires the anywidget bundle at import time. The wheel itself
+            # only gains these assets when repacked in
+            # `build_and_test_jupyterlab`, which runs in parallel.
+            - uses: actions/download-artifact@v4
+              with:
+                  name: perspective-anywidget-dist
+                  path: rust/perspective-python/perspective/widget/static
 
             - name: Run Tests
               run: pnpm run test

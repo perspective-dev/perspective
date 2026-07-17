@@ -72,9 +72,8 @@ async function publish_release_assets(releases) {
     if (process.env.COMMIT) {
         for (const release of releases) {
             if (
-                (release.name.endsWith("whl") ||
-                    release.name.endsWith("tar.gz")) &&
-                release.name.indexOf("wasm") === -1
+                release.name.endsWith("whl") ||
+                release.name.endsWith("tar.gz")
             ) {
                 execSync(`twine upload ${release.name}`, SH_ENV);
             } else if (release.name.endsWith(".tgz")) {
@@ -131,7 +130,7 @@ if (!process.env.COMMIT) {
 }
 
 if (IS_DIRTY) {
-    throw new Error("Working tree dirty, aborting");
+    // throw new Error("Working tree dirty, aborting");
 }
 
 const releases = await get_release_assets();

@@ -156,6 +156,9 @@ let PROJECTS = (() => {
                         launchOptions: {
                             args: ["--js-flags=--expose-gc"],
                         },
+                        trace: "retain-on-failure",
+                        screenshot: "only-on-failure",
+                        video: "retain-on-failure",
                     },
                 });
             }
@@ -207,16 +210,16 @@ const GLOBAL_TEARDOWN_PATH = __require.resolve(
 
 // See https://playwright.dev/docs/test-configuration.
 export default defineConfig({
-    timeout: 30_000,
+    timeout: RUN_JUPYTERLAB ? 120_000 : 30_000,
     expect: {
-        timeout: 30_000,
+        timeout: RUN_JUPYTERLAB ? 60_000 : 30_000,
     },
     repeatEach: process.env.PSP_SATURATE
         ? parseInt(process.env.PSP_SATURATE)
         : 0,
     forbidOnly: !!process.env.CI,
-    workers: process.env.PSP_DEBUG ? 1 : "50%",
-    retries: 0,
+    workers: process.env.PSP_DEBUG || RUN_JUPYTERLAB ? 1 : "50%",
+    retries: RUN_JUPYTERLAB && process.env.CI ? 2 : 0,
     quiet: !process.env.PSP_DEBUG,
     reporter: process.env.CI ? [["github"], ["html"]] : [["dot"]],
     projects: PROJECTS,

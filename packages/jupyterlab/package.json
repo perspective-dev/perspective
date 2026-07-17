@@ -1,7 +1,7 @@
 {
     "name": "@perspective-dev/jupyterlab",
     "version": "4.5.2",
-    "description": "A Jupyterlab extension for the Perspective library, designed to be used with perspective-python.",
+    "description": "JupyterLab file renderers for the Perspective library (CSV, JSON, Arrow). The PerspectiveWidget itself ships via the perspective-python wheel using anywidget.",
     "files": [
         "dist/**/*",
         "src/**/*"
@@ -19,8 +19,8 @@
     "scripts": {
         "build": "node ./build.mjs",
         "clean": "node ./clean.mjs",
-        "test:jupyter": "__JUPYTERLAB_PORT__=6538 npx playwright test --config ../../tools/test/playwright.config.ts -- --jupyter",
-        "test:jupyter:build": "node ./build.mjs --test"
+        "test:jupyter": "PSP_JUPYTERLAB_TESTS=1 __JUPYTERLAB_PORT__=6538 npx playwright test --config ../../tools/test/playwright.config.ts",
+        "test:jupyter:build": "node ./build.mjs"
     },
     "dependencies": {
         "@perspective-dev/viewer-charts": "workspace:",
@@ -28,29 +28,20 @@
         "@perspective-dev/viewer": "workspace:",
         "@perspective-dev/client": "workspace:",
         "@perspective-dev/server": "workspace:",
-        "@jupyter-widgets/base": ">2 <5",
         "@jupyterlab/application": ">2 <5",
-        "@lumino/application": "<3",
         "@lumino/widgets": "<3"
     },
     "devDependencies": {
+        "@perspective-dev/anywidget": "workspace:",
         "@perspective-dev/esbuild-plugin": "workspace:",
         "@perspective-dev/test": "workspace:",
         "@jupyterlab/builder": "^4",
-        "lightningcss": "catalog:",
-        "copy-webpack-plugin": "~12",
-        "zx": "^8.1.8"
+        "lightningcss": "catalog:"
     },
     "jupyterlab": {
         "webpackConfig": "./webpack.config.js",
         "extension": true,
         "outputDir": "./dist/cjs",
-        "sharedPackages": {
-            "@jupyter-widgets/base": {
-                "bundled": false,
-                "singleton": true
-            }
-        },
         "discovery": {
             "server": {
                 "base": {

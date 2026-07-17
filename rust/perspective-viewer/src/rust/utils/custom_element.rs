@@ -16,6 +16,11 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(inline_js = r#"
     export function bootstrap(psp, name, clsname, statics) {
+        if (customElements.get(name)) {
+            console.warn(`Custom element "${name}" is already registered; skipping duplicate registration (Perspective was loaded more than once on this page).`);
+            return;
+        }
+
         const cls = psp[clsname];
         const proto = cls.prototype;
         class x extends HTMLElement {

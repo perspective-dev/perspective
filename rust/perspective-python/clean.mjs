@@ -25,6 +25,7 @@ fs.rmSync(`perspective_python-${version}.data`, {
 fs.rmSync("LICENSE.md", { recursive: true, force: true });
 fs.rmSync("LICENSE_THIRDPARTY_cargo.yml", { recursive: true, force: true });
 fs.rmSync("perspective/*.so", { recursive: true, force: true });
+fs.rmSync("perspective/widget/static", { recursive: true, force: true });
 
 // for (const path in glob("*.data")) {
 //     fs.rmSync(path, { recursive: true, force: true });
