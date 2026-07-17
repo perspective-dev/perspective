@@ -189,7 +189,9 @@ export function renderSunburstFrame(
         drawArcs(chart, gl, glManager, 0, chart._instanceCount);
     }
 
-    renderSunburstChromeOverlay(chart);
+    // Deferred past the GPU fence (see `_defer2D`) so the chrome canvas
+    // doesn't present ahead of the GL arcs on resize.
+    chart._defer2D(() => renderSunburstChromeOverlay(chart));
 }
 
 /**

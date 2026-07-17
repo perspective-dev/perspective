@@ -31,6 +31,7 @@ export type ControlMsg =
     | SetBufferMaxCapacityMsg
     | LoadAndRenderMsg
     | RedrawMsg
+    | DeselectMsg
     | ResizeMsg
     | ClearMsg
     | InvalidateThemeMsg
@@ -298,6 +299,17 @@ export interface LoadAndRenderAckMsg {
 
 export interface RedrawMsg {
     kind: "redraw";
+}
+
+/**
+ * Host → worker: silently clear the chart's selection state (pinned
+ * tooltip) — no `userSelect` reply, so the host filter-bar removal that
+ * triggered it can't echo back into the host's filter set. The worker's
+ * `TooltipController.dismiss()` posts `dismissTooltip` to tear down the
+ * host-side pinned artifact.
+ */
+export interface DeselectMsg {
+    kind: "deselect";
 }
 
 export interface ResizeMsg {

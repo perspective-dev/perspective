@@ -388,6 +388,14 @@ export class ZoomController {
         };
 
         this._onPointerDown = (e: PointerEvent) => {
+            // Only the primary (left) button starts a pan. Right/middle clicks
+            // must fall through so the panel's `contextmenu` handler can open
+            // the menu — capturing the pointer here would otherwise swallow the
+            // right-click.
+            if (e.button !== 0) {
+                return;
+            }
+
             const rect = element.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;

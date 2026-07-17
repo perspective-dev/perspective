@@ -362,7 +362,14 @@ export class SeriesChart extends CategoricalYChart {
                     this._hoveredBarIdx = -1;
                     this._hoveredSample = null;
                     if (this._glManager) {
-                        renderBarFrame(this, this._glManager);
+                        // Route through the scheduler (not a direct
+                        // `renderBarFrame`) so the frame is serialized
+                        // against sibling charts sharing a pooled GL
+                        // context in blit mode — a direct render would
+                        // paint into the shared canvas outside the
+                        // present cycle and leak into another plugin's
+                        // frame.
+                        this.requestRender(this._glManager);
                     }
                 }
             },
@@ -513,6 +520,7 @@ export class SeriesChart extends CategoricalYChart {
                 this._expandedLeftDomain,
                 result.leftDomain,
             );
+
             if (result.rightDomain) {
                 this._expandedRightDomain = expandDomainInPlace(
                     this._expandedRightDomain,
@@ -520,6 +528,7 @@ export class SeriesChart extends CategoricalYChart {
                 );
             }
 
+            // // TODO(texodus): I don't think this is right, its
             if (result.numericCategoryDomain) {
                 this._expandedCategoryDomain = expandDomainInPlace(
                     this._expandedCategoryDomain,

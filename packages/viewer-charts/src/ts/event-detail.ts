@@ -39,6 +39,14 @@ export interface PerspectiveClickDetail {
      * `[<col>, "==", <value>]` clauses.
      */
     config: Partial<ViewConfig>;
+
+    /**
+     * The source panel's `slot` name in a multi-panel `<perspective-viewer>`,
+     * so the host can attribute the click to the originating panel. `undefined`
+     * for a lone, unslotted viewer. Mirrors `PerspectiveSelectDetail.panel` and
+     * the datagrid `PerspectiveClickDetail`.
+     */
+    panel?: string;
 }
 
 export { PerspectiveSelectDetail } from "@perspective-dev/viewer/src/ts/extensions.js";

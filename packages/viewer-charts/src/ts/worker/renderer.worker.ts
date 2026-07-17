@@ -572,7 +572,11 @@ export class WorkerRenderer {
         // chart left the shared canvas at its own size) would render at
         // the wrong dimensions.
         this.glManager.beginFrame();
-        this.chartImpl._fullRender(this.glManager);
+        // `renderFrameSync` (not `_fullRender`) so the gridline + chrome
+        // 2D canvases are actually painted here — the scheduler normally
+        // defers those to a post-fence flush, but the snapshot path
+        // bypasses the scheduler and composites the 2D layers below.
+        this.chartImpl.renderFrameSync(this.glManager);
         const gl = this.glManager.gl;
         const glCanvas = gl.canvas as OffscreenCanvas;
         const w = glCanvas.width;

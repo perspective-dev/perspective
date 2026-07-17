@@ -225,7 +225,9 @@ export function renderHeatmapFrame(
         drawCellsInstanced(chart, gl, glManager, 0, chart._uploadedCells);
     });
 
-    renderHeatmapChromeOverlay(chart);
+    // Deferred past the GPU fence (see `_defer2D`) so the chrome canvas
+    // doesn't present ahead of the GL cells on resize.
+    chart._defer2D(() => renderHeatmapChromeOverlay(chart));
 }
 
 function ensureProgram(
@@ -650,7 +652,9 @@ function renderFacetedHeatmap(
         });
     }
 
-    renderHeatmapChromeOverlay(chart);
+    // Deferred past the GPU fence (see `_defer2D`) so the chrome canvas
+    // doesn't present ahead of the GL cells on resize.
+    chart._defer2D(() => renderHeatmapChromeOverlay(chart));
 }
 
 /**

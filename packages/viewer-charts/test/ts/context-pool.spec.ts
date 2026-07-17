@@ -83,6 +83,34 @@ test.describe("Pooled blit WebGL contexts", () => {
         await waitOneFrame(page);
         await waitOneFrame(page);
 
+        // Assert every viewer's CONFIG before touching pixels: the historical
+        // failure mode here was not context eviction but a load→restore race
+        // reverting `columns` to the table default — which rendered MORE
+        // pixels and hijacked `ref = max(...)` below, failing the correct
+        // viewers with a misleading "evicted context" message (see
+        // SESSION_CONFIG_COHERENCE_PLAN.md and the viewer's
+        // load_restore_race.spec.ts). With configs asserted uniform, the
+        // max-as-reference pixel check is sound.
+        const configs = await page.evaluate(async () => {
+            const out: string[][] = [];
+            for (const v of Array.from(
+                document.querySelectorAll("perspective-viewer"),
+            )) {
+                out.push((await (v as any).save()).columns);
+            }
+
+            return out;
+        });
+
+        expect(configs.length).toBe(VIEWER_COUNT);
+        for (let i = 0; i < configs.length; i++) {
+            expect(
+                configs[i],
+                `viewer ${i} of ${VIEWER_COUNT} config drifted from the ` +
+                    `restored columns`,
+            ).toEqual(SCATTER.columns);
+        }
+
         const baselines = await calibrateAllBaselines(page);
         expect(baselines.length).toBe(VIEWER_COUNT);
         const ref = Math.max(...baselines);

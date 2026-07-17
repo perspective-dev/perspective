@@ -40,6 +40,9 @@ export function dispatch(r: WorkerRenderer, msg: ControlMsg): void {
         case "redraw":
             r.redraw();
             break;
+        case "deselect":
+            r.chartImpl.deselect?.();
+            break;
         case "resize":
             r.resize(msg.cssWidth, msg.cssHeight, msg.dpr);
             r.redraw();

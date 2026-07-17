@@ -109,7 +109,12 @@ export class TreemapChart extends TreeChartBase {
                 ) {
                     this._hoveredNodeId = NULL_NODE;
                     if (this._glManager) {
-                        renderTreemapFrame(this, this._glManager);
+                        // Schedule through the render scheduler rather
+                        // than painting directly — a direct frame render
+                        // bypasses the per-context serialization and, in
+                        // pooled blit mode, corrupts a sibling chart's
+                        // in-flight shared-canvas frame.
+                        this.requestRender(this._glManager);
                     }
                 }
             },

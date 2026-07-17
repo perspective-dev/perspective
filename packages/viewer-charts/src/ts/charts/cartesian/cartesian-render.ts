@@ -204,7 +204,11 @@ export function renderCartesianFrame(
         });
     }
 
-    renderCartesianChromeOverlay(chart);
+    // Defer the chrome (axes/legend/tooltip) draw past the GPU fence so
+    // the chrome canvas doesn't present ahead of the GL glyphs on resize.
+    // `renderCartesianChromeOverlay` reads the `_last*` frame state set
+    // above, which stays stable until the next `_fullRender`.
+    chart._defer2D(() => renderCartesianChromeOverlay(chart));
 }
 
 interface RenderFrameCtx {
@@ -406,26 +410,25 @@ function renderSinglePlotFrame(
 
     const isMap = chart._renderMode === "map";
 
-    if (chart._gridlineCanvas && !isMap) {
-        // One-shot destructive prep (resizes + clears + scales to DPR).
-        // `renderGridlines` itself is non-destructive.
-        const dpr = glManager.dpr;
-        initCanvas(chart._gridlineCanvas, layout, dpr);
-        renderGridlines(
-            chart._gridlineCanvas,
-            layout,
-            xTicks,
-            yTicks,
-            theme,
-            dpr,
-        );
-    } else if (chart._gridlineCanvas && isMap) {
+    // Defer the gridline draw past the GPU fence (see `_defer2D`) so the
+    // gridline canvas doesn't present ahead of the GL glyphs on resize.
+    // The closure captures this frame's `layout` / ticks / `theme`.
+    const dpr = glManager.dpr;
+    const gridlineCanvas = chart._gridlineCanvas;
+    if (gridlineCanvas && !isMap) {
+        chart._defer2D(() => {
+            // One-shot destructive prep (resizes + clears + scales to
+            // DPR). `renderGridlines` itself is non-destructive.
+            initCanvas(gridlineCanvas, layout, dpr);
+            renderGridlines(gridlineCanvas, layout, xTicks, yTicks, theme, dpr);
+        });
+    } else if (gridlineCanvas && isMap) {
         // Map mode draws no cartesian gridlines, but the gridline
         // canvas may carry stale ink from a prior cartesian chart
         // type. Reset it to a clean transparent surface so the
         // basemap (rendered into the GL canvas below) reads as the
         // only background layer.
-        initCanvas(chart._gridlineCanvas, layout, glManager.dpr);
+        chart._defer2D(() => initCanvas(gridlineCanvas, layout, dpr));
     }
 
     renderInPlotFrame(gl, layout, glManager.dpr, () => {
@@ -571,10 +574,17 @@ function renderFacetedFrame(
     // One-shot destructive prep for the gridline + WebGL canvases.
     // Both phases below are per-facet; calling their destructive
     // helpers (initCanvas / renderInPlotFrame) in the loop would wipe
-    // every previously-drawn facet, leaving only the last cell
-    // visible.
-    if (chart._gridlineCanvas && sampleLayout) {
-        initCanvas(chart._gridlineCanvas, sampleLayout, glManager.dpr);
+    // every previously-drawn facet, leaving only the last cell visible.
+    //
+    // The gridline draws are deferred past the GPU fence (see
+    // `_defer2D`) so the gridline canvas doesn't present ahead of the GL
+    // glyphs on resize. `initCanvas` is deferred first so it runs before
+    // the per-facet `renderGridlines` closures below (FIFO flush order);
+    // the GL prep (`clearAndSetupFrame`) and draws stay in this pass.
+    const dpr = glManager.dpr;
+    const gridlineCanvas = chart._gridlineCanvas;
+    if (gridlineCanvas && sampleLayout) {
+        chart._defer2D(() => initCanvas(gridlineCanvas, sampleLayout, dpr));
     }
 
     clearAndSetupFrame(gl);
@@ -609,49 +619,56 @@ function renderFacetedFrame(
         // basemap layer is rendered into the GL canvas inside the
         // facet's scissor below.
         const isMap = chart._renderMode === "map";
-        if (chart._gridlineCanvas && !isMap) {
-            const localXTicks = independent
-                ? computeTicks(
-                      buildXDomain(
-                          chart,
-                          facetDomain.xMin,
-                          facetDomain.xMax,
-                          xIsDate,
-                      ),
-                      buildYDomain(
-                          chart,
-                          facetDomain.yMin,
-                          facetDomain.yMax,
-                          yIsDate,
-                      ),
-                      cell.layout,
-                  ).xTicks
-                : xTicks;
-            const localYTicks = independent
-                ? computeTicks(
-                      buildXDomain(
-                          chart,
-                          facetDomain.xMin,
-                          facetDomain.xMax,
-                          xIsDate,
-                      ),
-                      buildYDomain(
-                          chart,
-                          facetDomain.yMin,
-                          facetDomain.yMax,
-                          yIsDate,
-                      ),
-                      cell.layout,
-                  ).yTicks
-                : yTicks;
-            renderGridlines(
-                chart._gridlineCanvas,
-                cell.layout,
-                localXTicks,
-                localYTicks,
-                theme,
-                glManager.dpr,
-            );
+        if (gridlineCanvas && !isMap) {
+            // Deferred to the post-fence 2D flush. The closure captures
+            // this facet's `cell` (whose `cell.layout` already carries
+            // the padded domain from `buildProjectionMatrix` above) plus
+            // the frame-local domain/ticks, so it stays correct without
+            // recomputing at flush time.
+            chart._defer2D(() => {
+                const localXTicks = independent
+                    ? computeTicks(
+                          buildXDomain(
+                              chart,
+                              facetDomain.xMin,
+                              facetDomain.xMax,
+                              xIsDate,
+                          ),
+                          buildYDomain(
+                              chart,
+                              facetDomain.yMin,
+                              facetDomain.yMax,
+                              yIsDate,
+                          ),
+                          cell.layout,
+                      ).xTicks
+                    : xTicks;
+                const localYTicks = independent
+                    ? computeTicks(
+                          buildXDomain(
+                              chart,
+                              facetDomain.xMin,
+                              facetDomain.xMax,
+                              xIsDate,
+                          ),
+                          buildYDomain(
+                              chart,
+                              facetDomain.yMin,
+                              facetDomain.yMax,
+                              yIsDate,
+                          ),
+                          cell.layout,
+                      ).yTicks
+                    : yTicks;
+                renderGridlines(
+                    gridlineCanvas,
+                    cell.layout,
+                    localXTicks,
+                    localYTicks,
+                    theme,
+                    dpr,
+                );
+            });
         }
 
         withScissor(gl, cell.layout, glManager.dpr, () => {

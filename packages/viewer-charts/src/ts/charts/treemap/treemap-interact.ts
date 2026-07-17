@@ -13,10 +13,7 @@
 import type { TreemapChart } from "./treemap";
 import { NULL_NODE } from "../common/node-store";
 import { PADDING_LABEL } from "./treemap-layout";
-import {
-    renderTreemapFrame,
-    renderTreemapChromeOverlay,
-} from "./treemap-render";
+import { renderTreemapChromeOverlay } from "./treemap-render";
 import {
     buildTreeTooltipLines,
     dismissTreePinnedTooltip,
@@ -254,7 +251,7 @@ export function handleTreemapDblClick(
 function drillTo(chart: TreemapChart, nodeId: number): void {
     treeDrillTo(chart, nodeId, () => {
         if (chart._glManager) {
-            renderTreemapFrame(chart, chart._glManager);
+            chart.requestRender(chart._glManager);
         }
     });
 }

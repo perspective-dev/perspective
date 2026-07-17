@@ -154,7 +154,6 @@ export class HTMLPerspectiveViewerWebGLPluginElement
     private _renderer: RendererTransport | null = null;
     private _rendererPromise: Promise<RendererTransport> | null = null;
     private _rawEventForwarder: RawEventForwarder | null = null;
-    private _generation = 0;
     private _resetClickAbort: AbortController | null = null;
 
     /**
@@ -285,8 +284,7 @@ export class HTMLPerspectiveViewerWebGLPluginElement
         // is the dispose signal: if `this._rendererPromise` no longer
         // points at *this* build when it resolves, the element was
         // deleted (or a reconnect started a newer build) and we destroy
-        // the orphan instead of adopting it. Promise identity — not
-        // `_generation`, which every `draw`/`update` bumps — is the
+        // the orphan instead of adopting it. Promise identity is the
         // right token: a rapid draw→update must NOT tear down the
         // single in-flight build it shares via this memoized promise.
         const p: Promise<RendererTransport> = this._buildRenderer(view).then(
@@ -353,11 +351,16 @@ export class HTMLPerspectiveViewerWebGLPluginElement
 
     private async _buildRenderer(view: View): Promise<RendererTransport> {
         const viewer = this.parentElement as HTMLPerspectiveViewerElement;
-        const client = await viewer.getClient();
+        // This chart's own panel (its `slot`). Used to scope the client/table
+        // to THIS panel rather than the host's active/seed panel (the bare
+        // getClient()/getTable() resolve element-wide in a multi-panel viewer),
+        // and to tag the dispatched interaction events with their source panel.
+        const panel = this.getAttribute("slot") ?? undefined;
+        const client = await viewer.getClientPanel(undefined, panel);
         const viewer_class = customElements.get("perspective-viewer");
         const clientWasm = viewer_class.get_wasm_module();
         const clientWorkerURL = viewer_class.get_worker_url();
-        const table = await viewer?.getTable?.();
+        const table = await viewer?.getTablePanel?.(undefined, panel);
         const tableName: string | undefined = table
             ? await table.get_name()
             : undefined;
@@ -370,6 +373,7 @@ export class HTMLPerspectiveViewerWebGLPluginElement
             client,
             view,
             tableName,
+            panel,
             clientWorkerURL,
             clientWasm,
             chartTag: this._chartType.tag,
@@ -553,8 +557,16 @@ export class HTMLPerspectiveViewerWebGLPluginElement
         return this._drawImpl(view);
     }
 
+    /**
+     * Shared body of `draw` / `update`. No re-entrancy guard: the host
+     * serializes every rendering call (`draw`, `update`, `render`,
+     * `resize`) and `delete` on its per-renderer draw lock, so this
+     * method never overlaps itself or a teardown. The one exception —
+     * an external DOM disconnect `delete()`ing the element mid-draw —
+     * is absorbed by `RendererTransport`, whose post-`destroy()`
+     * requests settle immediately instead of pending forever.
+     */
     private async _drawImpl(view: View): Promise<void> {
-        const gen = ++this._generation;
         let renderer: RendererTransport;
         try {
             renderer = await this._ensureRenderer(view);
@@ -564,19 +576,17 @@ export class HTMLPerspectiveViewerWebGLPluginElement
             return;
         }
 
-        if (this._generation !== gen) {
-            return;
-        }
-
         renderer.setView(view);
         renderer.setBufferMaxCapacity(this._chartType.max_cells);
+        const panel = this.getAttribute("slot") ?? undefined;
         const viewer = this
             .parentElement as HTMLPerspectiveViewerElement | null;
-        const viewerConfig = (await viewer?.getViewConfig?.()) ?? {};
-        if (this._generation !== gen) {
+
+        if (viewer === null) {
             return;
         }
 
+        const viewerConfig = await viewer.getViewConfigPanel(panel);
         await renderer.loadAndRender({
             viewerConfig: {
                 group_by: viewerConfig?.group_by ?? [],
@@ -588,17 +598,40 @@ export class HTMLPerspectiveViewerWebGLPluginElement
     }
 
     async clear(): Promise<void> {
-        this._generation++;
         this._renderer?.clear();
     }
 
     async resize(): Promise<void> {
+        // Hidden (an unslotted tab-stack panel, a `display: none` host):
+        // the 0×0 rect a hidden element reports would resize the worker
+        // canvas to zero — CLEARING the retained frame, so the next
+        // activation repaints from blank (the two-stage tab-switch
+        // artifact). Skip instead and keep the last frame for an instant,
+        // single-blit reveal — mirroring the datagrid's guard. The host's
+        // activation nudge is also a `resize()`, so a hidden panel's nudge
+        // is free by the same check.
+        if (!this.isConnected || this.offsetParent == null) {
+            return;
+        }
+
         this._renderer?.resize();
     }
 
     restyle() {
         this._renderer?.invalidateTheme();
-        return 5;
+    }
+
+    /**
+     * Clear any active selection state (pinned tooltip) WITHOUT emitting
+     * selection events — the host calls this when a global filter
+     * contributed by this panel's selection is removed from the global
+     * filter bar, so the pin can't outlive the filter it produced. The
+     * transport's `_lastInsertConfig` (remove-set memory) is deliberately
+     * RETAINED so a subsequent selection still replaces any leftover
+     * clauses rather than accumulating.
+     */
+    async deselect(): Promise<void> {
+        this._renderer?.deselect();
     }
 
     async render(view: View): Promise<Blob> {
@@ -627,7 +660,6 @@ export class HTMLPerspectiveViewerWebGLPluginElement
     }
 
     delete() {
-        this._generation++;
         if (this._rawEventForwarder) {
             this._rawEventForwarder.detach();
             this._rawEventForwarder = null;

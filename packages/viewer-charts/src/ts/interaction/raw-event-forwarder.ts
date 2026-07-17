@@ -55,6 +55,13 @@ export class RawEventForwarder {
         };
 
         this._onPointerDown = (e: PointerEvent) => {
+            // Only forward primary-button pointerdowns. Right/middle clicks must
+            // reach the panel's `contextmenu` handler — capturing the pointer
+            // here would otherwise swallow the right-click.
+            if (e.button !== 0) {
+                return;
+            }
+
             const rect = element.getBoundingClientRect();
             const mx = e.clientX - rect.left;
             const my = e.clientY - rect.top;

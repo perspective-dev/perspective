@@ -604,7 +604,10 @@ export function renderBarFrame(
     chart._lastCatTicks = numericCat
         ? computeNiceTicks(visCatMin, visCatMax, 6)
         : null;
-    renderBarChromeOverlay(chart);
+    // Deferred past the GPU fence (see `_defer2D`) so the chrome canvas
+    // doesn't present ahead of the GL glyphs on resize. Reads the
+    // `_last*` frame state set above.
+    chart._defer2D(() => renderBarChromeOverlay(chart));
 }
 
 /**
