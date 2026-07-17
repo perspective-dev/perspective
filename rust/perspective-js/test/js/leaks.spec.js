@@ -101,26 +101,21 @@ test.describe("leaks", function () {
                 await table.delete();
             });
 
-            test.skip("OG - to_columns_string does not leak", async () => {
-                const table = await perspective.table(arr.slice());
-                const view = await table.view({ group_by: ["State"] });
-                await leak_test(async function () {
-                    let json = await view.to_columns_string();
-                    expect(json.length).toEqual(6722);
-                });
-                await view.delete();
-                await table.delete();
-            });
-
-            // The length of this string changed due to
+            // The length of this string changes due to
             // some of the trailing fractional digits in the floats.
             test("to_columns_string does not leak", async () => {
                 const table = await perspective.table(arr.slice());
                 const view = await table.view({ group_by: ["State"] });
+                let len;
                 await leak_test(async function () {
                     let json = await view.to_columns_string();
-                    expect(json.length).toEqual(6669);
+                    if (!len) {
+                        len = json.length;
+                    } else {
+                        expect(json.length).toEqual(len);
+                    }
                 });
+
                 await view.delete();
                 await table.delete();
             });

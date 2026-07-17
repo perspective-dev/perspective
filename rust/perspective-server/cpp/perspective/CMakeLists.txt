@@ -263,6 +263,7 @@ if(PSP_WASM_BUILD)
             -mbulk-memory \
             -msimd128 \
             -mrelaxed-simd \
+            -fopenmp-simd \
             -flto \
             --emit-tsd=perspective-server.d.ts \
         ")
@@ -369,6 +370,12 @@ if(PSP_PYODIDE)
 
     # Emscripten exceptions
     string(APPEND CMAKE_CXX_FLAGS " -fexceptions")
+endif()
+
+if(PSP_WASM_BUILD AND NOT CMAKE_BUILD_TYPE_LOWER STREQUAL debug)
+    set(PSP_DEP_SIMD_FLAGS " -flto -mbulk-memory -msimd128 -mrelaxed-simd ")
+    string(APPEND CMAKE_C_FLAGS "${PSP_DEP_SIMD_FLAGS}")
+    string(APPEND CMAKE_CXX_FLAGS "${PSP_DEP_SIMD_FLAGS}")
 endif()
 
 # Build (read: download and extract) header-only dependencies from external sources

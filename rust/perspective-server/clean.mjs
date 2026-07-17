@@ -13,3 +13,4 @@
 import * as fs from "node:fs";
 
 fs.rmSync("dist", { recursive: true, force: true });
+fs.rmSync("build", { recursive: true, force: true });
