@@ -1,6 +1,6 @@
 Demo of [Perspective](https://github.com/perspective-dev/perspective).
 
-This example of a `<perspective-workspace>` dashboard is generated from one
+This example of a `<perspective-viewer>` dashboard is generated from one
 [Apache Arrow](https://arrow.apache.org/) source dataset, converted originally
 from this
 [XLS from a Tableau presentation](https://community.tableau.com/docs/DOC-1236).

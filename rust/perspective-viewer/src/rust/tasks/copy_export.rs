@@ -66,34 +66,44 @@ pub async fn html_as_jsvalue(
 }
 
 /// Render the current view as a `.png` `Blob` via the active plugin's
-/// `render` method (typically only available for chart plugins).
+/// `render` method (typically only available for chart plugins). Chart
+/// plugins implement `render` as a full internal `draw` + snapshot, so the
+/// call must hold the renderer's draw lock like any other draw (see
+/// [`crate::js::plugin`]) or it would interleave with a concurrent
+/// `table_updated` redraw.
 pub async fn png_as_jsvalue(session: &Session, renderer: &Renderer) -> ApiResult<web_sys::Blob> {
-    let plugin = renderer.get_active_plugin()?;
-    let view: perspective_client::View = session
-        .get_view()
-        .ok_or(ApiError::from(ApiErrorType::NoTableError))?;
+    renderer
+        .clone()
+        .render_task(|_guard| async move {
+            let plugin = renderer.ensure_plugin_selected()?;
+            let view: perspective_client::View = session
+                .get_view()
+                .ok_or(ApiError::from(ApiErrorType::NoTableError))?;
 
-    let png = plugin.render(view.into(), None).await?;
-    Ok(png)
+            plugin.render(view.into(), None).await
+        })
+        .await
 }
 
 /// Render the current view as a `.txt` `Blob` via the active plugin's
-/// `render` method (typically used for the datagrid).
+/// `render` method (typically used for the datagrid). Locked for the same
+/// reason as [`png_as_jsvalue`].
 pub async fn txt_as_jsvalue(
     session: &Session,
     renderer: &Renderer,
     viewport: Option<ViewWindow>,
 ) -> ApiResult<web_sys::Blob> {
-    let plugin = renderer.get_active_plugin()?;
-    let view: perspective_client::View = session
-        .get_view()
-        .ok_or(ApiError::from(ApiErrorType::NoTableError))?;
+    renderer
+        .clone()
+        .render_task(|_guard| async move {
+            let plugin = renderer.ensure_plugin_selected()?;
+            let view: perspective_client::View = session
+                .get_view()
+                .ok_or(ApiError::from(ApiErrorType::NoTableError))?;
 
-    let txt = plugin
-        .render(view.into(), viewport.map(|x| x.into()))
-        .await?;
-
-    Ok(txt)
+            plugin.render(view.into(), viewport.map(|x| x.into())).await
+        })
+        .await
 }
 
 /// Generate a result `Blob` for all types of [`ExportMethod`].

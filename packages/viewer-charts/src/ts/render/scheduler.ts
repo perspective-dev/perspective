@@ -16,8 +16,8 @@ import type { WebGLContextManager } from "../webgl/context-manager";
  * Module-level render scheduler. The single entry point for driving a
  * chart frame. Every render-triggering caller — upload chunks, zoom /
  * pan, resize, theme invalidation, host-driven redraws — calls
- * `requestRender(glManager, fullRender)` and awaits the returned
- * promise.
+ * `requestRender(glManager, fullRender, render2D)` and awaits the
+ * returned promise.
  *
  * ## Guarantees
  *
@@ -51,9 +51,12 @@ import type { WebGLContextManager } from "../webgl/context-manager";
  *     begins, letting per-context GPU work overlap.
  *
  *   - **Phase 2 (parallel):** `Promise.all(snapshot.map(present))`
- *     where `present` does `await awaitGpuFence(); endFrame();
- *     resolve waiters`. Each entry's waiters resolve as soon as its
- *     own present completes — independent of other entries.
+ *     where `present` does `await awaitGpuFence(); render2D();
+ *     endFrame(); resolve waiters`. The `render2D()` step draws the 2D
+ *     layers (gridlines + chrome) only after the GPU fence, so the 2D
+ *     placeholder canvases don't present a frame ahead of the GL frame
+ *     on resize. Each entry's waiters resolve as soon as its own
+ *     present completes — independent of other entries.
  *
  * ## Failure modes
  *
@@ -78,6 +81,15 @@ import type { WebGLContextManager } from "../webgl/context-manager";
 interface Entry {
     glManager: WebGLContextManager;
     fullRender: () => void;
+    /**
+     * The chart's 2D-canvas draws (gridlines + chrome), split out of
+     * `fullRender` so they run *after* `awaitGpuFence` — see
+     * {@link present}. Deferring the 2D work past the GPU fence keeps
+     * the 2D placeholder canvases from pushing a resized frame to the
+     * compositor a frame ahead of the GL present (the GL/2D "distortion"
+     * on resize). Populated as captured closures during `fullRender`.
+     */
+    render2D: () => void;
     waiters: PromiseWithResolvers<void>[];
 }
 
@@ -105,25 +117,30 @@ const inFlight = new Set<WebGLContextManager>();
 const deferred = new Map<WebGLContextManager, (() => void)[]>();
 
 /**
- * Request a coalesced render of `glManager` whose body is
- * `fullRender`. Returns a promise that resolves when this entry's
- * Phase 2 (`awaitGpuFence` + `endFrame`) completes.
+ * Request a coalesced render of `glManager`. `fullRender` submits the
+ * GL commands (Phase 1, synchronous); `render2D` draws the 2D layers
+ * (gridlines + chrome) and runs in Phase 2 *after* `awaitGpuFence`, so
+ * the 2D canvases don't present ahead of the GL frame. Returns a
+ * promise that resolves when this entry's Phase 2 (`awaitGpuFence` +
+ * `render2D` + `endFrame`) completes.
  *
  * If a request is already pending for the same glManager, the new
- * call's `fullRender` closure replaces the prior one (latest call
- * wins; closures read chart state lazily so this is functionally a
- * no-op, but keeps the closure fresh) and the returned promise
- * resolves alongside the existing waiters.
+ * call's `fullRender` / `render2D` closures replace the prior ones
+ * (latest call wins; closures read chart state lazily so this is
+ * functionally a no-op, but keeps the closures fresh) and the returned
+ * promise resolves alongside the existing waiters.
  */
 export function requestRender(
     glManager: WebGLContextManager,
     fullRender: () => void,
+    render2D: () => void,
 ): Promise<void> {
     let entry = pending.get(glManager);
     if (entry) {
         entry.fullRender = fullRender;
+        entry.render2D = render2D;
     } else {
-        entry = { glManager, fullRender, waiters: [] };
+        entry = { glManager, fullRender, render2D, waiters: [] };
         pending.set(glManager, entry);
     }
 
@@ -354,6 +371,15 @@ async function present(entry: Entry): Promise<void> {
 
     try {
         await entry.glManager.awaitGpuFence();
+        // Draw the 2D layers (gridlines + chrome) only now that the GL
+        // frame's GPU work has completed. Issuing the 2D-canvas commands
+        // here — rather than inline in `fullRender` (Phase 1) — keeps the
+        // 2D placeholder canvases from pushing their resized frame to the
+        // compositor during the fence-wait yields, a frame ahead of the
+        // GL present. That early push is the visible GL/2D misalignment
+        // on resize. Failures fall through to the same present-failed
+        // path as the fence.
+        entry.render2D();
         entry.glManager.endFrame();
         for (const w of entry.waiters) {
             w.resolve();

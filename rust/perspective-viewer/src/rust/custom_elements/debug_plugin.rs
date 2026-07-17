@@ -65,8 +65,27 @@ impl PerspectiveDebugPluginElement {
         JsValue::UNDEFINED
     }
 
+    /// Delegates to `draw()` VIRTUALLY — through the JS element's `draw`
+    /// property, never `self.draw(view)` (Rust static dispatch). This
+    /// element is the documented base class for custom plugins
+    /// (`class MyPlugin extends
+    /// customElements.get("perspective-viewer-plugin")`), whose contract is
+    /// "`update()` defaults to dispatch to `draw()`" — a
+    /// subclass overriding only `draw` must receive `update`-path repaints
+    /// (`BindDisposition::Unchanged`/`Adopted` runs,
+    /// `PLUGIN_DRAW_INVARIANT_PLAN.md`); the static call bypassed the
+    /// override and repainted the Debug CSV instead (the
+    /// `view_lifecycle.spec` regression).
     pub fn update(&self, view: &perspective_js::View) -> ApiFuture<()> {
-        self.draw(view)
+        clone!(self.elem, view);
+        ApiFuture::new(async move {
+            let draw = js_sys::Reflect::get(&elem, &JsValue::from_str("draw"))?
+                .dyn_into::<js_sys::Function>()?;
+
+            let task = draw.call1(&elem, &JsValue::from(view))?;
+            wasm_bindgen_futures::JsFuture::from(js_sys::Promise::resolve(&task)).await?;
+            Ok(())
+        })
     }
 
     /// # Notes

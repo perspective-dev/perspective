@@ -14,7 +14,21 @@
 @import "./intl.css";
 
 perspective-viewer,
-perspective-workspace,
+/* Per-panel light-DOM descendants (the plugin + `<PanelTab>`, both carrying a
+   `theme` attribute) get the complete base too — so each panel resolves real
+   `color`/`font-family` and every `--psp-*` from its OWN theme instead of
+   inheriting the active panel's. Theme overrides refine this via the matching
+   `perspective-viewer [theme="X"]` rule.
+
+   `:where()` gives this clause ZERO specificity, so the panel's own
+   `[theme="X"]` override (specificity 0,1,1) ALWAYS wins over this default base.
+   Without it the two would tie at (0,1,1) and import order would decide — and
+   because every theme file `@import`s `defaults.css`, the base is inlined after
+   later overrides and the default would leak over the panel's theme. A
+   zero-specificity rule still beats inheritance, so the base values apply where
+   the override is silent. */
+:where(perspective-viewer [theme]),
+perspective-context-menu,
 perspective-copy-menu,
 perspective-export-menu,
 perspective-dropdown,
@@ -26,7 +40,6 @@ perspective-string-column-style {
     --psp--color: #161616;
 
     color: var(--psp--color);
-    background-color: transparent;
 
     --psp-inactive--color: #ababab;
     --psp-inactive--border-color: #dadada;
@@ -127,9 +140,48 @@ perspective-string-column-style {
         #42b3d5 67.5%,
         #1a237e 100%
     );
+
+    /* Completeness anchors for per-panel theming. These are color/appearance
+       vars that some themes (e.g. Pro Dark) set but the light default does not
+       — so without a base value an unthemed/light panel would *inherit* them
+       from a differently-themed (active) panel, mixing themes. `initial` makes
+       the custom property the guaranteed-invalid value: consumers fall back to
+       their own default (identical to the current unthemed rendering) AND the
+       element no longer inherits a neighboring panel's value. A theme that
+       wants a real value overrides it in its `[theme="X"]` block as usual. */
+    --psp-active--background: initial;
+    --psp-calendar--filter: initial;
+    --psp-charts--legend--color: initial;
+    --psp-charts--tooltip--background: initial;
+    --psp-charts--treemap--hover-highlight: initial;
+    --psp-charts--treemap--labels: initial;
+    --psp-code-editor--column--color: initial;
+    --psp-code-editor--comment--color: initial;
+    --psp-code-editor--literal--color: initial;
+    --psp-code-editor--operator--color: initial;
+    --psp-code-editor--symbol--color: initial;
+    --psp-expression--error--color: initial;
+    --psp-expression--function--color: initial;
+    --psp-expression--operator--color: initial;
+    --psp-input--filter: initial;
+    --psp-openlayers--attribution--filter: initial;
+    --psp-charts--series-11--color: initial;
+    --psp-charts--series-12--color: initial;
+    --psp-charts--map-tiles--url: initial;
+    --psp-column-type--boolean--color: initial;
+    --psp-column-type--date--color: initial;
+    --psp-column-type--float--color: initial;
+    --psp-column-type--string--color: initial;
+    --psp-datagrid--border-color: initial;
+    --psp-datagrid--hover--border-color: initial;
+    --psp-expression--psp-error--color: initial;
+    --psp-status-icon--connected--color: initial;
+    --psp-status-icon--initializing--color: initial;
+    --psp-status-icon--psp-error--color: initial;
 }
 
 /* Modal defaults */
+perspective-context-menu,
 perspective-copy-menu,
 perspective-export-menu,
 perspective-dropdown,

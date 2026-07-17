@@ -12,7 +12,6 @@
 
 use itertools::Itertools;
 use perspective_client::config::*;
-use perspective_js::utils::ApiFuture;
 use web_sys::*;
 use yew::prelude::*;
 
@@ -22,6 +21,7 @@ use crate::config::ColumnSelectMode;
 use crate::presentation::{ColumnLocator, Presentation};
 use crate::renderer::*;
 use crate::session::*;
+use crate::tasks::apply_and_render;
 use crate::utils::*;
 
 #[derive(Clone, Properties)]
@@ -231,13 +231,8 @@ impl InactiveColumnProps {
             ..ViewConfigUpdate::default()
         };
 
-        if self.session.update_view_config(config).is_ok() {
-            let session = self.session.clone();
-            let renderer = self.renderer.clone();
-            ApiFuture::spawn(async move {
-                renderer.apply_pending_plugin()?;
-                renderer.draw(session.validate().await?.create_view()).await
-            });
+        if let Ok(task) = apply_and_render(&self.session, &self.renderer, config) {
+            spawn_owned("inactive-column", task);
         }
     }
 }

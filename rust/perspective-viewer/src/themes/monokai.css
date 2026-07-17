@@ -13,11 +13,13 @@
 @import "./defaults.css";
 
 perspective-viewer,
-perspective-viewer[theme="Monokai"] {
+perspective-viewer[theme="Monokai"],
+perspective-viewer [theme="Monokai"] {
     --psp-theme-name: "Monokai";
 }
 
-perspective-viewer[theme="Monokai"] {
+perspective-viewer[theme="Monokai"],
+perspective-viewer [theme="Monokai"] {
     /* perspective-viewer-pro-dark--colors (overrides) */
     background-color: #242526;
     color: white;
@@ -163,6 +165,7 @@ perspective-viewer[theme="Monokai"] {
     );
 }
 
+perspective-context-menu[theme="Monokai"],
 perspective-copy-menu[theme="Monokai"],
 perspective-export-menu[theme="Monokai"],
 perspective-dropdown[theme="Monokai"],

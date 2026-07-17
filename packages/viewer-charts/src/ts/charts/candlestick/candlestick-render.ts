@@ -224,7 +224,10 @@ export function renderCandlestickFrame(
     chart._lastCatTicks = numericCat
         ? computeNiceTicks(vis.xMin, vis.xMax, 6)
         : null;
-    renderCandlestickChromeOverlay(chart);
+    // Deferred past the GPU fence (see `_defer2D`) so the chrome canvas
+    // doesn't present ahead of the GL glyphs on resize. Reads the
+    // `_last*` frame state set above.
+    chart._defer2D(() => renderCandlestickChromeOverlay(chart));
 }
 
 export function renderCandlestickChromeOverlay(chart: CandlestickChart): void {

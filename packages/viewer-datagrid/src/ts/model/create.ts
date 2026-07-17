@@ -102,10 +102,10 @@ export async function createModel(
     regular: RegularTable,
     table: Table,
     view: View,
-    theme: string,
     extend: Partial<DatagridModel> = {},
 ): Promise<DatagridModel> {
     const config = (await view.get_config()) as ViewConfig;
+    const theme = get_rule(regular, "--psp-theme-name", "");
     if (this?.model?._config) {
         const old = this.model._config;
         const group_by_changed = arraysChanged(old.group_by, config.group_by);
@@ -147,13 +147,16 @@ export async function createModel(
             type_changed;
     }
 
+    const _panel = this.getAttribute("slot") ?? undefined;
     const [table_schema, num_rows, schema, expression_schema, _edit_port] =
         await Promise.all([
             table.schema(),
             view.num_rows(),
             view.schema(),
             view.expression_schema(),
-            (this.parentElement as HTMLPerspectiveViewerElement).getEditPort(),
+            (
+                this.parentElement as HTMLPerspectiveViewerElement
+            ).getEditPortPanel(_panel),
         ]);
 
     const _plugin_background = parseColor(
@@ -202,8 +205,12 @@ export async function createModel(
         this._edit_mode = _edit_mode;
     }
 
-    this._edit_button!.dataset.editMode = _edit_mode;
+    if (this._edit_button !== undefined) {
+        this._edit_button.dataset.editMode = _edit_mode;
+    }
+
     const model: DatagridModel = Object.assign(extend, {
+        _panel,
         _edit_port,
         _view: view,
         _table: table,

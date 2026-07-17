@@ -33,7 +33,11 @@ export class HTMLPerspectiveViewerDatagridToolbarElement extends HTMLElement {
         }
 
         this._initialized = true;
-        this.setAttribute("slot", "statusbar-extra");
+        const panel = this.previousElementSibling?.getAttribute("slot");
+        this.setAttribute(
+            "slot",
+            panel ? `statusbar-extra-${panel}` : "statusbar-extra",
+        );
         this.attachShadow({ mode: "open" });
         this.shadowRoot!.adoptedStyleSheets.push(stylesheet);
         this.shadowRoot!.innerHTML = `
@@ -52,11 +56,17 @@ export class HTMLPerspectiveViewerDatagridToolbarElement extends HTMLElement {
         `;
 
         const viewer = this.parentElement as HTMLPerspectiveViewerElement;
-        const plugin = this.previousElementSibling as DatagridPluginElement;
+        const prev = this.previousElementSibling;
+        const plugin = (
+            prev?.tagName === "PERSPECTIVE-VIEWER-DATAGRID"
+                ? prev
+                : viewer.getPlugin("Datagrid")
+        ) as DatagridPluginElement;
 
         plugin._scroll_lock = this.shadowRoot!.querySelector(
             "#scroll_lock",
         ) as HTMLElement;
+
         plugin._scroll_lock.addEventListener("click", () =>
             toggle_scroll_lock.call(plugin),
         );
@@ -65,6 +75,7 @@ export class HTMLPerspectiveViewerDatagridToolbarElement extends HTMLElement {
             "#edit_mode",
         ) as HTMLElement;
 
+        plugin._edit_button.dataset.editMode = plugin._edit_mode ?? "READ_ONLY";
         plugin._edit_button.addEventListener("click", () => {
             toggle_edit_mode.call(plugin);
             plugin.regular_table.draw();

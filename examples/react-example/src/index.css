@@ -38,14 +38,11 @@ perspective-viewer {
     margin: 12px;
 }
 
-perspective-workspace {
+.my-perspective-workspace {
     grid-row-start: 2;
     grid-row-end: 4;
     grid-column: 2;
     overflow: hidden;
-}
-
-perspective-workspace perspective-viewer {
     margin: 0px;
 }
 

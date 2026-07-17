@@ -18,7 +18,6 @@ import {
     type SeriesChartRecord,
 } from "./series-build";
 import {
-    renderBarFrame,
     uploadBarInstances,
     rebuildGlyphBuffers,
     rightAxisDataToPixel,
@@ -383,7 +382,7 @@ function clearHover(chart: SeriesChart): void {
         chart._hoveredBarIdx = -1;
         chart._hoveredSample = null;
         if (chart._glManager) {
-            renderBarFrame(chart, chart._glManager);
+            chart.requestRender(chart._glManager);
         }
     }
 }
@@ -405,7 +404,7 @@ function applyHover(
     chart._hoveredBarIdx = nextBarIdx;
     chart._hoveredSample = nextSample;
     if (chart._glManager) {
-        renderBarFrame(chart, chart._glManager);
+        chart.requestRender(chart._glManager);
     }
 }
 
@@ -454,7 +453,7 @@ export function handleBarLegendClick(
             if (chart._glManager) {
                 uploadBarInstances(chart, chart._glManager);
                 rebuildGlyphBuffers(chart, chart._glManager);
-                renderBarFrame(chart, chart._glManager);
+                chart.requestRender(chart._glManager);
             }
 
             return true;
@@ -594,7 +593,7 @@ function pinTooltip(chart: SeriesChart, b: SeriesChartRecord): void {
     chart._hoveredBarIdx = -1;
     chart._hoveredSample = null;
     if (chart._glManager) {
-        renderBarFrame(chart, chart._glManager);
+        chart.requestRender(chart._glManager);
     }
 }
 

@@ -13,7 +13,6 @@
 import type { SunburstChart } from "./sunburst";
 import { NULL_NODE } from "../common/node-store";
 import {
-    renderSunburstFrame,
     renderSunburstChromeOverlay,
     facetCenterForNode,
 } from "./sunburst-render";
@@ -264,7 +263,7 @@ export function handleSunburstClick(
                 }
 
                 if (chart._glManager) {
-                    renderSunburstFrame(chart, chart._glManager);
+                    chart.requestRender(chart._glManager);
                 }
             }
 
@@ -289,7 +288,7 @@ export function handleSunburstClick(
 function drillTo(chart: SunburstChart, nodeId: number): void {
     treeDrillTo(chart, nodeId, () => {
         if (chart._glManager) {
-            renderSunburstFrame(chart, chart._glManager);
+            chart.requestRender(chart._glManager);
         }
     });
 }

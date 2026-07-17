@@ -17,8 +17,7 @@ perspective-viewer {
     margin-left: 60px;
 }
 
-perspective-viewer[theme="Pro Light"],
-perspective-viewer[theme="Pro Dark"] {
+[theme="Pro Light"], [theme="Pro Dark"] {
     --psp-charts--gradient--background: linear-gradient(
         #000 0%,
         #94d0ff 50%,

@@ -16,7 +16,7 @@ perspective-viewer[theme="Pro Dark"] {
             #20de8b);
 }
 
-perspective-workspace {
+perspective-viewer {
     position: absolute;
     top: 0;
     left: 0;

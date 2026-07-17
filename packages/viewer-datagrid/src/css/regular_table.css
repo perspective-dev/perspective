@@ -514,7 +514,8 @@ regular-table tbody tr:hover {
 /* until the drawing is done. However, this causes the datagrid to draw its */
 /* _first_ frame as if its in the wrong state, as it detects sidepanel state */
 /* via HTML attribute checking. */
-regular-table
+:host(.active)
+    regular-table
     #psp-column-edit-buttons
     th:not(.rt-group-corner)
     span:not(.rt-column-resize):before {

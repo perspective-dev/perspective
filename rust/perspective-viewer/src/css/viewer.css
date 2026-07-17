@@ -16,10 +16,6 @@
     --psp--color: #ff0000;
 }
 
-/* Shift-key affordance: while the user holds Shift, any mask-image icon
- * tagged `.shift-alt-icon` recolors to advertise that a Shift-modified
- * action is available on the underlying control. `!important` is required
- * to beat per-icon ID-scoped `background-color` rules. */
 :host(.shift-active) .shift-alt-icon {
     background-color: var(
         --shift-active--color,
@@ -93,8 +89,18 @@
     pointer-events: var(--override-content-pointer-events);
 }
 
+::slotted(:not([slot^="statusbar-extra"]):not([slot^="tab-"])) {
+    position: absolute;
+    inset: 0;
+    background-color: var(--psp--background-color) !important;
+    box-shadow:
+        2.25px 2.25px 0 2.25px var(--psp--background-color),
+        -2.25px 2.25px 0 2.25px var(--psp--background-color),
+        2.75px 2.75px 0 2.75px var(--psp-inactive--color);
+}
+
 :host input[type="number"]::-webkit-inner-spin-button {
-    transform: scale(1.5) translateX(-5px); /* Makes the arrows 50% larger */
+    transform: scale(1.5) translateX(-5px);
     filter: var(--psp-input--filter);
 }
 
@@ -105,7 +111,7 @@
         (
                 var(
                         --psp-plugin-selector--height,
-                        var(--psp-status-bar--height, 48px)
+                        var(--psp-status-bar--height, 38px)
                     ) -
                     20px
             ) /
@@ -115,7 +121,7 @@
         (
                 var(
                         --psp-plugin-selector--height,
-                        var(--psp-status-bar--height, 48px)
+                        var(--psp-status-bar--height, 38px)
                     ) -
                     20px
             ) /
@@ -124,7 +130,7 @@
     z-index: 10000;
     height: var(
         --psp-plugin-selector--height,
-        var(--psp-status-bar--height, 48px)
+        var(--psp-status-bar--height, 38px)
     );
 
     &:hover {
@@ -241,6 +247,14 @@
         flex-direction: column;
     }
 
+    #layout_area {
+        flex: 1 1 auto;
+        position: relative;
+        min-height: 0;
+        display: flex;
+        overflow: hidden;
+    }
+
     #app_panel {
         position: absolute;
         bottom: 0px;
@@ -274,7 +288,7 @@
     }
 
     #status_bar {
-        height: var(--psp-status-bar--height, 48px);
+        height: var(--psp-status-bar--height, 38px);
     }
 
     #main_column_container {
@@ -297,15 +311,119 @@
     }
 
     #main_panel_container {
+        z-index: 0;
         position: relative;
         height: 100%;
         box-shadow: var(--plugin--box-shadow, none);
+        overflow: hidden;
+        border: var(--psp-plugin--border, none);
         background: var(
             --psp-main-column--background,
             var(--psp--background-color, none)
         );
-        overflow: hidden;
-        border: var(--psp-plugin--border, none);
+
+        /* The layout engine hosting this panel's plugin fills the container. */
+        & regular-layout {
+            position: absolute;
+            inset: -2px -3px -3px -3px;
+            box-sizing: border-box;
+            padding: 0px;
+            background: var(--psp-panel-gap--background, #808080);
+
+            & > .rl-panel {
+                position: relative;
+                box-sizing: border-box;
+                background: none;
+                border: 1px solid transparent;
+                margin: var(--psp-panel--margin, 4px);
+            }
+
+            & > .rl-panel::part(container) {
+                position: relative;
+                background: var(--psp--background-color);
+            }
+
+            & > .rl-panel::part(titlebar-track) {
+                gap: 10px;
+            }
+
+            & > .rl-panel::part(titlebar) {
+                display: flex;
+                align-items: stretch;
+                height: var(--psp-panel-titlebar--height, 24px);
+                font-family: var(--button--font-family, inherit);
+                overflow: visible;
+            }
+
+            & > .rl-panel::part(tab) {
+                display: flex;
+                flex: 1 1 auto;
+                align-items: center;
+                min-width: 0;
+                padding: 0 8px;
+                cursor: pointer;
+                font-size: 11px;
+                white-space: nowrap;
+                color: var(--psp--color, inherit);
+                background: var(--psp--background-color, #ffffff);
+            }
+
+            & > .rl-panel::part(title) {
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            & > .rl-panel::part(close) {
+                flex: 0 0 auto;
+                align-self: center;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 16px;
+                height: 16px;
+                margin: 0 4px;
+                border: none;
+                background: none;
+                cursor: pointer;
+                opacity: 0.6;
+                color: inherit;
+            }
+
+            & > .rl-panel::part(close):hover {
+                opacity: 1;
+            }
+
+            & > .rl-panel::part(close):before {
+                content: "×";
+                font-size: 14px;
+                line-height: 1;
+            }
+
+            & > .rl-panel.single::part(close) {
+                display: none;
+            }
+
+            &:has(.overlay) > * {
+                opacity: 0.7;
+            }
+
+            &:has(.overlay) > .overlay {
+                opacity: 1;
+            }
+
+            & > .overlay {
+                /* background: var(
+                    --psp-panel-overlay--background,
+                    rgba(26, 125, 161, 0.15)
+                ); */
+
+                transition:
+                    top 0.1s ease-in-out,
+                    left 0.1s ease-in-out,
+                    width 0.1s ease-in-out,
+                    height 0.1s ease-in-out;
+            }
+        }
     }
 
     #settings_panel {
@@ -388,7 +506,6 @@
         border-radius: 5px;
         font-size: 10px;
         font-weight: normal;
-
         &:hover {
             color: var(--psp--background-color, inherit);
             background-color: var(--psp--color);
@@ -506,10 +623,11 @@
         min-height: calc(
             var(
                     --psp-plugin-selector--height,
-                    var(--psp-status-bar--height, 48px)
+                    var(--psp-status-bar--height, 38px)
                 ) +
                 1px
         );
+        z-index: 7;
         overflow: hidden;
         display: flex;
         flex-direction: column;

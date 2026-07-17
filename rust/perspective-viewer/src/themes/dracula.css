@@ -13,11 +13,13 @@
 @import "./defaults.css";
 
 perspective-viewer,
-perspective-viewer[theme="Dracula"] {
+perspective-viewer[theme="Dracula"],
+perspective-viewer [theme="Dracula"] {
     --psp-theme-name: "Dracula";
 }
 
-perspective-viewer[theme="Dracula"] {
+perspective-viewer[theme="Dracula"],
+perspective-viewer [theme="Dracula"] {
     /* perspective-viewer-pro-dark--colors (overrides) */
     background-color: #242526;
     color: white;
@@ -122,7 +124,7 @@ perspective-viewer[theme="Dracula"] {
     --theme-pink: #ff79c6;
 
     color: var(--theme-fg0);
-    background-color: var(--theme-bg0);
+    background-color: var(--theme-bg1);
     --psp--color: var(--theme-fg1);
     --psp-inactive--color: var(--theme-fg2);
     --psp-inactive--border-color: var(--theme-bg2);
@@ -154,6 +156,7 @@ perspective-viewer[theme="Dracula"] {
     ) !important;
 }
 
+perspective-context-menu[theme="Dracula"],
 perspective-copy-menu[theme="Dracula"],
 perspective-export-menu[theme="Dracula"],
 perspective-dropdown[theme="Dracula"] {

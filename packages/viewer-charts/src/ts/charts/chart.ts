@@ -44,12 +44,22 @@ export interface ChartImplementation {
     requestRender(glManager: WebGLContextManager): Promise<void>;
 
     /**
-     * The chart-specific frame builder. The scheduler wraps this with
-     * fence + `endFrame`; callers must not invoke it directly except
-     * for `snapshotPng`, which needs an intact GL backbuffer for
-     * `gl.readPixels` and so must skip the `endFrame` pair.
+     * The chart-specific GL frame builder. Submits the GL draw commands
+     * and stashes the frame's 2D-canvas draws (gridlines + chrome) for
+     * the scheduler to flush after `awaitGpuFence`. The scheduler wraps
+     * this with fence + 2D flush + `endFrame`; callers must not invoke
+     * it directly — `snapshotPng` uses {@link renderFrameSync} instead.
      */
     _fullRender(glManager: WebGLContextManager): void;
+
+    /**
+     * Synchronous full frame (GL + 2D) for the `snapshotPng` bypass,
+     * which sits outside the scheduler and needs the gridline/chrome
+     * canvases painted before compositing. Runs the GL pass then flushes
+     * the deferred 2D draws immediately, skipping the fence split and
+     * `endFrame` so the GL backbuffer stays intact for `gl.readPixels`.
+     */
+    renderFrameSync(glManager: WebGLContextManager): void;
 
     /**
      * Hand the current View to the chart so it can make on-demand
@@ -173,6 +183,15 @@ export interface ChartImplementation {
      * hook internally.
      */
     resetExpandedDomain?(): void;
+
+    /**
+     * Silently clear any active selection state (pinned tooltip) WITHOUT
+     * emitting selection events. Driven from the host's `deselect`
+     * message — its global filter bar removed a clause this chart's
+     * selection contributed, so an unselect emit would double-mutate the
+     * host's filter set.
+     */
+    deselect?(): void;
 
     destroy(): void;
 }

@@ -163,6 +163,11 @@ export type Schema = Record<string, ColumnType>;
 
 // Model object stored on regular-table
 export interface DatagridModel {
+    /** This datagrid's panel id (the plugin element's `slot`, stamped by the
+     * host viewer) — `undefined` for a lone, unslotted panel. Passed as the
+     * `name` argument of the host's `*Panel` API variants so every viewer
+     * call targets THIS panel, never the host's active panel. */
+    _panel?: string;
     _edit_port: number;
     _view: View;
     _table: Table;
@@ -248,6 +253,8 @@ export interface PerspectiveClickDetail {
     row: Record<string, unknown>;
     column_names: string[];
     config: Partial<ViewConfig>;
+    /** The id (`slot`) of the panel that fired this, in a multi-panel viewer. */
+    panel?: string;
 }
 
 export { PerspectiveSelectDetail } from "@perspective-dev/viewer/src/ts/extensions.js";
@@ -285,13 +292,17 @@ export type SelectedPositionMap = WeakMap<
 // Centralized editable mode check - used by style handlers and event handlers
 export function isEditableMode(
     model: DatagridModel,
-    viewer: HTMLPerspectiveViewerElement,
+    _viewer: HTMLPerspectiveViewerElement,
     allowed: boolean = false,
 ): boolean {
     const has_pivots =
         model._config.group_by.length === 0 &&
         model._config.split_by.length === 0;
-    const plugin = viewer.children[0] as DatagridPluginElement | undefined;
-    const editable = allowed || plugin?._edit_mode === "EDIT";
+    // Read the edit mode from the model (mirrored from the plugin element in
+    // `model/create.ts`) rather than `viewer.children[0]`: the host viewer's
+    // light DOM now also holds per-panel `<perspective-viewer-tab>` and
+    // `statusbar-extra-*` elements, so the datagrid plugin is no longer
+    // reliably the first child.
+    const editable = allowed || model._edit_mode === "EDIT";
     return has_pivots && editable;
 }

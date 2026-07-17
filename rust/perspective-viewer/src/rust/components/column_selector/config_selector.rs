@@ -14,7 +14,6 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use perspective_client::config::{ViewConfig, *};
-use perspective_js::utils::ApiFuture;
 use yew::prelude::*;
 
 use super::InPlaceColumn;
@@ -29,6 +28,7 @@ use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::drag_drop_update::*;
 use crate::session::*;
+use crate::tasks::apply_and_render;
 use crate::utils::*;
 
 #[derive(Clone, Properties)]
@@ -132,11 +132,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(config).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, config) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -152,11 +149,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(config).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, config) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -191,11 +185,8 @@ impl Component for ConfigSelector {
                     {
                         let session = ctx.props().session.clone();
                         let renderer = ctx.props().renderer.clone();
-                        if session.update_view_config(config).is_ok() {
-                            ApiFuture::spawn(async move {
-                                renderer.apply_pending_plugin()?;
-                                renderer.draw(session.validate().await?.create_view()).await
-                            });
+                        if let Ok(task) = apply_and_render(&session, &renderer, config) {
+                            spawn_owned("config-selector", task);
                         }
                     }
 
@@ -214,11 +205,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(config).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, config) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -237,11 +225,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(config).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, config) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -270,11 +255,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -300,11 +282,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("config-selector", task);
                     }
                 }
                 ctx.props().onselect.emit(());
@@ -345,11 +324,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -366,11 +342,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -388,11 +361,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -416,11 +386,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -438,11 +405,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -462,11 +426,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -486,11 +447,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -518,11 +476,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 
@@ -544,11 +499,8 @@ impl Component for ConfigSelector {
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("config-selector", task);
                     }
                 }
 

@@ -19,10 +19,12 @@ pub mod clipboard_item;
 mod intersection_observer;
 mod mimetype;
 pub mod plugin;
+pub mod regular_layout;
 pub mod resize_observer;
 
 pub use self::clipboard::*;
 pub use self::intersection_observer::*;
 pub use self::mimetype::*;
 pub use self::plugin::*;
+pub use self::regular_layout::*;
 pub use self::resize_observer::*;

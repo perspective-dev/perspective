@@ -13,11 +13,13 @@
 @import "./defaults.css";
 
 perspective-viewer,
-perspective-viewer[theme="Gruvbox Light"] {
+perspective-viewer[theme="Gruvbox Light"],
+perspective-viewer [theme="Gruvbox Light"] {
     --psp-theme-name: "Gruvbox Light";
 }
 
-perspective-viewer[theme="Gruvbox Light"] {
+perspective-viewer[theme="Gruvbox Light"],
+perspective-viewer [theme="Gruvbox Light"] {
     /* perspective-viewer-gruvbox-light--colors */
     --theme-fg0: #282828;
     --theme-fg1: #3c3836;
@@ -83,6 +85,7 @@ perspective-viewer[theme="Gruvbox Light"] {
     ) !important;
 }
 
+perspective-context-menu[theme="Gruvbox Light"],
 perspective-copy-menu[theme="Gruvbox Light"],
 perspective-export-menu[theme="Gruvbox Light"],
 perspective-dropdown[theme="Gruvbox Light"] {

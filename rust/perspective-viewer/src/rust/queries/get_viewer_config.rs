@@ -28,27 +28,42 @@ pub async fn get_viewer_config(
     presentation: &Presentation,
 ) -> ApiResult<ViewerConfig> {
     let version = config::API_VERSION.to_string();
-    let view_config = if let Some(rendered) = session.get_rendered_view_config() {
+    let mut view_config = if let Some(rendered) = session.get_rendered_view_config() {
         (*rendered).clone()
     } else {
         session.get_view_config().clone()
     };
+
+    // The rendered config may carry transient element-level global filters
+    // (master/detail) appended at view-creation; the stored `config.filter` is
+    // always the panel's own user filter, so use it here to keep `save`/
+    // `getViewConfig` free of global filters.
+    view_config.filter = session.get_view_config().filter.clone();
     let settings = presentation.is_settings_open();
     let plugin = renderer.metadata().name.clone();
     let plugin_config = renderer.get_plugin_config();
-    let theme = presentation.get_selected_theme_name().await;
+    // Per-panel theme: a panel's own theme takes precedence; a panel with none
+    // records the registry DEFAULT (first registered theme) it actually renders
+    // — every panel has a concrete theme and none inherits the active panel's.
+    // `None` only when no themes are registered.
+    let theme = match renderer.theme() {
+        theme @ Some(_) => theme,
+        None => presentation.get_available_themes().await?.first().cloned(),
+    };
     let title = session.get_title();
     let table = session.get_table().map(|x| x.get_name().to_owned());
     let columns_config = renderer.all_columns_configs();
     Ok(ViewerConfig {
-        version,
-        plugin,
-        title,
-        plugin_config,
-        columns_config,
         settings,
-        table,
-        view_config,
-        theme,
+        panel: PanelViewerConfig {
+            version,
+            plugin,
+            title,
+            plugin_config,
+            columns_config,
+            table,
+            view_config,
+            theme,
+        },
     })
 }

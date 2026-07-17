@@ -72,6 +72,13 @@ impl DragState {
 pub struct PresentationHandle {
     viewer_elem: HtmlElement,
     theme_data: Mutex<ThemeData>,
+
+    /// SYNC mirror of the registry default (first) theme name, filled
+    /// whenever the async registry cache resolves. Lets synchronous code
+    /// paths ("stamp with commit" — panel creation, theme mutation sites)
+    /// resolve a panel's effective theme without awaiting registry init.
+    /// `None` = registry not yet parsed (or no themes exist).
+    default_theme: RefCell<Option<String>>,
     is_settings_open: RefCell<bool>,
     open_column_settings: RefCell<OpenColumnSettings>,
     is_workspace: RefCell<Option<bool>>,
@@ -100,13 +107,6 @@ pub struct PresentationHandle {
     /// the duration of the drag.
     drag_target: RefCell<Option<DragTargetState>>,
 
-    /// Per-element dedup cell for `perspective-config-update` event
-    /// dispatch. Read+written by `crate::custom_events::dispatch_*`
-    /// helpers; living here means every consumer with a `&Presentation`
-    /// (subscriptions in `wire_custom_events`, `tasks::send_plugin_config`,
-    /// `setSelection`) sees the same cache without separate plumbing.
-    pub last_dispatched_config: RefCell<Option<crate::config::ViewerConfig>>,
-
     pub settings_open_changed: PubSub<bool>,
 
     /// Injected callback from the root component, replacing the former
@@ -118,7 +118,7 @@ pub struct PresentationHandle {
     pub on_eject: PubSub<()>,
 
     /// Fires for status-bar / main-panel pointer events that target the
-    /// statusbar element. `wire_custom_events` formats the `PointerEvent`'s
+    /// statusbar element. `wire_element_events` formats the `PointerEvent`'s
     /// `type_()` into a `perspective-statusbar-{type}` `CustomEvent` name.
     pub statusbar_pointer_event: PubSub<PointerEvent>,
 }
@@ -149,6 +149,7 @@ impl Presentation {
         let theme = Self(Rc::new(PresentationHandle {
             viewer_elem: elem.clone(),
             theme_data: Default::default(),
+            default_theme: Default::default(),
             is_workspace: Default::default(),
             settings_open_changed: Default::default(),
             settings_before_open_changed: Default::default(),
@@ -159,7 +160,6 @@ impl Presentation {
             theme_config_updated: PubSub::default(),
             on_eject: PubSub::default(),
             statusbar_pointer_event: PubSub::default(),
-            last_dispatched_config: Default::default(),
             drag_state: Default::default(),
             drop_received: Default::default(),
             on_dragstart: Default::default(),
@@ -266,6 +266,8 @@ impl Presentation {
             data.themes = Some(themes);
         }
 
+        // Keep the SYNC default-theme mirror coherent with the async cache.
+        *self.0.default_theme.borrow_mut() = data.themes.as_ref().unwrap().first().cloned();
         Ok(data.themes.clone().unwrap().into())
     }
 
@@ -283,6 +285,7 @@ impl Presentation {
 
         let mut mutex = self.0.theme_data.lock().await;
         let changed = as_set(&mutex.themes) != as_set(&themes);
+        *self.0.default_theme.borrow_mut() = themes.as_ref().and_then(|x| x.first().cloned());
         mutex.themes = themes;
         changed
     }
@@ -307,6 +310,22 @@ impl Presentation {
         index.and_then(|x| themes.get(x).cloned())
     }
 
+    /// The default theme (first registered), used to resolve a panel's
+    /// effective theme when it has no per-panel override. `None` if no
+    /// themes exist.
+    pub async fn get_default_theme_name(&self) -> Option<String> {
+        self.get_available_themes().await.ok()?.first().cloned()
+    }
+
+    /// SYNC read of the registry default theme name — `None` until the
+    /// async registry cache first resolves (or when no themes exist). For
+    /// synchronous stamping paths that must not await registry init;
+    /// prefer [`Self::get_default_theme_name`] where awaiting is
+    /// acceptable.
+    pub fn default_theme_name_cached(&self) -> Option<String> {
+        self.0.default_theme.borrow().clone()
+    }
+
     fn set_theme_attribute(&self, theme: Option<&str>) -> ApiResult<()> {
         if let Some(theme) = theme {
             Ok(self.0.viewer_elem.set_attribute("theme", theme)?)
@@ -325,18 +344,35 @@ impl Presentation {
 
     /// Set the theme by name, or `None` for the default theme.
     ///
+    /// A NAMED theme's host attribute write is SYNCHRONOUS ("stamp with
+    /// commit") — no await separates the caller's config commit from the
+    /// attribute the document cascade styles, so a slow theme-registry
+    /// init can no longer hold the host on the former theme while e.g. an
+    /// initial `restore()`'s first draw resolves. The registry-dependent
+    /// tail (theme-list resolution + `theme_config_updated`) follows
+    /// asynchronously. `None` (reset to the registry default) still
+    /// resolves through the registry first, as the default name is not
+    /// knowable synchronously on a cold cache.
+    ///
+    /// The attribute is stamped even when the requested name is not (yet)
+    /// a registered theme — matching the prior behavior for unknown
+    /// names, and additionally making an explicitly-requested name that
+    /// HAPPENS to be the registry default explicit on the element (the
+    /// old resolved-selection no-op left it absent).
+    ///
     /// # Returns
     /// A `bool` indicating whether the internal state changed.
     pub async fn set_theme_name(&self, theme: Option<&str>) -> ApiResult<bool> {
-        let (themes, selected) = self.get_selected_theme_config().await?;
-        if let Some(x) = selected
-            && themes.get(x).map(|x| x.as_str()) == theme
-        {
-            return Ok(false);
+        if let Some(theme) = theme {
+            if self.0.viewer_elem.get_attribute("theme").as_deref() == Some(theme) {
+                return Ok(false);
+            }
+
+            self.set_theme_attribute(Some(theme))?;
         }
 
+        let themes = self.get_available_themes().await?;
         let index = if let Some(theme) = theme {
-            self.set_theme_attribute(Some(theme))?;
             themes.iter().position(|x| x == theme)
         } else if !themes.is_empty() {
             self.set_theme_attribute(themes.first().map(|x| x.as_str()))?;

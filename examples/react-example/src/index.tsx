@@ -20,20 +20,14 @@
 
 import perspective from "@perspective-dev/client";
 import perspective_viewer from "@perspective-dev/viewer";
-import perspective_workspace from "@perspective-dev/workspace";
-import "@perspective-dev/workspace";
 import "@perspective-dev/viewer-datagrid";
 import "@perspective-dev/viewer-charts";
 
 import * as React from "react";
 import { createRoot } from "react-dom/client";
-import {
-    PerspectiveViewer,
-    PerspectiveWorkspace,
-} from "@perspective-dev/react";
+import { PerspectiveViewer } from "@perspective-dev/react";
 
 import "@perspective-dev/viewer/dist/css/themes.css";
-import "@perspective-dev/workspace/dist/css/pro.css";
 import "./index.css";
 
 import type * as psp from "@perspective-dev/client";
@@ -62,12 +56,36 @@ async function createNewSuperstoreTable(): Promise<psp.Table> {
     const req = fetch(SUPERSTORE_ARROW);
     const resp = await req;
     const buffer = await resp.arrayBuffer();
-    return await WORKER.table(buffer);
+    return await WORKER.table(buffer, { name: "superstore" });
 }
 
 const CONFIG: pspViewer.ViewerConfigUpdate = {
     group_by: ["State"],
 };
+
+/// A multi-panel `<perspective-viewer>` whole-element config (a
+/// `regular-layout` tree + per-panel configs) — the same `restore()` payload
+/// shape the element's `save()` returns for a multi-panel viewer.
+const WORKSPACE_CONFIG = {
+    layout: {
+        type: "split-layout",
+        orientation: "horizontal",
+        sizes: [0.5, 0.5],
+        children: [
+            { type: "tab-layout", tabs: ["one"], selected: 0 },
+            { type: "tab-layout", tabs: ["two"], selected: 0 },
+        ],
+    },
+    panels: {
+        one: { table: "superstore", title: "Superstore", group_by: ["State"] },
+        two: {
+            table: "superstore",
+            title: "By Category",
+            group_by: ["Category"],
+            plugin: "Y Bar",
+        },
+    },
+} as unknown as pspViewer.ViewerConfigUpdate;
 
 // # React application
 
@@ -77,18 +95,12 @@ interface ToolbarState {
     mounted: boolean;
     table?: Promise<psp.Table>;
     config: pspViewer.ViewerConfigUpdate;
-    layout: perspective_workspace.PerspectiveWorkspaceConfig;
 }
 
 const App: React.FC = () => {
     const [state, setState] = React.useState<ToolbarState>(() => ({
         mounted: true,
         table: createNewSuperstoreTable(),
-        layout: {
-            detail: { main: null },
-            sizes: [],
-            viewers: {},
-        },
         config: { ...CONFIG },
     }));
 
@@ -118,15 +130,6 @@ const App: React.FC = () => {
         setState({ ...state, config });
     };
 
-    const onLayoutUpdate = (
-        layout: perspective_workspace.PerspectiveWorkspaceConfig,
-    ) => {
-        console.log("Layout Update Event", layout);
-
-        // delete config.table;
-        setState({ ...state, layout });
-    };
-
     const onClick = (detail: pspViewer.PerspectiveClickEventDetail) => {
         console.log("Click Event,", detail);
     };
@@ -153,10 +156,10 @@ const App: React.FC = () => {
                         onConfigUpdate={onConfigUpdate}
                         onSelect={onSelect}
                     />
-                    <PerspectiveWorkspace
+                    <PerspectiveViewer
+                        className="my-perspective-workspace"
                         client={WORKER}
-                        layout={state.layout}
-                        onLayoutUpdate={onLayoutUpdate}
+                        config={WORKSPACE_CONFIG}
                     />
                 </>
             )}

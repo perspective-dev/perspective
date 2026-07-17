@@ -143,6 +143,23 @@ export abstract class AbstractChart implements ChartImplementation {
     _chromeCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
 
     /**
+     * 2D-canvas draw closures collected during `_fullRender` (the GL
+     * pass) and flushed by {@link _flush2D} *after* the scheduler's
+     * `awaitGpuFence`. Deferring the gridline/chrome draws past the GPU
+     * fence stops the 2D placeholder canvases from pushing a resized
+     * frame to the compositor a frame ahead of the GL present — the
+     * visible GL/2D misalignment on resize.
+     *
+     * Renderers wrap their 2D drawing in {@link _defer2D}; the closures
+     * capture the exact per-frame locals (layout, ticks, theme) so no
+     * state needs to be recomputed or replayed from cache at flush time.
+     * Reset at the start of every GL pass (see {@link requestRender} /
+     * {@link renderFrameSync}) so a `_fullRender` that throws mid-way
+     * can't leak stale closures into the next frame.
+     */
+    _deferred2D: Array<() => void> = [];
+
+    /**
      * Host-supplied CSS-variable map. The host snapshots its DOM via
      * `snapshotThemeVars(el)` and ships it over the control channel;
      * the chart decodes via `resolveThemeFromVars` lazily in
@@ -631,6 +648,20 @@ export abstract class AbstractChart implements ChartImplementation {
     }
 
     /**
+     * Silently dismiss any pinned tooltip (the chart's selection visual)
+     * WITHOUT emitting `perspective-global-filter` — unlike the `setView`
+     * implicit dismiss above, the HOST initiated this (its global filter
+     * bar removed the clause this selection contributed), so an unselect
+     * emit would double-mutate the host's filter set.
+     * `TooltipController.dismiss()` posts the host-side pin teardown but
+     * never fires `onUnpin` (that emit belongs to `dispatchClick`'s
+     * click-to-unpin gesture), so this is emit-free by construction.
+     */
+    deselect(): void {
+        this._tooltip.dismiss();
+    }
+
+    /**
      * Build the chart-specific {@link TooltipCallbacks} object — the
      * `onHover` / `onLeave` / `onClickPre` / `onPin` / `onDblClick`
      * surface that mediates between the cursor and chart state.
@@ -810,17 +841,66 @@ export abstract class AbstractChart implements ChartImplementation {
      * scheduler so concurrent calls collapse to one `_fullRender` per
      * RAF and the host blitter receives one bitmap per frame. The
      * returned promise resolves after this chart's `awaitGpuFence` +
-     * `endFrame` chain — independent of other charts in the same
-     * RAF, which run their fence waits in parallel.
+     * `render2D` + `endFrame` chain — independent of other charts in the
+     * same RAF, which run their fence waits in parallel.
+     *
+     * `_fullRender` submits the GL commands and stashes the frame's 2D
+     * draws (gridlines + chrome) via {@link _defer2D}; the scheduler
+     * flushes them with {@link _flush2D} *after* the GPU fence, so the
+     * 2D canvases don't present ahead of the GL frame. The GL pass
+     * resets `_deferred2D` first so a mid-pass throw can't leak stale
+     * closures into the next frame.
      *
      * Every render-triggering caller — upload chunks, zoom / pan,
      * resize, theme invalidation, host-driven redraws — calls this.
-     * The only sanctioned bypass is `snapshotPng`, which calls
-     * `_fullRender` directly to keep the GL backbuffer intact for
+     * The only sanctioned bypass is `snapshotPng`, which uses
+     * {@link renderFrameSync} to keep the GL backbuffer intact for
      * `gl.readPixels`.
      */
     requestRender(glManager: WebGLContextManager): Promise<void> {
-        return scheduleRender(glManager, () => this._fullRender(glManager));
+        return scheduleRender(
+            glManager,
+            () => {
+                this._deferred2D = [];
+                this._fullRender(glManager);
+            },
+            () => this._flush2D(),
+        );
+    }
+
+    /**
+     * Queue a 2D-canvas draw (gridline or chrome) to run after the
+     * GPU fence. Called from the chart renderers in place of drawing to
+     * the gridline/chrome canvases inline during the GL pass. See
+     * {@link _deferred2D}.
+     */
+    _defer2D(fn: () => void): void {
+        this._deferred2D.push(fn);
+    }
+
+    /**
+     * Run and clear the queued 2D-canvas draws. Invoked by the scheduler
+     * after `awaitGpuFence` (Phase 2), and by {@link renderFrameSync}.
+     */
+    _flush2D(): void {
+        const draws = this._deferred2D;
+        this._deferred2D = [];
+        for (const draw of draws) {
+            draw();
+        }
+    }
+
+    /**
+     * Synchronous full frame (GL + 2D) for the `snapshotPng` bypass,
+     * which sits outside the scheduler and needs the gridline/chrome
+     * canvases painted before it composites them. Resets the deferred
+     * queue, runs the GL pass, then flushes the 2D draws immediately
+     * (no fence split — a snapshot isn't presented to the compositor).
+     */
+    renderFrameSync(glManager: WebGLContextManager): void {
+        this._deferred2D = [];
+        this._fullRender(glManager);
+        this._flush2D();
     }
 
     //  Lifecycle

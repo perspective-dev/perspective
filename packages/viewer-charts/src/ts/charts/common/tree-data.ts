@@ -156,6 +156,33 @@ function insertRow(
     }
 }
 
+/**
+ * Arrow validity-bitmap test. Columns without a bitmap are all-valid.
+ */
+function isValidCell(col: ColumnData, rowIdx: number): boolean {
+    const v = col.valid;
+    return !v || !!((v[rowIdx >> 3] >> (rowIdx & 7)) & 1);
+}
+
+/**
+ * Read a size cell, honoring the validity bitmap: the bytes under an
+ * invalid slot are UNDEFINED (DuckDB's Arrow leaves NaN where the
+ * engine zero-fills), and a NaN here would poison every ancestor sum
+ * in `finalizeTree`. Invalid → 0 (no contribution); no size column at
+ * all → 1 (count semantics).
+ */
+function readSize(col: ColumnData | null | undefined, rowIdx: number): number {
+    if (!col?.values) {
+        return 1;
+    }
+
+    if (!isValidCell(col, rowIdx)) {
+        return 0;
+    }
+
+    return col.values[rowIdx] as number;
+}
+
 function readColor(
     chart: TreeChartBase,
     colorCol: ColumnData | null | undefined,
@@ -163,7 +190,7 @@ function readColor(
 ): { colorValue: number; colorLabel: string } {
     let colorValue = NaN;
     let colorLabel = "";
-    if (!colorCol) {
+    if (!colorCol || !isValidCell(colorCol, rowIdx)) {
         return { colorValue, colorLabel };
     }
 
@@ -261,7 +288,11 @@ export function processTreeChunk(
     chart: TreeChartBase,
     columns: ColumnDataMap,
 ): void {
-    const rpCols: { indices: Int32Array; dictionary: string[] }[] = [];
+    const rpCols: {
+        indices: Int32Array;
+        dictionary: string[];
+        valid?: Uint8Array;
+    }[] = [];
     for (let n = 0; ; n++) {
         const rp = columns.get(`__ROW_PATH_${n}__`);
         if (!rp) {
@@ -269,7 +300,11 @@ export function processTreeChunk(
         }
 
         if (rp.type === "string" && rp.indices && rp.dictionary) {
-            rpCols.push({ indices: rp.indices, dictionary: rp.dictionary });
+            rpCols.push({
+                indices: rp.indices,
+                dictionary: rp.dictionary,
+                valid: rp.valid,
+            });
         } else if (rp.values) {
             // Non-string group_by (integer / float / date / datetime /
             // boolean) — synthesize a string-indexed dictionary so the
@@ -397,9 +432,7 @@ export function processTreeChunk(
                     // Pass the signed value through; `insertRow` stores
                     // `|size|` and `sizeSign` separately so the
                     // render pass can dim negative leaves.
-                    const sizeValue = src.sizeCol?.values
-                        ? (src.sizeCol.values[i] as number)
-                        : 1;
+                    const sizeValue = readSize(src.sizeCol, i);
                     const { colorValue, colorLabel } = readColor(
                         chart,
                         src.colorCol,
@@ -416,9 +449,7 @@ export function processTreeChunk(
                     );
                 }
             } else {
-                const sizeValue = sizeCol?.values
-                    ? (sizeCol.values[i] as number)
-                    : 1;
+                const sizeValue = readSize(sizeCol, i);
                 const { colorValue, colorLabel } = readColor(
                     chart,
                     colorCol,
@@ -449,6 +480,19 @@ export function processTreeChunk(
         let pathLen = 0;
         for (let d = 0; d < rpCols.length; d++) {
             const rp = rpCols[d];
+
+            // In `"rollup"` mode the view emits total / subtotal rows
+            // whose deeper row-path levels are INVALID — index slot 0,
+            // which decodes to a REAL dictionary value (the engine's
+            // string row-path dictionaries carry no `""` sentinel), so
+            // the validity bitmap is the only truthful signal. Truncate
+            // the path at the first invalid level; the `!label` check
+            // below still covers synthesized non-string levels, whose
+            // dictionary index 0 IS the `""` sentinel.
+            if (rp.valid && !((rp.valid[i >> 3] >> (i & 7)) & 1)) {
+                break;
+            }
+
             const label = rp.dictionary[rp.indices[i]];
             if (!label && label !== "0") {
                 break;
@@ -465,9 +509,7 @@ export function processTreeChunk(
             for (const src of splitSources!) {
                 pathScratch[0] = src.prefix;
                 const rowPath = pathScratch.slice(0, pathLen + 1);
-                const sizeValue = src.sizeCol?.values
-                    ? (src.sizeCol.values[i] as number)
-                    : 1;
+                const sizeValue = readSize(src.sizeCol, i);
                 const { colorValue, colorLabel } = readColor(
                     chart,
                     src.colorCol,
@@ -485,9 +527,7 @@ export function processTreeChunk(
             }
         } else {
             const rowPath = pathScratch.slice(0, pathLen);
-            const sizeValue = sizeCol?.values
-                ? (sizeCol.values[i] as number)
-                : 1;
+            const sizeValue = readSize(sizeCol, i);
             const { colorValue, colorLabel } = readColor(chart, colorCol, i);
             insertRow(
                 chart,
@@ -556,7 +596,12 @@ export function finalizeTree(chart: TreeChartBase): void {
             }
         } else {
             if (firstChild[id] === NULL_NODE) {
-                value[id] = Math.max(0, size[id]);
+                // NOT `Math.max(0, x)`: that maps NaN → NaN, and one NaN
+                // leaf would poison every ancestor sum (dropping whole
+                // subtrees in `squarify`'s `value > 0` filter). The
+                // comparison form maps NaN → 0.
+                const s = size[id];
+                value[id] = s > 0 ? s : 0;
             } else {
                 let sum = 0;
                 for (

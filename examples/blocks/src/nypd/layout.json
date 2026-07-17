@@ -1,15 +1,13 @@
 {
     "Raw": {
-        "sizes": [1],
-        "detail": {
-            "main": {
-                "type": "tab-area",
-                "widgets": ["PERSPECTIVE_GENERATED_ID_3"],
-                "currentIndex": 0
-            }
+        "layout": {
+            "type": "tab-layout",
+            "tabs": [
+                "PERSPECTIVE_GENERATED_ID_3"
+            ],
+            "selected": 0
         },
-        "mode": "globalFilters",
-        "viewers": {
+        "panels": {
             "PERSPECTIVE_GENERATED_ID_3": {
                 "plugin": "Datagrid",
                 "plugin_config": {
@@ -62,188 +60,305 @@
                 "sort": [],
                 "expressions": {},
                 "aggregates": {},
-                "master": false,
-                "table": "ccrb",
-                "linked": false
+                "table": "ccrb"
             }
         }
     },
     "Incidents per Month": {
-        "sizes": [1],
-        "detail": {
-            "main": {
-                "type": "tab-area",
-                "widgets": ["PERSPECTIVE_GENERATED_ID_3"],
-                "currentIndex": 0
-            }
+        "layout": {
+            "type": "tab-layout",
+            "tabs": [
+                "PERSPECTIVE_GENERATED_ID_3"
+            ],
+            "selected": 0
         },
-        "mode": "globalFilters",
-        "viewers": {
+        "panels": {
             "PERSPECTIVE_GENERATED_ID_3": {
                 "plugin": "Y Line",
                 "plugin_config": {},
                 "settings": false,
                 "title": "Incidents",
-                "group_by": ["bucket(\"IncidentDate\", 'M')"],
+                "group_by": [
+                    "bucket(\"IncidentDate\", 'M')"
+                ],
                 "split_by": [],
-                "columns": ["ComplaintID"],
+                "columns": [
+                    "ComplaintID"
+                ],
                 "filter": [
-                    ["IncidentDate", ">", "1985-01-01"],
-                    ["IncidentDate", "<", "2025-01-01"]
+                    [
+                        "IncidentDate",
+                        ">",
+                        "1985-01-01"
+                    ],
+                    [
+                        "IncidentDate",
+                        "<",
+                        "2025-01-01"
+                    ]
                 ],
                 "sort": [],
                 "expressions": {
                     "bucket(\"IncidentDate\", 'M')": "bucket(\"IncidentDate\", 'M')"
                 },
-                "aggregates": { "ComplaintID": "distinct count" },
-                "master": false,
-                "table": "ccrb",
-                "linked": false
+                "aggregates": {
+                    "ComplaintID": "distinct count"
+                },
+                "table": "ccrb"
             }
         }
     },
     "Incidents per Month by FADO": {
-        "sizes": [1],
-        "detail": {
-            "main": {
-                "type": "split-area",
-                "orientation": "vertical",
-                "children": [
-                    {
-                        "type": "tab-area",
-                        "widgets": ["PERSPECTIVE_GENERATED_ID_0"],
-                        "currentIndex": 0
-                    },
-                    {
-                        "type": "tab-area",
-                        "widgets": ["PERSPECTIVE_GENERATED_ID_2"],
-                        "currentIndex": 0
-                    }
-                ],
-                "sizes": [0.5, 0.5]
-            }
+        "layout": {
+            "type": "split-layout",
+            "orientation": "vertical",
+            "children": [
+                {
+                    "type": "tab-layout",
+                    "tabs": [
+                        "PERSPECTIVE_GENERATED_ID_0"
+                    ],
+                    "selected": 0
+                },
+                {
+                    "type": "tab-layout",
+                    "tabs": [
+                        "PERSPECTIVE_GENERATED_ID_2"
+                    ],
+                    "selected": 0
+                }
+            ],
+            "sizes": [
+                0.5,
+                0.5
+            ]
         },
-        "mode": "globalFilters",
-        "viewers": {
+        "panels": {
             "PERSPECTIVE_GENERATED_ID_0": {
                 "plugin": "Y Line",
-                "plugin_config": { "zoom": { "k": 1, "x": 0, "y": 0 } },
+                "plugin_config": {
+                    "zoom": {
+                        "k": 1,
+                        "x": 0,
+                        "y": 0
+                    }
+                },
                 "settings": false,
                 "title": "Incidents (line)",
-                "group_by": ["bucket(\"IncidentDate\", 'M')"],
-                "split_by": ["FADOType"],
-                "columns": ["AllegationID"],
-                "filter": [
-                    ["IncidentDate", ">", "1985-01-01"],
-                    ["IncidentDate", "<", "2025-01-01"]
+                "group_by": [
+                    "bucket(\"IncidentDate\", 'M')"
                 ],
-                "sort": [["AllegationID", "col asc"]],
+                "split_by": [
+                    "FADOType"
+                ],
+                "columns": [
+                    "AllegationID"
+                ],
+                "filter": [
+                    [
+                        "IncidentDate",
+                        ">",
+                        "1985-01-01"
+                    ],
+                    [
+                        "IncidentDate",
+                        "<",
+                        "2025-01-01"
+                    ]
+                ],
+                "sort": [
+                    [
+                        "AllegationID",
+                        "col asc"
+                    ]
+                ],
                 "expressions": {
                     "bucket(\"IncidentDate\", 'M')": "bucket(\"IncidentDate\", 'M')"
                 },
-                "aggregates": { "AllegationID": "distinct count" },
-                "master": false,
-                "table": "ccrb",
-                "linked": false
+                "aggregates": {
+                    "AllegationID": "distinct count"
+                },
+                "table": "ccrb"
             },
             "PERSPECTIVE_GENERATED_ID_2": {
                 "plugin": "Y Area",
                 "plugin_config": {},
                 "settings": false,
                 "title": "Incidents (area)",
-                "group_by": ["bucket(\"IncidentDate\", 'M')"],
-                "split_by": ["FADOType"],
-                "columns": ["AllegationID"],
-                "filter": [
-                    ["IncidentDate", ">", "1985-01-01"],
-                    ["IncidentDate", "<", "2025-01-01"]
+                "group_by": [
+                    "bucket(\"IncidentDate\", 'M')"
                 ],
-                "sort": [["AllegationID", "col asc"]],
+                "split_by": [
+                    "FADOType"
+                ],
+                "columns": [
+                    "AllegationID"
+                ],
+                "filter": [
+                    [
+                        "IncidentDate",
+                        ">",
+                        "1985-01-01"
+                    ],
+                    [
+                        "IncidentDate",
+                        "<",
+                        "2025-01-01"
+                    ]
+                ],
+                "sort": [
+                    [
+                        "AllegationID",
+                        "col asc"
+                    ]
+                ],
                 "expressions": {
                     "bucket(\"IncidentDate\", 'M')": "bucket(\"IncidentDate\", 'M')"
                 },
-                "aggregates": { "AllegationID": "distinct count" },
-                "master": false,
-                "table": "ccrb",
-                "linked": false
+                "aggregates": {
+                    "AllegationID": "distinct count"
+                },
+                "table": "ccrb"
             }
         }
     },
     "Total Complaints vs Officer Count by Command and FADO": {
-        "sizes": [1],
-        "detail": {
-            "main": {
-                "type": "split-area",
-                "orientation": "horizontal",
-                "children": [
-                    {
-                        "type": "tab-area",
-                        "widgets": ["PERSPECTIVE_GENERATED_ID_4"],
-                        "currentIndex": 0
-                    },
-                    {
-                        "type": "tab-area",
-                        "widgets": ["PERSPECTIVE_GENERATED_ID_7"],
-                        "currentIndex": 0
-                    }
-                ],
-                "sizes": [0.5, 0.5]
-            }
+        "layout": {
+            "type": "split-layout",
+            "orientation": "horizontal",
+            "children": [
+                {
+                    "type": "tab-layout",
+                    "tabs": [
+                        "PERSPECTIVE_GENERATED_ID_4"
+                    ],
+                    "selected": 0
+                },
+                {
+                    "type": "tab-layout",
+                    "tabs": [
+                        "PERSPECTIVE_GENERATED_ID_7"
+                    ],
+                    "selected": 0
+                }
+            ],
+            "sizes": [
+                0.5,
+                0.5
+            ]
         },
-        "mode": "globalFilters",
-        "viewers": {
+        "panels": {
             "PERSPECTIVE_GENERATED_ID_4": {
                 "plugin": "X/Y Scatter",
                 "plugin_config": {},
                 "settings": false,
                 "title": "Active Officer Incidents",
-                "group_by": ["IncidentCommand"],
-                "split_by": ["FADOType"],
-                "columns": ["ShieldNo", "ComplaintID", null, null, null, null],
-                "filter": [["Status", "==", "Active"]],
+                "group_by": [
+                    "IncidentCommand"
+                ],
+                "split_by": [
+                    "FADOType"
+                ],
+                "columns": [
+                    "ShieldNo",
+                    "ComplaintID",
+                    null,
+                    null,
+                    null,
+                    null
+                ],
+                "filter": [
+                    [
+                        "Status",
+                        "==",
+                        "Active"
+                    ]
+                ],
                 "sort": [],
                 "expressions": {},
                 "aggregates": {
                     "ShieldNo": "distinct count",
                     "ComplaintID": "distinct count"
                 },
-                "master": false,
-                "table": "ccrb",
-                "linked": false
+                "table": "ccrb"
             },
             "PERSPECTIVE_GENERATED_ID_7": {
                 "plugin": "X/Y Scatter",
-                "plugin_config": { "zoom": { "k": 1, "x": 0, "y": 0 } },
+                "plugin_config": {
+                    "zoom": {
+                        "k": 1,
+                        "x": 0,
+                        "y": 0
+                    }
+                },
                 "settings": false,
                 "title": "Inactive Officer Incidents",
-                "group_by": ["IncidentCommand"],
-                "split_by": ["FADOType"],
-                "columns": ["ShieldNo", "ComplaintID", null, null, null, null],
-                "filter": [["Status", "==", "Retired"]],
+                "group_by": [
+                    "IncidentCommand"
+                ],
+                "split_by": [
+                    "FADOType"
+                ],
+                "columns": [
+                    "ShieldNo",
+                    "ComplaintID",
+                    null,
+                    null,
+                    null,
+                    null
+                ],
+                "filter": [
+                    [
+                        "Status",
+                        "==",
+                        "Retired"
+                    ]
+                ],
                 "sort": [],
                 "expressions": {},
                 "aggregates": {
                     "ShieldNo": "distinct count",
                     "ComplaintID": "distinct count"
                 },
-                "master": false,
-                "table": "ccrb",
-                "linked": false
+                "table": "ccrb"
             }
         }
     },
     "Incidents by Allegation, time series": {
-        "sizes": [0.3654752553024352, 0.6345247446975648],
-        "detail": {
-            "main": {
-                "type": "tab-area",
-                "widgets": ["PERSPECTIVE_GENERATED_ID_13"],
-                "currentIndex": 0
-            }
+        "layout": {
+            "type": "split-layout",
+            "orientation": "horizontal",
+            "children": [
+                {
+                    "type": "split-layout",
+                    "orientation": "vertical",
+                    "children": [
+                        {
+                            "type": "tab-layout",
+                            "tabs": [
+                                "PERSPECTIVE_GENERATED_ID_11"
+                            ],
+                            "selected": 0
+                        }
+                    ],
+                    "sizes": [
+                        1
+                    ]
+                },
+                {
+                    "type": "tab-layout",
+                    "tabs": [
+                        "PERSPECTIVE_GENERATED_ID_13"
+                    ],
+                    "selected": 0
+                }
+            ],
+            "sizes": [
+                0.25,
+                0.75
+            ]
         },
-        "mode": "globalFilters",
-        "master": { "widgets": ["PERSPECTIVE_GENERATED_ID_11"], "sizes": [1] },
-        "viewers": {
+        "panels": {
             "PERSPECTIVE_GENERATED_ID_11": {
                 "plugin": "Datagrid",
                 "plugin_config": {
@@ -253,52 +368,73 @@
                 },
                 "settings": false,
                 "title": "Filter",
-                "group_by": ["FADOType", "Allegation"],
+                "group_by": [
+                    "FADOType",
+                    "Allegation"
+                ],
                 "split_by": [],
-                "columns": ["ComplaintID"],
+                "columns": [
+                    "ComplaintID"
+                ],
                 "filter": [],
-                "sort": [["ComplaintID", "desc"]],
+                "sort": [
+                    [
+                        "ComplaintID",
+                        "desc"
+                    ]
+                ],
                 "expressions": {},
-                "aggregates": { "ComplaintID": "distinct count" },
-                "master": true,
-                "table": "ccrb",
-                "linked": false,
-                "selectable": ""
+                "aggregates": {
+                    "ComplaintID": "distinct count"
+                },
+                "table": "ccrb"
             },
             "PERSPECTIVE_GENERATED_ID_13": {
                 "plugin": "Y Line",
                 "plugin_config": {},
                 "settings": false,
                 "title": "Incidents",
-                "group_by": ["bucket(\"IncidentDate\", 'M')"],
-                "split_by": ["FADOType"],
-                "columns": ["ComplaintID"],
+                "group_by": [
+                    "bucket(\"IncidentDate\", 'M')"
+                ],
+                "split_by": [
+                    "FADOType"
+                ],
+                "columns": [
+                    "ComplaintID"
+                ],
                 "filter": [
-                    ["IncidentDate", ">", "1985-01-01"],
-                    ["IncidentDate", "<", "2025-01-01"]
+                    [
+                        "IncidentDate",
+                        ">",
+                        "1985-01-01"
+                    ],
+                    [
+                        "IncidentDate",
+                        "<",
+                        "2025-01-01"
+                    ]
                 ],
                 "sort": [],
                 "expressions": {
                     "bucket(\"IncidentDate\", 'M')": "bucket(\"IncidentDate\", 'M')"
                 },
-                "aggregates": { "ComplaintID": "distinct count" },
-                "master": false,
-                "table": "ccrb",
-                "linked": false
+                "aggregates": {
+                    "ComplaintID": "distinct count"
+                },
+                "table": "ccrb"
             }
         }
     },
     "Allegation reporting change, 1995-2000": {
-        "sizes": [1],
-        "detail": {
-            "main": {
-                "type": "tab-area",
-                "widgets": ["PERSPECTIVE_GENERATED_ID_10"],
-                "currentIndex": 0
-            }
+        "layout": {
+            "type": "tab-layout",
+            "tabs": [
+                "PERSPECTIVE_GENERATED_ID_10"
+            ],
+            "selected": 0
         },
-        "mode": "globalFilters",
-        "viewers": {
+        "panels": {
             "PERSPECTIVE_GENERATED_ID_10": {
                 "plugin": "Heatmap",
                 "plugin_config": {
@@ -310,14 +446,33 @@
                 },
                 "settings": false,
                 "title": "Incidents",
-                "group_by": ["bucket(\"IncidentDate\", '3M')"],
-                "split_by": ["Allegation"],
-                "columns": ["AllegationID"],
-                "filter": [
-                    ["IncidentDate", ">", "1985-01-01"],
-                    ["IncidentDate", "<", "2025-01-01"]
+                "group_by": [
+                    "bucket(\"IncidentDate\", '3M')"
                 ],
-                "sort": [["IncidentDate", "col asc"]],
+                "split_by": [
+                    "Allegation"
+                ],
+                "columns": [
+                    "AllegationID"
+                ],
+                "filter": [
+                    [
+                        "IncidentDate",
+                        ">",
+                        "1985-01-01"
+                    ],
+                    [
+                        "IncidentDate",
+                        "<",
+                        "2025-01-01"
+                    ]
+                ],
+                "sort": [
+                    [
+                        "IncidentDate",
+                        "col asc"
+                    ]
+                ],
                 "expressions": {
                     "bucket(\"IncidentDate\", '3M')": "bucket(\"IncidentDate\", '3M')"
                 },
@@ -325,36 +480,62 @@
                     "IncidentDate": "median",
                     "AllegationID": "distinct count"
                 },
-                "master": false,
-                "table": "ccrb",
-                "linked": false
+                "table": "ccrb"
             }
         }
     },
     "Day-of-Week Incident Heatmap": {
-        "sizes": [0.3686174391201885, 0.6313825608798115],
-        "detail": {
-            "main": {
-                "type": "split-area",
-                "orientation": "vertical",
-                "children": [
-                    {
-                        "type": "tab-area",
-                        "widgets": ["PERSPECTIVE_GENERATED_ID_13"],
-                        "currentIndex": 0
-                    },
-                    {
-                        "type": "tab-area",
-                        "widgets": ["PERSPECTIVE_GENERATED_ID_15"],
-                        "currentIndex": 0
-                    }
-                ],
-                "sizes": [0.5, 0.5]
-            }
+        "layout": {
+            "type": "split-layout",
+            "orientation": "horizontal",
+            "children": [
+                {
+                    "type": "split-layout",
+                    "orientation": "vertical",
+                    "children": [
+                        {
+                            "type": "tab-layout",
+                            "tabs": [
+                                "PERSPECTIVE_GENERATED_ID_11"
+                            ],
+                            "selected": 0
+                        }
+                    ],
+                    "sizes": [
+                        1
+                    ]
+                },
+                {
+                    "type": "split-layout",
+                    "orientation": "vertical",
+                    "children": [
+                        {
+                            "type": "tab-layout",
+                            "tabs": [
+                                "PERSPECTIVE_GENERATED_ID_13"
+                            ],
+                            "selected": 0
+                        },
+                        {
+                            "type": "tab-layout",
+                            "tabs": [
+                                "PERSPECTIVE_GENERATED_ID_15"
+                            ],
+                            "selected": 0
+                        }
+                    ],
+                    "sizes": [
+                        0.5,
+                        0.5
+                    ]
+                }
+            ],
+            "sizes": [
+                0.25,
+                0.75
+            ]
         },
-        "mode": "globalFilters",
-        "master": { "widgets": ["PERSPECTIVE_GENERATED_ID_11"], "sizes": [1] },
-        "viewers": {
+        "panels": {
             "PERSPECTIVE_GENERATED_ID_11": {
                 "plugin": "Datagrid",
                 "plugin_config": {
@@ -364,51 +545,88 @@
                 },
                 "settings": false,
                 "title": "Filter",
-                "group_by": ["FADOType", "Allegation"],
+                "group_by": [
+                    "FADOType",
+                    "Allegation"
+                ],
                 "split_by": [],
-                "columns": ["ComplaintID"],
+                "columns": [
+                    "ComplaintID"
+                ],
                 "filter": [],
-                "sort": [["ComplaintID", "desc"]],
+                "sort": [
+                    [
+                        "ComplaintID",
+                        "desc"
+                    ]
+                ],
                 "expressions": {},
-                "aggregates": { "ComplaintID": "distinct count" },
-                "master": true,
-                "table": "ccrb",
-                "linked": false,
-                "selectable": ""
+                "aggregates": {
+                    "ComplaintID": "distinct count"
+                },
+                "table": "ccrb"
             },
             "PERSPECTIVE_GENERATED_ID_13": {
                 "plugin": "Heatmap",
                 "plugin_config": {},
                 "settings": false,
                 "title": "Year vs Month of Incident",
-                "group_by": ["bucket(\"IncidentDate\", 'Y')"],
-                "split_by": ["month_of_year(\"IncidentDate\")"],
-                "columns": ["ComplaintID"],
+                "group_by": [
+                    "bucket(\"IncidentDate\", 'Y')"
+                ],
+                "split_by": [
+                    "month_of_year(\"IncidentDate\")"
+                ],
+                "columns": [
+                    "ComplaintID"
+                ],
                 "filter": [
-                    ["IncidentDate", ">", "1985-01-01"],
-                    ["IncidentDate", "<", "2025-01-01"]
+                    [
+                        "IncidentDate",
+                        ">",
+                        "1985-01-01"
+                    ],
+                    [
+                        "IncidentDate",
+                        "<",
+                        "2025-01-01"
+                    ]
                 ],
                 "sort": [],
                 "expressions": {
                     "bucket(\"IncidentDate\", 'Y')": "bucket(\"IncidentDate\", 'Y')",
                     "month_of_year(\"IncidentDate\")": "month_of_year(\"IncidentDate\")"
                 },
-                "aggregates": { "ComplaintID": "distinct count" },
-                "master": false,
-                "table": "ccrb",
-                "linked": false
+                "aggregates": {
+                    "ComplaintID": "distinct count"
+                },
+                "table": "ccrb"
             },
             "PERSPECTIVE_GENERATED_ID_15": {
                 "plugin": "Heatmap",
                 "plugin_config": {},
                 "settings": false,
                 "title": "Month vs Weekday of Incident",
-                "group_by": ["month_of_year(\"IncidentDate\")"],
-                "split_by": ["day_of_week(\"IncidentDate\")"],
-                "columns": ["ComplaintID"],
+                "group_by": [
+                    "month_of_year(\"IncidentDate\")"
+                ],
+                "split_by": [
+                    "day_of_week(\"IncidentDate\")"
+                ],
+                "columns": [
+                    "ComplaintID"
+                ],
                 "filter": [
-                    ["IncidentDate", ">", "1985-01-01"],
-                    ["IncidentDate", "<", "2025-01-01"]
+                    [
+                        "IncidentDate",
+                        ">",
+                        "1985-01-01"
+                    ],
+                    [
+                        "IncidentDate",
+                        "<",
+                        "2025-01-01"
+                    ]
                 ],
                 "sort": [],
                 "expressions": {
@@ -416,10 +634,10 @@
                     "month_of_year(\"IncidentDate\")": "month_of_year(\"IncidentDate\")",
                     "day_of_week(\"IncidentDate\")": "day_of_week(\"IncidentDate\")"
                 },
-                "aggregates": { "ComplaintID": "distinct count" },
-                "master": false,
-                "table": "ccrb",
-                "linked": false
+                "aggregates": {
+                    "ComplaintID": "distinct count"
+                },
+                "table": "ccrb"
             }
         }
     }

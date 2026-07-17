@@ -173,7 +173,9 @@ export function renderTreemapFrame(
 
     gl.drawArrays(gl.TRIANGLES, 0, chart._vertexCount);
 
-    renderTreemapChromeOverlay(chart);
+    // Deferred past the GPU fence (see `_defer2D`) so the chrome canvas
+    // doesn't present ahead of the GL tiles on resize.
+    chart._defer2D(() => renderTreemapChromeOverlay(chart));
 }
 
 /**

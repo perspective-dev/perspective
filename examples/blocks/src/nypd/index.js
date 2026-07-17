@@ -11,7 +11,6 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
-import "/node_modules/@perspective-dev/workspace/dist/cdn/perspective-workspace.js";
 import "/node_modules/@perspective-dev/viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js";
 import "/node_modules/@perspective-dev/viewer-charts/dist/cdn/perspective-viewer-charts.js";
 
@@ -61,11 +60,11 @@ async function fetch_progress(url) {
 }
 
 DARK_THEME = await fetch(
-    "/node_modules/@perspective-dev/workspace/dist/css/pro-dark.css",
+    "/node_modules/@perspective-dev/viewer/dist/css/pro-dark.css",
 ).then((x) => x.text());
 
 LIGHT_THEME = await fetch(
-    "/node_modules/@perspective-dev/workspace/dist/css/pro.css",
+    "/node_modules/@perspective-dev/viewer/dist/css/pro.css",
 ).then((x) => x.text());
 
 document.body.innerHTML = `
@@ -84,23 +83,13 @@ document.body.innerHTML = `
             <a href="https://github.com/texodus/nypd-ccrb">NYCLU/CCRB Data</a>
             <a href="https://github.com/perspective-dev/perspective">Built With Perspective</a>
         </div>
-        <perspective-workspace id='workspace'></perspective-workspace>
+        <perspective-viewer id='workspace'></perspective-viewer>
     `.trim();
 
 toggle_theme();
 
-window.workspace.addEventListener(
-    "workspace-new-view",
-    ({ detail: { widget } }) => {
-        widget.viewer.setAttribute("theme", theme_style_node.dataset.theme);
-    },
-);
-
-window.workspace.addTable(
-    "ccrb",
-    (async () => worker.table(await fetch_progress(DATA_URL)))(),
-    // worker.table(await fetch_progress(DATA_URL))
-);
+await worker.table(await fetch_progress(DATA_URL), { name: "ccrb" });
+window.workspace.load(worker);
 
 if (LAYOUTS == undefined) {
     LAYOUTS = await (await fetch("./layout.json")).json();
@@ -128,7 +117,6 @@ window.layouts.addEventListener("change", async () => {
         return;
     }
 
-    window.workspace.innerHTML = "";
     await window.workspace.restore(LAYOUTS[window.layouts.value]);
     window.name_input.value = window.layouts.value;
 });

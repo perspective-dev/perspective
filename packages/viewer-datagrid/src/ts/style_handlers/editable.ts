@@ -34,7 +34,9 @@ export function applyColumnHeaderStyles(
     // Style selected column for settings panel
     const selectedColumn = model._column_settings_selected_column;
     const len = headerRows.length;
-    const settings_open = viewer.hasAttribute("settings");
+    const settings_open =
+        viewer.hasAttribute("settings") &&
+        viewer.getActivePanel() === model._panel;
 
     // Set row IDs
     if (len <= 1) {
@@ -48,6 +50,7 @@ export function applyColumnHeaderStyles(
                     : i === len - offset
                       ? "psp-column-edit-buttons"
                       : null;
+
             id ? row.setAttribute("id", id) : row.removeAttribute("id");
         });
     }

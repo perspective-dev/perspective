@@ -26,18 +26,21 @@ export class PerspectiveSelectDetail {
     column_names?: string[];
     removeConfigs: ViewConfigUpdate[];
     insertConfigs: ViewConfigUpdate[];
+    panel?: string;
     constructor(
         selected: boolean,
         row: Record<string, unknown>,
         column_names: string[],
         removeConfigs: ViewConfigUpdate[],
         insertConfigs: ViewConfigUpdate[],
+        panel?: string,
     ) {
         this.selected = selected;
         this.row = row;
         this.column_names = column_names;
         this.removeConfigs = removeConfigs;
         this.insertConfigs = insertConfigs;
+        this.panel = panel;
     }
 
     get removeFilters(): Filter[] {
@@ -72,6 +75,7 @@ export type PerspectiveClickEventDetail = {
     config: ViewerConfigUpdate;
     row: Record<string, any>;
     column_names: Array<string | Array<string>>;
+    panel?: string;
 };
 
 export type PerspectiveSelectEventDetail = {
@@ -196,7 +200,13 @@ export interface PerspectiveViewerElementExt {
 
     addEventListener(
         name: "perspective-global-filter",
-        cb: (e: CustomEvent<PerspectiveSelectEventDetail>) => void,
+        cb: (e: CustomEvent<PerspectiveSelectDetail>) => void,
+        options?: { signal: AbortSignal },
+    ): void;
+
+    addEventListener(
+        name: "perspective-global-filter-update",
+        cb: (e: CustomEvent<Filter[]>) => void,
         options?: { signal: AbortSignal },
     ): void;
 
@@ -239,6 +249,10 @@ export interface PerspectiveViewerElementExt {
     removeEventListener(name: "perspective-click", cb: any): void;
     removeEventListener(name: "perspective-select", cb: any): void;
     removeEventListener(name: "perspective-global-filter", cb: any): void;
+    removeEventListener(
+        name: "perspective-global-filter-update",
+        cb: any,
+    ): void;
     removeEventListener(name: "perspective-toggle-settings", cb: any): void;
     removeEventListener(
         name: "perspective-toggle-settings-before",

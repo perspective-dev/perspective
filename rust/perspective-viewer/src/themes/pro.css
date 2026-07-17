@@ -13,6 +13,7 @@
 @import "./defaults.css";
 
 perspective-viewer,
-perspective-viewer[theme="Pro Light"] {
+perspective-viewer[theme="Pro Light"],
+perspective-viewer [theme="Pro Light"] {
     --psp-theme-name: "Pro Light";
 }

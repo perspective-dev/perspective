@@ -28,7 +28,6 @@ use std::rc::Rc;
 pub use empty_column::*;
 pub use invalid_column::*;
 use perspective_client::config::ViewConfig;
-use perspective_js::utils::ApiFuture;
 pub use pivot_column::*;
 use web_sys::*;
 use yew::prelude::*;
@@ -46,6 +45,7 @@ use crate::queries::{ActiveColumnState, ActiveColumnStateData, ColumnsIteratorSe
 use crate::renderer::*;
 use crate::session::drag_drop_update::*;
 use crate::session::*;
+use crate::tasks::apply_and_render;
 use crate::utils::*;
 
 #[derive(Properties)]
@@ -218,11 +218,8 @@ impl Component for ColumnSelector {
 
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
-                    if session.update_view_config(update).is_ok() {
-                        ApiFuture::spawn(async move {
-                            renderer.apply_pending_plugin()?;
-                            renderer.draw(session.validate().await?.create_view()).await
-                        });
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("column-selector", task);
                     }
                 }
 
@@ -246,11 +243,8 @@ impl Component for ColumnSelector {
 
                 let session = ctx.props().session.clone();
                 let renderer = ctx.props().renderer.clone();
-                if session.update_view_config(update).is_ok() {
-                    ApiFuture::spawn(async move {
-                        renderer.apply_pending_plugin()?;
-                        renderer.draw(session.validate().await?.create_view()).await
-                    });
+                if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                    spawn_owned("column-selector", task);
                 }
 
                 true

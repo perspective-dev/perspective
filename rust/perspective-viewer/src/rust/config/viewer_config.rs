@@ -23,21 +23,43 @@ use wasm_bindgen::prelude::*;
 use crate::renderer::ColumnConfigMap;
 
 /// The state of an entire `custom_elements::PerspectiveViewerElement` component
-/// and its `Plugin`.
+/// and its `Plugin`: the element-level `settings` flag plus the per-panel
+/// [`PanelViewerConfig`]. The split exists so the whole-element config format
+/// can serialize panel entries *without* a `settings` key (it is element-level
+/// state there, carried by the top-level `active` field instead), while the
+/// single-panel format flattens back to the legacy shape.
 #[derive(Debug, Default, Serialize, PartialEq, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ViewerConfig<V: TS = String> {
+    pub settings: bool,
+
+    #[serde(flatten)]
+    pub panel: PanelViewerConfig<V>,
+}
+
+/// The per-panel state of a [`ViewerConfig`] — everything except the
+/// element-level `settings` flag. This is the `panels` entry type of the
+/// whole-element config format.
+#[derive(Debug, Default, Serialize, PartialEq, TS)]
+pub struct PanelViewerConfig<V: TS = String> {
     pub version: V,
     pub columns_config: ColumnConfigMap,
     pub plugin: String,
     pub plugin_config: serde_json::Map<String, Value>,
-    pub settings: bool,
     pub table: Option<String>,
     pub theme: Option<String>,
     pub title: Option<String>,
 
     #[serde(flatten)]
     pub view_config: ViewConfig,
+}
+
+impl<V: TS> Deref for ViewerConfig<V> {
+    type Target = PanelViewerConfig<V>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.panel
+    }
 }
 
 pub static API_VERSION: LazyLock<&'static str> = LazyLock::new(|| {

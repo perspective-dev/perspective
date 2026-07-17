@@ -110,11 +110,22 @@ interface PendingRenderRequest {
  */
 export class RendererTransport {
     private _handle: RendererHandle | null = null;
+
+    /**
+     * Set by {@link destroy}. Requests allocated after teardown settle
+     * immediately in `_allocPending` — `_post` is already a no-op once
+     * `_handle` is null, so a late request would otherwise never
+     * receive its reply and pend forever.
+     */
+    private _destroyed = false;
     private _proxyChannel: MessageChannel | null = null;
     private _proxySession: any = null;
     private _client: Client;
     private _view: View;
     private _tableName: string | undefined;
+    /** Source panel `slot`, tagged onto dispatched interaction events so the
+     * host can route them (master/detail, global filter) to the right panel. */
+    private _panel: string | undefined;
     private _clientWorkerURL: URL;
     private _clientWasm: WebAssembly.Module;
     private _chartTag: string;
@@ -182,6 +193,7 @@ export class RendererTransport {
         client: Client;
         view: View;
         tableName?: string;
+        panel?: string;
         clientWasm: WebAssembly.Module;
         clientWorkerURL: URL;
         chartTag: string;
@@ -192,6 +204,7 @@ export class RendererTransport {
         this._client = opts.client;
         this._view = opts.view;
         this._tableName = opts.tableName;
+        this._panel = opts.panel;
         this._clientWorkerURL = opts.clientWorkerURL;
         this._clientWasm = opts.clientWasm;
         this._chartTag = opts.chartTag;
@@ -438,7 +451,8 @@ export class RendererTransport {
      * `loadAndRenderAck`. Per the worker's "resolve on stale"
      * contract, a mid-flight cancellation (a newer `loadAndRender`
      * superseding this one) still acks — the host's awaiter just
-     * resolves quietly.
+     * resolves quietly. Calls issued after `destroy()` resolve
+     * immediately (see `_allocPending`).
      */
     loadAndRender(opts: {
         viewerConfig: {
@@ -462,6 +476,15 @@ export class RendererTransport {
 
     redraw(): void {
         this._post({ kind: "redraw" });
+    }
+
+    /**
+     * Silently clear the worker chart's selection state (pinned tooltip) —
+     * no selection events are emitted; the worker echoes `dismissTooltip`
+     * to drop the host-side pinned artifact. See `DeselectMsg`.
+     */
+    deselect(): void {
+        this._post({ kind: "deselect" });
     }
 
     resize(): void {
@@ -501,12 +524,39 @@ export class RendererTransport {
      * Allocate a pending request slot of the given `kind`. Returns the
      * id (encoded into the outgoing `ControlMsg`) and a promise that
      * resolves / rejects when the matching reply arrives or
-     * `destroy()` drains the table.
+     * `destroy()` drains the table. Requests issued *after* `destroy()`
+     * settle immediately with the same per-kind semantics as the drain.
      */
     private _allocPending<T>(kind: PendingRenderType): {
         id: number;
         promise: Promise<T>;
     } {
+        // A request issued after `destroy()` would never settle: `_post`
+        // no-ops with no handle, so no reply ever lands — and the host
+        // awaits `loadAndRender` while holding its per-renderer draw
+        // lock, so a pending-forever promise wedges that panel's lock
+        // permanently. (Reachable when an external DOM disconnect
+        // `delete()`s the element mid-draw; the host's own teardown
+        // paths are serialized behind the same lock.) Mirror the
+        // `destroy()` drain: `loadAndRender` resolves silently,
+        // reply-bearing kinds reject. The pre-attached no-op `catch`
+        // marks the rejection handled for fire-and-forget callers
+        // (`saveZoom`) without affecting real awaiters.
+        if (this._destroyed) {
+            if (kind === "loadAndRender") {
+                return {
+                    id: -1,
+                    promise: Promise.resolve(undefined as unknown as T),
+                };
+            }
+
+            const promise = Promise.reject<T>(
+                new Error("RendererTransport destroyed"),
+            );
+            promise.catch(() => {});
+            return { id: -1, promise };
+        }
+
         const id = ++this._pendingCounter;
         const promise = new Promise<T>((resolve, reject) => {
             this._pending.set(id, { kind, resolve, reject });
@@ -548,6 +598,7 @@ export class RendererTransport {
     }
 
     destroy(): void {
+        this._destroyed = true;
         this._post({ kind: "destroy" });
         if (this._proxySession) {
             this._proxySession.close().catch(() => {});
@@ -633,7 +684,9 @@ export class RendererTransport {
                         {
                             bubbles: true,
                             composed: true,
-                            detail: msg.detail,
+                            // Tag with the source panel so a multi-panel host
+                            // can attribute the click to the right panel.
+                            detail: { ...msg.detail, panel: this._panel },
                         },
                     ),
                 );
@@ -658,6 +711,9 @@ export class RendererTransport {
                     removeConfigs as any,
                     insertConfigs as any,
                 );
+                // Tag with the source panel so the host's master/detail +
+                // global-filter routing can identify the originating panel.
+                detail.panel = this._panel;
                 this._dispatchOnViewer(
                     new CustomEvent<PerspectiveSelectDetail>(
                         "perspective-global-filter",

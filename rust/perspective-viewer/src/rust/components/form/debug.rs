@@ -240,6 +240,9 @@ impl DebugPanelProps {
                         &props.session,
                         &props.renderer,
                         &props.presentation,
+                        // A user-pasted config apply — an explicit request,
+                        // same affordance as the public `restore()`.
+                        crate::tasks::RunOrigin::Public,
                         config,
                         async { Ok(()) },
                     )

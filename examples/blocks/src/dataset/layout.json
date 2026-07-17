@@ -1,37 +1,46 @@
 {
-    "sizes": [1],
-    "detail": {
-        "main": {
-            "type": "split-area",
-            "orientation": "vertical",
-            "children": [
-                {
-                    "type": "tab-area",
-                    "widgets": ["PERSPECTIVE_GENERATED_ID_0"],
-                    "currentIndex": 0
-                },
-                {
-                    "type": "split-area",
-                    "orientation": "horizontal",
-                    "children": [
-                        {
-                            "type": "tab-area",
-                            "widgets": ["PERSPECTIVE_GENERATED_ID_1"],
-                            "currentIndex": 0
-                        },
-                        {
-                            "type": "tab-area",
-                            "widgets": ["PERSPECTIVE_GENERATED_ID_2"],
-                            "currentIndex": 0
-                        }
-                    ],
-                    "sizes": [0.5, 0.5]
-                }
-            ],
-            "sizes": [0.5, 0.5]
-        }
+    "layout": {
+        "type": "split-layout",
+        "orientation": "vertical",
+        "children": [
+            {
+                "type": "tab-layout",
+                "tabs": [
+                    "PERSPECTIVE_GENERATED_ID_0"
+                ],
+                "selected": 0
+            },
+            {
+                "type": "split-layout",
+                "orientation": "horizontal",
+                "children": [
+                    {
+                        "type": "tab-layout",
+                        "tabs": [
+                            "PERSPECTIVE_GENERATED_ID_1"
+                        ],
+                        "selected": 0
+                    },
+                    {
+                        "type": "tab-layout",
+                        "tabs": [
+                            "PERSPECTIVE_GENERATED_ID_2"
+                        ],
+                        "selected": 0
+                    }
+                ],
+                "sizes": [
+                    0.5,
+                    0.5
+                ]
+            }
+        ],
+        "sizes": [
+            0.5,
+            0.5
+        ]
     },
-    "viewers": {
+    "panels": {
         "PERSPECTIVE_GENERATED_ID_0": {
             "version": "4.5.2",
             "plugin": "Datagrid",
@@ -42,8 +51,13 @@
             },
             "columns_config": {},
             "title": "Generated Data",
-            "group_by": ["String 0", "String 1"],
-            "split_by": ["String 2"],
+            "group_by": [
+                "String 0",
+                "String 1"
+            ],
+            "split_by": [
+                "String 2"
+            ],
             "sort": [],
             "filter": [],
             "expressions": {},
@@ -70,7 +84,9 @@
             "columns_config": {},
             "table": "stats",
             "title": "Server Memory",
-            "group_by": ["timestamp"],
+            "group_by": [
+                "timestamp"
+            ],
             "split_by": [],
             "sort": [],
             "filter": [],
@@ -78,7 +94,10 @@
                 "Free (mb)": "\"heap_size\" / 1024 / 1024",
                 "Heap (mb)": "\"used_size\" / 1024 / 1024"
             },
-            "columns": ["Free (mb)", "Heap (mb)"],
+            "columns": [
+                "Free (mb)",
+                "Heap (mb)"
+            ],
             "aggregates": {}
         },
         "PERSPECTIVE_GENERATED_ID_2": {
@@ -87,14 +106,18 @@
             "plugin_config": {},
             "columns_config": {},
             "title": "Server CPU",
-            "group_by": ["timestamp"],
+            "group_by": [
+                "timestamp"
+            ],
             "split_by": [],
             "sort": [],
             "filter": [],
             "expressions": {
                 "CPU (%)": "\"cpu_time\" / \"cpu_time_epoch\""
             },
-            "columns": ["CPU (%)"],
+            "columns": [
+                "CPU (%)"
+            ],
             "aggregates": {},
             "table": "stats",
             "settings": false

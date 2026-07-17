@@ -30,19 +30,19 @@ test.describe("Perspective React", () => {
         const comp = await mount(<EmptyWorkspace />);
         const toggleMount = comp.locator("button.toggle-mount");
         const addViewer = comp.locator("button.add-viewer");
-        const workspace = comp.locator("perspective-workspace");
-        const viewer = comp.locator("perspective-viewer");
+        const workspace = comp.locator("perspective-viewer");
         await toggleMount.waitFor();
         await addViewer.click();
         await addViewer.click();
         await addViewer.click();
         await page.waitForFunction(
-            () =>
-                document.querySelector("perspective-workspace")!.children
-                    .length === 3,
+            (expected) =>
+                (
+                    document.querySelector("perspective-viewer") as any
+                )?.getPanelNames?.().length === expected,
+            3,
         );
 
-        await expect(viewer).toHaveCount(3);
         await toggleMount.click();
         await workspace.waitFor({ state: "detached" });
 
@@ -51,43 +51,38 @@ test.describe("Perspective React", () => {
         await toggleMount.click();
         await workspace.waitFor();
         await page.waitForFunction(
-            () =>
-                document.querySelector("perspective-workspace")!.children
-                    .length === 3,
+            (expected) =>
+                (
+                    document.querySelector("perspective-viewer") as any
+                )?.getPanelNames?.().length === expected,
+            3,
         );
-        await expect(viewer).toHaveCount(3);
     });
 
-    test("Adding a viewer in single-document mode leaves SDM", async ({
-        page,
-        mount,
-    }) => {
+    test("Adding a panel to a lone-panel viewer", async ({ page, mount }) => {
         const name = "abcdef";
         const comp = await mount(<SingleView name={name} />);
         const addViewer = comp.locator("button.add-viewer");
-        const viewer = comp.locator("perspective-viewer");
         const settingsBtn = comp.locator(`perspective-viewer #settings_button`);
 
         await settingsBtn.waitFor();
         await addViewer.waitFor();
         await addViewer.click();
         await page.waitForFunction(
-            () =>
-                document.querySelector("perspective-workspace")!.children
-                    .length === 2,
+            (expected) =>
+                (
+                    document.querySelector("perspective-viewer") as any
+                )?.getPanelNames?.().length === expected,
+            2,
         );
 
-        expect(await viewer.count()).toBe(2);
-        await settingsBtn.first().click();
-        const settingsPanel = viewer.locator("#settings_panel");
-        await settingsPanel.waitFor();
         await addViewer.click();
         await page.waitForFunction(
-            () =>
-                document.querySelector("perspective-workspace")!.children
-                    .length === 3,
+            (expected) =>
+                (
+                    document.querySelector("perspective-viewer") as any
+                )?.getPanelNames?.().length === expected,
+            3,
         );
-        expect(await viewer.count()).toBe(3);
-        await settingsPanel.waitFor({ state: "detached" });
     });
 });

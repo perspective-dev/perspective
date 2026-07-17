@@ -17,6 +17,7 @@
 //! reference other `crate::utils` modules when it helps reduce boiler-plate.
 
 mod browser;
+mod completion;
 mod custom_element;
 mod datetime;
 mod debounce;
@@ -25,12 +26,14 @@ mod modal_position;
 mod number_format;
 mod ptr_eq_rc;
 mod pubsub;
+mod spawn;
 mod weak_scope;
 
 #[cfg(test)]
 mod tests;
 
 pub use browser::*;
+pub use completion::*;
 pub use custom_element::*;
 pub use datetime::*;
 pub use debounce::*;
@@ -40,4 +43,5 @@ pub use number_format::*;
 pub use perspective_client::clone;
 pub use ptr_eq_rc::*;
 pub use pubsub::*;
+pub use spawn::*;
 pub use weak_scope::*;

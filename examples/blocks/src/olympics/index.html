@@ -4,9 +4,8 @@
         <link rel="preload" href="/node_modules/@perspective-dev/server/dist/wasm/perspective-server.wasm" as="fetch" type="application/wasm" crossorigin="anonymous" />
         <link rel="preload" href="/node_modules/@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm" as="fetch" type="application/wasm" crossorigin="anonymous" />
         <link rel="stylesheet" crossorigin="anonymous" href="/node_modules/@perspective-dev/viewer/dist/css/pro.css" />
-        <link rel="stylesheet" crossorigin="anonymous" href="/node_modules/@perspective-dev/workspace/dist/css/pro.css" />
         <style>
-            perspective-workspace {
+            perspective-viewer {
                 left: 0;
                 position: absolute;
                 top: 0;
@@ -20,36 +19,27 @@
         </style>
     </head>
     <body>
-        <perspective-workspace id="workspace"></perspective-workspace>
+        <perspective-viewer id="workspace"></perspective-viewer>
         <script type="module">
             import "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
-            import "/node_modules/@perspective-dev/workspace/dist/cdn/perspective-workspace.js";
             import "/node_modules/@perspective-dev/viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js";
             import "/node_modules/@perspective-dev/viewer-charts/dist/cdn/perspective-viewer-charts.js";
 
             import perspective from "/node_modules/@perspective-dev/client/dist/cdn/perspective.js";
 
-            const datasource = async () => {
-                const request = fetch("./olympics.arrow");
-                const worker = await perspective.worker();
-                const response = await request;
-                const arrow = await response.arrayBuffer();
-                const table = await worker.table(arrow);
-                return table;
-            };
-
-            window.workspace.tables.set("olympics", datasource());
-            window.workspace.restore({
-                sizes: [1],
-                detail: {
-                    main: {
-                        type: "tab-area",
-                        widgets: ["PERSPECTIVE_GENERATED_ID_1", "PERSPECTIVE_GENERATED_ID_0"],
-                        currentIndex: 1,
-                    },
+            const worker = await perspective.worker();
+            const request = fetch("./olympics.arrow");
+            const response = await request;
+            const arrow = await response.arrayBuffer();
+            await worker.table(arrow, { name: "olympics" });
+            window.workspace.load(worker);
+            await window.workspace.restore({
+                layout: {
+                    type: "tab-layout",
+                    tabs: ["PERSPECTIVE_GENERATED_ID_1", "PERSPECTIVE_GENERATED_ID_0"],
+                    selected: 1,
                 },
-                mode: "globalFilters",
-                viewers: {
+                panels: {
                     PERSPECTIVE_GENERATED_ID_1: {
                         plugin: "X/Y Scatter",
                         title: "Avg Height vs Weight by Sport",

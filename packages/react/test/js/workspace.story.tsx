@@ -9,27 +9,19 @@
 // ┃ This file is part of the Perspective library, distributed under the terms ┃
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-import "@perspective-dev/workspace";
-
-import {
-    HTMLPerspectiveWorkspaceElement,
-    PerspectiveWorkspaceConfig,
-} from "@perspective-dev/workspace";
 
 import * as React from "react";
 
-import { PerspectiveWorkspace } from "@perspective-dev/react";
+import { PerspectiveViewer } from "@perspective-dev/react";
 
 import perspective_viewer from "@perspective-dev/viewer";
+import type { ViewerConfigUpdate } from "@perspective-dev/viewer";
 import "@perspective-dev/viewer-datagrid";
 import "@perspective-dev/viewer-charts";
-import "@perspective-dev/workspace";
-import * as Workspace from "@perspective-dev/workspace";
 
 import * as perspective from "@perspective-dev/client";
 
 import "@perspective-dev/viewer/dist/css/themes.css";
-import "@perspective-dev/workspace/dist/css/pro.css";
 import "./index.css";
 
 // @ts-ignore
@@ -45,19 +37,51 @@ await Promise.all([
 
 const CLIENT = await perspective.worker();
 
+/// The merged `<perspective-viewer>` whole-element config: a `regular-layout`
+/// tree + a per-panel `ViewerConfig` map. (Formerly
+/// `@perspective-dev/workspace`'s `PerspectiveWorkspaceConfig`.)
+interface MultiPanelConfig {
+    layout?: Record<string, unknown>;
+    panels: Record<string, Record<string, unknown>>;
+}
+
+/// Append a panel, re-deriving an even horizontal split of one stack per
+/// panel. (Formerly `Workspace.addViewer`.)
+function addPanel(
+    config: MultiPanelConfig,
+    panel: Record<string, unknown>,
+    id: string,
+): MultiPanelConfig {
+    const panels = { ...config.panels, [id]: panel };
+    const ids = Object.keys(panels);
+    return {
+        layout: {
+            type: "split-layout",
+            orientation: "horizontal",
+            sizes: ids.map(() => 1 / ids.length),
+            children: ids.map((k) => ({
+                type: "tab-layout",
+                tabs: [k],
+                selected: 0,
+            })),
+        },
+        panels,
+    };
+}
+
 interface WorkspaceState {
-    layout: PerspectiveWorkspaceConfig;
+    config: MultiPanelConfig;
     mounted: boolean;
 }
 
 interface WorkspaceAppProps {
-    layout: PerspectiveWorkspaceConfig;
+    config: MultiPanelConfig;
     onSpecial?: () => void;
 }
 
 const WorkspaceApp: React.FC<WorkspaceAppProps> = (props) => {
     const [state, setState] = React.useState<WorkspaceState>({
-        layout: props.layout,
+        config: props.config,
         mounted: true,
     });
 
@@ -65,35 +89,30 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = (props) => {
         const name = window.crypto.randomUUID();
         const data = `a,b,c\n${Math.random()},${Math.random()},${Math.random()}`;
         CLIENT.table(data, { name });
-        const nextId = Workspace.genId(state.layout);
-        const layout = Workspace.addViewer(
-            state.layout,
+        const config = addPanel(
+            state.config,
             {
                 table: name,
                 title: name,
             },
-            nextId,
+            name,
         );
 
         setState({
             ...state,
-            layout,
+            config,
         });
     };
 
     const onClickToggleMount = () =>
         setState((old) => ({ ...old, mounted: !state.mounted }));
 
-    const onLayoutUpdate = (layout: PerspectiveWorkspaceConfig) => {
-        setState({ ...state, layout });
-    };
-
     React.useEffect(() => {
         setState((s) => ({
             ...s,
-            layout: props.layout,
+            config: props.config,
         }));
-    }, [props.layout]);
+    }, [props.config]);
 
     return (
         <div className="workspace-container">
@@ -111,37 +130,30 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = (props) => {
                 )}
             </div>
             {state.mounted && (
-                <PerspectiveWorkspace
+                <PerspectiveViewer
                     client={CLIENT}
-                    layout={state.layout}
-                    onLayoutUpdate={onLayoutUpdate}
+                    config={state.config as unknown as ViewerConfigUpdate}
                 />
             )}
         </div>
     );
 };
 
-/// Renders the app with a default empty workspace
+/// Renders the app with a default empty workspace (a multi-panel viewer always
+/// has at least one — empty — seed panel).
 export const EmptyWorkspace: React.FC = () => {
-    return (
-        <WorkspaceApp
-            layout={{ sizes: [1], viewers: {}, detail: { main: null } }}
-        />
-    );
+    return <WorkspaceApp config={{ panels: {} }} />;
 };
 
 export const SingleView: React.FC<{ name: string }> = ({ name }) => {
     const _table = CLIENT.table("a,b,c\n1,2,3", { name });
-    const layout: PerspectiveWorkspaceConfig = {
-        sizes: [1],
-        detail: {
-            main: {
-                type: "tab-area",
-                currentIndex: 0,
-                widgets: [name],
-            },
+    const config: MultiPanelConfig = {
+        layout: {
+            type: "tab-layout",
+            tabs: [name],
+            selected: 0,
         },
-        viewers: {
+        panels: {
             [name]: {
                 table: name,
                 columns: ["a", "b", "c"],
@@ -150,5 +162,5 @@ export const SingleView: React.FC<{ name: string }> = ({ name }) => {
         },
     };
 
-    return <WorkspaceApp layout={layout} />;
+    return <WorkspaceApp config={config} />;
 };

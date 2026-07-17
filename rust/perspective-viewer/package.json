@@ -60,7 +60,8 @@
     },
     "dependencies": {
         "@perspective-dev/client": "workspace:",
-        "pro_self_extracting_wasm": "catalog:"
+        "pro_self_extracting_wasm": "catalog:",
+        "regular-layout": "catalog:"
     },
     "devDependencies": {
         "@perspective-dev/esbuild-plugin": "workspace:",

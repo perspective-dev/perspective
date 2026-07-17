@@ -17,18 +17,20 @@ use yew::prelude::*;
 
 use crate::renderer::Renderer;
 use crate::session::{Session, SessionProps, TableLoadState};
+use crate::tasks::apply_and_render;
 use crate::utils::*;
 
 /// Value-prop version: no PubSub subscriptions, no reducer.
 /// The parent (`StatusBar`) re-renders this component whenever
 /// `session_props.error/has_table/stats` or `update_count` change (via
-/// root's `IncrementUpdateCount` / `DecrementUpdateCount` / `UpdateSession`
-/// messages).
+/// root's `UpdateInFlight` / `UpdateSession` messages).
 #[derive(PartialEq, Properties)]
 pub struct StatusIndicatorProps {
     pub renderer: Renderer,
     pub session: Session,
-    /// Number of in-flight renders (>0 → "updating" spinner).
+    /// Number of in-flight CONFIG-DRIVEN runs (>0 → "updating" spinner) —
+    /// a level-triggered snapshot of `Session::in_flight_config_runs`
+    /// (RAII-settled; see `UPDATE_COUNT_REGRESSION_PLAN.md`).
     pub update_count: u32,
     /// Snapshot of session value props — read for `error`, `has_table`,
     /// `stats` to derive the icon state.
@@ -81,12 +83,7 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
             match &state {
                 StatusIconState::Errored(..) => {
                     session.reconnect().await?;
-                    let cfg = ViewConfigUpdate::default();
-                    session.update_view_config(cfg)?;
-                    renderer.apply_pending_plugin()?;
-                    renderer
-                        .draw(session.validate().await?.create_view())
-                        .await?;
+                    apply_and_render(session, renderer, ViewConfigUpdate::default())?.await?;
                 },
                 StatusIconState::Normal => {
                     session.status_indicator_clicked.emit(());

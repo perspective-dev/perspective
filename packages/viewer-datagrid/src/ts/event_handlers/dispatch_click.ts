@@ -19,6 +19,7 @@ export function createDispatchClickListener(
     model: DatagridModel,
     table: RegularTableElement,
     viewer: HTMLPerspectiveViewerElement,
+    plugin: HTMLElement,
 ): EventListener {
     return async (event: Event): Promise<void> => {
         const mouseEvent = event as MouseEvent;
@@ -27,8 +28,13 @@ export function createDispatchClickListener(
             return;
         }
 
+        if (model._edit_mode === "SELECT_ROW_TREE") {
+            return;
+        }
+
         const { x, y } = meta;
         const { row, column_names, config } = await getCellConfig(model, y, x);
+        const panel = plugin.getAttribute("slot") ?? undefined;
         viewer.dispatchEvent(
             new CustomEvent<PerspectiveClickDetail>("perspective-click", {
                 bubbles: true,
@@ -37,6 +43,7 @@ export function createDispatchClickListener(
                     row,
                     column_names,
                     config,
+                    panel,
                 },
             }),
         );

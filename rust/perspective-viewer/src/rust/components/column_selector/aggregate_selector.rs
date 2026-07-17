@@ -14,13 +14,13 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use perspective_client::config::*;
-use perspective_js::utils::ApiFuture;
 use yew::prelude::*;
 
 use crate::components::containers::select::*;
 use crate::renderer::*;
 use crate::session::*;
-use crate::utils::PtrEqRc;
+use crate::tasks::apply_and_render;
+use crate::utils::{PtrEqRc, spawn_owned};
 
 #[derive(Properties)]
 pub struct AggregateSelectorProps {
@@ -143,11 +143,8 @@ impl AggregateSelector {
 
         let session = ctx.props().session.clone();
         let renderer = ctx.props().renderer.clone();
-        if session.update_view_config(config).is_ok() {
-            ApiFuture::spawn(async move {
-                renderer.apply_pending_plugin()?;
-                renderer.draw(session.validate().await?.create_view()).await
-            });
+        if let Ok(task) = apply_and_render(&session, &renderer, config) {
+            spawn_owned("aggregate-selector", task);
         }
     }
 

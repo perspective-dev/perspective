@@ -98,7 +98,9 @@ test.describe("Events", () => {
             });
         });
 
-        const titleInput = page.locator("perspective-viewer #status_bar input");
+        const tab = page.locator("perspective-viewer perspective-viewer-tab");
+        await tab.dblclick();
+        const titleInput = tab.locator("input");
         await titleInput.focus();
         await titleInput.pressSequentially("New Title");
         await titleInput.blur();

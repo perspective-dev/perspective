@@ -102,9 +102,8 @@ export class HTMLPerspectiveViewerDatagridPluginElement
             ) as DatagridToolbarElement;
         }
 
-        const parent = this.parentElement;
-        if (parent) {
-            parent.appendChild(this._toolbar);
+        if (this.parentElement) {
+            this.insertAdjacentElement("afterend", this._toolbar);
         }
     }
 
@@ -196,7 +195,6 @@ export class HTMLPerspectiveViewerDatagridPluginElement
     async render(view: View, viewport?: ViewWindow): Promise<string> {
         const json = await view.to_columns(viewport as any);
         const cols = await view.column_paths(viewport as any);
-
         const nrows =
             viewport?.end_row !== undefined &&
             viewport?.end_row !== null &&
@@ -253,6 +251,23 @@ export class HTMLPerspectiveViewerDatagridPluginElement
 
     restore(token: DatagridPluginConfig, columns_config?: ColumnsConfig): void {
         return restore.call(this, token, columns_config ?? {});
+    }
+
+    async deselect(): Promise<void> {
+        const model = this.model;
+        if (!model?._selection_state) {
+            return;
+        }
+
+        model._selection_state.selected_areas = [];
+        model._selection_state.old_selected_areas = [];
+        model._selection_state.potential_selection = undefined;
+        model._selection_state.CURRENT_MOUSEDOWN_COORDINATES = {};
+        model._selection_state.dirty = true;
+        model._tree_selection_id = undefined;
+        if (this._initialized) {
+            await this.regular_table.draw({ preserve_width: true });
+        }
     }
 
     restyle() {}

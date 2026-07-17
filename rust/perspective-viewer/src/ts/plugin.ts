@@ -28,6 +28,36 @@ import { PluginStaticConfig } from "./ts-rs/PluginStaticConfig.js";
  * level (if packaged as a library), or during application init to ensure global
  * availability of a plugin.
  *
+ * ## Dispatch contract
+ *
+ * The host dispatches each method for exactly one reason, and never
+ * defensively — implementations may rely on these meanings:
+ *
+ * - `draw(view)` — `view` is NEW to this plugin: a new engine `View` was
+ *   constructed, or this plugin was freshly selected and owes its first
+ *   render. Safe to reset zoom/scroll/selection state.
+ * - `update(view)` — same `View`, but a plugin-visible input genuinely
+ *   changed: new data (`View.on_update`), an effective view-config delta
+ *   without a rebuild, a *changed* plugin/columns config just delivered
+ *   via `restore()`, changed CSS just applied via `restyle()`, a
+ *   render-limits change, or an explicit public `viewer.restore()` call
+ *   (the no-op-restore refresh affordance). Host-internal operations that
+ *   change none of these dispatch nothing.
+ * - `resize(view)` — geometry or visibility changed (including panel
+ *   activation); repaint from retained state, no data or CSS re-read.
+ * - `restyle()` — the effective theme genuinely changed; when a
+ *   `draw`/`update` is part of the same operation, `restyle()` is called
+ *   immediately BEFORE it, so one render pass paints in the new theme.
+ * - `restore()`/`save()` — state transfer only. Plugins must NOT render
+ *   from `restore()` (a changed restore is always followed by exactly one
+ *   `update`) and must NOT call host APIs from inside it — a
+ *   `restorePanel()` echo re-enters the host's public surface and forces
+ *   a redundant render (the classic double-render-on-load bug).
+ *
+ * Rendering methods (`draw`, `update`, `resize`, `render`, `clear`) and
+ * `delete` are serialized per element — the host never overlaps them, and
+ * each call runs to completion before the next begins.
+ *
  * @example
  * ```javascript
  * const BasePlugin = customElements.get("perspective-viewer-plugin");
@@ -68,6 +98,14 @@ export interface IPerspectiveViewerPlugin {
      * provision to cancel a render in progress per se, calling a method on
      * a `View` which has been deleted will throw an exception.
      *
+     * The host invokes `draw` ONLY when `view` is NEW to this plugin — a
+     * new engine `View` was constructed for a config change, or this plugin
+     * element was freshly selected and owes its first render of the bound
+     * `View` — so implementations may treat it as "new data shape" and
+     * reset zoom/scroll/selection-domain state. Repaints of the same
+     * `View` arrive as `update()` (data or style refresh) or `resize()`
+     * (geometry/chrome), never `draw()`.
+     *
      * @example
      * ```
      * async draw(view: perspective.View): Promise<void> {
@@ -79,9 +117,9 @@ export interface IPerspectiveViewerPlugin {
     draw(view: View): Promise<void>;
 
     /**
-     * Draw under the assumption that the `ViewConfig` has not changed since
-     * the previous call to `draw()`, but the underlying data has.  Defaults to
-     * dispatch to `draw()`.
+     * Draw under the assumption that the `View` has not changed since the
+     * previous call to `draw()`, but some plugin-visible input has.
+     * Defaults to dispatch to `draw()`.
      *
      * @example
      * ```javascript
@@ -109,20 +147,49 @@ export interface IPerspectiveViewerPlugin {
 
     /**
      * Like `update()`, but for when the dimensions of the plugin have changed
-     * and the underlying data has not.
+     * and the underlying data has not — a repaint from retained state,
+     * invoked ONLY when geometry or visibility changed: box resizes,
+     * presize sweeps, and the panel-ACTIVATION chrome nudge (multi-panel),
+     * so implementations should repaint activation-dependent chrome here
+     * and no-op while hidden (`offsetParent == null`).
      */
     resize(view: View): Promise<void>;
 
     /**
      * Notify the plugin that the style environment has changed.  Useful for
-     * plugins which read CSS styles via `window.getComputedStyle()`.
+     * plugins which read CSS styles via `window.getComputedStyle()` — this
+     * is the ONLY point at which a plugin is expected to (re-)read them
+     * (besides its first `draw()`), so implementations may cache computed
+     * styles between `restyle()` calls.
      */
     restyle(): void;
 
     /**
      * Restore this plugin to a state previously returned by `save()`.
+     *
+     * State transfer ONLY — implementations must not render from
+     * `restore()` (the host follows a restore that genuinely changed
+     * plugin state with exactly one `update()` in the same serialized
+     * sequence), and must not call host `<perspective-viewer>` APIs from
+     * inside it: an echoed `restorePanel()` re-enters the host's public
+     * surface where it is indistinguishable from a user call and forces a
+     * redundant render. Host API calls to persist plugin state belong to
+     * genuine user-gesture handlers (e.g. a toolbar click), never to the
+     * `restore()` delivery path.
      */
     restore(config: any): void;
+
+    /**
+     * OPTIONAL — clear any visible user selection state (highlighted rows,
+     * pinned tooltips) WITHOUT emitting selection events. The host
+     * `<perspective-viewer>` invokes this when an element-level global
+     * filter contributed by this plugin's selection is removed from the
+     * global filter bar, so the selection visual can't outlive the filter
+     * it produced. Called under the host's per-panel render serialization
+     * (like `draw`), so implementations may redraw. Plugins without a
+     * selection UI may omit it.
+     */
+    deselect?(): Promise<void>;
 
     /**
      * Free any resources acquired by this plugin and prepare to be deleted.

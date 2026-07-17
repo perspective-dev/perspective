@@ -114,10 +114,6 @@ const BROWSER_PACKAGES = [
         testDir: "packages/jupyterlab/test/js",
     },
     {
-        packageName: "workspace",
-        testDir: "packages/workspace/test/js",
-    },
-    {
         packageName: "docs",
         testDir: "docs/test/js",
     },

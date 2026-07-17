@@ -92,14 +92,17 @@ export function restore(
         }
     }
 
+    // `echo = false`: this `restore()` IS the host delivering the config —
+    // echoing it back via `restorePanel` queued a second render run
+    // (draw-then-update on every initial load carrying a `plugin_config`).
     if ("edit_mode" in token) {
         if (EDIT_MODES.indexOf(token.edit_mode!) !== -1) {
-            toggle_edit_mode.call(this, token.edit_mode);
+            toggle_edit_mode.call(this, token.edit_mode, false);
         } else {
             console.error("Unknown edit mode " + token.edit_mode);
         }
     } else {
-        toggle_edit_mode.call(this, "READ_ONLY");
+        toggle_edit_mode.call(this, "READ_ONLY", false);
     }
 
     if ("scroll_lock" in token) {

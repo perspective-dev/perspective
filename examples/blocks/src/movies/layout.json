@@ -1,22 +1,40 @@
 {
-    "sizes": [0.34555410083131466, 0.6544458991686853],
-    "detail": {
-        "main": {
-            "type": "tab-area",
-            "widgets": [
-                "PERSPECTIVE_GENERATED_ID_0",
-                "PERSPECTIVE_GENERATED_ID_1",
-                "PERSPECTIVE_GENERATED_ID_3"
-            ],
-            "currentIndex": 0
-        }
+    "layout": {
+        "type": "split-layout",
+        "orientation": "horizontal",
+        "children": [
+            {
+                "type": "split-layout",
+                "orientation": "vertical",
+                "children": [
+                    {
+                        "type": "tab-layout",
+                        "tabs": [
+                            "PERSPECTIVE_GENERATED_ID_2"
+                        ],
+                        "selected": 0
+                    }
+                ],
+                "sizes": [
+                    1
+                ]
+            },
+            {
+                "type": "tab-layout",
+                "tabs": [
+                    "PERSPECTIVE_GENERATED_ID_0",
+                    "PERSPECTIVE_GENERATED_ID_1",
+                    "PERSPECTIVE_GENERATED_ID_3"
+                ],
+                "selected": 0
+            }
+        ],
+        "sizes": [
+            0.25,
+            0.75
+        ]
     },
-    "mode": "globalFilters",
-    "master": {
-        "widgets": ["PERSPECTIVE_GENERATED_ID_2"],
-        "sizes": [1]
-    },
-    "viewers": {
+    "panels": {
         "PERSPECTIVE_GENERATED_ID_2": {
             "plugin": "Datagrid",
             "plugin_config": {
@@ -37,28 +55,46 @@
             },
             "settings": false,
             "theme": "Pro Dark",
-            "group_by": ["Distributor"],
+            "group_by": [
+                "Distributor"
+            ],
             "split_by": [],
-            "columns": ["US Gross"],
+            "columns": [
+                "US Gross"
+            ],
             "filter": [],
-            "sort": [["US Gross", "desc"]],
+            "sort": [
+                [
+                    "US Gross",
+                    "desc"
+                ]
+            ],
             "expressions": {},
             "aggregates": {},
-            "master": true,
-            "name": null,
             "table": "movies",
-            "linked": false,
-            "selectable": "true"
+            "title": null
         },
         "PERSPECTIVE_GENERATED_ID_0": {
             "plugin": "Heatmap",
             "plugin_config": {},
             "settings": false,
             "theme": "Pro Dark",
-            "group_by": ["bucket(\"Rotten Tomatoes Rating\", 2.5)"],
-            "split_by": ["bucket(\"IMDB Rating\", 0.25)"],
-            "columns": ["US Gross"],
-            "filter": [["bucket(\"IMDB Rating\", 0.25)", "is not null", null]],
+            "group_by": [
+                "bucket(\"Rotten Tomatoes Rating\", 2.5)"
+            ],
+            "split_by": [
+                "bucket(\"IMDB Rating\", 0.25)"
+            ],
+            "columns": [
+                "US Gross"
+            ],
+            "filter": [
+                [
+                    "bucket(\"IMDB Rating\", 0.25)",
+                    "is not null",
+                    null
+                ]
+            ],
             "sort": [],
             "expressions": {
                 "bucket(\"IMDB Rating\", 0.25)": "bucket(\"IMDB Rating\", 0.25)",
@@ -67,10 +103,8 @@
             "aggregates": {
                 "bucket(\"Rotten Tomatoes Rating\", 2.5)": "avg"
             },
-            "master": false,
-            "name": null,
             "table": "movies",
-            "linked": false
+            "title": null
         },
         "PERSPECTIVE_GENERATED_ID_1": {
             "plugin": "Y Line",
@@ -79,11 +113,15 @@
                     "left": "79px",
                     "top": "174px"
                 },
-                "splitMainValues": ["Rotten Tomatoes Rating"]
+                "splitMainValues": [
+                    "Rotten Tomatoes Rating"
+                ]
             },
             "settings": false,
             "theme": "Pro Dark",
-            "group_by": ["bucket(\"Release Date\", 'Y')"],
+            "group_by": [
+                "bucket(\"Release Date\", 'Y')"
+            ],
             "split_by": [],
             "columns": [
                 "US Gross",
@@ -100,10 +138,8 @@
             "aggregates": {
                 "Rotten Tomatoes Rating": "avg"
             },
-            "master": false,
-            "name": "Ratings vs Sales",
             "table": "movies",
-            "linked": false
+            "title": "Ratings vs Sales"
         },
         "PERSPECTIVE_GENERATED_ID_3": {
             "plugin": "Y Area",
@@ -115,19 +151,23 @@
             },
             "settings": false,
             "theme": "Pro Dark",
-            "group_by": ["bucket(\"Release Date\", 'Y')"],
-            "split_by": ["Major Genre"],
-            "columns": ["US Gross"],
+            "group_by": [
+                "bucket(\"Release Date\", 'Y')"
+            ],
+            "split_by": [
+                "Major Genre"
+            ],
+            "columns": [
+                "US Gross"
+            ],
             "filter": [],
             "sort": [],
             "expressions": {
                 "bucket(\"Release Date\", 'Y')": "bucket(\"Release Date\", 'Y')"
             },
             "aggregates": {},
-            "master": false,
-            "name": "US Gross by Genre",
             "table": "movies",
-            "linked": false
+            "title": "US Gross by Genre"
         }
     }
 }

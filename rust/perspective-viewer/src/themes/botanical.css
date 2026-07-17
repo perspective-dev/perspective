@@ -14,11 +14,13 @@
 
 /* Register theme for auto-detection */
 perspective-viewer,
-perspective-viewer[theme="Botanical"] {
+perspective-viewer[theme="Botanical"],
+perspective-viewer [theme="Botanical"] {
     --psp-theme-name: "Botanical";
 }
 
-perspective-viewer[theme="Botanical"] {
+perspective-viewer[theme="Botanical"],
+perspective-viewer [theme="Botanical"] {
     /* perspective-viewer-botanical--colors */
     background-color: #1a2e1a;
     color: #e0ead8;
@@ -90,6 +92,7 @@ perspective-viewer[theme="Botanical"] {
     --psp-charts--map-tiles--attribution-: "I <3 Open Source";
 }
 
+perspective-context-menu[theme="Botanical"],
 perspective-copy-menu[theme="Botanical"],
 perspective-export-menu[theme="Botanical"],
 perspective-dropdown[theme="Botanical"],

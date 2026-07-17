@@ -37,13 +37,3 @@ impl<C: Component> PartialEq for WeakScope<C> {
         Rc::ptr_eq(&self.0, &other.0)
     }
 }
-
-// #[extend::ext]
-// pub impl<T: Component> Context<T> {
-//     fn context<U: Clone + PartialEq + 'static>(&self) -> U {
-//         self.link()
-//             .context::<U>(Callback::from(|_| {}))
-//             .map(|(c, _)| c)
-//             .unwrap()
-//     }
-// }

@@ -29,6 +29,8 @@ pub enum StyleSurface {
     FunctionDropdown,
     /// Copy / Export menu (non-inverted color scheme).
     DropdownMenu,
+    /// Panel context menu (right-click a panel).
+    ContextMenu,
 }
 
 #[derive(Properties, PartialEq)]
