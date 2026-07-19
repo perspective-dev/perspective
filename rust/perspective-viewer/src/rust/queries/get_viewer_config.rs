@@ -48,7 +48,7 @@ pub async fn get_viewer_config(
     // `None` only when no themes are registered.
     let theme = match renderer.theme() {
         theme @ Some(_) => theme,
-        None => presentation.get_available_themes().await?.first().cloned(),
+        None => presentation.get_selected_theme_name().await,
     };
     let title = session.get_title();
     let table = session.get_table().map(|x| x.get_name().to_owned());

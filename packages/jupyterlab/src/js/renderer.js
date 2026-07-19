@@ -20,19 +20,20 @@ import {
 } from "@jupyterlab/apputils";
 
 import { ABCWidgetFactory, DocumentWidget } from "@jupyterlab/docregistry";
-import { PerspectiveWidget } from "./psp_widget";
+import { Widget } from "@lumino/widgets";
 
-import perspective from "@perspective-dev/client";
+// The Perspective runtime lives in the anywidget bundle and is loaded lazily on
+// first file-open (see `_update`), so the labextension doesn't load it at
+// startup. Importing the bundle eagerly registers the custom elements
+// (idempotent across bundle copies); `worker()` resolves its wasm from the
+// registered `<perspective-viewer>` element.
+const runtime = () => import("@perspective-dev/anywidget");
 
-/**
- * The name of the factories that creates widgets.
- */
 const FACTORY_CSV = "Perspective-CSV";
 const FACTORY_JSON = "Perspective-JSON";
 const FACTORY_ARROW = "Perspective-Arrow";
 const RENDER_TIMEOUT = 1000;
 
-// create here to reuse for exception handling
 const baddialog = () => {
     showDialog({
         body: "Perspective could not render the data",
@@ -46,10 +47,53 @@ const baddialog = () => {
     });
 };
 
+class PerspectiveViewerWidget extends Widget {
+    constructor() {
+        const node = document.createElement("div");
+        node.classList.add("PSPContainer");
+        const viewer = document.createElement("perspective-viewer");
+        viewer.classList.add("PSPViewer");
+        viewer.addEventListener(
+            "contextmenu",
+            (event) => event.stopPropagation(),
+            false,
+        );
+        node.appendChild(viewer);
+        super({ node });
+        this._viewer = viewer;
+    }
+
+    get viewer() {
+        return this._viewer;
+    }
+
+    set theme(t) {
+        this._viewer.restore({ theme: t });
+    }
+
+    onAfterShow() {
+        this._viewer.resize?.(true);
+    }
+
+    onActivateRequest() {
+        if (this.isAttached) {
+            this._viewer.focus();
+        }
+    }
+
+    dispose() {
+        if (this.isDisposed) {
+            return;
+        }
+        this._viewer.delete();
+        super.dispose();
+    }
+}
+
 export class PerspectiveDocumentWidget extends DocumentWidget {
     constructor(options, type = "csv") {
         super({
-            content: new PerspectiveWidget("Perspective"),
+            content: new PerspectiveViewerWidget(),
             context: options.context,
             reveal: options.reveal,
         });
@@ -69,13 +113,18 @@ export class PerspectiveDocumentWidget extends DocumentWidget {
     }
 
     async _update() {
+        // Lazy-load the Perspective runtime bundle; importing it eagerly
+        // registers the custom elements (idempotent across the widget/renderer
+        // bundle copies) and `await ready` ensures wasm init + that
+        // `<perspective-viewer>` is defined before the constructor's element is
+        // used to load a table.
+        const psp_runtime = await runtime();
+        await psp_runtime.ready;
         try {
             let data;
             if (this._type === "csv") {
-                // load csv directly
                 data = this._context.model.toString();
             } else if (this._type === "arrow") {
-                // load arrow directly
                 data = Uint8Array.from(
                     atob(this._context.model.toString()),
                     (c) => c.charCodeAt(0),
@@ -83,32 +132,23 @@ export class PerspectiveDocumentWidget extends DocumentWidget {
             } else if (this._type === "json") {
                 data = this._context.model.toJSON();
                 if (Array.isArray(data) && data.length > 0) {
-                    // already is records form, load directly
                     data = data;
                 } else {
-                    // Column-oriented or single records JSON
-                    // don't handle for now, just need to implement
-                    // a simple transform but we can't handle all
-                    // cases
                     throw "Not handled";
                 }
             } else {
-                // don't handle other mimetypes for now
                 throw "Not handled";
             }
             try {
                 const table = await this._psp.viewer.getTable();
                 table.replace(data);
             } catch (e) {
-                // construct new table
-                this.worker = await perspective.worker();
+                this.worker = await psp_runtime.worker();
                 const table_promise = this.worker.table(data);
 
-                // load data
                 await this._psp.viewer.load(table_promise);
                 const table = await this._psp.viewer.getTable();
 
-                // create a flat view
                 const view = await table.view();
                 view.on_update(async () => {
                     if (this._type === "csv") {
@@ -140,7 +180,6 @@ export class PerspectiveDocumentWidget extends DocumentWidget {
             throw e;
         }
 
-        // pickup theme from env
         this._psp.theme =
             document.body.getAttribute("data-jp-theme-light") === "false"
                 ? "Pro Light"
@@ -152,7 +191,9 @@ export class PerspectiveDocumentWidget extends DocumentWidget {
             this._monitor.dispose();
         }
 
-        this.worker.terminate();
+        if (this.worker) {
+            this.worker.terminate();
+        }
         super.dispose();
     }
 
@@ -161,9 +202,6 @@ export class PerspectiveDocumentWidget extends DocumentWidget {
     }
 }
 
-/**
- * A widget factory for CSV widgets.
- */
 export class PerspectiveCSVFactory extends ABCWidgetFactory {
     createNewWidget(context) {
         return new PerspectiveDocumentWidget(
@@ -175,9 +213,6 @@ export class PerspectiveCSVFactory extends ABCWidgetFactory {
     }
 }
 
-/**
- * A widget factory for JSON widgets.
- */
 export class PerspectiveJSONFactory extends ABCWidgetFactory {
     createNewWidget(context) {
         return new PerspectiveDocumentWidget(
@@ -189,9 +224,6 @@ export class PerspectiveJSONFactory extends ABCWidgetFactory {
     }
 }
 
-/**
- * A widget factory for arrow widgets.
- */
 export class PerspectiveArrowFactory extends ABCWidgetFactory {
     createNewWidget(context) {
         return new PerspectiveDocumentWidget(
@@ -202,10 +234,6 @@ export class PerspectiveArrowFactory extends ABCWidgetFactory {
         );
     }
 }
-
-/**
- * Activate cssviewer extension for CSV files
- */
 
 function activate(app, restorer, themeManager) {
     const factorycsv = new PerspectiveCSVFactory({
@@ -256,7 +284,6 @@ function activate(app, restorer, themeManager) {
     });
 
     if (restorer) {
-        // Handle state restoration.
         void restorer.restore(trackercsv, {
             command: "docmanager:open",
             args: (widget) => ({
@@ -292,10 +319,7 @@ function activate(app, restorer, themeManager) {
     const ftjson = app.docRegistry.getFileType("json");
     const ftarrow = app.docRegistry.getFileType("arrow");
     factorycsv.widgetCreated.connect((sender, widget) => {
-        // Track the widget.
         void trackercsv.add(widget);
-
-        // Notify the widget tracker if restore data needs to update.
         widget.context.pathChanged.connect(() => {
             void trackercsv.save(widget);
         });
@@ -307,10 +331,7 @@ function activate(app, restorer, themeManager) {
     });
 
     factoryjson.widgetCreated.connect((sender, widget) => {
-        // Track the widget.
         void trackerjson.add(widget);
-
-        // Notify the widget tracker if restore data needs to update.
         widget.context.pathChanged.connect(() => {
             void trackerjson.save(widget);
         });
@@ -322,10 +343,7 @@ function activate(app, restorer, themeManager) {
     });
 
     factoryarrow.widgetCreated.connect((sender, widget) => {
-        // Track the widget.
         void trackerarrow.add(widget);
-
-        // Notify the widget tracker if restore data needs to update.
         widget.context.pathChanged.connect(() => {
             void trackerarrow.save(widget);
         });
@@ -336,7 +354,6 @@ function activate(app, restorer, themeManager) {
         }
     });
 
-    // Keep the themes up-to-date.
     const updateThemes = () => {
         const isLight =
             themeManager && themeManager.theme
@@ -362,9 +379,6 @@ function activate(app, restorer, themeManager) {
     }
 }
 
-/**
- * The perspective extension for files
- */
 export const PerspectiveRenderers = {
     activate: activate,
     id: "@perspective-dev/jupyterlab-renderers",

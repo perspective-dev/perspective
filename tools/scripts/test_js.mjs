@@ -35,7 +35,6 @@ const IS_PLAYWRIGHT = get_scope().reduce(
             "viewer-charts",
             "viewer-workspace",
             "workspace",
-            "jupyterlab",
         ].includes(pkg),
     false,
 );

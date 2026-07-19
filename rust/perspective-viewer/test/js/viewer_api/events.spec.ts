@@ -119,3 +119,48 @@ test.describe("Events", () => {
         expect(config.title).toEqual("New Title");
     });
 });
+
+test.describe("Events (plugin switch)", () => {
+    test.beforeEach(async ({ page }) => {
+        await page.goto(
+            "/rust/perspective-viewer/test/html/superstore-debug.html",
+        );
+        await page.evaluate(async () => {
+            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+                await new Promise((x) => setTimeout(x, 10));
+            }
+        });
+        await page.evaluate(async () => {
+            await document.querySelector("perspective-viewer")!.restore({
+                plugin: "Debug Styled",
+            });
+        });
+    });
+
+    test("config-update detail carries the committed plugin on a plugin+theme switch", async ({
+        page,
+    }) => {
+        const seen = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.getTable();
+            await viewer.resetThemes(["Pro Light", "Pro Dark"]);
+            const acc: Array<{ plugin: string; theme: string }> = [];
+            viewer.addEventListener("perspective-config-update", (e) => {
+                const detail = (e as CustomEvent).detail;
+                acc.push({ plugin: detail.plugin, theme: detail.theme });
+            });
+
+            await viewer.restore({ plugin: "Debug Alt", theme: "Pro Dark" });
+            await viewer.flush();
+            return acc;
+        });
+
+        expect(seen.length).toBeGreaterThan(0);
+        for (const d of seen) {
+            if (d.theme === "Pro Dark") {
+                expect(d.plugin).toBe("Debug Alt");
+            }
+        }
+        expect(seen[seen.length - 1].plugin).toBe("Debug Alt");
+    });
+});

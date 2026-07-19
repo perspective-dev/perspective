@@ -93,6 +93,27 @@ export function describe_jupyter(body, { name, root } = {}) {
     test.beforeEach(remove_jupyter_artifacts);
     test.afterAll(remove_jupyter_artifacts);
 
+    test.afterEach(async () => {
+        const port = process.env.__JUPYTERLAB_PORT__;
+        if (!port) {
+            return;
+        }
+        try {
+            const base = `http://127.0.0.1:${port}`;
+            const res = await fetch(`${base}/api/sessions`, {
+                headers: { Accept: "application/json" },
+            });
+            const sessions = await res.json();
+            await Promise.all(
+                (Array.isArray(sessions) ? sessions : []).map((s) =>
+                    fetch(`${base}/api/sessions/${s.id}`, {
+                        method: "DELETE",
+                    }).catch(() => {}),
+                ),
+            );
+        } catch (e) {}
+    });
+
     // URL is null because each test.capture_jupyterlab will have its own
     // unique notebook generated.
     return test.describe(`Blank Notebook`, body);
@@ -118,6 +139,10 @@ export function test_jupyter(name, cells, body) {
     });
 }
 
+test_jupyter.skip = function (name, _cells, _body) {
+    test.skip(name, async () => {});
+};
+
 export async function default_body(page) {
     await execute_all_cells(page);
     const viewer = await page.waitForSelector(
@@ -133,6 +158,33 @@ export async function execute_all_cells(page) {
     await page.waitForSelector(".jp-NotebookPanel-toolbar", {
         visible: true,
     });
+
+    try {
+        await page.waitForFunction(
+            async () => {
+                try {
+                    const res = await fetch("/api/sessions", {
+                        headers: { Accept: "application/json" },
+                    });
+                    const sessions = await res.json();
+                    return (
+                        Array.isArray(sessions) &&
+                        sessions.some(
+                            (s) =>
+                                s.kernel &&
+                                s.kernel.connections > 0 &&
+                                s.kernel.execution_state &&
+                                s.kernel.execution_state !== "starting",
+                        )
+                    );
+                } catch (e) {
+                    return false;
+                }
+            },
+            null,
+            { timeout: 60000, polling: 500 },
+        );
+    } catch (e) {}
 
     // wait for a cell to be active
     try {
@@ -151,6 +203,16 @@ export async function execute_all_cells(page) {
     await page.keyboard.press("R");
     await page.keyboard.press("R");
     await page.evaluate(() => (document.scrollTop = 0));
+    try {
+        await page.waitForFunction(
+            () =>
+                !Array.from(
+                    document.querySelectorAll(".jp-InputPrompt"),
+                ).some((el) => (el.textContent || "").includes("*")),
+            null,
+            { timeout: 60000, polling: 500 },
+        );
+    } catch (e) {}
 }
 
 export async function add_and_execute_cell(page, cell_content) {
@@ -164,11 +226,13 @@ export async function add_and_execute_cell(page, cell_content) {
     await new Promise((x) => setTimeout(x, 100));
     // find and click the "new cell" button
     await page.click('jp-button[data-command="notebook:insert-cell-below"]');
-    await new Promise((x) => setTimeout(x, 100));
-    // after clicking new cell, the document will auto
-    // focus the new cell, so lets grab it
-    const el = await page.evaluateHandle(() => document.activeElement);
-    await el.type(cell_content);
+
+    // Click into the new active cell's editor before typing — grabbing
+    // `document.activeElement` races JupyterLab's command/edit mode focus,
+    // and in command mode the source is eaten as keyboard shortcuts.
+    // `insertText` inserts atomically (no auto-indent/auto-close mangling).
+    await page.locator(".jp-CodeCell.jp-mod-active .cm-content").click();
+    await page.keyboard.insertText(cell_content);
 
     await new Promise((x) => setTimeout(x, 100));
     // now while the element is still focused, click the run cell button
@@ -194,9 +258,51 @@ export async function assert_no_error_in_cell(page, cell_content) {
             .waitForSelector(
                 'div[data-mime-type="application/vnd.jupyter.stderr"]',
             )
-            .then(() => false),
+            .then(async (el) => {
+                // Only visible with `PSP_DEBUG=1` (playwright `quiet`)
+                console.log(
+                    "assert_no_error_in_cell stderr:",
+                    await el.evaluate((e) => e.textContent.slice(0, 1000)),
+                );
+                return false;
+            }),
         page
             .waitForSelector("//div//pre[contains(text(),\"'Passed'\")]")
             .then(() => true),
     ]);
+}
+
+let _python_pass_token = 0;
+
+/**
+ * Assert that a block of Python `assert` statements eventually passes, polling
+ * across fresh cell executions.
+ *
+ * A frontend `viewer.restore()` syncs back to the Python traits asynchronously
+ * (config-update event -> `model.save_changes()` -> comm -> kernel), and
+ * ipykernel only applies comm messages while the kernel is idle (between
+ * executions). A one-shot `assert_no_error_in_cell` therefore races the
+ * round-trip and fails on a slow runner even though the sync is on its way.
+ * Re-issue the assertion in a new cell (each execution gives the kernel another
+ * idle window to apply the pending update) until it passes or `tries` is
+ * exhausted. A per-attempt success token makes the check stale-safe — a prior
+ * failed attempt's output can never be mistaken for success.
+ *
+ * @returns {Promise<boolean>} whether the asserts passed within `tries`.
+ */
+export async function assert_python_eventually(page, asserts, tries = 15) {
+    for (let i = 0; i < tries; i++) {
+        const token = `PSP_PASS_${_python_pass_token++}`;
+        await add_and_execute_cell(page, `${asserts}\n${JSON.stringify(token)}`);
+        const passed = await page
+            .locator(`.jp-OutputArea-output:has-text("${token}")`)
+            .first()
+            .waitFor({ state: "visible", timeout: 4000 })
+            .then(() => true)
+            .catch(() => false);
+        if (passed) {
+            return true;
+        }
+    }
+    return false;
 }

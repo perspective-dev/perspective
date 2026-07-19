@@ -25,6 +25,13 @@ interface PerspectiveViewerConstructor {
 }
 
 async function _register_element(): Promise<void> {
+    if (customElements.get("perspective-viewer-datagrid")) {
+        console.warn(
+            'Custom element "perspective-viewer-datagrid" is already registered; skipping duplicate registration (Perspective was loaded more than once on this page).',
+        );
+        return;
+    }
+
     customElements.define(
         "perspective-viewer-datagrid-toolbar",
         HTMLPerspectiveViewerDatagridToolbarElement,

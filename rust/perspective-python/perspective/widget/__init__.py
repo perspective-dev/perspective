@@ -13,18 +13,21 @@
 import base64
 import logging
 import os
+import pathlib
 import re
 import importlib.metadata
 import inspect
 
 from string import Template
-from ipywidgets import DOMWidget
-from traitlets import Unicode, observe
+import anywidget
+from traitlets import observe
 from .viewer import PerspectiveViewer
 
 __version__ = re.sub(".dev[0-9]+", "", importlib.metadata.version("perspective-python"))
 
 __all__ = ["PerspectiveWidget"]
+
+_STATIC = pathlib.Path(__file__).parent / "static"
 
 __doc__ = """
 `PerspectiveWidget` is a JupyterLab widget that implements the same API as
@@ -90,7 +93,7 @@ PerspectiveWidget(table)
 """
 
 
-class PerspectiveWidget(DOMWidget, PerspectiveViewer):
+class PerspectiveWidget(anywidget.AnyWidget, PerspectiveViewer):
     """`PerspectiveWidget` allows for Perspective to be used as a Jupyter
     widget.
 
@@ -123,13 +126,8 @@ class PerspectiveWidget(DOMWidget, PerspectiveViewer):
     >>> widget.table.update({"a": [4, 5]}) # Browser UI updates
     """
 
-    # Required by ipywidgets for proper registration of the backend
-    _model_name = Unicode("PerspectiveModel").tag(sync=True)
-    _model_module = Unicode("@perspective-dev/jupyterlab").tag(sync=True)
-    _model_module_version = Unicode("~{}".format(__version__)).tag(sync=True)
-    _view_name = Unicode("PerspectiveView").tag(sync=True)
-    _view_module = Unicode("@perspective-dev/jupyterlab").tag(sync=True)
-    _view_module_version = Unicode("~{}".format(__version__)).tag(sync=True)
+    _esm = _STATIC / "perspective-anywidget.js"
+    _css = _STATIC / "perspective-anywidget.css"
 
     def __init__(
         self,
@@ -297,7 +295,7 @@ class PerspectiveWidget(DOMWidget, PerspectiveViewer):
                 session.close()
 
     def _repr_mimebundle_(self, **kwargs):
-        super_bundle = super(DOMWidget, self)._repr_mimebundle_(**kwargs)
+        super_bundle = super()._repr_mimebundle_(**kwargs)
         if not _jupyter_html_export_enabled():
             return super_bundle
 
@@ -319,7 +317,7 @@ class PerspectiveWidget(DOMWidget, PerspectiveViewer):
             # return f"http://localhost:8080/node_modules/@perspective-dev/{module}/dist/{path}"
             return f"https://cdn.jsdelivr.net/npm/@perspective-dev/{module}@{__version__}/dist/{path}"
 
-        return super(DOMWidget, self)._repr_mimebundle_(**kwargs) | {
+        return super()._repr_mimebundle_(**kwargs) | {
             "text/html": template.substitute(
                 psp_cdn_perspective=psp_cdn("perspective"),
                 psp_cdn_perspective_viewer=psp_cdn("perspective-viewer"),

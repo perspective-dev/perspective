@@ -7,6 +7,7 @@ packages:
     - "packages/viewer-datagrid"
     - "packages/viewer-charts"
     - "packages/workspace"
+    - "packages/anywidget"
     - "packages/jupyterlab"
     - "packages/react"
     - "packages/cli"

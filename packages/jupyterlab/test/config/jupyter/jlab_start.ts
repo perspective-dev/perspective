@@ -11,11 +11,14 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import * as path from "path";
+import * as fs from "fs";
 import { get } from "http";
 import { spawn } from "child_process";
 import "zx/globals";
 
 const PACKAGE_ROOT = path.join(__dirname, "..", "..", "..");
+
+const SERVER_LOG_PATH = path.join(PACKAGE_ROOT, "dist", "jupyter-server.log");
 
 /**
  * Kill the Jupyterlab process created by the tests.
@@ -83,6 +86,11 @@ export function start_jlab() {
 
         console.log("Spawning Jupyterlab process");
 
+        fs.mkdirSync(path.dirname(SERVER_LOG_PATH), { recursive: true });
+        const log_stream = fs.createWriteStream(SERVER_LOG_PATH, {
+            flags: "w",
+        });
+
         // Jupyterlab is spawned with the default $PYTHONPATH of the shell it
         // is running in. For local testing during devlopment you may need to
         // run it with the $PYTHONPATH set to ./python/perspective
@@ -91,7 +99,7 @@ export function start_jlab() {
             [
                 "lab",
                 "--no-browser",
-                "--log-level=CRITICAL",
+                "--log-level=INFO",
                 `--port=${process.env.__JUPYTERLAB_PORT__}`,
                 `--config=${process.env.JUPYTER_CONFIG_DIR}/jupyter_notebook_config.json`,
             ],
@@ -105,6 +113,9 @@ export function start_jlab() {
                 // stdio: "inherit",
             },
         );
+
+        proc.stdout?.pipe(log_stream);
+        proc.stderr?.pipe(log_stream);
 
         // Wait for Jupyterlab to start up
         return wait_for_jlab().then(() => {

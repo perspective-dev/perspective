@@ -180,6 +180,11 @@ async function focus_package() {
         },
         {
             key: "a",
+            name: "@perspective-dev/anywidget",
+            value: "anywidget",
+        },
+        {
+            key: "a",
             name: "@perspective-dev/react",
             value: "react",
         },

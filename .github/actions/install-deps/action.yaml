@@ -204,12 +204,12 @@ runs:
           if: ${{ inputs.javascript == 'false' || inputs.playwright == 'false'}}
           run: pnpm install --ignore-scripts
 
-        - name: Template version
-          shell: bash
-          if: ${{ !startsWith(github.ref_name, 'v') }}
-          run: |
-              git config --global --add safe.directory $GITHUB_WORKSPACE
-              node tools/scripts/version.mjs --nightly
+        # - name: Template version
+        #   shell: bash
+        #   if: ${{ !startsWith(github.ref_name, 'v') }}
+        #   run: |
+        #       git config --global --add safe.directory $GITHUB_WORKSPACE
+        #       node tools/scripts/version.mjs --nightly
 
         - name: Install Python dependencies
           shell: bash

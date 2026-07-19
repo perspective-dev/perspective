@@ -53,8 +53,10 @@ class PerspectiveViewer(PerspectiveTraitlets, object):
         self,
         plugin="Datagrid",
         columns=None,
+        columns_config=None,
         group_by=None,
         split_by=None,
+        group_rollup_mode=None,
         aggregates=None,
         sort=None,
         filter=None,
@@ -73,10 +75,14 @@ class PerspectiveViewer(PerspectiveTraitlets, object):
         Keyword Arguments:
             columns (:obj:`list` of :obj:`str`): A list of column names to be
                 visible to the user.
+            columns_config (:obj:`dict`): Per-column configuration (styling,
+                formatting, etc.), keyed by column name.
             group_by (:obj:`list` of :obj:`str`): A list of column names to
                 use as group by.
             split_by (:obj:`list` of :obj:`str`): A list of column names
                 to use as split by.
+            group_rollup_mode (:obj:`str`): How group-by rollups render; one
+                of ``rollup``, ``flat``, or ``total``.
             aggregates (:obj:`dict` of :obj:`str` to :obj:`str`):  A dictionary
                 of column names to aggregate types, which specify aggregates
                 for individual columns.
@@ -118,8 +124,10 @@ class PerspectiveViewer(PerspectiveTraitlets, object):
         # Viewer configuration
         self.plugin = plugin  # validate_plugin(plugin)
         self.columns = columns or []  # validate_columns(columns) or []
+        self.columns_config = columns_config or {}
         self.group_by = group_by or []  # validate_group_by(group_by) or []
         self.split_by = split_by or []  # validate_split_by(split_by) or []
+        self.group_rollup_mode = group_rollup_mode or "rollup"
         self.aggregates = aggregates or {}  # validate_aggregates(aggregates) or {}
         self.sort = sort or []  # validate_sort(sort) or []
         self.filter = filter or []  # validate_filter(filter) or []

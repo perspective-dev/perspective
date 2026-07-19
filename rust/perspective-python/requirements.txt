@@ -1,3 +1,4 @@
+anywidget==0.11.0
 clickhouse_connect==0.11.0
 duckdb==1.4.4
 Faker==26.0.0

@@ -39,7 +39,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-jupyter = ["ipywidgets>=7.5.1,<9"]
+jupyter = ["anywidget>=0.9"]
 tornado = ["tornado>=5,<7"]
 aiohttp = ["aiohttp>=2,<4"]
 starlette = ["starlette<1"]
@@ -51,6 +51,8 @@ features = ["pyo3/extension-module"]
 include = [
     { path = "perspective/*libpsp.so", format = "wheel" },
     { path = "perspective/*libpsp.dll", format = "wheel" },
+    { path = "perspective/widget/static/perspective-anywidget.js", format = "wheel" },
+    { path = "perspective/widget/static/perspective-anywidget.css", format = "wheel" },
 ]
 
 [tool.pytest.ini_options]

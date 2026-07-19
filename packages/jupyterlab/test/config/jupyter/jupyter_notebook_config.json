@@ -7,6 +7,12 @@
         "disable_check_xsrf": true,
         "enable_mathjax": false
     },
+    "MappingKernelManager": {
+        "cull_idle_timeout": 30,
+        "cull_interval": 10,
+        "cull_connected": false,
+        "cull_busy": false
+    },
     "LabApp": {
         "tornado_settings": {
             "page_config_data": {

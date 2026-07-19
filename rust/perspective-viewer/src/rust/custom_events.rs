@@ -153,7 +153,10 @@ fn dispatch_config_update(
     let elem = elem.clone();
     let tracker = session.clone();
     tracker.track_dispatch(async move {
-        let viewer_config = get_viewer_config(&session, &renderer, &presentation).await?;
+        let viewer_config = renderer
+            .clone()
+            .with_lock(async { get_viewer_config(&session, &renderer, &presentation).await })
+            .await?;
         if viewer_config.view_config != Default::default()
             && Some(&viewer_config) != session.last_dispatched_config.borrow().as_ref()
         {

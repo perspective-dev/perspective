@@ -76,6 +76,60 @@ test.describe("Theme", () => {
         expect(saved.settings).toBe(false);
     });
 
+    test("save reports the applied host theme with no per-panel theme", async ({
+        page,
+    }) => {
+        const saved = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.getTable();
+            await viewer.resetThemes(["Pro Light", "Pro Dark"]);
+            await viewer.restore({ theme: "Pro Dark" });
+            return await viewer.save();
+        });
+
+        expect(saved.theme).toBe("Pro Dark");
+    });
+
+    test("save reports the applied host theme with no per-panel theme default", async ({
+        page,
+    }) => {
+        const saved = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.getTable();
+            await viewer.resetThemes(["Pro Dark"]);
+            return await viewer.save();
+        });
+
+        expect(saved.theme).toBe("Pro Dark");
+    });
+
+    test("save reports the applied host theme with no per-panel theme 3", async ({
+        page,
+    }) => {
+        const saved = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.getTable();
+            await viewer.resetThemes(["Pro Light", "Pro Dark"]);
+            await viewer.restore({ theme: "Pro Dark" });
+            return await viewer.save();
+        });
+
+        expect(saved.theme).toBe("Pro Dark");
+    });
+
+    test("save reports the applied host theme with no per-panel theme 4", async ({
+        page,
+    }) => {
+        const saved = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.getTable();
+            await viewer.resetThemes(["Pro Light", "Pro Dark"]);
+            return await viewer.save();
+        });
+
+        expect(saved.theme).toBe("Pro Light");
+    });
+
     test("switching theme updates the theme attribute", async ({ page }) => {
         const themeAttr = await page.evaluate(async () => {
             const viewer = document.querySelector("perspective-viewer")!;

@@ -1,0 +1,29 @@
+{
+    "name": "@perspective-dev/anywidget",
+    "version": "4.5.1",
+    "description": "The `PerspectiveWidget` anywidget bundle for `perspective-python` (shipped in the wheel and loaded by anywidget). Not a JupyterLab labextension.",
+    "type": "module",
+    "private": true,
+    "exports": {
+        ".": "./src/js/index.js"
+    },
+    "files": [
+        "src/**/*"
+    ],
+    "license": "Apache-2.0",
+    "scripts": {
+        "build": "node ./build.mjs",
+        "clean": "node ./clean.mjs"
+    },
+    "dependencies": {
+        "@perspective-dev/client": "workspace:",
+        "@perspective-dev/server": "workspace:",
+        "@perspective-dev/viewer": "workspace:",
+        "@perspective-dev/viewer-charts": "workspace:",
+        "@perspective-dev/viewer-datagrid": "workspace:"
+    },
+    "devDependencies": {
+        "@perspective-dev/esbuild-plugin": "workspace:",
+        "lightningcss": "catalog:"
+    }
+}

@@ -16,6 +16,7 @@ import {
     default_body,
     add_and_execute_cell,
     assert_no_error_in_cell,
+    assert_python_eventually,
     execute_all_cells,
     test_jupyter,
     describe_jupyter,
@@ -32,22 +33,37 @@ const getEditMode = async (viewer) => {
     });
 };
 
-// utils.with_jupyterlab(process.env.__JUPYTERLAB_PORT__, () => {
 describe_jupyter(
     () => {
         test_jupyter(
             "Open arrow and csv from file browser",
             [],
             async ({ page }) => {
-                await page.locator("#tab-key-1-7").click();
+                // Lumino tab ids (`#tab-key-N-M`) shift with the installed
+                // extension set — select the File Browser by accessible name,
+                // and only click if not already selected (a click on the
+                // active tab collapses the sidebar).
+                const file_browser = page.getByRole("tab", {
+                    name: /File Browser/,
+                });
+
+                if (
+                    (await file_browser.getAttribute("aria-selected")) !==
+                    "true"
+                ) {
+                    await file_browser.click();
+                }
+
+                // The `data-file-type="arrow"` attribute is itself part of
+                // the labextension contract (`addFileType`), and Perspective
+                // is `defaultFor` arrow so a double-click opens it with the
+                // Perspective factory. (The right-click → "Open With" →
+                // "Perspective-Arrow" path proved flaky under lumino's
+                // hover-submenu timing and tests jlab core, not this
+                // extension.)
                 await page
                     .locator(`.jp-DirListing-item[data-file-type="arrow"]`)
-                    .click({ button: "right" });
-
-                await page.hover(`.lm-Menu .lm-Menu-item[data-type="submenu"]`);
-                await page
-                    .locator(`.lm-Menu-item[data-command="filebrowser:open"]`)
-                    .click();
+                    .dblclick();
 
                 const num_columns = await page
                     .locator("regular-table thead tr")
@@ -70,12 +86,19 @@ describe_jupyter(
             ],
             async ({ page }) => {
                 await default_body(page);
-                const num_columns = await page
-                    .locator("regular-table thead tr")
-                    .first()
-                    .evaluate((tr) => tr.childElementCount);
 
-                expect(num_columns).toEqual(3);
+                // Poll — the viewer draws once between `load()` and the
+                // trait `restore()` in the anywidget frontend, so the first
+                // paint can briefly show all columns.
+                await expect
+                    .poll(() =>
+                        page
+                            .locator("regular-table thead tr")
+                            .first()
+                            .evaluate((tr) => tr.childElementCount),
+                    )
+                    .toEqual(3);
+
                 await expect(
                     page.locator("regular-table tbody tr"),
                 ).toHaveCount(5);
@@ -96,12 +119,19 @@ describe_jupyter(
             ],
             async ({ page }) => {
                 await default_body(page);
-                const num_columns = await page
-                    .locator("regular-table thead tr")
-                    .first()
-                    .evaluate((tr) => tr.childElementCount);
 
-                expect(num_columns).toEqual(3);
+                // Poll — the viewer draws once between `load()` and the trait
+                // `restore()` in the anywidget frontend, so the first paint can
+                // briefly show all columns before collapsing to the configured
+                // three (see "Loads data").
+                await expect
+                    .poll(() =>
+                        page
+                            .locator("regular-table thead tr")
+                            .first()
+                            .evaluate((tr) => tr.childElementCount),
+                    )
+                    .toEqual(3);
 
                 await expect(
                     page.locator("regular-table tbody tr"),
@@ -123,12 +153,18 @@ describe_jupyter(
             async ({ page }) => {
                 await default_body(page);
 
-                const num_columns = await page
-                    .locator("regular-table thead tr")
-                    .first()
-                    .evaluate((tr) => tr.childElementCount);
-
-                expect(num_columns).toEqual(3);
+                // Poll — the viewer draws once between `load()` and the trait
+                // `restore()` in the anywidget frontend, so the first paint can
+                // briefly show all columns before collapsing to the configured
+                // three (see "Loads data").
+                await expect
+                    .poll(() =>
+                        page
+                            .locator("regular-table thead tr")
+                            .first()
+                            .evaluate((tr) => tr.childElementCount),
+                    )
+                    .toEqual(3);
 
                 await expect(
                     page.locator("regular-table tbody tr"),
@@ -185,12 +221,19 @@ async_table = await async_client.open_table(sync_table.get_name())`,
             ],
             async ({ page }) => {
                 await default_body(page);
-                const num_columns = await page
-                    .locator("regular-table thead tr")
-                    .first()
-                    .evaluate((tr) => tr.childElementCount);
 
-                expect(num_columns).toEqual(3);
+                // Poll — the viewer draws once between `load()` and the trait
+                // `restore()` in the anywidget frontend, so the first paint can
+                // briefly show all columns before collapsing to the configured
+                // three (see "Loads data").
+                await expect
+                    .poll(() =>
+                        page
+                            .locator("regular-table thead tr")
+                            .first()
+                            .evaluate((tr) => tr.childElementCount),
+                    )
+                    .toEqual(3);
 
                 await expect(
                     page.locator("regular-table tbody tr"),
@@ -251,16 +294,17 @@ async_table = await async_client.open_table(sync_table.get_name())`,
             ],
             async ({ page }) => {
                 const viewer = await default_body(page);
+                // Default (READ_ONLY) plugin_config serializes as `{}` —
+                // only non-default values appear in `save()`.
                 let edit_mode = await getEditMode(viewer);
-                expect(edit_mode).toEqual("READ_ONLY");
+                expect(edit_mode).toBeUndefined();
 
                 await add_and_execute_cell(
                     page,
                     'w.plugin_config = {"edit_mode": "EDIT"}',
                 );
 
-                edit_mode = await getEditMode(viewer);
-                expect(edit_mode).toEqual("EDIT");
+                await expect.poll(() => getEditMode(viewer)).toEqual("EDIT");
             },
         );
 
@@ -277,19 +321,19 @@ async_table = await async_client.open_table(sync_table.get_name())`,
             ],
             async ({ page }) => {
                 const viewer = await default_body(page);
+                // Default (READ_ONLY) plugin_config serializes as `{}` —
+                // only non-default values appear in `save()`.
                 let edit_mode = await getEditMode(viewer);
-                expect(edit_mode).toEqual("READ_ONLY");
+                expect(edit_mode).toBeUndefined();
 
                 await viewer.evaluate(async (viewer) => {
-                    const edit =
-                        viewer.children[1].shadowRoot.querySelector(
-                            "span#edit_mode",
-                        );
-                    edit.click();
+                    const toolbar = viewer.querySelector(
+                        "perspective-viewer-datagrid-toolbar",
+                    );
+                    toolbar.shadowRoot.querySelector("span#edit_mode").click();
                 });
 
-                edit_mode = await getEditMode(viewer);
-                expect(edit_mode).toEqual("EDIT");
+                await expect.poll(() => getEditMode(viewer)).toEqual("EDIT");
             },
         );
 
@@ -334,15 +378,15 @@ async_table = await async_client.open_table(sync_table.get_name())`,
                     expressions: {},
                     filter: [],
                     group_by: [],
+                    group_rollup_mode: "rollup",
                     plugin: "Datagrid",
-                    plugin_config: {
-                        columns: {},
-                        edit_mode: "READ_ONLY",
-                        scroll_lock: false,
-                    },
+                    // Default plugin_config serializes empty — only
+                    // non-default values appear in `save()`.
+                    plugin_config: {},
                     settings: true,
                     sort: [],
                     split_by: [],
+                    table: expect.any(String),
                     theme: "Pro Light",
                     title: null,
                 });
@@ -359,28 +403,30 @@ w.sort = [["date", "asc"]]
 w.theme = "Pro Dark"`,
                 );
 
-                // grab the config again
-                config = await viewer.evaluate(async (viewer) => {
-                    return await viewer.save();
-                });
-
-                // and check it
-                expect(config).toEqual({
-                    version: API_VERSION,
-                    columns_config: {},
-                    aggregates: {},
-                    columns: ["ui8"],
-                    expressions: {},
-                    filter: [["i8", "<", 50]],
-                    group_by: ["date"],
-                    plugin: "X Bar",
-                    plugin_config: {},
-                    settings: true,
-                    sort: [["date", "asc"]],
-                    split_by: ["bool"],
-                    theme: "Pro Dark",
-                    title: null,
-                });
+                // Poll — the python trait changes propagate over the comm.
+                await expect
+                    .poll(() =>
+                        viewer.evaluate(async (viewer) => await viewer.save()),
+                    )
+                    .toEqual({
+                        version: API_VERSION,
+                        columns_config: {},
+                        aggregates: {},
+                        columns: ["ui8"],
+                        expressions: {},
+                        filter: [["i8", "<", 50]],
+                        group_by: ["date"],
+                        // Chart plugins only support "flat" rollup mode
+                        group_rollup_mode: "flat",
+                        plugin: "X Bar",
+                        plugin_config: {},
+                        settings: true,
+                        sort: [["date", "asc"]],
+                        split_by: ["bool"],
+                        table: expect.any(String),
+                        theme: "Pro Dark",
+                        title: null,
+                    });
             },
         );
 
@@ -425,21 +471,27 @@ w.theme = "Pro Dark"`,
                     expressions: {},
                     filter: [],
                     group_by: [],
+                    group_rollup_mode: "rollup",
                     plugin: "Datagrid",
-                    plugin_config: {
-                        columns: {},
-                        scroll_lock: false,
-                        edit_mode: "READ_ONLY",
-                    },
+                    // Default plugin_config serializes empty — only
+                    // non-default values appear in `save()`.
+                    plugin_config: {},
                     settings: true,
                     sort: [],
                     split_by: [],
+                    table: expect.any(String),
                     theme: "Pro Light",
                     title: null,
                 });
 
+                // Await the restore (and flush) so the viewer has fully applied
+                // the config and fired `perspective-config-update` — which is
+                // what drives the frontend's `sync_to_python` comm push — before
+                // the Python assert cell below runs. Firing the restore and
+                // asserting immediately races the JS -> comm -> kernel trait
+                // round-trip and fails on a slow CI runner.
                 await viewer.evaluate(async (viewer, version) => {
-                    viewer.restore({
+                    await viewer.restore({
                         version,
                         columns: ["ui8"],
                         filter: [["i8", "<", "50"]],
@@ -451,11 +503,16 @@ w.theme = "Pro Dark"`,
                         theme: "Pro Dark",
                         title: null,
                     });
+                    await viewer.flush();
 
                     return "";
                 }, API_VERSION);
 
-                const error_cells_dont_exist = await assert_no_error_in_cell(
+                // Poll the Python side: the JS `restore()` above syncs back to
+                // the traits asynchronously and the kernel only applies the
+                // comm between cell executions, so a one-shot assert races the
+                // round-trip on a slow CI runner (see `assert_python_eventually`).
+                const passed = await assert_python_eventually(
                     page,
                     `
 assert w.plugin == "X Bar"
@@ -466,10 +523,25 @@ assert w.split_by == ["bool"]
 assert w.plugin_config == {}
 assert w.settings == False
 assert w.sort == [["date", "asc"]]
-assert w.theme == "Pro Dark"
-"Passed"`,
+assert w.theme == "Pro Dark"`,
                 );
-                expect(error_cells_dont_exist).toBe(true);
+                // Diagnostic: if the python traits never caught up, capture what
+                // the JS viewer holds vs. what python holds so the failure
+                // artifact shows the divergence directly (JS restored fine but
+                // the JS->python sync dropped it, vs. the restore never stuck).
+                if (!passed) {
+                    try {
+                        const js = await viewer.evaluate(
+                            async (v) => await v.save(),
+                        );
+                        await add_and_execute_cell(
+                            page,
+                            `print("PSP_DIAG JS_PLUGIN=${js.plugin} JS_THEME=${js.theme} JS_SETTINGS=${js.settings}"` +
+                                ` + " PY_PLUGIN=" + repr(w.plugin) + " PY_THEME=" + repr(w.theme) + " PY_SETTINGS=" + repr(w.settings))`,
+                        );
+                    } catch (e) {}
+                }
+                expect(passed).toBe(true);
             },
         );
 
@@ -515,18 +587,20 @@ assert w.theme == "Pro Dark"
 
         test_jupyter("Restores from saved config", [], async ({ page }) => {
             await execute_all_cells(page);
-            let errored = await assert_no_error_in_cell(
+            const no_error = await assert_no_error_in_cell(
                 page,
                 `
 server = perspective.Server()
 client = server.new_local_client()
 table = client.table(arrow_data)
-w = perspective.widget.PerspectiveWidget(table)
+w = perspective.widget.PerspectiveWidget(table, columns=["f64", "str"], group_by=["bool"])
 config = w.save()
-perpsective.PerspectiveWidget(df, **config)
-                        `,
+w2 = perspective.widget.PerspectiveWidget(table, **config)
+assert w2.columns == ["f64", "str"]
+assert w2.group_by == ["bool"]
+"Passed"`,
             );
-            expect(errored).toBe(false);
+            expect(no_error).toBe(true);
         });
 
         test_jupyter(
@@ -572,6 +646,155 @@ perpsective.PerspectiveWidget(df, **config)
                 await expect(
                     page.locator("regular-table tbody tr"),
                 ).toHaveCount(5);
+            },
+        );
+
+        // *************************
+        // anywidget-specific (Phase 3)
+        // *************************
+
+        // The same widget displayed in two cells: each `render()` gets its own
+        // `client_id`/`Client`, and both stay in sync through the shared model
+        // traits — a python edit reflects in both views.
+        test_jupyter(
+            "Two views of one widget stay in sync",
+            [
+                [
+                    "server = perspective.Server()",
+                    "client = server.new_local_client()",
+                    "table = client.table(arrow_data)",
+                    "w = perspective.widget.PerspectiveWidget(table, columns=['f64', 'str', 'datetime'])",
+                ].join("\n"),
+                "w",
+                "w",
+            ],
+            async ({ page }) => {
+                await execute_all_cells(page);
+                const viewers = page.locator(
+                    ".jp-OutputArea-output perspective-viewer",
+                );
+                await expect(viewers).toHaveCount(2);
+                for (const v of await viewers.all()) {
+                    await v.evaluate(async (viewer) => await viewer.flush());
+                }
+
+                await add_and_execute_cell(page, 'w.group_by = ["date"]');
+
+                for (let i = 0; i < 2; i++) {
+                    await expect
+                        .poll(() =>
+                            viewers
+                                .nth(i)
+                                .evaluate(
+                                    async (viewer) =>
+                                        (await viewer.save()).group_by,
+                                ),
+                        )
+                        .toEqual(["date"]);
+                }
+            },
+        );
+
+        // `binding_mode="client-server"` copies the server table into an
+        // in-page wasm client (`table(remote_view)`); rows render and *updates*
+        // stream across the view->table binding.
+        test_jupyter(
+            "binding_mode client-server renders and streams updates",
+            [
+                [
+                    "server = perspective.Server()",
+                    "client = server.new_local_client()",
+                    "table = client.table(arrow_data)",
+                    "w = perspective.widget.PerspectiveWidget(table, columns=['f64', 'str', 'datetime'], binding_mode='client-server')",
+                ].join("\n"),
+                "w",
+                "table.update(arrow_data)",
+            ],
+            async ({ page }) => {
+                await default_body(page);
+                await expect
+                    .poll(() =>
+                        page.locator("regular-table tbody tr").count(),
+                    )
+                    .toEqual(10);
+            },
+        );
+
+        // Traits mutated after construction but before the widget is displayed
+        // must be applied by the initial `restore()` (the restore-before-
+        // load-complete path).
+        test_jupyter(
+            "Traits set before display are restored on first render",
+            [
+                [
+                    "server = perspective.Server()",
+                    "client = server.new_local_client()",
+                    "table = client.table(arrow_data)",
+                    "w = perspective.widget.PerspectiveWidget(table)",
+                ].join("\n"),
+                'w.group_by = ["date"]\nw.columns = ["f64", "str"]',
+                "w",
+            ],
+            async ({ page }) => {
+                const viewer = await default_body(page);
+                await expect
+                    .poll(() =>
+                        viewer.evaluate(
+                            async (v) => (await v.save()).group_by,
+                        ),
+                    )
+                    .toEqual(["date"]);
+                const columns = await viewer.evaluate(
+                    async (v) => (await v.save()).columns,
+                );
+                expect(columns).toEqual(["f64", "str"]);
+            },
+        );
+
+        // Re-displaying the widget in additional cells remounts fresh views
+        // (each remount tears down its predecessor via the returned destroy fn:
+        // `hangup` + `terminate` + listener removal). No console/page errors,
+        // and a subsequent python edit applies exactly once (no leaked
+        // `change:` listeners).
+        test_jupyter(
+            "Re-execution remounts cleanly without leaks",
+            [
+                [
+                    "server = perspective.Server()",
+                    "client = server.new_local_client()",
+                    "table = client.table(arrow_data)",
+                    "w = perspective.widget.PerspectiveWidget(table, columns=['f64', 'str', 'datetime'])",
+                ].join("\n"),
+                "w",
+            ],
+            async ({ page }) => {
+                const errors = [];
+                page.on("pageerror", (e) => errors.push(String(e)));
+                page.on("console", (m) => {
+                    if (m.type() === "error") errors.push(m.text());
+                });
+
+                await default_body(page);
+                for (let i = 0; i < 2; i++) {
+                    await add_and_execute_cell(page, "w");
+                }
+
+                const last = page
+                    .locator(".jp-OutputArea-output perspective-viewer")
+                    .last();
+                await last.evaluate(async (v) => await v.flush());
+                await expect(
+                    last.locator("regular-table tbody tr"),
+                ).toHaveCount(5);
+
+                await add_and_execute_cell(page, 'w.theme = "Pro Dark"');
+                await expect
+                    .poll(() =>
+                        last.evaluate(async (v) => (await v.save()).theme),
+                    )
+                    .toEqual("Pro Dark");
+
+                expect(errors).toEqual([]);
             },
         );
 
