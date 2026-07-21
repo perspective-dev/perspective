@@ -592,6 +592,248 @@ fn test_table_make_view_total() {
 }
 
 #[test]
+fn test_table_make_view_flat_preserves_underscores() {
+    // https://github.com/perspective-dev/perspective/issues/3187
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("account_number".to_string())];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(
+        sql.contains("\"account_number\" as \"account_number\""),
+        "underscore names should pass through verbatim: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("account-number"),
+        "underscores should not be mangled to hyphens: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_pivoted_column_paths() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![
+        Some("account_number".to_string()),
+        Some("other_val".to_string()),
+    ];
+    config.split_by = vec!["state".to_string()];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(
+        sql.contains("ON \"state\" || '|account_number' USING first(\"account_number\")"),
+        "expected per-column ON expression: {}",
+        sql
+    );
+    assert!(
+        sql.contains("ON \"state\" || '|other_val' USING first(\"other_val\")"),
+        "expected per-column ON expression: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("account-number"),
+        "underscores should not be mangled to hyphens: {}",
+        sql
+    );
+    assert!(
+        sql.contains("IS NOT DISTINCT FROM"),
+        "multi-column pivots should be NULL-safe joined: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_pivoted_custom_separator() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs {
+        create_entity: None,
+        grouping_fn: None,
+        column_separator: Some("::".to_string()),
+    });
+
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("account_number".to_string())];
+    config.split_by = vec!["state".to_string()];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(
+        sql.contains("ON \"state\" || '::account_number'"),
+        "expected custom separator in ON expression: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_multi_split_by_separator() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string())];
+    config.split_by = vec!["region".to_string(), "state".to_string()];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(
+        sql.contains("ON \"region\" || '|' || \"state\" || '|value'"),
+        "expected separator-joined multi-level ON expression: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_grouped_pivoted_null_safe_join() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string()), Some("qty".to_string())];
+    config.group_by = vec!["category".to_string()];
+    config.split_by = vec!["quarter".to_string()];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(
+        sql.contains("GROUP BY __ROW_PATH_0__, __GROUPING_ID__"),
+        "expected pivot GROUP BY on row keys: {}",
+        sql
+    );
+    assert!(
+        sql.contains(
+            "__PSP_PIVOT_0__.__ROW_PATH_0__ IS NOT DISTINCT FROM __PSP_PIVOT_1__.__ROW_PATH_0__"
+        ),
+        "rollup rows have NULL row-path keys, join must be NULL-safe: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_total_pivoted_aggregate() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string())];
+    config.split_by = vec!["quarter".to_string()];
+    config.group_rollup_mode = GroupRollupMode::Total;
+    config.aggregates = HashMap::from([(
+        "value".to_string(),
+        Aggregate::SingleAggregate("sum".to_string()),
+    )]);
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(
+        sql.contains("ON \"quarter\" || '|value' USING sum(\"value\")"),
+        "expected unaliased aggregate in USING: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_column_path_source() {
+    let mut config = ViewConfig::default();
+    config.columns = vec![
+        Some("price".to_string()),
+        Some("total_price".to_string()),
+        Some("account_number".to_string()),
+    ];
+
+    // Path names resolve to their source column, longest suffix winning.
+    assert_eq!(column_path_source("CA|price", &config), Some((0, "price")));
+    assert_eq!(
+        column_path_source("CA|total_price", &config),
+        Some((1, "total_price"))
+    );
+    assert_eq!(
+        column_path_source("us_east|account_number", &config),
+        Some((2, "account_number"))
+    );
+
+    // Flat-view names equal a config column exactly — not a path.
+    assert_eq!(column_path_source("price", &config), None);
+    assert_eq!(column_path_source("__ROW_PATH_0__", &config), None);
+}
+
+#[test]
+fn test_sort_column_paths_value_major() {
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("price".to_string()), Some("qty".to_string())];
+    config.split_by = vec!["state".to_string()];
+    let mut names = vec![
+        "CA|price".to_string(),
+        "NY|price".to_string(),
+        "CA|qty".to_string(),
+        "NY|qty".to_string(),
+    ];
+
+    sort_column_paths(&mut names, &config);
+    assert_eq!(names, vec!["CA|price", "CA|qty", "NY|price", "NY|qty"]);
+}
+
+#[test]
+fn test_sort_column_paths_longest_suffix_wins() {
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("price".to_string()), Some("total_price".to_string())];
+    config.split_by = vec!["state".to_string()];
+    let mut names = vec![
+        "NY|total_price".to_string(),
+        "CA|total_price".to_string(),
+        "CA|price".to_string(),
+        "__ROW_PATH_0__".to_string(),
+    ];
+
+    sort_column_paths(&mut names, &config);
+    assert_eq!(names, vec![
+        "__ROW_PATH_0__",
+        "CA|price",
+        "CA|total_price",
+        "NY|total_price"
+    ]);
+}
+
+#[test]
+fn test_view_get_data_split_by_value_major_order() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("price".to_string()), Some("qty".to_string())];
+    config.split_by = vec!["state".to_string()];
+    let viewport = ViewPort {
+        start_row: Some(0),
+        end_row: Some(100),
+        start_col: Some(0),
+        end_col: None,
+        ..ViewPort::default()
+    };
+
+    // The per-column pivot join emits column-major order; the data query
+    // must restore value-major order.
+    let mut schema = IndexMap::new();
+    schema.insert("CA|price".to_string(), ColumnType::Float);
+    schema.insert("NY|price".to_string(), ColumnType::Float);
+    schema.insert("CA|qty".to_string(), ColumnType::Float);
+    schema.insert("NY|qty".to_string(), ColumnType::Float);
+    let sql = builder
+        .view_get_data("my_view", &config, &viewport, &schema)
+        .unwrap();
+
+    let positions: Vec<usize> = ["\"CA|price\"", "\"CA|qty\"", "\"NY|price\"", "\"NY|qty\""]
+        .iter()
+        .map(|c| sql.find(c).unwrap())
+        .collect();
+
+    assert!(
+        positions.windows(2).all(|w| w[0] < w[1]),
+        "expected value-major column order: {}",
+        sql
+    );
+}
+
+#[test]
 fn test_table_make_view_total_with_split_by() {
     let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
     let mut config = ViewConfig::default();

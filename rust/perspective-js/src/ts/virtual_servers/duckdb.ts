@@ -184,7 +184,9 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
         }
 
         this.db = db;
-        this.sqlBuilder = new mod!.GenericSQLVirtualServerModel();
+        this.sqlBuilder = new mod!.GenericSQLVirtualServerModel({
+            column_separator: "|",
+        });
     }
 
     getFeatures() {

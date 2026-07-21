@@ -54,6 +54,14 @@ enum QueryOrientation {
     TotalPivoted,
 }
 
+fn quote_ident(name: &str) -> String {
+    name.replace('"', "\"\"")
+}
+
+fn quote_literal(value: &str) -> String {
+    value.replace('\'', "''")
+}
+
 /// Precomputed context for building a SQL view query from a [`ViewConfig`].
 ///
 /// Holds the resolved column names, grouping function, and row-path aliases
@@ -64,6 +72,7 @@ pub(crate) struct ViewQueryContext<'a> {
     config: &'a ViewConfig,
     group_col_names: Vec<String>,
     grouping_fn: &'a str,
+    column_separator: &'a str,
     row_path_aliases: Vec<String>,
 }
 
@@ -84,6 +93,7 @@ impl<'a> ViewQueryContext<'a> {
         };
 
         let grouping_fn = model.0.grouping_fn.as_deref().unwrap_or("GROUPING_ID");
+        let column_separator = model.0.column_separator.as_deref().unwrap_or("|");
         let group_col_names: Vec<String> = config
             .group_by
             .iter()
@@ -99,6 +109,7 @@ impl<'a> ViewQueryContext<'a> {
             config,
             group_col_names,
             grouping_fn,
+            column_separator,
             row_path_aliases,
         }
     }
@@ -138,37 +149,30 @@ impl<'a> ViewQueryContext<'a> {
                 }
             },
             QueryOrientation::Pivoted => {
-                let select = self.select_clauses();
-                let pivot_using: Vec<String> = self
-                    .config
-                    .columns
-                    .iter()
-                    .flatten()
-                    .map(|col| {
-                        let escaped = col.replace('"', "\"\"").replace('_', "-");
-                        format!("first(\"{}\") as \"{}\"", escaped, escaped)
-                    })
-                    .collect();
+                let mut src_clauses = self.select_clauses();
+                src_clauses.extend(self.split_select_clauses());
+                src_clauses.push(format!(
+                    "ROW_NUMBER() OVER (ORDER BY {}) as __ROW_NUM__",
+                    self.pivot_row_num_order()
+                ));
 
-                let split_cols: String = self
-                    .config
-                    .split_by
-                    .iter()
-                    .map(|c| format!("\"{}\"", c))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
-                let row_num_order = self.pivot_row_num_order();
-                format!(
-                    "SELECT * EXCLUDE (__ROW_NUM__) FROM (PIVOT (SELECT {}, {}, ROW_NUMBER() OVER \
-                     (ORDER BY {}) as __ROW_NUM__ FROM {}{}) ON {} USING {} GROUP BY __ROW_NUM__)",
-                    select.join(", "),
-                    split_cols,
-                    row_num_order,
+                let src = format!(
+                    "SELECT {} FROM {}{}",
+                    src_clauses.join(", "),
                     self.table,
-                    where_sql,
-                    self.pivot_on_expr(),
-                    pivot_using.join(", "),
+                    where_sql
+                );
+
+                let cols: Vec<&String> = self.config.columns.iter().flatten().collect();
+                let from = if cols.is_empty() {
+                    "__PSP_PIVOT_SRC__".to_string()
+                } else {
+                    self.pivot_join(&cols, &["__ROW_NUM__".to_string()])
+                };
+
+                format!(
+                    "WITH __PSP_PIVOT_SRC__ AS ({}) SELECT * EXCLUDE (__ROW_NUM__) FROM {}",
+                    src, from
                 )
             },
             QueryOrientation::GroupedAndPivoted => {
@@ -179,9 +183,7 @@ impl<'a> ViewQueryContext<'a> {
                 if !self.is_flat_mode() {
                     inner_clauses.push(self.grouping_id_clause());
                 }
-                for sb_col in &self.config.split_by {
-                    inner_clauses.push(self.col_name(sb_col));
-                }
+                inner_clauses.extend(self.split_select_clauses());
 
                 for (sidx, Sort(sort_col, sort_dir)) in self.config.sort.iter().enumerate() {
                     if *sort_dir != SortDir::None && !is_col_sort(sort_dir) {
@@ -228,17 +230,6 @@ impl<'a> ViewQueryContext<'a> {
                     )
                 };
 
-                let pivot_using: String = self
-                    .config
-                    .columns
-                    .iter()
-                    .flatten()
-                    .map(|col| {
-                        let escaped = col.replace('"', "\"\"").replace('_', "-");
-                        format!("first(\"{}\") as \"{}\"", escaped, escaped)
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
                 let mut row_id_cols = self.row_path_aliases.clone();
                 if !self.is_flat_mode() {
                     row_id_cols.push("__GROUPING_ID__".to_string());
@@ -249,12 +240,16 @@ impl<'a> ViewQueryContext<'a> {
                     }
                 }
 
+                let cols: Vec<&String> = self.config.columns.iter().flatten().collect();
+                let from = if cols.is_empty() {
+                    "__PSP_PIVOT_SRC__".to_string()
+                } else {
+                    self.pivot_join(&cols, &row_id_cols)
+                };
+
                 format!(
-                    "SELECT * FROM (PIVOT ({}) ON {} USING {} GROUP BY {})",
-                    inner_query,
-                    self.pivot_on_expr(),
-                    pivot_using,
-                    row_id_cols.join(", ")
+                    "WITH __PSP_PIVOT_SRC__ AS ({}) SELECT * FROM {}",
+                    inner_query, from
                 )
             },
             QueryOrientation::Total => {
@@ -262,43 +257,51 @@ impl<'a> ViewQueryContext<'a> {
                 format!("SELECT {} FROM {}{}", select, self.table, where_sql)
             },
             QueryOrientation::TotalPivoted => {
-                let raw_cols: Vec<String> = self
+                let mut src_clauses: Vec<String> = self
                     .config
                     .columns
                     .iter()
                     .flatten()
-                    .map(|col| self.col_name(col))
+                    .map(|col| format!("{} as \"{}\"", self.col_name(col), quote_ident(col)))
                     .collect();
 
-                let split_cols: String = self
-                    .config
-                    .split_by
-                    .iter()
-                    .map(|c| format!("\"{}\"", c))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
-                let pivot_using: Vec<String> = self
-                    .config
-                    .columns
-                    .iter()
-                    .flatten()
-                    .map(|col| {
-                        let agg = self.get_aggregate(col);
-                        let escaped = col.replace('"', "\"\"").replace('_', "-");
-                        format!("{}(\"{}\") as \"{}\"", agg, escaped, escaped)
-                    })
-                    .collect();
-
-                format!(
-                    "SELECT * FROM (PIVOT (SELECT {}, {} FROM {}{}) ON {} USING {})",
-                    raw_cols.join(", "),
-                    split_cols,
+                src_clauses.extend(self.split_select_clauses());
+                let src = format!(
+                    "SELECT {} FROM {}{}",
+                    src_clauses.join(", "),
                     self.table,
-                    where_sql,
-                    self.pivot_on_expr(),
-                    pivot_using.join(", "),
-                )
+                    where_sql
+                );
+
+                let cols: Vec<&String> = self.config.columns.iter().flatten().collect();
+                let from = if cols.is_empty() {
+                    "__PSP_PIVOT_SRC__".to_string()
+                } else {
+                    // Without a `GROUP BY`, `PIVOT` implicitly groups by every
+                    // non-pivoted source column, so each per-column pivot must
+                    // project only its own column and the `split_by` columns.
+                    cols.iter()
+                        .map(|col| {
+                            let mut proj = vec![format!("\"{}\"", quote_ident(col))];
+                            for c in &self.config.split_by {
+                                if c != *col {
+                                    proj.push(format!("\"{}\"", quote_ident(c)));
+                                }
+                            }
+
+                            format!(
+                                "(PIVOT (SELECT {} FROM __PSP_PIVOT_SRC__) ON {} USING {}(\"{}\"))",
+                                proj.join(", "),
+                                self.pivot_on_expr_for(col),
+                                self.get_aggregate(col),
+                                quote_ident(col),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" CROSS JOIN ")
+                };
+
+                format!("WITH __PSP_PIVOT_SRC__ AS ({}) SELECT * FROM {}", src, from)
             },
         };
 
@@ -380,22 +383,95 @@ impl<'a> ViewQueryContext<'a> {
         if self.needs_aggregation() {
             for col in self.config.columns.iter().flatten() {
                 let agg = self.get_aggregate(col);
-                let escaped = col.replace('"', "\"\"").replace("_", "-");
                 clauses.push(format!(
                     "{}({}) as \"{}\"",
                     agg,
                     self.col_name(col),
-                    escaped
+                    quote_ident(col)
                 ));
             }
         } else if !self.config.columns.is_empty() {
             for col in self.config.columns.iter().flatten() {
-                let escaped = col.replace('"', "\"\"").replace("_", "-");
-                clauses.push(format!("{} as \"{}\"", self.col_name(col), escaped));
+                clauses.push(format!(
+                    "{} as \"{}\"",
+                    self.col_name(col),
+                    quote_ident(col)
+                ));
             }
         }
 
         clauses
+    }
+
+    /// `SELECT` clauses aliasing each `split_by` column for a pivot source
+    /// query, skipping any that already appear in `config.columns` (whose
+    /// alias would collide).
+    fn split_select_clauses(&self) -> Vec<String> {
+        self.config
+            .split_by
+            .iter()
+            .filter(|c| !self.config.columns.iter().flatten().any(|x| &x == c))
+            .map(|c| format!("{} as \"{}\"", self.col_name(c), quote_ident(c)))
+            .collect()
+    }
+
+    /// The `PIVOT ... ON` expression for one data column: the `split_by`
+    /// columns and the column name literal joined with `column_separator`,
+    /// so DuckDB names each output column `value<sep>value<sep>column`
+    /// verbatim. `||` concatenation propagates NULL split values, which
+    /// DuckDB's `PIVOT` then drops (matching its native `ON` behavior).
+    fn pivot_on_expr_for(&self, col: &str) -> String {
+        let sep = quote_literal(self.column_separator);
+        let splits = self
+            .config
+            .split_by
+            .iter()
+            .map(|c| format!("\"{}\"", quote_ident(c)))
+            .collect::<Vec<_>>()
+            .join(&format!(" || '{}' || ", sep));
+
+        format!("{} || '{}{}'", splits, sep, quote_literal(col))
+    }
+
+    /// Builds a `FROM` expression pivoting `__PSP_PIVOT_SRC__` once per data
+    /// column and joining the results on `keys`. Each pivot uses a single
+    /// unaliased `USING` aggregate — the only form for which DuckDB names
+    /// output columns by the `ON` value alone, with no `_`-joined alias
+    /// suffix. Joins compare with `IS NOT DISTINCT FROM` because rollup rows
+    /// carry NULL `__ROW_PATH_N__` keys.
+    fn pivot_join(&self, cols: &[&String], keys: &[String]) -> String {
+        let keys_joined = keys.join(", ");
+        let pivots: Vec<String> = cols
+            .iter()
+            .map(|col| {
+                format!(
+                    "(PIVOT __PSP_PIVOT_SRC__ ON {} USING first(\"{}\") GROUP BY {})",
+                    self.pivot_on_expr_for(col),
+                    quote_ident(col),
+                    keys_joined
+                )
+            })
+            .collect();
+
+        if pivots.len() == 1 {
+            return pivots.into_iter().next().unwrap();
+        }
+
+        let mut select_terms = vec!["__PSP_PIVOT_0__.*".to_string()];
+        let mut from = format!("{} __PSP_PIVOT_0__", pivots[0]);
+        for (i, pivot) in pivots.iter().enumerate().skip(1) {
+            let alias = format!("__PSP_PIVOT_{}__", i);
+            select_terms.push(format!("{}.* EXCLUDE ({})", alias, keys_joined));
+            let on = keys
+                .iter()
+                .map(|k| format!("__PSP_PIVOT_0__.{} IS NOT DISTINCT FROM {}.{}", k, alias, k))
+                .collect::<Vec<_>>()
+                .join(" AND ");
+
+            from.push_str(&format!(" JOIN {} {} ON {}", pivot, alias, on));
+        }
+
+        format!("(SELECT {} FROM {})", select_terms.join(", "), from)
     }
 
     fn where_sql(&self) -> String {

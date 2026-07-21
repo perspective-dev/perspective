@@ -214,6 +214,7 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
         this.sqlBuilder = new mod!.GenericSQLVirtualServerModel({
             create_entity: "VIEW",
             grouping_fn: "GROUPING",
+            column_separator: "|",
         });
     }
 

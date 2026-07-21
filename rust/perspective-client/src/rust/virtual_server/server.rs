@@ -18,6 +18,7 @@ use prost::bytes::{Bytes, BytesMut};
 
 use super::data::RowPathStyle;
 use super::error::VirtualServerError;
+use super::generic_sql_model::{column_path_source, sort_column_paths};
 use super::handler::VirtualServerHandler;
 use crate::config::{ViewConfig, ViewConfigUpdate};
 use crate::proto::response::ClientResp;
@@ -114,16 +115,21 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
         }
 
         if to_psp_format {
+            // `view.schema()` is keyed by *source* column name, matching the
+            // native engine, while the cached schema is keyed by the view's
+            // actual (possibly pivoted-path) SQL column names.
+            let config = self.view_configs.get(entity_id).unwrap();
             Ok(self
                 .view_schemas
                 .get(entity_id)
                 .unwrap()
                 .iter()
                 .map(|(k, v)| {
-                    (
-                        k.split("_").collect::<Vec<_>>().last().unwrap().to_string(),
-                        *v,
-                    )
+                    let name = column_path_source(k, config)
+                        .map(|(_, col)| col.to_string())
+                        .unwrap_or_else(|| k.clone());
+
+                    (name, *v)
                 })
                 .collect())
         } else {
@@ -286,18 +292,20 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 respond!(msg, ViewExpressionSchemaResp { ..resp })
             },
             ViewColumnPathsReq(_) => {
-                respond!(msg, ViewColumnPathsResp {
-                    paths: self
-                        .handler
-                        .view_schema(
-                            msg.entity_id.as_str(),
-                            self.view_configs.get(&msg.entity_id).unwrap()
-                        )
-                        .await?
-                        .keys()
-                        .cloned()
-                        .collect()
-                })
+                let config = self.view_configs.get(&msg.entity_id).unwrap();
+                let mut paths: Vec<String> = self
+                    .handler
+                    .view_schema(msg.entity_id.as_str(), config)
+                    .await?
+                    .keys()
+                    .cloned()
+                    .collect();
+
+                if !config.split_by.is_empty() {
+                    sort_column_paths(&mut paths, config);
+                }
+
+                respond!(msg, ViewColumnPathsResp { paths })
             },
             ViewToArrowReq(view_to_arrow_req) => {
                 let viewport = view_to_arrow_req.viewport.unwrap();
