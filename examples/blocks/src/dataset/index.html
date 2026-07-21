@@ -179,7 +179,7 @@
             const make_del_click_callback = (state) => async () => {
                 if (state.table) {
                     for (const name of window.psp_workspace.getPanelNames()) {
-                        const cfg = await window.psp_workspace.savePanel(name);
+                        const cfg = await window.psp_workspace.save({ panel: name });
                         if (cfg.table === "superstore") {
                             window.psp_workspace.removePanel(name);
                         }
@@ -220,7 +220,7 @@
             })();
 
             await window.psp_workspace.load(client);
-            await window.psp_workspace.restore(await fetch("layout.json").then((x) => x.json()));
+            await window.psp_workspace.restoreWorkspace(await fetch("layout.json").then((x) => x.json()));
         </script>
     </body>
 </html>

@@ -30,7 +30,7 @@ async function setupStack(page: Page): Promise<void> {
     await page.evaluate(
         async ({ table }) => {
             const viewer = document.querySelector("perspective-viewer") as any;
-            await viewer.restore({
+            await viewer.restoreWorkspace({
                 layout: {
                     type: "tab-layout",
                     tabs: ["one", "two"],
@@ -179,7 +179,7 @@ test.describe("Tab-stack chart activation", () => {
         const active = await page.evaluate(async () => {
             const viewer = document.querySelector("perspective-viewer") as any;
             const active = viewer.getActivePanel();
-            await viewer.restorePanel({ plugin: "Y Line" }, active);
+            await viewer.restore({ plugin: "Y Line" }, { panel: active });
             await viewer.flush();
             return active;
         });
@@ -190,7 +190,7 @@ test.describe("Tab-stack chart activation", () => {
         await hookDispatchCounters(page);
         await page.evaluate(async (active) => {
             const viewer = document.querySelector("perspective-viewer") as any;
-            await viewer.restorePanel({ plugin: "Y Line" }, active);
+            await viewer.restore({ plugin: "Y Line" }, { panel: active });
             await viewer.flush();
         }, active);
 

@@ -28,7 +28,6 @@ use super::wiring::{
     subscribe_panel_titles,
 };
 use crate::config::{TableUpdate, ViewerConfigUpdate};
-use crate::custom_elements::viewer::{create_panel, eject_panel};
 use crate::queries::*;
 use crate::renderer::Renderer;
 use crate::session::*;
@@ -197,8 +196,16 @@ impl PerspectiveViewer {
                 // The SOURCE panel's client — its table name is only
                 // meaningful there (it may not be the default client).
                 let client = panel.session.get_client();
-                let new_id =
-                    create_panel(&elem, &presentation, &workspace, &notify, update, client).await?;
+                let new_id = create_panel(
+                    &elem,
+                    &presentation,
+                    &workspace,
+                    &notify,
+                    None,
+                    update,
+                    client,
+                )
+                .await?;
                 // Make the duplicate active so the shared settings/toolbar
                 // immediately target it.
                 activate.emit(new_id.to_string());
@@ -228,8 +235,16 @@ impl PerspectiveViewer {
                 // The SOURCE panel's client — its table name is only
                 // meaningful there (it may not be the default client).
                 let client = panel.session.get_client();
-                let new_id =
-                    create_panel(&elem, &presentation, &workspace, &notify, update, client).await?;
+                let new_id = create_panel(
+                    &elem,
+                    &presentation,
+                    &workspace,
+                    &notify,
+                    None,
+                    update,
+                    client,
+                )
+                .await?;
                 // Make the new panel active so the shared settings/toolbar
                 // immediately target it.
                 activate.emit(new_id.to_string());
@@ -275,6 +290,7 @@ impl PerspectiveViewer {
                 &presentation,
                 &workspace,
                 &notify,
+                None,
                 update,
                 Some(client),
             )

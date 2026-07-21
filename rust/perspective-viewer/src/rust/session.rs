@@ -118,8 +118,32 @@ pub struct SessionHandle {
     /// this session dispatched, so an unchanged re-fire is suppressed. Held
     /// per-`Session` (i.e. per panel) — was element-level on `Presentation`,
     /// which cross-suppressed when N panels shared one cell — so each panel
-    /// dedups only against its own last dispatch.
-    pub last_dispatched_config: RefCell<Option<crate::config::ViewerConfig>>,
+    /// dedups only against its own last dispatch. `Rc`-wrapped so the same
+    /// allocation is shared with the event's lazy `getConfig()` closure without
+    /// copying the config.
+    pub last_dispatched_config: RefCell<Option<std::rc::Rc<crate::config::ViewerConfig>>>,
+
+    /// Monotone load counter, bumped once per `load()` call
+    /// ([`Session::begin_pending_load`]). Identifies the LATEST load so a
+    /// stale async classification — React binds `load` to a prop and fires it
+    /// repeatedly, unawaited and out of order — no-ops instead of clobbering a
+    /// newer load ([`Session::is_current_load`]).
+    load_generation: Cell<u32>,
+
+    /// Open between a `load()` call and its payload's classification as
+    /// `Table`/`Client` ([`PendingLoad`]). While `Some` the payload type is
+    /// unknown, so its RESET/no-RESET disposition cannot be decided yet — but
+    /// the window's POSITION on the config-commit stream is fixed at the
+    /// `load()` call site. During the window, config commits still apply live
+    /// (so `save()` stays coherent — I1) but ALSO append their raw delta to
+    /// the journal, and config-driven binds DEFER ([`Session::snapshot`]'s
+    /// caller [`crate::tasks::bind_snapshot`]) — the incoming config must
+    /// never draw against the still-bound outgoing table (hold the last
+    /// frame). Classified as `Table` the journal replays over a reset base
+    /// (`reset ∘ Δ₁ ∘ Δ₂ …`, the program-order result the old synchronous
+    /// reset guaranteed); as `Client` it is dropped (no reset — live already
+    /// carries every Δ). See `SESSION_CONFIG_COHERENCE_PLAN.md`.
+    pending_load: RefCell<Option<PendingLoad>>,
 
     /// Coalesces `view_config_changed`: multiple synchronous commits in one
     /// task emit ONE event on the next microtask — the cadence the deleted
@@ -221,6 +245,15 @@ pub enum TableIntermediateState {
     #[default]
     Ejected,
     Reloaded,
+}
+
+/// The open-load window state (see [`SessionHandle::pending_load`]): the
+/// generation that opened it (for supersession detection) and the raw config
+/// deltas committed while it was open, in commit order, awaiting replay over a
+/// reset base if the payload classifies as a `Table`.
+pub struct PendingLoad {
+    generation: u32,
+    journal: Vec<ViewConfigUpdate>,
 }
 
 /// Options for [`Session::reset`]
@@ -360,6 +393,49 @@ impl Session {
 
             if let Some(err) = err { Err(err) } else { res }
         }
+    }
+
+    /// Open a pending-load window (see [`SessionHandle::pending_load`]) at the
+    /// `load()` call site. Bumps the load generation and returns it — the
+    /// caller carries it into the async classification to detect supersession
+    /// by a later `load()`. Sets `is_loading` so a FRESH panel shows the
+    /// spinner while a slow payload resolves (a RELOAD keeps its bound table,
+    /// hence [`TableLoadState::Loaded`], throughout — no spinner flicker).
+    pub fn begin_pending_load(&self) -> u32 {
+        let generation = self.0.load_generation.get() + 1;
+        self.0.load_generation.set(generation);
+        *self.0.pending_load.borrow_mut() = Some(PendingLoad {
+            generation,
+            journal: Vec::new(),
+        });
+        self.borrow_mut().is_loading = true;
+        generation
+    }
+
+    /// Whether a `load()` payload is still awaiting classification. A `true`
+    /// value makes every config-driven bind DEFER
+    /// ([`crate::tasks::bind_snapshot`]) — the incoming config must never draw
+    /// against the outgoing table.
+    pub fn has_pending_load(&self) -> bool {
+        self.0.pending_load.borrow().is_some()
+    }
+
+    /// Close the pending-load window for `generation`, returning its journal
+    /// (the raw deltas committed while it was open, in order) for replay.
+    /// Returns `None` when a later `load()` already superseded this one (or it
+    /// was already closed), which the caller treats as "abandon this
+    /// classification, hold the frame". Clears `is_loading` — the
+    /// classification that follows sets the real table state.
+    pub fn take_pending_load(&self, generation: u32) -> Option<Vec<ViewConfigUpdate>> {
+        let mut slot = self.0.pending_load.borrow_mut();
+        if slot.as_ref().map(|p| p.generation) != Some(generation) {
+            return None;
+        }
+
+        let journal = slot.take().map(|p| p.journal);
+        drop(slot);
+        self.borrow_mut().is_loading = false;
+        journal
     }
 
     pub(crate) fn has_table(&self) -> Option<TableLoadState> {
@@ -636,12 +712,32 @@ impl Session {
             return Err(ApiError::new(x.0.clone()));
         }
 
+        // A `load()` is classifying its payload (see
+        // [`SessionHandle::pending_load`]): record the RAW delta so a `Table`
+        // classification can replay it over the reset base, validated against
+        // the INCOMING table's schema. The live apply below is a best-effort
+        // preview (kept for `save()` coherence, I1) that SKIPS name validation
+        // — the delta may legitimately name the incoming table's columns,
+        // absent from the outgoing one — mirroring the "no table bound yet"
+        // leniency already in `validate_names`. Authoritative validation is
+        // deferred to the replay.
+        let pending = self.has_pending_load();
         let mut candidate = self.borrow().config.clone();
+        let journal_entry = pending.then(|| config_update.clone());
         if !candidate.apply_update(config_update) {
             return Ok(());
         }
 
-        self.validate_names(&candidate)?;
+        if let Some(entry) = journal_entry
+            && let Some(p) = self.0.pending_load.borrow_mut().as_mut()
+        {
+            p.journal.push(entry);
+        }
+
+        if !pending {
+            self.validate_names(&candidate)?;
+        }
+
         self.normalize_view_config(&mut candidate);
         self.borrow_mut().config = candidate;
         self.notify_view_config_changed();

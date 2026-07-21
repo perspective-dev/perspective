@@ -48,7 +48,7 @@ test.describe("Events", () => {
             let config;
             viewer.addEventListener("perspective-config-update", (event) => {
                 // @ts-ignore
-                config = event.detail;
+                config = event.detail.getConfig();
             });
 
             // @ts-ignore
@@ -94,7 +94,7 @@ test.describe("Events", () => {
             });
 
             viewer!.addEventListener("perspective-config-update", (event) => {
-                window["acc"].push(event.detail);
+                window["acc"].push(event.detail.getConfig());
             });
         });
 
@@ -146,7 +146,7 @@ test.describe("Events (plugin switch)", () => {
             await viewer.resetThemes(["Pro Light", "Pro Dark"]);
             const acc: Array<{ plugin: string; theme: string }> = [];
             viewer.addEventListener("perspective-config-update", (e) => {
-                const detail = (e as CustomEvent).detail;
+                const detail = (e as CustomEvent).detail.getConfig();
                 acc.push({ plugin: detail.plugin, theme: detail.theme });
             });
 

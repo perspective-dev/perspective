@@ -54,10 +54,9 @@ export function createMousedownListener(
             const meta = regularTable.getMeta(target);
             const column_name =
                 meta?.column_header?.[model._config.split_by.length];
-            await viewer.toggleColumnSettingsPanel(
-                `${column_name}`,
-                model._panel,
-            );
+            await viewer.toggleColumnSettings(`${column_name}`, {
+                panel: model._panel,
+            });
         } else if (target.classList.contains("psp-sort-enabled")) {
             sortHandler(model, regularTable, viewer, mouseEvent, target);
         }

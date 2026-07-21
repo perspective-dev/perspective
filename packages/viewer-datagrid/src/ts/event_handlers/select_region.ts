@@ -355,7 +355,7 @@ function set_psp_selection(
         viewport.end_row = y1 + 1;
     }
 
-    viewer.setSelectionPanel(viewport, datagrid.model!._panel);
+    viewer.setSelection(viewport, { panel: datagrid.model!._panel });
 }
 
 type CellPredicate = (meta: CellMetadataBody, area: SelectionArea) => boolean;
@@ -406,7 +406,7 @@ export const applyMouseAreaSelections = (
         } else {
             (
                 datagrid.parentElement as HTMLPerspectiveViewerElement
-            ).setSelectionPanel(undefined, datagrid.model!._panel);
+            ).setSelection(undefined, { panel: datagrid.model!._panel });
             const tds = table.querySelectorAll("tbody td");
             for (const td of tds) {
                 td.classList.remove(className);

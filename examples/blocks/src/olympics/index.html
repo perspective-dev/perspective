@@ -33,7 +33,7 @@
             const arrow = await response.arrayBuffer();
             await worker.table(arrow, { name: "olympics" });
             window.workspace.load(worker);
-            await window.workspace.restore({
+            await window.workspace.restoreWorkspace({
                 layout: {
                     type: "tab-layout",
                     tabs: ["PERSPECTIVE_GENERATED_ID_1", "PERSPECTIVE_GENERATED_ID_0"],

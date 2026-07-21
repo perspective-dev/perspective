@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 export { PRIVATE_PLUGIN_SYMBOL } from "../types.js";
-export { createModel } from "./create.js";
+export { createModel, readThemeStyle } from "./create.js";
 export { toggle_edit_mode, toggle_scroll_lock } from "./toolbar.js";
 export {
     save_column_size_overrides,

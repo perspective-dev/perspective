@@ -82,6 +82,20 @@ export type PerspectiveSelectEventDetail = {
     view_window: ViewWindow;
 };
 
+export type PerspectiveConfigUpdateEventDetail = {
+    /**
+     * Serialize the panel config that triggered this event, ON DEMAND. The
+     * serialization is deferred so a config change with no interested listener
+     * costs nothing; call `getConfig()` only if you need the config.
+     *
+     * Valid ONLY synchronously within the event callback — the backing closure
+     * is released immediately after dispatch, so stashing `getConfig` and
+     * calling it later throws. To read config outside the callback, use
+     * `viewer.save()` / `viewer.saveWorkspace()`.
+     */
+    getConfig(): ViewerConfigUpdate;
+};
+
 // JSX / React extensions
 
 type ReactPerspectiveViewerAttributes<T> = React.HTMLAttributes<T>;
@@ -224,7 +238,7 @@ export interface PerspectiveViewerElementExt {
 
     addEventListener(
         name: "perspective-config-update",
-        cb: (e: CustomEvent) => void,
+        cb: (e: CustomEvent<PerspectiveConfigUpdateEventDetail>) => void,
         options?: { signal: AbortSignal },
     ): void;
 

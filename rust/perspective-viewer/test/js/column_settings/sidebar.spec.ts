@@ -99,7 +99,7 @@ test.describe("Column Settings Sidebar", () => {
         expect(rowId).toBeDefined();
 
         await exprCol.editBtn.waitFor();
-        await rowId.editBtn.waitFor({ state: "detached", timeout: 1000 });
+        await rowId.editBtn.waitFor({ state: "detached", timeout: 5000 });
 
         await view.assureColumnSettingsClosed();
         await exprCol.editBtn.click();

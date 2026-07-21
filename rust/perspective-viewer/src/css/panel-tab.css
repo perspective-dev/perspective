@@ -56,6 +56,28 @@
     mask-position: center;
 }
 
+.psp-tab-caret {
+    flex: 0 0 auto;
+    display: none;
+    margin-right: 10px;
+    pointer-events: none;
+}
+
+.psp-tab-caret::before {
+    content: ">";
+}
+
+:host([part~="tab"].active) .psp-tab-caret {
+    display: block;
+}
+
+/* A lone tab (its viewer has a single plugin child) has no stack to open —
+ * no caret. Must follow the `.active` rule (equal specificity) to win when
+ * the lone tab is also active. */
+:host([part~="tab"].single) .psp-tab-caret {
+    display: none;
+}
+
 .psp-tab-title {
     flex: 1 1 auto;
     pointer-events: none;
@@ -96,6 +118,14 @@
     outline: none;
 }
 
+.psp-tab-master {
+    margin-right: 6px;
+}
+
+.psp-tab-master:before {
+    content: var(--psp-broadcast--content, "[BROADCAST]");
+}
+
 .psp-tab-close {
     flex: 0 0 auto;
     display: flex;
@@ -109,13 +139,17 @@
     color: inherit;
 }
 
+.psp-tab-close:hover::before {
+    background-color: var(--psp--color);
+}
+
 .psp-tab-close::before {
     content: "";
 
     /* TODO don't hard-code dimensions */
     width: 20px;
     height: 20px;
-    background-color: var(--psp--color);
+    background-color: var(--psp-inactive--color);
     -webkit-mask-image: var(--psp-icon--close--mask-image);
     mask-image: var(--psp-icon--close--mask-image);
     -webkit-mask-size: contain;

@@ -71,6 +71,58 @@ function get_rule(regular: HTMLElement, tag: string, def: string): string {
     }
 }
 
+export type ThemeStyle = Pick<
+    DatagridModel,
+    | "_theme"
+    | "_plugin_background"
+    | "_color"
+    | "_pos_fg_color"
+    | "_neg_fg_color"
+    | "_pos_bg_color"
+    | "_neg_bg_color"
+>;
+
+/**
+ * Read the theme-derived style values off `regular`'s computed style, the
+ * single source for the color/theme fields cached on `DatagridModel`.
+ */
+export function readThemeStyle(regular: HTMLElement): ThemeStyle {
+    const _theme = get_rule(regular, "--psp-theme-name", "");
+    const _plugin_background = parseColor(
+        get_rule(regular, "--psp--background-color", "#FFFFFF"),
+    );
+
+    const _pos_fg_color = make_color_record(
+        get_rule(regular, "--psp-datagrid--pos-cell--color", "#338DCD"),
+    );
+
+    const _neg_fg_color = make_color_record(
+        get_rule(regular, "--psp-datagrid--neg-cell--color", "#FF5942"),
+    );
+
+    const _pos_bg_color = make_color_record(
+        blend(_pos_fg_color[0], _plugin_background),
+    );
+
+    const _neg_bg_color = make_color_record(
+        blend(_neg_fg_color[0], _plugin_background),
+    );
+
+    const _color = make_color_record(
+        get_rule(regular, "--psp-active--color", "#ff0000"),
+    );
+
+    return {
+        _theme,
+        _plugin_background,
+        _color,
+        _pos_fg_color,
+        _neg_fg_color,
+        _pos_bg_color,
+        _neg_bg_color,
+    };
+}
+
 class ElemFactoryImpl implements ElemFactory {
     private _name: string;
     private _elements: HTMLElement[];
@@ -105,7 +157,7 @@ export async function createModel(
     extend: Partial<DatagridModel> = {},
 ): Promise<DatagridModel> {
     const config = (await view.get_config()) as ViewConfig;
-    const theme = get_rule(regular, "--psp-theme-name", "");
+    const style = readThemeStyle(regular);
     if (this?.model?._config) {
         const old = this.model._config;
         const group_by_changed = arraysChanged(old.group_by, config.group_by);
@@ -128,7 +180,7 @@ export async function createModel(
         const group_rollup_mode_changed =
             old.group_rollup_mode !== config.group_rollup_mode;
 
-        const theme_changed = this.model._theme !== theme;
+        const theme_changed = this.model._theme !== style._theme;
         this._reset_scroll_top = group_by_changed;
         this._reset_scroll_left = split_by_changed;
         this._reset_select =
@@ -154,34 +206,10 @@ export async function createModel(
             view.num_rows(),
             view.schema(),
             view.expression_schema(),
-            (
-                this.parentElement as HTMLPerspectiveViewerElement
-            ).getEditPortPanel(_panel),
+            (this.parentElement as HTMLPerspectiveViewerElement).getEditPort({
+                panel: _panel,
+            }),
         ]);
-
-    const _plugin_background = parseColor(
-        get_rule(regular, "--psp--background-color", "#FFFFFF"),
-    );
-
-    const _pos_fg_color = make_color_record(
-        get_rule(regular, "--psp-datagrid--pos-cell--color", "#338DCD"),
-    );
-
-    const _neg_fg_color = make_color_record(
-        get_rule(regular, "--psp-datagrid--neg-cell--color", "#FF5942"),
-    );
-
-    const _pos_bg_color = make_color_record(
-        blend(_pos_fg_color[0], _plugin_background),
-    );
-
-    const _neg_bg_color = make_color_record(
-        blend(_neg_fg_color[0], _plugin_background),
-    );
-
-    const _color = make_color_record(
-        get_rule(regular, "--psp-active--color", "#ff0000"),
-    );
 
     const _schema: Schema = {
         ...(schema as Schema),
@@ -219,15 +247,9 @@ export async function createModel(
         _num_rows: num_rows,
         _schema,
         _ids: [],
-        _plugin_background,
-        _color,
-        _pos_fg_color,
-        _neg_fg_color,
-        _pos_bg_color,
-        _neg_bg_color,
+        ...style,
         _column_paths,
         _column_types,
-        _theme: theme,
         _is_editable,
         _edit_mode,
         _selection_state: {

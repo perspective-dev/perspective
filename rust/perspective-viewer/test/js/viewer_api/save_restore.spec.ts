@@ -131,68 +131,6 @@ test.describe("Save/Restore", async () => {
         });
 
         const contents = await get_contents(page);
-
-        await compareContentsToSnapshot(contents);
-    });
-
-    test("save > roundtrips in string format", async ({ page }) => {
-        const config = await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
-            await viewer.getTable();
-            await viewer.restore({
-                settings: true,
-                group_by: ["State"],
-                columns: ["Profit", "Sales"],
-            });
-            return await viewer.save("string");
-        });
-
-        const config3 = await page.evaluate(async (config) => {
-            const viewer = document.querySelector("perspective-viewer");
-            await viewer.reset();
-            await viewer.restore(config);
-            return await viewer.save();
-        }, config);
-
-        expect(config3).toEqual({
-            ...DEFAULT_CONFIG,
-            columns: ["Profit", "Sales"],
-            plugin: "Debug",
-            group_by: ["State"],
-            settings: true,
-            theme: "Pro Light",
-        });
-
-        const contents = await get_contents(page);
-        await compareContentsToSnapshot(contents);
-    });
-
-    test("save > roundtrips in arraybuffer format", async ({ page }) => {
-        const config3 = await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
-            await viewer.getTable();
-            await viewer.restore({
-                settings: true,
-                group_by: ["State"],
-                columns: ["Profit", "Sales"],
-            });
-
-            const config = await viewer.save("arraybuffer");
-            await viewer.reset();
-            await viewer.restore(config);
-            return await viewer.save();
-        });
-
-        expect(config3).toEqual({
-            ...DEFAULT_CONFIG,
-            columns: ["Profit", "Sales"],
-            plugin: "Debug",
-            group_by: ["State"],
-            settings: true,
-            theme: "Pro Light",
-        });
-
-        const contents = await get_contents(page);
         await compareContentsToSnapshot(contents);
     });
 });

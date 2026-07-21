@@ -51,7 +51,7 @@ export async function sortHandler(
 
     const abs = event.shiftKey;
     const sort = sort_method(model, `${column_name}`, abs);
-    await viewer.restorePanel({ sort }, model._panel);
+    await viewer.restore({ sort }, { panel: model._panel });
 }
 
 export function append_sort(

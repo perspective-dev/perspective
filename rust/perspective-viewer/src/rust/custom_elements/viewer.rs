@@ -13,7 +13,6 @@
 #![allow(non_snake_case)]
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use futures::channel::oneshot::channel;
@@ -37,7 +36,7 @@ use crate::presentation::*;
 use crate::queries::*;
 use crate::renderer::*;
 use crate::root::Root;
-use crate::session::{ResetOptions, Session, TableLoadState};
+use crate::session::{ResetOptions, Session};
 use crate::tasks::*;
 use crate::utils::*;
 use crate::workspace::{Panel, PanelId, Workspace};
@@ -45,11 +44,46 @@ use crate::*;
 
 #[wasm_bindgen]
 extern "C" {
-    #[wasm_bindgen(typescript_type = "Promise<ViewerConfig>")]
-    pub type JsViewerConfigPromise;
+    /// `load()` argument: a [`Client`], a (deprecated) [`Table`], or a
+    /// `Promise` resolving to either. Typed rather than `any` so callers get
+    /// completion; the `Table` forms remain runtime-deprecated.
+    #[wasm_bindgen(typescript_type = "Client | Table | Promise<Client | Table>")]
+    pub type JsClientLoad;
 
-    #[wasm_bindgen(typescript_type = "ViewerConfigUpdate")]
-    pub type JsViewerConfigUpdate;
+    /// `eject()` argument dict (`{ client?: string }`).
+    #[wasm_bindgen(typescript_type = "ClientOptions")]
+    pub type JsClientOptions;
+
+    /// Panel-selector dict (`{ panel?: string }`) for the active/base
+    /// accessor methods.
+    #[wasm_bindgen(typescript_type = "PanelOptions")]
+    pub type JsPanelOptions;
+
+    /// `download`/`export`/`copy` options dict
+    /// (`{ method?: ExportMethod, panel?: string }`).
+    #[wasm_bindgen(typescript_type = "ExportOptions")]
+    pub type JsExportOptions;
+
+    /// `getTable` options dict (`{ wait?: boolean, panel?: string }`).
+    #[wasm_bindgen(typescript_type = "GetTableOptions")]
+    pub type JsGetTableOptions;
+
+    /// `getClient` options dict (`{ wait?: boolean, panel?: string }`).
+    #[wasm_bindgen(typescript_type = "GetClientOptions")]
+    pub type JsGetClientOptions;
+
+    /// `restoreWorkspace()` argument: a whole-element config update.
+    #[wasm_bindgen(typescript_type = "WorkspaceConfigUpdate")]
+    pub type JsWorkspaceConfigUpdate;
+
+    /// `saveWorkspace()` return: a whole-element config.
+    #[wasm_bindgen(typescript_type = "Promise<WorkspaceConfig>")]
+    pub type JsWorkspaceConfigPromise;
+
+    /// A `Promise<void>` return, used by the `restore` family (whose
+    /// `ApiFuture<()>` would otherwise erase to `Promise<any>`).
+    #[wasm_bindgen(typescript_type = "Promise<void>")]
+    pub type JsVoidPromise;
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -61,6 +95,20 @@ struct ResizeOptions {
 struct ResizeDimensions {
     width: f64,
     height: f64,
+}
+
+/// Leniently deserialize an optional JS options dict into a serde struct,
+/// falling back to `Default` on absence or a malformed argument (matching the
+/// `ResizeOptions` precedent — an options bag is a best-effort convenience,
+/// not a hard-validated payload).
+fn parse_options<T, U>(options: Option<T>) -> U
+where
+    T: Into<JsValue>,
+    U: Default + for<'a> serde::Deserialize<'a>,
+{
+    options
+        .and_then(|o| o.into_serde_ext().ok())
+        .unwrap_or_default()
 }
 
 /// The `<perspective-viewer>` custom element.
@@ -90,17 +138,12 @@ struct ResizeDimensions {
 #[derive(Clone)]
 #[wasm_bindgen]
 pub struct PerspectiveViewerElement {
-    elem: HtmlElement,
-    root: Root<components::viewer::PerspectiveViewer>,
+    pub(crate) presentation: Presentation,
+    pub(crate) workspace: Workspace,
+    pub(crate) elem: HtmlElement,
+    pub(crate) root: Root<components::viewer::PerspectiveViewer>,
     resize_handle: Rc<RefCell<Option<ResizeObserverHandle>>>,
     intersection_handle: Rc<RefCell<Option<IntersectionObserverHandle>>>,
-    pub(crate) presentation: Presentation,
-
-    /// The multi-panel model — the single source of truth for engine state.
-    /// The active panel's [`Session`]/[`Renderer`] are reached via
-    /// `workspace.active_*()`; the element caches none, so no method can act on
-    /// a stale seed panel.
-    pub(crate) workspace: Workspace,
     _subscriptions: Rc<[Subscription; 1]>,
     _custom_event_subs: Rc<Vec<Subscription>>,
 }
@@ -111,230 +154,16 @@ impl CustomElementMetadata for PerspectiveViewerElement {
         ["registerPlugin", "get_wasm_module", "get_worker_url"].as_slice();
 }
 
-/// Wire a panel's data-refresh subscription: when its [`Session`]'s table emits
-/// an update, redraw its [`Renderer`]. The returned [`Subscription`] must be
-/// owned for the panel's lifetime (see [`Panel`]).
-///
-/// Every panel needs its own — historically this was created once, for the seed
-/// panel, in the element constructor, so panels added later (`addPanel`,
-/// duplicate) never redrew on `Table.update()`.
-fn wire_panel_render_sub(session: &Session, renderer: &Renderer) -> Subscription {
-    session.table_updated.add_listener({
-        clone!(renderer, session);
-        move |_| {
-            clone!(renderer, session);
-            // Resolve the `View` LAZILY, inside the render lock at draw time,
-            // rather than capturing it eagerly here. A config-change rebuild on
-            // this session can replace (and delete) the bound `View` between this
-            // `table_updated` firing and the debounced redraw actually running; an
-            // eager capture would then draw a stale/deleted `View` (the
-            // duplicate-panel "old view" glitch). `update_lazy` re-reads
-            // `get_view()` under the same lock a concurrent rebuild draw acquires,
-            // so it always renders the current bound `View`.
-            ApiFuture::spawn(async move {
-                renderer
-                    .update_lazy(async move { Ok(session.get_view()) })
-                    .await
-                    .ignore_view_delete()
-                    .map(|_| ())
-            })
-        }
-    })
-}
-
-/// Build the full set of subscriptions a [`Panel`] owns for its lifetime: its
-/// redraw subscription plus its custom-event fanout ([`wire_panel_events`]).
-/// Shared by the seed (element constructor) and every [`create_panel_model`]
-/// panel, so all panels wire identically and every panel — not just the seed —
-/// dispatches its own `perspective-*` events (see C6).
-fn wire_panel_subs(
-    elem: &HtmlElement,
-    presentation: &Presentation,
-    session: &Session,
-    renderer: &Renderer,
-) -> Vec<Subscription> {
-    let mut subs = vec![wire_panel_render_sub(session, renderer)];
-    subs.extend(wire_panel_events(elem, session, renderer, presentation));
-    subs
-}
-
-/// Create a new independent panel (own `Session` + `Renderer` + id) from a
-/// `ViewerConfigUpdate`, mount and draw it, and return its generated id. Shared
-/// by `addPanel` and whole-element `restore`. `settings`/`theme` are stripped
-/// (element-level, not per-panel) and `client` — or the element's default
-/// client when `None` — is bound so the config's `table` resolves against it.
-///
-/// A free function (not a method) so it stays clear of the `#[wasm_bindgen]`
-/// impl's exported surface, and `pub(crate)` + `Root`-agnostic (it signals a
-/// layout change through `notify` rather than a `Root` handle) so the root Yew
-/// component can also drive it (e.g. the context-menu "Duplicate" command).
-pub(crate) async fn create_panel(
-    elem: &HtmlElement,
-    presentation: &Presentation,
-    workspace: &Workspace,
-    notify: &Callback<()>,
-    update: ViewerConfigUpdate,
-    client: Option<perspective_client::Client>,
-) -> ApiResult<PanelId> {
-    let (id, session, renderer, update) =
-        create_panel_model(elem, presentation, workspace, update, client);
-
-    // A panel born into a workspace with active global filters must FIRST
-    // paint filtered: sync-stamp its overlay (a fresh panel is always a
-    // detail) before the content restore's locked bind reads it.
-    stamp_global_overlay(workspace, &id, &session);
-    notify.emit(());
-    restore_panel_content(&session, &renderer, presentation, update).await?;
-    Ok(id)
-}
-
-/// The synchronous *model* half of [`create_panel`]: build and register a new
-/// panel's engine handles (own `Session` + `Renderer` + generated id) in the
-/// [`Workspace`], apply-and-strip the element-level config fields
-/// (`settings`/`theme`), and bind `client` (falling back to the default
-/// client). Causes NO re-render and NO draw — whole-element `restore` batches
-/// N of these before its single commit render, so no intermediate panel set is
-/// ever visible.
-pub(crate) fn create_panel_model(
-    elem: &HtmlElement,
-    presentation: &Presentation,
-    workspace: &Workspace,
-    mut update: ViewerConfigUpdate,
-    client: Option<perspective_client::Client>,
-) -> (PanelId, Session, Renderer, ViewerConfigUpdate) {
-    let session = Session::new();
-    let renderer = Renderer::new(elem);
-    let id = workspace.generate_id();
-    renderer.set_slot_name(id.as_str());
-
-    // Seed the registry-default theme cache SYNCHRONOUSLY from the
-    // presentation's mirror (filled once the theme registry first
-    // resolves — element init kicks that off), so a panel with no own
-    // theme can stamp its effective theme without awaiting registry
-    // init inside a locked run. `None` on an ultra-cold start is fine:
-    // the async seeding in `restore_and_render` / `load` still runs.
-    renderer.set_default_theme(presentation.default_theme_name_cached());
-    let subs = wire_panel_subs(elem, presentation, &session, &renderer);
-    workspace.insert_panel(Panel::new(
-        id.clone(),
-        session.clone(),
-        renderer.clone(),
-        subs,
-    ));
-
-    update.settings = OptionalUpdate::Missing;
-    if let OptionalUpdate::Update(theme) = &update.theme {
-        renderer.set_theme(Some(theme.clone()));
-    }
-
-    update.theme = OptionalUpdate::Missing;
-    if let Some(client) = client.or_else(|| workspace.default_client()) {
-        workspace.register_client(client.clone());
-        session.set_client(client);
-    }
-
-    // Eagerly select + mount the config's plugin (when named and already
-    // registered), so the panel's frame is populated synchronously with its
-    // creation — a slow first view query would otherwise leave an empty
-    // frame until `draw_view` mounts post-query. Committing outside a locked
-    // draw is safe ONLY here: a brand-new `Renderer` provably has no queued
-    // draws, so the atomic-swap rule (which protects LIVE panels) is
-    // vacuous. An unresolvable name (its plugin not yet registered) stays
-    // lazy rather than falling back — pinning the registry default this
-    // early is the `Debug` init-order race. The `theme` attribute lands via
-    // `MainPanel`'s reconcile stamp in the same commit that mounts the
-    // frame, before any content draws.
-    if let Some((idx, _)) = renderer.resolve_plugin_update(&update.plugin) {
-        let _ = renderer.commit_plugin(Some(idx));
-        let _ = renderer.mount_active_plugin();
-    }
-
-    (id, session, renderer, update)
-}
-
-/// The async *content* half of [`create_panel`]: bind the config's table and
-/// draw the panel's plugin. Callers must already have rendered (or scheduled
-/// the render that mounts) the panel's cell — whole-element `restore` runs N
-/// of these CONCURRENTLY after its single commit render.
-pub(crate) async fn restore_panel_content(
-    session: &Session,
-    renderer: &Renderer,
-    presentation: &Presentation,
-    update: ViewerConfigUpdate,
-) -> ApiResult<()> {
-    let table = update.table.clone();
-    // `Public`: every caller is a public-API panel creation (`addPanel`,
-    // whole-element `restore`, duplicate) — and a fresh panel's first paint
-    // routes through the `!has_drawn` promotion regardless.
-    let result = restore_and_render(
-        session,
-        renderer,
-        presentation,
-        RunOrigin::Public,
-        update,
-        {
-            clone!(session);
-            async move {
-                if let OptionalUpdate::Update(name) = table {
-                    session.set_table(name).await?;
-                    session.commit_table_defaults();
-                }
-
-                Ok(())
-            }
-        },
-    )
-    .await;
-
-    // Surface a failed content restore (including a propagated first-draw
-    // failure — see `draw_view`) as a PANEL error, so the panel renders the
-    // error overlay instead of staying permanently blank. Same convention as
-    // `restorePanel` / `load`.
-    if let Err(e) = &result {
-        session.set_error(false, e.clone()).await?;
-    }
-
-    result?;
-    renderer.resize().await.unwrap_or_log();
-    Ok(())
-}
-
-/// Tear down a [`Panel`] already removed from the [`Workspace`]: dispose its
-/// renderer (slot-scoped plugin + light-DOM cleanup) and eject its table.
-/// Shared by the root's `ClosePanel` handler and whole-element `restore`'s
-/// batch replacement of the pre-existing panel set.
-pub(crate) fn eject_panel(panel: Panel) -> ApiFuture<()> {
-    let was_errored = panel.session.is_errored();
-    let dispose_task = panel.renderer.dispose();
-    let reset_task = panel.session.reset(ResetOptions {
-        config: true,
-        expressions: true,
-        table: Some(session::TableIntermediateState::Ejected),
-        ..ResetOptions::default()
-    });
-
-    ApiFuture::new(async move {
-        dispose_task.await?;
-        match reset_task.await.ignore_view_delete() {
-            Err(_) if was_errored => Ok(()),
-            Err(e) => Err(e),
-            Ok(_) => Ok(()),
-        }
-    })
-}
-
-/// Build a [`create_panel`] `notify` callback that requests a Yew re-render (so
-/// a new panel's cell mounts) through a [`Root`] app handle — the element-side
-/// equivalent of `ctx.link().callback(|_| LayoutChanged)`.
-fn layout_changed_callback(root: Root<components::viewer::PerspectiveViewer>) -> Callback<()> {
-    Callback::from(move |_: ()| {
-        if let Some(app) = root.borrow().as_ref() {
-            app.send_message(PerspectiveViewerMsg::LayoutChanged);
-        }
-    })
-}
-
 impl PerspectiveViewerElement {
+    fn layout_changed_notify(&self) -> Callback<()> {
+        let root = self.root.clone();
+        Callback::from(move |_: ()| {
+            if let Some(app) = root.borrow().as_ref() {
+                app.send_message(PerspectiveViewerMsg::LayoutChanged);
+            }
+        })
+    }
+
     fn resolve_panel(&self, name: Option<String>) -> ApiResult<Panel> {
         let id = name.map(PanelId::from);
         self.workspace.panel_or_active(id.as_ref()).ok_or_else(|| {
@@ -354,7 +183,77 @@ impl PerspectiveViewerElement {
             .flatten()
             .map(|el| el.unchecked_into())
     }
+
+    async fn workspace_config(this: Self) -> ApiResult<JsValue> {
+        let mut panels: std::collections::BTreeMap<String, PanelViewerConfig> = Default::default();
+        for id in &this.workspace.panel_ids() {
+            let panel = this.workspace.panel(id).into_apierror()?;
+            let config = panel
+                .renderer
+                .clone()
+                .with_lock(async {
+                    get_viewer_config(&panel.session, &panel.renderer, &this.presentation).await
+                })
+                .await?;
+
+            panels.insert(id.as_str().to_owned(), config.panel);
+        }
+
+        let active = this
+            .presentation
+            .is_settings_open()
+            .then(|| this.workspace.active_id().as_str().to_owned());
+
+        let layout = this
+            .layout_element()
+            .map(|l| l.save().into_serde_ext::<crate::js::Layout>())
+            .transpose()?;
+
+        Ok(JsValue::from_serde_ext(&WorkspaceConfig {
+            version: API_VERSION.to_string(),
+            active,
+            layout,
+            panels,
+            global_filters: this.workspace.global_filters(),
+            masters: this
+                .workspace
+                .masters()
+                .iter()
+                .map(|id| id.as_str().to_owned())
+                .collect(),
+        })?)
+    }
 }
+
+fn eject_client_panels(
+    workspace: &Workspace,
+    root: &Root<crate::components::viewer::PerspectiveViewer>,
+    target: String,
+    ids: Vec<PanelId>,
+) -> ApiFuture<()> {
+    clone!(workspace, root);
+    ApiFuture::new_throttled(async move {
+        for id in ids {
+            let (completion, receiver) = Completion::new();
+            root.borrow()
+                .as_ref()
+                .into_apierror()?
+                .send_message(PerspectiveViewerMsg::ClosePanel(
+                    id.to_string(),
+                    Some(completion),
+                ));
+
+            receiver.await.map_err(|_| ApiError::new("Cancelled"))??;
+        }
+
+        workspace.remove_client(&target);
+        Ok(())
+    })
+}
+
+#[rustfmt::skip]
+const DEPRECATED_TABLE_MESSAGE: &str =
+    "`load(table)` is deprecated - use `load(client)` followed by `restore({table: \"name\"})` instead";
 
 #[wasm_bindgen]
 impl PerspectiveViewerElement {
@@ -375,8 +274,20 @@ impl PerspectiveViewerElement {
         let presentation = Presentation::new(&elem);
         let session = Session::new();
         let renderer = Renderer::new(&elem);
+        if let Some(theme) = elem.get_attribute("theme") {
+            renderer.set_theme(Some(theme.clone()));
+            clone!(presentation, renderer);
+            ApiFuture::spawn(async move {
+                let themes = presentation.get_available_themes().await?;
+                if !themes.contains(&theme) && renderer.theme().as_deref() == Some(theme.as_str()) {
+                    renderer.set_theme(None);
+                }
 
-        // The seed panel's subscriptions (redraw + custom-event fanout)
+                Ok(())
+            });
+        }
+
+        // The active panel's subscriptions (redraw + custom-event fanout)
         let seed_subs = wire_panel_subs(&elem, &presentation, &session, &renderer);
         let workspace = Workspace::new(session, renderer, seed_subs);
         let custom_event_subs = wire_element_events(&elem, &presentation, &workspace);
@@ -394,7 +305,20 @@ impl PerspectiveViewerElement {
         // Create callbacks
         let eject_sub = presentation.on_eject.add_listener({
             let root = root.clone();
-            move |_| ApiFuture::spawn(delete_all(&state.workspace, &root))
+            move |_| {
+                clone!(state.workspace, root);
+                ApiFuture::spawn(async move {
+                    if let Some(target) = workspace.active_client().map(|c| c.get_name().to_owned())
+                    {
+                        let ids = workspace.panels_for_client(&target);
+                        if ids.len() < workspace.panel_ids().len() {
+                            return eject_client_panels(&workspace, &root, target, ids).await;
+                        }
+                    }
+
+                    delete_all(&workspace, &root).await
+                })
+            }
         });
 
         let resize_handle = ResizeObserverHandle::new(&elem, &workspace, &presentation, &root);
@@ -493,7 +417,8 @@ impl PerspectiveViewerElement {
     /// const table = await worker.table("x\n1", {name: "table_one"});
     /// await viewer.load(table);
     /// ```
-    pub fn load(&self, table: JsValue) -> ApiResult<ApiFuture<()>> {
+    pub fn load(&self, client: JsClientLoad) -> ApiResult<ApiFuture<()>> {
+        let table: JsValue = client.into();
         let promise = table
             .clone()
             .dyn_into::<js_sys::Promise>()
@@ -501,41 +426,34 @@ impl PerspectiveViewerElement {
 
         // Element-level `load` targets the active panel's engines. Selection
         // here (rather than at element construction) is what keeps the
-        // registry race safe — by `load()` time real plugins have registered
-        // — and the eager mount populates the panel's frame immediately,
-        // before the (possibly slow) load + first view query resolves.
+        // registry race safe — by `load()` time real plugins have registered.
         let panel = self.workspace.active_panel();
-        let _plugin = panel.renderer.ensure_plugin_selected()?;
-        let _ = panel.renderer.mount_active_plugin();
-        let reset_task = panel.session.reset(ResetOptions {
-            config: true,
-            expressions: true,
-            stats: true,
-            table: Some(session::TableIntermediateState::Reloaded),
-        });
-
         let session = panel.session;
         let renderer = panel.renderer;
+
+        // Open the pending-load window SYNCHRONOUSLY, at the call site — this
+        // is what fixes the ordering. The payload's RESET disposition (a
+        // `Table` resets the view; a `Client` does not) is unknown until the
+        // promise resolves, but the window's POSITION on the config-commit
+        // stream is fixed NOW. A `restore()` a caller fires immediately after
+        // this unawaited `load()` (the React prop-binding pattern, which has
+        // no async ordering guarantees) commits INTO this window's journal and
+        // is replayed over the reset base if the payload proves to be a
+        // `Table` — so a moved-async reset can no longer clobber a later
+        // commit. See `SESSION_CONFIG_COHERENCE_PLAN.md`.
+        let generation = session.begin_pending_load();
+
         clone!(self.workspace, self.presentation);
         Ok(ApiFuture::new_throttled(async move {
             renderer.set_throttle(None);
-            // Spinner accounting (RAII): the bind run below commits
-            // (`commit_table_defaults`) and draws — a config-driven run.
             let _run_token = session.begin_config_run();
             let result = {
                 clone!(session, renderer);
                 renderer
                     .clone()
                     .render_task(|guard| async move {
-                        // Seed the renderer's default-theme cache (awaits
-                        // theme-registry init), then stamp — before any
-                        // plugin style read below.
                         renderer.set_default_theme(presentation.get_default_theme_name().await);
                         renderer.stamp_theme(None);
-
-                        // Ignore this error, which is blown away by the table
-                        // anyway.
-                        let _ = reset_task.await;
                         let jstable = JsFuture::from(promise)
                             .await
                             .map_err(|x| apierror!(TableError(x)))?;
@@ -543,6 +461,23 @@ impl PerspectiveViewerElement {
                         if let Ok(Some(table)) =
                             try_from_js_option::<perspective_js::Table>(jstable.clone())
                         {
+                            tracing::warn!(DEPRECATED_TABLE_MESSAGE);
+                            let Some(journal) = session.take_pending_load(generation) else {
+                                return Ok(());
+                            };
+
+                            let _plugin = renderer.ensure_plugin_selected()?;
+                            let _ = renderer.mount_active_plugin();
+                            session
+                                .reset(ResetOptions {
+                                    config: true,
+                                    expressions: true,
+                                    stats: true,
+                                    table: Some(session::TableIntermediateState::Reloaded),
+                                })
+                                .await
+                                .unwrap_or_log();
+
                             let client = table.get_client().await;
                             let inner_client = client.get_client().clone();
                             session.set_client(inner_client.clone());
@@ -555,21 +490,14 @@ impl PerspectiveViewerElement {
                             );
 
                             session.set_table(name).await?;
+                            for delta in journal {
+                                session.commit_view_config(delta)?;
+                            }
 
-                            // Table-bind commit: default-view materialization
-                            // (empty `columns` → the table's columns), SYNC and
-                            // ordered inside this locked run like any other
-                            // commit (I1). A `restore()` racing this `load()`
-                            // commits either before this run's snapshot below
-                            // (absorbed) or after (its own queued run renders
-                            // it) — both orders terminate at the restore
-                            // config (I3).
                             session.commit_table_defaults();
                             let (disposition, _pin) =
                                 crate::tasks::bind_snapshot(&guard, &session, &renderer).await?;
-                            // `load()` is a public API entry; its table bind
-                            // rebuilds in practice, so `Public` is inert
-                            // insurance for behavior preservation.
+
                             crate::tasks::dispatch_bound(
                                 &guard,
                                 &renderer,
@@ -584,11 +512,16 @@ impl PerspectiveViewerElement {
                             perspective_js::Client,
                         >(jstable)
                         {
+                            if session.take_pending_load(generation).is_none() {
+                                return Ok(());
+                            }
+
                             let inner_client = client.get_client().clone();
                             session.set_client(inner_client.clone());
                             workspace.set_default_client(inner_client);
                             Ok(())
                         } else {
+                            session.take_pending_load(generation);
                             Err(ApiError::new("Invalid argument"))
                         }
                     })
@@ -596,6 +529,7 @@ impl PerspectiveViewerElement {
             };
 
             if let Err(e) = &result {
+                session.take_pending_load(generation);
                 session.set_error(false, e.clone()).await?;
             }
 
@@ -628,27 +562,47 @@ impl PerspectiveViewerElement {
         delete_all(&self.workspace, &self.root)
     }
 
-    /// Restart this `<perspective-viewer>` to its initial state, before
-    /// `load()`.
+    /// Remove a [`Client`] from this `<perspective-viewer>` and dispose every
+    /// panel bound to it (each panel's `View` is deleted and its `Table`
+    /// reference released).
     ///
-    /// Use `Self::restart` if you plan to call `Self::load` on this viewer
-    /// again, or alternatively `Self::delete` if this viewer is no longer
-    /// needed.
-    pub fn eject(&mut self) -> ApiFuture<()> {
-        if matches!(
-            self.workspace.active_session().has_table(),
-            Some(TableLoadState::Loaded)
-        ) {
+    /// # Arguments
+    ///
+    /// - `options` - An optional `{client?: string}` dict naming the client to
+    ///   eject; the active panel's client when omitted.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// await viewer.eject();
+    /// await viewer.eject({client: "remote"});
+    /// ```
+    pub fn eject(&mut self, options: Option<JsClientOptions>) -> ApiFuture<()> {
+        let ClientOptions { client } = parse_options(options);
+        let Some(target) = client.or_else(|| {
+            self.workspace
+                .active_client()
+                .map(|c| c.get_name().to_owned())
+        }) else {
+            return ApiFuture::new_throttled(async move { Ok(()) });
+        };
+
+        let ids = self.workspace.panels_for_client(&target);
+
+        // The target client backs EVERY panel — reset the element to its
+        // pre-`load` state (dropping the client with it), as a `Workspace`
+        // must always keep at least one panel.
+        if !ids.is_empty() && ids.len() == self.workspace.panel_ids().len() {
             let mut state = Self::new_from_shadow(
                 self.elem.clone(),
                 self.elem.shadow_root().unwrap().unchecked_into(),
             );
 
             std::mem::swap(self, &mut state);
-            ApiFuture::new_throttled(state.delete())
-        } else {
-            ApiFuture::new_throttled(async move { Ok(()) })
+            return ApiFuture::new_throttled(state.delete());
         }
+
+        eject_client_panels(&self.workspace, &self.root, target, ids)
     }
 
     /// Get the underlying [`View`] for this viewer.
@@ -671,8 +625,13 @@ impl PerspectiveViewerElement {
     /// const view = await viewer.getView();
     /// ```
     #[wasm_bindgen]
-    pub fn getView(&self, panel: Option<String>) -> ApiFuture<View> {
-        self.getViewPanel(panel)
+    pub fn getView(&self, options: Option<JsPanelOptions>) -> ApiFuture<View> {
+        let PanelOptions { panel: name } = parse_options(options);
+        let this = self.clone();
+        ApiFuture::new(async move {
+            let panel = this.resolve_panel(name)?;
+            Ok(panel.session.get_view().ok_or("No table set")?.into())
+        })
     }
 
     /// Get a copy of the [`ViewConfig`] for the current [`View`]. This is
@@ -681,8 +640,21 @@ impl PerspectiveViewerElement {
     /// server (unlike [`PerspectiveViewerElement::getView`] followed by
     /// [`View::get_config`])
     #[wasm_bindgen]
-    pub fn getViewConfig(&self, panel: Option<String>) -> ApiFuture<JsViewConfig> {
-        self.getViewConfigPanel(panel)
+    pub fn getViewConfig(&self, options: Option<JsPanelOptions>) -> ApiFuture<JsViewConfig> {
+        let PanelOptions { panel: name } = parse_options(options);
+        let this = self.clone();
+        ApiFuture::new(async move {
+            let panel = this.resolve_panel(name)?;
+            let config = if let Some(ctx) = panel.renderer.render_context() {
+                (*ctx.view_config).clone()
+            } else if let Some(rendered) = panel.session.get_rendered_view_config() {
+                (*rendered).clone()
+            } else {
+                panel.session.get_view_config().clone()
+            };
+
+            Ok(JsValue::from_serde_ext(&config)?.unchecked_into())
+        })
     }
 
     /// Get the underlying [`Table`] for this viewer (as passed to
@@ -701,8 +673,30 @@ impl PerspectiveViewerElement {
     /// const table = await viewer.getTable();
     /// ```
     #[wasm_bindgen]
-    pub fn getTable(&self, wait_for_table: Option<bool>) -> ApiFuture<Table> {
-        self.getTablePanel(wait_for_table, None)
+    pub fn getTable(&self, options: Option<JsGetTableOptions>) -> ApiFuture<Table> {
+        let GetTableOptions {
+            wait: wait_for_table,
+            panel: name,
+        } = parse_options(options);
+        let this = self.clone();
+        ApiFuture::new(async move {
+            let panel = this.resolve_panel(name)?;
+            if !wait_for_table.unwrap_or_default()
+                && let Some(ctx) = panel.renderer.render_context()
+            {
+                return Ok(ctx.table.clone().into());
+            }
+
+            let session = panel.session;
+            match session.get_table() {
+                Some(table) => Ok(table.into()),
+                None if !wait_for_table.unwrap_or_default() => Err("No `Table` set".into()),
+                None => {
+                    session.table_loaded.read_next().await?;
+                    Ok(session.get_table().ok_or("No `Table` set")?.into())
+                },
+            }
+        })
     }
 
     /// Get the underlying [`Client`] for this viewer (as passed to, or
@@ -721,8 +715,33 @@ impl PerspectiveViewerElement {
     /// const client = await viewer.getClient();
     /// ```
     #[wasm_bindgen]
-    pub fn getClient(&self, wait_for_client: Option<bool>) -> ApiFuture<perspective_js::Client> {
-        self.getClientPanel(wait_for_client, None)
+    pub fn getClient(
+        &self,
+        options: Option<JsGetClientOptions>,
+    ) -> ApiFuture<perspective_js::Client> {
+        let GetClientOptions {
+            wait: wait_for_client,
+            panel: name,
+        } = parse_options(options);
+        let this = self.clone();
+        ApiFuture::new(async move {
+            let panel = this.resolve_panel(name)?;
+            if !wait_for_client.unwrap_or_default()
+                && let Some(ctx) = panel.renderer.render_context()
+            {
+                return Ok(ctx.client.clone().into());
+            }
+
+            let session = panel.session;
+            match session.get_client() {
+                Some(client) => Ok(client.into()),
+                None if !wait_for_client.unwrap_or_default() => Err("No `Client` set".into()),
+                None => {
+                    session.table_loaded.read_next().await?;
+                    Ok(session.get_client().ok_or("No `Client` set")?.into())
+                },
+            }
+        })
     }
 
     /// Get render statistics. Some fields of the returned stats object are
@@ -735,8 +754,12 @@ impl PerspectiveViewerElement {
     /// const {virtual_fps, actual_fps} = await viewer.getRenderStats();
     /// ```
     #[wasm_bindgen]
-    pub fn getRenderStats(&self) -> ApiResult<JsValue> {
-        self.getRenderStatsPanel(None)
+    pub fn getRenderStats(&self, options: Option<JsPanelOptions>) -> ApiResult<JsValue> {
+        let PanelOptions { panel: name } = parse_options(options);
+        let panel = self.resolve_panel(name)?;
+        Ok(JsValue::from_serde_ext(
+            &panel.renderer.render_timer().get_stats(),
+        )?)
     }
 
     /// Flush any pending modifications to this `<perspective-viewer>`.  Since
@@ -776,12 +799,6 @@ impl PerspectiveViewerElement {
             {
                 panel.renderer.clone().with_lock(async { Ok(()) }).await?;
                 panel.renderer.with_lock(async { Ok(()) }).await?;
-
-                // Join the panel's in-flight `perspective-config-update`
-                // dispatch tasks: "the load/restore's config-update has fired
-                // by the time `flush()` resolves" is a contract (see
-                // flush.spec), and the dispatcher is async — without this
-                // join it beat `flush()` only by microtask luck.
                 panel.session.settle_dispatches().await?;
             }
 
@@ -789,9 +806,19 @@ impl PerspectiveViewerElement {
         })
     }
 
-    /// Restores this element from a full/partial
-    /// [`perspective_js::JsViewConfig`] (this element's user-configurable
-    /// state, including the `Table` name).
+    /// Restore a single panel from a full/partial
+    /// [`perspective_js::JsViewConfig`] (its user-configurable state, including
+    /// the `Table` name) — the active panel, or a specific panel via the
+    /// optional `{panel}` selector.
+    ///
+    /// If `panel` names no existing panel, a NEW panel is created with that id
+    /// and the config restored into it (an upsert), equivalent to
+    /// [`Self::addPanel`] but with a caller-chosen id. As with a created panel,
+    /// the element-level `settings`/`theme` fields are ignored in that case.
+    ///
+    /// This restores a SINGLE panel; a whole-element config (with a `panels`
+    /// map) must be applied via [`Self::restoreWorkspace`] — its `panels` /
+    /// `layout` keys are ignored here.
     ///
     /// One of the best ways to use [`Self::restore`] is by first configuring
     /// a `<perspective-viewer>` as you wish, then using either the `Debug`
@@ -802,6 +829,7 @@ impl PerspectiveViewerElement {
     ///
     /// - `update` - The config to restore to, as returned by [`Self::save`] in
     ///   either "json", "string" or "arraybuffer" format.
+    /// - `name` - The panel to target, or `None` for the active panel.
     ///
     /// # JavaScript Examples
     ///
@@ -818,156 +846,84 @@ impl PerspectiveViewerElement {
     /// ```javascript
     /// await viewer.restore({group_by: ["State"]});
     /// ```
-    pub fn restore(&self, update: JsViewerConfigUpdate) -> ApiFuture<()> {
-        // Format detection is synchronous: a whole-element config carries a
-        // `panels` map. A legacy single `ViewerConfig` is routed to the active
-        // panel — exactly today's behavior, so existing callers are unaffected.
-        // The probe only tests for the key's *presence*; a whole-element
-        // config which then fails the full typed parse below REPORTS its
-        // error, rather than falling through to the legacy path.
-        #[derive(serde::Deserialize)]
-        struct Probe {
-            #[serde(default)]
-            panels: Option<serde::de::IgnoredAny>,
-        }
-
-        let is_whole = update
-            .clone()
-            .into_serde_ext::<Probe>()
-            .map(|probe| probe.panels.is_some())
-            .unwrap_or(false);
-
-        if !is_whole {
-            return self.restorePanel(update, None);
-        }
-
+    pub fn restore(
+        &self,
+        update: JsViewerConfigUpdate,
+        options: Option<JsPanelOptions>,
+    ) -> JsVoidPromise {
+        let PanelOptions { panel: name } = parse_options(options);
         let this = self.clone();
-        ApiFuture::new(async move {
-            this.workspace
-                .active_renderer()
-                .with_lock(async { Ok(()) })
-                .await?;
-
-            let WorkspaceConfigUpdate {
-                active,
-                layout,
-                panels,
-                global_filters,
-                masters,
-            } = update.into_serde_ext()?;
-
-            let old_ids = this.workspace.panel_ids();
-
-            // Phase 1 — models only, NO renders and NO draws
-            let mut id_map: HashMap<String, String> = Default::default();
-            let mut fallback_fresh: Option<String> = None;
-            let mut active_fresh: Option<String> = None;
-            let mut contents = Vec::new();
-            for (saved_id, config) in panels {
-                if !matches!(config.settings, OptionalUpdate::Missing) {
-                    tracing::warn!(
-                        "`settings` on panel \"{saved_id}\" is ignored in a whole-element config; \
-                         use the top-level `active` field"
-                    );
-                }
-
-                let (fresh, session, renderer, config) = create_panel_model(
-                    &this.elem,
-                    &this.presentation,
-                    &this.workspace,
-                    config,
-                    None,
-                );
-
-                if active.as_deref() == Some(saved_id.as_str()) {
-                    active_fresh = Some(fresh.as_str().to_owned());
-                }
-
-                fallback_fresh.get_or_insert_with(|| fresh.as_str().to_owned());
-                id_map.insert(saved_id, fresh.as_str().to_owned());
-                contents.push((fresh, session, renderer, config));
+        let fut = ApiFuture::new_throttled(async move {
+            let id = name.map(PanelId::from);
+            let update = ViewerConfigUpdate::decode(&update)?;
+            match this.workspace.panel_or_active(id.as_ref()) {
+                // An existing (or the active) panel — update it in place.
+                Some(panel) => {
+                    let active = panel.id == this.workspace.active_id();
+                    restore_panel(
+                        &panel.session,
+                        &panel.renderer,
+                        &this.presentation,
+                        Some(&this.root),
+                        RestoreMode::Existing { active },
+                        update,
+                    )
+                    .await
+                },
+                // A `panel` that matches no panel — create it (upsert), routing
+                // through the shared `create_panel` (`RestoreMode::Fresh`)
+                // pipeline so the new panel's id is the requested `panel`.
+                None => {
+                    let notify = this.layout_changed_notify();
+                    create_panel(
+                        &this.elem,
+                        &this.presentation,
+                        &this.workspace,
+                        &notify,
+                        id,
+                        update,
+                        None,
+                    )
+                    .await?;
+                    Ok(())
+                },
             }
+        });
 
-            if contents.is_empty() {
-                let (fresh, session, renderer, config) = create_panel_model(
-                    &this.elem,
-                    &this.presentation,
-                    &this.workspace,
-                    ViewerConfigUpdate::default(),
-                    None,
-                );
+        js_sys::Promise::from(fut).unchecked_into()
+    }
 
-                fallback_fresh = Some(fresh.as_str().to_owned());
-                contents.push((fresh, session, renderer, config));
-            }
-
-            // Phase 2 — remove + eject the pre-existing panels. The sync
-            // halves run here; the deferred teardown futures are joined into
-            // this restore's own promise below (I6 — a failed old-panel
-            // teardown is no longer an unowned rejection).
-            let mut eject_tasks = Vec::new();
-            for old in old_ids {
-                if let Some(panel) = this.workspace.remove_panel(&old) {
-                    eject_tasks.push(eject_panel(panel));
-                }
-            }
-
-            // Phase 3 — stage the remapped layout tree on the Workspace
-            if let Some(layout) = layout {
-                this.workspace
-                    .set_pending_layout(layout.remap(&|name| id_map.get(name).cloned()));
-            }
-
-            // Phase 4 — the single visible commit
-            if let Some(saved) = &active
-                && active_fresh.is_none()
-            {
-                tracing::warn!("`active` names unknown panel \"{saved}\"");
-            }
-
-            let sidebar_open = active_fresh.is_some();
-            if let Some(target) = active_fresh.or(fallback_fresh)
-                && let Some(app) = this.root.borrow().as_ref()
-            {
-                app.send_message(PerspectiveViewerMsg::CommitWorkspaceRestore(target));
-            }
-
-            if let Some(app) = this.root.borrow().as_ref() {
-                app.send_message(PerspectiveViewerMsg::ToggleSettingsInit(
-                    Some(SettingsUpdate::Update(sidebar_open)),
-                    None,
-                ));
-            }
-
-            // Master/detail roles + the (unattributed) restored filter bucket
-            // land in the model BEFORE any panel content restores, so every
-            // panel's first paint sees its final role and filters.
-            let masters = masters
-                .into_iter()
-                .filter_map(|saved| match id_map.get(&saved) {
-                    Some(fresh) => Some(PanelId::from(fresh.as_str())),
-                    None => {
-                        tracing::warn!("`masters` names unknown panel \"{saved}\"");
-                        None
-                    },
-                })
-                .collect::<Vec<_>>();
-
-            this.workspace.set_masters(masters);
-            this.workspace.set_global_filters(global_filters);
+    /// Restore the ENTIRE element from a whole-element
+    /// [`WorkspaceConfigUpdate`] (`{version, active?, layout, panels, ...}`) —
+    /// the multi-panel counterpart of [`Self::restore`]. Every existing panel
+    /// is replaced by the `panels` entries, and the layout tree + master/detail
+    /// cross-filter state re-applied. Unlike [`Self::restore`], this never
+    /// falls back to the single-panel path.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// await viewer.restoreWorkspace(await otherViewer.saveWorkspace());
+    /// ```
+    pub fn restoreWorkspace(&self, update: JsWorkspaceConfigUpdate) -> JsVoidPromise {
+        let update: JsViewerConfigUpdate = update.unchecked_into();
+        let this = self.clone();
+        let fut = ApiFuture::new(async move {
+            let (contents, eject_tasks) = sync_update_panels(&this, update)?;
             let results = join_all(contents.into_iter().map(|(id, session, renderer, config)| {
                 let presentation = this.presentation.clone();
                 let workspace = this.workspace.clone();
                 async move {
-                    // Sync-stamp the panel's overlay (immunity for masters,
-                    // the restored bucket for details) before its locked bind
-                    // reads it — the config itself stays clean.
                     stamp_global_overlay(&workspace, &id, &session);
-                    restore_panel_content(&session, &renderer, &presentation, config).await?;
-
-                    // A restored master enters its plugin's selection mode
-                    // (no-op if the saved plugin_config already carries it,
-                    // or the plugin has no modes).
+                    restore_panel(
+                        &session,
+                        &renderer,
+                        &presentation,
+                        None,
+                        RestoreMode::Fresh,
+                        config,
+                    )
+                    .await?;
                     if workspace.is_master(&id) {
                         set_edit_mode(&session, &renderer, "SELECT_ROW_TREE");
                     }
@@ -982,8 +938,11 @@ impl PerspectiveViewerElement {
                 .await
                 .into_iter()
                 .collect::<ApiResult<Vec<_>>>()?;
+
             Ok(())
-        })
+        });
+
+        js_sys::Promise::from(fut).unchecked_into()
     }
 
     /// If this element is in an _errored_ state, this method will clear it and
@@ -998,156 +957,36 @@ impl PerspectiveViewerElement {
         })
     }
 
-    /// Save this element's user-configurable state to a serialized state
-    /// object, one which can be restored via the [`Self::restore`] method.
+    /// Save a single panel's user-configurable state as a [`ViewerConfig`], one
+    /// which can be restored via [`Self::restore`] — the active panel, or a
+    /// specific panel via the optional `{panel}` selector.
+    ///
+    /// This saves a SINGLE panel; to snapshot the ENTIRE element (every panel +
+    /// layout + cross-filters) use [`Self::saveWorkspace`].
+    ///
+    /// # Arguments
+    ///
+    /// - `options` - An optional `{panel?: string}`; the panel to save, or the
+    ///   active panel when omitted.
     ///
     /// # JavaScript Examples
     ///
     /// Get the current `group_by` setting:
     ///
     /// ```javascript
-    /// const {group_by} = await viewer.restore();
+    /// const {group_by} = await viewer.save();
     /// ```
     ///
     /// Reset workflow attached to an external button `myResetButton`:
     ///
     /// ```javascript
     /// const token = await viewer.save();
-    /// myResetButton.addEventListener("clien", async () => {
+    /// myResetButton.addEventListener("click", async () => {
     ///     await viewer.restore(token);
     /// });
     /// ```
-    pub fn save(&self) -> JsViewerConfigPromise {
-        let this = self.clone();
-        let fut = ApiFuture::new(async move {
-            let ids = this.workspace.panel_ids();
-
-            // Single panel → emit the legacy `ViewerConfig` verbatim, so existing
-            // single-viewer `save`/`restore` round-trips are byte-compatible.
-            if ids.len() <= 1 {
-                let panel = this.workspace.active_panel();
-                let config = panel
-                    .renderer
-                    .clone()
-                    .with_lock(async {
-                        get_viewer_config(&panel.session, &panel.renderer, &this.presentation).await
-                    })
-                    .await?;
-
-                return config.encode();
-            }
-
-            // Multi panel → whole-element format `{version, active?, layout,
-            // panels}`. Panel entries serialize the per-panel
-            // `PanelViewerConfig` only — the element-level `settings` flag is
-            // carried by `active` (present ⟺ sidebar open, naming the panel
-            // it targets).
-            let mut panels: std::collections::BTreeMap<String, PanelViewerConfig> =
-                Default::default();
-            for id in &ids {
-                let panel = this.workspace.panel(id).into_apierror()?;
-                let config = panel
-                    .renderer
-                    .clone()
-                    .with_lock(async {
-                        get_viewer_config(&panel.session, &panel.renderer, &this.presentation).await
-                    })
-                    .await?;
-
-                panels.insert(id.as_str().to_owned(), config.panel);
-            }
-
-            let active = this
-                .presentation
-                .is_settings_open()
-                .then(|| this.workspace.active_id().as_str().to_owned());
-
-            let layout = this
-                .layout_element()
-                .map(|l| l.save().into_serde_ext::<crate::js::Layout>())
-                .transpose()?;
-
-            Ok(JsValue::from_serde_ext(&WorkspaceConfig {
-                version: API_VERSION.to_string(),
-                active,
-                layout,
-                panels,
-                global_filters: this.workspace.global_filters(),
-                masters: this
-                    .workspace
-                    .masters()
-                    .iter()
-                    .map(|id| id.as_str().to_owned())
-                    .collect(),
-            })?)
-        });
-
-        js_sys::Promise::from(fut).unchecked_into()
-    }
-
-    /// Download this viewer's internal [`View`] data via a browser download
-    /// event.
-    ///
-    /// # Arguments
-    ///
-    /// - `method` - The `ExportMethod` to use to render the data to download.
-    ///
-    /// # JavaScript Examples
-    ///
-    /// ```javascript
-    /// myDownloadButton.addEventListener("click", async () => {
-    ///     await viewer.download();
-    /// })
-    /// ```
-    pub fn download(&self, method: Option<JsString>) -> ApiFuture<()> {
-        self.downloadPanel(method, None)
-    }
-
-    /// Exports this viewer's internal [`View`] as a JavaSript data, the
-    /// exact type of which depends on the `method` but defaults to `String`
-    /// in CSV format.
-    ///
-    /// This method is only really useful for the `"plugin"` method, which
-    /// will use the configured plugin's export (e.g. PNG for
-    /// `@perspective-dev/viewer-charts`). Otherwise, prefer to call the
-    /// equivalent method on the underlying [`View`] directly.
-    ///
-    /// # Arguments
-    ///
-    /// - `method` - The `ExportMethod` to use to render the data to download.
-    ///
-    /// # JavaScript Examples
-    ///
-    /// ```javascript
-    /// const data = await viewer.export("plugin");
-    /// ```
-    pub fn export(&self, method: Option<JsString>) -> ApiFuture<JsValue> {
-        self.exportPanel(method, None)
-    }
-
-    /// Copy this viewer's `View` or `Table` data as CSV to the system
-    /// clipboard.
-    ///
-    /// # Arguments
-    ///
-    /// - `method` - The `ExportMethod` (serialized as a `String`) to use to
-    ///   render the data to the Clipboard.
-    ///
-    /// # JavaScript Examples
-    ///
-    /// ```javascript
-    /// myDownloadButton.addEventListener("click", async () => {
-    ///     await viewer.copy();
-    /// })
-    /// ```
-    pub fn copy(&self, method: Option<JsString>) -> ApiFuture<()> {
-        self.copyPanel(method, None)
-    }
-
-    /// Per-panel companion to [`Self::save`]: serialize a single panel's
-    /// user-configurable state (today's `ViewerConfig` shape) for the named
-    /// panel, or the active panel when `name` is omitted.
-    pub fn savePanel(&self, name: Option<String>) -> JsViewerConfigPromise {
+    pub fn save(&self, options: Option<JsPanelOptions>) -> JsViewerConfigPromise {
+        let PanelOptions { panel: name } = parse_options(options);
         let this = self.clone();
         let fut = ApiFuture::new(async move {
             let panel = this.resolve_panel(name)?;
@@ -1165,295 +1004,44 @@ impl PerspectiveViewerElement {
         js_sys::Promise::from(fut).unchecked_into()
     }
 
-    /// Per-panel companion to [`Self::restore`]: restore a single panel from a
-    /// `ViewerConfig`, targeting the named panel, or the active panel when
-    /// `name` is omitted. When the target is not the active panel, the shared
-    /// (active-targeting) settings UI is left untouched.
-    pub fn restorePanel(
-        &self,
-        update: JsViewerConfigUpdate,
-        name: Option<String>,
-    ) -> ApiFuture<()> {
+    /// Save the ENTIRE element to a whole-element [`WorkspaceConfig`]
+    /// (`{version, active?, layout, panels, ...}`) — the multi-panel
+    /// counterpart of [`Self::save`]. Unlike [`Self::save`] (which emits a
+    /// single `ViewerConfig` for one panel), this ALWAYS emits the
+    /// whole-element format, restorable via [`Self::restoreWorkspace`].
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// const token = await viewer.saveWorkspace();
+    /// await viewer.restoreWorkspace(token);
+    /// ```
+    pub fn saveWorkspace(&self) -> JsWorkspaceConfigPromise {
         let this = self.clone();
-        ApiFuture::new_throttled(async move {
-            let panel = this.resolve_panel(name)?;
-            let is_active = panel.id == this.workspace.active_id();
-            let session = panel.session;
-            let renderer = panel.renderer;
-
-            let mut decoded_update = ViewerConfigUpdate::decode(&update)?;
-            tracing::info!("Restoring {} ({})", decoded_update, panel.id);
-            let settings = decoded_update.settings.clone();
-
-            // Per-panel theme: record it on THIS panel's renderer so it persists
-            // per panel (and `savePanel` reads it back — C1). For a NON-active
-            // panel, strip it from the shared restore so `restore_and_render`
-            // can't flip the host (active) theme; the active panel keeps it so
-            // the host mirrors it (chrome), matching `update_theme`.
-            match &decoded_update.theme {
-                OptionalUpdate::Update(theme) => {
-                    renderer.set_theme(Some(theme.clone()));
-                    // Stamp-with-commit: flip the panel plugin's `theme`
-                    // attribute in the SAME synchronous section as the
-                    // own-theme record — the own theme needs no registry,
-                    // so neither theme-registry init nor the locked run's
-                    // slow view bind can hold the panel on the former
-                    // theme. The locked dispatch re-asserts this stamp
-                    // idempotently ("stamp before draw" is unchanged;
-                    // this is strictly earlier).
-                    renderer.stamp_theme(None);
-                },
-                OptionalUpdate::SetDefault => {
-                    renderer.set_theme(None);
-                    // Default resolution needs the registry — stamp sync
-                    // only from a warm cache. A cold cache would stamp
-                    // attribute-REMOVAL (a base-styling flash); leave
-                    // that case to the locked dispatch, as before.
-                    if renderer.default_theme().is_some() {
-                        renderer.stamp_theme(None);
-                    }
-                },
-                OptionalUpdate::Missing => {},
-            }
-
-            if !is_active {
-                decoded_update.theme = OptionalUpdate::Missing;
-            }
-
-            let (sender, receiver) = channel::<()>();
-            if is_active {
-                this.root.borrow().as_ref().into_apierror()?.send_message(
-                    PerspectiveViewerMsg::ToggleSettingsComplete(settings, sender),
-                );
-            } else {
-                // A non-active panel's config must not toggle the shared
-                // settings panel; just unblock the render below.
-                let _ = sender.send(());
-            }
-
-            // TODO(texodus): qualify table names across clients.
-            let table_changed = match &decoded_update.table {
-                OptionalUpdate::Update(name) => session
-                    .get_table()
-                    .map(|t| t.get_name() != name.as_str())
-                    .unwrap_or(true),
-                _ => false,
-            };
-
-            // An ERRORED panel must still reset on any table-carrying
-            // restore even when the table is unchanged (the pre-gate
-            // behavior): both `commit_view_config` and the locked run
-            // refuse an errored session, so without this reset a
-            // same-table restore could never clear the error.
-            let errored_recovery =
-                session.is_errored() && matches!(&decoded_update.table, OptionalUpdate::Update(_));
-
-            let task = if table_changed || errored_recovery {
-                Some(session.reset(ResetOptions {
-                    config: true,
-                    expressions: true,
-                    stats: true,
-                    ..ResetOptions::default()
-                }))
-            } else {
-                None
-            };
-
-            let result = restore_and_render(
-                &session,
-                &renderer,
-                &this.presentation,
-                // The public element API: an explicit external request, so
-                // a no-op restore keeps its repaint affordance (`update`
-                // source 6). NOTE this includes the datagrid's
-                // `toggle_edit_mode` echo path (toolbar clicks), which
-                // arrives here carrying a genuinely-changed `plugin_config`.
-                RunOrigin::Public,
-                decoded_update.clone(),
-                {
-                    clone!(session, decoded_update.table);
-                    async move {
-                        if let OptionalUpdate::Update(name) = table {
-                            if let Some(task) = task {
-                                task.await?;
-                            }
-
-                            session.set_table(name).await?;
-                            // Table-bind commit (I1): default-view
-                            // materialization, sync, inside this locked run.
-                            session.commit_table_defaults();
-                        };
-
-                        receiver.await.unwrap_or_log();
-                        Ok(())
-                    }
-                },
-            )
-            .await;
-
-            if let Err(e) = &result {
-                session.set_error(false, e.clone()).await?;
-            }
-
-            // Theme restyle tail: a plugin re-reads its `--psp-*` CSS only
-            // at `restyle()`/first-draw (charts cache theme vars), so a
-            // theme change on an ALREADY-CAPTURED panel needs one explicit
-            // restyle. STATE-KEYED (`needs_restyle`: the effective theme
-            // vs. the one stamped at the plugin's last capture) — NOT
-            // diffed on the own-theme record this call mutated, whose
-            // baseline is wrong exactly when this same restore performed
-            // the first paint post-stamp: the capture is already fresh and
-            // the record-diff tail re-rendered the whole chart for nothing
-            // (the raycasting boot double render —
-            // `PLUGIN_DRAW_INVARIANT_PLAN.md`, captured-theme revision).
-            result?;
-            if renderer.needs_restyle() {
-                renderer.restyle_all().await?;
-            }
-
-            Ok(())
-        })
+        let fut = ApiFuture::new(Self::workspace_config(this));
+        js_sys::Promise::from(fut).unchecked_into()
     }
 
-    /// Per-panel companion to [`Self::getView`].
-    pub fn getViewPanel(&self, name: Option<String>) -> ApiFuture<View> {
-        let this = self.clone();
-        ApiFuture::new(async move {
-            let panel = this.resolve_panel(name)?;
-            Ok(panel.session.get_view().ok_or("No table set")?.into())
-        })
-    }
-
-    /// Per-panel companion to [`Self::getViewConfig`]. Render-callable
-    /// (invariant I5): while a run is in flight on this panel, answers from
-    /// its pinned [`RenderContext`] — the config of the `view` the plugin is
-    /// drawing, never the in-flight commit's.
-    pub fn getViewConfigPanel(&self, name: Option<String>) -> ApiFuture<JsViewConfig> {
-        let this = self.clone();
-        ApiFuture::new(async move {
-            let panel = this.resolve_panel(name)?;
-            let config = if let Some(ctx) = panel.renderer.render_context() {
-                (*ctx.view_config).clone()
-            } else if let Some(rendered) = panel.session.get_rendered_view_config() {
-                (*rendered).clone()
-            } else {
-                panel.session.get_view_config().clone()
-            };
-
-            Ok(JsValue::from_serde_ext(&config)?.unchecked_into())
-        })
-    }
-
-    /// Per-panel companion to [`Self::getTable`].
-    pub fn getTablePanel(
-        &self,
-        wait_for_table: Option<bool>,
-        name: Option<String>,
-    ) -> ApiFuture<Table> {
-        let this = self.clone();
-        ApiFuture::new(async move {
-            let panel = this.resolve_panel(name)?;
-            // Render-callable (I5): answer from the pinned RenderContext when
-            // a run is in flight — EXCEPT `wait_for_table: true`, which
-            // explicitly requests a FUTURE table (reload flows) and must not
-            // be satisfied by the outgoing one.
-            if !wait_for_table.unwrap_or_default()
-                && let Some(ctx) = panel.renderer.render_context()
-            {
-                return Ok(ctx.table.clone().into());
-            }
-
-            let session = panel.session;
-            match session.get_table() {
-                Some(table) => Ok(table.into()),
-                None if !wait_for_table.unwrap_or_default() => Err("No `Table` set".into()),
-                None => {
-                    session.table_loaded.read_next().await?;
-                    Ok(session.get_table().ok_or("No `Table` set")?.into())
-                },
-            }
-        })
-    }
-
-    /// Per-panel companion to [`Self::getClient`] — the named/active panel's
-    /// own client (vs the element-level default client).
-    pub fn getClientPanel(
-        &self,
-        wait_for_client: Option<bool>,
-        name: Option<String>,
-    ) -> ApiFuture<perspective_js::Client> {
-        let this = self.clone();
-        ApiFuture::new(async move {
-            let panel = this.resolve_panel(name)?;
-            // Render-callable (I5): see `getTablePanel`.
-            if !wait_for_client.unwrap_or_default()
-                && let Some(ctx) = panel.renderer.render_context()
-            {
-                return Ok(ctx.client.clone().into());
-            }
-
-            let session = panel.session;
-            match session.get_client() {
-                Some(client) => Ok(client.into()),
-                None if !wait_for_client.unwrap_or_default() => Err("No `Client` set".into()),
-                None => {
-                    session.table_loaded.read_next().await?;
-                    Ok(session.get_client().ok_or("No `Client` set")?.into())
-                },
-            }
-        })
-    }
-
-    /// Per-panel companion to [`Self::getRenderStats`].
-    pub fn getRenderStatsPanel(&self, name: Option<String>) -> ApiResult<JsValue> {
-        let panel = self.resolve_panel(name)?;
-        Ok(JsValue::from_serde_ext(
-            &panel.renderer.render_timer().get_stats(),
-        )?)
-    }
-
-    /// Per-panel companion to [`Self::getEditPort`] — the named/active panel's
-    /// own edit port. Plugins must use this (with their `slot` as `name`) so
-    /// cell edits target their own panel's [`Table`], not the active panel's.
-    #[wasm_bindgen]
-    pub fn getEditPortPanel(&self, name: Option<String>) -> ApiResult<f64> {
-        let panel = self.resolve_panel(name)?;
-        // Render-callable (I5): answer from the pinned RenderContext when a
-        // run is in flight.
-        let edit_port = if let Some(ctx) = panel.renderer.render_context() {
-            ctx.edit_port
-        } else {
-            panel.session.metadata().get_edit_port()
-        };
-
-        Ok(edit_port.ok_or("No `Table` loaded")?)
-    }
-
-    /// Per-panel companion to [`Self::getSelection`].
-    #[wasm_bindgen]
-    pub fn getSelectionPanel(&self, name: Option<String>) -> ApiResult<Option<JsViewWindow>> {
-        let panel = self.resolve_panel(name)?;
-        Ok(panel.renderer.get_selection().map(|x| x.into()))
-    }
-
-    /// Per-panel companion to [`Self::setSelection`]. Selection is
-    /// per-`Renderer` state, so recording it on the source panel (rather than
-    /// whichever panel is active) is what attributes master/detail and
-    /// toolbar selection actions to the panel the user actually selected in.
-    #[wasm_bindgen]
-    pub fn setSelectionPanel(
-        &self,
-        window: Option<JsViewWindow>,
-        name: Option<String>,
-    ) -> ApiResult<()> {
-        let window = window.map(|x| x.into_serde_ext()).transpose()?;
-        self.resolve_panel(name)?.renderer.set_selection(window);
-        Ok(())
-    }
-
-    /// Per-panel companion to [`Self::download`]: download the named panel's
-    /// [`View`] data, or the active panel's when `name` is omitted.
-    pub fn downloadPanel(&self, method: Option<JsString>, name: Option<String>) -> ApiFuture<()> {
+    /// Download this viewer's internal [`View`] data via a browser download
+    /// event.
+    ///
+    /// # Arguments
+    ///
+    /// - `method` - The `ExportMethod` to use to render the data to download.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// myDownloadButton.addEventListener("click", async () => {
+    ///     await viewer.download();
+    /// })
+    /// ```
+    pub fn download(&self, options: Option<JsExportOptions>) -> ApiFuture<()> {
+        let ExportOptions {
+            method,
+            panel: name,
+        } = parse_options(options);
+        let method = method.map(|m| JsString::from(m.as_str()));
         let this = self.clone();
         ApiFuture::new_throttled(async move {
             let method = if let Some(method) = method
@@ -1477,13 +1065,30 @@ impl PerspectiveViewerElement {
         })
     }
 
-    /// Per-panel companion to [`Self::export`]: export the named panel's
-    /// [`View`] data, or the active panel's when `name` is omitted.
-    pub fn exportPanel(
-        &self,
-        method: Option<JsString>,
-        name: Option<String>,
-    ) -> ApiFuture<JsValue> {
+    /// Exports this viewer's internal [`View`] as a JavaSript data, the
+    /// exact type of which depends on the `method` but defaults to `String`
+    /// in CSV format.
+    ///
+    /// This method is only really useful for the `"plugin"` method, which
+    /// will use the configured plugin's export (e.g. PNG for
+    /// `@perspective-dev/viewer-charts`). Otherwise, prefer to call the
+    /// equivalent method on the underlying [`View`] directly.
+    ///
+    /// # Arguments
+    ///
+    /// - `method` - The `ExportMethod` to use to render the data to download.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// const data = await viewer.export("plugin");
+    /// ```
+    pub fn export(&self, options: Option<JsExportOptions>) -> ApiFuture<JsValue> {
+        let ExportOptions {
+            method,
+            panel: name,
+        } = parse_options(options);
+        let method = method.map(|m| JsString::from(m.as_str()));
         let this = self.clone();
         ApiFuture::new(async move {
             let method = if let Some(method) = method
@@ -1501,10 +1106,27 @@ impl PerspectiveViewerElement {
         })
     }
 
-    /// Per-panel companion to [`Self::copy`]: copy the named panel's [`View`]
-    /// data to the system clipboard, or the active panel's when `name` is
-    /// omitted.
-    pub fn copyPanel(&self, method: Option<JsString>, name: Option<String>) -> ApiFuture<()> {
+    /// Copy this viewer's `View` or `Table` data as CSV to the system
+    /// clipboard.
+    ///
+    /// # Arguments
+    ///
+    /// - `method` - The `ExportMethod` (serialized as a `String`) to use to
+    ///   render the data to the Clipboard.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// myDownloadButton.addEventListener("click", async () => {
+    ///     await viewer.copy();
+    /// })
+    /// ```
+    pub fn copy(&self, options: Option<JsExportOptions>) -> ApiFuture<()> {
+        let ExportOptions {
+            method,
+            panel: name,
+        } = parse_options(options);
+        let method = method.map(|m| JsString::from(m.as_str()));
         let this = self.clone();
         ApiFuture::new_throttled(async move {
             let method = if let Some(method) = method
@@ -1523,68 +1145,53 @@ impl PerspectiveViewerElement {
         })
     }
 
-    /// Reset the viewer's `ViewerConfig` to the default. This is
-    /// element-level: EVERY panel is reset and the cross-filter overlay is
-    /// cleared (symmetric with whole-element [`Self::save`] /
-    /// [`Self::restore`]); use [`Self::resetPanel`] to reset a single panel.
+    /// Reset a panel's `ViewerConfig` to its data-relative default.
+    ///
+    /// Without a `panel`, this is ELEMENT-LEVEL: EVERY panel is reset and the
+    /// cross-filter overlay cleared (symmetric with whole-element
+    /// [`Self::save`] / [`Self::restore`]). With `{panel}`, only that panel is
+    /// reset — the other panels and the overlay are left untouched.
     ///
     /// # Arguments
     ///
     /// - `reset_all` - If set, will clear expressions and column settings as
     ///   well.
+    /// - `options` - An optional `{panel?: string}`; the panel to reset, or
+    ///   every panel when omitted.
     ///
     /// # JavaScript Examples
     ///
     /// ```javascript
-    /// await viewer.reset();
+    /// await viewer.reset();                     // every panel
+    /// await viewer.reset(true, {panel: "p1"});  // just "p1", + expressions
     /// ```
-    pub fn reset(&self, reset_all: Option<bool>) -> ApiFuture<()> {
-        tracing::debug!("Resetting config");
-        let root = self.root.clone();
-        let all = reset_all.unwrap_or_default();
-        ApiFuture::new_throttled(async move {
-            let (completion, receiver) = Completion::new();
-            root.borrow()
-                .as_ref()
-                .ok_or("Already deleted")?
-                .send_message(PerspectiveViewerMsg::Reset(all, Some(completion)));
-
-            receiver.await.map_err(|_| ApiError::new("Cancelled"))?
-        })
-    }
-
-    /// Per-panel companion to [`Self::reset`]: reset a single panel's
-    /// `ViewerConfig` to the default — the named panel, or the active panel
-    /// when `name` is omitted. Other panels (and the element-level
-    /// cross-filter overlay) are unaffected.
-    ///
-    /// # Arguments
-    ///
-    /// - `reset_all` - If set, will clear the panel's expressions and column
-    ///   settings as well.
-    /// - `name` - The panel to reset, or `None` for the active panel.
-    ///
-    /// # JavaScript Examples
-    ///
-    /// ```javascript
-    /// await viewer.resetPanel();
-    /// ```
-    pub fn resetPanel(&self, reset_all: Option<bool>, name: Option<String>) -> ApiFuture<()> {
+    pub fn reset(&self, reset_all: Option<bool>, options: Option<JsPanelOptions>) -> ApiFuture<()> {
+        let PanelOptions { panel: name } = parse_options(options);
         let this = self.clone();
         let all = reset_all.unwrap_or_default();
         ApiFuture::new_throttled(async move {
-            let panel = this.resolve_panel(name)?;
-            tracing::debug!("Resetting config ({})", panel.id);
             let (completion, receiver) = Completion::new();
-            this.root
-                .borrow()
-                .as_ref()
-                .ok_or("Already deleted")?
-                .send_message(PerspectiveViewerMsg::ResetPanel(
-                    Some(panel.id.to_string()),
-                    all,
-                    Some(completion),
-                ));
+            {
+                let root = this.root.borrow();
+                let app = root.as_ref().ok_or("Already deleted")?;
+                match name {
+                    // Element-level: reset every panel + the cross-filter overlay.
+                    None => {
+                        tracing::debug!("Resetting config");
+                        app.send_message(PerspectiveViewerMsg::Reset(all, Some(completion)));
+                    },
+                    // A single named panel; errors if the panel doesn't exist.
+                    Some(name) => {
+                        let panel = this.resolve_panel(Some(name))?;
+                        tracing::debug!("Resetting config ({})", panel.id);
+                        app.send_message(PerspectiveViewerMsg::ResetPanel(
+                            Some(panel.id.to_string()),
+                            all,
+                            Some(completion),
+                        ));
+                    },
+                }
+            }
 
             receiver.await.map_err(|_| ApiError::new("Cancelled"))?
         })
@@ -1626,14 +1233,11 @@ impl PerspectiveViewerElement {
                 apply_and_render(&panel.session, &panel.renderer, ViewConfigUpdate::default())?
                     .await?;
             } else if let Some(dims) = opts.dimensions {
-                // Explicit size hint is inherently single-plugin → active panel.
                 panel
                     .renderer
                     .resize_with_dimensions(dims.width, dims.height)
                     .await?;
             } else {
-                // Element-level: resize every visible panel (each owns its
-                // `Renderer`); hidden stacked-tab cells resize when revealed.
                 resize_visible_panels(&workspace).await;
             }
 
@@ -1717,18 +1321,12 @@ impl PerspectiveViewerElement {
                             &panel.session,
                             &panel.renderer,
                             &presentation,
-                            // A resume, not a config request: a paused-era
-                            // commit renders; a clean resume dispatches
-                            // nothing.
                             RunOrigin::Internal,
                             ViewerConfigUpdate::default(),
                             async { Ok(()) },
                         )
                         .await;
 
-                        // A failing resume (e.g. a propagated first-draw
-                        // failure) marks THIS panel errored but must not
-                        // strand the remaining panels paused.
                         if let Err(e) = result {
                             panel.session.set_error(false, e).await?;
                         }
@@ -1743,32 +1341,42 @@ impl PerspectiveViewerElement {
     }
 
     /// Return a [`perspective_js::JsViewWindow`] for the currently selected
-    /// region.
+    /// region of the named panel, or the active panel when `panel` is omitted.
     #[wasm_bindgen]
-    pub fn getSelection(&self) -> Option<JsViewWindow> {
-        self.workspace
-            .active_renderer()
-            .get_selection()
-            .map(|x| x.into())
+    pub fn getSelection(&self, options: Option<JsPanelOptions>) -> ApiResult<Option<JsViewWindow>> {
+        let PanelOptions { panel: name } = parse_options(options);
+        let panel = self.resolve_panel(name)?;
+        Ok(panel.renderer.get_selection().map(|x| x.into()))
     }
 
-    /// Set the selection [`perspective_js::JsViewWindow`] for this element.
+    /// Set the selection [`perspective_js::JsViewWindow`] for the named panel,
+    /// or the active panel when `panel` is omitted.
     #[wasm_bindgen]
-    pub fn setSelection(&self, window: Option<JsViewWindow>) -> ApiResult<()> {
+    pub fn setSelection(
+        &self,
+        window: Option<JsViewWindow>,
+        options: Option<JsPanelOptions>,
+    ) -> ApiResult<()> {
+        let PanelOptions { panel: name } = parse_options(options);
         let window = window.map(|x| x.into_serde_ext()).transpose()?;
-        self.workspace.active_renderer().set_selection(window);
+        self.resolve_panel(name)?.renderer.set_selection(window);
         Ok(())
     }
 
-    /// Get this viewer's edit port for the active [`Table`] (see
-    /// [`Table::update`] for details on ports).
+    /// Get this viewer's edit port for the named panel's [`Table`] (see
+    /// [`Table::update`] for details on ports), or the active panel when
+    /// `panel` is omitted.
     #[wasm_bindgen]
-    pub fn getEditPort(&self) -> Result<f64, JsValue> {
-        self.workspace
-            .active_session()
-            .metadata()
-            .get_edit_port()
-            .ok_or_else(|| "No `Table` loaded".into())
+    pub fn getEditPort(&self, options: Option<JsPanelOptions>) -> ApiResult<f64> {
+        let PanelOptions { panel: name } = parse_options(options);
+        let panel = self.resolve_panel(name)?;
+        let edit_port = if let Some(ctx) = panel.renderer.render_context() {
+            ctx.edit_port
+        } else {
+            panel.session.metadata().get_edit_port()
+        };
+
+        Ok(edit_port.ok_or("No `Table` loaded")?)
     }
 
     /// Restyle all plugins from current document.
@@ -1797,9 +1405,6 @@ impl PerspectiveViewerElement {
                 .into_iter()
                 .filter_map(|id| workspace.panel(&id))
             {
-                // Re-seed + restyle unconditionally — this API's contract is
-                // "re-read the CSS vars". `restyle_all` resolves the bound
-                // `View` itself, inside the draw lock (no-op if none).
                 panel.renderer.set_default_theme(default.clone());
                 panel.renderer.restyle_all().await?;
             }
@@ -1842,19 +1447,6 @@ impl PerspectiveViewerElement {
                 .cloned();
 
             presentation.set_theme_name(reset_theme.as_deref()).await?;
-
-            // Restyle exactly the panels whose captured CSS is stale
-            // (`Renderer::needs_restyle` — the plugin's captured theme vs.
-            // the new effective value; a default change only affects panels
-            // without their own theme, and `restyle_all` is expensive: full
-            // restyle + redraw). See `update_theme` for the per-panel theme
-            // isolation model. This loop stays HERE (not only in the root's
-            // default-theme fan-out) because `set_theme_name` above emits no
-            // `theme_config_updated` when the host attribute is unchanged —
-            // a default change under an unchanged selection would otherwise
-            // never restyle. Every renderer's default cache is re-seeded
-            // FIRST so `needs_restyle`'s effective side (and any subsequent
-            // draw's stamp) reads the new default.
             let new_default = presentation.get_default_theme_name().await;
             for panel in workspace
                 .panel_ids()
@@ -1890,7 +1482,6 @@ impl PerspectiveViewerElement {
     /// ```
     #[wasm_bindgen]
     pub fn setThrottle(&self, val: Option<f64>) {
-        // Element-wide: throttle is per-`Renderer`, so set it on every panel.
         for panel in self
             .workspace
             .panel_ids()
@@ -1949,8 +1540,6 @@ impl PerspectiveViewerElement {
     #[wasm_bindgen]
     pub fn getPlugin(&self, name: Option<String>) -> ApiResult<JsPerspectiveViewerPlugin> {
         match name {
-            // No name → the ACTIVE panel's selected plugin. A named lookup is
-            // registry-global, so the active renderer works there too.
             None => self.workspace.active_renderer().ensure_plugin_selected(),
             Some(name) => self.workspace.active_renderer().get_plugin(&name),
         }
@@ -1965,11 +1554,20 @@ impl PerspectiveViewerElement {
     /// ignored — those are shared across the element, not per-panel.
     #[wasm_bindgen]
     pub fn addPanel(&self, update: JsViewerConfigUpdate) -> ApiFuture<JsValue> {
-        clone!(self.elem, self.presentation, self.workspace, self.root);
+        clone!(self.elem, self.presentation, self.workspace);
+        let notify = self.layout_changed_notify();
         ApiFuture::new(async move {
-            let notify = layout_changed_callback(root);
             let update = ViewerConfigUpdate::decode(&update)?;
-            let id = create_panel(&elem, &presentation, &workspace, &notify, update, None).await?;
+            let id = create_panel(
+                &elem,
+                &presentation,
+                &workspace,
+                &notify,
+                None,
+                update,
+                None,
+            )
+            .await?;
             Ok(JsValue::from_str(id.as_str()))
         })
     }
@@ -2045,38 +1643,12 @@ impl PerspectiveViewerElement {
     /// string}`. The CustomEvent is also fired whenever the user toggles the
     /// sidebar manually.
     #[wasm_bindgen]
-    pub fn toggleColumnSettings(&self, column_name: String) -> ApiFuture<()> {
-        clone!(self.workspace, self.root);
-        ApiFuture::new_throttled(async move {
-            let session = workspace.active_session();
-            let locator = get_column_locator(&session.metadata(), Some(column_name));
-            let (sender, receiver) = channel::<()>();
-            root.borrow().as_ref().into_apierror()?.send_message(
-                PerspectiveViewerMsg::OpenColumnSettings {
-                    locator,
-                    sender: Some(sender),
-                    toggle: true,
-                },
-            );
-
-            receiver.await.map_err(|_| ApiError::from("Cancelled"))
-        })
-    }
-
-    /// Per-panel companion to [`Self::toggleColumnSettings`]. The column
-    /// settings sidebar is bound to the *active* panel, so opening a
-    /// non-active panel's column first activates that panel (exactly like
-    /// clicking its tab), then opens the column — resolved against *that*
-    /// panel's schema. Toggle semantics (close when already open) apply only
-    /// when the panel was already active; activating a different panel always
-    /// opens, even if a same-named column of the previously-active panel was
-    /// showing.
-    #[wasm_bindgen]
-    pub fn toggleColumnSettingsPanel(
+    pub fn toggleColumnSettings(
         &self,
         column_name: String,
-        name: Option<String>,
+        options: Option<JsPanelOptions>,
     ) -> ApiFuture<()> {
+        let PanelOptions { panel: name } = parse_options(options);
         let this = self.clone();
         ApiFuture::new_throttled(async move {
             let panel = this.resolve_panel(name)?;

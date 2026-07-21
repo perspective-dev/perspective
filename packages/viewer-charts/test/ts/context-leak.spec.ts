@@ -46,11 +46,10 @@ async function toggleSecondViewer(page: Page, cfg: object): Promise<void> {
     await page.evaluate(
         async ({ cfg, tableName }) => {
             const worker = (window as any).__TEST_WORKER__;
-            const table = await worker.open_table(tableName);
             const v = document.createElement("perspective-viewer");
             document.body.appendChild(v);
-            await v.load(table);
-            await v.restore(cfg);
+            await v.load(worker);
+            await v.restore({ ...(cfg as any), table: tableName });
         },
         { cfg, tableName: TABLE_NAME },
     );
@@ -69,11 +68,10 @@ async function toggleSecondViewerRacingInit(
     await page.evaluate(
         async ({ cfg, tableName }) => {
             const worker = (window as any).__TEST_WORKER__;
-            const table = await worker.open_table(tableName);
             const v = document.createElement("perspective-viewer");
             document.body.appendChild(v);
-            await v.load(table);
-            v.restore(cfg).catch(() => {});
+            await v.load(worker);
+            v.restore({ ...(cfg as any), table: tableName }).catch(() => {});
             await new Promise<void>((resolve) =>
                 setTimeout(() => {
                     v.remove();

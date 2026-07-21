@@ -256,6 +256,7 @@ impl Workspace {
         let id = PanelId("PERSPECTIVE_GENERATED_ID_0".to_owned());
         renderer.set_slot_name(id.as_str());
         renderer.set_active_flag(true);
+        renderer.set_solo_flag(true);
         let panel = Panel::new(id.clone(), session, renderer, subs);
         Self(Rc::new(RefCell::new(WorkspaceData {
             panels: vec![panel],
@@ -452,6 +453,18 @@ impl Workspace {
         let mut data = self.0.borrow_mut();
         panel.renderer.set_active_flag(panel.id == data.active);
         data.panels.push(panel);
+        Self::sync_solo_flags(&data);
+    }
+
+    /// Sync every panel renderer's solo (lone-panel) flag with the current
+    /// panel count — called from each count-changing mutation site (data
+    /// only; the `single`/`multi` CSS classes land inside each panel's next
+    /// locked plugin dispatch — see `Renderer::stamp_active`).
+    fn sync_solo_flags(data: &WorkspaceData) {
+        let is_solo = data.panels.len() == 1;
+        for panel in data.panels.iter() {
+            panel.renderer.set_solo_flag(is_solo);
+        }
     }
 
     /// Remove a [`Panel`] by id, returning it if present.
@@ -469,6 +482,7 @@ impl Workspace {
                 .iter()
                 .position(|p| &p.id == id)
                 .map(|idx| data.panels.remove(idx));
+            Self::sync_solo_flags(&data);
 
             (removed, changed, data.filters_changed.clone())
         };
@@ -502,6 +516,41 @@ impl Workspace {
     /// The default [`Client`], if one has been loaded.
     pub fn default_client(&self) -> Option<Client> {
         self.0.borrow().default_client.clone()
+    }
+
+    /// The active panel's bound [`Client`], if any — the default target of a
+    /// no-argument `eject()`.
+    pub fn active_client(&self) -> Option<Client> {
+        self.active_panel().session.get_client()
+    }
+
+    /// The ids of every panel whose session is bound to the [`Client`] named
+    /// `name` (client names are globally unique), in insertion order.
+    pub fn panels_for_client(&self, name: &str) -> Vec<PanelId> {
+        self.0
+            .borrow()
+            .panels
+            .iter()
+            .filter(|p| p.session.get_client().is_some_and(|c| c.get_name() == name))
+            .map(|p| p.id.clone())
+            .collect()
+    }
+
+    /// Drop the [`Client`] named `name` from the loaded-clients registry, and
+    /// clear the default-client designation if it referred to this client.
+    /// Callers must have already removed every panel bound to it (see
+    /// [`Workspace::panels_for_client`]) — `clients()` unions in live panel
+    /// sessions, so a lingering panel would resurrect it.
+    pub fn remove_client(&self, name: &str) {
+        let mut data = self.0.borrow_mut();
+        data.clients.retain(|c| c.get_name() != name);
+        if data
+            .default_client
+            .as_ref()
+            .is_some_and(|c| c.get_name() == name)
+        {
+            data.default_client = None;
+        }
     }
 
     /// Record the default [`Client`] if not already set (first-wins, matching

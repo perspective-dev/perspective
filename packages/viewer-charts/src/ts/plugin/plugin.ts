@@ -356,11 +356,11 @@ export class HTMLPerspectiveViewerWebGLPluginElement
         // getClient()/getTable() resolve element-wide in a multi-panel viewer),
         // and to tag the dispatched interaction events with their source panel.
         const panel = this.getAttribute("slot") ?? undefined;
-        const client = await viewer.getClientPanel(undefined, panel);
+        const client = await viewer.getClient({ panel });
         const viewer_class = customElements.get("perspective-viewer");
         const clientWasm = viewer_class.get_wasm_module();
         const clientWorkerURL = viewer_class.get_worker_url();
-        const table = await viewer?.getTablePanel?.(undefined, panel);
+        const table = await viewer?.getTable?.({ panel });
         const tableName: string | undefined = table
             ? await table.get_name()
             : undefined;
@@ -586,7 +586,7 @@ export class HTMLPerspectiveViewerWebGLPluginElement
             return;
         }
 
-        const viewerConfig = await viewer.getViewConfigPanel(panel);
+        const viewerConfig = await viewer.getViewConfig({ panel });
         await renderer.loadAndRender({
             viewerConfig: {
                 group_by: viewerConfig?.group_by ?? [],

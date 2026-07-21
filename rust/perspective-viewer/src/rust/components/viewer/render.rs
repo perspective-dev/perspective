@@ -152,6 +152,7 @@ impl PerspectiveViewer {
         let on_reset = ctx.link().callback(|all| ResetPanel(None, all, None));
         let is_settings_open = self.settings_open
             && matches!(self.session_props.has_table, Some(TableLoadState::Loaded));
+
         let main_panel = html! {
             <MainPanel
                 {on_settings}
@@ -208,6 +209,7 @@ impl PerspectiveViewer {
                         )
                     })
                     .collect::<Vec<_>>()}
+                panel_masters={ctx.props().workspace.masters()}
                 workspace={ctx.props().workspace.clone()}
                 global_filters={self.global_filters.clone()}
                 on_remove_global_filter={ctx.link().callback(RemoveGlobalFilter)}
@@ -218,9 +220,15 @@ impl PerspectiveViewer {
             />
         };
 
+        let is_single_panel = if ctx.props().workspace.panel_ids().len() == 1 {
+            "only-child"
+        } else {
+            ""
+        };
+
         html! {
             <StyleProvider root={ctx.props().elem.clone()}>
-                <div id="component_container">
+                <div id="component_container" class={is_single_panel}>
                     <div id="layout_area">
                         // Always render the `SplitPanel` with `main_panel` as its
                         // last (flex-fill) pane. Toggling the settings sidebar then

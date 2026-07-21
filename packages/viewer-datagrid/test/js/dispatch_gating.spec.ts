@@ -18,7 +18,7 @@
 //    `plugin_config` used to render TWICE — the restore run's `draw`, then
 //    a stray `update` ~25ms later. The datagrid's `restore()` called
 //    `toggle_edit_mode`, which echoed
-//    `restorePanel({plugin_config: {edit_mode}})` back into the host — an
+//    `restore({plugin_config: {edit_mode}})` back into the host — an
 //    inert restore whose run reconciled `Unchanged` and repainted anyway.
 //    The echo is now gated to user gestures, so boot is exactly ONE `draw`.
 //  - B2: the public no-op-restore refresh affordance is PRESERVED —
@@ -258,7 +258,7 @@ test.describe("Plugin dispatch gating (PLUGIN_DRAW_INVARIANT amendment)", () => 
         });
         expect(config.plugin_config.edit_mode).toEqual("EDIT");
 
-        // The request path's repaint: the echoed restorePanel carries a
+        // The request path's repaint: the echoed restore carries a
         // genuinely NEW mode → `Unchanged + changed → update`.
         const counts = await read_counts(page, "perspective-viewer");
         expect(counts.update).toBeGreaterThanOrEqual(1);

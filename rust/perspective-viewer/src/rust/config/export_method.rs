@@ -17,7 +17,7 @@ use yew::prelude::*;
 
 use crate::js::*;
 
-#[derive(Clone, Copy, Eq, PartialEq, Deserialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Deserialize, ts_rs::TS)]
 pub enum ExportMethod {
     #[serde(rename = "csv")]
     Csv,

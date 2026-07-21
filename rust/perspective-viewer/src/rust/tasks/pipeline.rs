@@ -46,6 +46,15 @@ pub async fn bind_snapshot(
     session: &Session,
     renderer: &Renderer,
 ) -> ApiResult<(BindDisposition, Option<crate::renderer::ContextPin>)> {
+    // A `load()` is mid-classification (see [`Session::pending_load`]): DEFER
+    // rather than bind the incoming config against the still-bound outgoing
+    // table. Holds the last painted frame; the `load()` run performs the one
+    // reconciling bind once its payload resolves — the single visible
+    // transition, correct in whichever future (Table/Client) materializes.
+    if session.has_pending_load() {
+        return Ok((BindDisposition::Deferred, None));
+    }
+
     let snap = session.snapshot(guard);
     let validated = session.validate_snapshot(guard, snap).await?;
     let disposition = session.bind_view(guard, validated).await?;

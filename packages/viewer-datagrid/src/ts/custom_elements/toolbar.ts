@@ -79,7 +79,6 @@ export class HTMLPerspectiveViewerDatagridToolbarElement extends HTMLElement {
         plugin._edit_button.addEventListener("click", () => {
             toggle_edit_mode.call(plugin);
             plugin.regular_table.draw();
-            viewer.dispatchEvent(new Event("perspective-config-update"));
         });
     }
 }
