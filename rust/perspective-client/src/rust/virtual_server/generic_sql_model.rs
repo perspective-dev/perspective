@@ -75,6 +75,57 @@ pub type GenericSQLResult<T> = Result<T, GenericSQLError>;
 pub struct GenericSQLVirtualServerModelArgs {
     create_entity: Option<String>,
     grouping_fn: Option<String>,
+
+    /// Separator joining `split_by` values and the column name in pivoted
+    /// view column names, e.g. `"CA|Sales"` for separator `"|"`. Perspective's
+    /// column-path separator is `"|"`, so any other value produces views the
+    /// client will not interpret as column paths.
+    column_separator: Option<String>,
+}
+
+/// Recovers the source column of a pivoted view column name — the longest
+/// `config.columns` entry that is a strict suffix of `name` — with its index
+/// in `config.columns`. Requires no separator knowledge, so it works at
+/// protocol boundaries where the SQL model's `column_separator` is unknown.
+/// Returns `None` for non-path names (e.g. flat-view columns, which equal a
+/// `config.columns` entry exactly rather than strictly containing one).
+pub(crate) fn column_path_source<'a>(
+    name: &str,
+    config: &'a ViewConfig,
+) -> Option<(usize, &'a str)> {
+    let mut best: Option<(usize, &'a str)> = None;
+    for (idx, col) in config.columns.iter().flatten().enumerate() {
+        if name.len() > col.len()
+            && name.ends_with(col.as_str())
+            && best.is_none_or(|(_, b)| col.len() > b.len())
+        {
+            best = Some((idx, col));
+        }
+    }
+
+    best
+}
+
+/// Sorts pivoted view column names into Perspective's column-path order:
+/// `split_by` value paths ascending, then `config.columns` order within each
+/// path (e.g. `CA|price, CA|qty, NY|price, NY|qty`).
+///
+/// The per-column `PIVOT` join in [`ViewQueryContext`] emits columns grouped
+/// by source column instead, so every egress of view column names re-sorts
+/// with this. Internal `__`-prefixed columns sort first, unmatched names
+/// last, both preserving relative order.
+pub(crate) fn sort_column_paths<T: AsRef<str>>(names: &mut [T], config: &ViewConfig) {
+    names.sort_by_cached_key(|name| {
+        let name = name.as_ref();
+        if name.starts_with("__") {
+            return (0u8, String::new(), 0usize);
+        }
+
+        match column_path_source(name, config) {
+            Some((idx, col)) => (1, name[..name.len() - col.len()].to_string(), idx),
+            None => (2, String::new(), 0),
+        }
+    });
 }
 
 /// A stateless SQL query builder virtual server operations.
@@ -230,6 +281,8 @@ impl GenericSQLVirtualServerModel {
             } else {
                 data_columns.sort_by(|a, b| b.cmp(a));
             }
+        } else if !config.split_by.is_empty() {
+            sort_column_paths(&mut data_columns, config);
         }
 
         let data_columns: Vec<&String> = data_columns

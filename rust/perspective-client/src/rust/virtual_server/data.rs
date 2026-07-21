@@ -601,11 +601,10 @@ impl VirtualDataSlice {
     /// native `perspective-server`'s `to_arrow` output when
     /// `emit_legacy_row_path_names: false`.
     ///
-    /// When `split_by` is active, renames data columns by replacing `_`
-    /// with `|` (the DuckDB PIVOT separator).
-    ///
     /// Also coerces non-standard Arrow types (e.g. `Decimal128`, `Int64`)
-    /// to Perspective-compatible types.
+    /// to Perspective-compatible types. Data column names are passed
+    /// through verbatim — pivoted views already name columns with
+    /// Perspective's column-path separator.
     pub fn from_arrow_ipc(&mut self, ipc: &[u8]) -> Result<(), Box<dyn Error>> {
         let cursor = std::io::Cursor::new(ipc);
         let batches: Vec<RecordBatch> = if &ipc[0..6] == "ARROW1".as_bytes() {
@@ -702,14 +701,7 @@ impl VirtualDataSlice {
                 continue;
             }
 
-            let new_name = if has_split_by && !name.starts_with("__") {
-                name.replace('_', "|")
-            } else {
-                name.clone()
-            };
-
-            let (coerced_field, coerced_array) =
-                coerce_column(&new_name, field, batch.column(col_idx))?;
+            let (coerced_field, coerced_array) = coerce_column(name, field, batch.column(col_idx))?;
             new_fields.push(coerced_field);
             new_arrays.push(coerced_array);
         }
@@ -1108,20 +1100,14 @@ impl VirtualDataSlice {
 
             Ok(())
         } else {
-            let col_name = if !self.config.split_by.is_empty() && !name.starts_with("__") {
-                name.replace('_', "|")
-            } else {
-                name.to_owned()
-            };
-
-            if !self.builders.contains_key(&col_name) {
-                self.builders.insert(col_name.clone(), T::new_builder());
+            if !self.builders.contains_key(name) {
+                self.builders.insert(name.to_owned(), T::new_builder());
             }
 
             let col = self
                 .builders
-                .get_mut(&col_name)
-                .ok_or_else(|| format!("Column '{}' not found after insertion", col_name))?;
+                .get_mut(name)
+                .ok_or_else(|| format!("Column '{}' not found after insertion", name))?;
 
             Ok(value.write_to(col)?)
         }

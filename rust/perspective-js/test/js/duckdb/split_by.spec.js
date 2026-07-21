@@ -25,10 +25,10 @@ describeDuckDB("split_by", (getClient) => {
 
         const columns = await view.column_paths();
         expect(columns).toEqual([
-            "Central_Sales",
-            "East_Sales",
-            "South_Sales",
-            "West_Sales",
+            "Central|Sales",
+            "East|Sales",
+            "South|Sales",
+            "West|Sales",
         ]);
 
         const json = await view.to_json();

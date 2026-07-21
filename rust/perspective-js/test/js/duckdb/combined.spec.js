@@ -54,10 +54,10 @@ describeDuckDB("combined operations", (getClient) => {
 
         const paths = await view.column_paths();
         expect(paths).toEqual([
-            "Central_Sales",
-            "East_Sales",
-            "South_Sales",
-            "West_Sales",
+            "Central|Sales",
+            "East|Sales",
+            "South|Sales",
+            "West|Sales",
         ]);
 
         const numRows = await view.num_rows();
@@ -108,10 +108,10 @@ describeDuckDB("combined operations", (getClient) => {
 
         const paths = await view.column_paths();
         expect(paths).toEqual([
-            "Central_Sales",
-            "East_Sales",
-            "South_Sales",
-            "West_Sales",
+            "Central|Sales",
+            "East|Sales",
+            "South|Sales",
+            "West|Sales",
         ]);
 
         const numRows = await view.num_rows();
@@ -140,10 +140,10 @@ describeDuckDB("combined operations", (getClient) => {
 
         const paths = await view.column_paths();
         expect(paths).toEqual([
-            "Central_Sales",
-            "East_Sales",
-            "South_Sales",
-            "West_Sales",
+            "Central|Sales",
+            "East|Sales",
+            "South|Sales",
+            "West|Sales",
         ]);
 
         const numRows = await view.num_rows();

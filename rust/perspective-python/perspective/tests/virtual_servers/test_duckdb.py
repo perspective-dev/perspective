@@ -324,10 +324,10 @@ class TestDuckDBSplitBy:
 
         column_paths = view.column_paths()
         assert column_paths == [
-            "Central_Sales",
-            "East_Sales",
-            "South_Sales",
-            "West_Sales",
+            "Central|Sales",
+            "East|Sales",
+            "South|Sales",
+            "West|Sales",
         ]
 
         json = view.to_json()
@@ -766,10 +766,10 @@ class TestDuckDBCombinedOperations:
 
         paths = view.column_paths()
         assert paths == [
-            "Central_Sales",
-            "East_Sales",
-            "South_Sales",
-            "West_Sales",
+            "Central|Sales",
+            "East|Sales",
+            "South|Sales",
+            "West|Sales",
         ]
 
         num_rows = view.num_rows()
@@ -818,10 +818,10 @@ class TestDuckDBCombinedOperations:
 
         paths = view.column_paths()
         assert paths == [
-            "Central_Sales",
-            "East_Sales",
-            "South_Sales",
-            "West_Sales",
+            "Central|Sales",
+            "East|Sales",
+            "South|Sales",
+            "West|Sales",
         ]
 
         num_rows = view.num_rows()
