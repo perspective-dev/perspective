@@ -156,7 +156,7 @@ impl RegularLayout {
 }
 
 /// The orientation of a [`SplitLayout`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum Orientation {
     Horizontal,
@@ -165,7 +165,7 @@ pub enum Orientation {
 
 /// A serde mirror of `regular-layout`'s serialized layout tree, as returned by
 /// [`RegularLayout::save`] and accepted by [`RegularLayout::restore`].
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "type")]
 pub enum Layout {
     /// Space divided among children, side-by-side or stacked.
@@ -177,20 +177,21 @@ pub enum Layout {
     Tab(TabLayout),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 pub struct SplitLayout {
     pub children: Vec<Layout>,
     pub sizes: Vec<f64>,
     pub orientation: Orientation,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 pub struct TabLayout {
     /// Panel ids (slot names) in this stack.
     pub tabs: Vec<String>,
 
     /// Index of the selected tab within `tabs`.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub selected: Option<usize>,
 }
 

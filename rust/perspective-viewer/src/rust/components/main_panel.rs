@@ -19,8 +19,11 @@
 //!   tab/active sync, context menu).
 //! - [`presize`] — the `BeforeResize` pre-size-every-plugin algorithm.
 //! - [`reconcile`] — the `rendered` layout reconcile + per-panel theme stamp.
+//! - [`frame_theme`] — the `rendered` frame-background mirror (each
+//!   `<regular-layout-frame>`'s panel-theme background var).
 //! - [`render`] — the `view` (status bar, cells, tabs, menu).
 
+mod frame_theme;
 mod presize;
 mod reconcile;
 mod render;
@@ -93,6 +96,12 @@ pub struct MainPanelProps {
     /// its theme's `--psp-*` block only when it diverges from the host theme.
     pub panel_themes: Vec<(String, Option<String>)>,
 
+    /// The master (filter-source) panel ids, sorted. A snapshot so a master
+    /// toggle re-renders MainPanel — the role set is interior-mutable on
+    /// `Workspace` and not otherwise observed by `eq`. Drives each tab's
+    /// broadcast badge.
+    pub panel_masters: Vec<PanelId>,
+
     /// Element-level global filters (fed by master/detail selection), threaded
     /// to the `StatusBar` where the global-filter chips are rendered.
     pub global_filters: Vec<perspective_client::config::Filter>,
@@ -123,6 +132,7 @@ impl PartialEq for MainPanelProps {
             && self.panel_ids == rhs.panel_ids
             && self.panel_titles == rhs.panel_titles
             && self.panel_themes == rhs.panel_themes
+            && self.panel_masters == rhs.panel_masters
             && self.global_filters == rhs.global_filters
     }
 }
@@ -188,6 +198,17 @@ pub struct MainPanel {
     /// `None`. Transient (regular-layout doesn't persist it); drives the
     /// Maximize/Restore menu label. Cleared when the panel leaves the layout.
     maximized: Option<String>,
+
+    /// Theme-name-keyed cache of backgrounds read off stamped plugin
+    /// elements, the mirror source for frames whose own plugin is unreadable
+    /// (see [`frame_theme`]). Cleared when the theme registry changes.
+    theme_backgrounds: HashMap<String, String>,
+
+    /// The inputs `stamp_frame_themes` last mirrored from; unchanged inputs
+    /// skip the pass (and its forced style recalcs) on unrelated re-renders.
+    /// `None` until the first *fully-resolved* pass — an unresolved frame
+    /// leaves it unlatched so the mirror retries each render.
+    stamped_frame_themes: Option<frame_theme::FrameThemeSnapshot>,
 }
 
 impl Component for MainPanel {
@@ -269,6 +290,8 @@ impl Component for MainPanel {
             hidden_tabs: HashSet::new(),
             context_menu: None,
             maximized: None,
+            theme_backgrounds: HashMap::new(),
+            stamped_frame_themes: None,
         }
     }
 
@@ -290,6 +313,7 @@ impl Component for MainPanel {
 
     fn rendered(&mut self, ctx: &Context<Self>, _first_render: bool) {
         self.reconcile(ctx);
+        self.stamp_frame_themes(ctx);
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {

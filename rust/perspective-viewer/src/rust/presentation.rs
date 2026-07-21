@@ -33,15 +33,6 @@ pub use self::drag_helpers::{DragDropContainer, DragEndCallback};
 pub use self::props::{DragDropProps, PresentationProps};
 use crate::utils::*;
 
-/// The available themes as detected in the browser environment or set
-/// explicitly when CORS prevents detection.  Detection is expensive and
-/// typically must be performed only once, when `document.styleSheets` is
-/// up-to-date.
-#[derive(Default)]
-struct ThemeData {
-    themes: Option<Vec<String>>,
-}
-
 #[derive(Clone, Debug)]
 struct DragFrom {
     column: String,
@@ -71,14 +62,23 @@ impl DragState {
 /// Actual presentations tate struct with some fields hidden.
 pub struct PresentationHandle {
     viewer_elem: HtmlElement,
-    theme_data: Mutex<ThemeData>,
 
-    /// SYNC mirror of the registry default (first) theme name, filled
-    /// whenever the async registry cache resolves. Lets synchronous code
-    /// paths ("stamp with commit" — panel creation, theme mutation sites)
-    /// resolve a panel's effective theme without awaiting registry init.
-    /// `None` = registry not yet parsed (or no themes exist).
-    default_theme: RefCell<Option<String>>,
+    /// The available themes as detected in the browser environment or set
+    /// explicitly when CORS prevents detection — a MEMO of a document
+    /// external, not component state. `None` until first parsed (detection
+    /// is expensive and must wait for `document.styleSheets`). Sync-readable
+    /// (a `RefCell`, never borrowed across an await) so synchronous paths
+    /// ("stamp with commit" — panel creation, theme mutation sites) can
+    /// derive the registry default without awaiting registry init; derived
+    /// values (e.g. the default theme = first registered) are computed from
+    /// it on demand, never mirrored.
+    themes: RefCell<Option<Vec<String>>>,
+
+    /// Single-flight guard for the stylesheet parse that populates
+    /// [`Self::themes`] (and exclusion against `reset_available_themes`) —
+    /// concurrent `get_available_themes` calls await one parse instead of
+    /// racing their own.
+    theme_init: Mutex<()>,
     is_settings_open: RefCell<bool>,
     open_column_settings: RefCell<OpenColumnSettings>,
     is_workspace: RefCell<Option<bool>>,
@@ -148,8 +148,8 @@ impl Presentation {
     pub fn new(elem: &HtmlElement) -> Self {
         let theme = Self(Rc::new(PresentationHandle {
             viewer_elem: elem.clone(),
-            theme_data: Default::default(),
-            default_theme: Default::default(),
+            themes: Default::default(),
+            theme_init: Default::default(),
             is_workspace: Default::default(),
             settings_open_changed: Default::default(),
             settings_before_open_changed: Default::default(),
@@ -259,16 +259,14 @@ impl Presentation {
     /// readable stylesheets.  This method is memoized - the state can be
     /// flushed by calling `reset()`.
     pub async fn get_available_themes(&self) -> ApiResult<PtrEqRc<Vec<String>>> {
-        let mut data = self.0.theme_data.lock().await;
-        if data.themes.is_none() {
+        let _guard = self.0.theme_init.lock().await;
+        if self.0.themes.borrow().is_none() {
             await_dom_loaded().await?;
             let themes = sheets::get_theme_names(&self.0.viewer_elem)?;
-            data.themes = Some(themes);
+            *self.0.themes.borrow_mut() = Some(themes);
         }
 
-        // Keep the SYNC default-theme mirror coherent with the async cache.
-        *self.0.default_theme.borrow_mut() = data.themes.as_ref().unwrap().first().cloned();
-        Ok(data.themes.clone().unwrap().into())
+        Ok(self.0.themes.borrow().clone().unwrap().into())
     }
 
     /// Reset the state.  `styleSheets` will be re-parsed next time
@@ -283,10 +281,9 @@ impl Presentation {
                 .unwrap_or_default()
         }
 
-        let mut mutex = self.0.theme_data.lock().await;
-        let changed = as_set(&mutex.themes) != as_set(&themes);
-        *self.0.default_theme.borrow_mut() = themes.as_ref().and_then(|x| x.first().cloned());
-        mutex.themes = themes;
+        let _guard = self.0.theme_init.lock().await;
+        let changed = as_set(&self.0.themes.borrow()) != as_set(&themes);
+        *self.0.themes.borrow_mut() = themes;
         changed
     }
 
@@ -317,13 +314,13 @@ impl Presentation {
         self.get_available_themes().await.ok()?.first().cloned()
     }
 
-    /// SYNC read of the registry default theme name — `None` until the
-    /// async registry cache first resolves (or when no themes exist). For
-    /// synchronous stamping paths that must not await registry init;
-    /// prefer [`Self::get_default_theme_name`] where awaiting is
-    /// acceptable.
-    pub fn default_theme_name_cached(&self) -> Option<String> {
-        self.0.default_theme.borrow().clone()
+    /// SYNC read of the registry default theme name, derived on demand from
+    /// the memoized registry — `None` until the registry first parses (or
+    /// when no themes exist). For synchronous stamping paths that must not
+    /// await registry init; prefer [`Self::get_default_theme_name`] where
+    /// awaiting is acceptable.
+    pub fn default_theme_name_sync(&self) -> Option<String> {
+        self.0.themes.borrow().as_ref()?.first().cloned()
     }
 
     fn set_theme_attribute(&self, theme: Option<&str>) -> ApiResult<()> {

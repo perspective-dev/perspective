@@ -68,7 +68,7 @@
                 let req = await fetch("layout.json");
                 let layout = await req.json();
                 await window.workspace.load(worker);
-                await window.workspace.restore(layout);
+                await window.workspace.restoreWorkspace(layout);
             })();
         </script>
     </body>

@@ -71,7 +71,7 @@ async function restore(page, config) {
     await page.evaluate(async (config) => {
         const viewer = document.querySelector("perspective-viewer")!;
         // @ts-ignore
-        await viewer.restore(config);
+        await viewer.restoreWorkspace(config);
     }, config);
 }
 
@@ -79,7 +79,7 @@ async function save(page) {
     return await page.evaluate(async () => {
         const viewer = document.querySelector("perspective-viewer")!;
         // @ts-ignore
-        return await viewer.save();
+        return await viewer.saveWorkspace();
     });
 }
 
@@ -87,7 +87,7 @@ async function save_panel(page, id) {
     return await page.evaluate(async (id) => {
         const viewer = document.querySelector("perspective-viewer")!;
         // @ts-ignore
-        return await viewer.savePanel(id);
+        return await viewer.save({ panel: id });
     }, id);
 }
 
@@ -97,7 +97,7 @@ async function id_by_title(page, title): Promise<string> {
         // @ts-ignore
         for (const id of viewer.getPanelNames()) {
             // @ts-ignore
-            if ((await viewer.savePanel(id)).title === title) {
+            if ((await viewer.save({ panel: id })).title === title) {
                 return id;
             }
         }
@@ -110,7 +110,7 @@ async function num_rows(page, id): Promise<number> {
     return await page.evaluate(async (id) => {
         const viewer = document.querySelector("perspective-viewer")!;
         // @ts-ignore
-        const view = await viewer.getViewPanel(id);
+        const view = await viewer.getView({ panel: id });
         return await view.num_rows();
     }, id);
 }
@@ -122,7 +122,7 @@ function wait_rows(page, id, rows) {
         async ({ id, rows }) => {
             const viewer = document.querySelector("perspective-viewer")!;
             // @ts-ignore
-            const view = await viewer.getViewPanel(id);
+            const view = await viewer.getView({ panel: id });
             return (await view.num_rows()) === rows;
         },
         { id, rows },
@@ -134,7 +134,7 @@ function wait_rows_below(page, id, bound) {
         async ({ id, bound }) => {
             const viewer = document.querySelector("perspective-viewer")!;
             // @ts-ignore
-            const view = await viewer.getViewPanel(id);
+            const view = await viewer.getView({ panel: id });
             return (await view.num_rows()) < bound;
         },
         { id, bound },
@@ -284,7 +284,7 @@ test.describe("Global filters: replace semantics", () => {
             async ({ id, texas_rows }) => {
                 const viewer = document.querySelector("perspective-viewer")!;
                 // @ts-ignore
-                const view = await viewer.getViewPanel(id);
+                const view = await viewer.getView({ panel: id });
                 const rows = await view.num_rows();
                 return rows !== texas_rows;
             },
@@ -335,7 +335,7 @@ test.describe("Global filters: replace semantics", () => {
         await page.waitForFunction(async () => {
             const viewer = document.querySelector("perspective-viewer")!;
             // @ts-ignore
-            return (await viewer.save()).global_filters?.length === 1;
+            return (await viewer.saveWorkspace()).global_filters?.length === 1;
         });
 
         expect((await save(page)).global_filters).toEqual([
@@ -390,7 +390,9 @@ test.describe("Global filters: chips + lifecycle", () => {
             async ({ id, prev }) => {
                 const v = document.querySelector("perspective-viewer")!;
                 // @ts-ignore
-                return (await (await v.getViewPanel(id)).num_rows()) > prev;
+                return (
+                    (await (await v.getView({ panel: id })).num_rows()) > prev
+                );
             },
             { id: detail, prev: texas_and_furniture },
         );
@@ -524,7 +526,7 @@ test.describe("Global filters: persistence", () => {
         await page.waitForFunction(async () => {
             const viewer = document.querySelector("perspective-viewer")!;
             // @ts-ignore
-            const token = await viewer.save();
+            const token = await viewer.saveWorkspace();
             return (
                 JSON.stringify(token.global_filters) ===
                 JSON.stringify([["Region", "==", "East"]])

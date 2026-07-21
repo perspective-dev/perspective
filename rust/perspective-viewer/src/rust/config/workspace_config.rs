@@ -24,11 +24,12 @@ use crate::config::{PanelViewerConfig, ViewerConfigUpdate};
 ///   `settings` key (element-level state).
 /// - `active` names the panel targeted by the *open* settings sidebar; it is
 ///   omitted when the sidebar is closed.
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, ts_rs::TS)]
 pub struct WorkspaceConfig {
     pub version: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub active: Option<String>,
 
     pub layout: Option<crate::js::Layout>,
@@ -43,6 +44,8 @@ pub struct WorkspaceConfig {
     /// overlay on every detail panel's view — persisted here, never in a
     /// per-panel entry. Omitted when empty.
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<_>")]
+    #[ts(optional)]
     pub global_filters: Vec<Filter>,
 
     /// The MASTER (filter-source) panels' ids, referencing `panels` keys.
@@ -50,6 +53,8 @@ pub struct WorkspaceConfig {
     /// which master contributed which clause does not — restored
     /// `global_filters` are one unattributed bucket. Omitted when empty.
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<_>")]
+    #[ts(optional)]
     pub masters: Vec<String>,
 }
 
@@ -58,12 +63,14 @@ pub struct WorkspaceConfig {
 /// but `panels` entries are full [`ViewerConfigUpdate`]s so a stray per-panel
 /// `settings` can be detected (warned, then ignored — `create_panel` strips
 /// it).
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, ts_rs::TS)]
 pub struct WorkspaceConfigUpdate {
     #[serde(default)]
+    #[ts(optional)]
     pub active: Option<String>,
 
     #[serde(default)]
+    #[ts(optional)]
     pub layout: Option<crate::js::Layout>,
 
     pub panels: BTreeMap<String, ViewerConfigUpdate>,
@@ -72,10 +79,14 @@ pub struct WorkspaceConfigUpdate {
     /// a transient overlay on every DETAIL panel. Restored as one
     /// unattributed bucket: the next selection on any master replaces it.
     #[serde(default)]
+    #[ts(as = "Option<_>")]
+    #[ts(optional)]
     pub global_filters: Vec<Filter>,
 
     /// The master (filter-source) panels, by saved `panels` key. An id not in
     /// `panels` warns and is dropped.
     #[serde(default)]
+    #[ts(as = "Option<_>")]
+    #[ts(optional)]
     pub masters: Vec<String>,
 }

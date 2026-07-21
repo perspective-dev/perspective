@@ -97,7 +97,7 @@ if (LAYOUTS == undefined) {
 
 const layout_names = Object.keys(LAYOUTS);
 let selected_layout = LAYOUTS[layout_names[0]];
-await window.workspace.restore(selected_layout);
+await window.workspace.restoreWorkspace(selected_layout);
 
 function set_layout_options() {
     const layout_names = Object.keys(LAYOUTS);
@@ -117,7 +117,7 @@ window.layouts.addEventListener("change", async () => {
         return;
     }
 
-    await window.workspace.restore(LAYOUTS[window.layouts.value]);
+    await window.workspace.restoreWorkspace(LAYOUTS[window.layouts.value]);
     window.name_input.value = window.layouts.value;
 });
 
@@ -150,7 +150,7 @@ window.reset.addEventListener("click", () => {
 });
 
 window.save.addEventListener("click", async () => {
-    const token = await window.workspace.save();
+    const token = await window.workspace.saveWorkspace();
     const new_name = window.name_input.value;
     LAYOUTS[new_name] = token;
     set_layout_options();

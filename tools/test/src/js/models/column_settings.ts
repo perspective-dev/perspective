@@ -60,11 +60,21 @@ export class ColumnSettingsSidebar {
     }
 
     async getTabs(): Promise<string[]> {
-        return await this.tabTitle.allInnerTexts();
+        await this.container
+            .locator("#settings_tab_bar .tab-title")
+            .first()
+            .waitFor();
+        return await this.tabTitle.evaluateAll((els) =>
+            els.map((e) => e.id),
+        );
     }
 
     async getSelectedTab(): Promise<string> {
-        return await this.selectedTab.innerText();
+        return (
+            (await this.selectedTab
+                .locator(".tab-title")
+                .getAttribute("id")) ?? ""
+        );
     }
 
     async getType(): Promise<ColumnType | "expression"> {

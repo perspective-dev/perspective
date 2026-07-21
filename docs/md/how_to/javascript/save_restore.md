@@ -97,3 +97,23 @@ Chrome developer console:
 // Copy to clipboard
 copy(await document.querySelector("perspective-viewer").save());
 ```
+
+## Multi-panel viewers
+
+`save()` and `restore()` operate on a _single_ panel — the _active_ one by
+default, or a specific panel via their optional `{ panel }` selector (e.g.
+`await elem.save({ panel: "my-panel" })`). If `restore()`'s `panel` names no
+existing panel, a new panel is created with that id.
+
+A `<perspective-viewer>` may host multiple panels. To serialize or restore the
+_whole element_ — every panel plus the layout and cross-filter state — use
+`saveWorkspace()` and `restoreWorkspace()` instead:
+
+```javascript
+const workspace_token = await elem.saveWorkspace();
+await elem.restoreWorkspace(workspace_token);
+```
+
+A `saveWorkspace()` token is a `WorkspaceConfig` (`{ version, layout, panels,
+... }`), not a `ViewerConfig` — passing it to the single-panel `restore()` will
+_not_ restore the layout (its `panels`/`layout` keys are ignored).

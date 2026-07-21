@@ -51,7 +51,7 @@ import { PluginStaticConfig } from "./ts-rs/PluginStaticConfig.js";
  * - `restore()`/`save()` — state transfer only. Plugins must NOT render
  *   from `restore()` (a changed restore is always followed by exactly one
  *   `update`) and must NOT call host APIs from inside it — a
- *   `restorePanel()` echo re-enters the host's public surface and forces
+ *   `restore()` echo re-enters the host's public surface and forces
  *   a redundant render (the classic double-render-on-load bug).
  *
  * Rendering methods (`draw`, `update`, `resize`, `render`, `clear`) and
@@ -171,7 +171,7 @@ export interface IPerspectiveViewerPlugin {
      * `restore()` (the host follows a restore that genuinely changed
      * plugin state with exactly one `update()` in the same serialized
      * sequence), and must not call host `<perspective-viewer>` APIs from
-     * inside it: an echoed `restorePanel()` re-enters the host's public
+     * inside it: an echoed `restore()` re-enters the host's public
      * surface where it is indistinguishable from a user call and forces a
      * redundant render. Host API calls to persist plugin state belong to
      * genuine user-gesture handlers (e.g. a toolbar click), never to the

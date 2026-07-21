@@ -157,12 +157,30 @@ fn dispatch_config_update(
             .clone()
             .with_lock(async { get_viewer_config(&session, &renderer, &presentation).await })
             .await?;
+
         if viewer_config.view_config != Default::default()
-            && Some(&viewer_config) != session.last_dispatched_config.borrow().as_ref()
+            && Some(&viewer_config) != session.last_dispatched_config.borrow().as_deref()
         {
-            let json_config = JsValue::from_serde_ext(&viewer_config)?;
+            let viewer_config = std::rc::Rc::new(viewer_config);
+            *session.last_dispatched_config.borrow_mut() = Some(viewer_config.clone());
+            let memo = std::cell::RefCell::new(None);
+            let get_config = Closure::<dyn Fn() -> Result<JsValue, JsValue>>::new(move || {
+                let mut memo = memo.borrow_mut();
+                if memo.is_none() {
+                    *memo = Some(JsValue::from_serde_ext(&*viewer_config).map_err(JsValue::from)?);
+                }
+
+                Ok(memo.as_ref().unwrap().clone())
+            });
+
+            let detail = js_sys::Object::new();
+            js_sys::Reflect::set(
+                &detail,
+                &JsValue::from_str("getConfig"),
+                get_config.as_ref(),
+            )?;
             let event_init = web_sys::CustomEventInit::new();
-            event_init.set_detail(&json_config);
+            event_init.set_detail(&detail);
             event_init.set_bubbles(true);
             event_init.set_composed(true);
             let event = web_sys::CustomEvent::new_with_event_init_dict(
@@ -170,8 +188,8 @@ fn dispatch_config_update(
                 &event_init,
             )?;
 
-            *session.last_dispatched_config.borrow_mut() = Some(viewer_config);
             panel_target(&elem, &renderer).dispatch_event(&event)?;
+            drop(get_config);
         }
 
         Ok(())

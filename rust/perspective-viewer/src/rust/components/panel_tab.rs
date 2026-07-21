@@ -127,6 +127,16 @@ pub struct PanelTabProps {
     /// panel, but only one panel in the whole layout is active.
     pub visible: bool,
 
+    /// `true` when this panel is a master (filter-source) panel — shows the
+    /// broadcast badge to the left of the close button.
+    pub is_master: bool,
+
+    /// `true` when this is the host viewer's ONLY panel (one plugin child).
+    /// Reflected on the host as a `single`/`multi` class — the same
+    /// panel-count CSS hook `Renderer::stamp_active` stamps on the plugin —
+    /// e.g. the caret is hidden on a lone tab (see panel-tab.css).
+    pub single: bool,
+
     /// `false` for a lone panel (which can't be closed to zero) — hides the
     /// close button.
     pub closable: bool,
@@ -232,20 +242,23 @@ impl PanelTab {
         true
     }
 
-    /// Reflect `active`/`visible` onto the host (not a vnode — so its class is
-    /// set imperatively). `visible` marks the front (selected) tab of every
-    /// stack, not just the single active panel; the shadow CSS keys off
-    /// `:host(.active)` / `:host(.visible)`.
-    fn sync_class(&self, active: bool, visible: bool) {
-        let class = match (active, visible) {
-            (true, true) => "active visible",
-            // Active implies front-of-stack, but guard the transient anyway.
-            (true, false) => "active",
-            (false, true) => "visible",
-            (false, false) => "",
-        };
+    /// Reflect `active`/`visible`/`single` onto the host (not a vnode — so
+    /// its class is set imperatively). `visible` marks the front (selected)
+    /// tab of every stack, not just the single active panel; `single`/`multi`
+    /// reflect the host viewer's panel count. The shadow CSS keys off
+    /// `:host(.active)` / `:host(.visible)` / `:host(.single)`.
+    fn sync_class(&self, active: bool, visible: bool, single: bool) {
+        let mut class = Vec::with_capacity(3);
+        if active {
+            class.push("active");
+        }
 
-        let _ = self.host.set_attribute("class", class);
+        if visible {
+            class.push("visible");
+        }
+
+        class.push(if single { "single" } else { "multi" });
+        let _ = self.host.set_attribute("class", &class.join(" "));
     }
 }
 
@@ -447,10 +460,16 @@ impl Component for PanelTab {
             }
         };
 
+        // The caret is always in the DOM; panel-tab.css shows it only on
+        // `:host(.active)`, so it flips with the tab chrome in the same style
+        // pass as `sync_class` (which stamps `active` imperatively, after
+        // render).
         let content = html! {
             <>
                 <span class="psp-tab-grip" />
+                <span class="psp-tab-caret" />
                 { title_html }
+                if ctx.props().is_master { <span class="psp-tab-master" /> }
                 if ctx.props().closable { <button class="psp-tab-close" onpointerdown={on_close} /> }
             </>
         };
@@ -459,7 +478,7 @@ impl Component for PanelTab {
     }
 
     fn rendered(&mut self, ctx: &Context<Self>, _first_render: bool) {
-        self.sync_class(ctx.props().active, ctx.props().visible);
+        self.sync_class(ctx.props().active, ctx.props().visible, ctx.props().single);
         match &ctx.props().theme {
             Some(theme) => {
                 let _ = self.host.set_attribute("theme", theme);

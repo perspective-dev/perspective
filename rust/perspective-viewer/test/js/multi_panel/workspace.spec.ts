@@ -61,7 +61,7 @@ async function restore(page, config) {
     await page.evaluate(async (config) => {
         const viewer = document.querySelector("perspective-viewer")!;
         // @ts-ignore
-        await viewer.restore(config);
+        await viewer.restoreWorkspace(config);
     }, config);
 }
 
@@ -69,7 +69,7 @@ async function save(page) {
     return await page.evaluate(async () => {
         const viewer = document.querySelector("perspective-viewer")!;
         // @ts-ignore
-        return await viewer.save();
+        return await viewer.saveWorkspace();
     });
 }
 
@@ -149,7 +149,7 @@ test.describe("Multi-panel API", () => {
                 title: "Added",
             });
             // @ts-ignore
-            return await viewer.savePanel(id);
+            return await viewer.save({ panel: id });
         }, TABLE);
 
         expect((await panel_names(page)).length).toBe(before.length + 1);
@@ -189,7 +189,7 @@ test.describe("Multi-panel API", () => {
         expect((await panel_names(page)).length).toBe(1);
     });
 
-    test("resetPanel resets only the named panel", async ({ page }) => {
+    test("reset({panel}) resets only the named panel", async ({ page }) => {
         await restore(page, SPLIT_CONFIG);
         const names = await panel_names(page);
 
@@ -197,7 +197,7 @@ test.describe("Multi-panel API", () => {
             page.evaluate(async (id) => {
                 const viewer = document.querySelector("perspective-viewer")!;
                 // @ts-ignore
-                return await viewer.savePanel(id);
+                return await viewer.save({ panel: id });
             }, id);
 
         // Identify the grouped panel ("One") by config, not insertion order.
@@ -209,7 +209,7 @@ test.describe("Multi-panel API", () => {
         await page.evaluate(async (id) => {
             const viewer = document.querySelector("perspective-viewer")!;
             // @ts-ignore
-            await viewer.resetPanel(null, id);
+            await viewer.reset(null, { panel: id });
         }, target);
 
         // The named panel's config resets, the other is untouched.
@@ -222,7 +222,7 @@ test.describe("Multi-panel API", () => {
             const viewer = document.querySelector("perspective-viewer")!;
             try {
                 // @ts-ignore
-                await viewer.resetPanel(null, "no-such-panel");
+                await viewer.reset(null, { panel: "no-such-panel" });
                 return null;
             } catch (e) {
                 return e.message ?? String(e);
@@ -249,6 +249,50 @@ test.describe("Multi-panel API", () => {
                     .getActivePanel() === name,
             names[1],
         );
+    });
+
+    test("restore creates the panel when the name is new (upsert)", async ({
+        page,
+    }) => {
+        const before = await panel_names(page);
+
+        // A `panel` that matches no panel creates one, with that name as its id.
+        await page.evaluate(async (table) => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            // @ts-ignore
+            await viewer.restore(
+                { table, title: "Created", group_by: ["Region"] },
+                { panel: "my-panel" },
+            );
+        }, TABLE);
+
+        const after = await panel_names(page);
+        expect(after.length).toBe(before.length + 1);
+        expect(after).toContain("my-panel");
+
+        const save_panel = (id) =>
+            page.evaluate(async (id) => {
+                const viewer = document.querySelector("perspective-viewer")!;
+                // @ts-ignore
+                return await viewer.save({ panel: id });
+            }, id);
+
+        const created = await save_panel("my-panel");
+        expect(created.title).toBe("Created");
+        expect(created.group_by).toEqual(["Region"]);
+
+        // A second restore with the SAME name UPDATES it (no new panel).
+        await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            // @ts-ignore
+            await viewer.restore(
+                { group_by: ["State"] },
+                { panel: "my-panel" },
+            );
+        });
+
+        expect((await panel_names(page)).length).toBe(after.length);
+        expect((await save_panel("my-panel")).group_by).toEqual(["State"]);
     });
 });
 
@@ -340,7 +384,7 @@ test.describe("Panel context menu", () => {
         const config = await page.evaluate(async () => {
             const viewer = document.querySelector("perspective-viewer")!;
             // @ts-ignore
-            return await viewer.savePanel(viewer.getActivePanel());
+            return await viewer.save({ panel: viewer.getActivePanel() });
         });
 
         expect(config.table).toBe("second-table");
@@ -404,7 +448,7 @@ test.describe("Panel context menu", () => {
         const config = await page.evaluate(async () => {
             const viewer = document.querySelector("perspective-viewer")!;
             // @ts-ignore
-            return await viewer.savePanel(viewer.getActivePanel());
+            return await viewer.save({ panel: viewer.getActivePanel() });
         });
 
         expect(config.table).toBe("other-client-table");
@@ -420,7 +464,7 @@ test.describe("Panel context menu", () => {
             page.evaluate(async (id) => {
                 const viewer = document.querySelector("perspective-viewer")!;
                 // @ts-ignore
-                return await viewer.savePanel(id);
+                return await viewer.save({ panel: id });
             }, id);
 
         const other = await page.evaluate((slot) => {
@@ -442,7 +486,7 @@ test.describe("Panel context menu", () => {
             async ({ slot, before }) => {
                 const viewer = document.querySelector("perspective-viewer")!;
                 // @ts-ignore
-                const config = await viewer.savePanel(slot);
+                const config = await viewer.save({ panel: slot });
                 return JSON.stringify(config) !== before;
             },
             { slot, before: JSON.stringify(target_before) },

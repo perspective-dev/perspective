@@ -55,9 +55,9 @@ export function toggle_edit_mode(
     }
 
     const panel = this.getAttribute("slot") ?? undefined;
-    (this.parentElement as HTMLPerspectiveViewerElement)?.setSelectionPanel?.(
+    (this.parentElement as HTMLPerspectiveViewerElement)?.setSelection?.(
         undefined,
-        panel,
+        { panel },
     );
     this._edit_mode = mode;
     if (this.model) {
@@ -70,11 +70,11 @@ export function toggle_edit_mode(
     }
 
     if (echo) {
-        (this.parentElement as HTMLPerspectiveViewerElement)?.restorePanel?.(
+        (this.parentElement as HTMLPerspectiveViewerElement)?.restore?.(
             {
                 plugin_config: { edit_mode: mode },
             },
-            panel,
+            { panel },
         );
     }
 

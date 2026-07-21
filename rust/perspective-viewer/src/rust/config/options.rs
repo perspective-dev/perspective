@@ -10,53 +10,62 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-//! State-mutating async business logic dispatched from user actions.
-//!
-//! Every function in this module ends in side effects on one or more of
-//! [`Session`], [`Renderer`], [`Presentation`] — applying a
-//! `ViewConfigUpdate`, drawing the active plugin, mutating expressions, etc.
-//! Read-only async derivations belong in [`crate::queries`].
-//!
-//! [`Session`]: crate::session::Session
-//! [`Renderer`]: crate::renderer::Renderer
-//! [`Presentation`]: crate::presentation::Presentation
+//! Argument dictionaries for the public `PerspectiveViewerElement` methods.
+//! Each derives `ts_rs::TS` so its TypeScript type is generated (and
+//! re-exported from the crate's `typescript_custom_section`) alongside the
+//! config types, rather than hand-maintained.
 
-mod apply_global_filters;
-mod copy_export;
-mod create_panel;
-mod dismiss_render_warning;
-mod edit_expression;
-mod eject;
-mod intersection_observer;
-mod pipeline;
-mod presize_panels;
-mod reset_all;
-mod resize_observer;
-mod restore_and_render;
-mod restore_panel;
-mod send_column_config;
-mod send_plugin_config;
-mod set_edit_mode;
-mod sync_update_panels;
-mod update_theme;
-mod validate_expression;
+use serde::Deserialize;
+use ts_rs::TS;
 
-pub use self::apply_global_filters::*;
-pub use self::copy_export::*;
-pub(crate) use self::create_panel::*;
-pub use self::dismiss_render_warning::*;
-pub use self::edit_expression::*;
-pub use self::eject::*;
-pub use self::intersection_observer::*;
-pub use self::pipeline::*;
-pub use self::presize_panels::*;
-pub use self::reset_all::*;
-pub use self::resize_observer::*;
-pub use self::restore_and_render::*;
-pub(crate) use self::restore_panel::*;
-pub use self::send_column_config::*;
-pub use self::send_plugin_config::*;
-pub use self::set_edit_mode::*;
-pub(crate) use self::sync_update_panels::*;
-pub use self::update_theme::*;
-pub use self::validate_expression::*;
+use crate::config::ExportMethod;
+
+/// Selects the target panel of a panel-scoped `<perspective-viewer>` method;
+/// the active panel when `panel` is omitted.
+#[derive(Deserialize, Default, TS)]
+pub struct PanelOptions {
+    #[ts(optional)]
+    pub panel: Option<String>,
+}
+
+/// The `eject` argument: the loaded client to remove by name; the active
+/// panel's client when omitted.
+#[derive(Deserialize, Default, TS)]
+pub struct ClientOptions {
+    #[ts(optional)]
+    pub client: Option<String>,
+}
+
+/// The `download` / `export` / `copy` argument: the `ExportMethod` and target
+/// panel.
+#[derive(Deserialize, Default, TS)]
+pub struct ExportOptions {
+    #[ts(as = "Option<ExportMethod>")]
+    #[ts(optional)]
+    pub method: Option<String>,
+
+    #[ts(optional)]
+    pub panel: Option<String>,
+}
+
+/// The `getTable` argument: whether to `wait` for a `Table`, and the target
+/// panel.
+#[derive(Deserialize, Default, TS)]
+pub struct GetTableOptions {
+    #[ts(optional)]
+    pub wait: Option<bool>,
+
+    #[ts(optional)]
+    pub panel: Option<String>,
+}
+
+/// The `getClient` argument: whether to `wait` for a `Client`, and the target
+/// panel.
+#[derive(Deserialize, Default, TS)]
+pub struct GetClientOptions {
+    #[ts(optional)]
+    pub wait: Option<bool>,
+
+    #[ts(optional)]
+    pub panel: Option<String>,
+}

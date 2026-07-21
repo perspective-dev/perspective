@@ -122,9 +122,9 @@ test("public mutators are render-quiescent at resolution (I6)", async ({
             await quiesce("restore", () =>
                 v.restore({ plugin: "Datagrid", columns: ["Sales"] }),
             );
-            await quiesce("resetPanel", () => v.resetPanel());
-            await quiesce("restorePanel", () =>
-                v.restorePanel({ columns: ["Profit", "Sales"] }),
+            await quiesce("reset", () => v.reset());
+            await quiesce("restore", () =>
+                v.restore({ columns: ["Profit", "Sales"] }),
             );
             await quiesce("reset", () => v.reset());
             await quiesce("resize", () => v.resize());

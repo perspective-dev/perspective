@@ -155,9 +155,12 @@ impl MainPanel {
             // listener picks up activation).
             let viewer_elem = ctx.props().presentation.viewer_elem().clone();
             // A lone panel can't be closed to zero, and has nowhere to be
-            // dragged — so it's neither closable nor draggable.
+            // dragged — so it's neither closable nor draggable; its tab also
+            // carries the `single` panel-count class (which e.g. hides the
+            // caret).
             let closable = ctx.props().panel_ids.len() > 1;
             let draggable = closable;
+            let single = !closable;
             // Each panel's effective theme: its own (`panel_themes` snapshot) or
             // the registry default (first registered theme). Stamped on the tab so
             // the `[theme]` document rules theme it per-panel.
@@ -206,6 +209,7 @@ impl MainPanel {
                         .and_then(|(_, t)| t.clone());
                     let active = active_slot.as_deref() == Some(name.as_str());
                     let visible = !self.hidden_tabs.contains(name.as_str());
+                    let is_master = ctx.props().panel_masters.contains(id);
                     let theme = ctx
                         .props()
                         .panel_themes
@@ -223,6 +227,8 @@ impl MainPanel {
                             {theme}
                             {active}
                             {visible}
+                            {is_master}
+                            {single}
                             {closable}
                             {draggable}
                             on_select={on_select.clone()}

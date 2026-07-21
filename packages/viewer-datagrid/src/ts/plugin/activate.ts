@@ -64,7 +64,7 @@ export async function activate(
 ): Promise<void> {
     const viewer = this.parentElement as HTMLPerspectiveViewerElement;
     const panel = this.getAttribute("slot") ?? undefined;
-    const table = await viewer.getTablePanel(undefined, panel);
+    const table = await viewer.getTable({ panel });
 
     if (!this._initialized) {
         this.innerHTML = "";

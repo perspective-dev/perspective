@@ -42,7 +42,7 @@
             await worker.table(buffer, { name: "superstore" });
             window.workspace.load(worker);
             const layout = await get_layout();
-            await window.workspace.restore(layout);
+            await window.workspace.restoreWorkspace(layout);
         </script>
     </body>
 </html>

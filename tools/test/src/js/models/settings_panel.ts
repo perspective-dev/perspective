@@ -15,6 +15,12 @@ import { PageView } from "./page";
 
 type ViewParameter = "groupby" | "splitby" | "orderby" | "where";
 
+async function autocompleteSelect(page: Page, input: Locator, name: string) {
+    await input.pressSequentially(name);
+    await page.locator("perspective-dropdown .selected").first().waitFor();
+    await input.press("Enter");
+}
+
 export class SettingsPanel {
     pageView: PageView;
     container: Locator;
@@ -82,7 +88,8 @@ export class SettingsPanel {
         if (successAssertion) {
             expect(await saveBtn.isDisabled()).toBe(false);
             await saveBtn.click();
-            await this.inactiveColumns.getColumnByName(name);
+            const col = await this.inactiveColumns.getColumnByName(name);
+            await col.container.first().waitFor();
         } else {
             expect(await saveBtn.isDisabled()).toBe(true);
         }
@@ -171,12 +178,7 @@ export class SettingsPanel {
             default:
                 throw "Invalid type passed!";
         }
-        await locator.type(name);
-        await this.pageView.page
-            .locator("perspective-dropdown .selected")
-            .first() // NOTE: There probably shouldn't actually be more than one.
-            .waitFor();
-        await locator.press("Enter");
+        await autocompleteSelect(this.pageView.page, locator, name);
     }
 
     async removeViewParameter(type: ViewParameter, name: string) {
@@ -342,12 +344,7 @@ export class ActiveColumns {
     async activateColumn(name: string) {
         await this.scrollToBottom();
         await this.newColumnInput.waitFor({ state: "visible" });
-        await this.newColumnInput.type(name);
-        await this.page
-            .locator("perspective-dropdown .selected")
-            .first() // NOTE: There probably shouldn't actually be more than one.
-            .waitFor();
-        await this.newColumnInput.press("Enter");
+        await autocompleteSelect(this.page, this.newColumnInput, name);
         let addedColumn = this.columnSelector.filter({ hasText: name }).first();
         return new ColumnSelector(addedColumn!, true);
     }

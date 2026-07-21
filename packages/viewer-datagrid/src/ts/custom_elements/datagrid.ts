@@ -10,7 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { PRIVATE_PLUGIN_SYMBOL } from "../model/index.js";
+import {
+    PRIVATE_PLUGIN_SYMBOL,
+    readThemeStyle,
+    save_column_size_overrides,
+    restore_column_size_overrides,
+} from "../model/index.js";
 import { activate } from "../plugin/activate.js";
 import { restore } from "../plugin/restore.js";
 import { save } from "../plugin/save.js";
@@ -270,7 +275,18 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         }
     }
 
-    restyle() {}
+    restyle(): void {
+        if (!this.model || !this.isConnected) {
+            return;
+        }
+
+        Object.assign(this.model, readThemeStyle(this.regular_table));
+        if (this._initialized) {
+            const old_sizes = save_column_size_overrides.call(this);
+            this.regular_table.resetAutoSize();
+            restore_column_size_overrides.call(this, old_sizes);
+        }
+    }
 
     delete(): void {
         this.disconnectedCallback();

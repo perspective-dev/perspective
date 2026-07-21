@@ -16,11 +16,12 @@ export function usePspListener<A>(
     el: HTMLElement | undefined | null,
     event: string,
     cb?: (x: A) => void,
+    map: (e: CustomEvent) => A = (e) => e.detail,
 ) {
     React.useEffect(() => {
         if (!cb || !el) return;
         const ctx = new AbortController();
-        const callback = (e: Event) => cb((e as CustomEvent).detail);
+        const callback = (e: Event) => cb(map(e as CustomEvent));
         el?.addEventListener(event, callback, { signal: ctx.signal });
         return () => ctx.abort();
     }, [el, cb]);

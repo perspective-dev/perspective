@@ -265,6 +265,9 @@ async function open(
     let state: SidebarState;
     if (open) {
         await selector.editBtn.click();
+        await view.columnSettingsSidebar.container.waitFor({
+            state: "visible",
+        });
         state = {
             open: true,
             tabs: await view.columnSettingsSidebar.getTabs(),
@@ -283,40 +286,28 @@ async function checkOutput(
     expected: ExpectedState,
     initial_state: SidebarState,
 ) {
-    const POSSIBLE_TABS = ["Style", "Attributes"];
+    const check_tabs = async (selectedTab: string, tabs: string[]) => {
+        const tabIds = async () =>
+            (
+                await view.columnSettingsSidebar.container
+                    .locator("#settings_tab_bar .tab-title")
+                    .evaluateAll((els) => els.map((e) => e.id))
+            ).sort();
 
-    const check_tabs = async (
-        selectedTab: string,
-        tabs: string[],
-        unexpected_tabs: string[],
-    ) => {
+        await expect.poll(tabIds).toEqual([...tabs].sort());
+
         if (selectedTab === "") {
-            await view.columnSettingsSidebar.container
-                .locator(".settings_tab.selected_tab .tab-title")
-                .first()
-                .waitFor();
+            await expect(
+                view.columnSettingsSidebar.container
+                    .locator(".settings_tab.selected_tab .tab-title")
+                    .first(),
+            ).toBeVisible();
         } else {
-            await view.columnSettingsSidebar.container
-                .locator(`.settings_tab.selected_tab #${selectedTab}`)
-                .waitFor();
-        }
-
-        for (let tab of tabs) {
-            if (tab === "") {
-                await view.columnSettingsSidebar.container
-                    .locator(`.tab-title`)
-                    .first()
-                    .waitFor();
-            } else {
-                await view.columnSettingsSidebar.container
-                    .locator(`#${tab}`)
-                    .waitFor();
-            }
-        }
-        for (let tab of unexpected_tabs) {
-            await view.columnSettingsSidebar.tabTitle
-                .locator(`#${tab}`)
-                .waitFor({ state: "hidden" });
+            await expect(
+                view.columnSettingsSidebar.container.locator(
+                    `.settings_tab.selected_tab #${selectedTab}`,
+                ),
+            ).toBeVisible();
         }
     };
 
@@ -331,24 +322,14 @@ async function checkOutput(
                 timeout: 2000,
             });
         } else {
-            const unexpected_tabs = POSSIBLE_TABS.filter(
-                (t) => !initial_state.tabs.includes(t),
-            );
-            await check_tabs(
-                initial_state.selectedTab,
-                initial_state.tabs,
-                unexpected_tabs,
-            );
+            await check_tabs(initial_state.selectedTab, initial_state.tabs);
         }
     } else if ("closed" in expected) {
         await expect(view.columnSettingsSidebar.container).toBeHidden({
             timeout: 2000,
         });
     } else {
-        const unexpected_tabs = POSSIBLE_TABS.filter(
-            (t) => !expected.tabs.includes(t),
-        );
-        await check_tabs(expected.selectedTab, expected.tabs, unexpected_tabs);
+        await check_tabs(expected.selectedTab, expected.tabs);
     }
 }
 

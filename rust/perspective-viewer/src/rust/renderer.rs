@@ -176,6 +176,14 @@ pub struct RendererData {
     /// theme), so activation-dependent chrome and the DOM it styles always
     /// land in one paint commit.
     is_active_panel: Cell<bool>,
+
+    /// Whether this renderer's panel is the workspace's ONLY panel. Pure DATA
+    /// like [`Self::is_active_panel`], written synchronously by the
+    /// `Workspace` panel-count mutation sites (`new`/`insert_panel`/
+    /// `remove_panel`); the `single`/`multi` CSS classes it drives are
+    /// applied ONLY inside locked plugin dispatches
+    /// ([`Renderer::stamp_active`]), for the same one-paint-commit reason.
+    is_solo_panel: Cell<bool>,
 }
 
 /// Mutable state
@@ -247,6 +255,7 @@ impl Renderer {
             cached_context: Default::default(),
             active_context: Default::default(),
             is_active_panel: Cell::new(false),
+            is_solo_panel: Cell::new(true),
         }))
     }
 
@@ -965,11 +974,19 @@ impl Renderer {
         self.0.is_active_panel.set(is_active);
     }
 
-    /// Toggle the `active` class on `plugin` from the recorded flag —
-    /// called ONLY from locked plugin-dispatch sites, immediately before the
-    /// dispatch. The class is a pure CSS hook (`:host(.active)` chrome, e.g.
-    /// the datagrid's edit column-header labels); plugins read activation
-    /// state through `getActivePanel()`, never this class. Stamping at
+    /// Record whether this panel is the workspace's only panel (data only —
+    /// see the field doc; the CSS class lands at the next locked plugin
+    /// dispatch).
+    pub fn set_solo_flag(&self, is_solo: bool) {
+        self.0.is_solo_panel.set(is_solo);
+    }
+
+    /// Toggle the `active` and panel-count (`single`/`multi`) classes on
+    /// `plugin` from the recorded flags — called ONLY from locked
+    /// plugin-dispatch sites, immediately before the dispatch. The classes
+    /// are pure CSS hooks (`:host(.active)` chrome, e.g. the datagrid's edit
+    /// column-header labels); plugins read activation state through
+    /// `getActivePanel()`, never these classes. Stamping at
     /// dispatch bounds any class/DOM disagreement to the one locked draw
     /// that reconciles them — never applied from an async render pass
     /// (that left the split unbounded — the activation "wrong-row EDIT"
@@ -979,6 +996,13 @@ impl Renderer {
         let _ = el
             .class_list()
             .toggle_with_force("active", self.0.is_active_panel.get());
+
+        // `single`/`multi` reflect whether the host viewer holds one plugin
+        // child or more than one — the same pure-CSS-hook contract as
+        // `active`.
+        let is_solo = self.0.is_solo_panel.get();
+        let _ = el.class_list().toggle_with_force("single", is_solo);
+        let _ = el.class_list().toggle_with_force("multi", !is_solo);
     }
 
     /// Stamp this panel's effective `theme` attribute — its own

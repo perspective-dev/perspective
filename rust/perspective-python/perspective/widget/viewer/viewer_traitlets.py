@@ -10,15 +10,11 @@
 #  ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-from traitlets import HasTraits, TraitError, Unicode, List, Bool, Dict, validate, Enum
+from traitlets import HasTraits, Unicode, List, Bool, Dict, Enum
 
 import importlib.metadata
 
 __version__ = importlib.metadata.version("perspective-python")
-
-from .validate import (
-    validate_version,
-)
 
 
 class PerspectiveTraitlets(HasTraits):
@@ -99,4 +95,3 @@ class PerspectiveTraitlets(HasTraits):
     # @validate("title")
     # def _validate_title(self, proposal):
     #     return validate_title(proposal.value)
-

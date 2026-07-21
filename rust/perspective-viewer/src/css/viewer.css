@@ -328,7 +328,7 @@
             inset: -2px -3px -3px -3px;
             box-sizing: border-box;
             padding: 0px;
-            background: var(--psp-panel-gap--background, #808080);
+            background: var(--psp--background-color, transparent);
 
             & > .rl-panel {
                 position: relative;
@@ -341,6 +341,7 @@
             & > .rl-panel::part(container) {
                 position: relative;
                 background: var(--psp--background-color);
+                /* box-shadow: 0 0 0 4.5px var(--psp--background-color); */
             }
 
             & > .rl-panel::part(titlebar-track) {

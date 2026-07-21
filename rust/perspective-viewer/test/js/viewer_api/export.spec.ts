@@ -34,14 +34,16 @@ test.describe("Viewer Export", () => {
 
     test("export > csv method", async ({ page }) => {
         const viewer = await load(page);
-        const result = await viewer.evaluate((viewer) => viewer.export("csv"));
+        const result = await viewer.evaluate((viewer) =>
+            viewer.export({ method: "csv" }),
+        );
         expect(result).toBe('"a","b","c"\n1,2,3\n4,5,6\n');
     });
 
     test("export > json method", async ({ page }) => {
         const viewer = await load(page);
         const result = await viewer.evaluate(async (viewer) =>
-            JSON.stringify(await viewer.export("json")),
+            JSON.stringify(await viewer.export({ method: "json" })),
         );
 
         const parsed = JSON.parse(result as string);
@@ -51,7 +53,7 @@ test.describe("Viewer Export", () => {
     test("export > ndjson method", async ({ page }) => {
         const viewer = await load(page);
         const result = await viewer.evaluate((viewer) =>
-            viewer.export("ndjson"),
+            viewer.export({ method: "ndjson" }),
         );
 
         const lines = (result as string)
@@ -68,7 +70,7 @@ test.describe("Viewer Export", () => {
     test("export > arrow method returns ArrayBuffer", async ({ page }) => {
         const viewer = await load(page);
         const byteLength = await viewer.evaluate(async (viewer) => {
-            const result = await viewer.export("arrow");
+            const result = await viewer.export({ method: "arrow" });
             return (result as ArrayBuffer).byteLength;
         });
 
@@ -115,7 +117,9 @@ test.describe("Viewer Export UTF8", () => {
             await viewer.flush();
         });
 
-        const result = await viewer.evaluate((viewer) => viewer.export("csv"));
+        const result = await viewer.evaluate((viewer) =>
+            viewer.export({ method: "csv" }),
+        );
         expect(result).toBe(
             `"年月","轄區分局","路口名稱","路口名稱split","A1","A2","A3","總件數","死亡人數","主要肇因","受傷人數"\n2023-01-01,"第四分局","南屯區","五權西路與環中路口",0,3,130,18,0,"未注意車前狀態",\n2023-01-01,"第六分局","西屯區","中清聯絡道與環中路口",0,2,100,15,0,"未注意車前狀態",\n`,
         );

@@ -26,22 +26,42 @@ function PerspectiveViewerImpl(props: PerspectiveViewerProps) {
     }, [viewer]);
 
     React.useEffect(() => {
-        if (props.client) {
-            viewer?.load(props.client);
-        } else {
-            viewer?.eject();
+        if (!viewer) {
+            return;
         }
-    }, [viewer, props.client]);
 
-    React.useEffect(() => {
-        if (props.client && props.config) {
-            viewer?.restore(props.config);
-        }
+        let cancelled = false;
+        (async () => {
+            if (!props.client) {
+                await viewer.eject();
+                return;
+            }
+
+            await viewer.load(props.client);
+            if (cancelled || !props.config) {
+                return;
+            }
+
+            if ("panels" in props.config) {
+                await viewer.restoreWorkspace(props.config);
+            } else {
+                await viewer.restore(props.config);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
     }, [viewer, props.client, JSON.stringify(props.config)]);
 
     usePspListener(viewer, "perspective-click", props.onClick);
     usePspListener(viewer, "perspective-select", props.onSelect);
-    usePspListener(viewer, "perspective-config-update", props.onConfigUpdate);
+    usePspListener(
+        viewer,
+        "perspective-config-update",
+        props.onConfigUpdate,
+        (e) => e.detail.getConfig(),
+    );
 
     return (
         <perspective-viewer
@@ -62,7 +82,7 @@ function PerspectiveViewerImpl(props: PerspectiveViewerProps) {
  */
 export interface PerspectiveViewerProps {
     client?: psp.Client | Promise<psp.Client> | psp.Table | Promise<psp.Table>;
-    config?: pspViewer.ViewerConfigUpdate;
+    config?: pspViewer.ViewerConfigUpdate | pspViewer.WorkspaceConfigUpdate;
     onConfigUpdate?: (config: pspViewer.ViewerConfigUpdate) => void;
     onClick?: (data: pspViewer.PerspectiveClickEventDetail) => void;
     onSelect?: (data: pspViewer.PerspectiveSelectEventDetail) => void;
