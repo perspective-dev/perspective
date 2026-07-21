@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/esbuild-plugin",
-    "version": "4.5.2",
+    "version": "5.0.0",
     "description": "esbuild plugin for Perspective",
     "author": "",
     "license": "Apache-2.0",

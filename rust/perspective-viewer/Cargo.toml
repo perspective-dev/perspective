@@ -12,7 +12,7 @@
 
 [package]
 name = "perspective-viewer"
-version = "4.5.2"
+version = "5.0.0"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
 description = "A data visualization and analytics component, especially well-suited for large and/or streaming datasets."
@@ -47,8 +47,8 @@ anyhow = "1.0.66"
 wasm-bindgen-test = "0.3.13"
 
 [dependencies]
-perspective-client = { version = "4.5.2" }
-perspective-js = { version = "4.5.2" }
+perspective-client = { version = "5.0.0" }
+perspective-js = { version = "5.0.0" }
 
 # Provides async `Mutex` for locked sections such as `render`
 async-lock = "2.5.0"

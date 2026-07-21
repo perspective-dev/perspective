@@ -1,3 +1,27 @@
+# [v5.0.0](https://github.com/perspective-dev/perspective/releases/tag/v5.0.0)
+
+_21 July 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.5.2...v5.0.0))
+
+**Breaking**
+
+- Deprecate `@perspective-dev/workspace` [#3199](https://github.com/finos/perspective/pull/3199)
+
+Features
+
+- `&lt;perspective-viewer&gt;` API cleanup [#3201](https://github.com/finos/perspective/pull/3201)
+- Fix GenericSQLAdapter to use manual path concatenation [#3202](https://github.com/finos/perspective/pull/3202)
+- Add `@perspective-dev/anywidget` for vscode/jupyter [#3192](https://github.com/finos/perspective/pull/3192)
+
+Fixes
+
+- Fix NaN bug in DuckDB aggregate SQL model, better wasm SIMD support, fix Window build [#3200](https://github.com/finos/perspective/pull/3200)
+- Fix `date` type timezone error [#3197](https://github.com/finos/perspective/pull/3197)
+- Fix `to_columns` off-by-one serialization error [#3196](https://github.com/finos/perspective/pull/3196)
+
+Misc
+
+- Fix `mallinfo` use [#3183](https://github.com/finos/perspective/pull/3183)
+
 # [v4.5.2](https://github.com/perspective-dev/perspective/releases/tag/v4.5.2)
 
 _9 July 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.5.1...v4.5.2))
