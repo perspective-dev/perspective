@@ -124,7 +124,7 @@ else()
 endif()
 
 if(DEFINED ENV{PSP_USE_CCACHE})
-    set(CMAKE_C_COMPILE_LAUNCHER ccache)
+    set(CMAKE_C_COMPILER_LAUNCHER ccache)
     set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
 endif()
 

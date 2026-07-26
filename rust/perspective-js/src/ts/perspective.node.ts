@@ -35,7 +35,10 @@ import { createRequire } from "node:module";
 
 import * as perspective_client from "../../dist/wasm/perspective-js.js";
 import { load_wasm_stage_0 } from "./wasm/decompress.js";
+import { host_supports_memory64 } from "./wasm/features.ts";
 import * as engine from "./wasm/engine.ts";
+
+export { host_supports_memory64 } from "./wasm/features.ts";
 import { compile_perspective } from "./wasm/emscripten_api.ts";
 import * as psp_websocket from "./websocket.ts";
 import * as api from "./wasm/browser.ts";
@@ -173,16 +176,43 @@ function make_node_disk_bridge({
     };
 }
 
-const SYNC_MODULE = await fs
-    .readFile(
+async function compile_server_module(wasm_path: string) {
+    const buffer = await fs.readFile(wasm_path);
+    const bytes = await load_wasm_stage_0(buffer.buffer as ArrayBuffer);
+    return await compile_perspective(bytes.buffer as ArrayBuffer, {
+        make_disk_bridge: make_node_disk_bridge,
+    });
+}
+
+async function load_server_module() {
+    if (host_supports_memory64()) {
+        let wasm_path;
+        try {
+            wasm_path = resolve(
+                "@perspective-dev/server/dist/wasm/perspective-server.memory64.wasm",
+            );
+        } catch (e) {
+            wasm_path = undefined;
+        }
+
+        if (wasm_path !== undefined) {
+            try {
+                return await compile_server_module(wasm_path);
+            } catch (e) {
+                console.warn(
+                    "Memory64 perspective server wasm failed to load, falling back to wasm32",
+                    e,
+                );
+            }
+        }
+    }
+
+    return await compile_server_module(
         resolve("@perspective-dev/server/dist/wasm/perspective-server.wasm"),
-    )
-    .then((buffer) => load_wasm_stage_0(buffer.buffer as ArrayBuffer))
-    .then((buffer) =>
-        compile_perspective(buffer.buffer as ArrayBuffer, {
-            make_disk_bridge: make_node_disk_bridge,
-        }),
     );
+}
+
+const SYNC_MODULE = await load_server_module();
 
 let SYNC_CLIENT: perspective_client.Client;
 
@@ -512,6 +542,7 @@ export default {
     join,
     websocket,
     worker,
+    host_supports_memory64,
     get_hosted_table_names,
     on_hosted_tables_update,
     remove_hosted_tables_update,
