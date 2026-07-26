@@ -60,8 +60,6 @@ impl ViewSubscriptionData {
         Ok(JsValue::UNDEFINED)
     }
 
-    /// TODO Use serde to serialize the full view config, instead of calculating
-    /// `is_aggregated` here.
     async fn update_view_stats(self) -> ApiResult<JsValue> {
         let dimensions = self.view.dimensions().await?;
         let num_rows = dimensions.num_table_rows as u32;
@@ -81,13 +79,16 @@ impl ViewSubscriptionData {
     }
 
     async fn internal_delete(&self) -> ApiResult<()> {
+        if self.is_deleted.replace(true) {
+            return Ok(());
+        }
+
         let view = &self.view;
         if self.on_update.is_some() {
             view.remove_update(self.callback_id.get()).await?;
         }
 
         view.delete().await?;
-        self.is_deleted.set(true);
         Ok(())
     }
 }

@@ -29,7 +29,6 @@ export class PageView {
     container: Locator;
     settingsPanel: SettingsPanel;
     settingsCloseButton: Locator;
-    /** Opens the settings panel. */
     settingsButton: Locator;
     columnSettingsSidebar: ColumnSettingsSidebar;
 
@@ -42,7 +41,9 @@ export class PageView {
         this.settingsCloseButton = this.container.locator(
             "#settings_close_button",
         );
-        this.settingsButton = this.container.locator("#settings_button");
+        this.settingsButton = this.container
+            .locator("perspective-viewer-tab .psp-tab-settings")
+            .first();
         this.columnSettingsSidebar = new ColumnSettingsSidebar(this);
         this.settingsPanel = new SettingsPanel(this);
 

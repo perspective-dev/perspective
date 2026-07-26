@@ -388,10 +388,24 @@ pub(super) fn create_shared_subscriptions(ctx: &Context<PerspectiveViewer>) -> V
             .add_notify_listener(&cb)
     };
 
+    // Staged-set transitions (`Workspace::stage_panel`/`clear_staged`) → a
+    // root re-render for the stage-level chrome (`only-child` class,
+    // binding resync). `MainPanel` inserts/reveals promoted panels via its
+    // OWN `staged_changed` subscription (`MainPanelMsg::StagedChanged`) —
+    // see `WorkspaceData::staged_changed`.
+    let staged_sub = {
+        let cb = ctx.link().callback(|_: ()| LayoutChanged);
+        ctx.props()
+            .workspace
+            .staged_changed()
+            .add_notify_listener(&cb)
+    };
+
     let mut subscriptions = Vec::new();
     subscriptions.extend(presentation_props_sub);
     subscriptions.extend(dragdrop_props_sub);
     subscriptions.push(filters_sub);
+    subscriptions.push(staged_sub);
     subscriptions
 }
 

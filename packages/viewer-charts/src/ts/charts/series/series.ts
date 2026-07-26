@@ -13,6 +13,7 @@
 import type { ColumnDataMap } from "../../data/view-reader";
 import type { WebGLContextManager } from "../../webgl/context-manager";
 import type { ZoomConfig } from "../../interaction/zoom-controller";
+import type { FacetGrid } from "../../layout/facet-grid";
 import { CategoricalYChart } from "../common/categorical-y-chart";
 import { type PlotRect } from "../../layout/plot-layout";
 import { type AxisDomain } from "../../axis/numeric-axis";
@@ -124,6 +125,35 @@ export class SeriesChart extends CategoricalYChart {
     _series: SeriesInfo[] = [];
 
     /**
+     * Whether the CURRENT build's geometry was produced for facet-grid
+     * mode (`facet_mode: "grid"` with real splits). The render / hover
+     * paths branch on this — never on the live `_facetConfig` — so a
+     * `setPluginConfig` that flips `facet_mode` between a build and a
+     * redraw can't pair grid-mode rendering with overlay-built stack
+     * geometry (or vice versa). The host always follows a
+     * `plugin.restore` with an `update` → `loadAndRender`, so the flag
+     * catches up one build later.
+     */
+    _facetActive = false;
+
+    /**
+     * Facet grid of the most recent faceted frame — one cell per
+     * split group. `null` in overlay / no-split frames. Read by the
+     * chrome overlay, hover hit-test, and tooltip pin to resolve the
+     * per-facet `PlotLayout`.
+     */
+    _facetGrid: FacetGrid | null = null;
+
+    /**
+     * Per-split contiguous instance ranges in the uploaded bar
+     * buffers, indexed by `splitIdx`. Populated by
+     * `uploadBarInstances` when `_facetActive` (instances are emitted
+     * split-major); `null` in overlay mode. Each facet's draw binds
+     * the instance attributes at `start` and draws `count` instances.
+     */
+    _facetBarRanges: { start: number; count: number }[] | null = null;
+
+    /**
      * Columnar bar/area record storage. Indexed by bar slot in
      * `[0, _bars.count)`. Replaces the legacy `SeriesChartRecord[]` to
      * avoid per-record POJO allocation on data load.
@@ -205,8 +235,12 @@ export class SeriesChart extends CategoricalYChart {
 
     /**
      * `domain_mode: "expand"` accumulators. Hold the running union of
-     * every prior build's value-axis (and, in numeric-category mode,
-     * category-axis) extent for as long as the option is active.
+     * every prior build's VALUE-axis extents (primary + alt) for as
+     * long as the option is active. The category axis deliberately has
+     * NO accumulator: `domain_mode` scopes to the value axis only on
+     * band charts (Y for the Y-family, X for X Bar) — a numeric or
+     * datetime `group_by` axis always fits the current data, so a
+     * streaming chart's time axis releases departed categories.
      * Cleared in `resetExpandedDomain` — wired from the worker's
      * `resetAllZooms` and from view-config mutations on the base
      * class. `null` whenever the option is `"fit"` or the accumulator
@@ -214,7 +248,6 @@ export class SeriesChart extends CategoricalYChart {
      */
     _expandedLeftDomain: { min: number; max: number } | null = null;
     _expandedRightDomain: { min: number; max: number } | null = null;
-    _expandedCategoryDomain: { min: number; max: number } | null = null;
 
     /**
      * Numeric category-axis state. Populated only when `group_by` has
@@ -296,7 +329,13 @@ export class SeriesChart extends CategoricalYChart {
      */
     _visibleBarIndices: Int32Array = new Int32Array(0);
 
-    _legendRects: { seriesId: number; rect: PlotRect }[] = [];
+    /**
+     * Hit-test rects for legend entries. Overlay mode: one entry per
+     * series (`seriesIds.length === 1`). Facet-grid mode: one entry
+     * per AGGREGATE, carrying every split's seriesId — a legend
+     * toggle hides/shows the aggregate across all facets at once.
+     */
+    _legendRects: { seriesIds: number[]; rect: PlotRect }[] = [];
 
     /**
      * Cached legend layout — recomputed only on series-set / palette /
@@ -486,6 +525,9 @@ export class SeriesChart extends CategoricalYChart {
             this._cornerBuffer = createQuadCornerBuffer(gl);
         }
 
+        const facetSplits =
+            this._splitBy.length > 0 && this._facetConfig.facet_mode === "grid";
+
         const result = buildSeriesPipeline({
             columns,
             numRows: endRow,
@@ -504,15 +546,21 @@ export class SeriesChart extends CategoricalYChart {
             bandInnerFrac: this._pluginConfig.band_inner_frac,
             barInnerPad: this._pluginConfig.bar_inner_pad,
             includeZero: this._pluginConfig.include_zero,
+            facetSplits,
             scratchBars: this._bars,
             scratchPosStack: this._posStackScratch,
             scratchNegStack: this._negStackScratch,
         });
 
-        // `domain_mode: "expand"` post-build union. Each call mutates
-        // the pipeline result in place so the downstream assignments
-        // below (`_leftDomain`, `_rightDomain`, `_numericCategoryDomain`,
-        // `_categoryOrigin`) automatically pick up the grown extent.
+        // `domain_mode: "expand"` post-build union — VALUE axes only
+        // (`leftDomain`/`rightDomain` are the logical value domains,
+        // orientation-agnostic, so this is Y for the Y-family and X for
+        // X Bar). The category axis is NEVER expanded: it identifies
+        // the data, and pinning a numeric/datetime `group_by` axis to
+        // departed categories froze streaming charts on their full
+        // history. Each call mutates the pipeline result in place so
+        // the downstream assignments below (`_leftDomain`,
+        // `_rightDomain`) automatically pick up the grown extent.
         // `"fit"` (or a fresh reset) leaves the result untouched and
         // clears the accumulators so the next toggle starts fresh.
         if (this._pluginConfig.domain_mode === "expand") {
@@ -527,22 +575,18 @@ export class SeriesChart extends CategoricalYChart {
                     result.rightDomain,
                 );
             }
-
-            // // TODO(texodus): I don't think this is right, its
-            if (result.numericCategoryDomain) {
-                this._expandedCategoryDomain = expandDomainInPlace(
-                    this._expandedCategoryDomain,
-                    result.numericCategoryDomain,
-                );
-            }
         } else {
             this._expandedLeftDomain = null;
             this._expandedRightDomain = null;
-            this._expandedCategoryDomain = null;
         }
 
         this._aggregates = result.aggregates;
         this._splitPrefixes = result.splitPrefixes;
+
+        // Stamp AFTER the build so render always branches on the mode
+        // the geometry was actually built for. A single "" prefix means
+        // no real splits — facet mode degenerates to the single plot.
+        this._facetActive = facetSplits && result.splitPrefixes.length > 1;
         this._rowPaths = result.rowPaths;
         this._numCategories = result.numCategories;
         this._rowOffset = result.rowOffset;
@@ -647,7 +691,6 @@ export class SeriesChart extends CategoricalYChart {
     override resetExpandedDomain(): void {
         this._expandedLeftDomain = null;
         this._expandedRightDomain = null;
-        this._expandedCategoryDomain = null;
     }
 
     protected destroyInternal(): void {
@@ -663,6 +706,9 @@ export class SeriesChart extends CategoricalYChart {
         this._program = null;
         this._locations = null;
         this._cornerBuffer = null;
+        this._facetActive = false;
+        this._facetGrid = null;
+        this._facetBarRanges = null;
         this._bars = emptyBarColumns();
         this._series = [];
         this._barSeries = [];
@@ -727,9 +773,16 @@ function uniqueAggLabels(series: SeriesInfo[], axis: 0 | 1): string {
 /**
  * Resolve the per-series palette and stamp it onto `_series[i].color`.
  * Cached on `_paletteCache` keyed by reference identity of the theme
- * inputs + series count — only `restyle()` (which clears `_paletteCache`
- * via `invalidateTheme`) or a data load (which clears it explicitly)
- * forces re-resolution.
+ * inputs + resolved color count — only `restyle()` (which clears
+ * `_paletteCache` via `invalidateTheme`) or a data load (which clears
+ * it explicitly) forces re-resolution.
+ *
+ * Facet-grid mode colors by AGGREGATE, not by (agg × split) series:
+ * the facet is the axis of splitting, so aggregate `k` renders the
+ * same color in every facet and the legend lists aggregates once.
+ * Overlay mode keeps the per-series palette (splits are distinguished
+ * by color there). `_facetActive` only changes at build time, which
+ * clears the cache, so the stamp mode can't go stale.
  *
  * Returns true when the cache changed (caller invalidates color upload).
  */
@@ -737,7 +790,9 @@ export function ensurePalette(chart: SeriesChart): boolean {
     const theme = chart._resolveTheme();
     const seriesPalette = theme.seriesPalette;
     const gradientStops = theme.gradientStops;
-    const seriesLength = chart._series.length;
+    const paletteCount = chart._facetActive
+        ? Math.max(1, chart._aggregates.length)
+        : chart._series.length;
 
     const key = chart._paletteCacheKey;
     if (
@@ -745,7 +800,7 @@ export function ensurePalette(chart: SeriesChart): boolean {
         key &&
         key.seriesPalette === seriesPalette &&
         key.gradientStops === gradientStops &&
-        key.seriesLength === seriesLength
+        key.seriesLength === paletteCount
     ) {
         return false;
     }
@@ -753,13 +808,19 @@ export function ensurePalette(chart: SeriesChart): boolean {
     const palette = resolvePaletteCached(
         seriesPalette,
         gradientStops,
-        seriesLength,
+        paletteCount,
     );
     chart._paletteCache = palette;
-    chart._paletteCacheKey = { seriesPalette, gradientStops, seriesLength };
+    chart._paletteCacheKey = {
+        seriesPalette,
+        gradientStops,
+        seriesLength: paletteCount,
+    };
 
     for (let i = 0; i < chart._series.length; i++) {
-        chart._series[i].color = palette[i];
+        chart._series[i].color = chart._facetActive
+            ? palette[chart._series[i].aggIdx]
+            : palette[i];
     }
 
     return true;

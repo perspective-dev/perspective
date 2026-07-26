@@ -37,9 +37,33 @@ use crate::workspace::PanelId;
 
 impl PerspectiveViewer {
     pub(super) fn on_layout_changed(&mut self, ctx: &Context<Self>) -> bool {
-        // The panel set may have changed (add); re-subscribe titles.
         self._title_subscriptions = subscribe_panel_titles(ctx);
+        self.resync_active(ctx);
         true
+    }
+
+    /// Level-triggered binding sync: re-point the root's engine bindings at
+    /// the model's *current* active panel (or the detached empty engines at
+    /// zero panels) when they differ, by `Rc` identity. Catches model-side
+    /// activations that never dispatch `SetActivePanel`.
+    fn resync_active(&mut self, ctx: &Context<Self>) -> bool {
+        let session = ctx
+            .props()
+            .workspace
+            .active_session()
+            .unwrap_or_else(|| self.empty_session.clone());
+        let renderer = ctx
+            .props()
+            .workspace
+            .active_renderer()
+            .unwrap_or_else(|| self.empty_renderer.clone());
+
+        if session == self.active_session && renderer == self.active_renderer {
+            false
+        } else {
+            self.retarget_active(ctx, session, renderer);
+            true
+        }
     }
 
     pub(super) fn on_set_active_panel(
@@ -50,31 +74,29 @@ impl PerspectiveViewer {
     ) -> bool {
         let id = PanelId::from(id);
         let prev = ctx.props().workspace.active_id();
-        if prev == id || !ctx.props().workspace.set_active(id.clone()) {
-            // A no-op activation resolves immediately (nothing to render).
+        if prev.as_ref() == Some(&id) || !ctx.props().workspace.set_active(id.clone()) {
+            let resynced = self.resync_active(ctx);
             if let Some(completion) = completion {
                 completion.resolve_after(async { Ok(()) });
             }
 
-            false
+            resynced
         } else {
-            let new_session = ctx.props().workspace.active_session();
-            let new_renderer = ctx.props().workspace.active_renderer();
-            self.retarget_active(ctx, new_session, new_renderer);
+            let new_session = ctx
+                .props()
+                .workspace
+                .active_session()
+                .unwrap_or_else(|| self.empty_session.clone());
 
-            // Plugins render activation-dependent chrome (e.g. the
-            // datagrid's extra "edit" column-header row while the
-            // settings sidebar is open), but nothing else redraws a
-            // panel on activation alone — so nudge BOTH sides of the
-            // switch, each as ONE transactional, unthrottled draw that
-            // stamps the `active` class atomically with the plugin DOM
-            // it styles (`activation_render` — see the I5 audit gap in
-            // SESSION_CONFIG_COHERENCE_PLAN.md §4). Hidden/undrawn
-            // panels are skipped by the activation guard and the
-            // plugin's own connected check. The runs are JOINED into
-            // the caller's completion (invariant I6).
+            let new_renderer = ctx
+                .props()
+                .workspace
+                .active_renderer()
+                .unwrap_or_else(|| self.empty_renderer.clone());
+
+            self.retarget_active(ctx, new_session, new_renderer);
             let mut nudges = Vec::new();
-            for pid in [&prev, &id] {
+            for pid in prev.iter().chain(std::iter::once(&id)) {
                 if let Some(panel) = ctx.props().workspace.panel(pid)
                     && panel.renderer.is_plugin_activated().unwrap_or(false)
                 {
@@ -122,38 +144,26 @@ impl PerspectiveViewer {
     ) -> bool {
         let id = PanelId::from(id);
 
-        // Never close the last panel — it would leave an empty workspace
-        // with an invalid active id. (The frame's close button is hidden
-        // for a lone panel; this guards the context-menu path too.) The
-        // public API documents this as a no-op, so it RESOLVES rather than
-        // cancels.
-        if ctx.props().workspace.len() <= 1 {
-            if let Some(completion) = completion {
-                completion.resolve_after(async { Ok(()) });
+        let was_active = ctx.props().workspace.active_id().as_ref() == Some(&id);
+        let removed = ctx.props().workspace.remove_panel(&id);
+        if was_active {
+            if let Some(next) = ctx.props().workspace.panel_ids().first().cloned() {
+                ctx.props().workspace.set_active(next);
             }
 
-            return false;
-        }
-
-        let was_active = ctx.props().workspace.active_id() == id;
-        let removed = ctx.props().workspace.remove_panel(&id);
-
-        // If the active panel was closed, re-point active to a surviving
-        // panel BEFORE anything reads `active_*` (the workspace's `active`
-        // still names the just-removed id). The lone panel can't be
-        // closed (its close button is hidden), so a survivor exists.
-        if was_active && let Some(next) = ctx.props().workspace.panel_ids().first().cloned() {
-            ctx.props().workspace.set_active(next);
-            let new_session = ctx.props().workspace.active_session();
-            let new_renderer = ctx.props().workspace.active_renderer();
+            let new_session = ctx
+                .props()
+                .workspace
+                .active_session()
+                .unwrap_or_else(|| self.empty_session.clone());
+            let new_renderer = ctx
+                .props()
+                .workspace
+                .active_renderer()
+                .unwrap_or_else(|| self.empty_renderer.clone());
             self.retarget_active(ctx, new_session, new_renderer);
         }
 
-        // Synchronous eject (see `eject_panel` for why its sync halves must
-        // not be deferred); the DEFERRED teardown future resolves the
-        // caller's completion, carrying any teardown error (invariant I6 —
-        // previously fire-and-forget). Surviving panels' resizes are driven
-        // by the subsequent layout-update event and are attributed to it.
         let eject = removed.map(eject_panel);
         match (eject, completion) {
             (Some(eject), Some(completion)) => completion.resolve_after(eject),
@@ -162,14 +172,7 @@ impl PerspectiveViewer {
             (None, None) => {},
         }
 
-        // Closing a MASTER retracts its contribution (`remove_panel` already
-        // cleaned the model); re-stamp the survivors so details drop its
-        // clauses (diff-aware — a detail close re-renders nothing).
         apply_global_filters(&ctx.props().workspace);
-
-        // The panel set shrank; drop the closed panel's title subscription.
-        // (`MainPanel` clears its own `maximized` state when the panel's cell
-        // leaves the layout.)
         self._title_subscriptions = subscribe_panel_titles(ctx);
         true
     }
@@ -182,8 +185,6 @@ impl PerspectiveViewer {
             let notify = ctx.link().callback(|_: ()| LayoutChanged);
             let activate = ctx.link().callback(|id| SetActivePanel(id, None));
             ApiFuture::spawn(async move {
-                // Snapshot the source panel's config, then build a new
-                // independent panel from it.
                 let config = panel
                     .renderer
                     .clone()
@@ -193,8 +194,6 @@ impl PerspectiveViewer {
                     .await?;
 
                 let update = ViewerConfigUpdate::decode(&config.encode()?)?;
-                // The SOURCE panel's client — its table name is only
-                // meaningful there (it may not be the default client).
                 let client = panel.session.get_client();
                 let new_id = create_panel(
                     &elem,
@@ -206,8 +205,7 @@ impl PerspectiveViewer {
                     client,
                 )
                 .await?;
-                // Make the duplicate active so the shared settings/toolbar
-                // immediately target it.
+
                 activate.emit(new_id.to_string());
                 Ok(())
             });
@@ -225,15 +223,11 @@ impl PerspectiveViewer {
             let notify = ctx.link().callback(|_: ()| LayoutChanged);
             let activate = ctx.link().callback(|id| SetActivePanel(id, None));
             ApiFuture::spawn(async move {
-                // A minimal config: the source's table (if any), default
-                // everything else.
                 let update = ViewerConfigUpdate {
                     table: table_name.map(TableUpdate::Update).unwrap_or_default(),
                     ..Default::default()
                 };
 
-                // The SOURCE panel's client — its table name is only
-                // meaningful there (it may not be the default client).
                 let client = panel.session.get_client();
                 let new_id = create_panel(
                     &elem,
@@ -245,8 +239,7 @@ impl PerspectiveViewer {
                     client,
                 )
                 .await?;
-                // Make the new panel active so the shared settings/toolbar
-                // immediately target it.
+
                 activate.emit(new_id.to_string());
                 Ok(())
             });
@@ -295,8 +288,7 @@ impl PerspectiveViewer {
                 Some(client),
             )
             .await?;
-            // Make the new panel active so the shared settings/toolbar
-            // immediately target it.
+
             activate.emit(new_id.to_string());
             Ok(())
         });
@@ -315,28 +307,20 @@ impl PerspectiveViewer {
         self._active_subscriptions = create_active_subscriptions(ctx, &session, &renderer);
         self.session_props = session.to_props();
         self.renderer_props = renderer.to_props(None);
-        // Level-triggered: read the new panel's TRUE in-flight count (its
-        // `run_state_changed` subscription tracks it from here) — switching
-        // to a busy panel spins truthfully, instead of the old reset-to-0.
         self.update_count = session.in_flight_config_runs();
         self.active_session = session;
         self.active_renderer = renderer;
-
-        // Chrome (status bar / settings) follows the active panel: mirror its
-        // EFFECTIVE theme — its own per-panel theme, else the registry default
-        // (first registered theme) — onto the host `theme` attribute, so the
-        // shadow's CSS custom properties (which the chrome inherits) resolve to
-        // it. The normal theme pathway (`set_theme_name`) also refreshes the
-        // picker's `selected_theme` (via `theme_config_updated`) and any external
-        // theme listeners; its no-op guard avoids a redundant emit when the host
-        // already matches.
-        let default_theme = self.presentation_props.available_themes.first().cloned();
-        if let Some(theme) = self.active_renderer.theme().or(default_theme) {
-            let presentation = ctx.props().presentation.clone();
-            ApiFuture::spawn(async move {
+        let presentation = ctx.props().presentation.clone();
+        let workspace = ctx.props().workspace.clone();
+        ApiFuture::spawn(async move {
+            let default_theme = presentation.get_default_theme_name().await;
+            if let Some(renderer) = workspace.active_renderer()
+                && let Some(theme) = renderer.theme().or(default_theme)
+            {
                 presentation.set_theme_name(Some(&theme)).await?;
-                Ok(())
-            });
-        }
+            }
+
+            Ok(())
+        });
     }
 }

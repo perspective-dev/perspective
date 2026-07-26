@@ -29,9 +29,14 @@ pub fn delete_all<T: Component>(workspace: &Workspace, root: &Root<T>) -> ApiFut
     clone!(workspace, root);
     ApiFuture::new(async move {
         let panels = workspace
-            .panel_ids()
+            .take_reserved()
             .into_iter()
-            .filter_map(|id| workspace.panel(&id))
+            .chain(
+                workspace
+                    .panel_ids()
+                    .into_iter()
+                    .filter_map(|id| workspace.panel(&id)),
+            )
             .collect::<Vec<_>>();
 
         // Each panel owns its own `Renderer`/draw lock, so dispose them
@@ -44,17 +49,22 @@ pub fn delete_all<T: Component>(workspace: &Workspace, root: &Root<T>) -> ApiFut
         let results = join_all(panels.iter().map(|panel| {
             clone!(panel.session, panel.renderer);
             session.table_unloaded.emit(false);
+            let was_errored = session.is_errored();
             renderer.clone().with_lock(async move {
                 renderer.delete()?;
-                session
+                let reset = session
                     .reset(ResetOptions {
                         config: true,
                         expressions: true,
                         table: Some(TableIntermediateState::Ejected),
                         ..ResetOptions::default()
                     })
-                    .await?;
-                Ok(())
+                    .await;
+
+                match reset {
+                    Err(_) if was_errored => Ok(()),
+                    other => other,
+                }
             })
         }))
         .await;

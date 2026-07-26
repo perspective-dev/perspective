@@ -54,6 +54,7 @@ export type WorkerMsg =
     | UserClickMsg
     | UserSelectMsg
     | LoadAndRenderAckMsg
+    | ResizeAckMsg
     | FrameBitmapMsg
     | ErrorMsg;
 
@@ -312,11 +313,31 @@ export interface DeselectMsg {
     kind: "deselect";
 }
 
+/**
+ * Host → worker: resize the chart to a new CSS box. Replied with
+ * {@link ResizeAckMsg} AFTER the resized frame PRESENTS — the host's
+ * `plugin.resize()` promise is the viewer's presize contract ("the
+ * plugin has repainted at the target box when this resolves"), so an
+ * ack at message-receipt would let the settings-pane layout commit
+ * against the old-dimensions bitmap (the aspect-ratio warp).
+ */
 export interface ResizeMsg {
     kind: "resize";
+    msgId: number;
     cssWidth: number;
     cssHeight: number;
     dpr: number;
+}
+
+/**
+ * Worker → host reply to a `ResizeMsg`, posted after the resized
+ * frame's present completes. Always sent — present failures and
+ * torn-down charts included — so the host's awaited promise resolves
+ * deterministically.
+ */
+export interface ResizeAckMsg {
+    kind: "resizeAck";
+    msgId: number;
 }
 
 export interface ClearMsg {

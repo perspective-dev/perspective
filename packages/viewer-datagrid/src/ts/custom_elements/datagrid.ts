@@ -245,6 +245,41 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         }
     }
 
+    /**
+     * Host presize protocol: stage a render for the TARGET element box
+     * `(width, height)` — the box the host's pending layout commit will
+     * produce — via `regular-table`'s `predraw()`, which runs the data
+     * fetch and viewport calculation now without touching the visible
+     * DOM. Resolves to the commit closure; the host invokes it in the
+     * same task as the layout commit, landing geometry and cells in one
+     * paint.
+     *
+     * The `predraw()` box is derived by delta: `regular-table` fills this
+     * element with constant chrome, so the element's box delta IS the
+     * table's. When column widths for the target viewport aren't yet
+     * measured (first paint, post-`resetAutoSize`), `predraw()` draws
+     * inline and the closure no-ops — the pre-staging behavior, degraded
+     * not broken.
+     */
+    async presize(width: number, height: number): Promise<(() => void) | void> {
+        if (
+            !this.isConnected ||
+            this.offsetParent == null ||
+            !this._initialized
+        ) {
+            return;
+        }
+
+        const rect = this.getBoundingClientRect();
+        return await this.regular_table.predraw(
+            Math.max(0, this.regular_table.clientWidth + (width - rect.width)),
+            Math.max(
+                0,
+                this.regular_table.clientHeight + (height - rect.height),
+            ),
+        );
+    }
+
     async clear(): Promise<void> {
         this.regular_table.resetAutoSize();
         this.regular_table.clear();

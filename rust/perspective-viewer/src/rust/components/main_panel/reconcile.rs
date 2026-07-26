@@ -22,7 +22,6 @@ use yew::prelude::*;
 
 use super::MainPanel;
 use crate::js::RegularLayout;
-use crate::tasks::resize_callback;
 
 /// Layout interaction tuning constants, applied via
 /// [`RegularLayout::restore_physics`] when the layout element mounts.
@@ -41,21 +40,79 @@ const LAYOUT_PHYSICS: LayoutPhysics = LayoutPhysics {
 };
 
 impl MainPanel {
+    /// Size each STAGED panel's hidden wrapper (`.psp-staging` — see
+    /// `MainPanel::render` and `Workspace::stage_panel`) to its PREDICTED
+    /// post-insert cell: an equal share of the layout box's width (the
+    /// reconcile insert splits the root horizontally with equal
+    /// redistribution) minus the frame-chrome fallback the presize sweep
+    /// uses. Prediction only — the staged first draw renders at these
+    /// dimensions, and any delta from the real committed cell is
+    /// reconciled by the post-commit reactive resize (free when exact,
+    /// via the charts transport's dims-unchanged guard). Imperative
+    /// because it MEASURES the committed layout box, which a `view()`
+    /// style prop cannot.
+    pub(super) fn size_staging_wrappers(&self) {
+        let Some(root) = self.main_panel_ref.cast::<web_sys::Element>() else {
+            return;
+        };
+
+        let Ok(wrappers) = root.query_selector_all(".psp-staging") else {
+            return;
+        };
+
+        if wrappers.length() == 0 {
+            return;
+        }
+
+        let Some(layout) = self.layout_ref.cast::<web_sys::HtmlElement>() else {
+            return;
+        };
+
+        let stage = layout.get_bounding_client_rect();
+        let shares = (self.inserted.len() + wrappers.length() as usize).max(1) as f64;
+        let (chrome_w, chrome_h) = crate::tasks::CHROME_FALLBACK;
+        let width = (stage.width() / shares - chrome_w).max(0.0);
+        let height = (stage.height() - chrome_h).max(0.0);
+        for i in 0..wrappers.length() {
+            if let Some(node) = wrappers.get(i)
+                && let Some(el) = node.dyn_ref::<web_sys::HtmlElement>()
+            {
+                let _ = el.style().set_property("width", &format!("{width}px"));
+                let _ = el.style().set_property("height", &format!("{height}px"));
+            }
+        }
+    }
+
     /// Reconcile the `<regular-layout>` grid against `panel_ids`: `insertPanel`
     /// newly-rendered cells (flipping each from `display:none` to a visible
     /// grid cell) and `removePanel` cells whose panels are gone.
     pub(super) fn reconcile(&mut self, ctx: &Context<Self>) {
+        // The `<regular-layout>` element is rendered unconditionally and so is
+        // stable for this component's lifetime — zero panels is just another
+        // count (empty insert loop; the retain below removes the last cell,
+        // collapsing the layout tree to a childless split). Do NOT reset
+        // `listener_target`/`inserted` on empty: the listeners stay attached
+        // to the persistent element.
         let Some(el) = self.layout_ref.cast::<web_sys::HtmlElement>() else {
             return;
         };
 
-        // Attach the close-detection + active-panel-sync listeners once (the
-        // `<regular-layout>` element is stable for this MainPanel's lifetime),
-        // and configure resize physics — `GRID_DIVIDER_SIZE` is the divider hit
-        // tolerance (0 by default → not resizable). The cell-edge band it grabs
-        // must be left uncovered: each `.rl-panel` carries a `margin` (viewer.css)
-        // so pointerdowns there reach `regular-layout` instead of the frame.
-        if !self.listener_attached {
+        // Attach the close-detection + active-panel-sync listeners once per
+        // ELEMENT (the `<regular-layout>` element is keyed into a fully-keyed
+        // sibling list, so Yew reuses one instance for this MainPanel's
+        // lifetime), and configure resize physics — `GRID_DIVIDER_SIZE` is the
+        // divider hit tolerance (0 by default → not resizable). The cell-edge
+        // band it grabs must be left uncovered: each `.rl-panel` carries a
+        // `margin` (viewer.css) so pointerdowns there reach `regular-layout`
+        // instead of the frame. Comparing the ELEMENT (not a latched bool)
+        // self-heals an instance swap: a fresh element boots an EMPTY layout
+        // tree with no listeners, so everything must be re-bound and every
+        // placed panel re-inserted (see `listener_target`).
+        if self.listener_target.as_ref() != Some(&el) {
+            if self.listener_target.is_some() {
+                self.inserted.clear();
+            }
+
             let _ = el.add_event_listener_with_callback(
                 RegularLayout::UPDATE_EVENT,
                 self._layout_update_listener.as_ref().unchecked_ref(),
@@ -71,17 +128,12 @@ impl MainPanel {
                 self._layout_before_resize_listener.as_ref().unchecked_ref(),
             );
 
-            let _ = el.add_event_listener_with_callback(
-                "contextmenu",
-                self._layout_contextmenu_listener.as_ref().unchecked_ref(),
-            );
-
             if let Ok(physics) = JsValue::from_serde_ext(&LAYOUT_PHYSICS) {
                 el.unchecked_ref::<RegularLayout>()
                     .restore_physics(&physics);
             }
 
-            self.listener_attached = true;
+            self.listener_target = Some(el.clone());
         }
 
         let layout: RegularLayout = el.unchecked_into();
@@ -111,11 +163,18 @@ impl MainPanel {
                 continue;
             }
 
+            // STAGED panels are withheld from the layout: their first draw
+            // is completing in the hidden staging wrapper (see
+            // `Workspace::stage_panel`). The promote re-render clears the
+            // flag, and this loop then inserts the already-drawn panel.
+            if ctx.props().workspace.is_staged(id) {
+                continue;
+            }
+
             // Already placed in the layout tree (the layout is the placement
             // source of truth — e.g. a restored tree naming a panel this
             // component hasn't tracked yet): record it, never re-split it.
-            let path = layout.calculate_path(name);
-            if !path.is_null() && !path.is_undefined() {
+            if layout.contains_panel(name) {
                 self.inserted.push(name.to_owned());
                 continue;
             }
@@ -129,17 +188,6 @@ impl MainPanel {
             let path = JsValue::from(js_sys::Array::of1(&JsValue::from_f64(index as f64)));
             let _ = layout.insert_panel(name, path, JsValue::from_bool(true));
             self.inserted.push(name.to_owned());
-
-            // If this panel's plugin is already drawn (e.g. its cell was
-            // re-created while the plugin persisted in the light DOM), redraw it
-            // now its cell is visible. A not-yet-loaded panel is skipped — the
-            // normal draw path renders into the now-visible cell, and forcing a
-            // render before a `Table` is loaded throws "No `Table` attached".
-            if let Some(panel) = ctx.props().workspace.panel(id)
-                && panel.renderer.is_plugin_activated().unwrap_or(false)
-            {
-                resize_callback(&panel.session, &panel.renderer).emit(());
-            }
         }
 
         // Remove cells whose panels are gone.

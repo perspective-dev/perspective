@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { test, expect } from "../helpers.ts";
+import { armInvariants } from "./harness.ts";
 
 const TABLE = "load-viewer-csv";
 
@@ -66,6 +67,11 @@ test.beforeEach(async ({ page }) => {
         }
     });
 });
+
+// Structural invariants (I1 element identity / I2 tree sanity / I3
+// model-layout-DOM coherence) gate every passing test's end state - see
+// `harness.ts` and `.plan/WORKSPACE_TEST_PLAN.md`.
+armInvariants(test);
 
 async function restore(page, config) {
     await page.evaluate(async (config) => {

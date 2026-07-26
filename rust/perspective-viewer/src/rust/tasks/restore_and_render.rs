@@ -17,7 +17,7 @@
 use futures::Future;
 use perspective_client::clone;
 
-use super::pipeline::{RunOrigin, bind_snapshot, dispatch_bound};
+use super::pipeline::{RunOrigin, RunSpec, locked_run};
 use crate::config::{OptionalUpdate, ViewerConfigUpdate};
 use crate::presentation::Presentation;
 use crate::renderer::Renderer;
@@ -33,6 +33,13 @@ use crate::*;
 /// `Unchanged` reconcile still repaints via `update`); an `Internal`
 /// restore that reconciles `Unchanged` and changes no plugin state
 /// dispatches nothing.
+///
+/// This function owns the PRE-LOCK prologue only (element-level settings /
+/// title / host-theme mirror, plugin resolution, the synchronous config
+/// commit and spinner token); the run itself is
+/// [`locked_run`] with the caller's `task` awaited inside the lock. The
+/// `update`'s `table` field is NOT applied here — table binding is the
+/// `task`'s job (see `restore_panel` / `table_lifecycle`).
 pub fn restore_and_render(
     session: &Session,
     renderer: &Renderer,
@@ -119,7 +126,7 @@ pub fn restore_and_render(
         session.commit_view_config(view_config)?;
 
         // Spinner accounting (RAII): held to the end of this restore —
-        // INCLUDING the deferred-draw exit below (no table yet → no
+        // INCLUDING the deferred-draw exit (no table yet → no
         // `bind_snapshot`), which under the old edge-counted scheme
         // stranded the `StatusIndicator` spinner permanently.
         let _run_token = session.begin_config_run();
@@ -129,99 +136,16 @@ pub fn restore_and_render(
         // panel's renderer default-theme cache, which every locked draw
         // stamps the effective theme from.
         renderer.set_default_theme(presentation.get_default_theme_name().await);
-        let run_result = {
-            clone!(session, renderer, presentation);
-            renderer
-                .clone()
-                .render_task(|guard| async move {
-                    // Mount eagerly — BEFORE the (possibly slow) `task`
-                    // completion gate — so the panel's frame is never empty
-                    // while it resolves. Idempotent; pre-swap this is the
-                    // outgoing plugin, exactly as before.
-                    renderer.mount_active_plugin()?;
-                    task.await?;
-                    let plugin_swapped = renderer.commit_plugin(plugin_idx)?;
-                    // `commit_plugin` above already selected, so the pure query
-                    // returns it (no need to re-select via
-                    // `ensure_plugin_selected`).
-                    let plugin = renderer.active_plugin().ok_or("No Plugin")?;
+        locked_run(&session, &renderer, RunSpec {
+            origin,
+            plugin_idx,
+            plugin_config,
+            columns_config,
+            task: Some(Box::pin(task)),
+            presentation: Some(presentation.clone()),
+        })
+        .await?;
 
-                    // "Stamp before restyle": the plugin captures its `--psp-*`
-                    // CSS at first `draw()`, so stamp the effective `theme` attr
-                    // NOW, inside the locked run, before any plugin style read —
-                    // this covers the `plugin.restore` below even when the run
-                    // draws nothing (hidden panel / no table yet); the draw
-                    // paths stamp for themselves (`draw_view`).
-                    renderer.stamp_theme(Some(&plugin));
-
-                    // The previous call which acquired the lock errored, so skip
-                    // this render
-                    if let Some(error) = session.get_error() {
-                        return Err(error);
-                    }
-
-                    // Snapshot + validate + bind BEFORE applying
-                    // columns_config / plugin_config updates, so the
-                    // strip-on-write and materialize passes see fresh
-                    // `expression_schema` and `view_schema`.
-                    //
-                    // Guard on a bound `Table`: a `restore()` with no table of
-                    // its own can land before a `load()` that sets it. The
-                    // config is already committed above, so defer the draw: the
-                    // eventual `load()` run binds the view from this commit.
-                    let (disposition, _pin) = if session.get_table().is_some() {
-                        bind_snapshot(&guard, &session, &renderer).await?
-                    } else {
-                        (crate::session::BindDisposition::Deferred, None)
-                    };
-
-                    // Apply incoming updates into the now-active plugin's
-                    // bucket on `Renderer`. Per-plugin storage means no
-                    // schema filter is needed before restore — foreign keys
-                    // cannot appear in the bucket by construction.
-                    let view_config_snapshot = session.get_view_config().clone();
-                    let plugin_config_changed =
-                        renderer.update_plugin_config(&view_config_snapshot, plugin_config);
-                    let columns_config_changed = renderer.update_columns_configs(
-                        &view_config_snapshot,
-                        &session,
-                        columns_config,
-                    );
-                    let changed = plugin_config_changed || columns_config_changed;
-
-                    // Force a materialized restore when the plugin just
-                    // swapped — `commit_plugin_idx` already restored from the
-                    // raw bucket, but the materialized restore is needed for
-                    // schema-revealed `include: true` defaults to reach the
-                    // plugin before its first draw.
-                    if changed || plugin_swapped {
-                        let plugin_config_snapshot = renderer.get_plugin_config();
-                        let plugin_update =
-                            wasm_bindgen::JsValue::from_serde_ext(&plugin_config_snapshot).unwrap();
-                        let columns_config = renderer
-                            .all_columns_configs_materialized(&view_config_snapshot, &session)
-                            .await;
-                        plugin.restore(&plugin_update, Some(&columns_config))?;
-                        if plugin_config_changed {
-                            renderer.plugin_config_changed.emit(plugin_config_snapshot);
-                        }
-                    }
-
-                    if presentation.is_visible() {
-                        // `plugin.draw` iff the bind REBUILT (or this
-                        // plugin owes its first paint); `update` iff a
-                        // source changed — the `Adopted` config delta, the
-                        // `changed` plugin-config restore above, or an
-                        // explicit `Public` API request; else nothing.
-                        dispatch_bound(&guard, &renderer, disposition, changed, origin).await?;
-                    }
-
-                    Ok(())
-                })
-                .await
-        };
-
-        run_result?;
         Ok(())
     })
 }

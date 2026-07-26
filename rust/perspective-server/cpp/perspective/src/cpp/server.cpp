@@ -2850,6 +2850,21 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 m_resources.mark_table_deleted(
                     req.entity_id(), client_id, req.msg_id()
                 );
+
+                // notify `on_hosted_tables_update` listeners — a lazily
+                // marked table leaves the hosted set NOW (`get_table_ids`
+                // filters it), and a listener releasing its `View`s is
+                // exactly what completes this delete.
+                auto subscriptions =
+                    m_resources.get_on_hosted_tables_update_sub();
+                for (auto& subscription : subscriptions) {
+                    Response out;
+                    out.set_msg_id(subscription.id);
+                    ProtoServerResp<ProtoServer::Response> resp2;
+                    resp2.data = std::move(out);
+                    resp2.client_id = subscription.client_id;
+                    proto_resp.emplace_back(std::move(resp2));
+                }
             }
 
             break;

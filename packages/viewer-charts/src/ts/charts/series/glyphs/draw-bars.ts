@@ -30,13 +30,20 @@ type GL = WebGL2RenderingContext | WebGLRenderingContext;
 /**
  * Draw the bar-typed subset of `chart._bars` as instanced quads. Assumes
  * the caller has already `useProgram`'d the bar shader and set uniforms.
+ *
+ * `range` draws a contiguous instance sub-range instead of the full
+ * uploaded set — the faceted renderer uploads instances split-major
+ * (see `uploadBarInstances`) and dispatches one range per facet.
  */
 export function drawBars(
     chart: SeriesChart,
     gl: GL,
     glManager: WebGLContextManager,
+    range?: { start: number; count: number },
 ): void {
-    if (chart._uploadedBars === 0) {
+    const first = range?.start ?? 0;
+    const count = range?.count ?? chart._uploadedBars;
+    if (chart._uploadedBars === 0 || count === 0) {
         return;
     }
 
@@ -62,6 +69,7 @@ export function drawBars(
             loc.a_x_center,
             "bar_x",
             1,
+            first,
         ) &&
         bindInstancedFloatAttr(
             glManager,
@@ -69,15 +77,31 @@ export function drawBars(
             loc.a_half_width,
             "bar_hw",
             1,
+            first,
         ) &&
-        bindInstancedFloatAttr(glManager, instancing, loc.a_y0, "bar_y0", 1) &&
-        bindInstancedFloatAttr(glManager, instancing, loc.a_y1, "bar_y1", 1) &&
+        bindInstancedFloatAttr(
+            glManager,
+            instancing,
+            loc.a_y0,
+            "bar_y0",
+            1,
+            first,
+        ) &&
+        bindInstancedFloatAttr(
+            glManager,
+            instancing,
+            loc.a_y1,
+            "bar_y1",
+            1,
+            first,
+        ) &&
         bindInstancedFloatAttr(
             glManager,
             instancing,
             loc.a_color,
             "bar_color",
             3,
+            first,
         ) &&
         bindInstancedFloatAttr(
             glManager,
@@ -85,6 +109,7 @@ export function drawBars(
             loc.a_series_id,
             "bar_sid",
             1,
+            first,
         ) &&
         bindInstancedFloatAttr(
             glManager,
@@ -92,15 +117,11 @@ export function drawBars(
             loc.a_axis,
             "bar_axis",
             1,
+            first,
         );
 
     if (ok) {
-        instancing.drawArraysInstanced(
-            gl.TRIANGLE_STRIP,
-            0,
-            4,
-            chart._uploadedBars,
-        );
+        instancing.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
     }
 
     setDivisor(loc.a_x_center, 0);

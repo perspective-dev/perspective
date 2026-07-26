@@ -265,8 +265,19 @@ export interface PluginConfig {
      * Faceting strategy when `split_by` is non-empty.
      *
      * - `"grid"` — one small-multiple sub-plot per split group.
-     * - `"overlay"` — single plot with split groups differentiated by
-     *   color. Synced into `_facetConfig.facet_mode`.
+     * - `"overlay"` — a single plot: cartesian charts differentiate
+     *   split groups by color; the categorical band pipeline (series
+     *   charts) stacks splits within each aggregate's band slot.
+     *   Synced into `_facetConfig.facet_mode`.
+     *
+     * The default differs by family via
+     * `ChartTypeConfig.plugin_field_defaults`: cartesian / density /
+     * map chart types default to `"grid"`, the series / financial
+     * band-pipeline types to `"overlay"` (their historical split
+     * rendering). Series charts REBUILD on a mode change — grid mode
+     * keys the stack ladder per split (`facetSplits` in
+     * `buildSeriesPipeline`) so each facet grows from its own
+     * baseline.
      */
     facet_mode: "grid" | "overlay";
 
@@ -302,15 +313,23 @@ export interface PluginConfig {
     /**
      * Domain accumulation policy across successive `View` updates.
      *
-     * - `"fit"` — every update recomputes the rendered domain (and on
-     *   cartesian charts, the X/Y range and color/size scales) from
+     * - `"fit"` — every update recomputes the affected domains from
      *   the current data extent. Can grow or shrink frame-to-frame.
-     * - `"expand"` — the rendered domain monotonically *grows*: each
+     * - `"expand"` — the affected domains monotonically *grow*: each
      *   update unions the new data extent with the previously rendered
      *   extent, so once a value is in scope it stays in scope. Reset
      *   by the "Reset Zoom" button, view-config changes (group_by /
      *   split_by / column-slot / column-type), or toggling back to
      *   `"fit"`.
+     *
+     * AXIS SCOPE differs by family: cartesian charts (X/Y Scatter,
+     * X/Y Line, Density, Maps) apply it to BOTH axes plus the
+     * color/size scales (categorical string axes opt out — slot
+     * indices are frame-local); the categorical band pipeline (series
+     * / financial) applies it to the VALUE axis only — Y for the
+     * Y-family, X for X Bar — while the category axis always fits, so
+     * a streaming numeric/datetime `group_by` axis releases departed
+     * categories instead of pinning to its history.
      */
     domain_mode: "fit" | "expand";
 

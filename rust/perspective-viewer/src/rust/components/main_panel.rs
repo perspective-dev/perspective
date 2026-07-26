@@ -47,6 +47,9 @@ use crate::workspace::{PanelId, Workspace};
 
 #[derive(Clone, Properties)]
 pub struct MainPanelProps {
+    /// Toggle the settings sidebar open. Fired by a `PanelTab`'s open-settings
+    /// button (after selecting + activating that panel) — the tabs are the
+    /// only open-settings affordance.
     pub on_settings: Callback<()>,
 
     /// Reset callback forwarded from the root component.  Fired when the user
@@ -134,12 +137,24 @@ impl PartialEq for MainPanelProps {
             && self.panel_themes == rhs.panel_themes
             && self.panel_masters == rhs.panel_masters
             && self.global_filters == rhs.global_filters
+            && self.workspace == rhs.workspace
+            && self.session == rhs.session
+            && self.renderer == rhs.renderer
+            && self.presentation == rhs.presentation
     }
 }
 
 impl MainPanelProps {
     fn is_title(&self) -> bool {
         self.session_props.title.is_some()
+    }
+
+    pub(super) fn effective_panel_theme(&self, id: &str) -> Option<String> {
+        self.panel_themes
+            .iter()
+            .find(|(pid, _)| pid == id)
+            .and_then(|(_, theme)| theme.clone())
+            .or_else(|| self.presentation_props.available_themes.first().cloned())
     }
 }
 
@@ -166,14 +181,27 @@ pub struct MainPanel {
     /// and attached alongside the others.
     _layout_before_resize_listener: Closure<dyn FnMut(web_sys::Event)>,
 
-    /// `contextmenu` listener on the layout element (panel context menu). Kept
-    /// alive here and attached alongside the others. Imperative — not a Yew
-    /// `oncontextmenu` — because the plugin body is light-DOM attached by the
-    /// renderer (its DOM parent is the host, not the frame), so Yew's delegated
-    /// handler never matches a right-click there. A native listener catches it
-    /// via composed bubbling and resolves the panel from the path.
-    _layout_contextmenu_listener: Closure<dyn FnMut(web_sys::Event)>,
-    listener_attached: bool,
+    /// `contextmenu` listener on the panel *container* — one stable attach
+    /// point covering the whole stage, independent of the layout reconcile;
+    /// at zero panels it opens the stage menu. Kept alive here and attached
+    /// once in `rendered`. Imperative — not a Yew `oncontextmenu` — because
+    /// the plugin body is light-DOM attached by the renderer (its DOM parent
+    /// is the host, not the frame), so Yew's delegated handler never matches
+    /// a right-click there. A native listener catches it via composed
+    /// bubbling and resolves the panel from the path.
+    _contextmenu_listener: Closure<dyn FnMut(web_sys::Event)>,
+
+    /// The `<regular-layout>` ELEMENT the layout listeners are attached to.
+    /// Compared by identity in `reconcile` — if the element is ever a
+    /// different instance (it should never be: the render keys it into a
+    /// fully-keyed sibling list precisely so Yew reuses it), the listeners
+    /// are re-attached and `inserted` is reset so the fresh (empty) layout
+    /// is repopulated instead of silently orphaning every panel. A latched
+    /// `bool` here once turned an unkeyed-diff element replacement into
+    /// "Duplicate commits into an EMPTY tree with no `before-resize`
+    /// listener": the old element left the DOM with the committed tree and
+    /// every listener, and nothing ever noticed.
+    listener_target: Option<web_sys::HtmlElement>,
 
     /// Per-panel `ResizeObserver`s, keyed by panel id, each observing that
     /// panel's slotted plugin element and resizing only that panel's
@@ -189,10 +217,11 @@ pub struct MainPanel {
     /// update — every panel starts visible.
     hidden_tabs: HashSet<String>,
 
-    /// Open panel context menu as `(client x, client y, panel id)`; `None`
-    /// when closed. Rendered as a cursor-anchored
+    /// Open context menu as `(client x, client y, target panel id)`; outer
+    /// `None` when closed. A `None` *panel id* is the empty-stage menu (zero
+    /// panels — "New" only). Rendered as a cursor-anchored
     /// [`PanelMenu`](super::panel_menu::PanelMenu) overlay.
-    context_menu: Option<(f64, f64, String)>,
+    context_menu: Option<(f64, f64, Option<String>)>,
 
     /// Id of the currently maximized panel (via `regular-layout.maximize`), or
     /// `None`. Transient (regular-layout doesn't persist it); drives the
@@ -209,6 +238,10 @@ pub struct MainPanel {
     /// `None` until the first *fully-resolved* pass — an unresolved frame
     /// leaves it unlatched so the mirror retries each render.
     stamped_frame_themes: Option<frame_theme::FrameThemeSnapshot>,
+
+    /// `Workspace::staged_changed` → [`MainPanelMsg::StagedChanged`] on THIS
+    /// component's scope (see the message doc for why not the root's).
+    _staged_sub: crate::utils::Subscription,
 }
 
 impl Component for MainPanel {
@@ -250,7 +283,10 @@ impl Component for MainPanel {
         // frame never matches it (Yew walks the vdom, not the composed path).
         // This native listener resolves the panel from the
         // `<regular-layout-frame name=…>` on the event's composed path, then
-        // suppresses the browser menu and emits.
+        // suppresses the browser menu and emits. On the EMPTY stage (zero
+        // panels — the persistent `<regular-layout>` has no frame
+        // descendants), it opens the stage menu instead, whose "New" items
+        // create the first panel.
         let contextmenu_cb = ctx
             .link()
             .callback(|(id, x, y)| MainPanelMsg::ContextMenu(id, x, y));
@@ -268,14 +304,39 @@ impl Component for MainPanel {
                 }
             }
 
-            // Only act when the click is inside a panel; outside any frame, let
-            // the native menu through.
+            let is_empty_stage = || {
+                event
+                    .current_target()
+                    .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+                    .is_some_and(|el| {
+                        el.query_selector("regular-layout-frame")
+                            .ok()
+                            .flatten()
+                            .is_none()
+                    })
+            };
+
             if let Some(id) = panel_id {
                 event.prevent_default();
                 let mouse = event.unchecked_ref::<web_sys::MouseEvent>();
-                contextmenu_cb.emit((id, mouse.client_x() as f64, mouse.client_y() as f64));
+                contextmenu_cb.emit((Some(id), mouse.client_x() as f64, mouse.client_y() as f64));
+            } else if is_empty_stage() {
+                event.prevent_default();
+                let mouse = event.unchecked_ref::<web_sys::MouseEvent>();
+                contextmenu_cb.emit((None, mouse.client_x() as f64, mouse.client_y() as f64));
             }
+            // With panels present, a click outside every frame lets the
+            // native menu through.
         }) as Box<dyn FnMut(web_sys::Event)>);
+
+        let staged_sub = {
+            use crate::utils::AddListener;
+            let cb = ctx.link().callback(|_: ()| MainPanelMsg::StagedChanged);
+            ctx.props()
+                .workspace
+                .staged_changed()
+                .add_listener(move |()| cb.emit(()))
+        };
 
         Self {
             main_panel_ref: NodeRef::default(),
@@ -284,20 +345,22 @@ impl Component for MainPanel {
             _layout_update_listener: listener,
             _layout_select_listener: select_listener,
             _layout_before_resize_listener: before_resize_listener,
-            _layout_contextmenu_listener: contextmenu_listener,
-            listener_attached: false,
+            _contextmenu_listener: contextmenu_listener,
+            listener_target: None,
             panel_resize_observers: HashMap::new(),
             hidden_tabs: HashSet::new(),
             context_menu: None,
             maximized: None,
             theme_backgrounds: HashMap::new(),
             stamped_frame_themes: None,
+            _staged_sub: staged_sub,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             MainPanelMsg::PointerEvent(event) => self.on_pointer_event(ctx, event),
+            MainPanelMsg::StagedChanged => true,
             MainPanelMsg::LayoutUpdated => self.on_layout_updated(ctx),
             MainPanelMsg::TabSelected(name) => self.on_tab_selected(ctx, name),
             MainPanelMsg::ContextMenu(id, x, y) => self.on_context_menu(ctx, id, x, y),
@@ -307,11 +370,24 @@ impl Component for MainPanel {
         }
     }
 
-    fn changed(&mut self, _ctx: &Context<Self>, _old: &Self::Properties) -> bool {
-        true
+    fn changed(&mut self, ctx: &Context<Self>, old: &Self::Properties) -> bool {
+        ctx.props() != old
     }
 
-    fn rendered(&mut self, ctx: &Context<Self>, _first_render: bool) {
+    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+        // The `contextmenu` listener attaches to the panel CONTAINER — one
+        // stable attach point covering the whole stage, decoupled from the
+        // layout reconcile. Panel right-clicks bubble to it through the
+        // layout on the composed path; at zero panels it serves the stage
+        // menu.
+        if first_render && let Some(el) = self.main_panel_ref.cast::<web_sys::HtmlElement>() {
+            let _ = el.add_event_listener_with_callback(
+                "contextmenu",
+                self._contextmenu_listener.as_ref().unchecked_ref(),
+            );
+        }
+
+        self.size_staging_wrappers();
         self.reconcile(ctx);
         self.stamp_frame_themes(ctx);
     }

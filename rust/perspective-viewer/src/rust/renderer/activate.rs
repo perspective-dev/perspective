@@ -19,9 +19,11 @@ use web_sys::*;
 use crate::js::plugin::JsPerspectiveViewerPlugin;
 use crate::utils::RenderGuard;
 
-/// Mount `plugin` (once) under its layout slot in the viewer's light DOM,
-/// restyling it on first mount. Idempotent — a plugin that already has a
-/// parent is left untouched (only its `slot` attribute is refreshed).
+/// Mount `plugin` (once) under its layout slot in the viewer's light DOM.
+/// Idempotent — a plugin that already has a parent is left untouched (only
+/// its `slot` attribute is refreshed). No style read happens here: the
+/// mount may precede the theme stamp, and the plugin's first `draw()`
+/// captures its `--psp-*` CSS fresh by construction ("stamp before draw").
 ///
 /// # Arguments
 /// - `viewer` the root `<perspective-viewer>` element.
@@ -43,7 +45,6 @@ pub fn mount_plugin(
         // but not visible during a tab switch. This is dumb - fix this with
         // a real life cycle.
         viewer.prepend_with_node_1(html_plugin)?;
-        plugin.restyle();
     }
 
     Ok(())

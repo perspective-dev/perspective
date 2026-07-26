@@ -16,6 +16,15 @@ use crate::components::panel_menu::PanelCommand;
 pub enum MainPanelMsg {
     PointerEvent(web_sys::PointerEvent),
 
+    /// The `Workspace` staged-panel set changed (`staged_changed` PubSub —
+    /// see `Workspace::stage_panel`): re-render so cells/tabs/wrappers
+    /// reflect it and `reconcile` inserts a promoted panel. Subscribed on
+    /// MainPanel's OWN scope — the root's `LayoutChanged` delivery proved
+    /// unreliable from element-API task contexts (promoted panels stranded
+    /// in their hidden wrappers), while this component's own messages
+    /// deliver in every observed context.
+    StagedChanged,
+
     /// The `<regular-layout>` tree changed (fired by its
     /// `regular-layout-update` event). Used to detect panels removed from
     /// the layout (e.g. a frame's close button) so they can be disposed.
@@ -35,13 +44,14 @@ pub enum MainPanelMsg {
     /// `preventDefault()`-ed it.
     BeforeResize(web_sys::Event),
 
-    /// A right-click landed inside a panel (panel id, client x, y). Fired by
-    /// the imperative `contextmenu` listener on the layout element — see
-    /// `_layout_contextmenu_listener` — and by each `PanelTab`. Activates the
-    /// panel and opens the
-    /// [`PanelMenu`](crate::components::panel_menu::PanelMenu)
-    /// at the cursor.
-    ContextMenu(String, f64, f64),
+    /// A right-click opened the panel context menu (target panel id, client
+    /// x, y). Fired by the imperative `contextmenu` listener on the panel
+    /// container — see `_contextmenu_listener` — and by each `PanelTab`.
+    /// `Some(id)` activates that panel and opens its
+    /// [`PanelMenu`](crate::components::panel_menu::PanelMenu) at the
+    /// cursor; `None` is the EMPTY stage (zero panels) — a target-less menu
+    /// offering only "New", whose items create the first panel.
+    ContextMenu(Option<String>, f64, f64),
 
     /// Dismiss the panel context menu (the menu session ended).
     CloseContextMenu,

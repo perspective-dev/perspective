@@ -80,9 +80,17 @@ pub struct PerspectiveViewer {
     _title_subscriptions: Vec<Subscription>,
 
     /// The active panel's engine handles — what the settings panel + status bar
-    /// bind to. Re-targeted on `SetActivePanel`.
+    /// bind to. Re-targeted on `SetActivePanel`. Fall back to
+    /// `empty_session`/`empty_renderer` when the element has zero panels.
     active_session: Session,
     active_renderer: Renderer,
+
+    /// Detached "empty" engine handles (never inserted into the `Workspace`,
+    /// never mounted). Used as the `active_*` fallback when there are zero
+    /// panels, so the settings/status chrome always has a `Session`+`Renderer`
+    /// to bind to — and, being tableless, renders an inert empty state.
+    empty_session: Session,
+    empty_renderer: Renderer,
     debug_open: bool,
     fonts: FontLoaderProps,
     on_close_column_settings: Callback<()>,
@@ -137,8 +145,18 @@ impl Component for PerspectiveViewer {
     fn create(ctx: &Context<Self>) -> Self {
         let elem = ctx.props().elem.clone();
         let fonts = FontLoaderProps::new(&elem, ctx.link().callback(|()| PreloadFontsUpdate));
-        let active_session = ctx.props().workspace.active_session();
-        let active_renderer = ctx.props().workspace.active_renderer();
+        let empty_session = Session::new();
+        let empty_renderer = Renderer::new(&elem);
+        let active_session = ctx
+            .props()
+            .workspace
+            .active_session()
+            .unwrap_or_else(|| empty_session.clone());
+        let active_renderer = ctx
+            .props()
+            .workspace
+            .active_renderer()
+            .unwrap_or_else(|| empty_renderer.clone());
         inject_shared_callbacks(ctx);
         inject_active_callbacks(ctx, &active_session, &active_renderer);
         let subscriptions = create_shared_subscriptions(ctx);
@@ -183,6 +201,8 @@ impl Component for PerspectiveViewer {
             _title_subscriptions: subscribe_panel_titles(ctx),
             active_session,
             active_renderer,
+            empty_session,
+            empty_renderer,
             debug_open: false,
             fonts,
             on_close_column_settings,

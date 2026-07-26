@@ -286,6 +286,18 @@ export interface SeriesPipelineInput {
     includeZero: boolean;
 
     /**
+     * `facet_mode: "grid"` geometry: key the stack ladder by
+     * `(catIdx, aggIdx, splitIdx)` instead of `(catIdx, aggIdx)`, so
+     * splits never stack on each other — each facet's bars / areas
+     * grow from their own zero baseline. Slot geometry (`xCenter` /
+     * `halfWidth`) is unchanged: facets separate splits by projection
+     * + scissor, not by X offset, so every split's records share the
+     * same band-slot coordinates. Value extents still accumulate
+     * across ALL splits — the facet grid renders a shared value axis.
+     */
+    facetSplits?: boolean;
+
+    /**
      * Reusable scratch — pipeline writes records into these in place
      * and zero-fills the stack ladder. Pass the previous build's
      * outputs to amortize allocation across data reloads.
@@ -404,6 +416,7 @@ export function buildSeriesPipeline(
         bandInnerFrac,
         barInnerPad,
         includeZero,
+        facetSplits,
         scratchBars,
         scratchPosStack,
         scratchNegStack,
@@ -529,9 +542,12 @@ export function buildSeriesPipeline(
     const N = numCategories;
     const S = series.length;
 
-    // Stacking ladder, keyed by (catIdx, aggIdx). Reuse chart-owned
+    // Stacking ladder, keyed by (catIdx, aggIdx) — or per-split
+    // (catIdx, aggIdx, splitIdx) in facet-grid mode, where each split
+    // renders in its own facet and cross-split stacking would lift
+    // every facet after the first off its baseline. Reuse chart-owned
     // scratch when sized; else allocate. Active prefix is zero-filled.
-    const stackLen = N * M;
+    const stackLen = facetSplits ? N * M * P : N * M;
     const posStack = ensureFloat64Scratch(scratchPosStack ?? null, stackLen);
     const negStack = ensureFloat64Scratch(scratchNegStack ?? null, stackLen);
     posStack.fill(0, 0, stackLen);
@@ -922,7 +938,9 @@ export function buildSeriesPipeline(
                         }
                     }
 
-                    const stackIdx = catI * M + k;
+                    const stackIdx = facetSplits
+                        ? (catI * M + k) * P + p
+                        : catI * M + k;
                     let y0: number;
                     let y1: number;
                     if (v >= 0) {

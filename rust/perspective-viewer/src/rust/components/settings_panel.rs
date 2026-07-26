@@ -161,7 +161,7 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
     let on_auto_width = props.on_auto_width.clone();
 
     // Dispatch callback: captures engine handles, constructs config update,
-    // hands the apply+draw work to `tasks::update_and_render`.
+    // hands the apply+draw work to `tasks::pipeline`.
     let on_select_plugin = {
         clone!(renderer, session, presentation);
         let session_metadata = props.metadata.clone();

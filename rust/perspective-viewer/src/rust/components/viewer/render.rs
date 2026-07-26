@@ -82,8 +82,8 @@ impl PerspectiveViewer {
         let metadata = self.session_props.metadata.clone();
         let on_select_tab = ctx.link().callback(SettingsPanelTabChanged);
         let on_auto_width = ctx.link().callback(SettingsPanelAutoWidth);
-        let settings_panel = html! {
-            if is_settings_open {
+        let settings_panel = if is_settings_open {
+            html! {
                 <SettingsPanel
                     on_close={on_close_settings}
                     on_resize={&self.on_resize}
@@ -109,11 +109,9 @@ impl PerspectiveViewer {
                     {renderer}
                     {session}
                 />
-            } else {
-                // Explicit empty so the always-rendered `app_panel` SplitPanel's
-                // `skip_empty` drops this pane when settings is closed.
-                <></>
             }
+        } else {
+            html! { <></> }
         };
 
         let on_settings = ctx.link().callback(|()| ToggleSettingsInit(None, None));
@@ -147,21 +145,13 @@ impl PerspectiveViewer {
             }
         };
 
-        // The toolbar Reset button targets the ACTIVE panel only; the
-        // whole-element reset is the public `reset()` API.
         let on_reset = ctx.link().callback(|all| ResetPanel(None, all, None));
-        let is_settings_open = self.settings_open
-            && matches!(self.session_props.has_table, Some(TableLoadState::Loaded));
-
         let main_panel = html! {
             <MainPanel
                 {on_settings}
                 {on_reset}
                 on_activate_panel={ctx.link().callback(|id| SetActivePanel(id, None))}
                 on_close_panel={ctx.link().callback(|id| ClosePanel(id, None))}
-                // The context-menu commands the root executes; Maximize/Restore
-                // are handled inside `MainPanel` (it owns the layout element)
-                // and Export/Copy inside `PanelMenu` itself.
                 on_panel_command={ctx.link().batch_callback(|(id, cmd): (String, PanelCommand)| {
                     match cmd {
                         PanelCommand::New => vec![NewPanel(id)],
@@ -186,9 +176,6 @@ impl PerspectiveViewer {
                     .panel_ids()
                     .iter()
                     .map(|id| {
-                        // Tab label: the panel's *explicit* title only. When absent
-                        // the tab shows a muted placeholder (see `PanelTab`), NOT the
-                        // table / plugin name.
                         let title = ctx
                             .props()
                             .workspace
@@ -220,7 +207,7 @@ impl PerspectiveViewer {
             />
         };
 
-        let is_single_panel = if ctx.props().workspace.panel_ids().len() == 1 {
+        let is_single_panel = if ctx.props().workspace.placed_count() == 1 {
             "only-child"
         } else {
             ""
@@ -230,13 +217,6 @@ impl PerspectiveViewer {
             <StyleProvider root={ctx.props().elem.clone()}>
                 <div id="component_container" class={is_single_panel}>
                     <div id="layout_area">
-                        // Always render the `SplitPanel` with `main_panel` as its
-                        // last (flex-fill) pane. Toggling the settings sidebar then
-                        // only adds/removes the leading settings pane — it never
-                        // reparents `main_panel`, so `MainPanel` (and the embedded
-                        // `<regular-layout>` + the `<slot>`s projecting the plugins)
-                        // is reconciled in place instead of remounted. When closed,
-                        // `settings_panel` is `<></>`, which `skip_empty` drops.
                         <SplitPanel
                             id="app_panel"
                             reverse=true
@@ -245,10 +225,6 @@ impl PerspectiveViewer {
                             size={self.settings_geometry.pane_width_override}
                             initial_size={self.settings_geometry.pane_width_override}
                             on_reset={ctx.link().callback(|_| SettingsPanelSizeUpdate(None))}
-                            // Deferred + pump (P1): drags propose widths; the
-                            // pane commits only after every visible panel has
-                            // presized — and every panel participates, not
-                            // just the active one.
                             on_resize={ctx.link().callback(|(x, _): (i32, i32)| SettingsDividerMove(x))}
                             on_resize_finished={ctx.link().callback(|_| SettingsDividerFinish)}
                         >

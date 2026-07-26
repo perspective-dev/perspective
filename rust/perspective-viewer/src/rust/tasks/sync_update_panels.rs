@@ -10,8 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-#![allow(non_snake_case)]
-
 use std::collections::HashMap;
 
 use wasm_bindgen::prelude::*;
@@ -26,9 +24,6 @@ use crate::*;
 
 #[wasm_bindgen]
 extern "C" {
-    #[wasm_bindgen(typescript_type = "Promise<ViewerConfig>")]
-    pub type JsViewerConfigPromise;
-
     #[wasm_bindgen(typescript_type = "ViewerConfigUpdate")]
     pub type JsViewerConfigUpdate;
 }
@@ -75,6 +70,7 @@ pub fn sync_update_panels(
             None,
             config,
             None,
+            Placement::Placed,
         );
 
         if active.as_deref() == Some(saved_id.as_str()) {
@@ -94,27 +90,31 @@ pub fn sync_update_panels(
             None,
             ViewerConfigUpdate::default(),
             None,
+            Placement::Placed,
         );
 
         fallback_fresh = Some(fresh.as_str().to_owned());
         contents.push((fresh, session, renderer, config));
     }
 
-    // Phase 2 — remove + eject the pre-existing panels.
     let mut eject_tasks = Vec::new();
+    if let Some(panel) = this.workspace.take_reserved() {
+        eject_tasks.push(eject_panel(panel));
+    }
+
     for old in old_ids {
         if let Some(panel) = this.workspace.remove_panel(&old) {
             eject_tasks.push(eject_panel(panel));
         }
     }
 
-    // Phase 3 — stage the remapped layout tree on the Workspace
+    // Phase 2 — stage the remapped layout tree on the Workspace
     if let Some(layout) = layout {
         this.workspace
             .set_pending_layout(layout.remap(&|name| id_map.get(name).cloned()));
     }
 
-    // Phase 4 — the single visible commit
+    // Phase 3 — the single visible commit
     if let Some(saved) = &active
         && active_fresh.is_none()
     {

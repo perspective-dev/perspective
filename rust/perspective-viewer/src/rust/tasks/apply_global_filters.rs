@@ -45,9 +45,11 @@ pub fn apply_global_filters(workspace: &Workspace) {
         if let Some(panel) = workspace.panel(&pid)
             && stamp_global_overlay(workspace, &pid, &panel.session)
         {
+            let effect = workspace.effects().guard();
             let session = panel.session.clone();
             let renderer = panel.renderer.clone();
             spawn_owned("apply-global-filters", async move {
+                let _effect = effect;
                 apply_and_render(&session, &renderer, ViewConfigUpdate::default())?.await?;
                 Ok(())
             });

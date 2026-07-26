@@ -48,9 +48,12 @@ export interface ChartTypeConfig {
      * Per-chart-type overrides for `DEFAULT_PLUGIN_CONFIG`. Used when a
      * field's sensible default differs by chart family — currently
      * `include_zero` (true for Y Bar / Y Area / X Bar, false for line
-     * / scatter / cartesian / financial). Applied at schema generation
-     * and at `restore({})` so the effective default matches the
-     * surfaced UI default.
+     * / scatter / cartesian / financial) and `facet_mode` ("overlay"
+     * for the band-pipeline families — series / financial — whose
+     * historical split_by rendering is the single stacked/colored
+     * plot; "grid" elsewhere). Applied at schema generation and at
+     * `restore({})` so the effective default matches the surfaced UI
+     * default.
      */
     plugin_field_defaults?: Partial<PluginConfig>;
 }
@@ -85,10 +88,19 @@ const SERIES_FIELDS: readonly PluginConfigField[] = [
     "bar_inner_pad",
 ];
 
+// The band pipeline's historical split_by rendering is a single plot
+// (splits stacked / colored in place), so the series family defaults
+// `facet_mode` to "overlay" — grid faceting is the opt-in. Cartesian
+// charts keep the global "grid" default from `DEFAULT_PLUGIN_CONFIG`.
+const SERIES_DEFAULTS: Partial<PluginConfig> = { facet_mode: "overlay" };
+
 // Bar / area series glyphs grow from the zero baseline, so the value
 // axis must enclose 0 to render correctly. Line / scatter glyphs have
 // no such constraint — their default `include_zero` stays `false`.
-const ZERO_ANCHORED_DEFAULTS: Partial<PluginConfig> = { include_zero: true };
+const ZERO_ANCHORED_DEFAULTS: Partial<PluginConfig> = {
+    ...SERIES_DEFAULTS,
+    include_zero: true,
+};
 
 // Pure Cartesian (X/Y Scatter, X/Y Line) — no categorical axis, so no
 // band geometry; gets the facet-routing variant of zoom_mode.
@@ -210,9 +222,11 @@ const CHARTS: ChartTypeConfig[] = [
     }),
     make("Y Line", "y-line", SERIES, SELECT, 1, Y_AXIS, SERIES_FIELDS, {
         default_chart_type: "line",
+        plugin_field_defaults: SERIES_DEFAULTS,
     }),
     make("Y Scatter", "y-scatter", SERIES, SELECT, 1, Y_AXIS, SERIES_FIELDS, {
         default_chart_type: "scatter",
+        plugin_field_defaults: SERIES_DEFAULTS,
     }),
     make("Y Area", "y-area", SERIES, SELECT, 1, Y_AXIS, SERIES_FIELDS, {
         default_chart_type: "area",
@@ -250,9 +264,11 @@ const CHARTS: ChartTypeConfig[] = [
     make("Heatmap", "heatmap", HIER, SELECT, 1, ["Color"], HEATMAP_FIELDS),
     make("Candlestick", "candlestick", FIN, TOGGLE, 1, FIN_NAMES, FIN_FIELDS, {
         default_chart_type: "candlestick",
+        plugin_field_defaults: SERIES_DEFAULTS,
     }),
     make("OHLC", "ohlc", FIN, TOGGLE, 1, FIN_NAMES, FIN_FIELDS, {
         default_chart_type: "ohlc",
+        plugin_field_defaults: SERIES_DEFAULTS,
     }),
     make(
         "Map Scatter",

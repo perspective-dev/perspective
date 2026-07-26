@@ -153,6 +153,13 @@ impl RegularLayout {
     pub const TAG_NAME: &'static str = "regular-layout";
     /// Emitted after the layout tree changes (`CustomEvent<Layout>`).
     pub const UPDATE_EVENT: &'static str = "regular-layout-update";
+
+    /// Whether `name` is currently placed in this layout's tree (a non-null
+    /// [`Self::calculate_path`]).
+    pub fn contains_panel(&self, name: &str) -> bool {
+        let path = self.calculate_path(name);
+        !path.is_null() && !path.is_undefined()
+    }
 }
 
 /// The orientation of a [`SplitLayout`].

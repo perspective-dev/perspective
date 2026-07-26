@@ -188,6 +188,7 @@ impl Deref for SessionHandle {
 pub struct SessionData {
     client: Option<perspective_client::Client>,
     table: Option<perspective_client::Table>,
+    pending_table: Option<String>,
     metadata: SessionMetadata,
     config: ViewConfig,
     global_filter: Vec<Filter>,
@@ -363,10 +364,12 @@ impl Session {
             Some(TableIntermediateState::Ejected) => {
                 self.borrow_mut().is_loading = false;
                 self.borrow_mut().table = None;
+                self.borrow_mut().pending_table = None;
             },
             Some(TableIntermediateState::Reloaded) => {
                 self.borrow_mut().is_loading = true;
                 self.borrow_mut().table = None;
+                self.borrow_mut().pending_table = None;
             },
             _ => {
                 self.borrow_mut().is_loading = false;
@@ -467,26 +470,69 @@ impl Session {
         self.borrow().client.clone()
     }
 
+    /// The configured table name awaiting a host, if any (see
+    /// [`SessionData::pending_table`]).
+    pub fn pending_table(&self) -> Option<String> {
+        self.borrow().pending_table.clone()
+    }
+
+    /// Suspend a BOUND table to PENDING: delete the `View`, drop the `Table`
+    /// handle (freeing the engine name for a lazy `Table::delete` to
+    /// complete), and record the name as pending — the view config is KEPT,
+    /// so the reactive rebind (`tasks::table_lifecycle`) restores this panel
+    /// as it was when the name is hosted again. `None` when no table is
+    /// bound.
+    pub fn suspend_table(&self) -> Option<impl Future<Output = ApiResult<()>> + use<>> {
+        let name = self.borrow().table.as_ref()?.get_name().to_owned();
+        let fut = self.reset(ResetOptions {
+            table: Some(TableIntermediateState::Ejected),
+            stats: true,
+            ..ResetOptions::default()
+        });
+
+        self.borrow_mut().pending_table = Some(name);
+        Some(fut)
+    }
+
     /// Reset this `Session`'s state with a new `Table`.  Implicitly clears the
     /// `ViewSubscription`, which will need to be re-initialized later via
     /// `create_view()`.
     ///
     /// # Arguments
     ///
-    /// - `table_name` The name of the `Table` to load, which must exist on the
-    ///   loaded `Client`.
+    /// - `table_name` The name of the `Table` to load.
     ///
     /// # Returns
     ///
     /// `table_name` is unique per `Client`, so if this value has not changed,
     /// `Session::set_table` does nothing and returns `Ok(false)`.
+    ///
+    /// A name NO loaded client hosts (yet) is not an error: the session
+    /// records it PENDING ([`SessionData::pending_table`]) and returns
+    /// `Ok(false)`; the element's hosted-tables subscription
+    /// (`tasks::table_lifecycle`) re-runs the bind when the table is created.
     pub async fn set_table(&self, table_name: String) -> ApiResult<bool> {
         if Some(table_name.as_str()) == self.0.borrow().table.as_ref().map(|x| x.get_name()) {
+            self.0.borrow_mut().pending_table = None;
             return Ok(false);
         }
 
         let client = self.0.borrow().client.clone().into_apierror()?;
-        let table = client.open_table(table_name.clone()).await?;
+        let table = match client.open_table(table_name.clone()).await {
+            Ok(table) => table,
+            Err(e) => {
+                // Distinguish "not hosted (yet)" — which PENDS — from a real
+                // open failure by the hosted set, not the error's text.
+                let hosted = client.get_hosted_table_names().await.unwrap_or_default();
+                if hosted.iter().any(|n| n == &table_name) {
+                    return Err(e.into());
+                }
+
+                self.0.borrow_mut().pending_table = Some(table_name);
+                return Ok(false);
+            },
+        };
+
         match SessionMetadata::from_table(&table).await {
             Ok(metadata) => {
                 let client = table.get_client();
@@ -517,6 +563,7 @@ impl Session {
                 let sub = self.borrow_mut().view_sub.take();
                 self.borrow_mut().metadata = metadata;
                 self.borrow_mut().table = Some(table);
+                self.borrow_mut().pending_table = None;
                 self.borrow_mut().is_loading = false;
                 self.borrow_mut().last_validated_expressions = None;
                 sub.delete().await?;
@@ -1257,10 +1304,6 @@ impl FreshView {
 
     pub fn view(&self) -> &View {
         &self.0
-    }
-
-    pub fn into_view(self) -> View {
-        self.0
     }
 }
 

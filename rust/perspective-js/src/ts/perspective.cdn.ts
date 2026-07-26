@@ -12,20 +12,17 @@
 
 import perspective from "./perspective.browser.ts";
 export * from "./perspective.browser.ts";
-
-const url = new URL(
-    "../../../server/dist/wasm/perspective-server.wasm",
-    import.meta.url,
-);
-
-const url64 = new URL(
-    "../../../server/dist/wasm/perspective-server.memory64.wasm",
-    import.meta.url,
-);
+import { resolve_server_wasm_url } from "./wasm/cdn.ts";
 
 perspective.init_server({
-    wasm32: () => fetch(url),
-    wasm64: () => fetch(url64),
+    wasm32: () => fetch(resolve_server_wasm_url(import.meta.url)),
+    wasm64: () =>
+        fetch(
+            resolve_server_wasm_url(
+                import.meta.url,
+                "perspective-server.memory64.wasm",
+            ),
+        ),
 });
 
 export default perspective;

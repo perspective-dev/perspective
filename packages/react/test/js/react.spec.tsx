@@ -63,7 +63,9 @@ test.describe("Perspective React", () => {
         const name = "abcdef";
         const comp = await mount(<SingleView name={name} />);
         const addViewer = comp.locator("button.add-viewer");
-        const settingsBtn = comp.locator(`perspective-viewer #settings_button`);
+        const settingsBtn = comp.locator(
+            `perspective-viewer perspective-viewer-tab .psp-tab-settings`,
+        );
 
         await settingsBtn.waitFor();
         await addViewer.waitFor();

@@ -47,7 +47,10 @@ pub fn set_edit_mode(session: &Session, renderer: &Renderer, mode: &str) {
             renderer
                 .ensure_plugin_selected()?
                 .restore(&plugin_token, Some(&columns_configs))?;
-            renderer.update(session.get_view()).await?;
+            clone!(session);
+            renderer
+                .update_lazy(async move { Ok(session.get_view()) })
+                .await?;
             renderer.plugin_config_changed.emit(plugin_config);
         }
 

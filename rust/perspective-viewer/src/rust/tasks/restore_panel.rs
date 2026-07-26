@@ -21,6 +21,7 @@ use crate::renderer::Renderer;
 use crate::root::Root;
 use crate::session::{ResetOptions, Session};
 use crate::tasks::*;
+use crate::workspace::Workspace;
 use crate::*;
 
 /// How a [`restore_panel`] call reached the pipeline — the only two genuine
@@ -30,6 +31,24 @@ pub(crate) enum RestoreMode {
     Fresh,
 }
 
+pub(crate) async fn bind_table_task(
+    session: &Session,
+    workspace: &Workspace,
+    name: String,
+) -> ApiResult<()> {
+    let current = session.get_client();
+    if let Some(client) = workspace
+        .resolve_client_for_table(&name, current.as_ref())
+        .await
+    {
+        session.set_client(client);
+    }
+
+    session.set_table(name).await?;
+    session.commit_table_defaults();
+    Ok(())
+}
+
 /// Apply a [`ViewerConfigUpdate`] to a single panel and re-draw — the one
 /// pipeline shared by `restorePanel` (an existing panel), whole-element
 /// `restoreWorkspace`, and `addPanel` (both fresh panels).
@@ -37,6 +56,7 @@ pub(crate) async fn restore_panel(
     session: &Session,
     renderer: &Renderer,
     presentation: &Presentation,
+    workspace: &Workspace,
     root: Option<&Root<PerspectiveViewer>>,
     mode: RestoreMode,
     mut update: ViewerConfigUpdate,
@@ -44,16 +64,8 @@ pub(crate) async fn restore_panel(
     let active = matches!(mode, RestoreMode::Existing { active: true });
     let fresh = matches!(mode, RestoreMode::Fresh);
     match &update.theme {
-        OptionalUpdate::Update(theme) => {
-            renderer.set_theme(Some(theme.clone()));
-            renderer.stamp_theme(None);
-        },
-        OptionalUpdate::SetDefault => {
-            renderer.set_theme(None);
-            if renderer.default_theme().is_some() {
-                renderer.stamp_theme(None);
-            }
-        },
+        OptionalUpdate::Update(theme) => renderer.set_theme_stamped(Some(theme.clone())),
+        OptionalUpdate::SetDefault => renderer.set_theme_stamped(None),
         OptionalUpdate::Missing => {},
     }
 
@@ -100,15 +112,14 @@ pub(crate) async fn restore_panel(
         RunOrigin::Public,
         update.clone(),
         {
-            clone!(session, update.table);
+            clone!(session, update.table, workspace);
             async move {
                 if let OptionalUpdate::Update(name) = table {
                     if let Some(reset) = reset {
                         reset.await?;
                     }
 
-                    session.set_table(name).await?;
-                    session.commit_table_defaults();
+                    bind_table_task(&session, &workspace, name).await?;
                 }
 
                 receiver.await.unwrap_or_log();

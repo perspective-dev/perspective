@@ -138,8 +138,9 @@ impl ExportDropDownMenuElement {
     }
 
     pub fn __set_model(&self, parent: &PerspectiveViewerElement) {
-        let panel = parent.workspace.active_panel();
-        self.set_config_model(&panel.session, &panel.renderer, &parent.presentation)
+        if let Some(panel) = parent.workspace.active_panel() {
+            self.set_config_model(&panel.session, &panel.renderer, &parent.presentation);
+        }
     }
 
     pub fn connected_callback(&self) {}

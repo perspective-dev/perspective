@@ -95,8 +95,34 @@
     background-color: var(--psp--background-color) !important;
     box-shadow:
         2.25px 2.25px 0 2.25px var(--psp--background-color),
+        /* down-right */ -2.25px 2.25px 0 2.25px var(--psp--background-color),
+        /* down-left */ 2.75px 2.75px 0 2.75px var(--psp-inactive--color),
+        -1.75px 2.75px 0 2.75px var(--psp-inactive--color);
+}
+
+.overlay ::slotted(:not([slot^="statusbar-extra"]):not([slot^="tab-"])) {
+    box-shadow:
+        2.25px 2.25px 0 2.25px var(--psp--background-color),
         -2.25px 2.25px 0 2.25px var(--psp--background-color),
-        2.75px 2.75px 0 2.75px var(--psp-inactive--color);
+        2.75px 2.75px 0 2.75px var(--psp-inactive--color),
+        -2.75px 2.75px 0 2.75px var(--psp-inactive--color);
+}
+
+::slotted([part="tab"].visible) {
+    box-shadow:
+        2.25px -2.25px 0 2.25px var(--psp--background-color),
+        -2.25px -2.25px 0 2.25px var(--psp--background-color),
+        3.5px -2.25px 0 2.25px var(--psp-inactive--color),
+        0 12.5px 0 -11.5px var(--psp-inactive--border-color);
+}
+
+.overlay ::slotted([part="tab"].visible) {
+    box-shadow:
+        2.25px -2.25px 0 2.25px var(--psp--background-color),
+        -2.25px -2.25px 0 2.25px var(--psp--background-color),
+        2.75px -2.75px 0 2.75px var(--psp-inactive--color),
+        -2.75px -2.75px 0 2.75px var(--psp-inactive--color),
+        0 12.5px 0 -11.5px var(--psp-inactive--border-color);
 }
 
 :host input[type="number"]::-webkit-inner-spin-button {
@@ -218,11 +244,6 @@
     #menu-bar {
         opacity: 1 !important;
     }
-
-    #component_container #settings_button,
-    #component_container #settings_button.titled {
-        opacity: 1;
-    }
 }
 
 :host {
@@ -322,10 +343,32 @@
             var(--psp--background-color, none)
         );
 
+        /* A STAGED panel's hidden staging wrapper (`MainPanel::render` +
+           `Workspace::stage_panel`): a freshly-created panel's plugin
+           completes its first draw here, laid out at predicted final size
+           but unpainted. `visibility` (not `display`) so the plugin keeps a
+           real box and a non-null `offsetParent` — draw guards, redraw
+           subscriptions and observers behave exactly as for a visible
+           panel. */
+        & > .psp-staging {
+            position: absolute;
+            top: 0;
+            left: 0;
+            overflow: hidden;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        & > .psp-staging ::slotted(*) {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
         /* The layout engine hosting this panel's plugin fills the container. */
         & regular-layout {
             position: absolute;
-            inset: -2px -3px -3px -3px;
+            inset: -4px -4px -4px -4px;
             box-sizing: border-box;
             padding: 0px;
             background: var(--psp--background-color, transparent);
@@ -351,7 +394,7 @@
             & > .rl-panel::part(titlebar) {
                 display: flex;
                 align-items: stretch;
-                height: var(--psp-panel-titlebar--height, 24px);
+                height: var(--psp-panel-titlebar--height, 26px);
                 font-family: var(--button--font-family, inherit);
                 overflow: visible;
             }
@@ -486,15 +529,6 @@
         border-right-width: 0px;
     }
 
-    #component_container > #settings_button {
-        opacity: 0;
-        position: absolute;
-        top: 0;
-        right: 0;
-        margin: var(--settings-button--margin, 10px 36px 0 0);
-        padding: 0;
-    }
-
     #close_button {
         background-color: var(--psp--background-color);
         padding: 0px;
@@ -528,49 +562,6 @@
 
             &:before {
                 content: var(--psp-icon--close--mask-image);
-                visibility: hidden;
-            }
-        }
-    }
-
-    #settings_button {
-        background-color: var(--psp--background-color);
-        padding: 0;
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 3;
-        border: 1px solid var(--psp-inactive--color);
-        border-radius: 5px;
-        font-size: 10px;
-        font-weight: normal;
-
-        &:hover {
-            color: var(--psp--background-color, inherit);
-            background-color: var(--psp--color);
-            cursor: pointer;
-        }
-
-        &:hover .icon {
-            background-color: var(--psp--background-color);
-        }
-
-        .icon {
-            display: inline-flex;
-            mask-size: cover;
-            -webkit-mask-size: cover;
-            background-repeat: no-repeat;
-            background-color: var(--psp--color);
-            mask-image: var(--psp-icon--drawer-tab-inverted--mask-image);
-            -webkit-mask-image: var(
-                --psp-icon--drawer-tab-inverted--mask-image
-            );
-
-            &:before {
-                line-height: 0;
-                display: inline-flex;
-                content: var(--psp-icon--drawer-tab-inverted--mask-image);
                 visibility: hidden;
             }
         }

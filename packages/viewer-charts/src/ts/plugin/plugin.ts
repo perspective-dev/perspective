@@ -614,7 +614,45 @@ export class HTMLPerspectiveViewerWebGLPluginElement
             return;
         }
 
-        this._renderer?.resize();
+        // AWAITED to the resized frame's PRESENT (the worker's
+        // `resizeAck`) — the host's presize protocol style-overrides
+        // this element to its target box and holds the layout commit on
+        // this promise, so resolving at message-post would commit the
+        // settings-pane layout against the old-dimensions bitmap (the
+        // aspect-ratio warp the datagrid's synchronous resize never
+        // shows).
+        await this._renderer?.resize();
+    }
+
+    /**
+     * OPTIONAL host presize protocol: render at the TARGET element box
+     * `(width, height)` — the box the host's pending layout commit will
+     * produce — holding the resulting frame offscreen, so nothing on
+     * screen changes during the round-trip. Resolves, once the resized
+     * frame is staged, to a present closure; the host calls it in the
+     * same task as the layout commit, landing geometry and pixels in
+     * one paint. Plugins without this method get the host's held
+     * style-override presize path instead.
+     */
+    async presize(width: number, height: number): Promise<(() => void) | void> {
+        if (
+            !this.isConnected ||
+            this.offsetParent == null ||
+            !this._renderer ||
+            !this._glCanvas
+        ) {
+            return;
+        }
+
+        // Target GL-canvas box = its current box shifted by the element's
+        // box delta — the chrome between the element edge and the canvas
+        // is constant across a resize.
+        const hostRect = this.getBoundingClientRect();
+        const glRect = this._glCanvas.getBoundingClientRect();
+        return await this._renderer.presize(
+            Math.max(0, glRect.width + (width - hostRect.width)),
+            Math.max(0, glRect.height + (height - hostRect.height)),
+        );
     }
 
     restyle() {

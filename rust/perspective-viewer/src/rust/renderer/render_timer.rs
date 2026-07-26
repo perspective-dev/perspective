@@ -33,6 +33,15 @@ pub struct RenderTimerState {
     render_times: VecDeque<f64>,
     total_render_count: u32,
     start_time: f64,
+
+    /// Bumped by every `visibilitychange` reset. A [`MovingWindowRenderTimer::
+    /// capture_time`] whose awaited render spans a visibility flip measured
+    /// the hidden gap, not the render — it compares its starting epoch
+    /// against this and discards the sample, closing the hole the reset
+    /// alone leaves: an in-flight draw resolves AFTER the show-time reset,
+    /// so its giant sample would land in the freshly-cleared window and pin
+    /// the throttle at its cap.
+    epoch: u64,
 }
 
 /// Serialization of snapshot stats for the JS API call.
@@ -48,22 +57,24 @@ pub struct RenderTimerStats {
 impl MovingWindowRenderTimer {
     pub async fn capture_time<T>(&self, f: impl Future<Output = T>) -> T {
         let perf = global::window().performance().unwrap();
-        let start = match *self.0.borrow() {
-            RenderTimerType::Constant(_) => 0_f64,
-            RenderTimerType::Moving(..) => perf.now(),
+        let (start, epoch) = match &*self.0.borrow() {
+            RenderTimerType::Constant(_) => (0_f64, 0_u64),
+            RenderTimerType::Moving(_, timings) => (perf.now(), timings.borrow().epoch),
         };
 
         let result = f.await;
         match &mut *self.0.borrow_mut() {
             RenderTimerType::Moving(_, timings) => {
                 let mut stats = timings.borrow_mut();
-                let now = perf.now();
-                stats.render_times.push_back(now - start);
-                if stats.render_times.len() > 5 {
-                    stats.render_times.pop_front();
-                }
+                if stats.epoch == epoch {
+                    let now = perf.now();
+                    stats.render_times.push_back(now - start);
+                    if stats.render_times.len() > 5 {
+                        stats.render_times.pop_front();
+                    }
 
-                stats.total_render_count += 1;
+                    stats.total_render_count += 1;
+                }
             },
             RenderTimerType::Constant(_) => (),
         };
@@ -143,10 +154,17 @@ impl RenderTimerState {
 impl RefCell<RenderTimerState> {
     /// We need to clear the throttle queue when the browser tab is hidden, else
     /// the next frame timing will be the time the tab was hidden + render time.
+    /// The epoch bump (not just the clear) is what invalidates an IN-FLIGHT
+    /// `capture_time` — its sample resolves after this reset runs.
     fn register_on_visibility_change(self: &Rc<Self>) -> Closure<dyn Fn(JsValue)> {
         let state = self.clone();
         let closure = Closure::new(move |_| {
-            *state.borrow_mut() = Default::default();
+            let mut state = state.borrow_mut();
+            let epoch = state.epoch + 1;
+            *state = RenderTimerState {
+                epoch,
+                ..Default::default()
+            };
         });
 
         global::document()
@@ -165,6 +183,7 @@ impl Default for RenderTimerState {
             render_times: Default::default(),
             total_render_count: Default::default(),
             start_time,
+            epoch: 0,
         }
     }
 }

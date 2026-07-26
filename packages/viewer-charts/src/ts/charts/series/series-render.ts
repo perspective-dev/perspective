@@ -19,12 +19,20 @@ import {
 } from "./series";
 import type { PlotRect } from "../../layout/plot-layout";
 import { PlotLayout } from "../../layout/plot-layout";
-import { renderInPlotFrame } from "../../webgl/plot-frame";
+import {
+    clearAndSetupFrame,
+    renderInPlotFrame,
+    withScissor,
+} from "../../webgl/plot-frame";
 import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
 import { drawBars, BAR_TYPE_BAR_VAL as BAR_TYPE_BAR } from "./glyphs/draw-bars";
 import { getHoveredBar } from "./series-interact";
 import { computeNiceTicks } from "../../layout/ticks";
-import { type AxisDomain } from "../../axis/numeric-axis";
+import {
+    renderOuterXAxis,
+    renderOuterYAxis,
+    type AxisDomain,
+} from "../../axis/numeric-axis";
 import {
     renderBarAxesChrome,
     renderBarGridlines,
@@ -34,8 +42,19 @@ import {
 import {
     measureCategoricalAxisHeight,
     measureCategoricalAxisWidth,
+    renderCategoricalXTicks,
+    renderCategoricalYTicks,
     type CategoricalDomain,
 } from "../../axis/categorical-axis";
+import {
+    bottomRowLayouts,
+    buildFacetGrid,
+    leftColumnLayouts,
+    type FacetGrid,
+} from "../../layout/facet-grid";
+import { drawFacetTitle } from "../../axis/facet-chrome";
+import { getScaledContext, initCanvas } from "../../axis/canvas";
+import { drawGridlinesX, drawGridlinesY } from "../../axis/axis-primitives";
 import { buildBarTooltipLines } from "./series-interact";
 
 /**
@@ -77,6 +96,12 @@ function ensureBarInstanceScratch(n: number): BarInstanceScratch {
 
 /**
  * Upload bar instance buffers from the columnar `_bars` storage.
+ *
+ * Overlay mode emits instances in `_bars` order. Facet-grid mode
+ * (`_facetActive`) emits them split-major via a counting sort so each
+ * facet's instances form a contiguous range — recorded on
+ * `chart._facetBarRanges` and drawn per facet with an instance-offset
+ * `drawBars` call.
  */
 export function uploadBarInstances(
     chart: SeriesChart,
@@ -84,8 +109,11 @@ export function uploadBarInstances(
 ): void {
     const bars = chart._bars;
     const total = bars.count;
+    const P = chart._splitPrefixes.length;
+    const faceted = chart._facetActive && P > 0;
     let n = 0;
 
+    chart._facetBarRanges = null;
     if (total > 0) {
         const scratch = ensureBarInstanceScratch(total);
         if (
@@ -108,6 +136,34 @@ export function uploadBarInstances(
         const by0 = bars.y0;
         const by1 = bars.y1;
         const ax = bars.axis;
+
+        // Facet mode: counting sort by splitIdx (`seriesId % P`). Pass
+        // 1 counts eligible instances per split; prefix sums become the
+        // per-split write cursors AND the published ranges.
+        let writeAt: ((seriesId: number) => number) | null = null;
+        if (faceted) {
+            const counts = new Array<number>(P).fill(0);
+            for (let i = 0; i < total; i++) {
+                if (ct[i] !== BAR_TYPE_BAR || hidden.has(sid[i])) {
+                    continue;
+                }
+
+                counts[sid[i] % P]++;
+            }
+
+            const ranges: { start: number; count: number }[] = [];
+            const cursors = new Int32Array(P);
+            let acc = 0;
+            for (let p = 0; p < P; p++) {
+                ranges.push({ start: acc, count: counts[p] });
+                cursors[p] = acc;
+                acc += counts[p];
+            }
+
+            chart._facetBarRanges = ranges;
+            writeAt = (seriesId: number) => cursors[seriesId % P]++;
+        }
+
         for (let i = 0; i < total; i++) {
             if (ct[i] !== BAR_TYPE_BAR) {
                 continue;
@@ -118,19 +174,25 @@ export function uploadBarInstances(
                 continue;
             }
 
-            scratch.xCenters[n] = xC[i] - xOrigin;
-            scratch.halfWidths[n] = hw[i];
-            scratch.y0s[n] = by0[i];
-            scratch.y1s[n] = by1[i];
-            scratch.seriesIds[n] = seriesId;
-            scratch.axes[n] = ax[i];
+            const w = writeAt ? writeAt(seriesId) : n;
+            scratch.xCenters[w] = xC[i] - xOrigin;
+            scratch.halfWidths[w] = hw[i];
+            scratch.y0s[w] = by0[i];
+            scratch.y1s[w] = by1[i];
+            scratch.seriesIds[w] = seriesId;
+            scratch.axes[w] = ax[i];
             const color = series[seriesId].color;
-            scratch.colors[n * 3] = color[0];
-            scratch.colors[n * 3 + 1] = color[1];
-            scratch.colors[n * 3 + 2] = color[2];
-            indices[n] = i;
+            scratch.colors[w * 3] = color[0];
+            scratch.colors[w * 3 + 1] = color[1];
+            scratch.colors[w * 3 + 2] = color[2];
+            indices[w] = i;
             n++;
         }
+    } else if (faceted) {
+        chart._facetBarRanges = Array.from({ length: P }, () => ({
+            start: 0,
+            count: 0,
+        }));
     }
 
     chart._uploadedBars = n;
@@ -386,6 +448,28 @@ export function renderBarFrame(
         }
     }
 
+    // Facet-grid branch — one sub-plot per split group. Keys off the
+    // build-time `_facetActive` stamp (NOT the live `_facetConfig`) so
+    // this frame's render mode always matches the stack geometry the
+    // current `_bars` were built with.
+    if (chart._facetActive && chart._splitPrefixes.length > 1) {
+        renderFacetedBarFrame(chart, glManager, {
+            horizontal,
+            numericCat,
+            cssWidth,
+            cssHeight,
+            visCatMin,
+            visCatMax,
+            visValMin,
+            visValMax,
+            visRightMin,
+            visRightMax,
+        });
+        return;
+    }
+
+    chart._facetGrid = null;
+
     const hasLegend = chart._series.length > 1;
     const hasCatLabel = chart._groupBy.length > 0;
 
@@ -611,6 +695,309 @@ export function renderBarFrame(
 }
 
 /**
+ * Domain window computed by `renderBarFrame`'s shared prologue (zoom
+ * window + auto-fit + `include_zero`), handed to the faceted branch.
+ */
+interface FacetedFrameCtx {
+    horizontal: boolean;
+    numericCat: boolean;
+    cssWidth: number;
+    cssHeight: number;
+    visCatMin: number;
+    visCatMax: number;
+    visValMin: number;
+    visValMax: number;
+    visRightMin: number;
+    visRightMax: number;
+}
+
+/**
+ * Faceted frame — one sub-plot per split group, laid out by
+ * `buildFacetGrid`. Geometry contract with the build pipeline
+ * (`facetSplits`): every split's records share the same band-slot
+ * coordinates and per-split stack baselines, so a facet is exactly
+ * "the single-plot render restricted to one split" — same domains,
+ * same projection math, different `PlotLayout` + instance subset.
+ *
+ * Axis policy: the value axis is shared (one outer band, one domain
+ * for every facet); the category axis paints per-cell when
+ * categorical (the outer painters are numeric-only — same compromise
+ * as the cartesian faceted path) and shared-outer when numeric. Zoom
+ * is shared: `syncFacetZoomLayouts` keeps the single controller's
+ * layout on cell 0, and every facet renders the same visible window.
+ *
+ * Known limitation: the grid reserves no outer band for a secondary
+ * value axis, so dual-axis series project correctly inside each facet
+ * but the right-axis chrome is suppressed (`_lastAltYDomain = null`).
+ */
+function renderFacetedBarFrame(
+    chart: SeriesChart,
+    glManager: WebGLContextManager,
+    ctx: FacetedFrameCtx,
+): void {
+    const gl = glManager.gl;
+    const dpr = glManager.dpr;
+    const theme = chart._resolveTheme();
+    const {
+        horizontal,
+        numericCat,
+        cssWidth,
+        cssHeight,
+        visCatMin,
+        visCatMax,
+        visValMin,
+        visValMax,
+        visRightMin,
+        visRightMax,
+    } = ctx;
+
+    const hasCatLabel = chart._groupBy.length > 0;
+    const valueCatDomain = chart._leftValueCategoryDomain;
+    const valueCatActive =
+        chart._leftValueAxisMode === "category" &&
+        valueCatDomain !== null &&
+        valueCatDomain.numRows > 0;
+
+    // Facets absorb the split dimension and color follows the
+    // aggregate, so only multiple aggregates warrant a legend.
+    const hasLegend = chart._aggregates.length > 1;
+
+    // `buildFacetGrid` axis modes are named in CANVAS orientation
+    // (x = bottom band, y = left band); map the logical category /
+    // value sides onto them per chart orientation.
+    const catAxisMode = numericCat ? ("outer" as const) : ("cell" as const);
+    const valAxisMode = valueCatActive ? ("cell" as const) : ("outer" as const);
+
+    const grid: FacetGrid = buildFacetGrid(chart._splitPrefixes, {
+        cssWidth,
+        cssHeight,
+        xAxis: horizontal ? valAxisMode : catAxisMode,
+        yAxis: horizontal ? catAxisMode : valAxisMode,
+        hasLegend,
+        hasXLabel: horizontal ? true : hasCatLabel,
+        hasYLabel: horizontal ? hasCatLabel : true,
+        gap: chart._facetConfig.facet_padding,
+    });
+    chart._facetGrid = grid;
+    chart._lastLayout = grid.cells[0]?.layout ?? null;
+    if (grid.cells.length === 0 || !chart._lastLayout) {
+        return;
+    }
+
+    chart.syncFacetZoomLayouts(grid.cells);
+
+    const leftValueTicks = computeNiceTicks(visValMin, visValMax, 6);
+    const catTicks = numericCat
+        ? computeNiceTicks(visCatMin, visCatMax, 6)
+        : null;
+
+    const sampleLayout = grid.cells[0].layout;
+    const gridlineCanvas = chart._gridlineCanvas;
+    if (gridlineCanvas) {
+        // Deferred FIRST so the destructive resize/clear runs before
+        // the per-cell gridline closures below (FIFO flush order).
+        chart._defer2D(() => initCanvas(gridlineCanvas, sampleLayout, dpr));
+    }
+
+    const requireZero = chart._pluginConfig.include_zero;
+    const hovered = chart._series.length > 1 ? getHoveredBar(chart) : null;
+    const hasRight =
+        chart._hasRightAxis && chart._rightDomain !== null && !horizontal;
+
+    clearAndSetupFrame(gl);
+    for (let p = 0; p < grid.cells.length; p++) {
+        const cell = grid.cells[p];
+        const layout = cell.layout;
+
+        // Same projection args as the single-plot path, on the cell's
+        // layout. Seeds the cell's padded domain, which the deferred
+        // gridline closure, chrome overlay, and hover hit-test read.
+        const projLeft = horizontal
+            ? layout.buildProjectionMatrix(
+                  visValMin,
+                  visValMax,
+                  visCatMax,
+                  visCatMin,
+                  "x",
+                  requireZero,
+                  undefined,
+                  0,
+                  chart._categoryOrigin,
+              )
+            : layout.buildProjectionMatrix(
+                  visCatMin,
+                  visCatMax,
+                  visValMin,
+                  visValMax,
+                  "y",
+                  requireZero,
+                  undefined,
+                  chart._categoryOrigin,
+                  0,
+              );
+
+        let projRight = projLeft;
+        if (hasRight) {
+            const savedPadXMin = layout.paddedXMin;
+            const savedPadXMax = layout.paddedXMax;
+            const savedPadYMin = layout.paddedYMin;
+            const savedPadYMax = layout.paddedYMax;
+            projRight = layout.buildProjectionMatrix(
+                visCatMin,
+                visCatMax,
+                visRightMin,
+                visRightMax,
+                "y",
+                requireZero,
+                undefined,
+                chart._categoryOrigin,
+                0,
+            );
+            layout.paddedXMin = savedPadXMin;
+            layout.paddedXMax = savedPadXMax;
+            layout.paddedYMin = savedPadYMin;
+            layout.paddedYMax = savedPadYMax;
+        }
+
+        if (gridlineCanvas) {
+            chart._defer2D(() =>
+                renderBarGridlinesCell(
+                    gridlineCanvas,
+                    layout,
+                    leftValueTicks,
+                    theme,
+                    dpr,
+                    horizontal,
+                ),
+            );
+        }
+
+        withScissor(gl, layout, dpr, () => {
+            // Same paint order as the single-plot path: areas behind
+            // bars, lines above, scatter on top. X Bar draws bars only
+            // (the other glyphs bake vertical geometry).
+            if (!horizontal) {
+                chart._glyphs.areas.draw(
+                    chart,
+                    gl,
+                    glManager,
+                    projLeft,
+                    projRight,
+                    theme.areaOpacity,
+                    p,
+                );
+            }
+
+            gl.useProgram(chart._program!);
+            const loc = chart._locations!;
+            gl.uniformMatrix4fv(loc.u_proj_left, false, projLeft);
+            gl.uniformMatrix4fv(loc.u_proj_right, false, projRight);
+            gl.uniform1f(loc.u_horizontal, horizontal ? 1.0 : 0.0);
+            gl.uniform1f(
+                loc.u_hover_series,
+                hovered && hovered.splitIdx === p ? hovered.seriesId : -1,
+            );
+            drawBars(
+                chart,
+                gl,
+                glManager,
+                chart._facetBarRanges?.[p] ?? { start: 0, count: 0 },
+            );
+
+            if (!horizontal) {
+                chart._glyphs.lines.draw(
+                    chart,
+                    gl,
+                    glManager,
+                    projLeft,
+                    projRight,
+                    p,
+                );
+                chart._glyphs.scatter.draw(
+                    chart,
+                    gl,
+                    glManager,
+                    projLeft,
+                    projRight,
+                    p,
+                );
+            }
+        });
+    }
+
+    chart._lastXDomain = {
+        levels: chart._rowPaths,
+        numRows: chart._numCategories,
+        levelLabels: chart._groupBy.slice(),
+    };
+    chart._lastYDomain = {
+        min: visValMin,
+        max: visValMax,
+        label: chart._primaryValueLabel,
+    };
+    chart._lastYTicks = leftValueTicks;
+    chart._lastAltYDomain = null;
+    chart._lastAltYTicks = null;
+    chart._lastCatTicks = catTicks;
+    chart._defer2D(() => renderBarChromeOverlay(chart));
+}
+
+/**
+ * Per-cell value-axis gridlines for the faceted frame. Non-destructive
+ * counterpart to {@link renderBarGridlines} — the shared gridline
+ * canvas is `initCanvas`'d once per frame, then each facet paints into
+ * it via `getScaledContext`.
+ */
+function renderBarGridlinesCell(
+    canvas: NonNullable<SeriesChart["_gridlineCanvas"]>,
+    layout: PlotLayout,
+    valueTicks: number[],
+    theme: ReturnType<SeriesChart["_resolveTheme"]>,
+    dpr: number,
+    horizontal: boolean,
+): void {
+    const ctx = getScaledContext(canvas, dpr);
+    if (!ctx) {
+        return;
+    }
+
+    ctx.strokeStyle = theme.gridlineColor;
+    ctx.lineWidth = 1;
+    if (horizontal) {
+        drawGridlinesX(
+            ctx,
+            layout.plotRect,
+            valueTicks,
+            (v) => layout.dataToPixel(v, 0).px,
+        );
+    } else {
+        drawGridlinesY(
+            ctx,
+            layout.plotRect,
+            valueTicks,
+            (v) => layout.dataToPixel(0, v).py,
+        );
+    }
+}
+
+/**
+ * Resolve the `PlotLayout` a record renders in: the record's facet
+ * cell in faceted frames, the single plot layout otherwise. Tooltip /
+ * pin positioning must map through this so faceted anchors land in the
+ * record's own cell.
+ */
+export function layoutForRecord(
+    chart: SeriesChart,
+    b: { splitIdx: number },
+): PlotLayout | null {
+    if (chart._facetGrid) {
+        return chart._facetGrid.cells[b.splitIdx]?.layout ?? null;
+    }
+
+    return chart._lastLayout;
+}
+
+/**
  * Draw axes chrome + legend + tooltip onto the overlay canvas.
  */
 export function renderBarChromeOverlay(chart: SeriesChart): void {
@@ -620,6 +1007,11 @@ export function renderBarChromeOverlay(chart: SeriesChart): void {
         !chart._lastYDomain ||
         !chart._lastYTicks
     ) {
+        return;
+    }
+
+    if (chart._facetGrid) {
+        renderFacetedBarChromeOverlay(chart);
         return;
     }
 
@@ -709,6 +1101,248 @@ export function renderBarChromeOverlay(chart: SeriesChart): void {
     if (getHoveredBar(chart)) {
         renderBarTooltipCanvas(chart);
     }
+}
+
+/**
+ * Chrome overlay for the faceted frame. The canvas is `initCanvas`'d
+ * once, then every painter goes through `getScaledContext` — per-cell
+ * axis frames, per-cell categorical ticks, shared outer numeric
+ * bands, facet titles, the aggregate legend, and the tooltip (mapped
+ * through the hovered record's own cell).
+ */
+function renderFacetedBarChromeOverlay(chart: SeriesChart): void {
+    const grid = chart._facetGrid!;
+    const canvas = chart._chromeCanvas!;
+    const theme = chart._resolveTheme();
+    const dpr = chart._glManager?.dpr ?? 1;
+    const horizontal = chart._isHorizontal;
+    const hasCatLabel = chart._groupBy.length > 0;
+    const numericCat =
+        chart._categoryAxisMode === "numeric" &&
+        chart._numericCategoryDomain !== null &&
+        chart._lastCatTicks !== null;
+
+    if (!initCanvas(canvas, chart._lastLayout!, dpr)) {
+        return;
+    }
+
+    const catDomain = chart._lastXDomain;
+    const valueDomain = chart._lastYDomain!;
+    const valueTicks = chart._lastYTicks!;
+    const valueCatDomain = chart._leftValueCategoryDomain;
+    const valueCatActive =
+        chart._leftValueAxisMode === "category" &&
+        valueCatDomain !== null &&
+        valueCatDomain.numRows > 0;
+
+    const primarySeries = chart._series.find((s) => s.axis === 0);
+    const valueFmt = chart.getColumnFormatter(
+        primarySeries?.aggName ?? null,
+        "tick",
+    );
+    const catFmt = chart.getColumnFormatter(chart._groupBy[0], "tick");
+
+    for (const cell of grid.cells) {
+        const layout = cell.layout;
+        const plot = layout.plotRect;
+        const ctx = getScaledContext(canvas, dpr);
+        if (!ctx) {
+            continue;
+        }
+
+        ctx.strokeStyle = theme.axisLineColor;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(plot.x, plot.y);
+        ctx.lineTo(plot.x, plot.y + plot.height);
+        ctx.lineTo(plot.x + plot.width, plot.y + plot.height);
+        ctx.stroke();
+
+        // Categorical sides paint per cell (the outer band painters
+        // are numeric-only); numeric sides are painted once below
+        // into the shared outer bands.
+        if (!horizontal) {
+            if (!numericCat && catDomain) {
+                renderCategoricalXTicks(ctx, layout, catDomain, theme);
+            }
+
+            if (valueCatActive) {
+                renderCategoricalYTicks(ctx, layout, valueCatDomain!, theme);
+            }
+        } else {
+            if (!numericCat && catDomain) {
+                renderCategoricalYTicks(ctx, layout, catDomain, theme);
+            }
+
+            if (valueCatActive) {
+                renderCategoricalXTicks(ctx, layout, valueCatDomain!, theme);
+            }
+        }
+
+        if (cell.titleRect) {
+            drawFacetTitle(canvas, cell.label, cell.titleRect, theme, dpr);
+        }
+    }
+
+    const numericCatAxisDomain: AxisDomain | null = numericCat
+        ? {
+              min: chart._numericCategoryDomain!.min,
+              max: chart._numericCategoryDomain!.max,
+              isDate: chart._numericCategoryDomain!.isDate,
+              label: chart._numericCategoryDomain!.label,
+          }
+        : null;
+
+    if (!horizontal) {
+        if (numericCatAxisDomain && grid.outerXAxisRect) {
+            renderOuterXAxis(
+                canvas,
+                grid.outerXAxisRect,
+                numericCatAxisDomain,
+                chart._lastCatTicks!,
+                bottomRowLayouts(grid),
+                theme,
+                hasCatLabel,
+                dpr,
+                catFmt,
+            );
+        }
+
+        if (!valueCatActive && grid.outerYAxisRect) {
+            renderOuterYAxis(
+                canvas,
+                grid.outerYAxisRect,
+                valueDomain,
+                valueTicks,
+                leftColumnLayouts(grid),
+                theme,
+                true,
+                dpr,
+                valueFmt,
+            );
+        }
+    } else {
+        if (numericCatAxisDomain && grid.outerYAxisRect) {
+            renderOuterYAxis(
+                canvas,
+                grid.outerYAxisRect,
+                numericCatAxisDomain,
+                chart._lastCatTicks!,
+                leftColumnLayouts(grid),
+                theme,
+                hasCatLabel,
+                dpr,
+                catFmt,
+            );
+        }
+
+        if (!valueCatActive && grid.outerXAxisRect) {
+            renderOuterXAxis(
+                canvas,
+                grid.outerXAxisRect,
+                valueDomain,
+                valueTicks,
+                bottomRowLayouts(grid),
+                theme,
+                true,
+                dpr,
+                valueFmt,
+            );
+        }
+    }
+
+    renderFacetedBarLegend(chart, grid);
+
+    if (getHoveredBar(chart)) {
+        renderBarTooltipCanvas(chart);
+    }
+}
+
+/**
+ * Aggregate-level legend for the faceted frame, painted into the
+ * grid's shared right gutter. One entry per aggregate (facets absorb
+ * the split dimension; every split of an aggregate shares its color —
+ * see `ensurePalette`). A legend toggle targets the aggregate's full
+ * seriesId set, so hiding "Sales" hides it in every facet at once; an
+ * entry reads as hidden only when ALL of its series are hidden.
+ */
+function renderFacetedBarLegend(chart: SeriesChart, grid: FacetGrid): void {
+    chart._legendRects = [];
+    if (!chart._chromeCanvas || !grid.legendRect) {
+        return;
+    }
+
+    const M = chart._aggregates.length;
+    if (M <= 1) {
+        return;
+    }
+
+    const ctx = chart._chromeCanvas.getContext("2d") as Context2D | null;
+    if (!ctx) {
+        return;
+    }
+
+    ctx.save();
+
+    const theme = chart._resolveTheme();
+    const swatchSize = 10;
+    const lineHeight = 18;
+    const x = grid.legendRect.x + 12;
+    let y = grid.legendRect.y + 10;
+
+    ctx.font = `11px ${theme.fontFamily}`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+
+    for (let k = 0; k < M; k++) {
+        const seriesIds: number[] = [];
+        let color: [number, number, number] = [0.5, 0.5, 0.5];
+        for (const s of chart._series) {
+            if (s.aggIdx === k) {
+                seriesIds.push(s.seriesId);
+                color = s.color;
+            }
+        }
+
+        const label = chart._aggregates[k];
+        const hidden = seriesIds.every((sid) => chart._hiddenSeries.has(sid));
+        const r = Math.round(color[0] * 255);
+        const g = Math.round(color[1] * 255);
+        const b = Math.round(color[2] * 255);
+
+        ctx.globalAlpha = hidden ? 0.3 : 1.0;
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(x, y - swatchSize / 2, swatchSize, swatchSize);
+
+        ctx.fillStyle = theme.legendText;
+        ctx.fillText(label, x + swatchSize + 6, y);
+
+        const textW = ctx.measureText(label).width;
+        if (hidden) {
+            ctx.strokeStyle = theme.legendText;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x + swatchSize + 6, y);
+            ctx.lineTo(x + swatchSize + 6 + textW, y);
+            ctx.stroke();
+        }
+
+        ctx.globalAlpha = 1.0;
+
+        chart._legendRects.push({
+            seriesIds,
+            rect: {
+                x: x - 2,
+                y: y - lineHeight / 2,
+                width: swatchSize + 6 + textW + 4,
+                height: lineHeight,
+            },
+        });
+
+        y += lineHeight;
+    }
+
+    ctx.restore();
 }
 
 /**
@@ -810,7 +1444,7 @@ function renderBarLegend(chart: SeriesChart): void {
             width: swatchSize + 6 + textW + 4,
             height: lineHeight,
         };
-        chart._legendRects.push({ seriesId: s.seriesId, rect });
+        chart._legendRects.push({ seriesIds: [s.seriesId], rect });
 
         y += lineHeight;
     }
@@ -828,7 +1462,12 @@ function renderBarTooltipCanvas(chart: SeriesChart): void {
         return;
     }
 
-    const layout = chart._lastLayout;
+    // Faceted frames anchor in the record's own cell; single-plot
+    // frames fall through to `_lastLayout`.
+    const layout = layoutForRecord(chart, b);
+    if (!layout) {
+        return;
+    }
 
     // Bar glyphs anchor the tooltip at the midpoint of the bar body so
     // it reads against a solid swatch. Line / scatter / area glyphs
@@ -845,7 +1484,7 @@ function renderBarTooltipCanvas(chart: SeriesChart): void {
             ? chart._isHorizontal
                 ? layout.dataToPixel(anchorV, b.xCenter)
                 : layout.dataToPixel(b.xCenter, anchorV)
-            : rightAxisDataToPixel(chart, b.xCenter, anchorV);
+            : rightAxisDataToPixel(chart, b.xCenter, anchorV, layout);
 
     const lines = buildBarTooltipLines(chart, b);
     const theme = chart._resolveTheme();
@@ -863,8 +1502,9 @@ export function rightAxisDataToPixel(
     chart: SeriesChart,
     x: number,
     y: number,
+    layoutOverride?: PlotLayout,
 ): { px: number; py: number } {
-    const layout = chart._lastLayout!;
+    const layout = layoutOverride ?? chart._lastLayout!;
     const { x: px, y: py, width, height } = layout.plotRect;
     const tx =
         (x - layout.paddedXMin) / (layout.paddedXMax - layout.paddedXMin);

@@ -41,10 +41,6 @@ pub struct StatusBarProps {
     /// Fired when the reset button is clicked.
     pub on_reset: Callback<bool>,
 
-    /// Fires when the settings button is clicked
-    #[prop_or_default]
-    pub on_settings: Option<Callback<()>>,
-
     /// Snapshots threaded from root.  Component reads `has_table`, `stats`,
     /// `error`, `title` from session_props; `selected_theme`,
     /// `available_themes`, `is_workspace` from presentation_props.
@@ -219,8 +215,7 @@ impl Component for StatusBar {
             .slot_name()
             .map(|id| format!("statusbar-extra-{id}"))
             .unwrap_or_else(|| "statusbar-extra".to_owned());
-        let is_menu = matches!(has_table, Some(TableLoadState::Loaded))
-            && ctx.props().on_settings.as_ref().is_none();
+        let is_menu = matches!(has_table, Some(TableLoadState::Loaded)) && is_settings_open;
         // The editable title moved to the per-panel `<PanelTab>` headers; the
         // status bar no longer hosts an `<input>`, so its `is_active` factor is
         // gone. `is_title` now only gates the row counter.
@@ -348,14 +343,7 @@ impl Component for StatusBar {
                                 </span>
                             </div>
                         }
-                        if let Some(x) = ctx.props().on_settings.as_ref() {
-                            <div
-                                id="settings_button"
-                                class="noselect"
-                                onmousedown={x.reform(|_| ())}
-                            >
-                                <span class="icon" />
-                            </div>
+                        if !is_settings_open {
                             <div id="close_button" class="noselect" onmousedown={onclose}>
                                 <span class="icon" />
                             </div>
@@ -387,18 +375,16 @@ impl Component for StatusBar {
                     </PortalModal>
                 </>
             }
-        } else if let Some(x) = ctx.props().on_settings.as_ref() {
+        } else {
+            // Settings closed + loaded: no docked status bar. The open-settings
+            // affordance lives on the `PanelTab`s; only the (default-hidden)
+            // eject button floats here.
             let class = classes!(is_updating_class_name, "floating");
             html! {
                 <div id={ctx.props().id.clone()} {class}>
-                    <div id="settings_button" class="noselect" onmousedown={x.reform(|_| ())}>
-                        <span class="icon" />
-                    </div>
                     <div id="close_button" class="noselect" onmousedown={&onclose} />
                 </div>
             }
-        } else {
-            html! {}
         }
     }
 }
