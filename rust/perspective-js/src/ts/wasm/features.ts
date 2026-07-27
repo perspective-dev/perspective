@@ -10,22 +10,22 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import perspective from "./perspective.browser.ts";
-export * from "./perspective.browser.ts";
+// The encoding of `(module (memory i64 1))` — validates only on hosts with
+// WebAssembly Memory64 support (the same probe `wasm-feature-detect` uses).
+const MEMORY64_PROBE = new Uint8Array([
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x05, 0x03, 0x01, 0x04,
+    0x01,
+]);
 
-const url = new URL(
-    "../../../server/dist/wasm/perspective-server.wasm",
-    import.meta.url,
-);
+let MEMORY64_SUPPORTED: boolean | undefined;
 
-const url64 = new URL(
-    "../../../server/dist/wasm/perspective-server.memory64.wasm",
-    import.meta.url,
-);
+/**
+ * Does this JavaScript host support WebAssembly Memory64 (wasm64)?
+ */
+export function host_supports_memory64(): boolean {
+    if (MEMORY64_SUPPORTED === undefined) {
+        MEMORY64_SUPPORTED = WebAssembly.validate(MEMORY64_PROBE);
+    }
 
-perspective.init_server({
-    wasm32: () => fetch(url),
-    wasm64: () => fetch(url64),
-});
-
-export default perspective;
+    return MEMORY64_SUPPORTED;
+}

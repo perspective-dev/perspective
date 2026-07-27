@@ -17,6 +17,8 @@ import * as psp_virtual from "./virtual_server.ts";
 import * as wasm_module from "../../dist/wasm/perspective-js.js";
 import * as api from "./wasm/browser.ts";
 import { load_wasm_stage_0 } from "./wasm/decompress.ts";
+import { host_supports_memory64 } from "./wasm/features.ts";
+export { host_supports_memory64 } from "./wasm/features.ts";
 
 export {
     GenericSQLVirtualServerModel,
@@ -30,7 +32,40 @@ import {
     VirtualServer,
 } from "../../dist/wasm/perspective-js.js";
 
-let GLOBAL_SERVER_WASM: Promise<ArrayBuffer | WebAssembly.Module>;
+/**
+ * A single Perspective engine binary, in any form `init_server` accepts.
+ * Thunk sources are only invoked if selected — register both bitnesses as
+ * `() => fetch(...)` and only the winning binary is ever downloaded.
+ */
+export type ServerWasmSource =
+    | Uint8Array
+    | ArrayBuffer
+    | Response
+    | WebAssembly.Module
+    | Promise<ArrayBuffer | Response | WebAssembly.Module>
+    | (() => Promise<ArrayBuffer | Response | WebAssembly.Module>);
+
+/**
+ * Engine binaries by bitness. Registering `wasm64` is the opt-in for the
+ * Memory64 engine (4GB heap ceiling raised to 16GB, at some engine
+ * performance cost) — it is selected whenever the host supports Memory64.
+ */
+export interface ServerWasmRegistration {
+    wasm32?: ServerWasmSource;
+    wasm64?: ServerWasmSource;
+}
+
+export interface InitServerOptions {
+    disable_stage_0?: boolean;
+}
+
+interface ServerWasmRegistry extends ServerWasmRegistration {
+    sole?: ServerWasmSource;
+    disable_stage_0: boolean;
+}
+
+let SERVER_REGISTRY: ServerWasmRegistry | undefined;
+let GLOBAL_SERVER_WASM: Promise<ArrayBuffer | WebAssembly.Module> | undefined;
 
 export async function createMessageHandler(
     handler: psp_virtual.VirtualServerHandler,
@@ -38,28 +73,144 @@ export async function createMessageHandler(
     return psp_virtual.createMessageHandler(await get_client(), handler);
 }
 
-export function init_server(
-    wasm:
-        | Uint8Array
-        | Promise<ArrayBuffer | Response | WebAssembly.Module>
-        | ArrayBuffer
-        | Response
-        | WebAssembly.Module,
-    disable_stage_0: boolean = false,
-) {
+function is_wasm_source(
+    wasm: ServerWasmSource | ServerWasmRegistration,
+): wasm is ServerWasmSource {
+    return (
+        wasm instanceof Uint8Array ||
+        wasm instanceof ArrayBuffer ||
+        (typeof Response !== "undefined" && wasm instanceof Response) ||
+        wasm instanceof Promise ||
+        wasm instanceof WebAssembly.Module ||
+        typeof wasm === "function"
+    );
+}
+
+async function materialize_server_wasm(
+    source: ServerWasmSource,
+    disable_stage_0: boolean,
+): Promise<ArrayBuffer | WebAssembly.Module> {
+    let wasm = typeof source === "function" ? await source() : await source;
     if (wasm instanceof Uint8Array) {
-        GLOBAL_SERVER_WASM = Promise.resolve(wasm.buffer);
-    } else if (wasm instanceof Response) {
-        GLOBAL_SERVER_WASM = Promise.resolve(wasm);
-    } else if (wasm instanceof Promise) {
-        GLOBAL_SERVER_WASM = wasm;
-    } else {
-        GLOBAL_SERVER_WASM = Promise.resolve(wasm);
+        wasm = wasm.buffer as ArrayBuffer;
     }
 
-    if (!disable_stage_0) {
-        GLOBAL_SERVER_WASM = GLOBAL_SERVER_WASM.then((x) =>
-            load_wasm_stage_0(x).then((x) => x.buffer as ArrayBuffer),
+    if (typeof Response !== "undefined" && wasm instanceof Response) {
+        if (!wasm.ok) {
+            throw new Error(
+                `Failed to fetch perspective server wasm (HTTP ${wasm.status} "${wasm.url}")`,
+            );
+        }
+
+        if (disable_stage_0) {
+            return await wasm.arrayBuffer();
+        }
+    }
+
+    if (disable_stage_0) {
+        return wasm as ArrayBuffer | WebAssembly.Module;
+    }
+
+    const bytes = await load_wasm_stage_0(wasm);
+    return bytes.buffer as ArrayBuffer;
+}
+
+async function select_server_wasm(
+    registry: ServerWasmRegistry,
+): Promise<ArrayBuffer | WebAssembly.Module> {
+    if (registry.sole !== undefined) {
+        return await materialize_server_wasm(
+            registry.sole,
+            registry.disable_stage_0,
+        );
+    }
+
+    // A lone `wasm64` registration is an explicit opt-in and is used as-is
+    // regardless of the probe (an unsupporting host fails at instantiation,
+    // which is the correct error).
+    if (
+        registry.wasm64 !== undefined &&
+        (registry.wasm32 === undefined || host_supports_memory64())
+    ) {
+        try {
+            return await materialize_server_wasm(
+                registry.wasm64,
+                registry.disable_stage_0,
+            );
+        } catch (e) {
+            if (registry.wasm32 === undefined) {
+                throw e;
+            }
+
+            console.warn(
+                "Memory64 perspective server wasm failed to load, falling back to wasm32",
+                e,
+            );
+        }
+    }
+
+    return await materialize_server_wasm(
+        registry.wasm32!,
+        registry.disable_stage_0,
+    );
+}
+
+/**
+ * Register the Perspective engine ("server") WebAssembly binary that backs
+ * `worker()`.
+ *
+ * The single-argument form registers one binary of either bitness. The
+ * object form registers a wasm32 and/or wasm64 (Memory64) binary; the wasm64
+ * binary is preferred whenever the host supports Memory64, raising the
+ * engine's heap ceiling from 4GB to 16GB (at some engine performance cost —
+ * register only `wasm32` to opt out). Sources registered as thunks are only
+ * invoked if selected, so the losing binary is never downloaded; if the
+ * selected wasm64 source fails to load and a wasm32 source is also
+ * registered, selection falls back to wasm32 with a console warning.
+ *
+ * Selection and download are deferred to the first `worker()` call.
+ *
+ * # Examples
+ *
+ * ```javascript
+ * perspective.init_server(
+ *     fetch("perspective-server.wasm"),
+ * );
+ *
+ * perspective.init_server({
+ *     wasm32: () => fetch("perspective-server.wasm"),
+ *     wasm64: () => fetch("perspective-server.memory64.wasm"),
+ * });
+ * ```
+ */
+export function init_server(
+    wasm: ServerWasmSource | ServerWasmRegistration,
+    options: boolean | InitServerOptions = false,
+) {
+    const disable_stage_0 =
+        typeof options === "boolean" ? options : !!options.disable_stage_0;
+
+    GLOBAL_SERVER_WASM = undefined;
+    if (is_wasm_source(wasm)) {
+        SERVER_REGISTRY = { sole: wasm, disable_stage_0 };
+        return;
+    }
+
+    // `WebAssembly.Module`'s lib type is structurally empty, so TypeScript
+    // can't negatively narrow this branch itself.
+    const registration = wasm as ServerWasmRegistration;
+    if (
+        registration.wasm32 !== undefined ||
+        registration.wasm64 !== undefined
+    ) {
+        SERVER_REGISTRY = {
+            wasm32: registration.wasm32,
+            wasm64: registration.wasm64,
+            disable_stage_0,
+        };
+    } else {
+        throw new Error(
+            "init_server requires a wasm source or a {wasm32, wasm64} registration",
         );
     }
 }
@@ -175,8 +326,12 @@ export async function getCompiledClientWasm(): Promise<WebAssembly.Module> {
 }
 
 function get_server() {
-    if (GLOBAL_SERVER_WASM === undefined) {
+    if (SERVER_REGISTRY === undefined) {
         throw new Error("Missing perspective-server.wasm");
+    }
+
+    if (GLOBAL_SERVER_WASM === undefined) {
+        GLOBAL_SERVER_WASM = select_server_wasm(SERVER_REGISTRY);
     }
 
     return GLOBAL_SERVER_WASM.then((x) =>
@@ -234,6 +389,7 @@ export default {
     worker,
     init_client,
     init_server,
+    host_supports_memory64,
     createMessageHandler,
     getCompiledClientWasm,
     GenericSQLVirtualServerModel,

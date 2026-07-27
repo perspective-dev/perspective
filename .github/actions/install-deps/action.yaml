@@ -41,6 +41,9 @@ inputs:
     skip_cache:
         default: "false"
         description: "Don't use cache from previous builds"
+    ccache:
+        default: ""
+        description: "Install ccache with this cache key (empty = disabled); build steps must also set PSP_USE_CCACHE"
 
 runs:
     using: "composite"
@@ -115,11 +118,12 @@ runs:
               restore-keys: |
                   ${{ runner.os }}-cargo-
 
-        # - name: ccache
-        #   uses: hendrikmuhs/ccache-action@v1.2
-        #   if: ${{ inputs.skip_cache == 'false' }}
-        #   with:
-        #       key: ${{ github.job }}-${{ matrix.os }}
+        - name: ccache
+          uses: hendrikmuhs/ccache-action@v1.2
+          if: ${{ inputs.ccache != '' && inputs.skip_cache == 'false' }}
+          with:
+              key: ${{ inputs.ccache }}
+              max-size: "1G"
 
         # https://github.com/apache/arrow/issues/38391
         - if: ${{ runner.os == 'macOS' }}

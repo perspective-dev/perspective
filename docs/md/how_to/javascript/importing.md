@@ -36,6 +36,23 @@ const viewer = document.createElement("perspective-viewer");
 
 The exact syntax will vary slightly depending on the bundler.
 
+### Memory64 (wasm64)
+
+`@perspective-dev/server` also ships a WebAssembly Memory64 build of the
+engine, `dist/wasm/perspective-server.memory64.wasm`, which raises the
+engine's heap ceiling from 4GB to 16GB (at some engine performance cost).
+`init_server` accepts both binaries at once — register each as a _thunk_ and
+only the selected binary is ever downloaded. The wasm64 binary is used
+whenever the browser supports Memory64; registering only the wasm32 binary
+(as above) opts out.
+
+```javascript
+perspective.init_server({
+    wasm32: () => fetch(SERVER_WASM),
+    wasm64: () => fetch(SERVER_WASM64),
+});
+```
+
 ### Vite
 
 ```javascript

@@ -211,15 +211,17 @@ async function convert_typed_array_to_pointer(
     array: Uint8Array,
     callback: (_: PspPtr) => Promise<PspPtr>,
 ): Promise<PspPtr> {
+    const is_64 = core._psp_is_memory64();
     const ptr = core._psp_alloc(
-        core._psp_is_memory64()
+        is_64
             ? (BigInt(array.byteLength) as any as number)
             : (array.byteLength as any),
     );
 
-    core.HEAPU8.set(array, Number(ptr) >>> 0);
-    const msg = await callback(Number(ptr) >>> 0);
-    core._psp_free(Number(ptr) >>> 0);
+    const addr = is_64 ? Number(ptr) : Number(ptr) >>> 0;
+    core.HEAPU8.set(array, addr);
+    const msg = await callback(ptr);
+    core._psp_free(ptr);
     return msg;
 }
 
@@ -255,7 +257,7 @@ async function decode_api_responses(
     const is_64 = core._psp_is_memory64();
     const response = new DataView(
         core.HEAPU8.buffer,
-        Number(ptr) >>> 0,
+        is_64 ? Number(ptr) : Number(ptr) >>> 0,
         is_64 ? 12 : 8,
     );
 

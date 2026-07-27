@@ -147,13 +147,14 @@ jobs:
                   clean: "true"
                   python: "false"
                   playwright: "true"
+                  ccache: "emscripten-wasm32"
                   skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
 
             - name: WebAssembly Build
               run: pnpm run build --ci
               env:
                   PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,react,anywidget"
-                  # PSP_USE_CCACHE: 1
+                  PSP_USE_CCACHE: "1"
 
             - uses: actions/upload-artifact@v4
               with:
@@ -178,6 +179,56 @@ jobs:
                   path: |
                       rust/perspective-python/perspective/widget/static/perspective-anywidget.js
                       rust/perspective-python/perspective/widget/static/perspective-anywidget.css
+
+    # The Memory64 engine recompiles the entire C++ dependency chain under
+    # `-sMEMORY64` (no object sharing with wasm32 is possible), so it builds
+    # on its own runner in parallel with `build_js` rather than doubling that
+    # job's wall clock. Downstream jobs merge this single-file artifact into
+    # `rust/perspective-server/dist/wasm/`.
+    build_js_wasm64:
+        runs-on: ${{ matrix.os }}
+        needs: [lint_and_docs]
+        strategy:
+            fail-fast: false
+            matrix:
+                os:
+                    - ubuntu-22.04
+                node-version: [22.x]
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Config
+              id: config-step
+              uses: ./.github/actions/config
+
+            - uses: actions/download-artifact@v4
+              with:
+                  name: perspective-metadata
+                  path: rust/
+
+            - name: Initialize Build
+              id: init-step
+              uses: ./.github/actions/install-deps
+              with:
+                  clean: "true"
+                  python: "false"
+                  playwright: "true"
+                  ccache: "emscripten-wasm64"
+                  skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
+
+            - name: WebAssembly Build (Memory64)
+              run: pnpm run build --ci
+              env:
+                  PACKAGE: "server"
+                  PSP_WASM64: "only"
+                  PSP_USE_CCACHE: "1"
+
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: perspective-server-wasm64-dist
+                  path: rust/perspective-server/dist/wasm/perspective-server.memory64.wasm
 
     # ,-,---.       .    .  .-,--.     .  .
     #  '|___/ . . . |  ,-|   '|__/ . . |- |-. ,-. ,-.
@@ -654,7 +705,7 @@ jobs:
     #                   /` |                              |
     #                   `--'                              '
     test_js:
-        needs: [build_js]
+        needs: [build_js, build_js_wasm64]
         runs-on: ${{ matrix.os }}
         strategy:
             fail-fast: false
@@ -686,6 +737,11 @@ jobs:
               with:
                   name: perspective-js-dist
                   path: .
+
+            - uses: actions/download-artifact@v4
+              with:
+                  name: perspective-server-wasm64-dist
+                  path: rust/perspective-server/dist/wasm
 
             - name: Run Tests
               id: run_tests
@@ -989,6 +1045,7 @@ jobs:
         needs:
             [
                 build_and_test_jupyterlab,
+                build_js_wasm64,
                 test_python,
                 test_python_sdist,
                 test_js,
@@ -1067,6 +1124,16 @@ jobs:
 
             - run: pnpm pack --pack-destination=../..
               working-directory: ./rust/perspective-js
+
+            - uses: actions/download-artifact@v4
+              with:
+                  name: perspective-server-wasm64-dist
+                  path: rust/perspective-server/dist/wasm
+
+            # `files` globs don't fail on absence, so a silently-skipped
+            # memory64 build would otherwise publish a wasm32-only package.
+            - name: Assert wasm64 engine asset
+              run: test -f rust/perspective-server/dist/wasm/perspective-server.memory64.wasm
 
             - run: pnpm pack --pack-destination=../..
               working-directory: ./rust/perspective-server
