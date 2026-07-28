@@ -12,7 +12,7 @@
 
 [package]
 name = "perspective-js"
-version = "4.5.2"
+version = "5.0.0"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
 description = "A data visualization and analytics component, especially well-suited for large and/or streaming datasets."
@@ -63,7 +63,7 @@ anyhow = "1.0.66"
 wasm-bindgen-test = "0.3.13"
 
 [dependencies]
-perspective-client = { version = "4.5.2", features = ["sendable"] }
+perspective-client = { version = "5.0.0", features = ["sendable"] }
 arrow-array = { version = "57.3.0", default-features = false }
 arrow-ipc = { version = "57.3.0", default-features = false }
 arrow-schema = { version = "57.3.0", default-features = false }

@@ -42,7 +42,7 @@
     },
     "panels": {
         "PERSPECTIVE_GENERATED_ID_0": {
-            "version": "4.5.2",
+            "version": "5.0.0",
             "plugin": "Datagrid",
             "plugin_config": {
                 "columns": {},
@@ -78,7 +78,7 @@
             "settings": false
         },
         "PERSPECTIVE_GENERATED_ID_1": {
-            "version": "4.5.2",
+            "version": "5.0.0",
             "plugin": "Y Area",
             "plugin_config": {},
             "columns_config": {},
@@ -101,7 +101,7 @@
             "aggregates": {}
         },
         "PERSPECTIVE_GENERATED_ID_2": {
-            "version": "4.5.2",
+            "version": "5.0.0",
             "plugin": "Y Line",
             "plugin_config": {},
             "columns_config": {},

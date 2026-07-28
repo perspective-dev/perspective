@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/docs",
-    "version": "4.5.2",
+    "version": "5.0.0",
     "private": true,
     "type": "module",
     "scripts": {
