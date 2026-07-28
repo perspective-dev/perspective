@@ -10,14 +10,30 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-//! Theme reset / set task. Replaces the inlined StatusBar callback that
-//! reached into `Session::get_view()` for the post-update restyle.
+//! Theme reset / set task.
 
+use futures::future::join_all;
 use perspective_js::utils::*;
 
 use crate::presentation::Presentation;
 use crate::renderer::Renderer;
 use crate::workspace::Workspace;
+
+/// Re-seed every panel renderer's cached registry default theme from the
+/// (awaited, so initialized) theme registry, returning the default name.
+/// Every consumer of `Renderer::needs_restyle` after a registry-affecting
+/// change must run this first — a cold cache compares against `None`.
+pub(crate) async fn seed_default_themes(
+    presentation: &Presentation,
+    workspace: &Workspace,
+) -> Option<String> {
+    let default = presentation.get_default_theme_name().await;
+    for panel in workspace.panels() {
+        panel.renderer.set_default_theme(default.clone());
+    }
+
+    default
+}
 
 /// Apply a theme change and restyle the affected panel's view.
 ///
@@ -47,18 +63,7 @@ pub fn update_theme(
     // it independent of which panel is active. `set_theme_name` below mirrors
     // the same value onto the host `theme` attribute (driving the chrome), and
     // MainPanel inlines this renderer's theme on its frame only when it
-    // diverges from the host. Sync `RefCell` write, done before the spawn so
-    // the re-render `set_theme_name` triggers observes the new value.
-    renderer.set_theme(theme.clone());
-
-    // Stamp-with-commit: flip the picked panel's plugin `theme` attribute
-    // synchronously with the own-theme record (a named pick needs no
-    // registry; a reset stamps sync only from a warm default cache — a
-    // cold one would stamp attribute-removal). The `restyle_all` in the
-    // spawned tail below still owns the expensive var re-read + redraw.
-    if theme.is_some() || renderer.default_theme().is_some() {
-        renderer.stamp_theme(None);
-    }
+    renderer.set_theme_stamped(theme.clone());
 
     let presentation = presentation.clone();
     let workspace = workspace.clone();
@@ -72,30 +77,18 @@ pub fn update_theme(
             },
         }
 
-        // Re-seed every renderer's default cache from the (now-initialized)
-        // registry before consulting `needs_restyle`, whose effective-theme
-        // side reads it — a reset (`theme = None`) on a cold cache would
-        // otherwise compare against `None` and restyle to attribute-removal.
-        let default = presentation.get_default_theme_name().await;
-        for panel in workspace
-            .panel_ids()
-            .into_iter()
-            .filter_map(|id| workspace.panel(&id))
-        {
-            panel.renderer.set_default_theme(default.clone());
-
-            // State-keyed (captured-theme vs. effective — see
-            // `Renderer::needs_restyle`): only the picked panel's effective
-            // theme changed in this task, so only it can read stale — and a
-            // pick that lands on the value the plugin already captured (or
-            // a panel that has yet to first-paint) restyles nothing.
+        seed_default_themes(&presentation, &workspace).await;
+        let panels = workspace.panels();
+        join_all(panels.iter().map(|panel| async move {
             if panel.renderer.needs_restyle() {
-                // `restyle_all` resolves the bound `View` itself, INSIDE the
-                // draw lock (no-op when nothing is bound) — a handle captured
-                // here would race an in-flight rebuild.
                 panel.renderer.restyle_all().await?;
             }
-        }
+
+            ApiResult::<()>::Ok(())
+        }))
+        .await
+        .into_iter()
+        .collect::<ApiResult<Vec<_>>>()?;
 
         Ok(())
     });

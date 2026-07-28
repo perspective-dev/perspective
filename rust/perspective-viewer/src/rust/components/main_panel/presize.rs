@@ -14,9 +14,7 @@
 //! its *target* cell box before the `<regular-layout>` commit, so content is
 //! ready ahead of the geometry change (no post-commit shear/clip).
 
-use std::cell::Cell;
 use std::collections::HashMap;
-use std::rc::Rc;
 
 use futures::future::join_all;
 use perspective_client::utils::PerspectiveResultExt;
@@ -31,13 +29,9 @@ use crate::renderer::Renderer;
 use crate::tasks::PanelResizeObserverHandle;
 use crate::workspace::PanelId;
 
-/// Presize the DRAGGED panel from the `before-resize` detail's `overlay`
-/// preview box (regular-layout >= 0.6.1) instead of tracking it reactively
-/// with a per-drag `ResizeObserver`.
-const PRESIZE_DRAG_OVERLAY: bool = false;
-
 fn set_tab_presize(tab: &web_sys::HtmlElement, dx: f64, dy: f64) {
-    if dx.abs() > 0.5 || dy.abs() > 0.5 {
+    if dx.abs() > crate::renderer::SUBPIXEL_EPSILON || dy.abs() > crate::renderer::SUBPIXEL_EPSILON
+    {
         let _ = tab
             .style()
             .set_property("transform", &format!("translate({dx}px, {dy}px)"));
@@ -58,10 +52,25 @@ struct PresizePath {
     view_window: JsValue,
 }
 
-#[derive(serde::Deserialize)]
-struct PresizeOverlay {
-    slot: String,
-    path: PresizePath,
+/// The current screen origin of a frame's grid TRACK (its margin box — the
+/// coordinate space `real_coordinates` reports), measured live from the frame.
+/// `target_track − current_track` is the presize translate delta: the plugin's
+/// offset *within* its track is constant across a layout transition, so the
+/// track delta is exactly the plugin delta (see `Renderer::presize_with_box`).
+fn frame_track_origin(frame: &web_sys::Element) -> Option<(f64, f64)> {
+    let style = web_sys::window()?.get_computed_style(frame).ok()??;
+    let px = |prop: &str| {
+        style
+            .get_property_value(prop)
+            .ok()
+            .and_then(|v| v.trim().trim_end_matches("px").parse::<f64>().ok())
+            .unwrap_or(0.0)
+    };
+    let rect = frame.get_bounding_client_rect();
+    Some((
+        rect.left() - px("margin-left"),
+        rect.top() - px("margin-top"),
+    ))
 }
 
 impl MainPanel {
@@ -76,25 +85,21 @@ impl MainPanel {
             .detail()
             .unchecked_into::<PresizeDetail>();
 
-        let mut paths: HashMap<String, PresizePath> = detail
+        let paths: HashMap<String, PresizePath> = detail
             .calculate_presize_paths()
             .into_serde_ext()
             .unwrap_or_default();
 
-        if PRESIZE_DRAG_OVERLAY
-            && let Ok(Some(overlay)) = detail.overlay().into_serde_ext::<Option<PresizeOverlay>>()
-        {
-            paths.insert(overlay.slot, overlay.path);
-        }
-
         // Bind a drag ResizeObserver on the panel being dragged: it's
         // the one present in the layout but EXCLUDED from the presize
-        // paths. With [`PRESIZE_DRAG_OVERLAY`] enabled the dragged slot
-        // IS in `paths`, so this loop no-ops.)
+        // paths. A STAGED panel is absent from the layout for a different
+        // reason than the dragged panel — never bind the per-drag observer
+        // to its staging wrapper.
         for id in &ctx.props().panel_ids {
             let name = id.as_str();
             if !paths.contains_key(name)
                 && !self.panel_resize_observers.contains_key(name)
+                && !ctx.props().workspace.is_staged(id)
                 && let Some(panel) = ctx.props().workspace.panel(id)
                 && let Some(plugin) = panel.renderer.active_plugin()
             {
@@ -108,7 +113,9 @@ impl MainPanel {
 
         let workspace = ctx.props().workspace.clone();
         let viewer = ctx.props().presentation.viewer_elem().clone();
+        let effect = workspace.effects().guard();
         ApiFuture::spawn(async move {
+            let _effect = effect;
             let mut targets: Vec<(Renderer, f64, f64, f64, f64)> = Vec::new();
             let mut tab_targets: Vec<(web_sys::HtmlElement, f64, f64)> = Vec::new();
             let mut last_chrome: Option<(f64, f64)> = None;
@@ -137,12 +144,12 @@ impl MainPanel {
                         .as_ref()
                         .and_then(|frame| crate::tasks::plugin_chrome(frame, plugin_el));
                     last_chrome = chrome.or(last_chrome);
-                    let (cw, ch) = chrome.or(last_chrome).unwrap_or((8.0, 33.0));
+                    let (cw, ch) = last_chrome.unwrap_or(crate::tasks::CHROME_FALLBACK);
                     let width = (cell.width() - cw).max(0.0);
                     let height = (cell.height() - ch).max(0.0);
                     let (dx, dy) = frame
                         .as_ref()
-                        .and_then(crate::tasks::frame_track_origin)
+                        .and_then(frame_track_origin)
                         .map(|(x, y)| (cell.left() - x, cell.top() - y))
                         .unwrap_or((0.0, 0.0));
                     targets.push((panel.renderer, dx, dy, width, height));
@@ -162,15 +169,27 @@ impl MainPanel {
                 .iter()
                 .map(|(t, ..)| t.clone())
                 .collect::<Vec<_>>();
-            let resumed = Rc::new(Cell::new(false));
-            {
-                let resumed = resumed.clone();
-                let renderers = renderers.clone();
-                let tabs = tabs.clone();
-                let layout = layout.clone().unchecked_into::<RegularLayout>();
-                ApiFuture::spawn(async move {
-                    crate::utils::set_timeout(500).await?;
-                    if !resumed.get() {
+            for (tab, dx, dy) in &tab_targets {
+                set_tab_presize(tab, *dx, *dy);
+            }
+
+            let presents = crate::tasks::staged_presents_with_deadline(
+                workspace.effects().guard(),
+                async move {
+                    join_all(
+                        targets
+                            .iter()
+                            .map(|(r, dx, dy, w, h)| r.presize_with_box(*dx, *dy, *w, *h)),
+                    )
+                    .await
+                    .into_iter()
+                    .filter_map(|r| r.ok().flatten())
+                    .collect()
+                },
+                {
+                    let renderers = renderers.clone();
+                    let tabs = tabs.clone();
+                    move || {
                         for renderer in &renderers {
                             let _ = renderer.clear_presize();
                         }
@@ -178,23 +197,8 @@ impl MainPanel {
                         for tab in &tabs {
                             clear_tab_presize(tab);
                         }
-
-                        resumed.set(true);
-                        layout.resume_resize();
                     }
-
-                    Ok(())
-                });
-            }
-
-            for (tab, dx, dy) in &tab_targets {
-                set_tab_presize(tab, *dx, *dy);
-            }
-
-            join_all(
-                targets
-                    .iter()
-                    .map(|(r, dx, dy, w, h)| r.presize_with_box(*dx, *dy, *w, *h)),
+                },
             )
             .await;
 
@@ -206,11 +210,8 @@ impl MainPanel {
                 clear_tab_presize(tab);
             }
 
-            if !resumed.get() {
-                resumed.set(true);
-                layout.resume_resize();
-            }
-
+            presents.reveal();
+            layout.resume_resize();
             Ok(())
         });
 

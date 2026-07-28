@@ -84,7 +84,11 @@ interface RendererHandle {
     terminate(): void;
 }
 
-type PendingRenderType = "saveZoom" | "loadAndRender" | "snapshotPng";
+type PendingRenderType =
+    | "saveZoom"
+    | "loadAndRender"
+    | "snapshotPng"
+    | "resize";
 interface PendingRenderRequest {
     kind: PendingRenderType;
     resolve: (v: any) => void;
@@ -168,6 +172,37 @@ export class RendererTransport {
      * canvas's drawing buffer is the worker's transferred GL canvas).
      */
     private _displayCtx: CanvasRenderingContext2D | null = null;
+
+    /**
+     * Present-hold state for the staged-present presize protocol
+     * ({@link presize}). While holding, inbound `frameBitmap`s are
+     * STAGED (latest wins) instead of blitted, so the on-screen frame
+     * — old dimensions in the old, unchanged box — stays put until the
+     * host invokes the present closure `presize` resolved to, in the
+     * same task as its layout commit. Entered only by `presize`;
+     * exited by the present closure, by `presize`'s rejection path, or
+     * by `destroy` — every settle path releases the hold or hands the
+     * caller the release.
+     */
+    /**
+     * The last `(cssWidth, cssHeight, dpr)` posted to the worker — at init
+     * or any resize — i.e. the dimensions the worker has already rendered
+     * (or has an in-flight render for). {@link resize} short-circuits when
+     * its measurement matches (±0.5px, the presize protocol's own
+     * threshold): reactive resizes fan in from several host paths per
+     * layout transition (the post-commit fan-out, activation nudges, the
+     * fresh-restore tail), and every worker resize is an unconditional
+     * full re-render.
+     */
+    private _lastPostedSize: {
+        cssWidth: number;
+        cssHeight: number;
+        dpr: number;
+    } | null = null;
+
+    private _holdPresent = false;
+
+    private _stagedFrame: ImageBitmap | null = null;
 
     /**
      * Host-side sink for tooltip + cursor side-effects. The chart
@@ -314,6 +349,11 @@ export class RendererTransport {
             precompileShaders: this._precompileShaders,
         };
 
+        this._lastPostedSize = {
+            cssWidth: rect.width,
+            cssHeight: rect.height,
+            dpr,
+        };
         this._handle = await this._createHandle(workerURL, initMsg);
         this._handle.addMessageListener((msg) =>
             this._handleRendererMsg(msg as WorkerMsg),
@@ -487,19 +527,87 @@ export class RendererTransport {
         this._post({ kind: "deselect" });
     }
 
-    resize(): void {
+    /**
+     * Resize the chart to the GL canvas's CURRENT CSS box and resolve
+     * once the resized frame has PRESENTED (the worker's `resizeAck`) —
+     * not at message-post, which would let callers proceed while the
+     * old-dimensions bitmap is still on screen. Reactive geometry
+     * changes only; anticipated ones go through {@link presize}.
+     *
+     * A measurement matching {@link _lastPostedSize} resolves immediately
+     * WITHOUT a worker round trip: the worker has already rendered (or is
+     * presenting) that exact frame, and re-posting would be a full
+     * re-render of an identical bitmap.
+     */
+    resize(): Promise<void> {
         if (!this._hostGlCanvas) {
-            return;
+            return Promise.resolve();
         }
 
         const rect = this._hostGlCanvas.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
+        const last = this._lastPostedSize;
+        if (
+            last &&
+            Math.abs(last.cssWidth - rect.width) <= 0.5 &&
+            Math.abs(last.cssHeight - rect.height) <= 0.5 &&
+            last.dpr === dpr
+        ) {
+            return Promise.resolve();
+        }
+
+        return this._postResize(rect.width, rect.height);
+    }
+
+    /**
+     * Staged-present variant of {@link resize}: render at the given
+     * TARGET canvas CSS box (no measurement — the caller supplies the
+     * box the pending layout commit will produce), HOLDING the
+     * resulting frame (and any others that arrive meanwhile) offscreen
+     * instead of blitting, so nothing on screen changes. Resolves,
+     * once the resized frame is staged, to a present closure: calling
+     * it blits the latest staged frame and exits the hold — the host
+     * runs it in the same task as its layout commit so geometry and
+     * pixels land in one paint. On rejection (teardown) the hold is
+     * released here, so every settle path either frees the display or
+     * hands the caller the release.
+     */
+    presize(cssWidth: number, cssHeight: number): Promise<(() => void) | void> {
+        if (!this._hostGlCanvas) {
+            return Promise.resolve();
+        }
+
+        this._holdPresent = true;
+        return this._postResize(cssWidth, cssHeight).then(
+            () => () => this._presentStaged(),
+            (err) => {
+                this._presentStaged();
+                throw err;
+            },
+        );
+    }
+
+    private _postResize(cssWidth: number, cssHeight: number): Promise<void> {
+        const dpr = window.devicePixelRatio || 1;
+        const { id, promise } = this._allocPending<void>("resize");
+        this._lastPostedSize = { cssWidth, cssHeight, dpr };
         this._post({
             kind: "resize",
-            cssWidth: rect.width,
-            cssHeight: rect.height,
+            msgId: id,
+            cssWidth,
+            cssHeight,
             dpr,
         });
+        return promise;
+    }
+
+    private _presentStaged(): void {
+        this._holdPresent = false;
+        const staged = this._stagedFrame;
+        this._stagedFrame = null;
+        if (staged) {
+            this._drawFrameBitmap(staged);
+        }
     }
 
     clear() {
@@ -623,6 +731,9 @@ export class RendererTransport {
         // them, and so the GPU-backed 2D context can release earlier.
         this._hostGlCanvas = null;
         this._displayCtx = null;
+        this._holdPresent = false;
+        this._stagedFrame?.close();
+        this._stagedFrame = null;
 
         // Drain pending request promises with kind-aware semantics:
         //  - `loadAndRender` resolves silently (the host's awaited draw
@@ -728,13 +839,22 @@ export class RendererTransport {
             }
 
             case "frameBitmap":
-                this._drawFrameBitmap(msg.bitmap);
+                if (this._holdPresent) {
+                    this._stagedFrame?.close();
+                    this._stagedFrame = msg.bitmap;
+                } else {
+                    this._drawFrameBitmap(msg.bitmap);
+                }
+
                 break;
             case "error":
                 this._rejectReady(new Error(msg.message));
                 break;
             case "loadAndRenderAck":
                 this._resolvePending(msg.msgId, "loadAndRender", undefined);
+                break;
+            case "resizeAck":
+                this._resolvePending(msg.msgId, "resize", undefined);
                 break;
             case "snapshotPngReply":
                 this._resolvePending(msg.requestId, "snapshotPng", msg.blob);

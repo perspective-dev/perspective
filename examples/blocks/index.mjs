@@ -19,19 +19,23 @@ import { execSync } from "child_process";
 const version = JSON.parse(fs.readFileSync("./package.json")).version;
 const __dirname = url.fileURLToPath(new URL(".", import.meta.url)).slice(0, -1);
 
-// TODO jsdelivr has slightly different logic for trailing '/' that causes
-// the wasm assets to not load correctly when using aliases, hence we must link
-// directly to the assets.
-const replacements = {
-    "/node_modules/": `https://cdn.jsdelivr.net/npm/`,
-    "@perspective-dev/client/dist/cdn/perspective.js": `@perspective-dev/client@${version}/dist/cdn/perspective.js`,
-    "@perspective-dev/viewer/dist/cdn/perspective-viewer.js": `@perspective-dev/viewer@${version}/dist/cdn/perspective-viewer.js`,
-    "@perspective-dev/viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js": `@perspective-dev/viewer-datagrid@${version}/dist/cdn/perspective-viewer-datagrid.js`,
-    "@perspective-dev/viewer-charts/dist/cdn/perspective-viewer-charts.js": `@perspective-dev/viewer-charts@${version}/dist/cdn/perspective-viewer-charts.js`,
-    "@perspective-dev/server/dist/cdn/perspective.cpp.wasm": `@perspective-dev/client@${version}/dist/cdn/perspective.cpp.wasm`,
-    "@perspective-dev/viewer/dist/cdn/perspective.rx.wasm": `@perspective-dev/viewer@${version}/dist/cdn/perspective.rx.wasm`,
-    "@perspective-dev/client/dist/cdn/perspective.worker.js": `@perspective-dev/client@${version}/dist/cdn/perspective.worker.js`,
-};
+const superstore_version = JSON.parse(
+    fs.readFileSync(`${__dirname}/node_modules/superstore-arrow/package.json`),
+).version;
+
+export function rewrite_cdn_urls(filecontents) {
+    return filecontents
+        .replace(
+            /\/node_modules\/@perspective-dev\/([A-Za-z0-9_-]+)\//g,
+            (_, pkg) =>
+                `https://cdn.jsdelivr.net/npm/@perspective-dev/${pkg}@${version}/`,
+        )
+        .replace(
+            /\/node_modules\/superstore-arrow\//g,
+            `https://cdn.jsdelivr.net/npm/superstore-arrow@${superstore_version}/`,
+        )
+        .replace(/\/node_modules\//g, `https://cdn.jsdelivr.net/npm/`);
+}
 
 export async function dist_examples(
     outpath = `${__dirname}/../../docs/static/blocks`,
@@ -56,15 +60,11 @@ export async function dist_examples(
                     filename.endsWith(".js") ||
                     filename.endsWith(".html")
                 ) {
-                    let filecontents = fs
-                        .readFileSync(`${__dirname}/src/${name}/${filename}`)
-                        .toString();
-                    for (const pattern of Object.keys(replacements)) {
-                        filecontents = filecontents.replace(
-                            new RegExp(pattern, "g"),
-                            replacements[pattern],
-                        );
-                    }
+                    const filecontents = rewrite_cdn_urls(
+                        fs
+                            .readFileSync(`${__dirname}/src/${name}/${filename}`)
+                            .toString(),
+                    );
                     fs.writeFileSync(
                         `${outpath}/${name}/${filename}`,
                         filecontents,

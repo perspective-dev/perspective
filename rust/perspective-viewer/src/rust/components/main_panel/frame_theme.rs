@@ -113,7 +113,6 @@ impl MainPanel {
         }
 
         let viewer = props.presentation.viewer_elem().clone();
-        let default_theme = props.presentation_props.available_themes.first();
         let mut complete = true;
         let children = layout.children();
         for i in 0..children.length() {
@@ -132,12 +131,7 @@ impl MainPanel {
                 continue;
             };
 
-            let theme = props
-                .panel_themes
-                .iter()
-                .find(|(pid, _)| *pid == name)
-                .and_then(|(_, theme)| theme.clone())
-                .or_else(|| default_theme.cloned());
+            let theme = props.effective_panel_theme(&name);
 
             let background = theme.as_ref().and_then(|theme| {
                 let fresh = read_plugin_background(&viewer, &name, theme);

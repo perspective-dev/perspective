@@ -21,7 +21,7 @@ use perspective_client::config::Filter;
 
 use crate::renderer::Renderer;
 use crate::session::Session;
-use crate::utils::{PubSub, Subscription};
+use crate::utils::{EffectLedger, PubSub, Subscription};
 
 /// A unique identifier for a [`Panel`] within a [`Workspace`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -196,79 +196,85 @@ impl Panel {
 #[derive(Clone)]
 pub struct Workspace(Rc<RefCell<WorkspaceData>>);
 
+impl PartialEq for Workspace {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 struct WorkspaceData {
     /// Panels in insertion order.
     panels: Vec<Panel>,
 
-    /// The currently active/selected panel. Always refers to a live panel in
-    /// `panels`.
-    active: PanelId,
+    /// The currently active/selected panel (a live panel in `panels`).
+    active: Option<PanelId>,
 
-    /// The first [`Client`] loaded via the element's `load()`, used as the
-    /// default for panels which don't bind a `Table` from another client.
-    /// First-wins (see [`Workspace::set_default_client`]).
+    /// The first [`Client`] loaded via the element's `load()`.
     default_client: Option<Client>,
 
-    /// Every [`Client`] ever loaded into this element (registration order,
-    /// deduped by client name — globally unique). Feeds "all loaded clients"
-    /// consumers (the context menu's New sub-menu) and client-by-name
-    /// resolution; see [`Workspace::register_client`].
+    /// Every [`Client`] ever loaded into this element (registration order.
     clients: Vec<Client>,
+
+    /// Fires once per genuinely-new [`Client`] registration (post-dedup) —
+    /// the element subscribes each new client's hosted-tables updates for
+    /// reactive table binding (`tasks::table_lifecycle`).
+    client_registered: Rc<PubSub<Client>>,
 
     /// Monotonic counter backing [`Workspace::generate_id`].
     next_id: usize,
 
-    /// Panels designated as master/detail filter sources: a master's
-    /// selection or click applies a derived filter to the other (detail)
-    /// panels. Toggled via the context menu; persisted (as ids) in the
-    /// whole-element config.
+    /// Panels designated as master/detail filter sources.
     masters: HashSet<PanelId>,
 
-    /// The element-level global filters (fed by master-panel selections),
-    /// applied as a transient overlay to every non-master panel's view — see
-    /// `tasks::apply_global_filters`. Never persisted per-panel. One
-    /// REPLACEABLE contribution per master (plus a restored bucket), so
-    /// bucket ownership both implements replace-semantics and tells
-    /// `tasks::clear_master_selections` whose selection visual to clear.
+    /// The element-level global filters.
     filters: GlobalFilterSet,
-
-    /// Fires after any change to `global_filters`, so observers (the root
-    /// component's render snapshot) can refresh. `Rc`-wrapped so a handle can
-    /// be taken out of a borrow (to emit outside it) and shared with
-    /// subscribers.
     filters_changed: Rc<PubSub<()>>,
 
-    /// A layout tree staged by whole-element `restore` for `MainPanel` to
-    /// apply (via `restoreSync`) at its next `rendered` pass, BEFORE the
-    /// insert reconcile — so restored panels mount directly at their saved
-    /// positions instead of transiting the synthetic equal-split inserts.
-    /// Taken (consumed) by the applier; regular-layout stays a slave view
-    /// synced from this model exactly once per restore.
+    /// A layout tree staged by whole-element `restore`.
     pending_layout: Option<crate::js::Layout>,
+
+    /// Freshly-created panels withheld from the `<regular-layout>`.
+    staged: HashSet<PanelId>,
+    staged_changed: Rc<PubSub<()>>,
+
+    /// The RESERVED first panel of a pending `load()`.
+    reserved: Option<Panel>,
+
+    /// In-flight effects (public mutators + scheduled internal flows),
+    /// drained by `flush()` — see [`EffectLedger`].
+    effects: EffectLedger,
+}
+
+impl Default for Workspace {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Workspace {
-    /// Create a `Workspace` seeded with a single active [`Panel`] built from
-    /// the supplied engine handles. `subs` are the seed panel's owned
-    /// subscriptions (redraw + custom-event fanout; see [`Panel`]); the caller
-    /// wires them so this module stays clear of the render/event plumbing.
-    pub fn new(session: Session, renderer: Renderer, subs: Vec<Subscription>) -> Self {
-        let id = PanelId("PERSPECTIVE_GENERATED_ID_0".to_owned());
-        renderer.set_slot_name(id.as_str());
-        renderer.set_active_flag(true);
-        renderer.set_solo_flag(true);
-        let panel = Panel::new(id.clone(), session, renderer, subs);
+    /// Create an EMPTY `Workspace`.
+    pub fn new() -> Self {
         Self(Rc::new(RefCell::new(WorkspaceData {
-            panels: vec![panel],
-            active: id,
+            panels: Vec::new(),
+            active: None,
             default_client: None,
             clients: Vec::new(),
-            next_id: 1,
+            client_registered: Rc::new(PubSub::default()),
+            next_id: 0,
             masters: HashSet::new(),
             filters: GlobalFilterSet::default(),
             filters_changed: Rc::new(PubSub::default()),
             pending_layout: None,
+            staged: HashSet::new(),
+            staged_changed: Rc::new(PubSub::default()),
+            reserved: None,
+            effects: EffectLedger::default(),
         })))
+    }
+
+    /// The element's in-flight effect ledger (see [`EffectLedger`]).
+    pub fn effects(&self) -> EffectLedger {
+        self.0.borrow().effects.clone()
     }
 
     /// Stage a layout tree for `MainPanel` to apply at its next `rendered`
@@ -280,6 +286,46 @@ impl Workspace {
     /// Take (consume) the staged layout tree, if any.
     pub fn take_pending_layout(&self) -> Option<crate::js::Layout> {
         self.0.borrow_mut().pending_layout.take()
+    }
+
+    /// A handle to the `staged_changed` PubSub (see
+    /// [`WorkspaceData::staged_changed`]).
+    pub fn staged_changed(&self) -> Rc<PubSub<()>> {
+        self.0.borrow().staged_changed.clone()
+    }
+
+    /// Mark a freshly-created panel STAGED (see [`WorkspaceData::staged`]).
+    /// Emits `staged_changed` — outside the borrow.
+    pub fn stage_panel(&self, id: &PanelId) {
+        let pubsub = {
+            let mut data = self.0.borrow_mut();
+            data.staged.insert(id.clone());
+            data.staged_changed.clone()
+        };
+
+        pubsub.emit(());
+    }
+
+    /// Promote a staged panel toward layout insertion, returning whether it
+    /// was still staged — restore completion and the staging deadline RACE
+    /// to promote, and only the winner proceeds. Emits `staged_changed` —
+    /// outside the borrow — iff the set changed.
+    pub fn clear_staged(&self, id: &PanelId) -> bool {
+        let (removed, pubsub) = {
+            let mut data = self.0.borrow_mut();
+            (data.staged.remove(id), data.staged_changed.clone())
+        };
+
+        if removed {
+            pubsub.emit(());
+        }
+
+        removed
+    }
+
+    /// Whether `id` is a staged (created, not yet layout-inserted) panel.
+    pub fn is_staged(&self, id: &PanelId) -> bool {
+        self.0.borrow().staged.contains(id)
     }
 
     /// The EFFECTIVE element-level global filters (master/detail
@@ -388,29 +434,27 @@ impl Workspace {
         PanelId(format!("PERSPECTIVE_GENERATED_ID_{n}"))
     }
 
-    /// The id of the active panel.
-    pub fn active_id(&self) -> PanelId {
+    /// The id of the active panel, or `None` with zero panels.
+    pub fn active_id(&self) -> Option<PanelId> {
         self.0.borrow().active.clone()
     }
 
-    /// The active [`Panel`] (clone; shares engine state).
-    pub fn active_panel(&self) -> Panel {
+    /// The active [`Panel`] (clone; shares engine state), or `None` with zero
+    /// panels.
+    pub fn active_panel(&self) -> Option<Panel> {
         let data = self.0.borrow();
-        data.panels
-            .iter()
-            .find(|p| p.id == data.active)
-            .cloned()
-            .expect("Workspace has no active panel")
+        let active = data.active.as_ref()?;
+        data.panels.iter().find(|p| &p.id == active).cloned()
     }
 
-    /// The active panel's [`Session`].
-    pub fn active_session(&self) -> Session {
-        self.active_panel().session
+    /// The active panel's [`Session`], or `None` with zero panels.
+    pub fn active_session(&self) -> Option<Session> {
+        self.active_panel().map(|p| p.session)
     }
 
-    /// The active panel's [`Renderer`].
-    pub fn active_renderer(&self) -> Renderer {
-        self.active_panel().renderer
+    /// The active panel's [`Renderer`], or `None` with zero panels.
+    pub fn active_renderer(&self) -> Option<Renderer> {
+        self.active_panel().map(|p| p.renderer)
     }
 
     /// Look up a [`Panel`] by id.
@@ -423,8 +467,26 @@ impl Workspace {
     pub fn panel_or_active(&self, id: Option<&PanelId>) -> Option<Panel> {
         match id {
             Some(id) => self.panel(id),
-            None => Some(self.active_panel()),
+            None => self.active_panel(),
         }
+    }
+
+    /// Snapshot of all [`Panel`]s, in insertion order — the canonical
+    /// fan-out source (fan-outs collect per-panel results; they never
+    /// sequential-abort on one panel's error).
+    pub fn panels(&self) -> Vec<Panel> {
+        self.0.borrow().panels.to_vec()
+    }
+
+    /// The number of PLACED panels (panels minus staged) — the single
+    /// source for panel-count chrome (`single`/`multi`, closable,
+    /// draggable, `only-child`).
+    pub fn placed_count(&self) -> usize {
+        let data = self.0.borrow();
+        data.panels
+            .iter()
+            .filter(|p| !data.staged.contains(&p.id))
+            .count()
     }
 
     /// All panel ids, in insertion order.
@@ -437,23 +499,60 @@ impl Workspace {
             .collect()
     }
 
-    /// The number of panels (always ≥1).
+    /// The number of panels (may be `0` — an empty stage).
     pub fn len(&self) -> usize {
         self.0.borrow().panels.len()
     }
 
-    /// Always `false` — a `Workspace` always has at least one panel. Provided
-    /// for API completeness / clippy.
+    /// Whether the element has zero panels.
     pub fn is_empty(&self) -> bool {
         self.0.borrow().panels.is_empty()
     }
 
-    /// Append a [`Panel`].
+    /// Append a [`Panel`]. When the element had zero panels, the inserted panel
+    /// becomes the active one (there is no other candidate).
     pub fn insert_panel(&self, panel: Panel) {
         let mut data = self.0.borrow_mut();
-        panel.renderer.set_active_flag(panel.id == data.active);
+        if data.active.is_none() {
+            data.active = Some(panel.id.clone());
+        }
+
+        panel
+            .renderer
+            .set_active_flag(data.active.as_ref() == Some(&panel.id));
         data.panels.push(panel);
         Self::sync_solo_flags(&data);
+    }
+
+    /// Hold `panel` in the reservation slot (see [`WorkspaceData::reserved`]):
+    /// NOT placed, invisible to every placed-panel consumer, awaiting a
+    /// pending `load()`'s payload classification or an interim claimant.
+    pub fn reserve_panel(&self, panel: Panel) {
+        self.0.borrow_mut().reserved = Some(panel);
+    }
+
+    /// The reservation slot's current occupant (shared handles), without a
+    /// transfer — a second `load()` on a still-empty element adopts the same
+    /// reservation rather than creating a competing one.
+    pub fn reserved_panel(&self) -> Option<Panel> {
+        self.0.borrow().reserved.clone()
+    }
+
+    /// PLACE the reserved panel: transfer it out of the reservation slot into
+    /// the placed set ([`Self::insert_panel`] — auto-activating on an empty
+    /// element). `None` when the slot is empty (no reservation, or the other
+    /// actor transferred first).
+    pub fn claim_reserved(&self) -> Option<Panel> {
+        let panel = self.0.borrow_mut().reserved.take()?;
+        self.insert_panel(panel.clone());
+        Some(panel)
+    }
+
+    /// DISCARD the reserved panel: transfer it out of the reservation slot
+    /// WITHOUT placing it, for disposal (an inert `Client` payload with no
+    /// claimant, or teardown draining). `None` when the slot is empty.
+    pub fn take_reserved(&self) -> Option<Panel> {
+        self.0.borrow_mut().reserved.take()
     }
 
     /// Sync every panel renderer's solo (lone-panel) flag with the current
@@ -473,22 +572,37 @@ impl Workspace {
     /// replacement) drops the panel's master role and its global-filter
     /// contribution here, so neither can outlive the panel.
     pub fn remove_panel(&self, id: &PanelId) -> Option<Panel> {
-        let (removed, changed, pubsub) = {
+        let (removed, changed, pubsub, staged_removed, staged_pubsub) = {
             let mut data = self.0.borrow_mut();
             data.masters.remove(id);
+            let staged_removed = data.staged.remove(id);
             let changed = data.filters.set_contribution(id, Vec::new());
             let removed = data
                 .panels
                 .iter()
                 .position(|p| &p.id == id)
                 .map(|idx| data.panels.remove(idx));
-            Self::sync_solo_flags(&data);
 
-            (removed, changed, data.filters_changed.clone())
+            if data.active.as_ref() == Some(id) {
+                data.active = None;
+            }
+
+            Self::sync_solo_flags(&data);
+            (
+                removed,
+                changed,
+                data.filters_changed.clone(),
+                staged_removed,
+                data.staged_changed.clone(),
+            )
         };
 
         if changed {
             pubsub.emit(());
+        }
+
+        if staged_removed {
+            staged_pubsub.emit(());
         }
 
         removed
@@ -499,12 +613,11 @@ impl Workspace {
     pub fn set_active(&self, id: PanelId) -> bool {
         let mut data = self.0.borrow_mut();
         if data.panels.iter().any(|p| p.id == id) {
-            data.active = id;
-            // Sync the per-renderer activation flags (data only; the CSS
-            // class lands inside each panel's next locked plugin dispatch —
-            // see `Renderer::stamp_active`).
+            data.active = Some(id);
             for panel in data.panels.iter() {
-                panel.renderer.set_active_flag(panel.id == data.active);
+                panel
+                    .renderer
+                    .set_active_flag(data.active.as_ref() == Some(&panel.id));
             }
 
             true
@@ -521,7 +634,7 @@ impl Workspace {
     /// The active panel's bound [`Client`], if any — the default target of a
     /// no-argument `eject()`.
     pub fn active_client(&self) -> Option<Client> {
-        self.active_panel().session.get_client()
+        self.active_panel().and_then(|p| p.session.get_client())
     }
 
     /// The ids of every panel whose session is bound to the [`Client`] named
@@ -566,16 +679,30 @@ impl Workspace {
     }
 
     /// Add a [`Client`] to the loaded-clients registry, if a client with the
-    /// same (globally unique) name isn't already present.
+    /// same (globally unique) name isn't already present. Emits
+    /// `client_registered` — outside the borrow — for a genuinely-new client.
     pub fn register_client(&self, client: Client) {
-        let mut data = self.0.borrow_mut();
-        if !data
-            .clients
-            .iter()
-            .any(|c| c.get_name() == client.get_name())
-        {
-            data.clients.push(client);
-        }
+        let pubsub = {
+            let mut data = self.0.borrow_mut();
+            if data
+                .clients
+                .iter()
+                .any(|c| c.get_name() == client.get_name())
+            {
+                return;
+            }
+
+            data.clients.push(client.clone());
+            data.client_registered.clone()
+        };
+
+        pubsub.emit(client);
+    }
+
+    /// A handle to the `client_registered` PubSub (see
+    /// [`WorkspaceData::client_registered`]).
+    pub fn client_registered(&self) -> Rc<PubSub<Client>> {
+        self.0.borrow().client_registered.clone()
     }
 
     /// All loaded [`Client`]s: the registry, unioned with every panel
@@ -593,6 +720,39 @@ impl Workspace {
         }
 
         clients
+    }
+
+    /// Resolve which loaded [`Client`] a panel should bind to serve the `Table`
+    /// named `table_name`, given its `current` binding (if any).
+    pub async fn resolve_client_for_table(
+        &self,
+        table_name: &str,
+        current: Option<&Client>,
+    ) -> Option<Client> {
+        let clients = self.clients();
+
+        // A single bound client is already correct — no probe, no rebind.
+        if current.is_some() && clients.len() <= 1 {
+            return None;
+        }
+
+        let mut host = None;
+        for client in &clients {
+            if let Ok(names) = client.get_hosted_table_names().await
+                && names.iter().any(|n| n.as_str() == table_name)
+            {
+                host = Some(client.clone());
+                break;
+            }
+        }
+
+        match host {
+            Some(host) if current.map(|c| c.get_name()) != Some(host.get_name()) => Some(host),
+            Some(_) => None,
+            // No host: seed an unbound session with the default client; leave a
+            // bound session as-is.
+            None => current.is_none().then(|| self.default_client()).flatten(),
+        }
     }
 }
 

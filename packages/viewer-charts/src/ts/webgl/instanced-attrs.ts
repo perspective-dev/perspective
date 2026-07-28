@@ -108,6 +108,12 @@ export function createQuadCornerBuffer(gl: GL): WebGLBuffer {
  * paint zero data). No-op return `true` when `attr` is negative
  * (optimized-out attribute — drawing the rest is still valid).
  *
+ * `firstInstance` byte-offsets the attribute pointer so the draw's
+ * instance 0 reads element `firstInstance` of the buffer — the WebGL
+ * substitute for a `baseInstance` draw parameter. Faceted renderers
+ * use it to draw a contiguous per-facet sub-range of a shared
+ * instance buffer.
+ *
  * Render-path uses `peek`, never `getOrCreate`: the latter recreates
  * with zero-initialized contents when `_totalCapacity` has grown past
  * the current buffer, which would wipe the previous draw's vertex
@@ -120,6 +126,7 @@ export function bindInstancedFloatAttr(
     attr: number,
     name: string,
     components: number,
+    firstInstance = 0,
 ): boolean {
     if (attr < 0) {
         return true;
@@ -133,7 +140,14 @@ export function bindInstancedFloatAttr(
     const gl: GL = glManager.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, buf.buffer);
     gl.enableVertexAttribArray(attr);
-    gl.vertexAttribPointer(attr, components, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(
+        attr,
+        components,
+        gl.FLOAT,
+        false,
+        0,
+        firstInstance * components * Float32Array.BYTES_PER_ELEMENT,
+    );
     instancing.setDivisor(attr, 1);
     return true;
 }

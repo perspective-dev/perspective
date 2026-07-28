@@ -114,6 +114,18 @@ pub impl LocalKey<Rc<RefCell<Vec<PluginRecord>>>> {
         self.with(|plugin| {
             let plugin_inst = create_plugin(tag_name);
             let config = Rc::new(plugin_inst.read_static_config());
+
+            // Warm the per-tag capability memo on the probe instance, so
+            // the first render never pays the `Reflect` sweep — and surface
+            // a missing REQUIRED `draw` at registration instead of as a
+            // `TypeError` at first paint.
+            if !plugin_inst.capabilities().draw {
+                tracing::warn!(
+                    "Plugin '{}' does not implement the required `draw` method",
+                    tag_name
+                );
+            }
+
             let record = PluginRecord {
                 tag_name: tag_name.to_owned(),
                 config,

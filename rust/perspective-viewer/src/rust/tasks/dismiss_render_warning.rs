@@ -27,7 +27,9 @@ pub fn dismiss_render_warning_callback(session: &Session, renderer: &Renderer) -
         clone!(session, renderer);
         ApiFuture::spawn(async move {
             renderer.disable_active_plugin_render_warning();
-            renderer.update(session.get_view()).await
+            renderer
+                .update_lazy(async move { Ok(session.get_view()) })
+                .await
         });
     })
 }

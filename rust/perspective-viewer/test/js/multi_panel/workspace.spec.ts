@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { test, expect } from "../helpers.ts";
+import { armInvariants } from "./harness.ts";
 
 const TABLE = "load-viewer-csv";
 
@@ -56,6 +57,11 @@ test.beforeEach(async ({ page }) => {
         }
     });
 });
+
+// Structural invariants (I1 element identity / I2 tree sanity / I3
+// model-layout-DOM coherence) gate every passing test's end state - see
+// `harness.ts` and `.plan/WORKSPACE_TEST_PLAN.md`.
+armInvariants(test);
 
 async function restore(page, config) {
     await page.evaluate(async (config) => {
@@ -157,7 +163,7 @@ test.describe("Multi-panel API", () => {
         expect(config.title).toBe("Added");
     });
 
-    test("removePanel disposes a panel; the last panel is protected", async ({
+    test("removePanel disposes a panel; removing the last empties the element", async ({
         page,
     }) => {
         await restore(page, SPLIT_CONFIG);
@@ -177,7 +183,9 @@ test.describe("Multi-panel API", () => {
                     .length === 1,
         );
 
-        // Removing the last panel is a no-op.
+        // Removing the last panel empties the element — zero panels is a
+        // supported state (see `zero_panel.spec.ts`), with the persistent
+        // `<regular-layout>` depopulated rather than torn down.
         const last = await panel_names(page);
         await page.evaluate((name) => {
             const viewer = document.querySelector("perspective-viewer")!;
@@ -185,8 +193,19 @@ test.describe("Multi-panel API", () => {
             viewer.removePanel(name);
         }, last[0]);
 
-        await page.waitForTimeout(100);
-        expect((await panel_names(page)).length).toBe(1);
+        await page.waitForFunction(
+            () =>
+                // @ts-ignore
+                document.querySelector("perspective-viewer")!.getPanelNames()
+                    .length === 0,
+        );
+
+        await expect(
+            page.locator("perspective-viewer perspective-viewer-plugin"),
+        ).toHaveCount(0);
+        await expect(
+            page.locator("perspective-viewer regular-layout"),
+        ).toHaveCount(1);
     });
 
     test("reset({panel}) resets only the named panel", async ({ page }) => {
@@ -369,16 +388,26 @@ test.describe("Panel context menu", () => {
         ]);
 
         await expect(submenu.locator(".context-menu-header")).toHaveCount(0);
+        const prev_active = await page.evaluate(() =>
+            // @ts-ignore
+            document.querySelector("perspective-viewer")!.getActivePanel(),
+        );
         await submenu
             .locator(".context-menu-item", { hasText: "second-table" })
             .click();
 
-        await page.waitForFunction(
-            () =>
+        // The menu inserts the panel synchronously but activates it only
+        // AFTER its restore/first-draw resolves — wait for the activation
+        // flip, not just the panel count.
+        await page.waitForFunction((prev) => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            return (
                 // @ts-ignore
-                document.querySelector("perspective-viewer")!.getPanelNames()
-                    .length === 3,
-        );
+                viewer.getPanelNames().length === 3 &&
+                // @ts-ignore
+                viewer.getActivePanel() !== prev
+            );
+        }, prev_active);
 
         // The new panel is active and bound to the selected table.
         const config = await page.evaluate(async () => {
@@ -434,16 +463,26 @@ test.describe("Panel context menu", () => {
 
         // "other-client-table" exists ONLY on the second client, so a
         // successful bind proves the sub-menu targeted the right client.
+        const prev_active = await page.evaluate(() =>
+            // @ts-ignore
+            document.querySelector("perspective-viewer")!.getActivePanel(),
+        );
         await submenu
             .locator(".context-menu-item", { hasText: "other-client-table" })
             .click();
 
-        await page.waitForFunction(
-            () =>
+        // The menu inserts the panel synchronously but activates it only
+        // AFTER its restore/first-draw resolves — wait for the activation
+        // flip, not just the panel count.
+        await page.waitForFunction((prev) => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            return (
                 // @ts-ignore
-                document.querySelector("perspective-viewer")!.getPanelNames()
-                    .length === 3,
-        );
+                viewer.getPanelNames().length === 3 &&
+                // @ts-ignore
+                viewer.getActivePanel() !== prev
+            );
+        }, prev_active);
 
         const config = await page.evaluate(async () => {
             const viewer = document.querySelector("perspective-viewer")!;

@@ -157,7 +157,11 @@ function formatLevelValue(
     valid: boolean,
     levelType: string,
 ): string {
-    if (!valid) {
+    // `value` can be `undefined` even when `valid` claims otherwise — an
+    // out-of-bounds read when a row window outran the delivered Arrow
+    // (belt to `loadAndRender`'s delivered-rows clamp) — treat it as
+    // null rather than crash the label formatters.
+    if (!valid || value == null || Number.isNaN(value)) {
         return "";
     }
 

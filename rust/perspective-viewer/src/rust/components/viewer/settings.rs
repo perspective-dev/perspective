@@ -180,11 +180,17 @@ impl PerspectiveViewer {
                     // finalizer.
                     let result: ApiResult<JsValue> = async {
                         if is_open {
-                            presize_visible_panels_grown(&workspace, &elem).await;
+                            let presents = presize_visible_panels_grown(&workspace, &elem).await;
                             let (notify, rendered) = channel::<()>();
                             callback.emit(notify);
                             presentation.set_settings_open(false);
                             rendered.await?;
+                            // `notify` fires in `rendered()` (same task as the
+                            // Yew DOM patch) and this future resumes as one of
+                            // its microtasks — so the staged reveal below and
+                            // the pane's geometry change reach the screen in a
+                            // single paint.
+                            presents.reveal();
                             // I6: the exactness-finalizer resize is part of
                             // what this toggle caused — await it here rather
                             // than leaving it to the ResizeObserver (whose
@@ -192,15 +198,18 @@ impl PerspectiveViewer {
                             // backstop).
                             resize_visible_panels(&workspace).await;
                         } else {
-                            if let Some((delta_w, delta_h)) = open_deltas {
+                            let presents = if let Some((delta_w, delta_h)) = open_deltas {
                                 presize_visible_panels_open(&workspace, &elem, delta_w, delta_h)
-                                    .await;
-                            }
+                                    .await
+                            } else {
+                                StagedPresents::default()
+                            };
 
                             let (notify, rendered) = channel::<()>();
                             callback.emit(notify);
                             presentation.set_settings_open(true);
                             rendered.await?;
+                            presents.reveal();
                             resize_visible_panels(&workspace).await;
                         }
                         Ok(JsValue::UNDEFINED)
@@ -259,8 +268,14 @@ impl PerspectiveViewer {
             let elem = ctx.props().elem.clone();
             let link = ctx.link().clone();
             ApiFuture::spawn(async move {
-                presize_visible_panels_pane_width(&workspace, &elem, pane_width as f64).await;
+                let presents =
+                    presize_visible_panels_pane_width(&workspace, &elem, pane_width as f64).await;
                 link.send_message(SettingsDividerCommit(pane_width));
+                // Same task as the commit's re-render (whether Yew drained it
+                // synchronously inside `send_message` or deferred it to a
+                // microtask): the staged reveal and the pane-width geometry
+                // land in one paint.
+                presents.reveal();
                 Ok(())
             });
         } else {

@@ -17,7 +17,7 @@
     box-sizing: border-box;
     height: 100%;
     min-width: 0;
-    padding: 0 7px 0 12px;
+    padding: 0 7px 0 13px;
     cursor: pointer;
     font-size: 11px;
     white-space: nowrap;
@@ -32,11 +32,11 @@
 :host([part~="tab"].visible) {
     z-index: 6;
     background: var(--psp--background-color, #ffffff) !important;
-    box-shadow:
+    /* box-shadow:
         2.25px -2.25px 0 2.25px var(--psp--background-color),
         -2.25px -2.25px 0 2.25px var(--psp--background-color),
         2.75px -2.75px 0 2.75px var(--psp-inactive--color),
-        0 12.5px 0 -11.5px var(--psp-inactive--border-color);
+        0 12.5px 0 -11.5px var(--psp-inactive--border-color); */
 }
 
 .psp-tab-grip {
@@ -59,16 +59,35 @@
 .psp-tab-caret {
     flex: 0 0 auto;
     display: none;
-    margin-right: 10px;
+    margin-right: 12px;
     pointer-events: none;
 }
 
-.psp-tab-caret::before {
-    content: ">";
+.psp-tab-caret {
+    /* content: " "; */
+    display: block;
+
+    width: 12px;
+    height: 12px;
+    pointer-events: none;
+    background-color: var(--psp--color);
+    /* -webkit-mask-image: var(--psp-icon--active-indicator--mask-image);
+    mask-image: var(--psp-icon--active-indicator--mask-image); */
+    -webkit-mask-image: var(--psp-icon--column-drag-handle--mask-image);
+    mask-image: var(--psp-icon--column-drag-handle--mask-image);
+
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
 }
 
 :host([part~="tab"].active) .psp-tab-caret {
     display: block;
+    -webkit-mask-image: var(--psp-icon--active-indicator--mask-image);
+    mask-image: var(--psp-icon--active-indicator--mask-image);
 }
 
 /* A lone tab (its viewer has a single plugin child) has no stack to open —
@@ -79,6 +98,8 @@
 }
 
 .psp-tab-title {
+    height: 11px;
+    line-height: 12px;
     flex: 1 1 auto;
     pointer-events: none;
     overflow: hidden;
@@ -126,7 +147,8 @@
     content: var(--psp-broadcast--content, "[BROADCAST]");
 }
 
-.psp-tab-close {
+.psp-tab-close,
+.psp-tab-settings {
     flex: 0 0 auto;
     display: flex;
     align-items: center;
@@ -139,23 +161,33 @@
     color: inherit;
 }
 
-.psp-tab-close:hover::before {
+.psp-tab-close:hover::before,
+.psp-tab-settings:hover::before {
     background-color: var(--psp--color);
 }
 
-.psp-tab-close::before {
+.psp-tab-close::before,
+.psp-tab-settings::before {
     content: "";
 
     /* TODO don't hard-code dimensions */
     width: 20px;
     height: 20px;
     background-color: var(--psp-inactive--color);
-    -webkit-mask-image: var(--psp-icon--close--mask-image);
-    mask-image: var(--psp-icon--close--mask-image);
     -webkit-mask-size: contain;
     mask-size: contain;
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
     -webkit-mask-position: center;
     mask-position: center;
+}
+
+.psp-tab-close::before {
+    -webkit-mask-image: var(--psp-icon--close--mask-image);
+    mask-image: var(--psp-icon--close--mask-image);
+}
+
+.psp-tab-settings::before {
+    -webkit-mask-image: var(--psp-icon--drawer-tab-inverted--mask-image);
+    mask-image: var(--psp-icon--drawer-tab-inverted--mask-image);
 }

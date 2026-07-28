@@ -45,7 +45,7 @@ export function dispatch(r: WorkerRenderer, msg: ControlMsg): void {
             break;
         case "resize":
             r.resize(msg.cssWidth, msg.cssHeight, msg.dpr);
-            r.redraw();
+            r.redrawAck(msg.msgId);
             break;
         case "clear":
             r.clear();

@@ -124,8 +124,8 @@ catalogs:
       specifier: '=0.6.1'
       version: 0.6.1
     regular-table:
-      specifier: '=0.8.5'
-      version: 0.8.5
+      specifier: '=0.8.6'
+      version: 0.8.6
     stoppable:
       specifier: '=1.1.0'
       version: 1.1.0
@@ -788,7 +788,7 @@ importers:
         version: link:../../rust/perspective-viewer
       regular-table:
         specifier: 'catalog:'
-        version: 0.8.5
+        version: 0.8.6
     devDependencies:
       '@perspective-dev/esbuild-plugin':
         specifier: 'workspace:'
@@ -2196,9 +2196,6 @@ packages:
 
   '@types/jsonwebtoken@9.0.10':
     resolution: {integrity: sha512-asx5hIG9Qmf/1oStypjanR7iKTv0gXQ1Ov/jfrX6kS/EO0OFni8orbmGCn0672NHR3kXHwpAwR+B368ZGN/2rA==}
-
-  '@types/lodash@4.17.20':
-    resolution: {integrity: sha512-H3MHACvFUEiujabxhaI/ImO6gUrd8oOurg7LQtS7mbwIXA/cUqWrvBsaeJ23aZEPk1TAYkurjfMbSELfoCXlGA==}
 
   '@types/lru-cache@5.1.1':
     resolution: {integrity: sha512-ssE3Vlrys7sdIzs5LOxCzTVMsU7i9oa/IaW92wF32JFb3CVczqOkru2xspuKczHEbG3nvmPY7IFqVmGGHdNbYw==}
@@ -4372,8 +4369,8 @@ packages:
   regular-layout@0.6.1:
     resolution: {integrity: sha512-vGDEFACgFbS/d5kLWJ6AMWY/3DYaZoF1P8+y4KIDnPUFqUQgV5bV8avX7836izmexfmz6ik8JZ4V0Xo4FhaZGQ==}
 
-  regular-table@0.8.5:
-    resolution: {integrity: sha512-2ow89unuOZChNDG72ZghZ7NIOIOJKMEUmJp1En+IOyxT4ZoHrFs446WmcyqltI5Gze2yf8lpZyOkg/FQBHvqBw==}
+  regular-table@0.8.6:
+    resolution: {integrity: sha512-jzJzu9WLtqwMgbf5ak/VdNm/YLHUDnDSCHD5SOksnHrHLuDN6l5i2stYfe7BjsHbQV1Gx9369Ma40nTBCgOFvA==}
     engines: {node: '>=16'}
 
   relateurl@0.2.7:
@@ -5879,23 +5876,23 @@ snapshots:
       '@lumino/widgets': 2.7.1
       ajv: 8.17.1
       commander: 9.5.0
-      css-loader: 6.11.0(webpack@5.102.1(webpack-cli@5.1.4))
+      css-loader: 6.11.0(webpack@5.102.1)
       duplicate-package-checker-webpack-plugin: 3.0.0
       fs-extra: 10.1.0
       glob: 7.1.7
-      license-webpack-plugin: 2.3.21(webpack@5.102.1(webpack-cli@5.1.4))
-      mini-css-extract-plugin: 2.9.4(webpack@5.102.1(webpack-cli@5.1.4))
+      license-webpack-plugin: 2.3.21(webpack@5.102.1)
+      mini-css-extract-plugin: 2.9.4(webpack@5.102.1)
       mini-svg-data-uri: 1.4.4
       path-browserify: 1.0.1
       process: 0.11.10
-      source-map-loader: 1.0.2(webpack@5.102.1(webpack-cli@5.1.4))
-      style-loader: 3.3.4(webpack@5.102.1(webpack-cli@5.1.4))
+      source-map-loader: 1.0.2(webpack@5.102.1)
+      style-loader: 3.3.4(webpack@5.102.1)
       supports-color: 7.2.0
       terser-webpack-plugin: 5.3.14(webpack@5.102.1)
       webpack: 5.102.1(webpack-cli@5.1.4)
       webpack-cli: 5.1.4(webpack@5.102.1)
       webpack-merge: 5.10.0
-      worker-loader: 3.0.8(webpack@5.102.1(webpack-cli@5.1.4))
+      worker-loader: 3.0.8(webpack@5.102.1)
     transitivePeerDependencies:
       - '@rspack/core'
       - '@swc/core'
@@ -6731,8 +6728,6 @@ snapshots:
       '@types/ms': 2.1.0
       '@types/node': 24.9.1
 
-  '@types/lodash@4.17.20': {}
-
   '@types/lru-cache@5.1.1': {}
 
   '@types/ms@2.1.0': {}
@@ -7408,7 +7403,7 @@ snapshots:
       shebang-command: 2.0.0
       which: 2.0.2
 
-  css-loader@6.11.0(webpack@5.102.1(webpack-cli@5.1.4)):
+  css-loader@6.11.0(webpack@5.102.1):
     dependencies:
       icss-utils: 5.1.0(postcss@8.5.6)
       postcss: 8.5.6
@@ -8477,7 +8472,7 @@ snapshots:
     dependencies:
       isomorphic.js: 0.2.5
 
-  license-webpack-plugin@2.3.21(webpack@5.102.1(webpack-cli@5.1.4)):
+  license-webpack-plugin@2.3.21(webpack@5.102.1):
     dependencies:
       '@types/webpack-sources': 0.1.12
       webpack-sources: 1.4.3
@@ -8654,7 +8649,7 @@ snapshots:
 
   mime@1.6.0: {}
 
-  mini-css-extract-plugin@2.9.4(webpack@5.102.1(webpack-cli@5.1.4)):
+  mini-css-extract-plugin@2.9.4(webpack@5.102.1):
     dependencies:
       schema-utils: 4.3.3
       tapable: 2.3.0
@@ -9109,7 +9104,7 @@ snapshots:
 
   regular-layout@0.6.1: {}
 
-  regular-table@0.8.5: {}
+  regular-table@0.8.6: {}
 
   relateurl@0.2.7: {}
 
@@ -9341,7 +9336,7 @@ snapshots:
 
   source-map-js@1.2.1: {}
 
-  source-map-loader@1.0.2(webpack@5.102.1(webpack-cli@5.1.4)):
+  source-map-loader@1.0.2(webpack@5.102.1):
     dependencies:
       data-urls: 2.0.0
       iconv-lite: 0.6.3
@@ -9434,7 +9429,7 @@ snapshots:
 
   strip-json-comments@3.1.1: {}
 
-  style-loader@3.3.4(webpack@5.102.1(webpack-cli@5.1.4)):
+  style-loader@3.3.4(webpack@5.102.1):
     dependencies:
       webpack: 5.102.1(webpack-cli@5.1.4)
 
@@ -9880,7 +9875,7 @@ snapshots:
 
   wordwrapjs@5.1.1: {}
 
-  worker-loader@3.0.8(webpack@5.102.1(webpack-cli@5.1.4)):
+  worker-loader@3.0.8(webpack@5.102.1):
     dependencies:
       loader-utils: 2.0.4
       schema-utils: 3.3.0

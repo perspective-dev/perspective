@@ -92,15 +92,16 @@ export class CandlestickChart extends CategoricalYChart {
     _yDomain: { min: number; max: number } = { min: 0, max: 1 };
 
     /**
-     * `domain_mode: "expand"` accumulators. Hold the running union of
-     * the value-axis (and, in numeric-category mode, category-axis)
-     * extent across data loads. Cleared in `resetExpandedDomain` —
-     * wired from the worker's `resetAllZooms` and from view-config
-     * mutations on `AbstractChart`. `null` whenever the option is
-     * `"fit"` or the accumulator has just been cleared.
+     * `domain_mode: "expand"` accumulator — the VALUE (Y) axis only.
+     * The category axis has NO accumulator on band charts (see
+     * `SeriesChart._expandedLeftDomain`): a numeric/datetime `group_by`
+     * axis always fits the current data. Cleared in
+     * `resetExpandedDomain` — wired from the worker's `resetAllZooms`
+     * and from view-config mutations on `AbstractChart`. `null`
+     * whenever the option is `"fit"` or the accumulator has just been
+     * cleared.
      */
     _expandedYDomain: { min: number; max: number } | null = null;
-    _expandedCategoryDomain: { min: number; max: number } | null = null;
 
     /**
      * Numeric category-axis state (single non-string group_by).
@@ -267,22 +268,17 @@ export class CandlestickChart extends CategoricalYChart {
             scratchCandles: this._candles,
         });
         // `domain_mode: "expand"` post-build union — mirrors the series
-        // pipeline. `expandDomainInPlace` mutates `result.*` so the
-        // assignments below pick up the grown extent automatically.
+        // pipeline: VALUE (Y) axis only, never the category axis (see
+        // `SeriesChart.uploadAndRender`). `expandDomainInPlace` mutates
+        // `result.yDomain` so the assignment below picks up the grown
+        // extent automatically.
         if (this._pluginConfig.domain_mode === "expand") {
             this._expandedYDomain = expandDomainInPlace(
                 this._expandedYDomain,
                 result.yDomain,
             );
-            if (result.numericCategoryDomain) {
-                this._expandedCategoryDomain = expandDomainInPlace(
-                    this._expandedCategoryDomain,
-                    result.numericCategoryDomain,
-                );
-            }
         } else {
             this._expandedYDomain = null;
-            this._expandedCategoryDomain = null;
         }
 
         this._rowPaths = result.rowPaths;
@@ -320,7 +316,6 @@ export class CandlestickChart extends CategoricalYChart {
 
     override resetExpandedDomain(): void {
         this._expandedYDomain = null;
-        this._expandedCategoryDomain = null;
     }
 
     protected destroyInternal(): void {

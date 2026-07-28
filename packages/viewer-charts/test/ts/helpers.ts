@@ -61,15 +61,17 @@ export async function waitOneFrame(page: Page): Promise<void> {
 }
 
 /**
- * Take a screenshot of the viewer element (not the whole page) and
- * compare to `name`'s baseline. Cropping to the viewer excludes page
- * scrollbars / viewport chrome that would add pixel noise.
+ * Take a screenshot of the CHART (the slotted plugin element) and compare
+ * to `name`'s baseline.
  */
 export async function expectViewerScreenshot(
     page: Page,
     options: { maxDiffPixelRatio?: number } = {},
 ): Promise<void> {
-    const viewer = page.locator("perspective-viewer");
+    const chart = page.locator(
+        'perspective-viewer > [slot]:not([slot^="tab-"])',
+    );
+
     const snapshotName =
         test
             .info()
@@ -82,7 +84,7 @@ export async function expectViewerScreenshot(
             )
             .join("-") + ".png";
 
-    await expect(viewer).toHaveScreenshot(snapshotName, {
+    await expect(chart).toHaveScreenshot(snapshotName, {
         threshold: DEFAULT_THRESHOLD,
         maxDiffPixelRatio:
             options.maxDiffPixelRatio ?? DEFAULT_MAX_DIFF_PIXEL_RATIO,

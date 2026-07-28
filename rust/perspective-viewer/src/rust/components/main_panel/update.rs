@@ -60,12 +60,11 @@ impl MainPanel {
         let layout: RegularLayout = el.unchecked_into();
         let mut closed = Vec::new();
         self.inserted.retain(|id| {
-            let path = layout.calculate_path(id);
-            if path.is_null() || path.is_undefined() {
+            if layout.contains_panel(id) {
+                true
+            } else {
                 closed.push(id.clone());
                 false
-            } else {
-                true
             }
         });
 
@@ -86,8 +85,7 @@ impl MainPanel {
             // tasks can't be cancelled. App-initiated closes already drop
             // the panel from `panel_ids` before this fires; this also
             // covers a layout-originated removal.
-            let path = layout.calculate_path(id.as_str());
-            if path.is_null() || path.is_undefined() {
+            if !layout.contains_panel(id.as_str()) {
                 continue;
             }
 
@@ -125,13 +123,16 @@ impl MainPanel {
     pub(super) fn on_context_menu(
         &mut self,
         ctx: &Context<Self>,
-        id: String,
+        id: Option<String>,
         x: f64,
         y: f64,
     ) -> bool {
         // Make the right-clicked panel active so active-targeting
         // commands (e.g. Reset) act on it; then show the menu.
-        ctx.props().on_activate_panel.emit(id.clone());
+        if let Some(id) = &id {
+            ctx.props().on_activate_panel.emit(id.clone());
+        }
+
         self.context_menu = Some((x, y, id));
         true
     }
@@ -142,7 +143,7 @@ impl MainPanel {
     }
 
     pub(super) fn on_command(&mut self, ctx: &Context<Self>, cmd: PanelCommand) -> bool {
-        let Some((_, _, id)) = self.context_menu.clone() else {
+        let Some((_, _, target)) = self.context_menu.clone() else {
             return false;
         };
 
@@ -154,7 +155,9 @@ impl MainPanel {
             // `BeforeResize` gate presizes the now-visible plugin(s)
             // — no reactive post-commit resize sweep needed.
             PanelCommand::Maximize => {
-                if let Some(el) = self.layout_ref.cast::<web_sys::HtmlElement>() {
+                if let Some(id) = target
+                    && let Some(el) = self.layout_ref.cast::<web_sys::HtmlElement>()
+                {
                     el.unchecked_ref::<RegularLayout>().maximize(&id);
                     self.maximized = Some(id);
                 }
@@ -166,7 +169,14 @@ impl MainPanel {
 
                 self.maximized = None;
             },
-            cmd => ctx.props().on_panel_command.emit((id, cmd)),
+            // The stage menu (no target panel) offers ONLY `NewFrom`, whose
+            // handler resolves the client/table purely from the loaded-clients
+            // registry — the panel id is unused there, so the empty id never
+            // reaches a panel lookup.
+            cmd => ctx
+                .props()
+                .on_panel_command
+                .emit((target.unwrap_or_default(), cmd)),
         }
 
         false

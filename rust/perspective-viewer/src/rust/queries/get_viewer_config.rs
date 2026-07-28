@@ -51,7 +51,10 @@ pub async fn get_viewer_config(
         None => presentation.get_selected_theme_name().await,
     };
     let title = session.get_title();
-    let table = session.get_table().map(|x| x.get_name().to_owned());
+    let table = session
+        .get_table()
+        .map(|x| x.get_name().to_owned())
+        .or_else(|| session.pending_table());
     let columns_config = renderer.all_columns_configs();
     Ok(ViewerConfig {
         settings,

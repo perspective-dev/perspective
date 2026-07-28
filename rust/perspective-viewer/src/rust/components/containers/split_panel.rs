@@ -29,8 +29,10 @@ pub struct SplitPanelProps {
     #[prop_or_default]
     pub orientation: Orientation,
 
-    /// Whether to render `<></>` empty templates as empty child panels, or
-    /// omit them entirely.
+    /// Whether to OMIT children that render nothing (an empty fragment, or
+    /// any nesting of empty fragments — see [`is_empty_html`]) instead of
+    /// rendering them as empty panes. A skipped pane takes its divider with
+    /// it.
     #[prop_or_default]
     pub skip_empty: bool,
 
@@ -70,6 +72,20 @@ pub struct SplitPanelProps {
     /// re-derive pane 0's style on every `changed`.
     #[prop_or_default]
     pub size: Option<i32>,
+}
+
+/// `true` when `node` renders NOTHING: an empty fragment, or a fragment of
+/// nothing but empty fragments. SEMANTIC, not literal — the `html!`
+/// if-syntax (and other wrappers) nests an empty branch inside another
+/// `VList` rather than yielding a bare `<></>`, which is why a literal
+/// `x != html! { <></> }` comparison is not a usable emptiness test (see
+/// the mechanism unit test). Deliberately conservative: `VText("")` and
+/// other node kinds are NOT considered empty.
+fn is_empty_html(node: &Html) -> bool {
+    match node {
+        Html::VList(list) => list.iter().all(is_empty_html),
+        _ => false,
+    }
 }
 
 /// The fixed-size pane style for a committed size (the complement pane
@@ -204,6 +220,20 @@ impl Component for SplitPanel {
         self.refs.resize_with(new_len, Default::default);
         self.styles.resize(new_len, Default::default());
 
+        if let Some(state) = self.resize_state.as_ref() {
+            let skip_empty = ctx.props().skip_empty;
+            let still_visible = ctx
+                .props()
+                .children
+                .iter()
+                .enumerate()
+                .any(|(i, x)| i == state.index && (!skip_empty || !is_empty_html(&x)));
+
+            if !still_visible {
+                self.resize_state = None;
+            }
+        }
+
         // Deferred mode: pane 0's style tracks the controlled `size` prop
         // (`None` = natural width, e.g. after a divider double-click reset).
         if ctx.props().deferred {
@@ -234,7 +264,7 @@ impl Component for SplitPanel {
             .children
             .iter()
             .enumerate()
-            .filter(|(_, x)| !skip_empty || x != &html! { <></> })
+            .filter(|(_, x)| !skip_empty || !is_empty_html(x))
             .collect::<Vec<_>>();
 
         let last = panes.len().saturating_sub(1);
@@ -530,5 +560,46 @@ impl ResizingState {
     fn release_cursor(&self) -> ApiResult<()> {
         self.pointer_elem.release_pointer_capture(self.pointer_id)?;
         Ok(self.body_style.set_property("cursor", &self.cursor)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn html_if_empty_branch_is_not_literally_empty() {
+        let via_if: Html = html! { if false { <div /> } else { <></> } };
+        assert_ne!(via_if, html! { <></> });
+    }
+
+    #[test]
+    fn empty_fragment_is_empty() {
+        assert!(is_empty_html(&html! { <></> }));
+    }
+
+    #[test]
+    fn html_if_empty_branch_is_semantically_empty() {
+        assert!(is_empty_html(&html! { if false { <div/> } else { <></> } }));
+    }
+
+    #[test]
+    fn nested_empty_fragments_are_empty() {
+        assert!(is_empty_html(&html! { <><><></></></> }));
+    }
+
+    #[test]
+    fn tag_is_not_empty() {
+        assert!(!is_empty_html(&html! { <div/> }));
+    }
+
+    #[test]
+    fn fragment_containing_a_tag_is_not_empty() {
+        assert!(!is_empty_html(&html! { <><div/></> }));
+    }
+
+    #[test]
+    fn text_is_not_empty() {
+        assert!(!is_empty_html(&html! { { "" } }));
     }
 }

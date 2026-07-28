@@ -187,7 +187,8 @@ export class AreaGlyph {
 
     /**
      * Bind persistent strip buffers and dispatch one TRIANGLE_STRIP per
-     * series-run. Skips hidden series.
+     * series-run. Skips hidden series. `splitFilter` (faceted frames)
+     * draws only the series whose `splitIdx` matches.
      */
     draw(
         chart: SeriesChart,
@@ -196,6 +197,7 @@ export class AreaGlyph {
         projLeft: Float32Array,
         projRight: Float32Array,
         opacity: number,
+        splitFilter?: number,
     ): void {
         const buf = this._buffers;
         const cache = this._program;
@@ -209,6 +211,13 @@ export class AreaGlyph {
         const hidden = chart._hiddenSeries;
         for (const s of buf.series) {
             if (hidden.has(s.seriesId)) {
+                continue;
+            }
+
+            if (
+                splitFilter !== undefined &&
+                chart._series[s.seriesId].splitIdx !== splitFilter
+            ) {
                 continue;
             }
 

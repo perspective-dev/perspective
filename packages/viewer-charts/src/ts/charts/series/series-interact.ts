@@ -21,6 +21,7 @@ import {
     uploadBarInstances,
     rebuildGlyphBuffers,
     rightAxisDataToPixel,
+    layoutForRecord,
 } from "./series-render";
 
 const POINT_HIT_RADIUS_PX = 10;
@@ -49,6 +50,12 @@ export function getHoveredBar(chart: SeriesChart): SeriesChartRecord | null {
  * Handle mouse-move across all glyph types. Tests (in reverse paint order
  * so top glyphs win): scatter points → line points → bars → areas.
  * Updates `_hoveredBarIdx` or `_hoveredSample` and re-renders on change.
+ *
+ * Faceted frames first resolve the cell under the cursor: that cell's
+ * layout supplies the pixel→data mapping and its index becomes the
+ * `splitFilter` — records of other splits share the same band-slot
+ * coordinates by construction, so an unfiltered hit-test would match
+ * a bar from a different facet.
  */
 export function handleBarHover(
     chart: SeriesChart,
@@ -59,7 +66,33 @@ export function handleBarHover(
         return;
     }
 
-    const layout = chart._lastLayout;
+    let layout = chart._lastLayout;
+    let splitFilter: number | undefined;
+    if (chart._facetGrid) {
+        const cells = chart._facetGrid.cells;
+        let found = -1;
+        for (let i = 0; i < cells.length; i++) {
+            const p = cells[i].layout.plotRect;
+            if (
+                mx >= p.x &&
+                mx <= p.x + p.width &&
+                my >= p.y &&
+                my <= p.y + p.height
+            ) {
+                found = i;
+                break;
+            }
+        }
+
+        if (found < 0) {
+            clearHover(chart);
+            return;
+        }
+
+        layout = cells[found].layout;
+        splitFilter = found;
+    }
+
     const plot = layout.plotRect;
 
     if (
@@ -130,6 +163,7 @@ export function handleBarHover(
         pxPerDataX,
         pxPerDataYLeft,
         pxPerDataYRight,
+        splitFilter,
     );
 
     // 2. Line points (still above bars; treat as point hits).
@@ -143,6 +177,7 @@ export function handleBarHover(
             pxPerDataX,
             pxPerDataYLeft,
             pxPerDataYRight,
+            splitFilter,
         );
     }
 
@@ -157,12 +192,17 @@ export function handleBarHover(
         const by1 = bars.y1;
         const ax = bars.axis;
         const hidden = chart._hiddenSeries;
+        const P = chart._splitPrefixes.length;
         for (let i = 0; i < bars.count; i++) {
             if (ct[i] !== BAR_TYPE_BAR) {
                 continue;
             }
 
             if (hidden.has(sid[i])) {
+                continue;
+            }
+
+            if (splitFilter !== undefined && sid[i] % P !== splitFilter) {
                 continue;
             }
 
@@ -186,7 +226,13 @@ export function handleBarHover(
 
     // 4. Areas (strip hit — stacked records via `_bars`, unstacked via samples).
     if (nextBarIdx < 0 && !nextSample) {
-        const areaHit = hitTestAreas(chart, dataX, dataYLeft, dataYRight);
+        const areaHit = hitTestAreas(
+            chart,
+            dataX,
+            dataYLeft,
+            dataYRight,
+            splitFilter,
+        );
         if (areaHit) {
             if (areaHit.idx >= 0) {
                 nextBarIdx = areaHit.idx;
@@ -208,6 +254,7 @@ function hitTestPoints(
     pxPerDataX: number,
     pxPerDataYLeft: number,
     pxPerDataYRight: number,
+    splitFilter?: number,
 ): SeriesChartRecord | null {
     const N = chart._numCategories;
     const S = chart._series.length;
@@ -229,6 +276,10 @@ function hitTestPoints(
         }
 
         if (chart._hiddenSeries.has(s.seriesId)) {
+            continue;
+        }
+
+        if (splitFilter !== undefined && s.splitIdx !== splitFilter) {
             continue;
         }
 
@@ -288,6 +339,7 @@ function hitTestAreas(
     dataX: number,
     dataYLeft: number,
     dataYRight: number,
+    splitFilter?: number,
 ): { idx: number; bar: SeriesChartRecord | null } | null {
     // Closest category to the mouse; an area covers every [cat - 0.5, cat + 0.5]
     // slot, so use `round(dataX)` as the candidate index.
@@ -312,6 +364,7 @@ function hitTestAreas(
     const ax = bars.axis;
     const by0 = bars.y0;
     const by1 = bars.y1;
+    const P = chart._splitPrefixes.length;
     for (let i = 0; i < bars.count; i++) {
         if (ct[i] !== BAR_TYPE_AREA) {
             continue;
@@ -322,6 +375,10 @@ function hitTestAreas(
         }
 
         if (chart._hiddenSeries.has(sid[i])) {
+            continue;
+        }
+
+        if (splitFilter !== undefined && sid[i] % P !== splitFilter) {
             continue;
         }
 
@@ -342,6 +399,10 @@ function hitTestAreas(
         }
 
         if (chart._hiddenSeries.has(s.seriesId)) {
+            continue;
+        }
+
+        if (splitFilter !== undefined && s.splitIdx !== splitFilter) {
             continue;
         }
 
@@ -411,6 +472,10 @@ function applyHover(
 /**
  * Handle a click on the legend area. Returns true when the click hit a
  * legend entry (the caller should then treat the event as consumed).
+ *
+ * An entry may own several series (facet-grid mode groups the legend
+ * by aggregate): the toggle is all-or-nothing — any visible member
+ * hides the whole group, a fully-hidden group shows every member.
  */
 export function handleBarLegendClick(
     chart: SeriesChart,
@@ -429,10 +494,15 @@ export function handleBarLegendClick(
             my >= r.y &&
             my <= r.y + r.height
         ) {
-            if (chart._hiddenSeries.has(entry.seriesId)) {
-                chart._hiddenSeries.delete(entry.seriesId);
-            } else {
-                chart._hiddenSeries.add(entry.seriesId);
+            const anyVisible = entry.seriesIds.some(
+                (sid) => !chart._hiddenSeries.has(sid),
+            );
+            for (const sid of entry.seriesIds) {
+                if (anyVisible) {
+                    chart._hiddenSeries.add(sid);
+                } else {
+                    chart._hiddenSeries.delete(sid);
+                }
             }
 
             // Hidden-series change affects which bars contribute to
@@ -570,7 +640,11 @@ function pinTooltip(chart: SeriesChart, b: SeriesChartRecord): void {
         return;
     }
 
-    const layout = chart._lastLayout;
+    // Faceted frames anchor in the record's own cell.
+    const layout = layoutForRecord(chart, b);
+    if (!layout) {
+        return;
+    }
 
     // Anchor at the bar midpoint for bar glyphs (tooltip reads against
     // the body); at the point itself (`y1`) for line / scatter / area.
@@ -581,7 +655,7 @@ function pinTooltip(chart: SeriesChart, b: SeriesChartRecord): void {
             ? chart._isHorizontal
                 ? layout.dataToPixel(anchorV, b.xCenter)
                 : layout.dataToPixel(b.xCenter, anchorV)
-            : rightAxisDataToPixel(chart, b.xCenter, anchorV);
+            : rightAxisDataToPixel(chart, b.xCenter, anchorV, layout);
 
     const lines = buildBarTooltipLines(chart, b);
     if (lines.length === 0) {

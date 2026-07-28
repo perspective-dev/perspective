@@ -141,6 +141,12 @@ pub struct PanelTabProps {
     /// close button.
     pub closable: bool,
 
+    /// `true` when the settings sidebar is open. When closed, the tab renders
+    /// an open-settings button *in place of* the close button — the only
+    /// affordance for opening the settings panel (there is deliberately none
+    /// at zero panels).
+    pub is_settings_open: bool,
+
     /// `false` for a lone panel — suppresses the tab rearrange-drag.
     /// `<regular-layout-frame>` arms a drag from any `part="tab"` pointerdown,
     /// but a lone panel has nowhere to drop, so the host `pointerdown` handler
@@ -156,6 +162,11 @@ pub struct PanelTabProps {
     /// syncs the slave `regular-layout` — NOT `RegularLayout::remove_panel`
     /// directly; see the app-initiated-layout-change invariant).
     pub on_close: Callback<String>,
+
+    /// Open the settings sidebar targeting this panel. Wired by `MainPanel` to
+    /// select this panel in the layout, activate it (so the sidebar binds its
+    /// engines), then toggle the sidebar open.
+    pub on_open_settings: Callback<String>,
 
     /// Open the panel context menu at `(client_x, client_y)`. Wired here on the
     /// tab host because the tab's content is a `create_portal` subtree, so its
@@ -186,6 +197,9 @@ pub enum PanelTabMsg {
     /// `dblclick` listener never fires on the tab.
     PointerDown(f64),
     Close,
+    /// The tab's open-settings button (shown while the settings sidebar is
+    /// closed, in the close button's place).
+    OpenSettings,
     ContextMenu(f64, f64),
     /// Track the live `<input>` value while editing (drives the auto-sizer).
     EditInput(String),
@@ -274,12 +288,10 @@ impl Component for PanelTab {
             .unwrap()
             .unchecked_into();
 
-        let _ = host.set_attribute("part", "tab");
-        let _ = host.set_attribute("slot", &Self::slot_name(&ctx.props().panel_id));
+        host.set_attribute("part", "tab").unwrap();
+        host.set_attribute("slot", &Self::slot_name(&ctx.props().panel_id))
+            .unwrap();
 
-        // Encapsulate the tab's contents in an open ShadowRoot, and adopt the
-        // shared structure stylesheet into it. The host itself stays in the
-        // light DOM (see `ensure_custom_element`).
         let init = ShadowRootInit::new(ShadowRootMode::Open);
         let shadow_root = host
             .shadow_root()
@@ -287,26 +299,10 @@ impl Component for PanelTab {
             .unchecked_into::<Element>();
 
         adopt_sheet(&shadow_root);
-
-        // A pointerdown anywhere on the tab selects the panel (the title is
-        // `pointer-events:none`, so its clicks fall through to this host), and a
-        // second within the double-click window enters title-edit mode (see
-        // `PanelTabMsg::PointerDown`). The close button stops propagation so it
-        // doesn't also select; the frame's own handler reads `part="tab"` off
-        // this host to start a drag.
         let link = ctx.link().clone();
         let draggable = Rc::new(Cell::new(ctx.props().draggable));
         let drag_flag = draggable.clone();
         let pointerdown = Closure::wrap(Box::new(move |event: PointerEvent| {
-            // A lone panel can't be rearranged — stop the pointerdown before it
-            // reaches `<regular-layout-frame>`'s titlebar handler so it never
-            // arms a drag (our own select / double-click logic still runs).
-            // ALSO cancel the compat mouse events (the frame's drag-arm
-            // `preventDefault` normally does this): the synthesized
-            // double-click renders + focuses the title editor `<input>`
-            // between the second `pointerdown` and its compat `mousedown`,
-            // whose default focus action would land on the non-focusable host
-            // and instantly blur (→ commit away) the editor.
             if !drag_flag.get() {
                 event.stop_propagation();
                 event.prevent_default();
@@ -318,8 +314,6 @@ impl Component for PanelTab {
         let _ = host
             .add_event_listener_with_callback("pointerdown", pointerdown.as_ref().unchecked_ref());
 
-        // Right-click → panel context menu (suppressing the native menu). Stops
-        // propagation so it doesn't also bubble to the frame.
         let link = ctx.link().clone();
         let contextmenu = Closure::wrap(Box::new(move |event: MouseEvent| {
             event.prevent_default();
@@ -353,9 +347,7 @@ impl Component for PanelTab {
                 .set_attribute("slot", &Self::slot_name(&ctx.props().panel_id));
         }
 
-        // Keep the pointerdown closure's drag gate in sync with the prop.
         self.draggable.set(ctx.props().draggable);
-
         true
     }
 
@@ -363,17 +355,17 @@ impl Component for PanelTab {
         let id = ctx.props().panel_id.clone();
         match msg {
             PanelTabMsg::PointerDown(ts) => {
-                // Every pointerdown selects the panel (single-click behavior).
                 ctx.props().on_select.emit(id);
-                // A second pointerdown within the double-click window enters
-                // title-edit mode. `begin_edit` only runs (and forces a render)
-                // on an actual double-click that isn't already editing.
                 let is_double = ts - self.last_pointerdown <= DBLCLICK_MS;
                 self.last_pointerdown = ts;
                 is_double && self.begin_edit(ctx)
             },
             PanelTabMsg::Close => {
                 ctx.props().on_close.emit(id);
+                false
+            },
+            PanelTabMsg::OpenSettings => {
+                ctx.props().on_open_settings.emit(id);
                 false
             },
             PanelTabMsg::ContextMenu(x, y) => {
@@ -412,6 +404,11 @@ impl Component for PanelTab {
             PanelTabMsg::Close
         });
 
+        let on_open_settings = ctx.link().callback(|e: PointerEvent| {
+            e.stop_propagation();
+            PanelTabMsg::OpenSettings
+        });
+
         let title_html = if self.editing {
             let oninput = ctx.link().callback(|e: InputEvent| {
                 let value = e
@@ -428,14 +425,12 @@ impl Component for PanelTab {
                     "Escape" => vec![PanelTabMsg::CancelEdit],
                     _ => vec![],
                 });
-            // Cursor-positioning clicks in the input must not fall through to the
-            // host's select / the frame's drag while editing.
+
             let onpointerdown = ctx.link().batch_callback(|e: PointerEvent| {
                 e.stop_propagation();
                 Vec::<PanelTabMsg>::new()
             });
 
-            // `input-sizer` (ported from the status bar) auto-grows to the value.
             html! {
                 <label class="psp-tab-title input-sizer" data-value={self.edit_value.clone()}>
                     <input
@@ -460,17 +455,17 @@ impl Component for PanelTab {
             }
         };
 
-        // The caret is always in the DOM; panel-tab.css shows it only on
-        // `:host(.active)`, so it flips with the tab chrome in the same style
-        // pass as `sync_class` (which stamps `active` imperatively, after
-        // render).
         let content = html! {
             <>
-                <span class="psp-tab-grip" />
                 <span class="psp-tab-caret" />
+                // <span class="psp-tab-grip" />
                 { title_html }
                 if ctx.props().is_master { <span class="psp-tab-master" /> }
-                if ctx.props().closable { <button class="psp-tab-close" onpointerdown={on_close} /> }
+                if !ctx.props().is_settings_open {
+                    <button class="psp-tab-settings" onpointerdown={on_open_settings} />
+                } else if ctx.props().closable {
+                    <button class="psp-tab-close" onpointerdown={on_close} />
+                }
             </>
         };
 

@@ -27,11 +27,15 @@
 
 use std::rc::Rc;
 
+use futures::future::LocalBoxFuture;
 use perspective_client::config::ViewConfigUpdate;
 use perspective_client::{View, clone};
 use perspective_js::utils::*;
+use wasm_bindgen::JsValue;
 use yew::prelude::*;
 
+use crate::config::{ColumnConfigUpdate, PluginConfigUpdate};
+use crate::presentation::Presentation;
 use crate::renderer::{RenderContext, Renderer};
 use crate::session::{BindDisposition, Session};
 use crate::utils::RenderGuard;
@@ -191,72 +195,152 @@ pub fn just_render(session: &Session, renderer: &Renderer) -> ApiResult<ApiFutur
     }))
 }
 
-/// One locked, witnessed, snapshot-consuming render run.
+/// Everything that varies between locked render runs, consumed by
+/// [`locked_run`] — the ONE lock-body composition. `Default` is the
+/// host-internal UI-commit run: `Internal` origin, no plugin swap, no
+/// pre-bind task, no bucket updates, no dispatch visibility gate.
+pub(crate) struct RunSpec {
+    /// Who initiated this run (see [`RunOrigin`]).
+    pub origin: RunOrigin,
+
+    /// A plugin swap resolved by [`Renderer::resolve_plugin_update`],
+    /// committed inside the run atomically with the rebind.
+    pub plugin_idx: Option<usize>,
+
+    /// Plugin-level bucket update, applied inside the run after the bind
+    /// (so strip-on-write sees fresh schemas).
+    pub plugin_config: PluginConfigUpdate,
+
+    /// Per-column bucket update; same timing as `plugin_config`.
+    pub columns_config: ColumnConfigUpdate,
+
+    /// Pre-bind hook awaited inside the lock (table binding, resets) —
+    /// BEFORE the error guard, so a task that recovers the session (e.g.
+    /// `restorePanel`'s errored-recovery reset) unblocks its own run.
+    pub task: Option<LocalBoxFuture<'static, ApiResult<()>>>,
+
+    /// When set, plugin dispatch is skipped while the host element is not
+    /// visible (`Presentation::is_visible`) — the `restore` family's gate
+    /// (the eventual auto-pause resume rebuilds and redraws). `None`
+    /// dispatches unconditionally (UI-commit runs, whose callers gate on
+    /// drawn/loaded state themselves).
+    pub presentation: Option<Presentation>,
+}
+
+impl Default for RunSpec {
+    fn default() -> Self {
+        Self {
+            origin: RunOrigin::Internal,
+            plugin_idx: None,
+            plugin_config: PluginConfigUpdate::Missing,
+            columns_config: ColumnConfigUpdate::Missing,
+            task: None,
+            presentation: None,
+        }
+    }
+}
+
+/// One locked, witnessed, snapshot-consuming render run — the SINGLE lock
+/// body shared by every config-driven run (`apply_and_render` &co. via
+/// [`render_run`]'s tail, the `restore` family via
+/// [`super::restore_and_render`]): eager mount → pre-bind `task` →
+/// plugin-swap commit → theme stamp → error guard → [`bind_snapshot`]
+/// (gated on a bound `Table`, else `Deferred` — the config is already
+/// committed, so the eventual `load()` run binds from it) → bucket updates
+/// + materialized `plugin.restore` → [`dispatch_bound`].
+///
+/// A pre-existing session error skips the run for `Internal` origins and
+/// fails it for `Public` ones (the caller asked and must hear the failure —
+/// I6). Returns the RAW run result; error-reporting policy (`set_run_error`
+/// vs. propagate) belongs to the caller.
+pub(crate) async fn locked_run(
+    session: &Session,
+    renderer: &Renderer,
+    spec: RunSpec,
+) -> ApiResult<()> {
+    clone!(session, renderer);
+    renderer
+        .clone()
+        .render_task(|guard| async move {
+            renderer.mount_active_plugin()?;
+            if let Some(task) = spec.task {
+                task.await?;
+            }
+
+            let plugin_swapped = renderer.commit_plugin(spec.plugin_idx)?;
+            let plugin = renderer.active_plugin().ok_or("No Plugin")?;
+            renderer.stamp_theme(Some(&plugin));
+            if let Some(error) = session.get_error() {
+                return match spec.origin {
+                    RunOrigin::Public => Err(error),
+                    RunOrigin::Internal => Ok(()),
+                };
+            }
+
+            let (disposition, _pin) = if session.get_table().is_some() {
+                bind_snapshot(&guard, &session, &renderer).await?
+            } else {
+                (BindDisposition::Deferred, None)
+            };
+
+            let view_config_snapshot = session.get_view_config().clone();
+            let plugin_config_changed =
+                renderer.update_plugin_config(&view_config_snapshot, spec.plugin_config);
+            let columns_config_changed = renderer.update_columns_configs(
+                &view_config_snapshot,
+                &session,
+                spec.columns_config,
+            );
+
+            let changed = plugin_config_changed || columns_config_changed;
+            if changed || plugin_swapped {
+                let plugin_config_snapshot = renderer.get_plugin_config();
+                let plugin_update =
+                    JsValue::from_serde_ext(&plugin_config_snapshot).unwrap_or(JsValue::NULL);
+                let columns_config = renderer
+                    .all_columns_configs_materialized(&view_config_snapshot, &session)
+                    .await;
+                plugin.restore(&plugin_update, Some(&columns_config))?;
+                if plugin_config_changed {
+                    renderer.plugin_config_changed.emit(plugin_config_snapshot);
+                }
+            }
+
+            if spec
+                .presentation
+                .as_ref()
+                .map(|p| p.is_visible())
+                .unwrap_or(true)
+            {
+                dispatch_bound(&guard, &renderer, disposition, changed, spec.origin).await?;
+            }
+
+            Ok(())
+        })
+        .await
+}
+
+/// [`locked_run`]'s host-internal tail: a failed RUN sets error state (with
+/// the reset-reconnect affordance); the committed config is NOT rolled back
+/// (I4). Cancellation by a superseding run ("View already deleted") is not
+/// a failure.
 async fn render_run(
     session: Session,
     renderer: Renderer,
     plugin_idx: Option<usize>,
 ) -> ApiResult<()> {
-    let result = {
-        clone!(session, renderer);
-        renderer
-            .clone()
-            .render_task(|guard| async move {
-                // The previous run errored; skip until the error clears.
-                if session.get_error().is_some() {
-                    return Ok(());
-                }
-
-                // Mount eagerly — BEFORE the (possibly slow) view query — so
-                // the panel's frame is never empty while the query runs.
-                renderer.mount_active_plugin()?;
-                let plugin_swapped = renderer.commit_plugin(plugin_idx)?;
-                let (disposition, _pin) = bind_snapshot(&guard, &session, &renderer).await?;
-                if plugin_swapped {
-                    // `commit_plugin_idx` already restored the new plugin from
-                    // its raw bucket; re-run with the materialized snapshot so
-                    // any `include: true` schema defaults make it into the
-                    // plugin's state before the first draw.
-                    let view_config_snapshot = session.get_view_config().clone();
-                    let plugin_token =
-                        wasm_bindgen::JsValue::from_serde_ext(&renderer.get_plugin_config())
-                            .unwrap_or(wasm_bindgen::JsValue::NULL);
-                    let columns_config = renderer
-                        .all_columns_configs_materialized(&view_config_snapshot, &session)
-                        .await;
-                    renderer
-                        .ensure_plugin_selected()?
-                        .restore(&plugin_token, Some(&columns_config))?;
-                }
-
-                // `render_run` initiators are host-internal UI flows and
-                // never touch plugin buckets (`commit_plugin` swaps route
-                // through the first-paint promotion), so: no state delta,
-                // internal origin — a reconciled no-op dispatches nothing.
-                dispatch_bound(&guard, &renderer, disposition, false, RunOrigin::Internal).await
-            })
-            .await
+    let spec = RunSpec {
+        plugin_idx,
+        ..RunSpec::default()
     };
 
-    // A failed RUN sets error state (with the reset-reconnect affordance);
-    // the committed config is NOT rolled back (I4). Cancellation by a
-    // superseding run ("View already deleted") is not a failure.
-    match result.ignore_view_delete() {
+    match locked_run(&session, &renderer, spec)
+        .await
+        .ignore_view_delete()
+    {
         Err(e) => session.set_run_error(e).await,
         Ok(_) => Ok(()),
     }
-}
-
-/// Create a [`Callback`] that re-renders the current commit. Replaces the
-/// old `render_callback` (which drew the bound view without validation).
-pub fn render_callback(session: &Session, renderer: &Renderer) -> Callback<()> {
-    clone!(session, renderer);
-    Callback::from(move |_| {
-        clone!(renderer, session);
-        crate::utils::spawn_owned("render-callback", async move {
-            just_render(&session, &renderer)?.await
-        });
-    })
 }
 
 /// One TRANSACTIONAL activation repaint (see the I5 audit gap in
@@ -276,6 +360,14 @@ pub fn render_callback(session: &Session, renderer: &Renderer) -> Callback<()> {
 /// debounced/throttled: activation is a one-shot interaction, not a data
 /// stream, and the throttle timer is a task boundary the browser paints
 /// across.
+///
+/// EXCEPTION: a panel whose `table_updated` redraws were dropped while it
+/// was hidden ([`Renderer::take_data_stale`]) HAS changed data — its
+/// retained frame is stale, so this activation dispatches one full
+/// `plugin.update` (same `View`, fresh data; `draw` stays reserved for new
+/// `View`s) instead of the chrome-only repaint. `draw_view` stamps the
+/// activation class + theme itself, so the atomicity contract above holds
+/// on this branch too.
 pub async fn activation_render(session: Session, renderer: Renderer) -> ApiResult<()> {
     let result = {
         clone!(session, renderer);
@@ -283,11 +375,15 @@ pub async fn activation_render(session: Session, renderer: Renderer) -> ApiResul
             .clone()
             .render_task(|guard| async move {
                 match session.get_view() {
-                    Some(_) => {
+                    Some(view) => {
                         let _pin = renderer
                             .cached_context()
                             .map(|ctx| renderer.pin_context(&guard, ctx));
-                        renderer.activation_repaint(&guard).await
+                        if renderer.take_data_stale() {
+                            renderer.update_bound(&guard, &view).await
+                        } else {
+                            renderer.activation_repaint(&guard).await
+                        }
                     },
                     None => Ok(()),
                 }
@@ -298,24 +394,18 @@ pub async fn activation_render(session: Session, renderer: Renderer) -> ApiResul
     result.ignore_view_delete().map(|_| ())
 }
 
-/// Resize from the current `View` and `Plugin`, or run a full render when
-/// the plugin has never drawn. The future form — callers that must own
-/// completion (invariant I6) join THIS; [`resize_callback`] is its
-/// event-listener-leaf wrapper.
-pub async fn resize_or_render(session: Session, renderer: Renderer) -> ApiResult<()> {
-    if !renderer.is_plugin_activated()? {
-        just_render(&session, &renderer)?.await
-    } else {
-        renderer.resize().await
-    }
-}
-
 /// Create a [`Callback`] that resizes from the current `View` and `Plugin`,
 /// or runs a full render when the plugin has never drawn.
 pub fn resize_callback(session: &Session, renderer: &Renderer) -> Callback<()> {
     clone!(session, renderer);
     Callback::from(move |_| {
         clone!(renderer, session);
-        crate::utils::spawn_owned("resize-callback", resize_or_render(session, renderer));
+        crate::utils::spawn_owned("resize-callback", async move {
+            if !renderer.is_plugin_activated()? {
+                just_render(&session, &renderer)?.await
+            } else {
+                renderer.resize().await
+            }
+        });
     })
 }

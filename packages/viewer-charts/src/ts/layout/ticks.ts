@@ -72,8 +72,17 @@ export function computeNiceTicks(
 /**
  * Format a numeric tick value for display.
  * Uses K/M/B suffixes for large numbers, fixed decimals for small.
+ *
+ * Total over any input: label formatters run inside render passes, so a
+ * non-finite value (or `undefined` smuggled in by an upstream
+ * out-of-bounds read) must degrade to a placeholder, never throw the
+ * frame away.
  */
 export function formatTickValue(val: number): string {
+    if (!Number.isFinite(val)) {
+        return "-";
+    }
+
     const abs = Math.abs(val);
     if (abs === 0) {
         return "0";

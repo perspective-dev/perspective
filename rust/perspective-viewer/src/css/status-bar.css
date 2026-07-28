@@ -36,7 +36,6 @@
         height: auto;
         min-height: auto;
         max-height: none;
-        gap: 6px;
         top: calc((var(--psp-status-bar--height, 38px) - 20px) / 2);
         right: calc(
             min(48px, (var(--psp-status-bar--height, 38px) - 20px) / 2)
@@ -47,7 +46,7 @@
         box-shadow: 0 1px 0 0px var(--psp-inactive--color);
         z-index: 6;
         display: var(--psp-status-bar--display, flex);
-        gap: 6px;
+        gap: 4px;
         align-items: center;
         background: var(--psp--background-color);
         padding: var(--psp-status-bar--padding, 0 31px 0 4px);

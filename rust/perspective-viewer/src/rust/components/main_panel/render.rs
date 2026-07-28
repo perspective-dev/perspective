@@ -44,8 +44,6 @@ impl MainPanel {
         } = ctx.props();
 
         let is_settings_open = ctx.props().is_settings_open;
-        let on_settings = (!is_settings_open).then(|| ctx.props().on_settings.clone());
-
         let mut class = classes!();
         if !is_settings_open {
             class.push("settings-closed");
@@ -64,73 +62,82 @@ impl MainPanel {
         // `regular-layout` grid-places via its `::slotted([name])` rule — that
         // only matches *direct*, non-`<slot>` children, hence the wrapper) whose
         // inner forwarding `<slot>` projects the light-DOM plugin into the placed
-        // cell. Falls back to a bare default slot when there are no panels.
-        let plugin_area = if ctx.props().panel_ids.is_empty() {
-            html! { <slot /> }
-        } else {
+        // cell. The `<regular-layout>` element is ALWAYS rendered — at zero
+        // panels it is merely empty (its tree collapses to a childless split,
+        // and it paints nothing of its own), which keeps the stage CSS
+        // (viewer.css keys the stage background + inset bleed on the element)
+        // and the attached listeners alive across empty↔populated transitions.
+        let plugin_area = {
             // The active panel (whose engines the status bar/settings target) is
             // the one the active renderer is bound to.
             let active_slot = renderer.slot_name();
-            let cells = ctx.props().panel_ids.iter().map(|id| {
-                let name = id.as_str().to_owned();
-                let mut class = classes!("rl-panel");
-                if ctx.props().panel_ids.len() > 1 {
-                    if active_slot.as_deref() == Some(name.as_str()) {
-                        class.push("active");
+            // Panel-count chrome (`single`/`multi`, closable, draggable)
+            let placed_count = ctx.props().workspace.placed_count();
+            let cells = ctx
+                .props()
+                .panel_ids
+                .iter()
+                .filter(|id| !ctx.props().workspace.is_staged(id))
+                .map(|id| {
+                    let name = id.as_str().to_owned();
+                    let mut class = classes!("rl-panel");
+                    if placed_count > 1 {
+                        if active_slot.as_deref() == Some(name.as_str()) {
+                            class.push("active");
+                        }
+                    } else {
+                        // Lone panel: can't be closed to zero — hide the close button
+                        // (see viewer.css) and skip the active outline.
+                        class.push("single");
                     }
-                } else {
-                    // Lone panel: can't be closed to zero — hide the close button
-                    // (see viewer.css) and skip the active outline.
-                    class.push("single");
-                }
 
-                // Activate this panel on pointerdown anywhere in it (body or
-                // titlebar), so *working* in a panel — not only clicking its tab
-                // — targets it with the shared settings/toolbar. regular-layout
-                // emits `regular-layout-select` on tab clicks only, which left
-                // body interaction unable to change the active panel. Tab clicks
-                // still also fire `-select`, but that dispatch is async (after
-                // `restore`) so it lands after this synchronous handler — within a
-                // stack, switching tabs still resolves to the clicked panel.
-                // Re-activating the already-active panel is a no-op upstream.
-                let on_activate = ctx.props().on_activate_panel.clone();
-                let activate_name = name.clone();
-                let onpointerdown = Callback::from(move |_: web_sys::PointerEvent| {
-                    on_activate.emit(activate_name.clone());
+                    // Activate this panel on pointerdown anywhere in it (body or
+                    // titlebar), so *working* in a panel — not only clicking its tab
+                    // — targets it with the shared settings/toolbar. regular-layout
+                    // emits `regular-layout-select` on tab clicks only, which left
+                    // body interaction unable to change the active panel. Tab clicks
+                    // still also fire `-select`, but that dispatch is async (after
+                    // `restore`) so it lands after this synchronous handler — within a
+                    // stack, switching tabs still resolves to the clicked panel.
+                    // Re-activating the already-active panel is a no-op upstream.
+                    let on_activate = ctx.props().on_activate_panel.clone();
+                    let activate_name = name.clone();
+                    let onpointerdown = Callback::from(move |_: web_sys::PointerEvent| {
+                        on_activate.emit(activate_name.clone());
+                    });
+
+                    // Right-click anywhere in the panel opens the context menu. This
+                    // is handled by the imperative `contextmenu` listener on the
+                    // panel container (see `_contextmenu_listener`), NOT a Yew
+                    // `oncontextmenu` here: the plugin body is light-DOM attached by
+                    // the renderer, so Yew's delegated handler — which walks the vdom
+                    // — never matches a right-click on it, leaving the native menu.
+
+                    // `<regular-layout-frame>` gives each panel a titlebar (its
+                    // `slot="tab"`) and a `::part(container)`. Two forwarding `<slot>`s
+                    // project our light-DOM nodes in: `name` → the plugin (into the
+                    // container), and `tab-<name>` (with `slot="tab"`) → this panel's
+                    // `<PanelTab>` (into the titlebar). Both targets live in the
+                    // viewer's light DOM, so the slots — being in the viewer's shadow —
+                    // collect them and forward them one level deeper into the frame.
+                    //
+                    // The frame no longer carries the theme: the per-panel theme is
+                    // applied directly to the light-DOM plugin + tab (each stamped with
+                    // a `theme` attribute) via the `perspective-viewer [theme="X"]`
+                    // document rules, so it themes through the native cascade instead
+                    // of a scraped/inlined `--psp-*` block.
+                    html! {
+                        <regular-layout-frame
+                            name={name.clone()}
+                            key={name.clone()}
+                            {class}
+                            {onpointerdown}
+                        >
+                            <slot name={name.clone()} />
+                            <slot name={format!("tab-{name}")} slot="tab" />
+                        </regular-layout-frame>
+                    }
                 });
-
-                // Right-click anywhere in the panel opens the context menu. This
-                // is handled by the imperative `contextmenu` listener on the
-                // layout element (see `_layout_contextmenu_listener`), NOT a Yew
-                // `oncontextmenu` here: the plugin body is light-DOM attached by
-                // the renderer, so Yew's delegated handler — which walks the vdom
-                // — never matches a right-click on it, leaving the native menu.
-
-                // `<regular-layout-frame>` gives each panel a titlebar (its
-                // `slot="tab"`) and a `::part(container)`. Two forwarding `<slot>`s
-                // project our light-DOM nodes in: `name` → the plugin (into the
-                // container), and `tab-<name>` (with `slot="tab"`) → this panel's
-                // `<PanelTab>` (into the titlebar). Both targets live in the
-                // viewer's light DOM, so the slots — being in the viewer's shadow —
-                // collect them and forward them one level deeper into the frame.
-                //
-                // The frame no longer carries the theme: the per-panel theme is
-                // applied directly to the light-DOM plugin + tab (each stamped with
-                // a `theme` attribute) via the `perspective-viewer [theme="X"]`
-                // document rules, so it themes through the native cascade instead
-                // of a scraped/inlined `--psp-*` block.
-                html! {
-                    <regular-layout-frame
-                        name={name.clone()}
-                        key={name.clone()}
-                        {class}
-                        {onpointerdown}
-                    >
-                        <slot name={name.clone()} />
-                        <slot name={format!("tab-{name}")} slot="tab" />
-                    </regular-layout-frame>
-                }
-            });
 
             // Per-panel tab titles: regular-layout's tabs render their label from
             // a `--regular-layout-<id>--title` custom property (a CSS string). We
@@ -158,13 +165,9 @@ impl MainPanel {
             // dragged — so it's neither closable nor draggable; its tab also
             // carries the `single` panel-count class (which e.g. hides the
             // caret).
-            let closable = ctx.props().panel_ids.len() > 1;
+            let closable = placed_count > 1;
             let draggable = closable;
             let single = !closable;
-            // Each panel's effective theme: its own (`panel_themes` snapshot) or
-            // the registry default (first registered theme). Stamped on the tab so
-            // the `[theme]` document rules theme it per-panel.
-            let default_theme = ctx.props().presentation_props.available_themes.first();
             let on_select = {
                 let layout_ref = self.layout_ref.clone();
                 Callback::from(move |id: String| {
@@ -195,10 +198,27 @@ impl MainPanel {
                     }
                 })
             };
+            // The tab's open-settings button (the ONLY open-settings
+            // affordance — the status bar's button is gone): select the panel
+            // in the layout, activate it, then toggle the sidebar open. All
+            // three are synchronous root-message sends, so activation lands
+            // before the toggle and the sidebar binds the clicked panel's
+            // engines.
+            let on_open_settings = {
+                let on_select = on_select.clone();
+                let on_activate = ctx.props().on_activate_panel.clone();
+                let on_settings = ctx.props().on_settings.clone();
+                Callback::from(move |id: String| {
+                    on_select.emit(id.clone());
+                    on_activate.emit(id);
+                    on_settings.emit(());
+                })
+            };
             let tabs = ctx
                 .props()
                 .panel_ids
                 .iter()
+                .filter(|id| !ctx.props().workspace.is_staged(id))
                 .map(|id| {
                     let name = id.as_str().to_owned();
                     let title = ctx
@@ -210,13 +230,7 @@ impl MainPanel {
                     let active = active_slot.as_deref() == Some(name.as_str());
                     let visible = !self.hidden_tabs.contains(name.as_str());
                     let is_master = ctx.props().panel_masters.contains(id);
-                    let theme = ctx
-                        .props()
-                        .panel_themes
-                        .iter()
-                        .find(|(pid, _)| pid == &name)
-                        .and_then(|(_, t)| t.clone())
-                        .or_else(|| default_theme.cloned());
+                    let theme = ctx.props().effective_panel_theme(&name);
 
                     html! {
                         <PanelTab
@@ -230,44 +244,94 @@ impl MainPanel {
                             {is_master}
                             {single}
                             {closable}
+                            {is_settings_open}
                             {draggable}
                             on_select={on_select.clone()}
                             on_close={on_close.clone()}
-                            on_context_menu={ctx.link().callback(|(id, x, y)| MainPanelMsg::ContextMenu(id, x, y))}
+                            on_open_settings={on_open_settings.clone()}
+                            on_context_menu={ctx.link().callback(|(id, x, y): (String, f64, f64)| MainPanelMsg::ContextMenu(Some(id), x, y))}
                             on_rename={on_rename.clone()}
                         />
                     }
                 })
-                .collect::<Html>();
+                .collect::<Vec<_>>();
 
-            html! {
-                <>
-                    <regular-layout ref={self.layout_ref.clone()} style={title_style}>
-                        { for cells }
-                    </regular-layout>
-                    { tabs }
-                </>
-            }
+            // STAGED panels: the plugin `<slot>` is delivered OUTSIDE the
+            // layout into a hidden wrapper, sized to the predicted
+            // post-insert cell by `size_staging_wrappers`. `visibility:
+            // hidden` (not `display: none`) so the plugin keeps a real box
+            // and a non-null `offsetParent` — first draws, redraw
+            // subscriptions and every observer (the host-level
+            // `AutoPauseHandle`/`ResizeObserverHandle` gates, the drag
+            // `ResizeObserver`s) see it exactly as they would a visible
+            // panel. No tab is rendered while staged.
+            let staging = ctx
+                .props()
+                .panel_ids
+                .iter()
+                .filter(|id| ctx.props().workspace.is_staged(id))
+                .map(|id| {
+                    let name = id.as_str().to_owned();
+                    html! {
+                        <div
+                            class="psp-staging"
+                            data-panel={name.clone()}
+                            key={format!("staging-{name}")}
+                        >
+                            <slot {name} />
+                        </div>
+                    }
+                });
+
+            // ONE flat FULLY-KEYED list: `<regular-layout>` + tabs + staging
+            // wrappers. Keying every sibling (the layout element included)
+            // routes Yew's list diff through `apply_keyed`, which matches by
+            // key — the layout element is REUSED across renders regardless of
+            // how the tab/staging population shifts around it. The prior
+            // shape (`<regular-layout>` + nested `{tabs}`/`{staging}` lists,
+            // layout unkeyed) took `apply_unkeyed`, whose back-to-front
+            // positional pairing REPLACED the layout element whenever the
+            // trailing lists changed length — orphaning its committed tree
+            // and attached listeners, and silently re-booting the layout
+            // from `EMPTY_PANEL` (see `listener_target`).
+            std::iter::once(html! {
+                <regular-layout
+                    key="__regular_layout__"
+                    ref={self.layout_ref.clone()}
+                    style={title_style}
+                >
+                    { for cells }
+                </regular-layout>
+            })
+            .chain(tabs)
+            .chain(staging)
+            .collect::<Html>()
         };
 
         // The cursor-anchored panel command menu — a body-mounted
         // `PortalModal` (like the Export/Copy pickers it spawns), so its
         // placement in this subtree is irrelevant. Themed by the TARGET
         // panel's effective theme — its own, else the registry default —
-        // not the active/host theme. Maximize/Restore are handled locally;
+        // not the active/host theme (the target-less stage menu also takes
+        // the registry default). Maximize/Restore are handled locally;
         // other commands forward to the root.
         let panel_menu = self
             .context_menu
             .as_ref()
             .map(|(x, y, id)| {
-                let default_theme = ctx.props().presentation_props.available_themes.first();
-                let theme = ctx
-                    .props()
-                    .panel_themes
-                    .iter()
-                    .find(|(pid, _)| pid == id)
-                    .and_then(|(_, theme)| theme.clone())
-                    .or_else(|| default_theme.cloned());
+                let theme = match id {
+                    Some(id) => ctx.props().effective_panel_theme(id),
+                    None => ctx
+                        .props()
+                        .presentation_props
+                        .available_themes
+                        .first()
+                        .cloned(),
+                };
+
+                let maximized = id
+                    .as_deref()
+                    .is_some_and(|id| self.maximized.as_deref() == Some(id));
 
                 html! {
                     <PanelMenu
@@ -277,7 +341,7 @@ impl MainPanel {
                         workspace={ctx.props().workspace.clone()}
                         presentation={ctx.props().presentation.clone()}
                         {theme}
-                        maximized={self.maximized.as_deref() == Some(id.as_str())}
+                        {maximized}
                         on_command={ctx.link().callback(MainPanelMsg::Command)}
                         on_close={ctx.link().callback(|_| MainPanelMsg::CloseContextMenu)}
                     />
@@ -289,7 +353,6 @@ impl MainPanel {
             <div id="main_column">
                 <StatusBar
                     id="status_bar"
-                    {on_settings}
                     on_reset={ctx.props().on_reset.clone()}
                     session_props={ctx.props().session_props.clone()}
                     presentation_props={ctx.props().presentation_props.clone()}

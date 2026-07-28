@@ -295,16 +295,23 @@ export class WorkerRenderer {
             try {
                 await viewToColumnDataMap(
                     this.view,
-                    async (cols) => {
+                    async (cols, deliveredRows) => {
                         if (this._renderGen !== myGen) {
                             throw new StaleGenerationError();
                         }
 
+                        // `totalRows` came from a SEPARATE `num_rows()`
+                        // round-trip; a fast-updating table with deletions
+                        // can shrink the view before the Arrow fetch, which
+                        // clamps its window silently. Iterating to the stale
+                        // count reads typed arrays out-of-bounds (`undefined`
+                        // values no validity bitmap covers) — clamp to what
+                        // was actually delivered.
                         await this.chartImpl.uploadAndRender(
                             this.glManager,
                             cols,
                             0,
-                            totalRows,
+                            Math.min(totalRows, deliveredRows),
                         );
                     },
                     { end_row: totalRows, float32: msg.options.float32 },
@@ -325,6 +332,24 @@ export class WorkerRenderer {
 
     redraw(): void {
         this.chartImpl.requestRender(this.glManager);
+    }
+
+    /**
+     * `redraw`, acked to the host AFTER the frame's present completes —
+     * the reply backing the viewer's presize contract (`ResizeAckMsg`):
+     * `plugin.resize()` must not resolve until the resized frame is
+     * actually on screen. A resize landing mid-present defers its
+     * canvas mutation (`deferIfDraining`), but the redraw's own frame
+     * applies pending dimensions in `beginFrame`, so the present this
+     * awaits IS at the new size. Always acks — a failed present or a
+     * torn-down chart resolves the host's await rather than stranding
+     * it (completion, not success, is the contract).
+     */
+    redrawAck(msgId: number): void {
+        this.chartImpl
+            .requestRender(this.glManager)
+            .catch(() => {})
+            .finally(() => this.post({ kind: "resizeAck", msgId }));
     }
 
     resize(cssWidth: number, cssHeight: number, dpr: number): void {

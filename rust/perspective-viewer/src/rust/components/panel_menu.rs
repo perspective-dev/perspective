@@ -71,8 +71,11 @@ pub struct PanelMenuProps {
     pub x: f64,
     pub y: f64,
 
-    /// The right-clicked panel this menu targets.
-    pub panel_id: String,
+    /// The right-clicked panel this menu targets — or `None` for the
+    /// EMPTY-stage menu (zero panels), which offers only the "New" sub-menu
+    /// (its `NewFrom` items resolve from the loaded-clients registry, no
+    /// panel required).
+    pub panel_id: Option<String>,
 
     /// For per-panel command context (`is_master`, pivot state, panel count)
     /// and resolving the target panel's engines for Export/Copy.
@@ -233,9 +236,6 @@ impl Component for PanelMenu {
 impl PanelMenu {
     fn menu_html(&self, ctx: &Context<Self>) -> Html {
         let on_close = ctx.link().callback(|_| PanelMenuMsg::MenuClosed);
-        let can_close = ctx.props().workspace.len() > 1;
-        let panel_id = PanelId::from(ctx.props().panel_id.as_str());
-        let is_master = ctx.props().workspace.is_master(&panel_id);
         let item = |label: &str, on_select: Callback<()>, disabled: bool| {
             ContextMenuEntry::Item(ContextMenuItem {
                 label: label.to_owned(),
@@ -247,41 +247,55 @@ impl PanelMenu {
             ctx.link()
                 .callback(move |_| PanelMenuMsg::Command(cmd.clone()))
         };
-        let entries = vec![
-            ContextMenuEntry::Submenu {
+        let entries = match ctx.props().panel_id.as_deref() {
+            // The empty-stage menu: no target panel, so only the "New"
+            // sub-menu. Hover-only (`on_select: None`) — plain "New" copies
+            // its source panel's table binding, which doesn't exist here.
+            None => vec![ContextMenuEntry::Submenu {
                 label: "New".to_owned(),
-                on_select: Some(cmd(PanelCommand::New)),
+                on_select: None,
                 entries: self.new_submenu_entries(ctx),
+            }],
+            Some(panel_id) => {
+                let can_close = ctx.props().workspace.len() > 1;
+                let is_master = ctx.props().workspace.is_master(&PanelId::from(panel_id));
+                vec![
+                    ContextMenuEntry::Submenu {
+                        label: "New".to_owned(),
+                        on_select: Some(cmd(PanelCommand::New)),
+                        entries: self.new_submenu_entries(ctx),
+                    },
+                    item("Duplicate", cmd(PanelCommand::Duplicate), false),
+                    item("Reset", cmd(PanelCommand::Reset), false),
+                    item(
+                        "Export",
+                        ctx.link()
+                            .callback(|_| PanelMenuMsg::OpenPicker(PickerKind::Export)),
+                        false,
+                    ),
+                    item(
+                        "Copy",
+                        ctx.link()
+                            .callback(|_| PanelMenuMsg::OpenPicker(PickerKind::Copy)),
+                        false,
+                    ),
+                    if ctx.props().maximized {
+                        item("Restore", cmd(PanelCommand::Restore), false)
+                    } else {
+                        item("Maximize", cmd(PanelCommand::Maximize), false)
+                    },
+                    // Never gated: masters broadcast from ANY select/click event
+                    // (flat grids fall back to the clicked cell's `==` clause), not
+                    // just a grouped row tree.
+                    item(
+                        if is_master { "Detail" } else { "Master" },
+                        cmd(PanelCommand::ToggleMaster),
+                        false,
+                    ),
+                    item("Close", cmd(PanelCommand::Close), !can_close),
+                ]
             },
-            item("Duplicate", cmd(PanelCommand::Duplicate), false),
-            item("Reset", cmd(PanelCommand::Reset), false),
-            item(
-                "Export",
-                ctx.link()
-                    .callback(|_| PanelMenuMsg::OpenPicker(PickerKind::Export)),
-                false,
-            ),
-            item(
-                "Copy",
-                ctx.link()
-                    .callback(|_| PanelMenuMsg::OpenPicker(PickerKind::Copy)),
-                false,
-            ),
-            if ctx.props().maximized {
-                item("Restore", cmd(PanelCommand::Restore), false)
-            } else {
-                item("Maximize", cmd(PanelCommand::Maximize), false)
-            },
-            // Never gated: masters broadcast from ANY select/click event
-            // (flat grids fall back to the clicked cell's `==` clause), not
-            // just a grouped row tree.
-            item(
-                if is_master { "Detail" } else { "Master" },
-                cmd(PanelCommand::ToggleMaster),
-                false,
-            ),
-            item("Close", cmd(PanelCommand::Close), !can_close),
-        ];
+        };
 
         html! {
             <PortalModal
@@ -354,10 +368,13 @@ impl PanelMenu {
     /// at the same cursor anchor and reusing the status bar's dropdown
     /// components.
     fn picker_html(&self, ctx: &Context<Self>, kind: PickerKind) -> Html {
+        // Export/Copy are absent from the target-less stage menu, so
+        // `panel_id` is always `Some` here in practice.
         let Some(panel) = ctx
             .props()
-            .workspace
-            .panel(&PanelId::from(ctx.props().panel_id.as_str()))
+            .panel_id
+            .as_deref()
+            .and_then(|id| ctx.props().workspace.panel(&PanelId::from(id)))
         else {
             return Html::default();
         };

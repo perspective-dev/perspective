@@ -18,7 +18,8 @@ perspective-dropdown,
 perspective-date-column-style,
 perspective-datetime-column-style,
 perspective-number-column-style,
-perspective-string-column-style {
+perspective-string-column-style,
+perspective-viewer-tab {
     /* Icons */
     --psp-column-type--integer--mask-image: url("../svg/number-type.svg");
     --psp-column-type--float--mask-image: var(
@@ -55,6 +56,7 @@ perspective-string-column-style {
     --psp-label--active-column-selector--content: url("../svg/checkbox-checked-icon.svg");
     --psp-icon--select-arrow-light--mask-image: url("../svg/dropdown-selector-light.svg");
     --psp-icon--select-arrow-dark--mask-image: url("../svg/dropdown-selector.svg");
+    --psp-icon--active-indicator--mask-image: url("../svg/active-indicator.svg");
     --psp-icon-overflow-hint--content: "!";
     --psp-label--reset-button-icon--content: "refresh";
     --psp-label--save-button-icon--content: "save";

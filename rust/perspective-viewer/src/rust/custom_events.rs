@@ -119,7 +119,8 @@ fn dispatch_column_settings_open_changed(
     // apply to the active panel, so scope the highlight to its plugin; fall back
     // to the host if none is drawn.
     let target: web_sys::EventTarget = workspace
-        .panel(&workspace.active_id())
+        .active_id()
+        .and_then(|id| workspace.panel(&id))
         .and_then(|panel| panel.renderer.active_plugin())
         .map(|plugin| plugin.unchecked_into())
         .unwrap_or_else(|| elem.clone().unchecked_into());
@@ -209,8 +210,9 @@ pub fn wire_element_events(
     let theme_sub = presentation.theme_config_updated.add_listener({
         clone!(elem, presentation, workspace);
         move |_| {
-            let panel = workspace.active_panel();
-            dispatch_config_update(&elem, &panel.session, &panel.renderer, &presentation);
+            if let Some(panel) = workspace.active_panel() {
+                dispatch_config_update(&elem, &panel.session, &panel.renderer, &presentation);
+            }
         }
     });
 
@@ -218,8 +220,9 @@ pub fn wire_element_events(
         clone!(elem, presentation, workspace);
         move |open: bool| {
             dispatch_event(&elem, "toggle-settings", open).unwrap();
-            let panel = workspace.active_panel();
-            dispatch_config_update(&elem, &panel.session, &panel.renderer, &presentation);
+            if let Some(panel) = workspace.active_panel() {
+                dispatch_config_update(&elem, &panel.session, &panel.renderer, &presentation);
+            }
         }
     });
 

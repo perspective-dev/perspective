@@ -47,7 +47,10 @@ pub fn send_column_config(
             .ensure_plugin_selected()?
             .restore(&plugin_token, Some(&columns_configs))?;
 
-        renderer.update(session.get_view()).await?;
+        clone!(session);
+        renderer
+            .update_lazy(async move { Ok(session.get_view()) })
+            .await?;
         renderer.column_style_changed.emit(columns_configs);
         Ok(())
     })

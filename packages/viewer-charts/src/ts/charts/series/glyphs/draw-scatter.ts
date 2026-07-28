@@ -34,10 +34,22 @@ interface ScatterProgramCache {
  * Persistent scatter glyph state — left/right axis position + color
  * buffers built once at data load. Pan/zoom redraws rebind without
  * uploading.
+ *
+ * `seriesRanges` records each visible series' contiguous run within
+ * its axis bucket (`first` is bucket-relative). The fill loop appends
+ * series in order, so runs are contiguous by construction; the
+ * faceted draw path uses them to dispatch per-facet sub-ranges via
+ * `drawArrays(POINTS, first, count)`.
  */
 interface ScatterBuffers {
     leftCount: number;
     rightCount: number;
+    seriesRanges: {
+        seriesId: number;
+        axis: 0 | 1;
+        first: number;
+        count: number;
+    }[];
 }
 
 /**
@@ -170,6 +182,9 @@ export class ScatterGlyph {
 
         // Fill left bucket from `[0, leftCount)`, right bucket from
         // `[leftCount, total)` — single typed-array allocation each.
+        // Series runs are contiguous within their bucket; record each
+        // run's bucket-relative `[first, count)` for the faceted draw.
+        const seriesRanges: ScatterBuffers["seriesRanges"] = [];
         let leftWrite = 0;
         let rightWrite = leftCount;
         for (const s of scatterSeries) {
@@ -177,6 +192,7 @@ export class ScatterGlyph {
                 continue;
             }
 
+            const runFirst = s.axis === 1 ? rightWrite - leftCount : leftWrite;
             const r = s.color[0];
             const g = s.color[1];
             const b = s.color[2];
@@ -203,6 +219,16 @@ export class ScatterGlyph {
                     _colScratch[leftWrite * 3 + 2] = b;
                     leftWrite++;
                 }
+            }
+
+            const runEnd = s.axis === 1 ? rightWrite - leftCount : leftWrite;
+            if (runEnd > runFirst) {
+                seriesRanges.push({
+                    seriesId: s.seriesId,
+                    axis: s.axis,
+                    first: runFirst,
+                    count: runEnd - runFirst,
+                });
             }
         }
 
@@ -236,12 +262,15 @@ export class ScatterGlyph {
             );
         }
 
-        this._buffers = { leftCount, rightCount };
+        this._buffers = { leftCount, rightCount, seriesRanges };
     }
 
     /**
      * Bind the persistent left/right buffers and issue up to two draw
-     * calls. No per-frame allocations or buffer uploads.
+     * calls. No per-frame allocations or buffer uploads. `splitFilter`
+     * (faceted frames) instead draws each matching series' contiguous
+     * bucket sub-range — one `drawArrays(POINTS, first, count)` per
+     * series of the facet.
      */
     draw(
         chart: SeriesChart,
@@ -249,6 +278,7 @@ export class ScatterGlyph {
         glManager: WebGLContextManager,
         projLeft: Float32Array,
         projRight: Float32Array,
+        splitFilter?: number,
     ): void {
         const buf = this._buffers;
         const cache = this._program;
@@ -266,6 +296,28 @@ export class ScatterGlyph {
             cache.u_point_size,
             chart._pluginConfig.point_size_px * dpr,
         );
+
+        if (splitFilter !== undefined) {
+            for (const r of buf.seriesRanges) {
+                if (chart._series[r.seriesId].splitIdx !== splitFilter) {
+                    continue;
+                }
+
+                drawBucket(
+                    gl,
+                    cache,
+                    r.axis === 1 ? cache.posRightBuffer : cache.posLeftBuffer,
+                    r.axis === 1
+                        ? cache.colorRightBuffer
+                        : cache.colorLeftBuffer,
+                    r.count,
+                    r.axis === 1 ? projRight : projLeft,
+                    r.first,
+                );
+            }
+
+            return;
+        }
 
         drawBucket(
             gl,
@@ -309,6 +361,7 @@ function drawBucket(
     colBuf: WebGLBuffer,
     count: number,
     proj: Float32Array,
+    first = 0,
 ): void {
     if (count === 0) {
         return;
@@ -324,5 +377,5 @@ function drawBucket(
     gl.enableVertexAttribArray(cache.a_color);
     gl.vertexAttribPointer(cache.a_color, 3, gl.FLOAT, false, 0, 0);
 
-    gl.drawArrays(gl.POINTS, 0, count);
+    gl.drawArrays(gl.POINTS, first, count);
 }
