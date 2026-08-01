@@ -147,3 +147,10 @@ to the nearest multiple of 10.
 | `random()`                | Random float between 0.0 and 1.0                      |
 | `col(name)`               | Look up a column by string name at runtime            |
 | `vlookup(col, key)`       | Look up a value in another column by row key          |
+
+## See also
+
+Expressions are row-local — each output cell is computed from that row's
+values alone. For calculations which span rows, such as moving averages,
+cumulative sums or period-over-period differences, see
+[Window Columns](./windows.md).

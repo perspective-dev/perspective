@@ -15,6 +15,36 @@ dictionary to the `Client::table` method, or by passing _data_ to this method
 from which the schema is _inferred_ (if CSV or JSON format) or inherited (if
 Arrow).
 
+## Arrow type mapping
+
+Perspective's six column types are narrower than Arrow's type system, so Arrow
+input is mapped on ingest:
+
+| Arrow type | Perspective type |
+| --- | --- |
+| `int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64` | `integer` |
+| `float`, `double` | `float` |
+| `decimal`, `decimal128` | `float` |
+| `bool` | `boolean` |
+| `date32`, `date64` | `date` |
+| `timestamp` | `datetime` |
+| `time32`, `time64` | `integer` |
+| `utf8`, `large_utf8`, `binary`, `dictionary`, `list`, `null` | `string` |
+
+Two mappings are worth calling out:
+
+- Arrow `decimal` columns become `float` — a `DECIMAL` value of `3.14` reads
+  as `3.14`, not as its unscaled integer representation.
+- Arrow `time32`/`time64` (a time-of-day with no date component) becomes
+  `integer`, not `datetime`. Use a `timestamp` column for a true `datetime`.
+
+Arrow types not listed above — including `decimal256` and the nested types —
+are rejected with an error rather than silently coerced.
+
+Arrow input is fully validated before its buffers are read. A malformed IPC
+payload — bad offsets, out-of-range dictionary indices, inconsistent chunk
+lengths — is rejected with an error rather than producing corrupt data.
+
 ## Type inference
 
 When passing CSV or JSON data to the `Client::table` constructor, the type of

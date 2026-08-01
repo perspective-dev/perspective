@@ -62,14 +62,22 @@ const fn numeric_default() -> u32 {
     0
 }
 
+/// A datetime column's `date_format` in its `Custom` form: per-part
+/// `Intl.DateTimeFormatOptions` overrides, discriminated from the `Simple`
+/// preset form by the required `format: "custom"` key. Each part is a
+/// [`CustomDatetimeFormat`] variant valid for that `Intl` option;
+/// `"disabled"` omits the part from the formatted output entirely.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 pub struct CustomDatetimeStyleConfig {
     format: FormatUnit,
 
+    /// An IANA time zone name (e.g. `"America/New_York"`); defaults to the
+    /// browser's local time zone.
     #[serde(default)]
     #[serde(rename = "timeZone", skip_serializing_if = "Option::is_none")]
     pub time_zone: Option<String>,
 
+    /// Sub-second digits to display, 0-3 (0 = none).
     #[serde(
         skip_serializing_if = "is_zero",
         rename = "fractionalSecondDigits",
@@ -77,27 +85,36 @@ pub struct CustomDatetimeStyleConfig {
     )]
     pub fractional_seconds: u32,
 
+    /// Defaults to `"numeric"`.
     #[serde(skip_serializing_if = "is_numeric", default = "second_default")]
     pub second: CustomDatetimeFormat,
 
+    /// Defaults to `"numeric"`.
     #[serde(skip_serializing_if = "is_numeric", default = "second_default")]
     pub minute: CustomDatetimeFormat,
 
+    /// Defaults to `"numeric"`.
     #[serde(skip_serializing_if = "is_numeric", default = "second_default")]
     pub hour: CustomDatetimeFormat,
 
+    /// Defaults to `"numeric"`.
     #[serde(skip_serializing_if = "is_numeric", default = "second_default")]
     pub day: CustomDatetimeFormat,
 
+    /// A name form (`"long"`/`"short"`/`"narrow"`); defaults to
+    /// `"disabled"` (weekday not shown).
     #[serde(skip_serializing_if = "is_disabled", default = "weekday_default")]
     pub weekday: CustomDatetimeFormat,
 
+    /// Numeric or name form; defaults to `"numeric"`.
     #[serde(skip_serializing_if = "is_numeric", default = "second_default")]
     pub month: CustomDatetimeFormat,
 
+    /// Defaults to `"2-digit"`.
     #[serde(skip_serializing_if = "is_two_digit", default = "year_default")]
     pub year: CustomDatetimeFormat,
 
+    /// 12-hour clock; defaults to `true`.
     #[serde(skip_serializing_if = "is_true", default = "hour12_default")]
     pub hour12: bool,
 }

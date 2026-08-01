@@ -63,6 +63,12 @@ impl DragState {
 pub struct PresentationHandle {
     viewer_elem: HtmlElement,
 
+    /// The embedded LLM agent's shared model (runtime + chat transcript) —
+    /// carried here so the settings sidebar can render the chat tab without
+    /// threading a new prop chain from the element.
+    #[cfg(feature = "llm-agent")]
+    pub agent: crate::agent::AgentSlot,
+
     /// The available themes as detected in the browser environment or set
     /// explicitly when CORS prevents detection — a MEMO of a document
     /// external, not component state. `None` until first parsed (detection
@@ -148,6 +154,8 @@ impl Presentation {
     pub fn new(elem: &HtmlElement) -> Self {
         let theme = Self(Rc::new(PresentationHandle {
             viewer_elem: elem.clone(),
+            #[cfg(feature = "llm-agent")]
+            agent: Default::default(),
             themes: Default::default(),
             theme_init: Default::default(),
             is_workspace: Default::default(),

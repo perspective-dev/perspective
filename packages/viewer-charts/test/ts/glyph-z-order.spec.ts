@@ -10,32 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-/**
- * Mixed-glyph Z-order = `columns` declaration order
- * (.plan/GLYPH_Z_ORDER_PLAN.md). Legacy behavior painted a FIXED type
- * sequence (areas → bars → lines → scatter) regardless of declaration
- * order; the fix paints glyph runs in ascending `aggIdx` — later
- * columns on top.
- *
- * Fixture: two constant expression columns, `avg`-aggregated so every
- * category lands exactly at the constant — a bar column at 100 and a
- * line column at 50. With `include_zero` (Y Bar default) the bars span
- * the full value range, so the horizontal line at 50 crosses EVERY bar
- * body, and the gaps between bars show the bare line.
- *
- * Assertion (palette- and coordinate-free): on the visible GL canvas
- * (glyph fragments only — gridlines/chrome are separate canvases, and
- * glyph pixels are the only `alpha > 0` pixels), the row with the most
- * OPAQUE pixels is the line's center row (the line spans the whole
- * plot; bars alone cover only the band fraction). The dominant-color
- * share of that row discriminates the stack:
- *
- *  - line on top → the whole row is line-colored → share ≈ 1.0
- *  - bars on top → the row alternates bar-color runs (inside bodies)
- *    with line-color runs (gaps) → share ≈ the band fraction, well
- *    under 0.85.
- */
-
 import type { Page } from "@playwright/test";
 import { expect, test } from "@perspective-dev/test";
 import { gotoBasic, restoreChart, waitOneFrame } from "./helpers";
@@ -159,19 +133,11 @@ async function renderAndMeasure(
 
 test.describe("Mixed-glyph Z-order follows columns order", () => {
     test("bar declared after line occludes it", async ({ page }) => {
-        // `columns: [line, bar]` — the bar column is declared later, so
-        // bars must paint OVER the line inside their bodies, leaving
-        // the line visible only in the gaps. Pre-fix the line always
-        // painted on top (fixed type order) and the row is uniformly
-        // line-colored.
         const share = await renderAndMeasure(page, ["l50", "b100"]);
         expect(share).toBeLessThan(0.85);
     });
 
     test("line declared after bar stays on top", async ({ page }) => {
-        // `columns: [bar, line]` — declaration order agrees with the
-        // legacy fixed order; the line crosses every bar uncovered.
-        // Guards the run path against over-occluding.
         const share = await renderAndMeasure(page, ["b100", "l50"]);
         expect(share).toBeGreaterThan(0.9);
     });

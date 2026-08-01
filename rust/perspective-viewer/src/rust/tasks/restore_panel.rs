@@ -10,15 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use futures::channel::oneshot::channel;
 use perspective_client::clone;
 use perspective_client::utils::PerspectiveResultExt;
 
-use crate::components::viewer::{PerspectiveViewer, PerspectiveViewerMsg};
 use crate::config::*;
 use crate::presentation::Presentation;
 use crate::renderer::Renderer;
-use crate::root::Root;
 use crate::session::{ResetOptions, Session};
 use crate::tasks::*;
 use crate::workspace::Workspace;
@@ -29,6 +26,20 @@ use crate::*;
 pub(crate) enum RestoreMode {
     Existing { active: bool },
     Fresh,
+}
+
+/// Where a failed restore's error goes. `Publish` (every user-facing path)
+/// commits it to the session — the visible error UI and errored session
+/// state. `Suppress` (the agent's `set_view_config` tool) returns it ONLY
+/// to the caller: the model receives the error as a tool result and
+/// self-corrects, so the transient failure is noise to the human user —
+/// and the errored session state would otherwise BLOCK the corrected
+/// retry, since error recovery below requires a `table` field the model's
+/// patches don't carry.
+#[derive(Clone, Copy)]
+pub(crate) enum RestoreErrors {
+    Publish,
+    Suppress,
 }
 
 pub(crate) async fn bind_table_task(
@@ -57,9 +68,9 @@ pub(crate) async fn restore_panel(
     renderer: &Renderer,
     presentation: &Presentation,
     workspace: &Workspace,
-    root: Option<&Root<PerspectiveViewer>>,
     mode: RestoreMode,
     mut update: ViewerConfigUpdate,
+    errors: RestoreErrors,
 ) -> ApiResult<()> {
     let active = matches!(mode, RestoreMode::Existing { active: true });
     let fresh = matches!(mode, RestoreMode::Fresh);
@@ -77,17 +88,17 @@ pub(crate) async fn restore_panel(
         tracing::info!("Restoring {update}");
     }
 
-    let (sender, receiver) = channel::<()>();
-    match (active, root) {
-        (true, Some(root)) => {
-            root.borrow().as_ref().into_apierror()?.send_message(
-                PerspectiveViewerMsg::ToggleSettingsComplete(update.settings.clone(), sender),
-            );
-        },
-        _ => {
-            let _ = sender.send(());
-        },
-    }
+    // NOTE: `update.settings` is deliberately NOT applied here. It is
+    // element-level chrome rather than panel state, so `restore()` — the
+    // only caller that can carry it — applies it before dispatching, and
+    // this pipeline stays per-panel. Applying it here reached only the
+    // `Existing { active: true }` mode, which is why a freshly created
+    // panel silently ignored it.
+
+    // Under `Suppress` the restore is TRANSACTIONAL, so snapshot the config
+    // it is about to overwrite — see the failure tail below for why.
+    let rollback =
+        matches!(errors, RestoreErrors::Suppress).then(|| session.get_view_config().clone());
 
     let table_changed = !fresh
         && matches!(&update.table, OptionalUpdate::Update(name)
@@ -122,7 +133,6 @@ pub(crate) async fn restore_panel(
                     bind_table_task(&session, &workspace, name).await?;
                 }
 
-                receiver.await.unwrap_or_log();
                 Ok(())
             }
         },
@@ -130,7 +140,14 @@ pub(crate) async fn restore_panel(
     .await;
 
     if let Err(e) = &result {
-        session.set_error(false, e.clone()).await?;
+        match errors {
+            RestoreErrors::Publish => session.set_error(false, e.clone()).await?,
+            RestoreErrors::Suppress => {
+                if let Some(config) = rollback {
+                    session.commit_view_config(config.into()).unwrap_or_log();
+                }
+            },
+        }
     }
 
     result?;

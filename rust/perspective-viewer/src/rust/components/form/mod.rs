@@ -20,6 +20,7 @@ pub mod code_editor;
 pub mod color_range_selector;
 pub mod color_selector;
 pub mod debug;
+pub mod mirrored_textarea;
 pub mod number_field;
 pub mod number_input;
 pub mod number_range_field;

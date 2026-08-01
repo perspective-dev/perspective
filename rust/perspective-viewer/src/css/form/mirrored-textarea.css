@@ -1,0 +1,81 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+/* Geometry for `components/form/mirrored_textarea.rs`: an invisible
+ * `<textarea>` stacked over a `<pre>` mirror of its text, so that layout -
+ * not a JS resize loop - sizes the box.
+ *
+ * This file fixes ONLY what must agree between the two layers, because
+ * every disagreement shows up as a caret sitting somewhere other than the
+ * glyphs it is between. Consumers own the rest of the box (padding,
+ * border, min/max size) and choose the growth axes via `white-space`. */
+
+:host {
+    .mirrored-textarea {
+        position: relative;
+        display: flex;
+
+        /* Anything affecting glyph advance or line breaking must be
+         * identical in both layers - hence one selector, never two. */
+        & > .mirrored-textarea-input,
+        & > .mirrored-textarea-mirror {
+            box-sizing: border-box;
+            font: inherit;
+            letter-spacing: inherit;
+            line-height: inherit;
+            tab-size: inherit;
+            margin: 0;
+            border: none;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+
+        & > .mirrored-textarea-input {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+
+            /* The container's padding, so the two layers' text origins
+             * and wrap widths coincide however a consumer pads the box:
+             * the mirror starts at the content box, and this element
+             * covers the padding box and re-applies the same inset. */
+            padding: inherit;
+
+            resize: none;
+            outline: none;
+            overscroll-behavior: none;
+
+            /* Functional, not visual: keystrokes, selection and caret
+             * only. The glyphs the user reads are the mirror's. */
+            color: transparent;
+            background-color: transparent;
+            caret-color: var(--psp--color, #161616);
+        }
+
+        & > .mirrored-textarea-mirror {
+            /* Clicks and drags belong to the input layer above. */
+            pointer-events: none;
+        }
+
+        /* The mirror paints everything the user sees, INCLUDING the
+         * placeholder: a consumer supplies it as `content` on
+         * `.is-empty`, which the intl label mechanism can localize.
+         * The native `placeholder` attribute stays for assistive tech
+         * but is never painted - it would double up, and no stylesheet
+         * can translate an attribute. */
+        & > .mirrored-textarea-input::placeholder {
+            color: transparent;
+        }
+    }
+}

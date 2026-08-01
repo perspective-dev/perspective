@@ -55,20 +55,19 @@ pub fn sync_update_panels(
     let mut fallback_fresh: Option<String> = None;
     let mut active_fresh: Option<String> = None;
     let mut contents = Vec::new();
+    // `panels` entries are `ViewerConfigInitial`s — `table` required by
+    // TYPE (a placed panel without a binding would be permanently blank),
+    // and no per-panel `settings` exists (element-level; carried by the
+    // top-level `active` field). An EMPTY `panels` map restores to the
+    // zero-panel empty stage — the former table-less fallback panel was
+    // exactly the blank-panel state this type exists to preclude.
     for (saved_id, config) in panels {
-        if !matches!(config.settings, OptionalUpdate::Missing) {
-            #[rustfmt::skip]
-            tracing::warn!(
-                "`settings` on panel \"{saved_id}\" is ignored in a whole-element config; use the top-level `active` field"
-            );
-        }
-
         let (fresh, session, renderer, config) = create_panel_model(
             &this.elem,
             &this.presentation,
             &this.workspace,
             None,
-            config,
+            config.into(),
             None,
             Placement::Placed,
         );
@@ -79,21 +78,6 @@ pub fn sync_update_panels(
 
         fallback_fresh.get_or_insert_with(|| fresh.as_str().to_owned());
         id_map.insert(saved_id, fresh.as_str().to_owned());
-        contents.push((fresh, session, renderer, config));
-    }
-
-    if contents.is_empty() {
-        let (fresh, session, renderer, config) = create_panel_model(
-            &this.elem,
-            &this.presentation,
-            &this.workspace,
-            None,
-            ViewerConfigUpdate::default(),
-            None,
-            Placement::Placed,
-        );
-
-        fallback_fresh = Some(fresh.as_str().to_owned());
         contents.push((fresh, session, renderer, config));
     }
 

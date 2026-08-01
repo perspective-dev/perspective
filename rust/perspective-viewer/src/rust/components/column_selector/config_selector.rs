@@ -24,6 +24,7 @@ use crate::components::column_dropdown::{ColumnDropDownElement, ColumnDropDownPo
 use crate::components::containers::dragdrop_list::*;
 use crate::components::containers::select::{Select, SelectItem};
 use crate::components::filter_dropdown::{FilterDropDownElement, FilterDropDownPortal};
+use crate::config::PluginStaticConfig;
 use crate::presentation::Presentation;
 use crate::renderer::*;
 use crate::session::drag_drop_update::*;
@@ -48,6 +49,14 @@ pub struct ConfigSelectorProps {
     /// Session metadata snapshot — threaded from `SessionProps`.
     pub metadata: SessionMetadataRc,
 
+    /// The ACTIVE plugin's declared contract, threaded as a VALUE prop.
+    /// Read from `renderer.metadata()` during render instead, the pivot
+    /// labels went stale: `renderer` is deliberately excluded from prop
+    /// equality, so switching Y Line back to Datagrid — same view config,
+    /// same named-slot count — re-rendered nothing and left the previous
+    /// plugin's role labels on screen until the panel was reopened.
+    pub plugin_static_config: Rc<PluginStaticConfig>,
+
     /// Selected theme name, threaded for PortalModal consumers.
     pub selected_theme: Option<String>,
 
@@ -63,6 +72,7 @@ impl PartialEq for ConfigSelectorProps {
             && self.drag_column == other.drag_column
             && self.metadata == other.metadata
             && self.selected_theme == other.selected_theme
+            && self.plugin_static_config == other.plugin_static_config
     }
 }
 
@@ -531,6 +541,18 @@ impl Component for ConfigSelector {
             ..
         } = ctx.props();
         let config = &ctx.props().view_config;
+
+        // What the ACTIVE plugin says these pivots draw — the same
+        // declaration the agent reads through `list_plugins`, so the
+        // label a user sees and the role a model is told cannot drift.
+        let plugin_roles = {
+            let plugin = &ctx.props().plugin_static_config;
+            (
+                plugin.group_by_role.clone().map(AttrValue::from),
+                plugin.split_by_role.clone().map(AttrValue::from),
+            )
+        };
+
         let transpose = ctx.link().callback(|_| ConfigSelectorMsg::TransposePivots);
         let column_dropdown = self.column_dropdown.clone();
         let mut class = classes!();
@@ -593,6 +615,7 @@ impl Component for ConfigSelector {
                     if features.group_by {
                         <GroupBySelector
                             name="group_by"
+                            role_label={plugin_roles.0.clone()}
                             disabled={config.group_rollup_mode == GroupRollupMode::Total}
                             parent={ctx.link().clone()}
                             column_dropdown={column_dropdown.clone()}
@@ -627,6 +650,7 @@ impl Component for ConfigSelector {
                         }
                         <SplitBySelector
                             name="split_by"
+                            role_label={plugin_roles.1.clone()}
                             parent={ctx.link().clone()}
                             column_dropdown={column_dropdown.clone()}
                             exclude={config.split_by.iter().cloned().collect::<HashSet<_>>()}

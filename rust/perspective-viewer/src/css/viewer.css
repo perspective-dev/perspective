@@ -664,11 +664,339 @@
         content: var(--psp-label--debug-tab--content);
     }
 
+    #chat_tabbar_tab:before {
+        content: var(--psp-label--chat-tab--content);
+    }
+
     label#stack-label:before {
         content: var(--psp-label--stack--content, "Stack");
     }
 
     label#alt_axis-label:before {
         content: var(--psp-label--alt-axis--content, "Alt Axis");
+    }
+}
+
+#chat_panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    contain: inline-size;
+    padding: 0px;
+    gap: 6px;
+
+    #chat_log:empty {
+        flex: 0 0 auto;
+        padding-bottom: 0px;
+        margin-bottom: -6px; /* offset gap */
+    }
+
+    #chat_log {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: scroll;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 12px 6px 6px 2px;
+    }
+
+    .chat-message {
+        overflow-wrap: anywhere;
+        border-radius: 3px;
+        padding: 6px 8px;
+        max-width: 90%;
+        font-size: 1em;
+    }
+
+    /* User/error text is NOT markdown-rendered - preserve its whitespace. */
+    .chat-user,
+    .chat-error {
+        white-space: pre-wrap;
+    }
+
+    .chat-user {
+        align-self: flex-end;
+        background-color: var(--psp--background-color);
+        border: 1px solid var(--psp-inactive--color, #6e6e6e);
+    }
+
+    .chat-assistant {
+        align-self: flex-start;
+        background-color: #00000010;
+        border: 1px solid var(--psp-inactive--color, #6e6e6e);
+
+        /* Markdown content (see `agent/markdown.rs`). */
+        p,
+        ul,
+        ol,
+        blockquote,
+        pre,
+        table,
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6,
+        hr {
+            margin: 0.4em 0;
+
+            &:first-child {
+                margin-top: 0;
+            }
+
+            &:last-child {
+                margin-bottom: 0;
+            }
+        }
+
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+            font-size: 1.05em;
+            font-weight: 700;
+        }
+
+        ul,
+        ol {
+            padding-inline-start: 1.5em;
+        }
+
+        code {
+            font-family: inherit;
+            background-color: #00000028;
+            border-radius: 3px;
+            padding: 0 3px;
+        }
+
+        pre {
+            overflow-x: auto;
+            background-color: #00000028;
+            border-radius: 3px;
+            padding: 6px 8px;
+
+            code {
+                background-color: transparent;
+                padding: 0;
+                white-space: pre;
+            }
+        }
+
+        blockquote {
+            border-left: 2px solid var(--psp-inactive--color, #6e6e6e);
+            padding-left: 8px;
+            color: var(--psp-inactive--color, #6e6e6e);
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid var(--psp-inactive--color, #6e6e6e);
+        }
+
+        a {
+            color: var(--psp-active--color, #1a7da1);
+        }
+
+        table {
+            border-collapse: collapse;
+
+            th,
+            td {
+                border: 1px solid var(--psp-inactive--color, #6e6e6e);
+                padding: 2px 6px;
+            }
+
+            th {
+                font-weight: 700;
+            }
+        }
+
+        .chat-md-align-center {
+            text-align: center;
+        }
+
+        .chat-md-align-right {
+            text-align: right;
+        }
+    }
+
+    .chat-error {
+        align-self: flex-start;
+        color: var(--warning--color, #ff471e);
+        border: 1px dashed var(--warning--color, #ff471e);
+    }
+
+    .chat-tool-chip {
+        align-self: flex-start;
+        font-size: 0.66em;
+        text-transform: uppercase;
+        color: var(--psp-inactive--color, #6e6e6e);
+        border: 1px solid var(--psp-inactive--color, #6e6e6e);
+        border-radius: 3px;
+        padding: 1px 6px;
+        cursor: default;
+    }
+
+    .chat-tool-chip-error {
+        color: var(--warning--color, #ff471e);
+        border-color: var(--warning--color, #ff471e);
+    }
+
+    .chat-reasoning {
+        font-size: 0.9em;
+        color: var(--psp-inactive--color, #6e6e6e);
+        margin-bottom: 0.4em;
+
+        summary {
+            cursor: pointer;
+            user-select: none;
+            &:before {
+                text-transform: uppercase;
+                content: var(--psp-label--chat-reasoning--content);
+                font-size: var(--psp-label--font-size, 0.75em);
+            }
+        }
+
+        /* The BODY scrolls, not the `<details>` - the summary is the
+         * collapse toggle, and auto-scrolling an outer scroller to the
+         * bottom would carry it out of view. */
+        .chat-reasoning-body {
+            white-space: pre-wrap;
+            margin-top: 0.4em;
+            max-height: 96px;
+            overflow-y: auto;
+        }
+    }
+
+    .chat-pending span {
+        display: inline-block;
+        width: 4px;
+        height: 4px;
+        margin-right: 3px;
+        border-radius: 50%;
+        background-color: var(--psp-inactive--color, #6e6e6e);
+        animation: chat-pending-pulse 1.2s infinite ease-in-out;
+
+        &:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        &:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+    }
+
+    #chat_input_row {
+        display: flex;
+        gap: 6px;
+        flex: 0 0 auto;
+        padding-right: 12px;
+
+        /* The input grows downward as it fills; the button stays anchored
+         * to the bottom rather than stretching with it. */
+        align-items: flex-end;
+
+        /* The prompt is a `MirroredTextarea` (see
+         * `form/mirrored-textarea.css`): it is exactly as tall as its
+         * text, so this wrapper owns the visible box and caps how far
+         * that growth goes before it scrolls instead. */
+        #chat_input_scroll {
+            flex: 1 1 auto;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 40px;
+            max-height: 160px;
+            overflow-y: auto;
+            border: 1px solid var(--psp-inactive--color, #6e6e6e);
+            border-radius: 3px;
+
+            &:focus-within {
+                border-color: var(--psp-active--color, #1a7da1);
+            }
+
+            /* Fills the resting box so clicks anywhere in it reach the
+             * input, then grows past it with the text. */
+            .chat-input-box {
+                flex: 1 0 auto;
+                padding: 4px 6px;
+                font-size: 1em;
+
+                /* The mirror paints the text; the input layer above it is
+                 * caret-only (`mirrored-textarea.css`). */
+                .mirrored-textarea-mirror {
+                    color: inherit;
+
+                    /* The placeholder, as CSS `content` so the intl
+                     * label mechanism can localize it - the native
+                     * `placeholder` attribute is untranslatable and is
+                     * kept only for assistive tech. */
+                    &.is-empty:before {
+                        content: var(--psp-label--chat-placeholder--content);
+                        color: var(--psp-inactive--color, #6e6e6e);
+                    }
+                }
+
+                /* The wrapper is the scroller - the input must not
+                 * scroll independently of the text it mirrors. */
+                .mirrored-textarea-input {
+                    overflow: hidden;
+                }
+            }
+        }
+
+        button {
+            flex: 0 0 auto;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: var(--label--font-size, 0.75em);
+            text-transform: uppercase;
+            color: inherit;
+            background-color: #00000020;
+            border: 1px solid var(--psp-inactive--color, #6e6e6e);
+            border-radius: 3px;
+            padding: 0 10px;
+
+            /* Matches `#chat_input`'s resting `min-height`: the row no
+             * longer stretches its children, so this keeps the button
+             * square with an empty input and anchored as it grows. */
+            height: 40px;
+        }
+
+        #chat_send_button:before {
+            content: var(--psp-label--chat-send--content);
+        }
+
+        #chat_stop_button:before {
+            content: var(--psp-label--chat-stop--content);
+        }
+    }
+
+    #chat_badge {
+        flex: 0 0 auto;
+        font-size: 0.66em;
+        color: var(--psp-inactive--color, #6e6e6e);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        margin-bottom: 6px;
+    }
+}
+
+@keyframes chat-pending-pulse {
+    0%,
+    80%,
+    100% {
+        opacity: 0.25;
+    }
+
+    40% {
+        opacity: 1;
     }
 }

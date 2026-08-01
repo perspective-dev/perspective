@@ -74,6 +74,7 @@
         "@types/node": "catalog:",
         "@types/react-dom": "catalog:",
         "prettier": "catalog:",
+        "ts-json-schema-generator": "^2.4.0",
         "typedoc": "catalog:",
         "typescript": "catalog:",
         "zx": "catalog:"

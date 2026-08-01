@@ -23,10 +23,9 @@
             height: 100px;
         }
 
-        #editor-inner {
+        /* `position`/`display` come from `.mirrored-textarea`. */
+        .editor-inner {
             overflow: hidden;
-            position: relative;
-            display: flex;
             flex: 1 1 auto;
         }
 

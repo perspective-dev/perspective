@@ -34,9 +34,6 @@ test.beforeEach(async ({ page }) => {
     });
 });
 
-// Structural invariants (I1 element identity / I2 tree sanity / I3
-// model-layout-DOM coherence) gate every passing test's end state - see
-// `harness.ts` and `.plan/WORKSPACE_TEST_PLAN.md`.
 armInvariants(test);
 
 function singleFrames(page) {

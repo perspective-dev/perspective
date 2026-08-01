@@ -22,7 +22,12 @@ import {
     bundleAsync as bundleAsyncCss,
 } from "lightningcss";
 import { compress } from "pro_self_extracting_wasm";
-import { get_host, inlineUrlVisitor, resolveNPM } from "./tools.mjs";
+import {
+    buildDocsCorpus,
+    get_host,
+    inlineUrlVisitor,
+    resolveNPM,
+} from "./tools.mjs";
 
 const IS_DEBUG =
     !!process.env.PSP_DEBUG || process.argv.indexOf("--debug") >= 0;
@@ -44,6 +49,13 @@ export async function build_all() {
             "dist/wasm/perspective-viewer.wasm",
         );
     }
+
+    // The agent metadata bundle: `search_docs` corpus + tool parameter
+    // schemas (needs the freshly-emitted `.d.ts` / ts-rs output).
+    const docs_stats = await buildDocsCorpus();
+    console.log(
+        `docs corpus: ${docs_stats.chunks} chunks / ${docs_stats.bytes} bytes from ${docs_stats.files} files`,
+    );
 
     // JavaScript
     const BUILD = [

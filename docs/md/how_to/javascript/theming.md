@@ -12,9 +12,11 @@ import "@perspective-dev/viewer/dist/css/pro-dark.css";
 
 // Other themes
 import "@perspective-dev/viewer/dist/css/solarized.css";
-import "@perspective-dev/viewer/dist/css/solarized-dark.css";
 import "@perspective-dev/viewer/dist/css/monokai.css";
 import "@perspective-dev/viewer/dist/css/vaporwave.css";
+
+// ...
+
 ```
 
 Alternatively, you may use `themes.css`, which bundles all default themes
@@ -70,8 +72,9 @@ await viewer.restore({ theme: "Pro Dark" });
 
 The best way to write a new theme is to
 [fork and modify an existing theme](https://github.com/perspective-dev/perspective/tree/master/rust/perspective-viewer/src/themes),
-which are _just_ collections of regular CSS variables (no preprocessor is
-required, though Perspective's own themes use one). `<perspective-viewer>` is
+which are _just_ collections of regular CSS variables — Perspective's own
+themes are plain `.css` files, with no preprocessor involved.
+`<perspective-viewer>` is
 not "themed" by default and will lack icons and label text in addition to colors
 and fonts, so starting from an empty theme forces you to define _every_
 theme-able variable to get a functional UI.

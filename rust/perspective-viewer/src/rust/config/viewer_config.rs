@@ -42,12 +42,42 @@ pub struct ViewerConfig<V: TS = String> {
 /// whole-element config format.
 #[derive(Debug, Default, Serialize, PartialEq, TS)]
 pub struct PanelViewerConfig<V: TS = String> {
+    /// The `@perspective-dev/viewer` version that wrote this config,
+    /// stamped on save and used to migrate older tokens. Callers do not
+    /// set it.
     pub version: V,
+
+    /// Per-column styling, keyed by column name. The viewer treats the
+    /// values as opaque — their shape is defined by the ACTIVE plugin,
+    /// so a config written for one plugin may carry keys another
+    /// ignores. Query the live shape with the `get_style_schema` agent
+    /// tool, or the plugin's `column_config_schema()`.
     pub columns_config: ColumnConfigMap,
+
+    /// Name of the visualization plugin, from the set registered on the
+    /// page (the `list_plugins` agent tool, or the plugin picker). This
+    /// also decides what the view fields MEAN visually: `columns` is
+    /// positional and each plugin reads the positions differently, and
+    /// `group_by`/`split_by` draw different things per plugin.
     pub plugin: String,
+
+    /// Plugin-wide settings (as opposed to the per-column
+    /// [`Self::columns_config`]). Opaque to the viewer and defined by
+    /// the active plugin; see `get_style_schema`.
     pub plugin_config: serde_json::Map<String, Value>,
-    pub table: Option<String>,
+
+    /// Name of the `Table` this panel renders, as hosted on the panel's
+    /// `Client`. Every placed panel has a table binding (creation
+    /// requires one by type — [`ViewerConfigInitial`]), so the saved
+    /// config carries it unconditionally.
+    pub table: String,
+
+    /// Selected theme NAME (e.g. `"Pro Dark"`) — not a CSS value. Valid
+    /// names are the Perspective themes loaded on the page, which
+    /// `resetThemes()` re-scans. `None` selects the first available.
     pub theme: Option<String>,
+
+    /// Panel title, shown in its tab. `None` renders the default title.
     pub title: Option<String>,
 
     #[serde(flatten)]
@@ -93,41 +123,73 @@ impl Deref for PluginConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, TS)]
 pub struct ViewerConfigUpdate {
+    /// The `@perspective-dev/viewer` version a saved config was written
+    /// by, used to migrate older tokens. Omit it — the viewer stamps
+    /// the current version on save.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub version: VersionUpdate,
 
+    /// Name of the visualization plugin to switch to, from the set
+    /// registered on the page (the `list_plugins` agent tool, or the
+    /// plugin picker). Changing it changes what the view fields MEAN:
+    /// `columns` is positional and every plugin reads the positions
+    /// differently, and `group_by`/`split_by` draw different things per
+    /// plugin — so read the new plugin's roles before writing `columns`
+    /// for it.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub plugin: PluginUpdate,
 
+    /// Panel title, shown in its tab. `null` restores the default
+    /// title; omitting the field leaves the current one.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub title: TitleUpdate,
 
+    /// Name of the `Table` to render, as hosted on this panel's
+    /// `Client`. Rebinding an existing panel to another table keeps the
+    /// rest of the config, so column names that do not exist in the new
+    /// table will fail validation.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub table: TableUpdate,
 
+    /// Theme NAME (e.g. `"Pro Dark"`) — not a CSS value. Valid names are
+    /// the Perspective themes loaded on the page, re-scanned by
+    /// `resetThemes()`. `null` selects the default.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub theme: ThemeUpdate,
 
+    /// Whether the settings sidebar is OPEN. Purely cosmetic chrome —
+    /// it does not affect what the viewer renders, and it is
+    /// element-level rather than per-panel.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub settings: SettingsUpdate,
 
+    /// Plugin-wide settings (as opposed to the per-column
+    /// [`Self::columns_config`]). The viewer passes these through
+    /// opaquely — their valid keys are defined by the ACTIVE plugin and
+    /// vary by plugin and by state, so query them with the
+    /// `get_style_schema` agent tool rather than guessing.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub plugin_config: PluginConfigUpdate,
 
+    /// Per-column styling — formatting, colors, and other per-column
+    /// controls — keyed by column name. Opaque to the viewer and
+    /// plugin-defined like [`Self::plugin_config`]; `get_style_schema`
+    /// reports the valid keys for a given column under the active
+    /// plugin.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
@@ -149,6 +211,119 @@ impl ViewerConfigUpdate {
         Ok(self.clone())
     }
 }
+
+/// The initial configuration of a NEW panel (`addPanel`, `restore`'s
+/// panel-creating upsert, `restoreWorkspace` `panels` entries). Unlike
+/// [`ViewerConfigUpdate`] — a patch against existing state — creation has
+/// no prior state: `table` is REQUIRED (a placed panel without a table
+/// binding would be permanently blank), absent fields mean "default"
+/// rather than "leave unchanged" (so no [`OptionalUpdate`] tri-state), and
+/// there is no `settings` field (element-level, not per-panel).
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, TS)]
+pub struct ViewerConfigInitial {
+    /// Name of the `Table` the new panel renders, as hosted on the
+    /// `Client`. REQUIRED: a placed panel with no table binding would be
+    /// permanently blank.
+    pub table: String,
+
+    /// The `@perspective-dev/viewer` version a saved config was written
+    /// by. Omit it when creating a panel.
+    #[ts(optional)]
+    pub version: Option<String>,
+
+    /// Name of the visualization plugin, from the set registered on the
+    /// page (the `list_plugins` agent tool, or the plugin picker).
+    /// Decides what the view fields MEAN: `columns` is positional and
+    /// every plugin reads the positions differently, and
+    /// `group_by`/`split_by` draw different things per plugin. Absent
+    /// uses the default plugin.
+    #[ts(optional)]
+    pub plugin: Option<String>,
+
+    /// Panel title, shown in its tab. Absent renders the default title.
+    #[ts(optional)]
+    pub title: Option<String>,
+
+    /// Theme NAME (e.g. `"Pro Dark"`) — not a CSS value. Valid names are
+    /// the Perspective themes loaded on the page. Absent uses the
+    /// default.
+    #[ts(optional)]
+    pub theme: Option<String>,
+
+    /// Plugin-wide settings (as opposed to the per-column
+    /// [`Self::columns_config`]). Opaque to the viewer and defined by
+    /// the ACTIVE plugin; query the valid keys with `get_style_schema`
+    /// rather than guessing.
+    #[ts(optional)]
+    pub plugin_config: Option<serde_json::Map<String, Value>>,
+
+    /// Per-column styling — formatting, colors, and other per-column
+    /// controls — keyed by column name. Plugin-defined like
+    /// [`Self::plugin_config`]; see `get_style_schema`.
+    #[ts(optional)]
+    pub columns_config: Option<ColumnConfigMap>,
+
+    #[serde(flatten)]
+    pub view_config: ViewConfigUpdate,
+}
+
+impl ViewerConfigInitial {
+    /// Decode a `JsValue` by auto-detecting format from JavaScript type.
+    pub fn decode(config: &JsValue) -> ApiResult<Self> {
+        Ok(config.into_serde_ext()?)
+    }
+
+    /// A default-config panel bound to `table` (the "New panel" menus).
+    /// Exhaustive on purpose — same drift alarm as the `From` impl below.
+    pub fn new(table: impl Into<String>) -> Self {
+        Self {
+            table: table.into(),
+            version: None,
+            plugin: None,
+            title: None,
+            theme: None,
+            plugin_config: None,
+            columns_config: None,
+            view_config: ViewConfigUpdate::default(),
+        }
+    }
+}
+
+fn up<T: Clone>(value: Option<T>) -> OptionalUpdate<T> {
+    match value {
+        Some(value) => OptionalUpdate::Update(value),
+        None => OptionalUpdate::Missing,
+    }
+}
+
+// Constructed EXHAUSTIVELY on purpose: a field added to
+// `ViewerConfigUpdate` breaks this impl at compile time, forcing the
+// "should creation carry it?" decision (the drift alarm).
+impl From<ViewerConfigInitial> for ViewerConfigUpdate {
+    fn from(value: ViewerConfigInitial) -> Self {
+        ViewerConfigUpdate {
+            version: up(value.version),
+            plugin: up(value.plugin),
+            title: up(value.title),
+            table: OptionalUpdate::Update(value.table),
+            theme: up(value.theme),
+            settings: OptionalUpdate::Missing,
+            plugin_config: up(value.plugin_config),
+            columns_config: up(value.columns_config),
+            view_config: value.view_config,
+        }
+    }
+}
+
+// There is deliberately NO `TryFrom<ViewerConfigUpdate>` here. Requiring a
+// `table` is a property of the CREATION ENTRY POINTS — `addPanel`'s
+// argument type, `WorkspaceConfigUpdate::panels`, and the agent's
+// `add_panel` decode — each of which already has a `ViewerConfigInitial`
+// in hand. An update→initial conversion exists only to let a route holding
+// a PATCH pretend it is creating from scratch, which is how `restore`'s
+// upsert acquired the gate and started rejecting the table-less
+// restore-then-`load` contract. Its absence is what keeps that from
+// recurring: `create_panel` takes an update, so no caller needs one.
 
 impl std::fmt::Display for ViewerConfigUpdate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -184,6 +359,50 @@ pub type TableUpdate = OptionalUpdate<String>;
 pub type VersionUpdate = OptionalUpdate<String>;
 pub type ColumnConfigUpdate = OptionalUpdate<ColumnConfigMap>;
 pub type PluginConfigUpdate = OptionalUpdate<serde_json::Map<String, Value>>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn initial_requires_a_table() {
+        let json = serde_json::json!({ "group_by": ["State"] });
+        let err = serde_json::from_value::<ViewerConfigInitial>(json).unwrap_err();
+        assert!(format!("{err}").contains("table"));
+    }
+
+    /// The creation → patch direction is the only one that exists (see the
+    /// note above the `From` impl); a `table` becomes a concrete update and
+    /// the element-level `settings` is not carried.
+    #[test]
+    fn initial_widens_to_an_update() {
+        let json = serde_json::json!({
+            "table": "superstore",
+            "plugin": "Datagrid",
+            "group_by": ["State"],
+        });
+
+        let initial: ViewerConfigInitial = serde_json::from_value(json).unwrap();
+        let update = ViewerConfigUpdate::from(initial);
+        assert!(matches!(&update.table, OptionalUpdate::Update(x) if x == "superstore"));
+        assert!(matches!(&update.settings, OptionalUpdate::Missing));
+        assert!(matches!(&update.plugin, OptionalUpdate::Update(x) if x == "Datagrid"));
+        assert_eq!(
+            update.view_config.group_by.as_deref(),
+            Some(&["State".to_owned()][..])
+        );
+    }
+
+    /// A table-less patch is a legitimate creation input now that
+    /// `create_panel` takes an update — the deferred panel a `load()`
+    /// binds. Nothing in this module may reject it.
+    #[test]
+    fn a_table_less_update_is_representable() {
+        let json = serde_json::json!({ "group_by": ["State"] });
+        let update: ViewerConfigUpdate = serde_json::from_value(json).unwrap();
+        assert!(matches!(&update.table, OptionalUpdate::Missing));
+    }
+}
 
 /// Handles `{}` when included as a field with `#[serde(default)]`.
 impl<T: Clone> Default for OptionalUpdate<T> {

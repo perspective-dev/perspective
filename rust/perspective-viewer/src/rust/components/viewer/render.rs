@@ -94,6 +94,7 @@ impl PerspectiveViewer {
                     {available_plugins}
                     {has_table}
                     {named_column_count}
+                    plugin_static_config={self.renderer_props.config.clone()}
                     {view_config}
                     plugin_config={self.renderer_props.plugin_config.clone()}
                     {drag_column}

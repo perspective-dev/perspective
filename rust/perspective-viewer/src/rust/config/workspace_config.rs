@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 
 use perspective_client::config::Filter;
 
-use crate::config::{PanelViewerConfig, ViewerConfigUpdate};
+use crate::config::{PanelViewerConfig, ViewerConfigInitial};
 
 /// The whole-element config format (`{version, active?, layout, panels}`) —
 /// the multi-panel counterpart of the single-panel [`ViewerConfig`] — as
@@ -59,10 +59,11 @@ pub struct WorkspaceConfig {
 }
 
 /// The parse target of a whole-element config in
-/// [`PerspectiveViewerElement::restore`]. Mirrors [`WorkspaceConfig`],
-/// but `panels` entries are full [`ViewerConfigUpdate`]s so a stray per-panel
-/// `settings` can be detected (warned, then ignored — `create_panel` strips
-/// it).
+/// [`PerspectiveViewerElement::restoreWorkspace`]. Mirrors
+/// [`WorkspaceConfig`], but `panels` entries are [`ViewerConfigInitial`]s —
+/// every entry creates a NEW panel, so `table` is required by type (a
+/// stray per-panel `settings` key is ignored; it is element-level state,
+/// carried by the top-level `active` field).
 #[derive(serde::Deserialize, ts_rs::TS)]
 pub struct WorkspaceConfigUpdate {
     #[serde(default)]
@@ -73,7 +74,7 @@ pub struct WorkspaceConfigUpdate {
     #[ts(optional)]
     pub layout: Option<crate::js::Layout>,
 
-    pub panels: BTreeMap<String, ViewerConfigUpdate>,
+    pub panels: BTreeMap<String, ViewerConfigInitial>,
 
     /// The element-level global (master/detail cross-) filters to re-apply as
     /// a transient overlay on every DETAIL panel. Restored as one

@@ -48,11 +48,12 @@ await elem.restore(JSON.stringify(json_token));
 Using the JSON format, every facet of a `<perspective-viewer>`'s configuration
 can be manipulated from JavaScript using the `restore()` method. The valid
 structure of properties is described via the
-[`ViewerConfig`](https://github.com/perspective-dev/perspective/blob/ebced4caa/rust/perspective-viewer/src/ts/viewer.ts#L16)
+[`ViewerConfigUpdate`](https://github.com/perspective-dev/perspective/blob/master/rust/perspective-viewer/src/ts/ts-rs/ViewerConfigUpdate.ts)
 and embedded
-[`ViewConfig`](https://github.com/perspective-dev/perspective/blob/ebced4caa19435a2a57d4687be7e428a4efc759b/packages/perspective/index.d.ts#L140)
-type declarations, and [`View`](view.md) chapter of the documentation which has
-several interactive examples for each `ViewConfig` property.
+[`ViewConfigUpdate`](https://github.com/perspective-dev/perspective/blob/master/rust/perspective-js/src/ts/ts-rs/ViewConfigUpdate.ts)
+type declarations (both generated from the Rust definitions), and the
+[`View`](../../explanation/view.md) chapter of the documentation which has
+several examples for each `ViewConfig` property.
 
 ```javascript
 // Set the plugin (will also update `columns` to plugin-defaults)

@@ -14,6 +14,8 @@
 //! necessary for public Custom Elements.  The rest are internal components of
 //! these 4.
 
+#[cfg(feature = "llm-agent")]
+pub mod chat_panel;
 pub mod column_dropdown;
 pub mod column_selector;
 pub mod column_settings_sidebar;

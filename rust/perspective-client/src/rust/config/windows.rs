@@ -133,6 +133,8 @@ struct RawWindowSpec {
     partition_by: Vec<String>,
 
     /// The `Table` column which orders each partition, and the direction.
+    /// This orders rows WITHIN the window frame only — it does not
+    /// reorder the `View`, which is what the view-level `sort` does.
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     order_by: Option<WindowSort>,

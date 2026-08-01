@@ -10,25 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-/**
- * `plugin_config.domain_mode` axis-scope contract
- * (`.plan/DOMAIN_MODE_PLAN.md`):
- *
- *   - Cartesian charts (X/Y Scatter, X/Y Line): `"expand"` applies to
- *     BOTH axes (+ color/size scales).
- *   - Band charts (Y Bar / Y Line / Y Scatter / Y Area / X Bar):
- *     `"expand"` applies to the VALUE axis ONLY — the category axis
- *     (numeric/datetime `group_by`) always fits the current data, so a
- *     streaming time axis releases departed categories.
- *
- * The accumulators only live across DATA updates — any `plugin.draw`
- * (view-config change) resets them — so every scenario drives
- * `table.remove` on the indexed fixture table via `window.__TEST_WORKER__`
- * and waits for the update-redraw (debounced + throttled) by polling
- * pixel counts. SwiftShader is deterministic; thresholds are loose only
- * to absorb AA.
- */
-
 import type { Page } from "@playwright/test";
 import { test, expect } from "@perspective-dev/test";
 import {
@@ -172,16 +153,10 @@ test.describe("domain_mode axis scope", () => {
         } as never);
         await waitOneFrame(page);
 
-        // Full data spans the plot; the right side is populated.
         expect(
             await pollPixels(page, RIGHT, (n) => n > POPULATED_MIN),
         ).toBeGreaterThan(POPULATED_MIN);
 
-        // Keep only the earliest dates. Under the `"expand"` DEFAULT the
-        // value axis may retain its extent, but the category (X) axis
-        // must REFIT — the surviving line spreads across the full plot
-        // width instead of compressing into the historical range's
-        // leading sliver.
         await removeLaterDates(page, 30);
         expect(
             await pollPixels(page, RIGHT, (n) => n > POPULATED_MIN),
@@ -191,10 +166,6 @@ test.describe("domain_mode axis scope", () => {
     test("Y Line: the value axis retains its extent under expand, refits under fit", async ({
         page,
     }) => {
-        // One row per day (sums = values): a small ±10 wiggle plus a
-        // SYMMETRIC ±1000 extreme pair MID-SERIES (so the spike's x
-        // position falls inside the sampled band, not at the plot edge).
-        // The symmetric domain centers zero MID-plot.
         await reshapeFixture(
             page,
             dates(40).map((d, i) => ({
@@ -212,21 +183,15 @@ test.describe("domain_mode axis scope", () => {
         } as never);
         await waitOneFrame(page);
 
-        // The +1000 spike reaches the top of the plot.
         expect(
             await pollPixels(page, TOP, (n) => n > EMPTY_MAX),
         ).toBeGreaterThan(EMPTY_MAX);
 
-        // Drop the ±1000 extremes: survivors are ±10. Under `"expand"`
-        // (default) the Y axis RETAINS [-1000, 1000], so the line hugs
-        // zero MID-plot and the top band empties.
         await removeExtremes(page, "Profit", 20);
         expect(await pollPixels(page, TOP, (n) => n < EMPTY_MAX)).toBeLessThan(
             EMPTY_MAX,
         );
 
-        // `"fit"` recomputes: the surviving ±10 extent stretches to the
-        // plot and the line reaches the top band again.
         await restoreChart(page, {
             plugin_config: { domain_mode: "fit" },
         } as never);
@@ -249,9 +214,6 @@ test.describe("domain_mode axis scope", () => {
             await pollPixels(page, BOTTOM, (n) => n > POPULATED_MIN),
         ).toBeGreaterThan(POPULATED_MIN);
 
-        // Keep only the earliest dates (rendered from the top). The
-        // category axis is Y here — it must refit so the surviving bars
-        // spread down the full plot height.
         await removeLaterDates(page, 30);
         expect(
             await pollPixels(page, BOTTOM, (n) => n > POPULATED_MIN),
@@ -261,12 +223,6 @@ test.describe("domain_mode axis scope", () => {
     test("X/Y Scatter: BOTH axes retain their extent under expand", async ({
         page,
     }) => {
-        // `Sales` spread uniformly over [0, 975]; `Profit` is 0 for every
-        // point except two low-`Sales` ±500 anchors that stretch the Y
-        // domain, parking the point mass MID-plot (inside the band's
-        // y-range — a value AT the domain extreme renders at the plot
-        // edge, outside it). Rows with `Sales > 500` are the removable
-        // extremes; the anchors survive.
         await reshapeFixture(
             page,
             dates(40).map((d, i) => ({
@@ -286,19 +242,15 @@ test.describe("domain_mode axis scope", () => {
             await pollPixels(page, RIGHT, (n) => n > EMPTY_MAX),
         ).toBeGreaterThan(EMPTY_MAX);
 
-        // Drop the high-Sales rows. Cartesian `"expand"` (default) keeps
-        // the X extent, so survivors stay clustered at the left and the
-        // right side EMPTIES — the axis did not refit.
         await removeExtremes(page, "Sales", 500);
         expect(
             await pollPixels(page, RIGHT, (n) => n < EMPTY_MAX),
         ).toBeLessThan(EMPTY_MAX);
 
-        // Control: `"fit"` refits X and the survivors spread back into
-        // the right side.
         await restoreChart(page, {
             plugin_config: { domain_mode: "fit" },
         } as never);
+
         expect(
             await pollPixels(page, RIGHT, (n) => n > EMPTY_MAX),
         ).toBeGreaterThan(EMPTY_MAX);

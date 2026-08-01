@@ -45,6 +45,33 @@ export interface ChartTypeConfig {
     applicable_plugin_fields: readonly PluginConfigField[];
 
     /**
+     * What `group_by` DRAWS in this chart, e.g. `"X Axis"` for the
+     * Y-series charts. Omitted where the field has no visual role of
+     * its own and is a plain aggregation key — the X/Y and map charts,
+     * whose axes both come from `columns`.
+     *
+     * The `group_by` counterpart of `initial.names`: one declaration
+     * says what every view field draws, so the settings UI's labels and
+     * the agent's `list_plugins` contract read the same source instead
+     * of restating the mapping.
+     */
+    group_by_role?: string;
+
+    /** What `split_by` DRAWS in this chart. See {@link group_by_role}. */
+    split_by_role?: string;
+
+    /**
+     * Set on the charts that CONNECT their points in row order, so the
+     * view's row order shows up in the drawing: without a `sort` the
+     * line follows the table's natural order, which reads as a tangle
+     * unless the rows already arrive ordered along the X axis. The point
+     * charts (scatter, density) are unaffected, and a pre-ordered table
+     * needs no `sort` — which is why this is declared per chart rather
+     * than inferred from an empty `sort`.
+     */
+    connects_row_order?: boolean;
+
+    /**
      * Per-chart-type overrides for `DEFAULT_PLUGIN_CONFIG`. Used when a
      * field's sensible default differs by chart family — currently
      * `include_zero` (true for Y Bar / Y Area / X Bar, false for line
@@ -187,6 +214,9 @@ function make(
             | "max_columns"
             | "default_chart_type"
             | "plugin_field_defaults"
+            | "group_by_role"
+            | "split_by_role"
+            | "connects_row_order"
         >
     >,
 ): ChartTypeConfig {
@@ -205,30 +235,52 @@ function make(
         ...(overrides?.plugin_field_defaults
             ? { plugin_field_defaults: overrides.plugin_field_defaults }
             : {}),
+        ...(overrides?.group_by_role
+            ? { group_by_role: overrides.group_by_role }
+            : {}),
+        ...(overrides?.split_by_role
+            ? { split_by_role: overrides.split_by_role }
+            : {}),
+        ...(overrides?.connects_row_order
+            ? { connects_row_order: overrides.connects_row_order }
+            : {}),
     };
 }
 
 const FIN_NAMES = ["Open", "Close", "High", "Low", "Tooltip"];
 const HIER_NAMES = ["Size", "Color", "Tooltip"];
 
+const SERIES_Y_ROLES = { group_by_role: "X Axis", split_by_role: "Series" };
+const SERIES_X_ROLES = { group_by_role: "Y Axis", split_by_role: "Series" };
+const CART_ROLES = {};
+const HIER_ROLES = { group_by_role: "Hierarchy", split_by_role: "Facets" };
+const HEATMAP_ROLES = { group_by_role: "X Axis", split_by_role: "Y Axis" };
+const FIN_ROLES = { group_by_role: "X Axis", split_by_role: "Series" };
+const MAP_ROLES = {};
+
 const CHARTS: ChartTypeConfig[] = [
     make("X Bar", "x-bar", SERIES, SELECT, 1, X_AXIS, SERIES_FIELDS, {
+        ...SERIES_X_ROLES,
         default_chart_type: "bar",
         plugin_field_defaults: ZERO_ANCHORED_DEFAULTS,
     }),
     make("Y Bar", "y-bar", SERIES, SELECT, 1, Y_AXIS, SERIES_FIELDS, {
+        ...SERIES_Y_ROLES,
         default_chart_type: "bar",
         plugin_field_defaults: ZERO_ANCHORED_DEFAULTS,
     }),
     make("Y Line", "y-line", SERIES, SELECT, 1, Y_AXIS, SERIES_FIELDS, {
+        ...SERIES_Y_ROLES,
         default_chart_type: "line",
         plugin_field_defaults: SERIES_DEFAULTS,
     }),
     make("Y Scatter", "y-scatter", SERIES, SELECT, 1, Y_AXIS, SERIES_FIELDS, {
+        ...SERIES_Y_ROLES,
         default_chart_type: "scatter",
         plugin_field_defaults: SERIES_DEFAULTS,
     }),
     make("Y Area", "y-area", SERIES, SELECT, 1, Y_AXIS, SERIES_FIELDS, {
+        ...SERIES_Y_ROLES,
         default_chart_type: "area",
         plugin_field_defaults: ZERO_ANCHORED_DEFAULTS,
     }),
@@ -240,6 +292,7 @@ const CHARTS: ChartTypeConfig[] = [
         2,
         ["X Axis", "Y Axis", "Color", "Size", "Label", "Tooltip"],
         CARTESIAN_FIELDS,
+        { ...CART_ROLES },
     ),
     make(
         "X/Y Line",
@@ -249,6 +302,7 @@ const CHARTS: ChartTypeConfig[] = [
         2,
         ["X Axis", "Y Axis", "Tooltip"],
         CARTESIAN_FIELDS,
+        { ...CART_ROLES, connects_row_order: true },
     ),
     make(
         "Density",
@@ -258,15 +312,24 @@ const CHARTS: ChartTypeConfig[] = [
         2,
         ["X Axis", "Y Axis", "Color", "Tooltip"],
         DENSITY_FIELDS,
+        { ...CART_ROLES },
     ),
-    make("Treemap", "treemap", HIER, TOGGLE, 1, HIER_NAMES, NO_FIELDS),
-    make("Sunburst", "sunburst", HIER, TOGGLE, 1, HIER_NAMES, NO_FIELDS),
-    make("Heatmap", "heatmap", HIER, SELECT, 1, ["Color"], HEATMAP_FIELDS),
+    make("Treemap", "treemap", HIER, TOGGLE, 1, HIER_NAMES, NO_FIELDS, {
+        ...HIER_ROLES,
+    }),
+    make("Sunburst", "sunburst", HIER, TOGGLE, 1, HIER_NAMES, NO_FIELDS, {
+        ...HIER_ROLES,
+    }),
+    make("Heatmap", "heatmap", HIER, SELECT, 1, ["Color"], HEATMAP_FIELDS, {
+        ...HEATMAP_ROLES,
+    }),
     make("Candlestick", "candlestick", FIN, TOGGLE, 1, FIN_NAMES, FIN_FIELDS, {
+        ...FIN_ROLES,
         default_chart_type: "candlestick",
         plugin_field_defaults: SERIES_DEFAULTS,
     }),
     make("OHLC", "ohlc", FIN, TOGGLE, 1, FIN_NAMES, FIN_FIELDS, {
+        ...FIN_ROLES,
         default_chart_type: "ohlc",
         plugin_field_defaults: SERIES_DEFAULTS,
     }),
@@ -278,6 +341,7 @@ const CHARTS: ChartTypeConfig[] = [
         2,
         ["Longitude", "Latitude", "Color", "Size", "Label", "Tooltip"],
         MAP_SCATTER_FIELDS,
+        { ...MAP_ROLES },
     ),
     make(
         "Map Line",
@@ -287,6 +351,7 @@ const CHARTS: ChartTypeConfig[] = [
         2,
         ["Longitude", "Latitude", "Tooltip"],
         MAP_LINE_FIELDS,
+        { ...MAP_ROLES, connects_row_order: true },
     ),
     make(
         "Map Density",
@@ -296,6 +361,7 @@ const CHARTS: ChartTypeConfig[] = [
         2,
         ["Longitude", "Latitude", "Color", "Tooltip"],
         MAP_DENSITY_FIELDS,
+        { ...MAP_ROLES },
     ),
 ];
 

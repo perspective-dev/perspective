@@ -60,18 +60,23 @@ via the API), this runtime mode allows large datasets without the need to copy
 them entirely to the Browser, at the expense of network latency on UI
 interaction/API calls.
 
-### Jupyterlab
+### Notebooks
 
-`PerspectiveWidget` is a JupyterLab widget that implements the same API as
-`<perspective-viewer>`, allows running such a viewer in
-[JupyterLab](https://jupyterlab.readthedocs.io/en/stable/) in either server or
-client (via WebAssembly) mode. `PerspectiveWidget` is compatible with Jupyterlab
-3 and Jupyter Notebook 6 via a
-[prebuilt extension](https://jupyterlab.readthedocs.io/en/stable/extension/extension_dev.html#prebuilt-extensions).
-To use it, simply install `perspective-python` and the extensions should be
-available.
+`PerspectiveWidget` is an [AnyWidget](https://anywidget.dev) that implements
+the same API as `<perspective-viewer>`, and runs such a viewer in either
+server or client (via WebAssembly) mode.
 
-`perspective-python`'s JupyterLab extension also provides convenient builtin
-viewers for `csv`, `json`, or `arrow` files. Simply right-click on a file with
-this extension and choose the appropriate `Perpective` option from the context
-menu.
+The widget is bundled entirely inside the `perspective-python` wheel, so
+there is no per-host extension to install. It runs identically in
+[JupyterLab](https://jupyterlab.readthedocs.io/en/stable/), classic Jupyter
+Notebook, VSCode notebooks, Google Colab and Marimo. Install the `jupyter`
+extra to pull in `anywidget`:
+
+```bash
+pip install "perspective-python[jupyter]"
+```
+
+Separately, the _optional_ `@perspective-dev/jupyterlab` package provides
+convenient builtin viewers for `csv`, `json`, or `arrow` files in JupyterLab.
+With it installed, right-click a file of one of these types and choose the
+appropriate `Perspective` option from the context menu.

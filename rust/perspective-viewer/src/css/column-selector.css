@@ -181,6 +181,14 @@
         border-color: var(--psp--color);
     }
 
+    /* Composed inside a `.pivot-column` pill (the window editor's slots),
+       the row's `min-width: auto` floor would hold it at content width and
+       overflow the container-stretched pill - collapse-to-0 requires the
+       definite-width chain to pass through. */
+    .pivot-column > .column-selector-column {
+        min-width: 0;
+    }
+
     .column-selector-column {
         display: flex;
         flex-direction: row-reverse;

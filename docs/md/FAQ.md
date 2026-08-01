@@ -137,14 +137,31 @@ which is too small). See
 
 ### Can I do rolling sums or cumulative calculations?
 
-Not in Perspective's built-in engine, but as an alternative, DuckDB supports
-[rolling and cumulative sums via `WINDOW` functions](https://duckdb.org/docs/stable/sql/functions/window_functions),
-and DuckDB now has
-[native Perspective Virtual Server support](./explanation/virtual_servers.md)
-which allows arbitrary DuckDB queries (as a `TABLE` or `VIEW`) to be
-`<perspective-viewer>` `Table`s.
+Yes — use [Window Columns](./explanation/view/config/windows.md), the
+`windows` property of a `View` config. These are ordered, partitioned rolling
+computations analogous to SQL window functions, declared per-`View` like
+expression columns:
 
-<!-- _Related:
+```javascript
+const view = await table.view({
+    columns: ["Cumulative Sales"],
+    windows: {
+        "Cumulative Sales": {
+            column: "Sales",
+            aggregate: "sum",
+            order_by: ["Order Date", "asc"],
+            cumulative: true,
+        },
+    },
+});
+```
+
+Window Columns are supported by Perspective's built-in engine, by the DuckDB,
+ClickHouse and Polars [Virtual Servers](./explanation/virtual_servers.md), and
+by the `<perspective-viewer>` UI. They update incrementally as the `Table`
+updates.
+
+<!-- _Related: [#504](https://github.com/perspective-dev/perspective/issues/504),
 [#2600](https://github.com/perspective-dev/perspective/discussions/2600),
 [#2624](https://github.com/perspective-dev/perspective/issues/2624)_ -->
 
@@ -191,20 +208,42 @@ Apply two filters on the same date column for a range.
 [#3100](https://github.com/perspective-dev/perspective/discussions/3100),
 [#2023](https://github.com/perspective-dev/perspective/issues/2023)_ -->
 
-## JupyterLab
+## Notebooks
 
-### `PerspectiveWidget` is not loading in JupyterLab
+### `PerspectiveWidget` is not loading
 
-See the [`PerspectiveWidget` guide](./how_to/python/jupyterlab.md) for full
-setup details. Ensure the JupyterLab extension version matches your
-`perspective-python` version. Make sure you are using a compatible JupyterLab
-for your Perspective version (JupyterLab 4+ currently).
+`PerspectiveWidget` is an [AnyWidget](https://anywidget.dev), shipped entirely
+inside the `perspective-python` wheel. There is no separate JupyterLab
+extension to install or version-match for the widget, so
+`jupyter labextension list` is not where to look.
 
-Check that the extension is enabled with `jupyter labextension list`.
+Install the `jupyter` extra, which pulls in `anywidget`:
+
+```bash
+pip install "perspective-python[jupyter]"
+```
+
+Then restart the kernel — and, for JupyterLab, reload the browser page. See
+the [`PerspectiveWidget` guide](./how_to/python/jupyterlab.md).
 
 <!-- _Related: [#1392](https://github.com/perspective-dev/perspective/issues/1392),
 [#2059](https://github.com/perspective-dev/perspective/issues/2059),
 [#2307](https://github.com/perspective-dev/perspective/issues/2307)_ -->
+
+### Does `PerspectiveWidget` work outside JupyterLab?
+
+Yes. Because the widget is an AnyWidget bundled into the wheel rather than a
+JupyterLab labextension, it runs in any AnyWidget-compatible host —
+JupyterLab, classic Jupyter Notebook, **VSCode notebooks**, Google Colab and
+Marimo — with no per-host install step.
+
+The separate `@perspective-dev/jupyterlab` package is now _optional_ and
+provides only the "Open With → Perspective" file renderers for `csv`, `json`
+and `arrow` files in JupyterLab.
+
+<!-- _Related: [#2783](https://github.com/perspective-dev/perspective/issues/2783),
+[#3042](https://github.com/perspective-dev/perspective/issues/3042),
+[#3056](https://github.com/perspective-dev/perspective/issues/3056)_ -->
 
 ## Memory and Performance
 
@@ -446,9 +485,10 @@ update failures.
 
 ### Can I export the viewer to HTML, PNG or PDF?
 
-HTML and PNG exports are available via `viewer.export("html")` and
-`viewer.export("png")`, respectively. For PDF, render the viewer and use browser
-or headless browser screenshot capabilities.
+HTML export is available via `viewer.export({ method: "html" })`. For an
+image, use `{ method: "plugin" }`, which asks the plugin to render itself —
+this produces a PNG for chart plugins (and text for the datagrid). For PDF,
+render the viewer and use browser or headless browser screenshot capabilities.
 
 <!-- _Related: [#2836](https://github.com/perspective-dev/perspective/issues/2836),
 [#2770](https://github.com/perspective-dev/perspective/discussions/2770),
@@ -466,8 +506,15 @@ using a library like `xlsx` (JavaScript) or `openpyxl` (Python).
 
 ### How do I copy data from a cell or row?
 
-Use the `"text"` export mode when data is selected:
-`await viewer.export("text")`.
+Use one of the `-selected` export methods, which operate on the current
+selection. To place it on the clipboard:
+
+```javascript
+await viewer.copy({ method: "csv-selected" });
+```
+
+... or to get it as a string, `await viewer.export({ method: "csv-selected" })`.
+`json-selected` and `arrow-selected` are also available.
 
 <!-- _Related: [#2765](https://github.com/perspective-dev/perspective/issues/2765),
 [#2356](https://github.com/perspective-dev/perspective/discussions/2356)_ -->
@@ -552,12 +599,16 @@ server-side data processing without any UI. Use
 
 ### Can I use Perspective in Pyodide?
 
-There is an emscripten wheel
-[published via Releases](https://github.com/perspective-dev/perspective/releases),
-but it must be downloaded and hosted manually and is only built for specific
-pyodide versions.
+Yes. Perspective publishes Emscripten wheels to PyPI under
+[PEP 783](https://peps.python.org/pep-0783/), so `perspective-python` can be
+installed by Pyodide's own package resolution — there is no need to download
+and host a wheel yourself.
 
-<!-- _Related:
+Emscripten wheels are ABI-tied to a specific Emscripten version, and thus to
+the Pyodide versions built against it. If resolution fails, check that your
+Pyodide version matches a published wheel tag.
+
+<!-- _Related: [#3186](https://github.com/perspective-dev/perspective/issues/3186),
 [#2880](https://github.com/perspective-dev/perspective/discussions/2880)_ -->
 
 ### How do I handle row selection events?

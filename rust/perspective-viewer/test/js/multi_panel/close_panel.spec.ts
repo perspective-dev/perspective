@@ -10,13 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-// Full-stack UI panel CLOSE coverage (`.plan/WORKSPACE_TEST_PLAN.md` §2.6):
-// close via the context menu and the tab × button. Closing is model-FIRST
-// (the Workspace drops the panel, then reconcile removes the cell) — these
-// specs assert the observable consequences: one layout commit, complete
-// plugin disposal, activation retargeting, and coherence — including across
-// a close racing an in-flight create.
-
 import { test, expect } from "../helpers.ts";
 import {
     armInvariants,
@@ -61,9 +54,6 @@ test.beforeEach(async ({ page }) => {
     });
 });
 
-// Structural invariants (I1 element identity / I2 tree sanity / I3
-// model-layout-DOM coherence) gate every passing test's end state - see
-// `harness.ts` and `.plan/WORKSPACE_TEST_PLAN.md`.
 armInvariants(test);
 
 async function restoreWorkspace(page, config): Promise<void> {

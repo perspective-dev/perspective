@@ -118,6 +118,22 @@ perspective-dropdown {
     --psp-label--query-tab--content: "Consulta";
     --psp-label--plugin-tab--content: "Plugin";
     --psp-label--debug-tab--content: "JSON";
+    --psp-label--chat-tab--content: "Conversa";
+
+    /* Chat panel */
+    --psp-label--chat-reasoning--content: "Raciocínio";
+    --psp-label--chat-send--content: "Enviar";
+    --psp-label--chat-stop--content: "Parar";
+    --psp-label--chat-placeholder--content: "Pergunte sobre seus dados…";
+
+    /* Plugin-declared pivot roles (PluginStaticConfig) */
+    --psp-label--role--x-axis--content: "Eixo X";
+    --psp-label--role--y-axis--content: "Eixo Y";
+    --psp-label--role--series--content: "Séries";
+    --psp-label--role--hierarchy--content: "Hierarquia";
+    --psp-label--role--facets--content: "Facetas";
+    --psp-label--role--row-groups--content: "Grupos de linhas";
+    --psp-label--role--column-groups--content: "Grupos de colunas";
 
     /* Plugin settings */
     --psp-label--edit-mode--content: "Modo de edição";

@@ -31,6 +31,8 @@
 // `SESSION_CONFIG_COHERENCE_PLAN.md`) — deny, don't warn.
 #![deny(clippy::await_holding_refcell_ref)]
 
+#[cfg(feature = "llm-agent")]
+mod agent;
 pub mod components;
 pub mod config;
 pub mod custom_elements;
@@ -86,22 +88,33 @@ import type {
 
 export type * from "../../src/ts/ts-rs/ViewerConfig.d.ts";
 export type * from "../../src/ts/ts-rs/ViewerConfigUpdate.d.ts";
+export type * from "../../src/ts/ts-rs/ViewerConfigInitial.d.ts";
 export type * from "../../src/ts/ts-rs/PluginStaticConfig.d.ts";
 export type * from "../../src/ts/ts-rs/WorkspaceConfig.d.ts";
 export type * from "../../src/ts/ts-rs/WorkspaceConfigUpdate.d.ts";
 export type * from "../../src/ts/ts-rs/ExportMethod.d.ts";
 export type * from "../../src/ts/ts-rs/PanelOptions.d.ts";
+export type * from "../../src/ts/ts-rs/RestoreOptions.d.ts";
 export type * from "../../src/ts/ts-rs/ClientOptions.d.ts";
 export type * from "../../src/ts/ts-rs/ExportOptions.d.ts";
 export type * from "../../src/ts/ts-rs/GetTableOptions.d.ts";
 export type * from "../../src/ts/ts-rs/GetClientOptions.d.ts";
+export type * from "../../src/ts/ts-rs/CustomNumberFormatConfig.d.ts";
+export type * from "../../src/ts/ts-rs/NumberFormatStyle.d.ts";
+export type * from "../../src/ts/ts-rs/Notation.d.ts";
+export type * from "../../src/ts/ts-rs/DatetimeFormatType.d.ts";
+export type * from "../../src/ts/ts-rs/StringColorMode.d.ts";
+export type * from "../../src/ts/ts-rs/DatetimeColorMode.d.ts";
+export type * from "../../src/ts/ts-rs/FormatMode.d.ts";
 import type {GetTableOptions} from "../../src/ts/ts-rs/GetTableOptions.d.ts";
 import type {PanelOptions} from "../../src/ts/ts-rs/PanelOptions.d.ts";
+import type {RestoreOptions} from "../../src/ts/ts-rs/RestoreOptions.d.ts";
 import type {ExportOptions} from "../../src/ts/ts-rs/ExportOptions.d.ts";
 import type {GetClientOptions} from "../../src/ts/ts-rs/GetClientOptions.d.ts";
 import type {ClientOptions} from "../../src/ts/ts-rs/ClientOptions.d.ts";
 import type {ViewerConfig} from "../../src/ts/ts-rs/ViewerConfig.d.ts";
 import type {ViewerConfigUpdate} from "../../src/ts/ts-rs/ViewerConfigUpdate.d.ts";
+import type {ViewerConfigInitial} from "../../src/ts/ts-rs/ViewerConfigInitial.d.ts";
 import type {WorkspaceConfig} from "../../src/ts/ts-rs/WorkspaceConfig.d.ts";
 import type {WorkspaceConfigUpdate} from "../../src/ts/ts-rs/WorkspaceConfigUpdate.d.ts";
 "#;

@@ -120,15 +120,70 @@ pub struct PluginStaticConfig {
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub can_render_column_styles: bool,
+
+    /// What `group_by` MEANS visually for this plugin, e.g. `"X Axis"`
+    /// for the Y-series charts or `"Hierarchy"` for treemap/sunburst.
+    /// `None` where the field has no visual role of its own and is a
+    /// plain aggregation key (the X/Y charts, whose axes both come from
+    /// `columns`).
+    ///
+    /// This is the `group_by` counterpart of [`Self::config_column_names`]:
+    /// the same declaration that names the positional `columns` slots
+    /// should say what the other view fields draw, so that consumers —
+    /// the settings UI's field labels, and the agent's `list_plugins`
+    /// contract — read one source instead of restating the mapping.
+    #[serde(default)]
+    #[ts(as = "Option<_>")]
+    #[ts(optional)]
+    pub group_by_role: Option<String>,
+
+    /// What `split_by` MEANS visually for this plugin, e.g. `"Series"`.
+    /// See [`Self::group_by_role`].
+    #[serde(default)]
+    #[ts(as = "Option<_>")]
+    #[ts(optional)]
+    pub split_by_role: Option<String>,
+
+    /// `true` when this plugin CONNECTS its points in row order, so the
+    /// `View`'s row order is visible in the drawing: an unsorted config
+    /// renders the table's natural order, which reads as a tangle unless
+    /// the rows already arrive ordered along the axis. Declared rather
+    /// than inferred, because "unsorted" is not itself a mistake — a
+    /// pre-ordered table needs no `sort`, and the point plugins
+    /// (scatter, density) do not care at all.
+    #[serde(default)]
+    #[ts(as = "Option<_>")]
+    #[ts(optional)]
+    pub connects_row_order: bool,
 }
 
 impl PluginStaticConfig {
+    /// The number of leading `columns` slots that are POSITIONAL: a drop
+    /// there swaps with the column already present, and the slot's
+    /// meaning is fixed by [`Self::config_column_names`]. Everything from
+    /// this index on is the insert TAIL, which repeats the last named
+    /// role — which is why a `Y Line` (named slots: `["Y Axis"]`) takes
+    /// any number of columns as additional Y series, while an
+    /// `X/Y Line` (`["X Axis", "Y Axis", "Tooltip"]`) pins its two axes
+    /// and treats the rest as further tooltips.
+    ///
+    /// The single definition of that rule: [`Self::is_swap`] and the
+    /// agent's `list_plugins` contract both derive from it, so the
+    /// convention cannot be read two different ways.
+    pub fn positional_columns(&self) -> usize {
+        self.config_column_names.len().saturating_sub(1)
+    }
+
+    /// The role that `columns` past the positional slots repeat, i.e.
+    /// the last named slot. `None` when the plugin names no slots.
+    pub fn tail_column_role(&self) -> Option<&str> {
+        self.config_column_names.last().map(|x| x.as_str())
+    }
+
     /// `true` if dropping a column at `index` should swap with the
-    /// column already there rather than insert. Only the named slots
-    /// (`config_column_names[..len()-1]`) participate in swap behaviour;
-    /// the trailing unnamed tail inserts.
+    /// column already there rather than insert.
     pub fn is_swap(&self, index: usize) -> bool {
-        !self.config_column_names.is_empty() && index < self.config_column_names.len() - 1
+        !self.config_column_names.is_empty() && index < self.positional_columns()
     }
 
     pub fn get_group_rollups(&self, rollup_features: &[GroupRollupMode]) -> Vec<GroupRollupMode> {
@@ -140,5 +195,47 @@ impl PluginStaticConfig {
                     .collect()
             })
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn plugin(names: &[&str]) -> PluginStaticConfig {
+        PluginStaticConfig {
+            config_column_names: names.iter().map(|x| (*x).to_owned()).collect(),
+            ..Default::default()
+        }
+    }
+
+    /// The tail rule has ONE definition: `is_swap` and the role a
+    /// trailing column repeats must never disagree about where the
+    /// positional slots end.
+    #[test]
+    fn positional_slots_and_tail_agree() {
+        // `Y Line` — the only named slot IS the tail, so every column
+        // is another Y series and none of them swap.
+        let y_line = plugin(&["Y Axis"]);
+        assert_eq!(y_line.positional_columns(), 0);
+        assert_eq!(y_line.tail_column_role(), Some("Y Axis"));
+        assert!(!y_line.is_swap(0));
+
+        // `X/Y Line` — two pinned axes, then tooltips.
+        let xy_line = plugin(&["X Axis", "Y Axis", "Tooltip"]);
+        assert_eq!(xy_line.positional_columns(), 2);
+        assert_eq!(xy_line.tail_column_role(), Some("Tooltip"));
+        assert!(xy_line.is_swap(0));
+        assert!(xy_line.is_swap(1));
+        assert!(!xy_line.is_swap(2));
+
+        for index in 0..4 {
+            assert_eq!(xy_line.is_swap(index), index < xy_line.positional_columns());
+        }
+
+        let unnamed = plugin(&[]);
+        assert_eq!(unnamed.positional_columns(), 0);
+        assert_eq!(unnamed.tail_column_role(), None);
+        assert!(!unnamed.is_swap(0));
     }
 }

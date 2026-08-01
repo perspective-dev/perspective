@@ -16,6 +16,11 @@ use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter};
 use ts_rs::TS;
 
+/// The `style` family of a numeric column's `number_format` — serialized
+/// FLATTENED into [`CustomNumberFormatConfig`]'s object, discriminated by
+/// the `style` key (`"decimal"` default, `"currency"` + `currency`/
+/// `currencyDisplay`/`currencySign`, `"percent"`, `"unit"` + `unit`/
+/// `unitDisplay`), mirroring `Intl.NumberFormat` options.
 #[derive(Serialize, Deserialize, Default, Debug, PartialEq, Clone, TS)]
 #[serde(rename_all = "camelCase", tag = "style")]
 pub enum NumberFormatStyle {
@@ -127,6 +132,11 @@ pub enum TrailingZeroDisplay {
     StripIfInteger,
 }
 
+/// The `notation` family of a numeric column's `number_format` —
+/// serialized FLATTENED into [`CustomNumberFormatConfig`]'s object,
+/// discriminated by the `notation` key (`"standard"` default,
+/// `"scientific"`, `"engineering"`, `"compact"` + `compactDisplay`),
+/// mirroring `Intl.NumberFormat` options.
 #[derive(Serialize, Deserialize, Default, Debug, PartialEq, Clone, TS)]
 #[serde(rename_all = "camelCase", tag = "notation")]
 pub enum Notation {
@@ -169,6 +179,14 @@ pub enum SignDisplay {
     Never,
 }
 
+/// A numeric column's `number_format` (`columns_config` value) —
+/// `Intl.NumberFormat`-shaped options, written by the Style tab's number
+/// format editor and read by `createNumberFormatter`. The `style` and
+/// `notation` families ([`NumberFormatStyle`] / [`Notation`]) are serde-
+/// FLATTENED into this object but `#[ts(skip)]`'d (ts-rs cannot flatten
+/// `Option<enum>`) — the package's `NumberFormatConfig` re-composes the
+/// full wire type as `CustomNumberFormatConfig & Partial<NumberFormatStyle>
+/// & Partial<Notation>` (see `column-format.ts`).
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, Clone, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CustomNumberFormatConfig {
@@ -181,33 +199,42 @@ pub struct CustomNumberFormatConfig {
     // these min/max props can all be specified but it results in possible conflicts
     // may consider making them distinct options
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<_>")]
     pub minimum_integer_digits: Option<f64>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<_>")]
     pub minimum_fraction_digits: Option<f64>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<_>")]
     pub maximum_fraction_digits: Option<f64>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<_>")]
     pub minimum_significant_digits: Option<f64>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<_>")]
     pub maximum_significant_digits: Option<f64>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<_>")]
     pub rounding_priority: Option<RoundingPriority>,
 
     // specific values https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat/NumberFormat#roundingincrement
     // Only available with automatic rounding priority
     // Cannot be mixed with sigfig rounding. (Does this mean max/min sigfig must be unset?)
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<_>")]
     pub rounding_increment: Option<f64>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<_>")]
     pub rounding_mode: Option<RoundingMode>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<_>")]
     pub trailing_zero_display: Option<TrailingZeroDisplay>,
 
     #[serde(flatten)]
@@ -215,10 +242,16 @@ pub struct CustomNumberFormatConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub _notation: Option<Notation>,
 
+    /// NOTE (audit 2026-08-05): serialized values are the STRINGS
+    /// `"always"`/`"auto"`/`"min2"` or the untagged BOOLEAN `false` —
+    /// the former hand-written TS `useGrouping?: boolean` was wrong for
+    /// the string cases.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<_>")]
     pub use_grouping: Option<UseGrouping>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<_>")]
     pub sign_display: Option<SignDisplay>,
 }
 

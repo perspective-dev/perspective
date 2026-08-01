@@ -1,11 +1,33 @@
-# `PerspectiveWidget` for JupyterLab
+# `PerspectiveWidget` for notebooks
 
 Building on top of the API provided by `perspective.Table`, the
-`PerspectiveWidget` is a JupyterLab plugin that offers the entire functionality
-of Perspective within the Jupyter environment. It supports the same API
-semantics of `<perspective-viewer>`, along with the additional data types
-supported by `perspective.Table`. `PerspectiveWidget` takes keyword arguments
-for the managed `View`:
+`PerspectiveWidget` offers the entire functionality of Perspective within a
+notebook environment. It supports the same API semantics of
+`<perspective-viewer>`, along with the additional data types supported by
+`perspective.Table`.
+
+## Installation
+
+`PerspectiveWidget` is an [AnyWidget](https://anywidget.dev), shipped as a
+prebuilt bundle inside the `perspective-python` wheel. There is no separate
+labextension to install or version-match — install the `jupyter` extra, which
+adds the `anywidget` dependency:
+
+```bash
+pip install "perspective-python[jupyter]"
+```
+
+The same wheel works in JupyterLab, classic Jupyter Notebook, VSCode
+notebooks, Google Colab and Marimo.
+
+<div class="warning">The <code>@perspective-dev/jupyterlab</code> package is
+now <em>optional</em> and no longer ships the widget. It provides only the
+"Open With &rarr; Perspective" file renderers for <code>csv</code>,
+<code>json</code> and <code>arrow</code> files in JupyterLab.</div>
+
+## Usage
+
+`PerspectiveWidget` takes keyword arguments for the managed `View`:
 
 ```python
 from perspective.widget import PerspectiveWidget
@@ -51,11 +73,16 @@ PerspectiveWidget(table)
 Element, and has similar `save()` and `restore()` methods that
 serialize/deserialize UI state for the widget.
 
-<!--
 ## `PerspectiveRenderer`
 
-Perspective also exposes a JS-only `mimerender-extension`. This lets you view
-`csv`, `json`, and `arrow` files directly from the file browser. You can see
-this by right clicking one of these files and `Open With->CSVPerspective` (or
-`JSONPerspective` or `ArrowPerspective`). Perspective will also install itself
-as the default handler for opening `.arrow` files. -->
+The optional `@perspective-dev/jupyterlab` package exposes a JS-only
+`mimerender-extension`. This lets you view `csv`, `json`, and `arrow` files
+directly from the JupyterLab file browser — right-click one of these files and
+choose `Open With → Perspective`.
+
+```bash
+jupyter labextension install @perspective-dev/jupyterlab
+```
+
+This package is independent of `PerspectiveWidget`; install it only if you
+want the file renderers.

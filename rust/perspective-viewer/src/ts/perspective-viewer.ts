@@ -35,6 +35,8 @@ import "regular-layout";
 
 export { IPerspectiveViewerPlugin } from "./plugin";
 export { HTMLPerspectiveViewerPluginElement } from "./plugin";
+export { providers } from "./providers";
+export type { AgentProviderPreset } from "./providers";
 
 export {
     createNumberFormatter,

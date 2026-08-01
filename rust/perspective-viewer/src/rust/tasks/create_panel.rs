@@ -69,13 +69,23 @@ fn wire_panel_render_sub(session: &Session, renderer: &Renderer) -> Subscription
     })
 }
 
-/// Create a new independent panel (own `Session` + `Renderer` + id) from a
-/// `ViewerConfigUpdate`, mount and draw it, and return its id. Shared by
-/// `addPanel`, whole-element `restore`, and `restorePanel`'s create-if-missing
-/// path. `id` is the panel's id — provided when restoring into a specific named
-/// slot, or `None` to generate a fresh one. `settings`/`theme` are stripped
-/// (element-level, not per-panel) and `client` — or the element's default
-/// client when `None` — is bound so the config's `table` resolves against it.
+/// Create a new independent panel (own `Session` + `Renderer` + id) and
+/// restore `update` into it. Shared by `addPanel`, `restore`'s
+/// create-if-missing upsert, and `restorePanel`. `id` is the panel's id —
+/// provided when restoring into a specific named slot, or `None` to
+/// generate a fresh one. `theme` is stripped (element-level, not
+/// per-panel) and `client` — or the element's default client when `None` —
+/// is bound so the config's `table` resolves against it.
+///
+/// A `table` is OPTIONAL here: an update with none creates a deferred
+/// panel that a later `load()` binds, which is the pre-existing
+/// `restore`-then-`load` contract and the same state the reserved
+/// `load()` path produces. The routes where a table-less panel WOULD be
+/// permanently blank require one in their own argument types instead —
+/// `addPanel`'s [`ViewerConfigInitial`], `WorkspaceConfigUpdate`'s
+/// `panels` entries, and the agent's `add_panel` — so the guarantee sits
+/// at the boundary that owns it rather than here, which would sweep
+/// `restore`'s patch in with them.
 pub(crate) async fn create_panel(
     elem: &HtmlElement,
     presentation: &Presentation,
@@ -128,9 +138,9 @@ pub(crate) async fn create_panel(
         &renderer,
         presentation,
         workspace,
-        None,
         RestoreMode::Fresh,
         update,
+        crate::tasks::RestoreErrors::Publish,
     )
     .await;
 
