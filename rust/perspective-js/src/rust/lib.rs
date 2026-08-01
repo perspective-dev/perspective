@@ -64,6 +64,9 @@ export type * from "../../src/ts/ts-rs/ViewConfig.d.ts";
 export type * from "../../src/ts/ts-rs/JoinOptions.ts";
 export type * from "../../src/ts/ts-rs/JoinType.ts";
 export type * from "../../src/ts/ts-rs/TypedArrayWindow.ts";
+export type * from "../../src/ts/ts-rs/Features.ts";
+export type * from "../../src/ts/ts-rs/AggSpec.ts";
+export type * from "../../src/ts/ts-rs/WindowAggregate.ts";
 
 import type {ColumnWindow} from "../../src/ts/ts-rs/ColumnWindow.d.ts";
 import type {ColumnType} from "../../src/ts/ts-rs/ColumnType.d.ts";
@@ -78,6 +81,9 @@ import type {OnUpdateOptions} from "../../src/ts/ts-rs/OnUpdateOptions.d.ts";
 import type {UpdateOptions} from "../../src/ts/ts-rs/UpdateOptions.d.ts";
 import type {DeleteOptions} from "../../src/ts/ts-rs/DeleteOptions.d.ts";
 import type {SystemInfo} from "../../src/ts/ts-rs/SystemInfo.d.ts";
+import type {ViewConfig} from "../../src/ts/ts-rs/ViewConfig.d.ts";
+import type {Scalar} from "../../src/ts/ts-rs/Scalar.d.ts";
+import type {Features} from "../../src/ts/ts-rs/Features.ts";
 "#;
 
 #[cfg(feature = "export-init")]

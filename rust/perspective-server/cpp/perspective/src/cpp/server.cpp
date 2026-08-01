@@ -107,7 +107,9 @@ make_context(
     auto sortspec = view_config->get_sortspec();
     auto expressions = view_config->get_used_expressions();
 
-    auto cfg = t_config(columns, fterm, filter_op, expressions);
+    auto cfg = t_config(
+        columns, fterm, filter_op, expressions, view_config->get_windows()
+    );
     cfg.set_backing_store(table->get_backing_store());
     auto ctx0 = std::make_shared<t_ctx0>(*schema, cfg);
     ctx0->init();
@@ -140,7 +142,14 @@ make_context(
     auto row_pivot_depth = view_config->get_row_pivot_depth();
     auto expressions = view_config->get_used_expressions();
 
-    auto cfg = t_config(row_pivots, aggspecs, fterm, filter_op, expressions);
+    auto cfg = t_config(
+        row_pivots,
+        aggspecs,
+        fterm,
+        filter_op,
+        expressions,
+        view_config->get_windows()
+    );
     cfg.set_backing_store(table->get_backing_store());
     auto ctx1 = std::make_shared<t_ctx1>(*schema, cfg);
 
@@ -199,7 +208,8 @@ make_context(
         fterm,
         filter_op,
         expressions,
-        column_only
+        column_only,
+        view_config->get_windows()
     );
     cfg.set_backing_store(table->get_backing_store());
     auto ctx2 = std::make_shared<t_ctx2>(*schema, cfg);
@@ -1410,6 +1420,36 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             features->set_sort(true);
             features->set_on_update(true);
             features->set_expressions(true);
+
+            proto::GetFeaturesResp_WindowAggregateOptions numeric_aggs;
+            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_SUM);
+            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_AVG);
+            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_COUNT);
+            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_MIN);
+            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_MAX);
+            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_STDDEV);
+            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_VAR);
+            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_LAG);
+            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_LEAD);
+            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_DIFF);
+            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_RATE);
+            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_EMA);
+
+            proto::GetFeaturesResp_WindowAggregateOptions any_aggs;
+            any_aggs.add_options(proto::WINDOW_AGGREGATE_COUNT);
+            any_aggs.add_options(proto::WINDOW_AGGREGATE_MIN);
+            any_aggs.add_options(proto::WINDOW_AGGREGATE_MAX);
+            any_aggs.add_options(proto::WINDOW_AGGREGATE_LAG);
+            any_aggs.add_options(proto::WINDOW_AGGREGATE_LEAD);
+
+            auto& window_aggs = *features->mutable_window_aggregates();
+            window_aggs[proto::ColumnType::INTEGER] = numeric_aggs;
+            window_aggs[proto::ColumnType::FLOAT] = std::move(numeric_aggs);
+            window_aggs[proto::ColumnType::STRING] = any_aggs;
+            window_aggs[proto::ColumnType::DATE] = any_aggs;
+            window_aggs[proto::ColumnType::DATETIME] = any_aggs;
+            window_aggs[proto::ColumnType::BOOLEAN] = std::move(any_aggs);
+
             features->add_group_rollup_mode(proto::GroupRollupMode::ROLLUP);
             features->add_group_rollup_mode(proto::GroupRollupMode::FLAT);
             features->add_group_rollup_mode(proto::GroupRollupMode::TOTAL);
@@ -2148,6 +2188,252 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 ));
             }
 
+            std::vector<t_window_spec> windows;
+            windows.reserve(cfg.windows_size());
+            const t_schema& table_schema = table->get_schema();
+
+            // `windows` is a proto map keyed by output alias; iterate in
+            // sorted-name order so output column registration (and thus
+            // any error precedence) is deterministic.
+            std::vector<std::string> window_names;
+            window_names.reserve(cfg.windows_size());
+            for (const auto& it : cfg.windows()) {
+                window_names.push_back(it.first);
+            }
+            std::sort(window_names.begin(), window_names.end());
+            for (const auto& name : window_names) {
+                const auto& w = cfg.windows().at(name);
+                if (name.empty()) {
+                    PSP_COMPLAIN_AND_ABORT("Window `name` must not be empty");
+                }
+
+                if (schema->has_column(name)) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Window `name` collides with an existing column: "
+                        + name
+                    );
+                }
+
+                if (!schema->has_column(w.source())) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Window `source` column not found: " + w.source()
+                    );
+                }
+
+                // `order_by`/`partition_by` must be real `Table` columns -
+                // the window engine reads them from the gnode master table,
+                // where expression aliases do not exist. An OMITTED
+                // `order_by` takes natural (primary key) order.
+                if (w.has_order_by()
+                    && !table_schema.has_column(w.order_by().column())) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Window `order_by` must be a `Table` column: "
+                        + w.order_by().column()
+                    );
+                }
+
+                for (const auto& p : w.partition_by()) {
+                    if (!table_schema.has_column(p)) {
+                        PSP_COMPLAIN_AND_ABORT(
+                            "Window `partition_by` must be a `Table` column: "
+                            + p
+                        );
+                    }
+                }
+
+                t_window_op op = t_window_op::WINDOW_OP_SUM;
+                switch (w.op()) {
+                    case proto::WINDOW_AGGREGATE_SUM:
+                        op = t_window_op::WINDOW_OP_SUM;
+                        break;
+                    case proto::WINDOW_AGGREGATE_AVG:
+                        op = t_window_op::WINDOW_OP_AVG;
+                        break;
+                    case proto::WINDOW_AGGREGATE_COUNT:
+                        op = t_window_op::WINDOW_OP_COUNT;
+                        break;
+                    case proto::WINDOW_AGGREGATE_MIN:
+                        op = t_window_op::WINDOW_OP_MIN;
+                        break;
+                    case proto::WINDOW_AGGREGATE_MAX:
+                        op = t_window_op::WINDOW_OP_MAX;
+                        break;
+                    case proto::WINDOW_AGGREGATE_STDDEV:
+                        op = t_window_op::WINDOW_OP_STDDEV;
+                        break;
+                    case proto::WINDOW_AGGREGATE_VAR:
+                        op = t_window_op::WINDOW_OP_VAR;
+                        break;
+                    case proto::WINDOW_AGGREGATE_LAG:
+                        op = t_window_op::WINDOW_OP_LAG;
+                        break;
+                    case proto::WINDOW_AGGREGATE_LEAD:
+                        op = t_window_op::WINDOW_OP_LEAD;
+                        break;
+                    case proto::WINDOW_AGGREGATE_DIFF:
+                        op = t_window_op::WINDOW_OP_DIFF;
+                        break;
+                    case proto::WINDOW_AGGREGATE_RATE:
+                        op = t_window_op::WINDOW_OP_RATE;
+                        break;
+                    case proto::WINDOW_AGGREGATE_EMA:
+                        op = t_window_op::WINDOW_OP_EMA;
+                        break;
+                    default:
+                        PSP_COMPLAIN_AND_ABORT(
+                            "Window `op` not implemented in this build"
+                        );
+                }
+
+                // An OMITTED frame means cumulative for aggregating
+                // ops - the initializer below IS that default.
+                t_window_frame_type frame_type =
+                    t_window_frame_type::WINDOW_FRAME_CUMULATIVE;
+                t_uindex frame_rows = 0;
+                double frame_range = 0;
+                bool has_frame = true;
+                switch (w.frame_case()) {
+                    case proto::WindowSpec::kRows:
+                        frame_type = t_window_frame_type::WINDOW_FRAME_ROWS;
+                        frame_rows = w.rows();
+                        break;
+                    case proto::WindowSpec::kCumulative:
+                        frame_type =
+                            t_window_frame_type::WINDOW_FRAME_CUMULATIVE;
+                        break;
+                    case proto::WindowSpec::kRange: {
+                        frame_type = t_window_frame_type::WINDOW_FRAME_RANGE;
+                        frame_range = w.range();
+                        if (!(frame_range > 0)) {
+                            PSP_COMPLAIN_AND_ABORT(
+                                "Window `range` must be a positive interval"
+                            );
+                        }
+
+                        // Interval arithmetic is defined on the order
+                        // column's raw units (ms for datetime, days for
+                        // date) - the natural-order fallback has no units,
+                        // so `range` requires an explicit `order_by`.
+                        if (!w.has_order_by()) {
+                            PSP_COMPLAIN_AND_ABORT(
+                                "Window `range` frames require an explicit "
+                                "`order_by`"
+                            );
+                        }
+
+                        t_dtype order_dtype =
+                            table_schema.get_dtype(w.order_by().column());
+                        switch (order_dtype) {
+                            case DTYPE_INT8:
+                            case DTYPE_INT16:
+                            case DTYPE_INT32:
+                            case DTYPE_INT64:
+                            case DTYPE_UINT8:
+                            case DTYPE_UINT16:
+                            case DTYPE_UINT32:
+                            case DTYPE_UINT64:
+                            case DTYPE_FLOAT32:
+                            case DTYPE_FLOAT64:
+                            case DTYPE_TIME:
+                            case DTYPE_DATE:
+                                break;
+                            default:
+                                PSP_COMPLAIN_AND_ABORT(
+                                    "Window `range` frames require a numeric "
+                                    "or temporal `order_by` column: "
+                                    + w.order_by().column()
+                                );
+                        }
+                    } break;
+                    default:
+                        has_frame = false;
+                        break;
+                }
+
+                switch (op) {
+                    case t_window_op::WINDOW_OP_LAG:
+                    case t_window_op::WINDOW_OP_LEAD:
+                    case t_window_op::WINDOW_OP_DIFF:
+                        if (has_frame) {
+                            PSP_COMPLAIN_AND_ABORT(
+                                "Window `frame` is not applicable to "
+                                "`lag`/`lead`/`diff` (use `offset`)"
+                            );
+                        }
+                        break;
+                    case t_window_op::WINDOW_OP_RATE:
+                        if (frame_type
+                                != t_window_frame_type::WINDOW_FRAME_RANGE
+                            || !has_frame) {
+                            PSP_COMPLAIN_AND_ABORT(
+                                "Window `rate` requires a `range` frame"
+                            );
+                        }
+                        break;
+                    case t_window_op::WINDOW_OP_EMA:
+                        if (has_frame
+                            && frame_type
+                                != t_window_frame_type::
+                                    WINDOW_FRAME_CUMULATIVE) {
+                            PSP_COMPLAIN_AND_ABORT(
+                                "Window `ema` is cumulative; it does not "
+                                "accept a `rows` or `range` frame"
+                            );
+                        }
+
+                        if (!w.has_alpha() || !(w.alpha() > 0)
+                            || w.alpha() > 1) {
+                            PSP_COMPLAIN_AND_ABORT(
+                                "Window `ema` requires `alpha` in (0, 1]"
+                            );
+                        }
+                        break;
+                    default:
+                        break;
+                }
+
+                if (!t_window_engine::is_implemented(op, frame_type)) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Window op/frame combination not implemented"
+                    );
+                }
+
+                t_dtype source_dtype = schema->get_dtype(w.source());
+                t_dtype dtype =
+                    t_window_engine::resolve_dtype(op, source_dtype);
+                if (dtype == DTYPE_NONE) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Window op requires a numeric `source` column: "
+                        + w.source()
+                    );
+                }
+
+                t_window_spec spec;
+                spec.m_name = name;
+                spec.m_source = w.source();
+
+                // Empty `m_order_by` = natural (primary key) order; the
+                // engine's comparator degenerates to its pkey tiebreak when
+                // every order key is absent.
+                spec.m_order_by =
+                    w.has_order_by() ? w.order_by().column() : "";
+                spec.m_order_desc =
+                    w.has_order_by() && w.order_by().desc();
+                spec.m_partition_by = {
+                    w.partition_by().begin(), w.partition_by().end()
+                };
+                spec.m_op = op;
+                spec.m_frame_type = frame_type;
+                spec.m_frame_rows = frame_rows;
+                spec.m_frame_range = frame_range;
+                spec.m_offset = w.has_offset() ? w.offset() : 1;
+                spec.m_alpha = w.has_alpha() ? w.alpha() : 0;
+                spec.m_dtype = dtype;
+
+                schema->add_column(spec.m_name, dtype);
+                windows.push_back(std::move(spec));
+            }
+
             t_vocab vocab;
             vocab.init(false);
             std::vector<
@@ -2253,6 +2539,9 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 for (const auto& f : expressions) {
                     columns.push_back(f->get_expression_alias());
                 }
+                for (const auto& w : windows) {
+                    columns.push_back(w.m_name);
+                }
             }
 
             LOG_DEBUG(
@@ -2301,7 +2590,8 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 filter_op,
                 column_only,
                 leaves_only,
-                total_only
+                total_only,
+                windows
             );
             config->init(schema);
 
@@ -2326,7 +2616,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             bool is_unit_context = table->get_index().empty() && sides == 0
                 && row_pivots.empty() && column_pivots.empty()
                 && aggregates.empty() && columns.empty() && sort_str.empty()
-                && cfg.expressions().empty();
+                && cfg.expressions().empty() && cfg.windows().empty();
 
             std::shared_ptr<ErasedView> erased_view;
 

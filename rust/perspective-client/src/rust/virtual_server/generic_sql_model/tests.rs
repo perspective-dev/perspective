@@ -13,7 +13,10 @@
 use std::collections::HashMap;
 
 use super::*;
-use crate::config::{Aggregate, GroupRollupMode};
+use crate::config::{
+    Aggregate, GroupRollupMode, WindowAggregate, WindowFrame, WindowSort, WindowSortDir,
+    WindowSpec, Windows,
+};
 
 #[test]
 fn test_get_hosted_tables() {
@@ -859,4 +862,225 @@ fn test_table_make_view_total_with_split_by() {
         "should not contain ROW_NUMBER: {}",
         sql
     );
+}
+
+fn window_spec(
+    name: &str,
+    op: WindowAggregate,
+    frame: Option<WindowFrame>,
+) -> (String, WindowSpec) {
+    (name.to_string(), WindowSpec {
+        column: "price".to_string(),
+        aggregate: op,
+        partition_by: vec!["sym".to_string()],
+        order_by: Some(WindowSort("t".to_string(), WindowSortDir::Asc)),
+        frame,
+        offset: None,
+        alpha: None,
+    })
+}
+
+#[test]
+fn test_table_make_view_window_natural_order() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("t".to_string()), Some("cumsum".to_string())];
+    let (name, mut spec) = window_spec(
+        "cumsum",
+        WindowAggregate::Sum,
+        Some(WindowFrame::Cumulative),
+    );
+    spec.order_by = None;
+    config.windows = Windows(HashMap::from([(name, spec)]));
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    // An omitted `order_by` takes the model's natural order - the same
+    // `rowid` identity unsorted view results are ordered by.
+    assert!(
+        sql.contains("PARTITION BY \"sym\" ORDER BY rowid ASC"),
+        "natural order in OVER clause: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_window_range_requires_order_by() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("rs".to_string())];
+    let (name, mut spec) = window_spec("rs", WindowAggregate::Sum, Some(WindowFrame::Range(10.0)));
+    spec.order_by = None;
+    config.windows = Windows(HashMap::from([(name, spec)]));
+    let result = builder.table_make_view("source_table", "dest_view", &config);
+    assert!(matches!(
+        result,
+        Err(GenericSQLError::UnsupportedOperation(_))
+    ));
+}
+
+#[test]
+fn test_table_make_view_window_order_desc() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("t".to_string()), Some("cumsum".to_string())];
+    let (name, mut spec) = window_spec(
+        "cumsum",
+        WindowAggregate::Sum,
+        Some(WindowFrame::Cumulative),
+    );
+    spec.order_by.as_mut().unwrap().1 = WindowSortDir::Desc;
+    config.windows = Windows(HashMap::from([(name, spec)]));
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(
+        sql.contains("ORDER BY \"t\" DESC NULLS FIRST"),
+        "desc order in OVER clause: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_window_cumulative_sum() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("t".to_string()), Some("cumsum".to_string())];
+    config.windows = Windows(HashMap::from([window_spec(
+        "cumsum",
+        WindowAggregate::Sum,
+        Some(WindowFrame::Cumulative),
+    )]));
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(sql.contains(
+        "SUM(\"price\") OVER (PARTITION BY \"sym\" ORDER BY \"t\" ASC NULLS FIRST ROWS BETWEEN \
+         UNBOUNDED PRECEDING AND CURRENT ROW) AS \"cumsum\""
+    ));
+    assert!(sql.contains("FROM (SELECT *,"));
+    assert!(sql.contains("FROM source_table) AS __PSP_WINDOW_SRC__"));
+}
+
+#[test]
+fn test_table_make_view_window_rows_and_range_frames() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("sma".to_string()), Some("rsum".to_string())];
+    config.windows = Windows(HashMap::from([
+        window_spec("sma", WindowAggregate::Avg, Some(WindowFrame::Rows(20))),
+        window_spec(
+            "rsum",
+            WindowAggregate::Sum,
+            Some(WindowFrame::Range(100.0)),
+        ),
+    ]));
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(sql.contains("AVG(\"price\") OVER"));
+    assert!(sql.contains("ROWS BETWEEN 20 PRECEDING AND CURRENT ROW"));
+    assert!(sql.contains("RANGE BETWEEN 100 PRECEDING AND CURRENT ROW"));
+}
+
+#[test]
+fn test_table_make_view_window_lag_diff() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("lg".to_string()), Some("df".to_string())];
+    let (lag_name, mut lag) = window_spec("lg", WindowAggregate::Lag, None);
+    lag.offset = Some(2);
+    config.windows = Windows(HashMap::from([
+        (lag_name, lag),
+        window_spec("df", WindowAggregate::Diff, None),
+    ]));
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(sql.contains(
+        "LAG(\"price\", 2) OVER (PARTITION BY \"sym\" ORDER BY \"t\" ASC NULLS FIRST) AS \"lg\""
+    ));
+    assert!(sql.contains("(\"price\" - LAG(\"price\", 1) OVER"));
+}
+
+#[test]
+fn test_table_make_view_window_rate() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("rt".to_string())];
+    config.windows = Windows(HashMap::from([window_spec(
+        "rt",
+        WindowAggregate::Rate,
+        Some(WindowFrame::Range(10.0)),
+    )]));
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(sql.contains("FIRST_VALUE(\"price\") OVER"));
+    assert!(sql.contains("NULLIF(CAST(\"t\" AS DOUBLE)"));
+    assert!(sql.contains("RANGE BETWEEN 10 PRECEDING AND CURRENT ROW"));
+}
+
+#[test]
+fn test_table_make_view_window_over_expression_source() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("w".to_string())];
+    config.expressions = crate::config::Expressions(HashMap::from([(
+        "double_price".to_string(),
+        "\"price\" * 2".to_string(),
+    )]));
+    let (w_name, mut w) = window_spec("w", WindowAggregate::Sum, Some(WindowFrame::Cumulative));
+    w.column = "double_price".to_string();
+    config.windows = Windows(HashMap::from([(w_name, w)]));
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(sql.contains("SUM(\"price\" * 2) OVER"));
+}
+
+#[test]
+fn test_table_make_view_window_group_by_over_window_column() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("cumsum".to_string())];
+    config.group_by = vec!["sym".to_string()];
+    config.aggregates = HashMap::from([(
+        "cumsum".to_string(),
+        Aggregate::SingleAggregate("max".to_string()),
+    )]);
+    config.windows = Windows(HashMap::from([window_spec(
+        "cumsum",
+        WindowAggregate::Sum,
+        Some(WindowFrame::Cumulative),
+    )]));
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap();
+
+    assert!(sql.contains("GROUP BY"));
+    assert!(sql.contains("__PSP_WINDOW_SRC__"));
+    assert!(sql.contains("max(\"cumsum\")"));
+}
+
+#[test]
+fn test_table_make_view_window_ema_unsupported() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("e".to_string())];
+    let (w_name, mut w) = window_spec("e", WindowAggregate::Ema, None);
+    w.alpha = Some(0.5);
+    config.windows = Windows(HashMap::from([(w_name, w)]));
+    let result = builder.table_make_view("source_table", "dest_view", &config);
+    assert!(matches!(
+        result,
+        Err(GenericSQLError::UnsupportedOperation(_))
+    ));
 }

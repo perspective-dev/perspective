@@ -68,6 +68,30 @@ STRING_AGGS = [
     "string_agg",
 ]
 
+# The window aggregates the SQL translation supports, per source column
+# type (`ema` is recursive - no SQL window equivalent).
+WINDOW_AGGREGATES = [
+    "sum",
+    "avg",
+    "count",
+    "min",
+    "max",
+    "stddev",
+    "var",
+    "lag",
+    "lead",
+    "diff",
+    "rate",
+]
+
+WINDOW_AGGREGATES_ANY = [
+    "count",
+    "min",
+    "max",
+    "lag",
+    "lead",
+]
+
 FILTER_OPS = [
     "==",
     "!=",
@@ -129,6 +153,14 @@ class DuckDBVirtualServerHandler(VirtualServerHandler):
                 "boolean": STRING_AGGS,
                 "date": STRING_AGGS,
                 "datetime": STRING_AGGS,
+            },
+            "window_aggregates": {
+                "integer": WINDOW_AGGREGATES,
+                "float": WINDOW_AGGREGATES,
+                "string": WINDOW_AGGREGATES_ANY,
+                "boolean": WINDOW_AGGREGATES_ANY,
+                "date": WINDOW_AGGREGATES_ANY,
+                "datetime": WINDOW_AGGREGATES_ANY,
             },
         }
 

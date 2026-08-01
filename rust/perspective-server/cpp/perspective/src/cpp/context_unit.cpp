@@ -77,6 +77,11 @@ t_ctxunit::notify(
     const t_column* pkey_col = pkey_sptr.get();
     const t_column* op_col = op_sptr.get();
 
+    // A unit context has no derived columns, so rows appended by the window
+    // widening pass (for OTHER contexts on this gnode) are pure no-ops here
+    // and must not enter the row delta.
+    const t_column* widened_col = existed._get_const_column("psp_widened");
+
     bool delete_encountered = false;
 
     for (t_uindex idx = 0; idx < nrecs; ++idx) {
@@ -97,8 +102,11 @@ t_ctxunit::notify(
             } break;
         }
 
-        // add the pkey for row delta
-        add_delta_pkey(pkey);
+        // add the pkey for row delta (value read: `get_nth` never returns
+        // nullptr in bounds; the column is written for every row)
+        if (!*(widened_col->get_nth<bool>(idx))) {
+            add_delta_pkey(pkey);
+        }
     }
 
     m_has_delta = !m_delta_pkeys.empty() || delete_encountered;

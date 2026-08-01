@@ -24,18 +24,20 @@ t_config::t_config(
     const std::vector<std::string>& detail_columns,
     const std::vector<t_fterm>& fterms,
     t_filter_op combiner,
-    const std::vector<std::shared_ptr<t_computed_expression>>& expressions
+    const std::vector<std::shared_ptr<t_computed_expression>>& expressions,
+    const std::vector<t_window_spec>& windows
 ) :
     m_detail_columns(detail_columns),
     m_fterms(fterms),
     m_expressions(expressions),
+    m_windows(windows),
     m_combiner(combiner),
     m_fmode(FMODE_SIMPLE_CLAUSES) {
     setup(m_detail_columns);
     m_is_trivial_config = m_row_pivots.empty() && m_col_pivots.empty()
         && m_sortby.empty() && m_sortspecs.empty() && m_col_sortspecs.empty()
         && m_detail_columns.empty() && m_fterms.empty()
-        && m_expressions.empty();
+        && m_expressions.empty() && m_windows.empty();
 }
 
 // t_ctx1
@@ -44,11 +46,13 @@ t_config::t_config(
     const std::vector<t_aggspec>& aggregates,
     const std::vector<t_fterm>& fterms,
     t_filter_op combiner,
-    const std::vector<std::shared_ptr<t_computed_expression>>& expressions
+    const std::vector<std::shared_ptr<t_computed_expression>>& expressions,
+    const std::vector<t_window_spec>& windows
 ) :
     m_aggregates(aggregates),
     m_fterms(fterms),
     m_expressions(expressions),
+    m_windows(windows),
     m_combiner(combiner),
     m_is_trivial_config(false),
     m_totals(TOTALS_BEFORE),
@@ -70,11 +74,13 @@ t_config::t_config(
     const std::vector<t_fterm>& fterms,
     t_filter_op combiner,
     const std::vector<std::shared_ptr<t_computed_expression>>& expressions,
-    bool column_only
+    bool column_only,
+    const std::vector<t_window_spec>& windows
 ) :
     m_aggregates(aggregates),
     m_fterms(fterms),
     m_expressions(expressions),
+    m_windows(windows),
     m_combiner(combiner),
     m_column_only(column_only),
     m_is_trivial_config(false),
@@ -423,6 +429,11 @@ t_config::get_fterms() const {
 std::vector<std::shared_ptr<t_computed_expression>>
 t_config::get_expressions() const {
     return m_expressions;
+}
+
+const std::vector<t_window_spec>&
+t_config::get_windows() const {
+    return m_windows;
 }
 
 t_filter_op

@@ -20,6 +20,7 @@ use super::aggregates::*;
 use super::expressions::*;
 use super::filters::*;
 use super::sort::*;
+use super::windows::*;
 use crate::proto;
 use crate::proto::columns_update;
 
@@ -91,6 +92,10 @@ pub struct ViewConfig {
 
     #[serde(default)]
     pub expressions: Expressions,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_default_value")]
+    pub windows: Windows,
 
     #[serde(default)]
     pub columns: Vec<Option<String>>,
@@ -187,6 +192,16 @@ pub struct ViewConfigUpdate {
     #[ts(optional)]
     pub expressions: Option<Expressions>,
 
+    /// The `windows` property declares ordered, partitioned rolling
+    /// computations (moving aggregates, cumulative sums) as _new_ columns
+    /// keyed by output alias (`{"name": {...spec}}`, symmetric with
+    /// `expressions`), analogous to SQL window functions. See
+    /// [`crate::config::WindowSpec`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[ts(optional)]
+    pub windows: Option<Windows>,
+
     /// Aggregates perform a calculation over an entire column, and are
     /// displayed when one or more [Group By](#group-by) are applied to the
     /// `View`. Aggregates can be specified by the user, or Perspective will
@@ -248,6 +263,13 @@ impl From<ViewConfigUpdate> for proto::ViewConfig {
                 .map(|x| x.into())
                 .collect(),
             expressions: value.expressions.unwrap_or_default().0,
+            windows: value
+                .windows
+                .unwrap_or_default()
+                .0
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
             aggregates: value
                 .aggregates
                 .unwrap_or_default()
@@ -290,6 +312,7 @@ impl From<ViewConfig> for ViewConfigUpdate {
             filter_op: Some(value.filter_op),
             sort: Some(value.sort),
             expressions: Some(value.expressions),
+            windows: Some(value.windows),
             aggregates: Some(value.aggregates),
             group_by_depth: value.group_by_depth,
             group_rollup_mode: Some(value.group_rollup_mode),
@@ -316,6 +339,13 @@ impl From<proto::ViewConfig> for ViewConfig {
                 .into(),
             sort: value.sort.into_iter().map(|x| x.into()).collect(),
             expressions: Expressions(value.expressions),
+            windows: Windows(
+                value
+                    .windows
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into()))
+                    .collect(),
+            ),
             aggregates: value
                 .aggregates
                 .into_iter()
@@ -342,6 +372,7 @@ impl From<ViewConfigUpdate> for ViewConfig {
             filter_op: value.filter_op.unwrap_or_default(),
             sort: value.sort.unwrap_or_default(),
             expressions: value.expressions.unwrap_or_default(),
+            windows: value.windows.unwrap_or_default(),
             aggregates: value.aggregates.unwrap_or_default(),
             group_by_depth: value.group_by_depth,
             group_rollup_mode: value.group_rollup_mode.unwrap_or_default(),
@@ -368,6 +399,13 @@ impl From<proto::ViewConfig> for ViewConfigUpdate {
             ),
             sort: Some(value.sort.into_iter().map(|x| x.into()).collect()),
             expressions: Some(Expressions(value.expressions)),
+            windows: Some(Windows(
+                value
+                    .windows
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into()))
+                    .collect(),
+            )),
             aggregates: Some(
                 value
                     .aggregates
@@ -434,6 +472,7 @@ impl ViewConfig {
         changed = Self::_apply(&mut self.sort, update.sort) || changed;
         changed = Self::_apply(&mut self.aggregates, update.aggregates) || changed;
         changed = Self::_apply(&mut self.expressions, update.expressions) || changed;
+        changed = Self::_apply(&mut self.windows, update.windows) || changed;
         changed = Self::_apply(&mut self.group_rollup_mode, update.group_rollup_mode) || changed;
         if self.group_rollup_mode == GroupRollupMode::Total && !self.group_by.is_empty() {
             tracing::info!("`total` incompatible with `group_by`");

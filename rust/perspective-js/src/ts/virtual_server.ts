@@ -10,10 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { ColumnType } from "./ts-rs/ColumnType.ts";
-import { ViewConfig } from "./ts-rs/ViewConfig.ts";
-import { ViewWindow } from "./ts-rs/ViewWindow.ts";
-
 import type * as perspective from "../../dist/wasm/perspective-js.js";
 
 /**
@@ -26,63 +22,29 @@ import type * as perspective from "../../dist/wasm/perspective-js.js";
  * - Implementing custom aggregation or transformation logic
  * - Creating data adapters without copying data into Perspective tables
  *
+ * The `VirtualServerHandler` interface and `Features` struct are declared
+ * in Rust alongside the bridge that invokes them (`perspective-js`'s
+ * `virtual_server.rs` and `perspective-client`'s `features.rs`
+ * respectively) and re-exported here. `ServerFeatures` is a legacy alias
+ * for `Features`.
+ *
  * @module virtual_server
  */
 
-export interface ServerFeatures {
-    expressions?: boolean;
-}
-
-/**
- * Handler interface that you implement to provide custom data sources.
- *
- * All methods will be called by the VirtualServer when handling protocol
- * messages from Perspective clients. Methods can return values directly or
- * return Promises for asynchronous operations (e.g., database queries).
- */
-export interface VirtualServerHandler {
-    getHostedTables(): string[] | Promise<string[]>;
-    tableSchema(
-        tableId: string,
-    ): Record<string, ColumnType> | Promise<Record<string, ColumnType>>;
-    tableSize(tableId: string): number | Promise<number>;
-    tableMakeView(
-        tableId: string,
-        viewId: string,
-        config: ViewConfig,
-    ): void | Promise<void>;
-    viewDelete(viewId: string): void | Promise<void>;
-    viewGetData(
-        viewId: string,
-        config: ViewConfig,
-        schema: Record<string, ColumnType>,
-        viewport: ViewWindow,
-        dataSlice: perspective.VirtualDataSlice,
-    ): void | Promise<void>;
-    viewSchema?(
-        viewId: string,
-        config?: ViewConfig,
-    ): Record<string, ColumnType> | Promise<Record<string, ColumnType>>;
-    viewSize?(viewId: string): number | Promise<number>;
-    tableValidateExpression?(
-        tableId: string,
-        expression: string,
-    ): ColumnType | Promise<ColumnType>;
-    viewGetMinMax?(
-        viewId: string,
-        columnName: string,
-        config: ViewConfig,
-    ): { min: any; max: any } | Promise<{ min: any; max: any }>;
-    getFeatures?(): ServerFeatures | Promise<ServerFeatures>;
-    makeTable?(
-        tableId: string,
-        data: string | Uint8Array,
-    ): void | Promise<void>;
-}
+// `Features` must re-export from the wasm `.d.ts` (NOT "./ts-rs/Features.ts")
+// - `perspective.browser.ts` star-exports both this module and the wasm
+// `.d.ts`, and star exports of the same name only merge when they resolve to
+// the same declaration.
+export type {
+    VirtualServerHandler,
+    VirtualHostedTable,
+    Features,
+    Features as ServerFeatures,
+} from "../../dist/wasm/perspective-js.js";
 
 export function createMessageHandler(
     mod: typeof perspective,
-    handler: VirtualServerHandler,
+    handler: perspective.VirtualServerHandler,
 ) {
     let virtualServer: perspective.VirtualServer;
     async function postMessage(port: MessagePort, msg: MessageEvent) {

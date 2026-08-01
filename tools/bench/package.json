@@ -15,6 +15,7 @@
     },
     "scripts": {
         "bench_js": "node --experimental-wasm-memory64 basic_suite.mjs",
+        "bench_windows": "node --experimental-wasm-memory64 windows_suite.mjs",
         "bench_python": "node --experimental-wasm-memory64 python_suite.mjs",
         "bench_charts": "node --experimental-wasm-memory64 charts_suite.mjs"
     },

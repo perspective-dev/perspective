@@ -30,7 +30,8 @@ t_view_config::t_view_config(
     std::string filter_op,
     bool column_only,
     bool leaves_only,
-    bool total_only
+    bool total_only,
+    const std::vector<t_window_spec>& windows
 ) :
     m_init(false),
     m_vocab(std::move(vocab)),
@@ -41,6 +42,7 @@ t_view_config::t_view_config(
     m_filter(filter),
     m_sort(sort),
     m_expressions(expressions),
+    m_windows(windows),
     m_row_pivot_depth(-1),
     m_column_pivot_depth(-1),
     m_filter_op(std::move(filter_op)),
@@ -143,6 +145,13 @@ t_view_config::get_used_expressions() {
 
     for (const auto& i : m_sort) {
         used_cols.insert(i[0]);
+    }
+
+    // A window's source expression must survive pruning even when the
+    // expression itself is not selected - the window reads it from the
+    // expression master table.
+    for (const auto& window : m_windows) {
+        used_cols.insert(window.m_source);
     }
 
     std::copy(
@@ -254,6 +263,12 @@ std::vector<std::shared_ptr<t_computed_expression>>
 t_view_config::get_expressions() const {
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
     return m_expressions;
+}
+
+const std::vector<t_window_spec>&
+t_view_config::get_windows() const {
+    PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+    return m_windows;
 }
 
 t_filter_op

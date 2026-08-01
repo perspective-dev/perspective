@@ -60,6 +60,7 @@ private:
     std::shared_ptr<t_stree> m_tree;
     std::vector<t_sortspec> m_sortby;
     std::shared_ptr<t_expression_tables> m_expression_tables;
+    std::shared_ptr<t_window_engine> m_window_engine;
     t_depth m_depth;
     bool m_depth_set;
     bool m_leaves_only = false;

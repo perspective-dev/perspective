@@ -60,6 +60,91 @@ export async function join_suite(perspective, metadata) {
     }
 }
 
+export async function window_suite(perspective, metadata) {
+    if (!check_version_gte(metadata.version, "5.0.0")) {
+        return;
+    }
+
+    async function before_all() {
+        const table = await perspective.table(new_superstore_table(metadata));
+        const view = await table.view();
+        const arrow = await view.to_arrow();
+        await view.delete();
+        await table.delete();
+        return { arrow };
+    }
+
+    const WINDOWS = {
+        cumsum: {
+            column: "Sales",
+            aggregate: "sum",
+            order_by: ["Row ID", "asc"],
+            partition_by: ["Region"],
+            cumulative: true,
+        },
+        sma20: {
+            column: "Sales",
+            aggregate: "avg",
+            order_by: ["Row ID", "asc"],
+            partition_by: ["Region"],
+            rows: 20,
+        },
+    };
+
+    await benchmark({
+        name: `.view({windows})`,
+        before_all,
+        metadata,
+        async before({ arrow }) {
+            return await perspective.table(arrow.slice());
+        },
+        async after(_, table, view) {
+            await view.delete();
+            await table.delete();
+        },
+        async test(_, table) {
+            const view = await table.view({
+                columns: ["Row ID", "cumsum", "sma20"],
+                windows: WINDOWS,
+            });
+
+            // Materialize so the master compute is actually included.
+            await view.to_columns();
+            return view;
+        },
+    });
+
+    await benchmark({
+        name: `table.update(arrow) with windows`,
+        before_all,
+        metadata,
+        async before({ arrow }) {
+            // Indexed by the unique "Row ID", so re-updating with the same
+            // arrow touches EVERY row - the worst case for the incremental
+            // window index maintenance path.
+            const table = await perspective.table(arrow.slice(), {
+                index: "Row ID",
+            });
+
+            const view = await table.view({
+                columns: ["Row ID", "cumsum", "sma20"],
+                windows: WINDOWS,
+            });
+
+            await view.to_columns();
+            return { table, view };
+        },
+        async after(_, { table, view }) {
+            await view.delete();
+            await table.delete();
+        },
+        async test({ arrow }, { table, view }) {
+            await table.update(arrow.slice());
+            await view.to_columns();
+        },
+    });
+}
+
 export async function to_data_suite(perspective, metadata) {
     async function before_all() {
         const table = await perspective.table(new_superstore_table(metadata));

@@ -178,6 +178,19 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     .insert(req.view_id.clone(), msg.entity_id.clone());
 
                 let mut config: ViewConfigUpdate = req.config.clone().unwrap_or_default().into();
+
+                // An UNORDERED store has no natural row order to fall back
+                // on, so every window must carry an explicit `order_by`.
+                if let Some(windows) = &config.windows
+                    && windows.values().any(|w| w.order_by.is_none())
+                    && self.handler.get_features().await?.unordered
+                {
+                    return Err(VirtualServerError::Other(
+                        "This data store is unordered - windows require an explicit `order_by`"
+                            .to_string(),
+                    ));
+                }
+
                 let bytes = respond!(msg, TableMakeViewResp {
                     view_id: self
                         .handler
@@ -394,7 +407,10 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     .await?;
 
                 let json_string = cols
-                    .render_to_columns_json(RowPathStyle::Sidecar)
+                    .render_to_columns_json(
+                        RowPathStyle::Sidecar,
+                        view_to_columns_string_req.id.unwrap_or_default(),
+                    )
                     .map_err(|e| VirtualServerError::Other(e.to_string()))?;
 
                 respond!(msg, ViewToColumnsStringResp { json_string })

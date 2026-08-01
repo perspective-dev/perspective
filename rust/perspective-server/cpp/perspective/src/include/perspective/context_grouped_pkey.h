@@ -76,6 +76,7 @@ private:
     t_depth m_depth;
     bool m_depth_set;
     std::shared_ptr<t_expression_tables> m_expression_tables;
+    std::shared_ptr<t_window_engine> m_window_engine;
 };
 
 typedef std::shared_ptr<t_ctx_grouped_pkey> t_ctx_grouped_pkey_sptr;

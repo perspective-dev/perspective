@@ -99,6 +99,7 @@ private:
     t_depth m_column_depth;
     bool m_column_depth_set;
     std::shared_ptr<t_expression_tables> m_expression_tables;
+    std::shared_ptr<t_window_engine> m_window_engine;
     bool m_leaves_only = false;
     bool m_total_only = false;
 };

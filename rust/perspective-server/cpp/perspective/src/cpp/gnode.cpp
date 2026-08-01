@@ -26,6 +26,7 @@
 #include <perspective/parallel_for.h>
 #include <perspective/pyutils.h>
 
+#include <tsl/hopscotch_set.h>
 #include <algorithm>
 #include <utility>
 
@@ -77,9 +78,14 @@ t_gnode::t_gnode(
     }
 
     t_schema trans_schema(m_output_schema.columns(), trans_types);
+    // `psp_widened` marks rows appended by the window widening pass
+    // (`_process_windows`) - synthesized "unchanged" rows outside the update
+    // batch. Contexts exclude them from row deltas unless one of their
+    // derived (expression/window) columns actually transitioned. Batch rows
+    // never write this column, so its slot validity IS the mark.
     t_schema existed_schema(
-        std::vector<std::string>{"psp_existed"},
-        std::vector<t_dtype>{DTYPE_BOOL}
+        std::vector<std::string>{"psp_existed", "psp_widened"},
+        std::vector<t_dtype>{DTYPE_BOOL, DTYPE_BOOL}
     );
 
     m_transitional_schemas = std::vector<t_schema>{
@@ -240,6 +246,15 @@ t_gnode::_process_mask_existed_rows(t_process_state& process_state) {
     t_column* existed_column =
         process_state.m_existed_data_table->_get_column("psp_existed");
 
+    // `psp_widened` must be written for EVERY batch row: transitional-table
+    // buffers are reused across updates and `t_lstore::clear` does not zero
+    // memory on WASM, so an unwritten slot could hold a stale mark from a
+    // prior update's widening pass. `get_nth` never returns nullptr in
+    // bounds - readers must test the VALUE, and the value must be
+    // deterministic.
+    t_column* widened_column =
+        process_state.m_existed_data_table->_get_column("psp_widened");
+
     for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
         t_tscalar pkey = pkey_col->get_scalar(idx);
         std::uint8_t op_ = process_state.m_op_base[idx];
@@ -260,12 +275,14 @@ t_gnode::_process_mask_existed_rows(t_process_state& process_state) {
                     row_pre_existed && !process_state.m_prev_pkey_eq_vec[idx];
                 mask.set(idx, true);
                 existed_column->set_nth(added_count, row_pre_existed);
+                widened_column->set_nth(added_count, false);
                 ++added_count;
             } break;
             case OP_DELETE: {
                 if (row_pre_existed) {
                     mask.set(idx, true);
                     existed_column->set_nth(added_count, row_pre_existed);
+                    widened_column->set_nth(added_count, false);
                     ++added_count;
                 } else {
                     mask.set(idx, false);
@@ -598,6 +615,24 @@ t_gnode::_process_table(t_uindex port_id) {
         PSP_GNODE_VERIFY_TABLE(updated_table);
     }
 #endif
+
+    // Window widening (WINDOW_FUNCTIONS_PLAN §2.3): must see the batch
+    // before contexts compute, and must run after the master update so new
+    // row locations are readable. `row_lookup` is aligned with the UNMASKED
+    // flattened - re-align it when the mask dropped rows, since the engine
+    // indexes it by masked row.
+    if (flattened_masked.get() == _process_state.m_flattened_data_table.get()) {
+        _process_windows(flattened_masked, row_lookup);
+    } else {
+        std::vector<t_rlookup> masked_lookup;
+        masked_lookup.reserve(flattened_masked->size());
+        for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
+            if (existed_mask.get(idx)) {
+                masked_lookup.push_back(row_lookup[idx]);
+            }
+        }
+        _process_windows(flattened_masked, masked_lookup);
+    }
 
     m_oports[PSP_PORT_FLATTENED]->set_table(flattened_masked);
 
@@ -1242,6 +1277,181 @@ t_gnode::_register_context(
         default: {
             PSP_COMPLAIN_AND_ABORT("Unexpected context type");
         } break;
+    }
+}
+
+void
+t_gnode::_process_windows(
+    const std::shared_ptr<t_data_table>& flattened,
+    const std::vector<t_rlookup>& lookup
+) {
+    PSP_TRACE_SENTINEL();
+    PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
+
+    std::shared_ptr<t_data_table> master = get_table_sptr();
+    const t_gstate::t_mapping& pkey_map = m_gstate->get_pkey_map();
+
+    std::vector<t_tscalar> extra;
+    tsl::hopscotch_set<t_tscalar> seen;
+    for (auto& kv : m_contexts) {
+        const t_ctx_handle& ctxh = kv.second;
+        std::shared_ptr<t_window_engine> engine;
+        switch (ctxh.get_type()) {
+            case TWO_SIDED_CONTEXT: {
+                engine = ctxh.get<t_ctx2>()->get_window_engine();
+            } break;
+            case ONE_SIDED_CONTEXT: {
+                engine = ctxh.get<t_ctx1>()->get_window_engine();
+            } break;
+            case ZERO_SIDED_CONTEXT: {
+                engine = ctxh.get<t_ctx0>()->get_window_engine();
+            } break;
+            case GROUPED_PKEY_CONTEXT: {
+                engine = ctxh.get<t_ctx_grouped_pkey>()->get_window_engine();
+            } break;
+            default:
+                break;
+        }
+
+        if (!engine || !engine->enabled()) {
+            continue;
+        }
+
+        std::vector<t_tscalar> invalidated =
+            engine->collect_invalidations(*flattened, lookup, master, pkey_map);
+        for (const t_tscalar& pkey : invalidated) {
+            if (seen.insert(pkey).second) {
+                extra.push_back(pkey);
+            }
+        }
+    }
+
+    if (extra.empty()) {
+        return;
+    }
+
+    t_uindex n_old = flattened->size();
+    t_uindex n_new = n_old + extra.size();
+
+    std::shared_ptr<t_data_table> delta = m_oports[PSP_PORT_DELTA]->get_table();
+    std::shared_ptr<t_data_table> prev = m_oports[PSP_PORT_PREV]->get_table();
+    std::shared_ptr<t_data_table> current =
+        m_oports[PSP_PORT_CURRENT]->get_table();
+    std::shared_ptr<t_data_table> transitions =
+        m_oports[PSP_PORT_TRANSITIONS]->get_table();
+    std::shared_ptr<t_data_table> existed =
+        m_oports[PSP_PORT_EXISTED]->get_table();
+
+    flattened->extend(n_new);
+    delta->extend(n_new);
+    prev->extend(n_new);
+    current->extend(n_new);
+    transitions->extend(n_new);
+    existed->extend(n_new);
+
+    const t_schema& master_schema = master->get_schema();
+
+    enum class t_wcol_kind : std::uint8_t { PKEY, OP, MASTER, CLEAR };
+    struct t_wcol {
+        t_column* m_col;
+        t_wcol_kind m_kind;
+        const t_column* m_master;
+    };
+
+    auto plan_table = [&](const std::shared_ptr<t_data_table>& table) {
+        std::vector<t_wcol> plan;
+        const auto& columns = table->get_schema().m_columns;
+        plan.reserve(columns.size());
+        for (const auto& cname : columns) {
+            t_column* col = table->get_column(cname).get();
+            if (cname == "psp_pkey") {
+                plan.push_back({col, t_wcol_kind::PKEY, nullptr});
+            } else if (cname == "psp_op") {
+                plan.push_back({col, t_wcol_kind::OP, nullptr});
+            } else if (master_schema.has_column(cname)) {
+                plan.push_back(
+                    {col,
+                     t_wcol_kind::MASTER,
+                     master->get_const_column(cname).get()}
+                );
+            } else {
+                plan.push_back({col, t_wcol_kind::CLEAR, nullptr});
+            }
+        }
+        return plan;
+    };
+
+    // flattened/prev/current get the current master values (an unchanged
+    // row: prev == current for every real column, so `_process_column`-style
+    // diffing yields no spurious real-column deltas downstream).
+    std::vector<std::vector<t_wcol>> copy_plans;
+    copy_plans.push_back(plan_table(flattened));
+    copy_plans.push_back(plan_table(prev));
+    copy_plans.push_back(plan_table(current));
+    std::vector<t_wcol> delta_plan = plan_table(delta);
+    std::vector<t_wcol> transitions_plan = plan_table(transitions);
+    t_column* existed_col = existed->get_column("psp_existed").get();
+    t_column* widened_col = existed->get_column("psp_widened").get();
+
+    for (std::size_t i = 0; i < extra.size(); ++i) {
+        const t_tscalar& pkey = extra[i];
+        t_uindex row = n_old + i;
+        auto it = pkey_map.find(pkey);
+        if (it == pkey_map.end()) {
+            continue;
+        }
+
+        t_uindex mridx = it->second;
+        for (const auto& plan : copy_plans) {
+            for (const auto& wcol : plan) {
+                switch (wcol.m_kind) {
+                    case t_wcol_kind::PKEY:
+                        wcol.m_col->set_scalar(row, pkey);
+                        break;
+                    case t_wcol_kind::OP:
+                        wcol.m_col->set_nth<std::uint8_t>(row, OP_INSERT);
+                        break;
+                    case t_wcol_kind::MASTER:
+                        if (wcol.m_master->is_valid(mridx)) {
+                            wcol.m_col->set_scalar(
+                                row, wcol.m_master->get_scalar(mridx)
+                            );
+                        } else {
+                            wcol.m_col->clear(row);
+                        }
+                        break;
+                    case t_wcol_kind::CLEAR:
+                        wcol.m_col->clear(row);
+                        break;
+                }
+            }
+        }
+
+        for (const auto& wcol : delta_plan) {
+            switch (wcol.m_kind) {
+                case t_wcol_kind::PKEY:
+                    wcol.m_col->set_scalar(row, pkey);
+                    break;
+                case t_wcol_kind::OP:
+                    wcol.m_col->set_nth<std::uint8_t>(row, OP_INSERT);
+                    break;
+                default:
+                    wcol.m_col->clear(row);
+                    break;
+            }
+        }
+
+        for (const auto& wcol : transitions_plan) {
+            std::uint8_t code = VALUE_TRANSITION_EQ_FF;
+            if (wcol.m_kind == t_wcol_kind::MASTER
+                && wcol.m_master->is_valid(mridx)) {
+                code = VALUE_TRANSITION_EQ_TT;
+            }
+            wcol.m_col->set_nth<std::uint8_t>(row, code);
+        }
+
+        existed_col->set_nth<bool>(row, true);
+        widened_col->set_nth<bool>(row, true);
     }
 }
 

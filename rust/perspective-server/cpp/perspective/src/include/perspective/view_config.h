@@ -18,6 +18,7 @@
 #include <perspective/raw_types.h>
 #include <perspective/scalar.h>
 #include <perspective/computed_expression.h>
+#include <perspective/window.h>
 #include <tsl/ordered_map.h>
 #include <tsl/hopscotch_set.h>
 #include <unordered_set>
@@ -59,7 +60,8 @@ public:
         std::string filter_op,
         bool column_only,
         bool leaves_only = false,
-        bool total_only = false
+        bool total_only = false,
+        const std::vector<t_window_spec>& windows = {}
     );
 
     /**
@@ -116,6 +118,8 @@ public:
     std::vector<t_sortspec> get_col_sortspec() const;
 
     std::vector<std::shared_ptr<t_computed_expression>> get_expressions() const;
+
+    const std::vector<t_window_spec>& get_windows() const;
 
     t_filter_op get_filter_op() const;
 
@@ -198,6 +202,7 @@ private:
         m_filter;
     std::vector<std::vector<std::string>> m_sort;
     std::vector<std::shared_ptr<t_computed_expression>> m_expressions;
+    std::vector<t_window_spec> m_windows;
 
     /**
      * @brief The ordered list of aggregate columns:

@@ -74,6 +74,102 @@ fn jsvalue_to_scalar(val: &JsValue) -> perspective_client::config::Scalar {
     }
 }
 
+// This interface is the TypeScript contract for [`JsServerHandler`] below.
+// There is no codegen tying the two together - every method dispatched via
+// `Reflect::get` in this file MUST be declared here, with the exact argument
+// and return types the `Reflect` call sites accept. Keep them in sync when
+// editing either.
+#[wasm_bindgen(typescript_custom_section)]
+const TS_VIRTUAL_SERVER_HANDLER: &'static str = r#"
+/**
+ * A table hosted by a `VirtualServerHandler`, as returned by
+ * `getHostedTables()`. A plain `string` is shorthand for `{ name }`.
+ */
+export interface VirtualHostedTable {
+    name: string;
+    index?: string;
+    limit?: number;
+}
+
+/**
+ * Handler interface that you implement to provide custom data sources.
+ *
+ * All methods will be called by the `VirtualServer` when handling protocol
+ * messages from Perspective clients. Methods can return values directly or
+ * return Promises for asynchronous operations (e.g., database queries).
+ * Optional methods fall back to defaults documented per-method.
+ */
+export interface VirtualServerHandler {
+    getHostedTables():
+        | (string | VirtualHostedTable)[]
+        | Promise<(string | VirtualHostedTable)[]>;
+    tableSchema(
+        tableId: string,
+    ): Record<string, ColumnType> | Promise<Record<string, ColumnType>>;
+    tableSize(tableId: string): number | Promise<number>;
+    tableMakeView(
+        tableId: string,
+        viewId: string,
+        config: ViewConfigUpdate,
+    ): void | Promise<void>;
+    viewDelete(viewId: string): void | Promise<void>;
+    viewGetData(
+        viewId: string,
+        config: ViewConfig,
+        schema: Record<string, ColumnType>,
+        viewport: ViewWindow,
+        dataSlice: VirtualDataSlice,
+    ): void | Promise<void>;
+
+    /** Defaults to `tableSchema(viewId)`. */
+    viewSchema?(
+        viewId: string,
+        config: ViewConfig,
+    ): Record<string, ColumnType> | Promise<Record<string, ColumnType>>;
+
+    /** Defaults to `tableSize(viewId)`. */
+    viewSize?(viewId: string): number | Promise<number>;
+
+    /** Defaults to the length of `tableSchema(tableId)`. */
+    tableColumnsSize?(tableId: string): number | Promise<number>;
+
+    /** Defaults to the length of `viewSchema(viewId, config)`. */
+    viewColumnSize?(
+        viewId: string,
+        config: ViewConfig,
+    ): number | Promise<number>;
+
+    /** Required when `getFeatures()` reports `expressions: true`. */
+    tableValidateExpression?(
+        tableId: string,
+        expression: string,
+    ): ColumnType | Promise<ColumnType>;
+
+    viewGetMinMax?(
+        viewId: string,
+        columnName: string,
+        config: ViewConfig,
+    ): { min: Scalar; max: Scalar } | Promise<{ min: Scalar; max: Scalar }>;
+
+    /** Defaults to no optional features. */
+    getFeatures?(): Features | Promise<Features>;
+
+    /** Defaults to port `0`. */
+    tableMakePort?(): number | Promise<number>;
+
+    makeTable?(
+        tableId: string,
+        data: string | Uint8Array,
+    ): void | Promise<void>;
+}
+"#;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(typescript_type = "VirtualServerHandler")]
+    pub type JsVirtualServerHandler;
+}
+
 pub struct JsServerHandler(Object);
 
 impl JsServerHandler {
@@ -785,9 +881,9 @@ pub struct VirtualServer(Rc<UnsafeCell<virtual_server::VirtualServer<JsServerHan
 #[wasm_bindgen]
 impl VirtualServer {
     #[wasm_bindgen(constructor)]
-    pub fn new(handler: Object) -> Result<VirtualServer, JsValue> {
+    pub fn new(handler: JsVirtualServerHandler) -> Result<VirtualServer, JsValue> {
         Ok(VirtualServer(Rc::new(UnsafeCell::new(
-            virtual_server::VirtualServer::new(JsServerHandler(handler)),
+            virtual_server::VirtualServer::new(JsServerHandler(handler.unchecked_into())),
         ))))
     }
 

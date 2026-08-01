@@ -26,6 +26,7 @@ mod filters;
 mod plugin;
 mod sort;
 mod view_config;
+pub mod windows;
 
 pub use aggregates::*;
 pub use expressions::*;
@@ -33,5 +34,6 @@ pub use filters::*;
 pub use plugin::*;
 pub use sort::*;
 pub use view_config::*;
+pub use windows::*;
 
 pub use crate::proto::{ColumnType, SortOp};

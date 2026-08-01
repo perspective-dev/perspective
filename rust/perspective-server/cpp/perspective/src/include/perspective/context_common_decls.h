@@ -101,6 +101,15 @@ bool is_expression_column(const std::string& colname) const;
 
 t_uindex num_expressions() const;
 
+/**
+ * @brief Whether this context's expression tables contribute any columns
+ * (expressions or windows) - i.e. whether the gnode must join them into the
+ * tables it notifies this context with.
+ */
+bool has_derived_columns() const;
+
+std::shared_ptr<t_window_engine> get_window_engine() const;
+
 std::shared_ptr<t_expression_tables> get_expression_tables() const;
 
 // Given shared pointers to data tables from the gnode, use them to

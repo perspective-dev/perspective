@@ -229,6 +229,13 @@ message GetFeaturesResp {
     map<uint32, ColumnTypeOptions> filter_ops = 6;
     map<uint32, AggregateOptions> aggregates = 7;
     repeated GroupRollupMode group_rollup_mode = 8;
+    map<uint32, WindowAggregateOptions> window_aggregates = 9;
+
+    bool unordered = 10;
+
+    message WindowAggregateOptions {
+        repeated WindowAggregate options = 1;
+    }
 
     message ColumnTypeOptions {
         repeated string options = 1;
@@ -539,6 +546,42 @@ message ServerSystemInfoResp {
 }
 
 
+enum WindowAggregate {
+    WINDOW_AGGREGATE_SUM = 0;
+    WINDOW_AGGREGATE_AVG = 1;
+    WINDOW_AGGREGATE_COUNT = 2;
+    WINDOW_AGGREGATE_MIN = 3;
+    WINDOW_AGGREGATE_MAX = 4;
+    WINDOW_AGGREGATE_STDDEV = 5;
+    WINDOW_AGGREGATE_VAR = 6;
+    WINDOW_AGGREGATE_FIRST = 7;
+    WINDOW_AGGREGATE_LAST = 8;
+    WINDOW_AGGREGATE_LAG = 9;
+    WINDOW_AGGREGATE_LEAD = 10;
+    WINDOW_AGGREGATE_DIFF = 11;
+    WINDOW_AGGREGATE_RATE = 12;
+    WINDOW_AGGREGATE_EMA = 13;
+}
+
+message WindowSpec {
+    string source = 2;
+    WindowAggregate op = 3;
+    repeated string partition_by = 4;
+    Order order_by = 5;
+    oneof frame {
+        uint32 rows = 6;
+        double range = 7;
+        google.protobuf.NullValue cumulative = 8;
+    }
+    optional uint32 offset = 9;
+    optional double alpha = 10;
+
+    message Order {
+        string column = 1;
+        bool desc = 2;
+    }
+}
+
 message ViewConfig {
     repeated string group_by = 1;
     repeated string split_by = 2;
@@ -550,6 +593,7 @@ message ViewConfig {
     FilterReducer filter_op = 8;
     optional uint32 group_by_depth = 9;
     optional GroupRollupMode group_rollup_mode = 10;
+    map<string, WindowSpec> windows = 11;
 
     message AggList {
         repeated string aggregations = 1;

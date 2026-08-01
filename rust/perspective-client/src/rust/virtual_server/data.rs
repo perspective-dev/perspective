@@ -894,18 +894,29 @@ impl VirtualDataSlice {
     /// `__ROW_PATH_N__` columns (`PerLevel`, currently unused — reserved
     /// for the future deprecation of `__ROW_PATH__`). See
     /// [`RowPathStyle`] for context.
+    ///
+    /// `id` emits an `__ID__` column of per-row identities, matching the
+    /// native engine's `to_columns(id = true)` shape for grouped views
+    /// (each row's identity is its `__ROW_PATH__` prefix). Ungrouped
+    /// views have no `row_path` and emit no `__ID__` — consumers fall
+    /// back to positional identity, as before.
     pub fn render_to_columns_json(
         &mut self,
         style: RowPathStyle,
+        id: bool,
     ) -> Result<String, Box<dyn Error>> {
         let batch = self.freeze().clone();
         let schema = batch.schema();
         let mut map = serde_json::Map::new();
 
-        if style == RowPathStyle::Sidecar
-            && let Some(ref rp) = self.row_path
-        {
-            map.insert("__ROW_PATH__".to_string(), serde_json::to_value(rp)?);
+        if let Some(ref rp) = self.row_path {
+            if style == RowPathStyle::Sidecar {
+                map.insert("__ROW_PATH__".to_string(), serde_json::to_value(rp)?);
+            }
+
+            if id {
+                map.insert("__ID__".to_string(), serde_json::to_value(rp)?);
+            }
         }
 
         for (col_idx, field) in schema.fields().iter().enumerate() {
