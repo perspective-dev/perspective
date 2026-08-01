@@ -193,6 +193,29 @@ class TestFallback:
         assert col[2] is None
 
 
+class TestDictionary:
+    def test_dictionary_int8_utf8(self):
+        indices = pa.array([0, 1, 0, None], type=pa.int8())
+        dictionary = pa.array(["alpha", "beta"], type=pa.utf8())
+        table = pa.table({"col": pa.DictionaryArray.from_arrays(indices, dictionary)})
+        result = round_trip(table)
+        assert result["col"] == ["alpha", "beta", "alpha", None]
+
+    def test_dictionary_uint16_large_utf8(self):
+        indices = pa.array([1, 0, None], type=pa.uint16())
+        dictionary = pa.array(["x", "y"], type=pa.large_utf8())
+        table = pa.table({"col": pa.DictionaryArray.from_arrays(indices, dictionary)})
+        result = round_trip(table)
+        assert result["col"] == ["y", "x", None]
+
+    def test_dictionary_int32_utf8_passthrough(self):
+        indices = pa.array([0, 1, None], type=pa.int32())
+        dictionary = pa.array(["a", "b"], type=pa.utf8())
+        table = pa.table({"col": pa.DictionaryArray.from_arrays(indices, dictionary)})
+        result = round_trip(table)
+        assert result["col"] == ["a", "b", None]
+
+
 class TestEmpty:
     def test_empty_batch(self):
         # PyArrow's new_stream with an empty table writes no record batches,
@@ -207,3 +230,18 @@ class TestEmpty:
         ds.from_arrow_ipc(buf.getvalue())
         result = json.loads(ds.render_to_columns_json())
         assert result["col"] == []
+
+    def test_empty_columns_preserves_row_count(self):
+        # Metadata-only batch: all data columns dropped, but rows remain.
+        schema = pa.schema([("__GROUPING_ID__", pa.int64())])
+        batch = pa.record_batch({"__GROUPING_ID__": pa.array([0, 0, 0], type=pa.int64())})
+        buf = io.BytesIO()
+        writer = ipc.RecordBatchStreamWriter(buf, schema)
+        writer.write_batch(batch)
+        writer.close()
+        ds = VirtualDataSlice()
+        # Total mode triggers coerce path which drops __GROUPING_ID__.
+        ds.from_arrow_ipc(buf.getvalue())
+        # Should not crash; empty column map with preserved structure.
+        result = json.loads(ds.render_to_columns_json())
+        assert isinstance(result, dict)

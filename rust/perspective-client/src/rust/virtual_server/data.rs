@@ -18,14 +18,17 @@ use arrow_array::builder::{
     TimestampMillisecondBuilder,
 };
 use arrow_array::cast::AsArray;
-use arrow_array::types::Int32Type;
+use arrow_array::types::{
+    ArrowDictionaryKeyType, Int8Type, Int16Type, Int32Type, Int64Type, UInt8Type, UInt16Type,
+    UInt32Type, UInt64Type,
+};
 use arrow_array::{
     Array, ArrayAccessor, ArrayRef, BooleanArray, Date32Array, Date64Array, Decimal128Array,
     Float32Array, Float64Array, Int8Array, Int16Array, Int32Array, Int64Array, LargeStringArray,
-    RecordBatch, StringArray, Time32MillisecondArray, Time32SecondArray, Time64MicrosecondArray,
-    Time64NanosecondArray, TimestampMicrosecondArray, TimestampMillisecondArray,
-    TimestampNanosecondArray, TimestampSecondArray, UInt8Array, UInt16Array, UInt32Array,
-    UInt64Array,
+    RecordBatch, RecordBatchOptions, StringArray, Time32MillisecondArray, Time32SecondArray,
+    Time64MicrosecondArray, Time64NanosecondArray, TimestampMicrosecondArray,
+    TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray, UInt8Array,
+    UInt16Array, UInt32Array, UInt64Array,
 };
 use arrow_ipc::reader::{FileReader, StreamReader};
 use arrow_ipc::writer::StreamWriter;
@@ -47,6 +50,92 @@ pub enum ColumnBuilder {
 
 fn dict_data_type() -> DataType {
     DataType::Dictionary(Box::new(DataType::Int32), Box::new(DataType::Utf8))
+}
+
+/// Rebuild a string dictionary as Int32→Utf8 without `arrow::compute`
+/// (keeps WASM size down). Supports common DuckDB key/value layouts.
+fn decode_dictionary_to_utf8_dict(array: &ArrayRef) -> Result<ArrayRef, Box<dyn Error>> {
+    if let DataType::Dictionary(key, value) = array.data_type() {
+        if matches!(key.as_ref(), DataType::Int32) && matches!(value.as_ref(), DataType::Utf8) {
+            return Ok(array.clone());
+        }
+    }
+
+    let mut builder = StringDictionaryBuilder::<Int32Type>::new();
+    match array.data_type() {
+        DataType::Dictionary(key, value) => match (key.as_ref(), value.as_ref()) {
+            (DataType::Int8, DataType::Utf8 | DataType::LargeUtf8) => {
+                append_dict_strings::<Int8Type>(array, &mut builder)?;
+            },
+            (DataType::Int16, DataType::Utf8 | DataType::LargeUtf8) => {
+                append_dict_strings::<Int16Type>(array, &mut builder)?;
+            },
+            (DataType::Int32, DataType::Utf8 | DataType::LargeUtf8) => {
+                append_dict_strings::<Int32Type>(array, &mut builder)?;
+            },
+            (DataType::Int64, DataType::Utf8 | DataType::LargeUtf8) => {
+                append_dict_strings::<Int64Type>(array, &mut builder)?;
+            },
+            (DataType::UInt8, DataType::Utf8 | DataType::LargeUtf8) => {
+                append_dict_strings::<UInt8Type>(array, &mut builder)?;
+            },
+            (DataType::UInt16, DataType::Utf8 | DataType::LargeUtf8) => {
+                append_dict_strings::<UInt16Type>(array, &mut builder)?;
+            },
+            (DataType::UInt32, DataType::Utf8 | DataType::LargeUtf8) => {
+                append_dict_strings::<UInt32Type>(array, &mut builder)?;
+            },
+            (DataType::UInt64, DataType::Utf8 | DataType::LargeUtf8) => {
+                append_dict_strings::<UInt64Type>(array, &mut builder)?;
+            },
+            _ => {
+                for i in 0..array.len() {
+                    if array.is_null(i) {
+                        builder.append_null();
+                    } else {
+                        let scalar_arr = array.slice(i, 1);
+                        builder.append_value(format!("{:?}", scalar_arr));
+                    }
+                }
+            },
+        },
+        other => {
+            return Err(format!("Expected Dictionary array, got {}", other).into());
+        },
+    }
+    Ok(Arc::new(builder.finish()) as ArrayRef)
+}
+
+fn append_dict_strings<K: ArrowDictionaryKeyType>(
+    array: &ArrayRef,
+    builder: &mut StringDictionaryBuilder<Int32Type>,
+) -> Result<(), Box<dyn Error>> {
+    let dict = array.as_dictionary::<K>();
+    if let Some(values) = dict.downcast_dict::<StringArray>() {
+        for i in 0..values.len() {
+            if values.is_null(i) {
+                builder.append_null();
+            } else {
+                builder.append_value(values.value(i));
+            }
+        }
+        return Ok(());
+    }
+    if let Some(values) = dict.downcast_dict::<LargeStringArray>() {
+        for i in 0..values.len() {
+            if values.is_null(i) {
+                builder.append_null();
+            } else {
+                builder.append_value(values.value(i));
+            }
+        }
+        return Ok(());
+    }
+    Err(format!(
+        "Unsupported dictionary value type: {:?}",
+        dict.values().data_type()
+    )
+    .into())
 }
 
 /// A single cell value in a row-oriented data representation.
@@ -381,7 +470,10 @@ fn coerce_column(
             Field::new(name, field.data_type().clone(), true),
             array.clone(),
         )),
-        DataType::Dictionary(..) => Ok((Field::new(name, dict_data_type(), true), array.clone())),
+        DataType::Dictionary(..) => {
+            let coerced = decode_dictionary_to_utf8_dict(array)?;
+            Ok((Field::new(name, dict_data_type(), true), coerced))
+        },
         DataType::Utf8 => {
             let arr = array.as_any().downcast_ref::<StringArray>().unwrap();
             let mut builder = StringDictionaryBuilder::<Int32Type>::new();
@@ -708,7 +800,12 @@ impl VirtualDataSlice {
 
         let new_schema = Arc::new(Schema::new(new_fields));
         self.frozen = if new_arrays.is_empty() {
-            Some(RecordBatch::new_empty(new_schema))
+            // Preserve row count for metadata-only batches (e.g. columns: []).
+            Some(RecordBatch::try_new_with_options(
+                new_schema,
+                new_arrays,
+                &RecordBatchOptions::new().with_row_count(Some(num_rows)),
+            )?)
         } else {
             Some(RecordBatch::try_new(new_schema, new_arrays)?)
         };
