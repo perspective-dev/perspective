@@ -162,6 +162,15 @@ export interface InitMsg {
      * a `setPluginConfig` control msg.
      */
     pluginConfig: PluginConfig;
+
+    /**
+     * Initial per-column config (`alt_axis`, `chart_type`, formats, …).
+     * Seeds the chart impl before the first `loadAndRender` — the host
+     * calls `plugin.restore` before the renderer exists, so without
+     * this the initial `columns_config` never reaches the worker.
+     * Later changes arrive as `setColumnsConfig` control msgs.
+     */
+    columnsConfig?: Record<string, any>;
     defaultChartType?: string;
 
     /**

@@ -268,9 +268,9 @@ export class ScatterGlyph {
     /**
      * Bind the persistent left/right buffers and issue up to two draw
      * calls. No per-frame allocations or buffer uploads. `splitFilter`
-     * (faceted frames) instead draws each matching series' contiguous
-     * bucket sub-range — one `drawArrays(POINTS, first, count)` per
-     * series of the facet.
+     * (faceted frames) and/or `aggRange` (mixed glyph-run frames)
+     * instead draw each matching series' contiguous bucket sub-range —
+     * one `drawArrays(POINTS, first, count)` per matching series.
      */
     draw(
         chart: SeriesChart,
@@ -279,6 +279,7 @@ export class ScatterGlyph {
         projLeft: Float32Array,
         projRight: Float32Array,
         splitFilter?: number,
+        aggRange?: { start: number; end: number },
     ): void {
         const buf = this._buffers;
         const cache = this._program;
@@ -297,9 +298,20 @@ export class ScatterGlyph {
             chart._pluginConfig.point_size_px * dpr,
         );
 
-        if (splitFilter !== undefined) {
+        if (splitFilter !== undefined || aggRange !== undefined) {
             for (const r of buf.seriesRanges) {
-                if (chart._series[r.seriesId].splitIdx !== splitFilter) {
+                if (
+                    splitFilter !== undefined &&
+                    chart._series[r.seriesId].splitIdx !== splitFilter
+                ) {
+                    continue;
+                }
+
+                const aggIdx = chart._series[r.seriesId].aggIdx;
+                if (
+                    aggRange !== undefined &&
+                    (aggIdx < aggRange.start || aggIdx > aggRange.end)
+                ) {
                     continue;
                 }
 

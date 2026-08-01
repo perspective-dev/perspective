@@ -258,6 +258,7 @@ export class RendererTransport {
         chrome: HTMLCanvasElement;
         facetConfig: FacetConfig;
         pluginConfig: PluginConfig;
+        columnsConfig?: Record<string, any>;
         defaultChartType?: string;
         renderBlitMode: "blit" | "direct";
     }): Promise<void> {
@@ -339,6 +340,7 @@ export class RendererTransport {
             tableName: this._tableName,
             facetConfig: opts.facetConfig,
             pluginConfig: opts.pluginConfig,
+            columnsConfig: opts.columnsConfig,
             defaultChartType: opts.defaultChartType,
             themeVars,
             fontFaces,
@@ -574,6 +576,17 @@ export class RendererTransport {
      */
     presize(cssWidth: number, cssHeight: number): Promise<(() => void) | void> {
         if (!this._hostGlCanvas) {
+            return Promise.resolve();
+        }
+
+        const dpr = window.devicePixelRatio || 1;
+        const last = this._lastPostedSize;
+        if (
+            last &&
+            Math.abs(last.cssWidth - cssWidth) <= 0.5 &&
+            Math.abs(last.cssHeight - cssHeight) <= 0.5 &&
+            last.dpr === dpr
+        ) {
             return Promise.resolve();
         }
 
