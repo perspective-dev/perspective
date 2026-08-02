@@ -235,7 +235,7 @@ impl Component for ConfigSelector {
             },
             ConfigSelectorMsg::Close(..) => false,
             ConfigSelectorMsg::Drop(column, action, effect, index)
-                if action != DragTarget::Active =>
+                if action != DragTarget::Active && !action.is_staged() =>
             {
                 let col_type = ctx
                     .props()
@@ -369,6 +369,12 @@ impl Component for ConfigSelector {
                 ctx.props().onselect.emit(());
                 false
             },
+            ConfigSelectorMsg::New(
+                DragTarget::WindowSource
+                | DragTarget::WindowOrderBy
+                | DragTarget::WindowPartitionBy,
+                _,
+            ) => false,
             ConfigSelectorMsg::New(DragTarget::Filter, InPlaceColumn::Column(column)) => {
                 let mut view_config = (*ctx.props().view_config).clone();
                 let op = ctx.props().default_op(column.as_str()).unwrap_or_default();

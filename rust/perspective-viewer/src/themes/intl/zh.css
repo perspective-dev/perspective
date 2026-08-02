@@ -108,6 +108,13 @@ perspective-dropdown {
     /* Tabs */
     --psp-label--style-tab--content: "风格";
     --psp-label--attributes-tab--content: "属性";
+    --psp-label--window-tab--content: "窗口";
+    --psp-label--window-source--content: "列";
+    --psp-label--window-order-by--content: "订购依据";
+    --psp-label--window-partition-by--content: "分区依据";
+    --psp-label--window-frame--content: "框架";
+    --psp-label--window-offset--content: "偏移";
+    --psp-label--window-alpha--content: "Alpha";
     --psp-label--query-tab--content: "查询";
     --psp-label--plugin-tab--content: "插件";
     --psp-label--debug-tab--content: "JSON";

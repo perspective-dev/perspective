@@ -52,6 +52,21 @@ where
 
     #[prop_or_default]
     pub allow_duplicates: bool,
+
+    /// Single-slot mode: the list holds at most one item, a dragover
+    /// preview REPLACES the current item rather than inserting beside it,
+    /// and the trailing `EmptyColumn` autocomplete renders only while the
+    /// slot is empty.
+    #[prop_or_default]
+    pub single_slot: bool,
+
+    /// The in-flight drag is INVALID for this list (a parent-defined rule,
+    /// e.g. the window editor's Table-columns-only slots): the dragover
+    /// preview is suppressed and the invalid-X overlay renders instead,
+    /// like a duplicate drag over `group_by`/`split_by`. The parent's drop
+    /// handler is still responsible for ignoring the drop itself.
+    #[prop_or_default]
+    pub is_invalid: bool,
 }
 
 impl<T, U> PartialEq for DragDropListProps<T, U>
@@ -66,6 +81,8 @@ where
             && self.allow_duplicates == other.allow_duplicates
             && self.is_dragover == other.is_dragover
             && self.disabled == other.disabled
+            && self.single_slot == other.single_slot
+            && self.is_invalid == other.is_invalid
     }
 }
 
@@ -202,7 +219,51 @@ where
         let invalid_drag: bool;
         let mut valid_duplicate_drag = false;
 
-        let columns_html = {
+        let columns_html = if ctx.props().single_slot {
+            invalid_drag = ctx.props().is_invalid && ctx.props().is_dragover.is_some();
+
+            // Dragging the slot's own pill over its own slot is a no-op
+            // move - keep showing the pill instead of the drop preview
+            // (mirrors the multi-column branch's `is_self_move` handling).
+            let is_self_move = ctx
+                .props()
+                .presentation
+                .get_drag_target()
+                .map(|x| V::is_self_move(x))
+                .unwrap_or_default();
+
+            let close = ctx.props().parent.callback(|_| V::close(0));
+            let dragenter = ctx.props().parent.callback({
+                let container_noderef = container_noderef.clone();
+                move |event: DragEvent| {
+                    event.stop_propagation();
+                    event.prevent_default();
+                    if event.related_target().is_none()
+                        && let Some(elem) = container_noderef.cast::<HtmlElement>()
+                    {
+                        let _ = elem.dataset().set("safaridragleave", "true");
+                    }
+                    V::dragenter(0)
+                }
+            });
+
+            if ctx.props().is_dragover.is_some() && !is_self_move && !invalid_drag {
+                html! {
+                    <div class="pivot-column" ondragenter={dragenter}>
+                        <div class="config-drop" />
+                    </div>
+                }
+            } else if let Some(column) = ctx.props().children.iter().next() {
+                html! {
+                    <div class="pivot-column" ondragenter={dragenter}>
+                        { Html::from(column) }
+                        <span class="row_close" onmousedown={close} />
+                    </div>
+                }
+            } else {
+                html! {}
+            }
+        } else {
             let mut columns = ctx
                 .props()
                 .children
@@ -211,7 +272,10 @@ where
                 .enumerate()
                 .collect::<Vec<_>>();
 
-            invalid_drag = if let Some((x, column)) = &ctx.props().is_dragover {
+            invalid_drag = if ctx.props().is_invalid && ctx.props().is_dragover.is_some() {
+                // Parent-defined invalidity: no preview, X overlay only.
+                true
+            } else if let Some((x, column)) = &ctx.props().is_dragover {
                 let index = *x;
                 let is_append = index == columns.len();
                 let is_self_move = ctx
@@ -314,6 +378,12 @@ where
                 .collect::<Html>()
         };
 
+        let show_empty = if ctx.props().single_slot {
+            ctx.props().children.is_empty() && ctx.props().is_dragover.is_none()
+        } else {
+            ctx.props().is_dragover.is_none() | (!invalid_drag && valid_duplicate_drag)
+        };
+
         let column_dropdown = ctx.props().column_dropdown.clone();
         let exclude = ctx.props().exclude.clone();
         let on_select = ctx.props().parent.callback(V::create);
@@ -345,7 +415,7 @@ where
                                         onmousedown={ctx.props().parent.callback(move |_| V::close(0))}
                                     />
                                 </div>
-                            } else if ctx.props().is_dragover.is_none() | (!invalid_drag && valid_duplicate_drag) {
+                            } else if show_empty {
                                 <EmptyColumn {column_dropdown} {exclude} {on_select} />
                             } else if invalid_drag {
                                 <InvalidColumn />

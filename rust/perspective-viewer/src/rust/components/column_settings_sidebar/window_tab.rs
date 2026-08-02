@@ -12,53 +12,23 @@
 
 use yew::prelude::*;
 
-use super::ColumnLocator;
+use super::save_settings::{SaveSettings, SaveSettingsProps};
+use crate::components::window_editor::{WindowEditor, WindowEditorProps};
 
-#[derive(PartialEq, Clone, Properties)]
-pub struct ExprEditButtonProps {
-    /// Column name.
-    pub name: String,
-
-    /// Is this an expression column?
-    pub is_expression: bool,
-
-    /// Is this a window column?
-    #[prop_or_default]
-    pub is_window: bool,
-
-    /// Fires when the config/expresison button is clicked.
-    pub on_open_expr_panel: Callback<ColumnLocator>,
-
-    /// Is the expression/config panel open?
-    pub is_editing: bool,
-
-    /// Is the expression/config panel enabled? If not, show an invisible
-    /// square in the same dimensions (so the layout does not jump around).
-    pub is_disabled: bool,
+#[derive(PartialEq, Properties, Clone)]
+pub struct WindowTabProps {
+    pub editor: WindowEditorProps,
+    pub save_section: SaveSettingsProps,
 }
 
-/// A button that goes into a column-list for a custom expression
-/// when pressed, it opens up the expression editor side-panel.
 #[function_component]
-pub fn ExprEditButton(p: &ExprEditButtonProps) -> Html {
-    let onmousedown = yew::use_callback(p.clone(), |_, p| {
-        let name = if p.is_window {
-            ColumnLocator::Window(p.name.clone())
-        } else if p.is_expression {
-            ColumnLocator::Expression(p.name.clone())
-        } else {
-            ColumnLocator::Table(p.name.clone())
-        };
-        p.on_open_expr_panel.emit(name)
-    });
-
-    let class = if p.is_disabled {
-        "expression-edit-button disabled"
-    } else if p.is_editing {
-        "expression-edit-button is-editing"
-    } else {
-        "expression-edit-button"
-    };
-
-    html! { <span {onmousedown} {class}><span class="icon" /></span> }
+pub fn WindowTab(p: &WindowTabProps) -> Html {
+    html! {
+        <div id="window-tab">
+            <div class="tab-section" id="window-editor-section">
+                <WindowEditor ..p.editor.clone() />
+            </div>
+            <div class="tab-section"><SaveSettings ..p.save_section.clone() /></div>
+        </div>
+    }
 }

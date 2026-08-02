@@ -28,11 +28,11 @@
         display: flex;
         flex-direction: column;
         .tab-section:last-child {
-            padding: 12px 0px 12px 8px;
+            padding: 13px 0px 12px 8px;
         }
 
         .tab-section {
-            padding: 12px 0px 0px 8px;
+            padding: 6px 0 0 8px;
             flex: 0 0 auto;
             overflow: hidden;
         }

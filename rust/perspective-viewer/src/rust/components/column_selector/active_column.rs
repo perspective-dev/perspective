@@ -18,10 +18,10 @@ use yew::prelude::*;
 
 use super::InPlaceColumn;
 use super::aggregate_selector::*;
+use super::column_selector_column_row::ColumnSelectorColumnRow;
 use super::expr_edit_button::*;
 use crate::components::column_dropdown::ColumnDropDownElement;
 use crate::components::column_selector::{EmptyColumn, InvalidColumn};
-use crate::components::type_icon::TypeIcon;
 use crate::config::ColumnSelectMode;
 use crate::presentation::{ColumnLocator, Presentation};
 use crate::queries::*;
@@ -66,6 +66,10 @@ pub struct ActiveColumnProps {
     #[prop_or_default]
     pub is_expression: bool,
 
+    /// Whether this column is a window column.
+    #[prop_or_default]
+    pub is_window: bool,
+
     /// Whether the expression/config edit button should be shown.  Computed
     /// by the parent (`is_expression || can_render_column_styles`).
     #[prop_or_default]
@@ -95,6 +99,7 @@ impl PartialEq for ActiveColumnProps {
             && self.is_aggregated == rhs.is_aggregated
             && self.is_editing == rhs.is_editing
             && self.is_expression == rhs.is_expression
+            && self.is_window == rhs.is_window
             && self.show_edit_btn == rhs.show_edit_btn
             && self.col_type == rhs.col_type
             && self.metadata == rhs.metadata
@@ -204,10 +209,7 @@ impl Component for ActiveColumn {
             Named(String),
         }
 
-        let mut classes = classes!["column-selector-draggable"];
-        if ctx.props().is_aggregated {
-            classes.push("show-aggregate");
-        };
+        let mut classes = classes![];
 
         let mut outer_classes = classes!["column-selector-column"];
         if self.mouseover {
@@ -344,6 +346,7 @@ impl Component for ActiveColumn {
                     .callback(|event: MouseEvent| MouseEnter(event.which() == 0));
 
                 let is_expression = ctx.props().is_expression;
+                let is_window = ctx.props().is_window;
                 let show_edit_btn = ctx.props().show_edit_btn;
                 let mut class = ctx.props().renderer.metadata().select_mode.css();
                 if is_required {
@@ -363,17 +366,14 @@ impl Component for ActiveColumn {
                         ondragenter={ondragenter.clone()}
                     >
                         <span {class} onmousedown={remove_column} />
-                        <div
-                            class={classes}
-                            ref={&self.add_expression_ref}
-                            draggable="true"
-                            {ondragstart}
-                            {ondragend}
-                        >
-                            <div class="column-selector-column-border">
-                                <span class="drag-handle icon" />
-                                <TypeIcon ty={col_type} />
-                                if ctx.props().is_aggregated {
+                        <ColumnSelectorColumnRow
+                            name={name.clone()}
+                            col_type={Some(col_type)}
+                            wrapper_class={classes}
+                            wrapper_ref={&self.add_expression_ref}
+                            ondragstart={Some(ondragstart)}
+                            ondragend={Some(ondragend.clone())}
+                            aggregate={ctx.props().is_aggregated.then(|| html! {
                                     <AggregateSelector
                                         column={name.clone()}
                                         aggregate={ctx.props().get_aggregate(&name)}
@@ -382,24 +382,18 @@ impl Component for ActiveColumn {
                                         renderer={&ctx.props().renderer}
                                         session={&ctx.props().session}
                                     />
-                                }
-                                <span
-                                    class="column_name"
-                                >
-                                    { name.clone() }
-                                </span>
-                                if !ctx.props().is_aggregated {
-                                    <span class="column-selector--spacer" />
-                                }
+                                })}
+                            trailing={html! {
                                 <ExprEditButton
+                                    {is_window}
                                     name={name.clone()}
                                     on_open_expr_panel={&ctx.props().on_open_expr_panel}
                                     {is_expression}
                                     is_disabled={!show_edit_btn}
                                     is_editing={ctx.props().is_editing}
                                 />
-                            </div>
-                        </div>
+                            }}
+                        />
                     </div>
                 }
             },

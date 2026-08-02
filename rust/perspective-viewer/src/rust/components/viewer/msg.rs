@@ -46,6 +46,8 @@ pub struct MasterSelection {
 #[derive(Debug)]
 pub enum PerspectiveViewerMsg {
     ColumnSettingsPanelSizeUpdate(Option<i32>),
+    ColumnSettingsPanelAutoWidth(f64),
+    ToggleColumnSettingsPin,
     ColumnSettingsTabChanged(ColumnSettingsTab),
     OpenColumnSettings {
         locator: Option<ColumnLocator>,

@@ -170,6 +170,13 @@ impl Component for PortalModal {
     }
 
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
+        // The host element (`tag_name`) and its adopted sheet (`surface`) are
+        // fixed at `create` — a swap at the same vdom position must be keyed
+        // so Yew recreates the component (see `PanelMenu`'s menu→picker
+        // stages).
+        debug_assert_eq!(ctx.props().tag_name, old_props.tag_name);
+        debug_assert_eq!(ctx.props().surface, old_props.surface);
+
         let new_target = &ctx.props().target;
         let old_target = &old_props.target;
 

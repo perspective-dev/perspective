@@ -116,10 +116,18 @@ impl PerspectiveViewer {
 
         let on_settings = ctx.link().callback(|()| ToggleSettingsInit(None, None));
         let on_select_tab = ctx.link().callback(ColumnSettingsTabChanged);
+        // Pinning the drawer is a pure CSS positioning flip on `#modal_panel`
+        // (absolute overlay over the main panel <-> static flex sibling
+        // between the main panel and the settings pane) - the drawer NEVER
+        // reparents, so neither `MainPanel` nor the drawer subtree remounts
+        // on toggle, and the divider/width-override machinery is identical
+        // in both modes.
+        let is_pinned = self.settings_geometry.column_settings_pinned;
         let column_settings_panel = html! {
             if let Some(selected_column) = selected_column {
                 <SplitPanel
                     id="modal_panel"
+                    class={classes!(is_pinned.then_some("pinned"))}
                     reverse=true
                     initial_size={self.settings_geometry.column_settings_width_override}
                     on_reset={ctx.link().callback(|_| ColumnSettingsPanelSizeUpdate(None))}
@@ -130,6 +138,10 @@ impl PerspectiveViewer {
                         {selected_tab}
                         on_close={self.on_close_column_settings.clone()}
                         width_override={self.settings_geometry.column_settings_width_override}
+                        auto_width={self.settings_geometry.column_settings_auto_width}
+                        on_auto_width={ctx.link().callback(ColumnSettingsPanelAutoWidth)}
+                        {is_pinned}
+                        on_toggle_pin={ctx.link().callback(|()| ToggleColumnSettingsPin)}
                         {on_select_tab}
                         plugin_name={self.renderer_props.plugin_name.clone()}
                         {metadata}

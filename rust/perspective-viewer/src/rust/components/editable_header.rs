@@ -119,10 +119,12 @@ impl Component for EditableHeader {
                     }
                     let metadata = &ctx.props().metadata;
                     let expressions = metadata.get_expression_columns();
+                    let windows = metadata.get_window_columns();
                     let found = metadata
                         .get_table_columns()?
                         .iter()
                         .chain(expressions)
+                        .chain(windows)
                         .contains(&new_value);
                     Some(!found)
                 })()

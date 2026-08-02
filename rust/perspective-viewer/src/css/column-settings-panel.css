@@ -41,6 +41,7 @@
         .item_title {
             flex: 0 0 auto;
             font-size: var(--label--font-size, 0.75em);
+            margin-top: 9px;
         }
 
         input {
@@ -70,7 +71,7 @@
 
         .sidebar_header_contents {
             display: flex;
-            margin: 8px;
+            margin: 7px 8px;
             align-items: center;
             border-radius: 3px;
             outline-width: 1px;
@@ -115,6 +116,18 @@
 
     label#color-label:before {
         content: var(--psp-label--color--content, "Color");
+    }
+
+    label#window-frame-label:before {
+        content: var(--psp-label--window-frame--content, "Frame");
+    }
+
+    label#window-offset-label:before {
+        content: var(--psp-label--window-offset--content, "Offset");
+    }
+
+    label#window-alpha-label:before {
+        content: var(--psp-label--window-alpha--content, "Alpha");
     }
 
     label#format-label:before {
@@ -296,6 +309,58 @@
     }
 
     div.tab-title#Attributes:before {
-        content: var(--psp-label--attributes-tab--content, "Attributes");
+        content: var(--psp-label--attributes-tab--content, "Expression");
+    }
+
+    div.tab-title#Window:before {
+        content: var(--psp-label--window-tab--content, "Window");
+    }
+}
+
+#window-tab {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+#window-editor-container .window-editor-error {
+    color: var(--error--color, #ff5942);
+    font-size: 11px;
+}
+
+:host {
+    #column_settings_sidebar {
+        .sidebar_header {
+            padding-right: 24px;
+        }
+    }
+
+    #window-order-by .column-selector-column-border {
+        padding-right: 8px;
+    }
+
+    .sidebar_pin_button {
+        position: absolute;
+        right: 6px;
+        width: 14px;
+        height: 14px;
+        z-index: 8;
+        cursor: pointer;
+        background-color: var(--psp--color);
+        opacity: 0.5;
+        background-repeat: no-repeat;
+        -webkit-mask-size: cover;
+        mask-size: cover;
+        -webkit-mask-image: var(--psp-icon--pin--mask-image);
+        mask-image: var(--psp-icon--pin--mask-image);
+        transform: rotate(45deg);
+        &:hover {
+            opacity: 1;
+        }
+
+        &.is-pinned {
+            transform: none;
+            opacity: 1;
+        }
     }
 }

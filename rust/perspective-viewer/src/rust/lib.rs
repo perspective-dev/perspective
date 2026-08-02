@@ -71,14 +71,17 @@ import type {
     ColumnType,
     TableInitOptions,
     ColumnWindow,
-    ViewWindow, 
+    ViewWindow,
     TypedArrayWindow,
     OnUpdateOptions,
     JoinOptions,
     UpdateOptions,
     DeleteOptions,
+    ViewConfig,
     ViewConfigUpdate,
     SystemInfo,
+    Scalar,
+    Features,
 } from "@perspective-dev/client";
 
 export type * from "../../src/ts/ts-rs/ViewerConfig.d.ts";

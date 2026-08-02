@@ -53,6 +53,22 @@ use crate::utils::*;
 /// presize paths.
 pub(crate) const SUBPIXEL_EPSILON: f64 = 0.5;
 
+/// One queued geometry task for the [`RendererData::geometry_slot`] runner.
+/// `Measure` re-measures the plugin's live box (reactive resize); `Presize`
+/// renders an anticipated box ahead of a layout commit. A later command
+/// subsumes an earlier unconsumed one: `Measure` reflects whatever geometry
+/// has committed by run time, and `Presize` anticipates the NEXT commit —
+/// callers issue them in commit order.
+#[derive(Clone, Copy)]
+pub(crate) enum GeometryCmd {
+    Measure,
+    Presize {
+        translate: Option<(f64, f64)>,
+        width: f64,
+        height: f64,
+    },
+}
+
 /// Everything a plugin may read back during its render, all belonging to
 /// one snapshot (invariant I5). Built once per bound `View` by the render
 /// pipeline and CACHED on the `Renderer`; pinning it for a run is an `Rc`
@@ -103,6 +119,20 @@ pub struct RendererData {
     /// Count of in-flight [`Renderer::resize_with_dimensions`] /
     /// [`Renderer::presize_with_box`] presize calls.
     presize_pending: Cell<u32>,
+
+    /// Debounce slot for geometry tasks (`resize` / presize), separate from
+    /// the default slot data-update redraws coalesce on. Invariant: a
+    /// geometry request must never resolve via a parked DATA task — a
+    /// pending update's redraw renders at the worker's current dimensions
+    /// and cannot subsume a size change (the drag-during-updates permanent
+    /// skew).
+    geometry_slot: DebounceSlot,
+
+    /// Latest-wins parameter cell for the geometry slot, consumed by the
+    /// runner AT RUN TIME under the lock. Parameters live here rather than
+    /// in runner captures so a parked runner can never act on a stale
+    /// target when later calls coalesced onto it.
+    geometry_cmd: Cell<Option<GeometryCmd>>,
 
     /// Fires after every draw/update with the computed render limits.
     pub on_render_limits_changed: RefCell<Option<Callback<RenderLimits>>>,
@@ -221,6 +251,7 @@ impl Deref for RendererData {
 
 impl Renderer {
     pub fn new(viewer_elem: &HtmlElement) -> Self {
+        let draw_lock = DebounceMutex::default();
         Self(Rc::new(RendererData {
             plugin_data: RefCell::new(RendererMutData {
                 viewer_elem: viewer_elem.clone(),
@@ -231,7 +262,9 @@ impl Renderer {
                 timer: MovingWindowRenderTimer::default(),
                 plugin_states: HashMap::default(),
             }),
-            draw_lock: Default::default(),
+            geometry_slot: draw_lock.slot(),
+            geometry_cmd: Cell::new(None),
+            draw_lock,
             plugin_changed: Default::default(),
             style_changed: Default::default(),
             reset_changed: Default::default(),

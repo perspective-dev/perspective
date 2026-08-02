@@ -10,55 +10,64 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use perspective_client::config::ColumnType;
+use web_sys::DragEvent;
 use yew::prelude::*;
 
-use super::ColumnLocator;
+use crate::components::type_icon::TypeIcon;
 
-#[derive(PartialEq, Clone, Properties)]
-pub struct ExprEditButtonProps {
-    /// Column name.
+/// The draggable row of a `column-selector-column`
+#[derive(Clone, PartialEq, Properties)]
+pub struct ColumnSelectorColumnRowProps {
     pub name: String,
 
-    /// Is this an expression column?
-    pub is_expression: bool,
-
-    /// Is this a window column?
     #[prop_or_default]
-    pub is_window: bool,
+    pub col_type: Option<ColumnType>,
 
-    /// Fires when the config/expresison button is clicked.
-    pub on_open_expr_panel: Callback<ColumnLocator>,
+    #[prop_or_default]
+    pub aggregate: Option<Html>,
 
-    /// Is the expression/config panel open?
-    pub is_editing: bool,
+    /// Trailing affordance (e.g. the edit button in the active list).
+    #[prop_or_default]
+    pub trailing: Html,
 
-    /// Is the expression/config panel enabled? If not, show an invisible
-    /// square in the same dimensions (so the layout does not jump around).
-    pub is_disabled: bool,
+    #[prop_or_default]
+    pub wrapper_class: Classes,
+
+    #[prop_or_default]
+    pub wrapper_ref: NodeRef,
+
+    #[prop_or_default]
+    pub ondragstart: Option<Callback<DragEvent>>,
+
+    #[prop_or_default]
+    pub ondragend: Option<Callback<DragEvent>>,
 }
 
-/// A button that goes into a column-list for a custom expression
-/// when pressed, it opens up the expression editor side-panel.
 #[function_component]
-pub fn ExprEditButton(p: &ExprEditButtonProps) -> Html {
-    let onmousedown = yew::use_callback(p.clone(), |_, p| {
-        let name = if p.is_window {
-            ColumnLocator::Window(p.name.clone())
-        } else if p.is_expression {
-            ColumnLocator::Expression(p.name.clone())
-        } else {
-            ColumnLocator::Table(p.name.clone())
-        };
-        p.on_open_expr_panel.emit(name)
-    });
+pub fn ColumnSelectorColumnRow(p: &ColumnSelectorColumnRowProps) -> Html {
+    let mut classes = classes!["column-selector-draggable"];
+    if p.aggregate.is_some() {
+        classes.push("show-aggregate");
+    }
 
-    let class = if p.is_disabled {
-        "expression-edit-button disabled"
-    } else if p.is_editing {
-        "expression-edit-button is-editing"
-    } else {
-        "expression-edit-button"
-    };
-
-    html! { <span {onmousedown} {class}><span class="icon" /></span> }
+    classes.extend(p.wrapper_class.clone());
+    html! {
+        <div
+            class={classes}
+            ref={&p.wrapper_ref}
+            draggable={p.ondragstart.is_some().then_some("true")}
+            ondragstart={p.ondragstart.clone()}
+            ondragend={p.ondragend.clone()}
+        >
+            <div class="column-selector-column-border">
+                <span class="drag-handle icon" />
+                <TypeIcon ty={p.col_type.unwrap_or(ColumnType::String)} />
+                if let Some(aggregate) = &p.aggregate { { aggregate.clone() } }
+                <span class="column_name">{ p.name.clone() }</span>
+                if p.aggregate.is_none() { <span class="column-selector--spacer" /> }
+                { p.trailing.clone() }
+            </div>
+        </div>
+    }
 }

@@ -43,6 +43,10 @@ pub struct InactiveColumnProps {
     #[prop_or_default]
     pub is_expression: bool,
 
+    /// Whether this column is a window column.
+    #[prop_or_default]
+    pub is_window: bool,
+
     /// Session metadata snapshot — threaded from `SessionProps`.
     pub metadata: SessionMetadataRc,
 
@@ -72,6 +76,7 @@ impl PartialEq for InactiveColumnProps {
             && self.name == rhs.name
             && self.is_editing == rhs.is_editing
             && self.is_expression == rhs.is_expression
+            && self.is_window == rhs.is_window
             && self.metadata == rhs.metadata
             && self.view_config == rhs.view_config
     }
@@ -148,6 +153,7 @@ impl Component for InactiveColumn {
             .callback(|event: MouseEvent| MouseEnter(event.which() == 0));
 
         let is_expression = ctx.props().is_expression;
+        let is_window = ctx.props().is_window;
 
         let mut is_active_class = ctx.props().renderer.metadata().select_mode.css();
         is_active_class.push("shift-alt-icon");
@@ -179,7 +185,8 @@ impl Component for InactiveColumn {
                             name={ctx.props().name.clone()}
                             on_open_expr_panel={&ctx.props().on_open_expr_panel}
                             {is_expression}
-                            is_disabled={!is_expression}
+                            {is_window}
+                            is_disabled={!(is_expression || is_window)}
                             is_editing={ctx.props().is_editing}
                         />
                     </div>

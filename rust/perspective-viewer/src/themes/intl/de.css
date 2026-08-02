@@ -108,6 +108,13 @@ perspective-dropdown {
     /* Tabs */
     --psp-label--style-tab--content: "Stil";
     --psp-label--attributes-tab--content: "Attribute";
+    --psp-label--window-tab--content: "Fenster";
+    --psp-label--window-source--content: "Spalte";
+    --psp-label--window-order-by--content: "Sortieren nach";
+    --psp-label--window-partition-by--content: "Partitionieren nach";
+    --psp-label--window-frame--content: "Rahmen";
+    --psp-label--window-offset--content: "Versatz";
+    --psp-label--window-alpha--content: "Alpha";
     --psp-label--query-tab--content: "Abfrage";
     --psp-label--plugin-tab--content: "Plugin";
     --psp-label--debug-tab--content: "JSON";

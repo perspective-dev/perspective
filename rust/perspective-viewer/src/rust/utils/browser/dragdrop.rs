@@ -17,6 +17,18 @@ pub enum DragTarget {
     SplitBy,
     Sort,
     Filter,
+    WindowSource,
+    WindowOrderBy,
+    WindowPartitionBy,
+}
+
+impl DragTarget {
+    pub fn is_staged(&self) -> bool {
+        matches!(
+            self,
+            Self::WindowSource | Self::WindowOrderBy | Self::WindowPartitionBy
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

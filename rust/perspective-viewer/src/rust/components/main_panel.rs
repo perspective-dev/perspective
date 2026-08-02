@@ -291,6 +291,11 @@ impl Component for MainPanel {
             .link()
             .callback(|(id, x, y)| MainPanelMsg::ContextMenu(id, x, y));
         let contextmenu_listener = Closure::wrap(Box::new(move |event: web_sys::Event| {
+            // Shift+right-click passes through to the native browser menu.
+            if event.unchecked_ref::<web_sys::MouseEvent>().shift_key() {
+                return;
+            }
+
             let path = event.composed_path();
             let mut panel_id = None;
             for i in 0..path.length() {

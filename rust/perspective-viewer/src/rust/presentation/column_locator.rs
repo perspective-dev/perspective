@@ -19,6 +19,7 @@ use std::fmt::Display;
 pub enum ColumnLocator {
     Table(String),
     Expression(String),
+    Window(String),
     NewExpression,
 }
 
@@ -28,7 +29,7 @@ impl ColumnLocator {
     /// function will return None.
     pub fn name(&self) -> Option<&String> {
         match self {
-            Self::Table(s) | Self::Expression(s) => Some(s),
+            Self::Table(s) | Self::Expression(s) | Self::Window(s) => Some(s),
             Self::NewExpression => None,
         }
     }
@@ -50,6 +51,19 @@ impl ColumnLocator {
     pub fn is_new_expr(&self) -> bool {
         matches!(self, ColumnLocator::NewExpression)
     }
+
+    #[inline(always)]
+    pub fn is_saved_window(&self) -> bool {
+        matches!(self, ColumnLocator::Window(_))
+    }
+
+    #[inline(always)]
+    pub fn is_window_editable(&self) -> bool {
+        matches!(
+            self,
+            ColumnLocator::Window(_) | ColumnLocator::NewExpression
+        )
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -57,6 +71,7 @@ impl ColumnLocator {
 pub enum ColumnSettingsTab {
     #[default]
     Attributes,
+    Window,
     Style,
 }
 

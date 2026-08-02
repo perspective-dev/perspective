@@ -326,7 +326,8 @@ pub fn StyleTab(props: &StyleTabProps) -> Html {
                     },
                 };
 
-                Some(html! { <fieldset class="style-control">{ component }</fieldset> })
+                let key = format!("{}::{}", props.column_name, keys.join("+"));
+                Some(html! { <fieldset class="style-control" {key}>{ component }</fieldset> })
             })
             .collect_vec()
     })

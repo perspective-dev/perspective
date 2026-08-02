@@ -13,6 +13,7 @@
 mod active_column;
 mod add_expression_button;
 mod aggregate_selector;
+mod column_selector_column_row;
 mod config_selector;
 mod empty_column;
 mod expr_edit_button;
@@ -25,6 +26,7 @@ mod sort_column;
 use std::iter::*;
 use std::rc::Rc;
 
+pub use column_selector_column_row::*;
 pub use empty_column::*;
 pub use invalid_column::*;
 use perspective_client::config::ViewConfig;
@@ -367,7 +369,9 @@ impl Component for ColumnSelector {
                 let column_dropdown = self.column_dropdown.clone();
                 let is_editing = matches!(
                     &ctx.props().selected_column,
-                    Some(ColumnLocator::Table(x)) | Some(ColumnLocator::Expression(x))
+                    Some(ColumnLocator::Table(x))
+                        | Some(ColumnLocator::Expression(x))
+                        | Some(ColumnLocator::Window(x))
                 if x == &key );
 
                 // Compute metadata-derived props here so that changes to
@@ -392,10 +396,15 @@ impl Component for ColumnSelector {
                     .map(|n| metadata.is_column_expression(n))
                     .unwrap_or(false);
 
+                let is_window = name
+                    .get_name()
+                    .map(|n| metadata.is_column_window(n))
+                    .unwrap_or(false);
+
                 let can_render_styles =
                     name.get_name().is_some() && renderer.can_render_column_styles();
 
-                let show_edit_btn = is_expression || can_render_styles;
+                let show_edit_btn = is_expression || is_window || can_render_styles;
                 let on_open_expr_panel = &ctx.props().on_open_expr_panel;
                 html_nested! {
                     <ScrollPanelItem {key} {size_hint}>
@@ -405,6 +414,7 @@ impl Component for ColumnSelector {
                             {is_aggregated}
                             {is_editing}
                             {is_expression}
+                            {is_window}
                             {show_edit_btn}
                             {col_type}
                             view_config={config.clone()}
@@ -425,12 +435,18 @@ impl Component for ColumnSelector {
 
         let mut inactive_children: Vec<_> = columns_iter
             .expression()
+            .chain(columns_iter.window())
             .chain(columns_iter.inactive())
             .enumerate()
             .map(|(idx, vc)| {
                 let selected_column = ctx.props().selected_column.as_ref();
-                let is_editing = matches!(selected_column, Some(ColumnLocator::Expression(x)) if x.as_str() == vc.name);
+                let is_editing = matches!(
+                    selected_column,
+                    Some(ColumnLocator::Expression(x)) | Some(ColumnLocator::Window(x))
+                        if x.as_str() == vc.name
+                );
                 let is_expression = metadata.is_column_expression(vc.name);
+                let is_window = metadata.is_column_window(vc.name);
                 html_nested! {
                     <ScrollPanelItem key={vc.name} size_hint=28.0>
                         <InactiveColumn
@@ -439,6 +455,7 @@ impl Component for ColumnSelector {
                             name={vc.name.to_owned()}
                             {is_editing}
                             {is_expression}
+                            {is_window}
                             view_config={config.clone()}
                             metadata={metadata.clone()}
                             onselect={&onselect}

@@ -316,6 +316,11 @@ impl Component for PanelTab {
 
         let link = ctx.link().clone();
         let contextmenu = Closure::wrap(Box::new(move |event: MouseEvent| {
+            // Shift+right-click passes through to the native browser menu.
+            if event.shift_key() {
+                return;
+            }
+
             event.prevent_default();
             event.stop_propagation();
             link.send_message(PanelTabMsg::ContextMenu(

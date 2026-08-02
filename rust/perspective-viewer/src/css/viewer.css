@@ -303,6 +303,14 @@
         }
     }
 
+    #modal_panel.pinned {
+        position: static;
+        flex: 0 0 auto;
+        width: auto;
+        pointer-events: all;
+        overflow: visible;
+    }
+
     #modal_panel > .split-panel-divider {
         border-left: 1px solid var(--psp-inactive--color, #6e6e6e);
         margin-right: -5px;
