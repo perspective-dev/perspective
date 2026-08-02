@@ -121,37 +121,33 @@ export function cell_style_numeric(
         }
     }
 
-    const fg_tuple: ColorRecord = (() => {
-        if (plugin?.pos_fg_color !== undefined) {
-            return is_positive
-                ? plugin.pos_fg_color
-                : is_negative
-                  ? plugin.neg_fg_color!
-                  : [
-                        "",
-                        model._plugin_background[0],
-                        model._plugin_background[1],
-                        model._plugin_background[2],
-                        "",
-                        "",
-                        "",
-                    ];
-        } else {
-            return is_positive
-                ? model._pos_fg_color
-                : is_negative
-                  ? model._neg_fg_color
-                  : [
-                        "",
-                        model._plugin_background[0],
-                        model._plugin_background[1],
-                        model._plugin_background[2],
-                        "",
-                        "",
-                        "",
-                    ];
-        }
-    })();
+    let pos_fg_color: ColorRecord;
+    if (plugin?.pos_fg_color !== undefined) {
+        pos_fg_color = plugin.pos_fg_color;
+    } else {
+        pos_fg_color = model._pos_fg_color;
+    }
+
+    let neg_fg_color: ColorRecord;
+    if (plugin?.neg_fg_color !== undefined) {
+        neg_fg_color = plugin.neg_fg_color;
+    } else {
+        neg_fg_color = model._neg_fg_color;
+    }
+
+    const fg_tuple: ColorRecord = is_positive
+        ? pos_fg_color
+        : is_negative
+          ? neg_fg_color
+          : [
+                "",
+                model._plugin_background[0],
+                model._plugin_background[1],
+                model._plugin_background[2],
+                "",
+                "",
+                "",
+            ];
 
     const [hex, , , , gradhex] = fg_tuple;
 

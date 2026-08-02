@@ -143,10 +143,16 @@ export function applyBodyCellStyles(
                 const isSub = id.length !== selectedId.length && key_match;
 
                 if (isHeader) {
+                    // A row-header `<th>` is "inert" when its level lies
+                    // within the row's path depth — those cells are the
+                    // merged/rowspan'd group headers whose metadata row is
+                    // merely the first row of their span. Compare indices,
+                    // not values: a falsy group key (0, "", false, null)
+                    // is still a real path segment.
                     if (
                         metadata.type === "row_header" &&
                         metadata.row_header_x !== undefined &&
-                        !!id[metadata.row_header_x]
+                        metadata.row_header_x < id.length
                     ) {
                         td.classList.toggle("psp-select-region", false);
                     } else {

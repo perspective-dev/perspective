@@ -225,11 +225,14 @@ export async function createModel(
     const _column_types: ColumnType[] = [];
     let _edit_mode: EditMode = this._edit_mode || "READ_ONLY";
 
-    if (
-        _edit_mode === "SELECT_ROW_TREE" &&
-        (config.group_by.length === 0 || config.group_rollup_mode === "flat")
-    ) {
+    if (_edit_mode === "SELECT_ROW_TREE" && config.group_by.length === 0) {
         _edit_mode = "READ_ONLY";
+        this._edit_mode = _edit_mode;
+    } else if (
+        _edit_mode === "SELECT_ROW_TREE" &&
+        config.group_rollup_mode === "flat"
+    ) {
+        _edit_mode = "SELECT_ROW";
         this._edit_mode = _edit_mode;
     }
 
