@@ -1,0 +1,14 @@
+# Path overrides for synthesizing public releases (`cargo package` /
+# `cargo publish`).  Packaging resolves an ephemeral copy of each crate
+# _outside_ the workspace, so the `[patch.crates-io]` table in the root
+# `Cargo.toml` does not apply there; without these overrides the not yet
+# published perspective-* versions would fail to resolve (or resolve to stale
+# crates.io copies).  This file is not loaded automatically - pass it
+# explicitly with `cargo --config .cargo/release.toml` from the repo root.
+[patch.crates-io]
+perspective-client = { path = "rust/perspective-client" }
+perspective-server = { path = "rust/perspective-server" }
+perspective-js = { path = "rust/perspective-js" }
+perspective-python = { path = "rust/perspective-python" }
+perspective-viewer = { path = "rust/perspective-viewer" }
+perspective = { path = "rust/perspective" }

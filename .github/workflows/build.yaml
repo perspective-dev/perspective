@@ -429,7 +429,7 @@ jobs:
 
             - name: Package
               if: ${{ !contains(matrix.os, 'windows') && steps.config-step.outputs.FULL_RUN }}
-              run: cargo package --no-verify --allow-dirty -p perspective -p perspective-viewer -p perspective-js -p perspective-client -p perspective-server -p perspective-python
+              run: cargo package --config .cargo/release.toml --no-verify --allow-dirty -p perspective -p perspective-viewer -p perspective-js -p perspective-client -p perspective-server -p perspective-python
 
             - uses: actions/upload-artifact@v4
               if: ${{ !contains(matrix.os, 'windows') && steps.config-step.outputs.FULL_RUN }}
