@@ -61,7 +61,7 @@ export async function join_suite(perspective, metadata) {
 }
 
 export async function window_suite(perspective, metadata) {
-    if (!check_version_gte(metadata.version, "5.0.0")) {
+    if (!check_version_gte(metadata.version, "5.1.0")) {
         return;
     }
 

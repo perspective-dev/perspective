@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/react",
-    "version": "5.0.0",
+    "version": "5.1.0",
     "description": "React component wrappers for `<perspective-viewer>`",
     "keywords": [
         "perspective",

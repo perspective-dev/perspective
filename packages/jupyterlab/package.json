@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/jupyterlab",
-    "version": "5.0.0",
+    "version": "5.1.0",
     "description": "JupyterLab file renderers for the Perspective library (CSV, JSON, Arrow). The PerspectiveWidget itself ships via the perspective-python wheel using anywidget.",
     "files": [
         "dist/**/*",

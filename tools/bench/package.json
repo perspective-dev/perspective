@@ -30,6 +30,7 @@
         "zx": "catalog:"
     },
     "dependencies": {
+        "perspective-5-0-0": "npm:@perspective-dev/client@5.0.0",
         "perspective-4-5-1": "npm:@perspective-dev/client@4.5.1",
         "perspective-4-5-0": "npm:@perspective-dev/client@4.5.0",
         "perspective-4-4-0": "npm:@perspective-dev/client@4.4.0",

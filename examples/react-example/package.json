@@ -1,7 +1,7 @@
 {
     "name": "react-example",
     "private": true,
-    "version": "5.0.0",
+    "version": "5.1.0",
     "description": "An example app built using `@perspective-dev/viewer`.",
     "type": "module",
     "scripts": {

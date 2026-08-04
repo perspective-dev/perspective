@@ -1,6 +1,14 @@
+# [v5.1.0](https://github.com/perspective-dev/perspective/releases/tag/v5.1.0)
+
+_4 August 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.0.0...v5.1.0))
+
+Features
+
+- Window columns [#3207](https://github.com/finos/perspective/pull/3207)
+
 # [v5.0.0](https://github.com/perspective-dev/perspective/releases/tag/v5.0.0)
 
-_28 July 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.5.2...v5.0.0))
+_27 July 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v4.5.2...v5.0.0))
 
 **Breaking**
 

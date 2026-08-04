@@ -1061,6 +1061,9 @@ importers:
       perspective-4-5-1:
         specifier: npm:@perspective-dev/client@4.5.1
         version: '@perspective-dev/client@4.5.1'
+      perspective-5-0-0:
+        specifier: npm:@perspective-dev/client@5.0.0
+        version: '@perspective-dev/client@5.0.0'
     devDependencies:
       '@perspective-dev/client':
         specifier: 'workspace:'
@@ -1977,6 +1980,9 @@ packages:
   '@perspective-dev/client@4.5.1':
     resolution: {integrity: sha512-Yb/huLDHEQ9FFeTloipHKM2oVtgTkHLIEqh971eznOc0sNQGg9Sd7flju8xlKe8KMGe3VCo7/wlvxr4GqBi1Bw==}
 
+  '@perspective-dev/client@5.0.0':
+    resolution: {integrity: sha512-K+Rg+j9GNHsGyD0uI7kng8nuodtdEa/DHQecZYcUe4ikk7ztLuekTAp0DzhIEZWyEdzG5JChFpqvId4RgCuDOw==}
+
   '@perspective-dev/server@4.3.0':
     resolution: {integrity: sha512-UH3ADscynozVx42RF07DTBmPE/0PUwH+SS0cgvMLuLfBjtvnPm6msfOU0tHlgFnNZOHJO0q6RZ9WI5fD6wF07A==}
 
@@ -1985,6 +1991,9 @@ packages:
 
   '@perspective-dev/server@4.5.1':
     resolution: {integrity: sha512-VzR1Z+SdUlB4K1hTHFxVE7PLxFXtTb008fBGMg/uo3Y3qDbJh/9IcZjOwvpI86k6QUZ49VR2w3BDGdh7YzF/8A==}
+
+  '@perspective-dev/server@5.0.0':
+    resolution: {integrity: sha512-tuWAHeOusI+Jva34x5PPXBVnEaXB0Yeq/rfpioUygnLwmz4LJVk+SIjfoK4uEriScbV52dgatQjSbyWzUcKtqQ==}
 
   '@playwright/experimental-ct-core@1.58.0':
     resolution: {integrity: sha512-YZsjApZmRE78Kp2E6OtAvFFVheUyZDfrlZMf+lfnSshmYHrrJUy3bhdCe7EPCWsE12XfCVVAv6G0btiyAx8d0w==}
@@ -6500,11 +6509,25 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@perspective-dev/client@5.0.0':
+    dependencies:
+      '@perspective-dev/server': 5.0.0
+      pro_self_extracting_wasm: 0.0.9
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
   '@perspective-dev/server@4.3.0': {}
 
   '@perspective-dev/server@4.4.1': {}
 
   '@perspective-dev/server@4.5.1': {}
+
+  '@perspective-dev/server@5.0.0': {}
 
   '@playwright/experimental-ct-core@1.58.0(@types/node@24.9.1)(jiti@1.21.7)(less@4.4.2)(lightningcss@1.32.0)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)':
     dependencies:
