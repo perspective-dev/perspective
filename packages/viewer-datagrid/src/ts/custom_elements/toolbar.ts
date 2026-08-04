@@ -12,7 +12,7 @@
 
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 import TOOLBAR_STYLE from "../../../dist/css/perspective-viewer-datagrid-toolbar.css";
-import { toggle_edit_mode, toggle_scroll_lock } from "../model/toolbar.js";
+import { toggle_edit_mode } from "../model/toolbar.js";
 import type { DatagridPluginElement } from "../types.js";
 
 const stylesheet = new CSSStyleSheet();
@@ -43,11 +43,6 @@ export class HTMLPerspectiveViewerDatagridToolbarElement extends HTMLElement {
         this.shadowRoot!.innerHTML = `
             <div id="toolbar">
                 <span class="hover-target">
-                    <span id="scroll_lock" class="button">
-                        <span></span>
-                    </span>
-                </span>
-                <span class="hover-target">
                     <span id="edit_mode" class="button" data-edit-mode="READ_ONLY">
                         <span></span>
                     </span>
@@ -62,14 +57,6 @@ export class HTMLPerspectiveViewerDatagridToolbarElement extends HTMLElement {
                 ? prev
                 : viewer.getPlugin("Datagrid")
         ) as DatagridPluginElement;
-
-        plugin._scroll_lock = this.shadowRoot!.querySelector(
-            "#scroll_lock",
-        ) as HTMLElement;
-
-        plugin._scroll_lock.addEventListener("click", () =>
-            toggle_scroll_lock.call(plugin),
-        );
 
         plugin._edit_button = this.shadowRoot!.querySelector(
             "#edit_mode",

@@ -10,7 +10,11 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use crate::config::{Aggregate, GroupRollupMode, Sort, SortDir, ViewConfig};
+use super::GenericSQLError;
+use crate::config::{
+    Aggregate, GroupRollupMode, Sort, SortDir, ViewConfig, WindowAggregate, WindowFrame,
+    WindowSortDir, WindowSpec,
+};
 
 fn aggregate_to_string(agg: &Aggregate) -> String {
     match agg {
@@ -54,6 +58,149 @@ enum QueryOrientation {
     TotalPivoted,
 }
 
+fn window_over_clause(w: &WindowSpec, frame: Option<&str>) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if !w.partition_by.is_empty() {
+        parts.push(format!(
+            "PARTITION BY {}",
+            w.partition_by
+                .iter()
+                .map(|c| format!("\"{}\"", quote_ident(c)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    // NULLS FIRST matches the engine's invalid-keys-sort-first ordering (in
+    // both directions). The engine additionally breaks order-key ties by
+    // primary key; SQL row order within ties is dialect-defined, so tied
+    // ROWS frames may differ. An OMITTED `order_by` takes the model's
+    // natural row order - `rowid`, the same identity unsorted view results
+    // are already ordered by.
+    match &w.order_by {
+        Some(order_by) => parts.push(format!(
+            "ORDER BY \"{}\" {} NULLS FIRST",
+            quote_ident(&order_by.0),
+            match order_by.1 {
+                WindowSortDir::Asc => "ASC",
+                WindowSortDir::Desc => "DESC",
+            }
+        )),
+        None => parts.push("ORDER BY rowid ASC".to_string()),
+    }
+    if let Some(f) = frame {
+        parts.push(f.to_string());
+    }
+
+    parts.join(" ")
+}
+
+fn window_frame_sql(frame: Option<&WindowFrame>) -> String {
+    match frame {
+        Some(WindowFrame::Rows(n)) => {
+            format!("ROWS BETWEEN {} PRECEDING AND CURRENT ROW", n)
+        },
+        Some(WindowFrame::Range(x)) => {
+            format!("RANGE BETWEEN {} PRECEDING AND CURRENT ROW", x)
+        },
+        Some(WindowFrame::Cumulative) | None => {
+            "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW".to_string()
+        },
+    }
+}
+
+/// One `WindowSpec` as a SQL window-function expression - the 1:1 `OVER`
+/// mapping that keeps hot-tier and virtual-server semantics interchangeable
+/// (WINDOW_FUNCTIONS_PLAN Phase 5). `resolve` inlines expression-alias
+/// sources. `ema` is recursive and has no SQL window equivalent.
+fn window_sql(w: &WindowSpec, resolve: &dyn Fn(&str) -> String) -> Result<String, GenericSQLError> {
+    // `range` frame interval arithmetic is defined on the order key's
+    // units - the natural (`rowid`) fallback is meaningless for it, so an
+    // explicit `order_by` is required (mirrors the engine's validation).
+    if w.order_by.is_none() && matches!(w.frame, Some(WindowFrame::Range(_))) {
+        return Err(GenericSQLError::UnsupportedOperation(
+            "window `range` frames require an explicit `order_by`".to_string(),
+        ));
+    }
+
+    let src = resolve(&w.column);
+    let agg_fn = match w.aggregate {
+        WindowAggregate::Sum => Some("SUM"),
+        WindowAggregate::Avg => Some("AVG"),
+        WindowAggregate::Count => Some("COUNT"),
+        WindowAggregate::Min => Some("MIN"),
+        WindowAggregate::Max => Some("MAX"),
+        WindowAggregate::Stddev => Some("STDDEV_SAMP"),
+        WindowAggregate::Var => Some("VAR_SAMP"),
+        _ => None,
+    };
+
+    if let Some(agg_fn) = agg_fn {
+        let frame = window_frame_sql(w.frame.as_ref());
+        return Ok(format!(
+            "{}({}) OVER ({})",
+            agg_fn,
+            src,
+            window_over_clause(w, Some(&frame))
+        ));
+    }
+
+    match w.aggregate {
+        WindowAggregate::Lag | WindowAggregate::Lead => Ok(format!(
+            "{}({}, {}) OVER ({})",
+            if w.aggregate == WindowAggregate::Lag {
+                "LAG"
+            } else {
+                "LEAD"
+            },
+            src,
+            w.offset.unwrap_or(1),
+            window_over_clause(w, None)
+        )),
+        WindowAggregate::Diff => Ok(format!(
+            "({} - LAG({}, {}) OVER ({}))",
+            src,
+            src,
+            w.offset.unwrap_or(1),
+            window_over_clause(w, None)
+        )),
+        WindowAggregate::Rate => {
+            let Some(order_by) = &w.order_by else {
+                return Err(GenericSQLError::UnsupportedOperation(
+                    "window `rate` requires an explicit `order_by`".to_string(),
+                ));
+            };
+
+            // The engine's validation matrix rejects frameless `rate`
+            // (an omitted frame means cumulative only for aggregating
+            // ops) - mirror it rather than diverge.
+            if !matches!(w.frame, Some(WindowFrame::Range(_))) {
+                return Err(GenericSQLError::UnsupportedOperation(
+                    "window `rate` requires a `range` frame".to_string(),
+                ));
+            }
+
+            let frame = window_frame_sql(w.frame.as_ref());
+            let over = window_over_clause(w, Some(&frame));
+            let okey = format!("\"{}\"", quote_ident(&order_by.0));
+            Ok(format!(
+                "(({} - FIRST_VALUE({}) OVER ({})) / NULLIF(CAST({} AS DOUBLE) - \
+                 CAST(FIRST_VALUE({}) OVER ({}) AS DOUBLE), 0))",
+                src, src, over, okey, okey, over
+            ))
+        },
+        WindowAggregate::Ema => Err(GenericSQLError::UnsupportedOperation(
+            "`ema` windows cannot be translated to a SQL window function (recursive); compute it \
+             in the Perspective engine instead"
+                .to_string(),
+        )),
+        _ => Err(GenericSQLError::UnsupportedOperation(format!(
+            "window op {:?} is not supported by the SQL translation",
+            w.aggregate
+        ))),
+    }
+}
+
 fn quote_ident(name: &str) -> String {
     name.replace('"', "\"\"")
 }
@@ -68,7 +215,7 @@ fn quote_literal(value: &str) -> String {
 /// needed to emit the correct `SELECT`, `GROUP BY`, `PIVOT`, `ORDER BY`, and
 /// `WINDOW` clauses for every combination of `group_by` / `split_by`.
 pub(crate) struct ViewQueryContext<'a> {
-    table: &'a str,
+    from_expr: String,
     config: &'a ViewConfig,
     group_col_names: Vec<String>,
     grouping_fn: &'a str,
@@ -83,13 +230,40 @@ impl<'a> ViewQueryContext<'a> {
         model: &'a super::GenericSQLVirtualServerModel,
         table: &'a str,
         config: &'a ViewConfig,
-    ) -> Self {
+    ) -> Result<Self, GenericSQLError> {
         let expressions = &config.expressions.0;
         let col_name_resolve = |col: &str| -> String {
             expressions
                 .get(col)
                 .cloned()
                 .unwrap_or_else(|| format!("\"{}\"", col))
+        };
+
+        // Window columns materialize in a wrapping sub-select, so every
+        // downstream clause (filter, group_by, aggregate, sort) sees them as
+        // plain columns in all four query orientations - mirroring the
+        // engine, where windows compute over raw rows before pivoting.
+        let from_expr = if config.windows.is_empty() {
+            table.to_string()
+        } else {
+            // Sorted by alias so the generated SQL is deterministic (the
+            // `windows` map itself is unordered).
+            let mut windows = config.windows.iter().collect::<Vec<_>>();
+            windows.sort_by_key(|(name, _)| name.as_str());
+            let mut selects = Vec::with_capacity(windows.len());
+            for (name, w) in windows {
+                selects.push(format!(
+                    "{} AS \"{}\"",
+                    window_sql(w, &col_name_resolve)?,
+                    quote_ident(name)
+                ));
+            }
+
+            format!(
+                "(SELECT *, {} FROM {}) AS __PSP_WINDOW_SRC__",
+                selects.join(", "),
+                table
+            )
         };
 
         let grouping_fn = model.0.grouping_fn.as_deref().unwrap_or("GROUPING_ID");
@@ -104,14 +278,14 @@ impl<'a> ViewQueryContext<'a> {
             .map(|i| format!("__ROW_PATH_{}__", i))
             .collect();
 
-        Self {
-            table,
+        Ok(Self {
+            from_expr,
             config,
             group_col_names,
             grouping_fn,
             column_separator,
             row_path_aliases,
-        }
+        })
     }
 
     /// Builds the inner `SELECT` query (without the outer `CREATE TABLE`
@@ -124,7 +298,7 @@ impl<'a> ViewQueryContext<'a> {
         let mut query = match self.query_orientation() {
             QueryOrientation::Flat => {
                 let select = self.select_clauses().join(", ");
-                format!("SELECT {} FROM {}{}", select, self.table, where_sql)
+                format!("SELECT {} FROM {}{}", select, self.from_expr, where_sql)
             },
             QueryOrientation::Grouped => {
                 let mut clauses = self.select_clauses();
@@ -133,7 +307,7 @@ impl<'a> ViewQueryContext<'a> {
                     format!(
                         "SELECT {} FROM {}{} GROUP BY {}",
                         clauses.join(", "),
-                        self.table,
+                        self.from_expr,
                         where_sql,
                         self.group_col_names.join(", ")
                     )
@@ -142,7 +316,7 @@ impl<'a> ViewQueryContext<'a> {
                     format!(
                         "SELECT {} FROM {}{} GROUP BY ROLLUP({})",
                         clauses.join(", "),
-                        self.table,
+                        self.from_expr,
                         where_sql,
                         self.group_col_names.join(", ")
                     )
@@ -159,7 +333,7 @@ impl<'a> ViewQueryContext<'a> {
                 let src = format!(
                     "SELECT {} FROM {}{}",
                     src_clauses.join(", "),
-                    self.table,
+                    self.from_expr,
                     where_sql
                 );
 
@@ -214,7 +388,7 @@ impl<'a> ViewQueryContext<'a> {
                     format!(
                         "SELECT {} FROM {}{} GROUP BY {}, {}",
                         inner_clauses.join(", "),
-                        self.table,
+                        self.from_expr,
                         where_sql,
                         groups_joined,
                         split_cols_joined,
@@ -223,7 +397,7 @@ impl<'a> ViewQueryContext<'a> {
                     format!(
                         "SELECT {} FROM {}{} GROUP BY ROLLUP({}), {}",
                         inner_clauses.join(", "),
-                        self.table,
+                        self.from_expr,
                         where_sql,
                         groups_joined,
                         split_cols_joined,
@@ -254,7 +428,7 @@ impl<'a> ViewQueryContext<'a> {
             },
             QueryOrientation::Total => {
                 let select = self.select_clauses().join(", ");
-                format!("SELECT {} FROM {}{}", select, self.table, where_sql)
+                format!("SELECT {} FROM {}{}", select, self.from_expr, where_sql)
             },
             QueryOrientation::TotalPivoted => {
                 let mut src_clauses: Vec<String> = self
@@ -269,7 +443,7 @@ impl<'a> ViewQueryContext<'a> {
                 let src = format!(
                     "SELECT {} FROM {}{}",
                     src_clauses.join(", "),
-                    self.table,
+                    self.from_expr,
                     where_sql
                 );
 

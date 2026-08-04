@@ -102,7 +102,8 @@ impl<'a> ColumnsIteratorSet<'a> {
                     .get_table_columns()
                     .map(|x: &Vec<String>| x.len())
                     .unwrap_or_default()
-                    + self.config.expressions.len();
+                    + self.config.expressions.len()
+                    + self.config.windows.len();
 
         match &self.is_dragover_column {
             Some((to_index, from_column)) => {
@@ -236,6 +237,11 @@ impl<'a> ColumnsIteratorSet<'a> {
     /// Generate an iterator for inactive expressions.
     pub fn expression(&'a self) -> impl Iterator<Item = OrderedColumn<'a>> {
         self.order_columns(self.metadata.get_expression_columns())
+    }
+
+    /// Generate an iterator for inactive window columns.
+    pub fn window(&'a self) -> impl Iterator<Item = OrderedColumn<'a>> {
+        self.order_columns(self.metadata.get_window_columns())
     }
 
     /// Generate an iterator for inactive columns, which also shows the columns

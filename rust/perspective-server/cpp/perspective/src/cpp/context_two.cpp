@@ -101,10 +101,22 @@ t_ctx2::init() {
     // and do not affect other contexts when they are calculated.
     const auto& expressions = m_config.get_expressions();
     m_expression_tables = std::make_shared<t_expression_tables>(
-        expressions, m_config.get_backing_store()
+        expressions, m_config.get_backing_store(), m_config.get_windows()
     );
+    m_window_engine =
+        std::make_shared<t_window_engine>(m_config.get_windows());
 
     m_init = true;
+}
+
+std::shared_ptr<t_window_engine>
+t_ctx2::get_window_engine() const {
+    return m_window_engine;
+}
+
+bool
+t_ctx2::has_derived_columns() const {
+    return m_expression_tables->m_master->get_schema().size() > 0;
 }
 
 t_uindex
@@ -1317,6 +1329,10 @@ t_ctx2::compute_expressions(
             regex_mapping
         );
     }
+
+    // Windows read expression-alias sources from the master expression
+    // table, so they must compute after the expression loop.
+    m_window_engine->compute_master(master, pkey_map, master_expression_table);
 }
 
 void
@@ -1393,6 +1409,21 @@ t_ctx2::compute_expressions(
             regex_mapping
         );
     }
+
+    // Windows must compute after the expression loop (expression-alias
+    // sources) and before `calculate_transitions` (which diffs the window
+    // columns of `m_prev`/`m_current` like any other column).
+    m_window_engine->compute_update(
+        master,
+        pkey_map,
+        m_expression_tables->m_master,
+        m_expression_tables->m_flattened,
+        m_expression_tables->m_prev,
+        m_expression_tables->m_current,
+        m_expression_tables->m_delta,
+        flattened,
+        existed
+    );
 
     // Calculate the transitions now that the intermediate tables are computed
     m_expression_tables->calculate_transitions(existed);

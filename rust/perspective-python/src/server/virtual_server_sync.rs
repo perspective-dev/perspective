@@ -416,7 +416,7 @@ impl PyVirtualDataSlice {
         self.0
             .lock()
             .unwrap()
-            .render_to_columns_json(RowPathStyle::Sidecar)
+            .render_to_columns_json(RowPathStyle::Sidecar, false)
             .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 

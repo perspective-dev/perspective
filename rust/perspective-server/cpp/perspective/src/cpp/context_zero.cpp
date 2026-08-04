@@ -41,8 +41,10 @@ t_ctx0::init() {
     // and do not affect other contexts when they are calculated.
     const auto& expressions = m_config.get_expressions();
     m_expression_tables = std::make_shared<t_expression_tables>(
-        expressions, m_config.get_backing_store()
+        expressions, m_config.get_backing_store(), m_config.get_windows()
     );
+    m_window_engine =
+        std::make_shared<t_window_engine>(m_config.get_windows());
 
     m_init = true;
 }
@@ -102,6 +104,38 @@ t_ctx0::notify(
     const t_column* pkey_col = flattened._get_const_column("psp_pkey");
     const t_column* op_col = flattened._get_const_column("psp_op");
     const t_column* existed_col = existed._get_const_column("psp_existed");
+    const t_column* widened_col = existed._get_const_column("psp_widened");
+
+    // Widened rows (appended by the gnode window pass, outside the update
+    // batch) enter the row delta only when one of this context's derived
+    // columns actually transitioned; batch rows keep their unconditional
+    // row-delta semantics.
+    const t_schema& derived_schema =
+        m_expression_tables->m_transitions->get_schema();
+    std::vector<const t_column*> derived_trans_cols;
+    derived_trans_cols.reserve(derived_schema.size());
+    for (const auto& cname : derived_schema.m_columns) {
+        derived_trans_cols.push_back(transitions._get_const_column(cname));
+    }
+
+    auto derived_changed = [&derived_trans_cols](t_uindex idx) {
+        for (const t_column* tcol : derived_trans_cols) {
+            auto tr = static_cast<t_value_transition>(
+                *(tcol->get_nth<std::uint8_t>(idx))
+            );
+            switch (tr) {
+                case VALUE_TRANSITION_NVEQ_FT:
+                case VALUE_TRANSITION_NEQ_FT:
+                case VALUE_TRANSITION_NEQ_TT:
+                case VALUE_TRANSITION_NEQ_TF:
+                case VALUE_TRANSITION_NEQ_TDT:
+                    return true;
+                default:
+                    break;
+            }
+        }
+        return false;
+    };
 
     bool delete_encountered = false;
     bool has_filters = m_config.has_filters();
@@ -172,7 +206,13 @@ t_ctx0::notify(
             } break;
         }
 
-        add_delta_pkey(pkey);
+        // Value read, not pointer: `get_nth` never returns nullptr in
+        // bounds, and `_process_mask_existed_rows` writes this column for
+        // every batch row so the value is deterministic.
+        bool widened = *(widened_col->get_nth<bool>(idx));
+        if (!widened || derived_changed(idx)) {
+            add_delta_pkey(pkey);
+        }
     }
 
     m_has_delta =
@@ -731,6 +771,10 @@ t_ctx0::compute_expressions(
             regex_mapping
         );
     }
+
+    // Windows read expression-alias sources from the master expression
+    // table, so they must compute after the expression loop.
+    m_window_engine->compute_master(master, pkey_map, master_expression_table);
 }
 
 // TODO rewrite const&
@@ -809,6 +853,21 @@ t_ctx0::compute_expressions(
         );
     }
 
+    // Windows must compute after the expression loop (expression-alias
+    // sources) and before `calculate_transitions` (which diffs the window
+    // columns of `m_prev`/`m_current` like any other column).
+    m_window_engine->compute_update(
+        master,
+        pkey_map,
+        m_expression_tables->m_master,
+        m_expression_tables->m_flattened,
+        m_expression_tables->m_prev,
+        m_expression_tables->m_current,
+        m_expression_tables->m_delta,
+        flattened,
+        existed
+    );
+
     // Calculate the transitions now that the intermediate tables are computed
     m_expression_tables->calculate_transitions(existed);
 }
@@ -817,6 +876,16 @@ bool
 t_ctx0::is_expression_column(const std::string& colname) const {
     const t_schema& schema = m_expression_tables->m_master->get_schema();
     return schema.has_column(colname);
+}
+
+std::shared_ptr<t_window_engine>
+t_ctx0::get_window_engine() const {
+    return m_window_engine;
+}
+
+bool
+t_ctx0::has_derived_columns() const {
+    return m_expression_tables->m_master->get_schema().size() > 0;
 }
 
 t_uindex

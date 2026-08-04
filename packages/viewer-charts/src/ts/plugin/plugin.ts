@@ -171,6 +171,16 @@ export class HTMLPerspectiveViewerWebGLPluginElement
      */
     private _pluginConfigStore: PluginConfig | null = null;
 
+    /**
+     * Per-column config (`alt_axis`, `chart_type`, formats, …), held on
+     * the element for the same reason as `_pluginConfigStore`: the host
+     * calls `restore()` BEFORE the first draw builds the renderer, so
+     * forwarding only to a live renderer silently drops the initial
+     * `columns_config` — `_buildRenderer` ships it in the `InitMsg`
+     * instead.
+     */
+    private _columnsConfig: Record<string, any> = {};
+
     private get _pluginConfig(): PluginConfig {
         if (!this._pluginConfigStore) {
             this._pluginConfigStore = this._effectiveDefaults();
@@ -396,6 +406,7 @@ export class HTMLPerspectiveViewerWebGLPluginElement
                 zoom_mode: this._pluginConfig.facet_zoom_mode,
             },
             pluginConfig: this._pluginConfig,
+            columnsConfig: this._columnsConfig,
             defaultChartType: this._chartType.default_chart_type,
             renderBlitMode: BLIT_MODE,
         });
@@ -693,8 +704,9 @@ export class HTMLPerspectiveViewerWebGLPluginElement
             ...config,
         };
 
+        this._columnsConfig = columns_config ?? {};
         this._renderer?.setPluginConfig(this._pluginConfig);
-        this._renderer?.setColumnsConfig(columns_config ?? {});
+        this._renderer?.setColumnsConfig(this._columnsConfig);
     }
 
     delete() {

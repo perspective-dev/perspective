@@ -94,4 +94,4 @@ features = ["prost-derive", "std"]
 
 [dependencies.ts-rs]
 version = "11.0.1"
-features = ["serde-json-impl", "no-serde-warnings", "import-esm"]
+features = ["serde-json-impl", "no-serde-warnings", "import-esm", "indexmap-impl"]

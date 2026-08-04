@@ -25,7 +25,7 @@ use web_sys::*;
 
 use super::activate::*;
 use super::limits::*;
-use super::{ContextPin, RenderContext, Renderer, SUBPIXEL_EPSILON};
+use super::{ContextPin, GeometryCmd, RenderContext, Renderer, SUBPIXEL_EPSILON};
 use crate::js::plugin::*;
 use crate::session::FreshView;
 use crate::utils::*;
@@ -133,19 +133,8 @@ impl Renderer {
     }
 
     pub async fn resize(&self) -> ApiResult<()> {
-        let draw_mutex = self.draw_lock();
-        let timer = self.render_timer();
-        draw_mutex
-            .debounce_with(|_guard| async move {
-                set_timeout(timer.get_throttle()).await?;
-                let Some(jsplugin) = self.active_plugin() else {
-                    return Ok(());
-                };
-                self.stamp_active(&jsplugin);
-                jsplugin.resize().await?;
-                Ok(())
-            })
-            .await
+        self.0.geometry_cmd.set(Some(GeometryCmd::Measure));
+        self.geometry_task().await.map(|_| ())
     }
 
     /// Public one-shot resize to explicit dimensions (`viewer.resize({
@@ -190,62 +179,100 @@ impl Renderer {
         width: f64,
         height: f64,
     ) -> ApiResult<Option<js_sys::Function>> {
-        let draw_mutex = self.draw_lock();
-        draw_mutex
+        self.0.geometry_cmd.set(Some(GeometryCmd::Presize {
+            translate,
+            width,
+            height,
+        }));
+
+        self.geometry_task().await
+    }
+
+    /// Run the LATEST queued [`GeometryCmd`] on the geometry debounce slot.
+    async fn geometry_task(&self) -> ApiResult<Option<js_sys::Function>> {
+        let timer = self.render_timer();
+        self.0
+            .geometry_slot
+            .clone()
             .debounce_with(|_guard| async move {
-                let Some(plugin) = self.active_plugin() else {
+                let Some(cmd) = self.0.geometry_cmd.take() else {
                     return Ok(None);
                 };
 
-                self.stamp_active(&plugin);
-                self.clear_presize()?;
-                let main_panel: &web_sys::HtmlElement = plugin.unchecked_ref();
-                let rect = main_panel.get_bounding_client_rect();
-                let size_changed = (height - rect.height()).abs() > SUBPIXEL_EPSILON
-                    || (width - rect.width()).abs() > SUBPIXEL_EPSILON;
+                match cmd {
+                    GeometryCmd::Measure => {
+                        set_timeout(timer.get_throttle()).await?;
+                        let Some(jsplugin) = self.active_plugin() else {
+                            return Ok(None);
+                        };
 
-                let (dx, dy) = translate.unwrap_or((0.0, 0.0));
-                let moved = dx.abs() > SUBPIXEL_EPSILON || dy.abs() > SUBPIXEL_EPSILON;
-                if !size_changed && !moved {
-                    return Ok(None);
+                        self.stamp_active(&jsplugin);
+                        jsplugin.resize().await?;
+                        Ok(None)
+                    },
+                    GeometryCmd::Presize {
+                        translate,
+                        width,
+                        height,
+                    } => self.run_presize(translate, width, height).await,
                 }
-
-                if plugin.capabilities().presize {
-                    if size_changed {
-                        return plugin.presize(width, height).await;
-                    }
-
-                    return Ok(None);
-                }
-
-                if size_changed {
-                    main_panel
-                        .style()
-                        .set_property("width", &format!("{width}px"))?;
-                    main_panel
-                        .style()
-                        .set_property("height", &format!("{height}px"))?;
-                }
-
-                if moved {
-                    main_panel
-                        .style()
-                        .set_property("transform", &format!("translate({dx}px, {dy}px)"))?;
-                }
-
-                if size_changed {
-                    let result = plugin.resize().await;
-                    if translate.is_none() {
-                        main_panel.style().set_property("width", "")?;
-                        main_panel.style().set_property("height", "")?;
-                    }
-
-                    result?;
-                }
-
-                Ok(None)
             })
             .await
+    }
+
+    async fn run_presize(
+        &self,
+        translate: Option<(f64, f64)>,
+        width: f64,
+        height: f64,
+    ) -> ApiResult<Option<js_sys::Function>> {
+        let Some(plugin) = self.active_plugin() else {
+            return Ok(None);
+        };
+
+        self.stamp_active(&plugin);
+        self.clear_presize()?;
+        if plugin.capabilities().presize {
+            return plugin.presize(width, height).await;
+        }
+
+        let main_panel: &web_sys::HtmlElement = plugin.unchecked_ref();
+        let rect = main_panel.get_bounding_client_rect();
+        let size_changed = (height - rect.height()).abs() > SUBPIXEL_EPSILON
+            || (width - rect.width()).abs() > SUBPIXEL_EPSILON;
+
+        let (dx, dy) = translate.unwrap_or((0.0, 0.0));
+        let moved = dx.abs() > SUBPIXEL_EPSILON || dy.abs() > SUBPIXEL_EPSILON;
+        if !size_changed && !moved {
+            return Ok(None);
+        }
+
+        if size_changed {
+            main_panel
+                .style()
+                .set_property("width", &format!("{width}px"))?;
+            main_panel
+                .style()
+                .set_property("height", &format!("{height}px"))?;
+        }
+
+        if moved {
+            main_panel
+                .style()
+                .set_property("transform", &format!("translate({dx}px, {dy}px)"))?;
+        }
+
+        if size_changed {
+            let result = plugin.resize().await;
+            if translate.is_none() {
+                main_panel.style().set_property("width", "")?;
+                main_panel.style().set_property("height", "")?;
+            }
+
+            result?;
+        }
+
+        Ok(None)
     }
 
     /// Remove the inline presize styles applied by [`Self::presize_with_box`].

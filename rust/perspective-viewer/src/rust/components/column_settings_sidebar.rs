@@ -13,12 +13,13 @@ mod attributes_tab;
 
 mod save_settings;
 pub(crate) mod style_tab;
+mod window_tab;
 
 use std::rc::Rc;
 
 use derivative::Derivative;
 use itertools::Itertools;
-use perspective_client::config::{ColumnType, Expression, ViewConfig};
+use perspective_client::config::{ColumnType, Expression, ViewConfig, WindowSpec};
 use perspective_client::utils::PerspectiveResultExt;
 use yew::{Callback, Component, Html, Properties, html, props};
 
@@ -27,15 +28,19 @@ use self::style_tab::StyleTabProps;
 use crate::components::column_settings_sidebar::attributes_tab::AttributesTab;
 use crate::components::column_settings_sidebar::save_settings::SaveSettingsProps;
 use crate::components::column_settings_sidebar::style_tab::StyleTab;
+use crate::components::column_settings_sidebar::window_tab::{WindowTab, WindowTabProps};
 use crate::components::containers::sidebar::Sidebar;
 use crate::components::containers::tab_list::TabList;
 use crate::components::editable_header::EditableHeaderProps;
 use crate::components::expression_editor::ExpressionEditorProps;
 use crate::components::type_icon::TypeIconType;
+use crate::components::window_editor::WindowEditorProps;
 use crate::presentation::{ColumnLocator, ColumnSettingsTab, Presentation};
 use crate::renderer::Renderer;
 use crate::session::{Session, SessionMetadataRc};
-use crate::tasks::{delete_expr, save_expr, update_expr};
+use crate::tasks::{
+    delete_expr, delete_window, save_expr, save_window, update_expr, update_window,
+};
 use crate::utils::PtrEqRc;
 
 #[derive(Clone, Derivative, Properties)]
@@ -47,9 +52,22 @@ pub struct ColumnSettingsPanelProps {
     pub width_override: Option<i32>,
     pub on_select_tab: Callback<ColumnSettingsTab>,
 
-    /// Active plugin name threaded as a value prop so that plugin changes
-    /// trigger re-initialization via `changed()` rather than a PubSub
-    /// `render_limits_changed` subscription.
+    /// Shared trap-door width across the drawer's Style/Attributes/Window
+    /// tabs.
+    #[prop_or_default]
+    pub auto_width: f64,
+
+    #[prop_or_default]
+    pub on_auto_width: Callback<f64>,
+
+    /// Whether the drawer is pinned into the layout.
+    #[prop_or_default]
+    pub is_pinned: bool,
+
+    #[prop_or_default]
+    pub on_toggle_pin: Callback<()>,
+
+    /// Active plugin name.
     pub plugin_name: Option<String>,
 
     /// Session metadata snapshot — threaded from `SessionProps`.
@@ -75,8 +93,10 @@ pub struct ColumnSettingsPanelProps {
     pub session: Session,
 }
 
-impl PartialEq for ColumnSettingsPanelProps {
-    fn eq(&self, other: &Self) -> bool {
+impl ColumnSettingsPanelProps {
+    /// Everything EXCEPT the trap-door `auto_width`: the props whose change
+    /// invalidates the drafts that `initialize` rebuilds.
+    fn identity_eq(&self, other: &Self) -> bool {
         self.selected_column == other.selected_column
             && self.selected_tab == other.selected_tab
             && self.plugin_name == other.plugin_name
@@ -87,12 +107,21 @@ impl PartialEq for ColumnSettingsPanelProps {
     }
 }
 
+impl PartialEq for ColumnSettingsPanelProps {
+    fn eq(&self, other: &Self) -> bool {
+        self.identity_eq(other)
+            && self.auto_width == other.auto_width
+            && self.is_pinned == other.is_pinned
+    }
+}
+
 #[derive(Debug)]
 pub enum ColumnSettingsPanelMsg {
     SetExprValue(Rc<String>),
     SetExprValid(bool),
     SetHeaderValue(Option<String>),
     SetHeaderValid(bool),
+    SetWindowValue(Option<WindowSpec>),
     SetSelectedTab((usize, ColumnSettingsTab)),
     OnSaveAttributes(()),
     OnResetAttributes(()),
@@ -117,6 +146,8 @@ pub struct ColumnSettingsPanel {
     reset_enabled: bool,
     save_count: u8,
     save_enabled: bool,
+    initial_window_value: Option<WindowSpec>,
+    window_value: Option<WindowSpec>,
     tabs: Vec<ColumnSettingsTab>,
 }
 
@@ -138,6 +169,8 @@ impl Component for ColumnSettingsPanel {
             reset_count: 0,
             column_name: "".to_owned(),
             maybe_ty: None,
+            initial_window_value: None,
+            window_value: None,
             tabs: vec![],
             on_input: Callback::default(),
             on_save: Callback::default(),
@@ -149,12 +182,15 @@ impl Component for ColumnSettingsPanel {
     }
 
     fn changed(&mut self, ctx: &yew::prelude::Context<Self>, old_props: &Self::Properties) -> bool {
-        if ctx.props() != old_props {
+        // Only reached when props are unequal. Re-`initialize` (which wipes
+        // in-progress expression/window drafts) only on IDENTITY changes -
+        // a trap-door `auto_width` change re-renders the `Sidebar` sizer
+        // alone.
+        if !ctx.props().identity_eq(old_props) {
             self.initialize(ctx);
-            true
-        } else {
-            false
         }
+
+        true
     }
 
     fn update(&mut self, ctx: &yew::prelude::Context<Self>, msg: Self::Message) -> bool {
@@ -187,6 +223,15 @@ impl Component for ColumnSettingsPanel {
                 self.save_enabled_effect();
                 true
             },
+            ColumnSettingsPanelMsg::SetWindowValue(val) => {
+                if self.window_value != val {
+                    self.window_value = val;
+                    self.reset_enabled = true;
+                    true
+                } else {
+                    false
+                }
+            },
             ColumnSettingsPanelMsg::SetSelectedTab((_, val)) => {
                 let rerender = ctx.props().selected_tab != Some(val);
                 ctx.props().on_select_tab.emit(val);
@@ -195,19 +240,58 @@ impl Component for ColumnSettingsPanel {
             ColumnSettingsPanelMsg::OnResetAttributes(()) => {
                 self.header_value.clone_from(&self.initial_header_value);
                 self.expr_value.clone_from(&self.initial_expr_value);
+                self.window_value.clone_from(&self.initial_window_value);
                 self.save_enabled = false;
                 self.reset_enabled = false;
                 self.reset_count += 1;
                 true
             },
             ColumnSettingsPanelMsg::OnSaveAttributes(()) => {
+                if matches!(ctx.props().selected_tab, Some(ColumnSettingsTab::Window)) {
+                    if let Some(spec) = self.window_value.clone() {
+                        let name = self
+                            .header_value
+                            .clone()
+                            .unwrap_or_else(|| self.column_name.clone());
+                        match &ctx.props().selected_column {
+                            ColumnLocator::Window(old_name) => update_window(
+                                &ctx.props().session,
+                                &ctx.props().renderer,
+                                &ctx.props().presentation,
+                                old_name.clone(),
+                                name,
+                                spec.clone(),
+                            ),
+                            _ => {
+                                if let Err(err) = save_window(
+                                    &ctx.props().session,
+                                    &ctx.props().renderer,
+                                    &ctx.props().presentation,
+                                    name,
+                                    spec.clone(),
+                                ) {
+                                    tracing::warn!("{}", err);
+                                }
+                            },
+                        }
+
+                        self.initial_window_value = Some(spec);
+                        self.initial_header_value.clone_from(&self.header_value);
+                        self.save_enabled = false;
+                        self.reset_enabled = false;
+                        self.save_count += 1;
+                    }
+
+                    return true;
+                }
+
                 let new_expr = Expression::new(
                     self.header_value.clone().map(|s| s.into()),
                     (*(self.expr_value)).clone().into(),
                 );
 
                 match &ctx.props().selected_column {
-                    ColumnLocator::Table(_) => {
+                    ColumnLocator::Table(_) | ColumnLocator::Window(_) => {
                         tracing::error!("Tried to save non-expression column!")
                     },
                     ColumnLocator::Expression(name) => update_expr(
@@ -244,6 +328,13 @@ impl Component for ColumnSettingsPanel {
                         &self.column_name,
                     )
                     .unwrap_or_log();
+                } else if ctx.props().selected_column.is_saved_window() {
+                    delete_window(
+                        &ctx.props().session,
+                        &ctx.props().renderer,
+                        &self.column_name,
+                    )
+                    .unwrap_or_log();
                 }
 
                 ctx.props().on_close.emit(());
@@ -253,15 +344,24 @@ impl Component for ColumnSettingsPanel {
     }
 
     fn view(&self, ctx: &yew::prelude::Context<Self>) -> Html {
+        let is_window_tab = matches!(ctx.props().selected_tab, Some(ColumnSettingsTab::Window));
+
+        let header_placeholder = if is_window_tab {
+            Rc::new(self.column_name.clone())
+        } else {
+            self.expr_value.clone()
+        };
+
         let header_props = props!(EditableHeaderProps {
             initial_value: self.initial_header_value.clone(),
-            placeholder: self.expr_value.clone(),
+            placeholder: header_placeholder,
             reset_count: self.reset_count,
-            editable: ctx.props().selected_column.is_expr()
+            editable: (ctx.props().selected_column.is_expr()
                 && matches!(
                     ctx.props().selected_tab,
                     Some(ColumnSettingsTab::Attributes)
-                ),
+                ))
+                || (ctx.props().selected_column.is_window_editable() && is_window_tab),
             update_on_input: true,
             icon_type: self
                 .maybe_ty
@@ -324,7 +424,26 @@ impl Component for ColumnSettingsPanel {
 
         let attrs_tab = AttributesTabProps {
             expr_editor,
-            save_section,
+            save_section: save_section.clone(),
+        };
+
+        let window_changed = self.window_value != self.initial_window_value
+            || self.header_value != self.initial_header_value;
+        let window_tab = WindowTabProps {
+            editor: WindowEditorProps {
+                metadata: ctx.props().metadata.clone(),
+                initial: self.initial_window_value.clone(),
+                on_change: ctx.link().callback(ColumnSettingsPanelMsg::SetWindowValue),
+                reset_count: self.reset_count,
+                presentation: ctx.props().presentation.clone(),
+                session: ctx.props().session.clone(),
+                selected_theme: ctx.props().selected_theme.clone(),
+            },
+            save_section: SaveSettingsProps {
+                save_enabled: self.window_value.is_some() && window_changed && self.header_valid,
+                show_danger_zone: ctx.props().selected_column.is_saved_window(),
+                ..save_section
+            },
         };
 
         let style_tab = StyleTabProps {
@@ -342,6 +461,7 @@ impl Component for ColumnSettingsPanel {
 
         let tab_children = self.tabs.iter().map(|tab| match tab {
             ColumnSettingsTab::Attributes => html! { <AttributesTab ..attrs_tab.clone() /> },
+            ColumnSettingsTab::Window => html! { <WindowTab ..window_tab.clone() /> },
             ColumnSettingsTab::Style => html! { <StyleTab ..style_tab.clone() /> },
         });
 
@@ -358,6 +478,10 @@ impl Component for ColumnSettingsPanel {
                     on_close={ctx.props().on_close.clone()}
                     id_prefix="column_settings"
                     width_override={ctx.props().width_override}
+                    auto_width={ctx.props().auto_width}
+                    on_auto_width={ctx.props().on_auto_width.clone()}
+                    is_pinned={ctx.props().is_pinned}
+                    on_toggle_pin={Some(ctx.props().on_toggle_pin.clone())}
                     selected_tab={selected_tab_idx}
                     {header_props}
                 >
@@ -403,6 +527,16 @@ impl ColumnSettingsPanel {
             .metadata
             .locator_view_type(&ctx.props().selected_column);
 
+        // Specs are unnamed (the `windows` map key names them, and the
+        // editable header owns naming in the UI), so drafts and saved specs
+        // compare directly.
+        let initial_window_value = ctx
+            .props()
+            .selected_column
+            .name()
+            .and_then(|name| ctx.props().view_config.windows.get(name))
+            .cloned();
+
         let tabs = {
             let mut tabs = vec![];
             let is_new_expr = ctx.props().selected_column.is_new_expr();
@@ -424,6 +558,17 @@ impl ColumnSettingsPanel {
                 tabs.push(ColumnSettingsTab::Attributes);
             }
 
+            let supports_windows = ctx
+                .props()
+                .metadata
+                .get_features()
+                .map(|x| x.has_window_aggregates())
+                .unwrap_or_default();
+
+            if ctx.props().selected_column.is_window_editable() && supports_windows {
+                tabs.push(ColumnSettingsTab::Window);
+            }
+
             tabs
         };
 
@@ -440,6 +585,8 @@ impl ColumnSettingsPanel {
             header_value: initial_header_value.clone(),
             initial_header_value,
             maybe_ty,
+            window_value: initial_window_value.clone(),
+            initial_window_value,
             tabs,
             header_valid: true,
             on_input,

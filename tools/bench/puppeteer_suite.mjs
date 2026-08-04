@@ -81,5 +81,6 @@ perspective_bench.suite(
         await test_suite("view_suite");
         await test_suite("to_data_suite");
         await test_suite("join_suite");
+        await test_suite("window_suite");
     },
 );

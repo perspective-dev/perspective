@@ -33,14 +33,25 @@ pub struct RenderGuard {
     _private: (),
 }
 
+/// The per-slot debounce bookkeeping: one running + one parked evaluation,
+/// with coalesced callers awaiting the parked runner's settle. Kept
+/// per-[`DebounceSlot`] so coalescing is only expressible WITHIN a kind —
+/// a caller can never be absorbed by a parked runner of a different kind
+/// whose work does not subsume it (the resize-eaten-by-parked-update bug).
 #[derive(Default)]
-struct DebounceMutexData {
+struct SlotState {
     id: Cell<u64>,
-    held: Cell<bool>,
-    mutex: Mutex<u64>,
+    last: Cell<u64>,
     parked: Cell<bool>,
     settled_id: Cell<u64>,
     on_settle: PubSub<()>,
+}
+
+#[derive(Default)]
+struct DebounceMutexData {
+    held: Cell<bool>,
+    mutex: Mutex<()>,
+    default_slot: Rc<SlotState>,
 }
 
 /// Clears the `held` flag on drop, so cancellation of a locked task (its
@@ -67,25 +78,25 @@ impl Drop for HeldFlag<'_> {
 /// mid-run still frees the parked slot and releases its coalesced waiters,
 /// so they can never be stranded awaiting a settle that no task will emit.
 struct SettleGuard<'a> {
-    data: &'a DebounceMutexData,
+    state: &'a SlotState,
     next: u64,
 }
 
 impl<'a> SettleGuard<'a> {
-    fn park(data: &'a DebounceMutexData, next: u64) -> Self {
-        data.parked.set(true);
-        Self { data, next }
+    fn park(state: &'a SlotState, next: u64) -> Self {
+        state.parked.set(true);
+        Self { state, next }
     }
 }
 
 impl Drop for SettleGuard<'_> {
     fn drop(&mut self) {
-        self.data.parked.set(false);
-        if self.data.settled_id.get() < self.next {
-            self.data.settled_id.set(self.next);
+        self.state.parked.set(false);
+        if self.state.settled_id.get() < self.next {
+            self.state.settled_id.set(self.next);
         }
 
-        self.data.on_settle.emit(());
+        self.state.on_settle.emit(());
     }
 }
 
@@ -123,12 +134,11 @@ impl DebounceMutex {
         F: FnOnce(RenderGuard) -> Fut,
         Fut: Future<Output = T>,
     {
-        let mut last = self.0.mutex.lock().await;
-        let next = self.0.id.get();
+        let guard = self.0.mutex.lock().await;
         let held = HeldFlag::set(&self.0.held);
         let result = f(RenderGuard { _private: () }).await;
         drop(held);
-        *last = next;
+        drop(guard);
         result
     }
 
@@ -144,23 +154,62 @@ impl DebounceMutex {
         F: FnOnce(RenderGuard) -> Fut,
         Fut: Future<Output = ApiResult<T>>,
     {
-        let next = self.0.id.get() + 1;
-        if self.0.parked.get() {
+        DebounceSlot {
+            mutex: self.clone(),
+            state: self.0.default_slot.clone(),
+        }
+        .debounce_with(f)
+        .await
+    }
+
+    /// A NEW debounce slot over this mutex: its tasks serialize against
+    /// every other locked task, but coalesce only among themselves.
+    pub fn slot(&self) -> DebounceSlot {
+        DebounceSlot {
+            mutex: self.clone(),
+            state: Default::default(),
+        }
+    }
+}
+
+/// One debounce KIND over a shared [`DebounceMutex`]. Execution is
+/// exclusive across the whole mutex; coalescing (a caller resolving via a
+/// parked runner instead of queueing) is scoped to the slot. A coalesced
+/// caller's work must be subsumable by any same-slot runner that runs no
+/// earlier than the call — which is why parameterized tasks sharing a slot
+/// must read their parameters at RUN time (e.g. the [`Renderer`] geometry
+/// command cell), never capture them at call time.
+#[derive(Clone)]
+pub struct DebounceSlot {
+    mutex: DebounceMutex,
+    state: Rc<SlotState>,
+}
+
+impl DebounceSlot {
+    pub async fn debounce_with<T, F, Fut>(&self, f: F) -> ApiResult<T>
+    where
+        T: Default,
+        F: FnOnce(RenderGuard) -> Fut,
+        Fut: Future<Output = ApiResult<T>>,
+    {
+        let state = &self.state;
+        let next = state.id.get() + 1;
+        if state.parked.get() {
             self.await_settled(next).await;
             return Ok(T::default());
         }
 
-        let settle = SettleGuard::park(&self.0, next);
-        let mut last = self.0.mutex.lock().await;
-        self.0.parked.set(false);
-        let result = if *last < next {
-            let next = self.0.id.get() + 1;
-            self.0.id.set(next);
-            let held = HeldFlag::set(&self.0.held);
+        let settle = SettleGuard::park(state, next);
+        let guard = self.mutex.0.mutex.lock().await;
+        state.parked.set(false);
+        let result = if state.last.get() < next {
+            let next = state.id.get() + 1;
+            state.id.set(next);
+            let held = HeldFlag::set(&self.mutex.0.held);
             let result = f(RenderGuard { _private: () }).await;
             drop(held);
             if result.is_ok() {
-                *last = next;
+                state.last.set(next);
             }
 
             result
@@ -168,14 +217,14 @@ impl DebounceMutex {
             Ok(T::default())
         };
 
-        drop(last);
+        drop(guard);
         drop(settle);
         result
     }
 
     async fn await_settled(&self, next: u64) {
-        while self.0.settled_id.get() < next {
-            if self.0.on_settle.read_next().await.is_err() {
+        while self.state.settled_id.get() < next {
+            if self.state.on_settle.read_next().await.is_err() {
                 break;
             }
         }

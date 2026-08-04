@@ -60,7 +60,8 @@
         }
     }
 
-    #top_panel {
+    #top_panel,
+    #window-editor-slots {
         display: flex;
         flex-direction: column;
         justify-content: stretch;
@@ -176,6 +177,7 @@
                 flex: 1 1 auto;
                 align-self: stretch;
                 position: relative;
+                min-height: 24px;
                 &:before {
                     content: " ";
                     position: absolute;
@@ -213,6 +215,21 @@
 
         #filter label.pivot-selector-label:before {
             content: var(--psp-label--filter--content, "Where");
+        }
+
+        #window-source label.pivot-selector-label:before {
+            content: var(--psp-label--window-source--content, "Column");
+        }
+
+        #window-order-by label.pivot-selector-label:before {
+            content: var(--psp-label--window-order-by--content, "Order By");
+        }
+
+        #window-partition-by label.pivot-selector-label:before {
+            content: var(
+                --psp-label--window-partition-by--content,
+                "Partition By"
+            );
         }
 
         .rrow {
@@ -339,6 +356,10 @@
                 content: var(--psp-label--transpose-button--content, "Swap");
             }
         }
+    }
+
+    #window-editor-slots .pivot-column {
+        min-height: 24px;
     }
 
     .sort-icon {

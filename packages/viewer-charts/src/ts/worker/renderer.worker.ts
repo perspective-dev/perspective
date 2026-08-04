@@ -204,6 +204,9 @@ export class WorkerRenderer {
 
         this.chartImpl.setFacetConfig?.(msg.facetConfig);
         this.chartImpl.setPluginConfig?.(msg.pluginConfig);
+        if (msg.columnsConfig) {
+            this.chartImpl.setColumnsConfig?.(msg.columnsConfig);
+        }
 
         if (this.chartImpl.setZoomController) {
             this.zoomController = new ZoomController();

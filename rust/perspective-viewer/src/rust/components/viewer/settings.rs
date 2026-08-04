@@ -57,6 +57,18 @@ pub(super) struct SettingsGeometry {
 
     /// User-dragged column-settings drawer width override.
     pub column_settings_width_override: Option<i32>,
+
+    /// High-water-mark auto width reported by the column-settings drawer -
+    /// the trap-door shared across its Style/Attributes/Window tabs, lifted
+    /// here (like `auto_width`) so it survives drawer re-opens and clears
+    /// on divider reset.
+    pub column_settings_auto_width: f64,
+
+    /// Whether the column-settings drawer is PINNED - laid out as a static
+    /// flex sibling between the main panel and the settings panel - rather
+    /// than FLOATING over the main panel (the default absolute overlay).
+    /// Session UI state, not part of the saved config.
+    pub column_settings_pinned: bool,
 }
 
 impl PerspectiveViewer {
@@ -373,7 +385,27 @@ impl PerspectiveViewer {
 
     pub(super) fn on_column_settings_panel_size_update(&mut self, x: Option<i32>) -> bool {
         self.settings_geometry.column_settings_width_override = x;
-        false
+        if x.is_none() {
+            self.settings_geometry.column_settings_auto_width = 0.0;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(super) fn on_column_settings_panel_auto_width(&mut self, w: f64) -> bool {
+        if w > self.settings_geometry.column_settings_auto_width {
+            self.settings_geometry.column_settings_auto_width = w;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(super) fn on_toggle_column_settings_pin(&mut self) -> bool {
+        self.settings_geometry.column_settings_pinned =
+            !self.settings_geometry.column_settings_pinned;
+        true
     }
 
     pub(super) fn on_column_settings_tab_changed(

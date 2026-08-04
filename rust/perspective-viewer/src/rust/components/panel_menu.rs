@@ -299,6 +299,7 @@ impl PanelMenu {
 
         html! {
             <PortalModal
+                key="perspective-context-menu"
                 tag_name="perspective-context-menu"
                 surface={StyleSurface::ContextMenu}
                 target={Some(self.anchor.clone())}
@@ -453,7 +454,13 @@ impl PanelMenu {
         };
 
         html! {
+            // Keyed by host tag: the menu→picker swap happens at the same
+            // vdom position, and `PortalModal`'s host element + adopted
+            // surface sheet are create-time-only — unkeyed reuse would leave
+            // the picker inside the `<perspective-context-menu>` host with
+            // the context-menu sheet.
             <PortalModal
+                key={tag_name}
                 {tag_name}
                 surface={StyleSurface::DropdownMenu}
                 {target}

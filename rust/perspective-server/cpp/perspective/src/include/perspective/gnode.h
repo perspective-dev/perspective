@@ -379,6 +379,21 @@ protected:
         const std::shared_ptr<t_data_table>& flattened
     );
 
+    /**
+     * @brief The window widening pass (WINDOW_FUNCTIONS_PLAN §2.3): apply
+     * the update batch to every registered context's window indexes, then
+     * append a synthesized "unchanged" row to `flattened` and the
+     * transitional port tables for each row OUTSIDE the batch whose window
+     * outputs may change. The ordinary pipeline then reports those rows'
+     * window deltas, and its per-row prev/current diffing suppresses the
+     * over-approximation. Must run after `m_gstate` is updated and before
+     * `_compute_expressions`.
+     */
+    void _process_windows(
+        const std::shared_ptr<t_data_table>& flattened,
+        const std::vector<t_rlookup>& lookup
+    );
+
 private:
     /**
      * @brief Process the input data table by flattening it, calculating
@@ -460,10 +475,10 @@ t_gnode::notify_context(
 
     ctx->step_begin();
 
-    if (ctx->num_expressions() > 0) {
+    if (ctx->has_derived_columns()) {
         // Join expression tables on the context with gnode tables and pass
-        // those into the context so there is no distinction between expression
-        // and real columns for the context.
+        // those into the context so there is no distinction between
+        // expression/window and real columns for the context.
         std::shared_ptr<t_expression_tables> ctx_expression_tables =
             ctx->get_expression_tables();
 
@@ -535,10 +550,10 @@ t_gnode::update_context_from_state(
     //  to update its registered contexts with the new data. `is_registration`
     //  is `false` here — a subscriber may have attached between context
     //  creation and the first update, and expects to see all rows as deltas.
-    if (ctx->num_expressions() > 0) {
-        // If the context has expression columns, it has already been computed
-        // in `process_table` and we can join the "real" and expression columns
-        // together and pass it to the context.
+    if (ctx->has_derived_columns()) {
+        // If the context has expression or window columns, they have already
+        // been computed in `process_table` and we can join the "real" and
+        // derived columns together and pass it to the context.
         std::shared_ptr<t_expression_tables> ctx_expression_tables =
             ctx->get_expression_tables();
         std::shared_ptr<t_data_table> joined_flattened =

@@ -38,12 +38,13 @@
     cursor: pointer;
     white-space: nowrap;
 
+    /* The dropdown-menu surface's inverted hover, from the same theme keys
+     * (`--psp--color`/`--psp--background-color` land on the host via the
+     * modal selector groups) — the Copy/Export pickers this menu spawns use
+     * exactly this idiom. */
     &:hover {
-        background: var(
-            --psp-context-menu--hover--background,
-            var(--psp-active--background, rgba(0, 0, 0, 0.08))
-        );
-        color: var(--psp-context-menu--hover--color, inherit);
+        background-color: var(--psp--color);
+        color: var(--psp--background-color);
     }
 
     &.disabled {
@@ -51,7 +52,7 @@
         cursor: default;
 
         &:hover {
-            background: transparent;
+            background-color: transparent;
             color: inherit;
         }
     }
@@ -86,6 +87,11 @@
     max-height: 50vh;
     overflow-y: auto;
     background-color: var(--psp--background-color, white);
+
+    /* The flyout is a CHILD of its (necessarily hovered, so inverted) parent
+     * item — un-hovered rows must not inherit the parent's inverted
+     * foreground. */
+    color: var(--psp--color);
     border: 1px solid var(--psp-inactive--color);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }

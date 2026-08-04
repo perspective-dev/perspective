@@ -26,6 +26,10 @@ pub struct SplitPanelProps {
     #[prop_or_default]
     pub id: Option<String>,
 
+    /// Extra classes on the root element (ignored under `no_wrap`).
+    #[prop_or_default]
+    pub class: Classes,
+
     #[prop_or_default]
     pub orientation: Orientation,
 
@@ -110,6 +114,7 @@ impl SplitPanelProps {
 impl PartialEq for SplitPanelProps {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
+            && self.class == other.class
             && self.children == other.children
             && self.orientation == other.orientation
             && self.reverse == other.reverse
@@ -305,6 +310,7 @@ impl Component for SplitPanel {
         }
 
         let mut classes = classes!("split-panel");
+        classes.extend(ctx.props().class.clone());
         if orientation == Orientation::Vertical {
             classes.push("orient-vertical");
         }

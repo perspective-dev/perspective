@@ -461,6 +461,7 @@ set(SOURCE_FILES
     ${PSP_CPP_SRC}/src/cpp/compat_impl_wasm.cpp
     ${PSP_CPP_SRC}/src/cpp/compat_impl_win.cpp
     ${PSP_CPP_SRC}/src/cpp/computed_expression.cpp
+    ${PSP_CPP_SRC}/src/cpp/window.cpp
     ${PSP_CPP_SRC}/src/cpp/computed_function.cpp
     ${PSP_CPP_SRC}/src/cpp/config.cpp
     ${PSP_CPP_SRC}/src/cpp/context_base.cpp

@@ -19,7 +19,8 @@ namespace perspective {
 
 t_expression_tables::t_expression_tables(
     const std::vector<std::shared_ptr<t_computed_expression>>& expressions,
-    t_backing_store backing_store
+    t_backing_store backing_store,
+    const std::vector<t_window_spec>& windows
 ) {
     t_schema schema;
     t_schema transitions_schema;
@@ -30,12 +31,18 @@ t_expression_tables::t_expression_tables(
         transitions_schema.add_column(alias, DTYPE_UINT8);
     }
 
+    for (const auto& window : windows) {
+        schema.add_column(window.m_name, window.m_dtype);
+        transitions_schema.add_column(window.m_name, DTYPE_UINT8);
+    }
+
     // Only the persistent `m_master` table honors on-disk backing; the
     // transitional tables are per-update scratch (cleared every update, sized
     // to the update batch) so disk-backing them is pure I/O churn with no
     // memory-relief benefit, and they stay in memory.
     std::string master_dirname;
-    if (backing_store == BACKING_STORE_DISK && !expressions.empty()) {
+    if (backing_store == BACKING_STORE_DISK
+        && (!expressions.empty() || !windows.empty())) {
         master_dirname = create_backing_store_dir("perspective_expr_");
     }
 

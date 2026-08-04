@@ -22,6 +22,10 @@ pub struct ExprEditButtonProps {
     /// Is this an expression column?
     pub is_expression: bool,
 
+    /// Is this a window column?
+    #[prop_or_default]
+    pub is_window: bool,
+
     /// Fires when the config/expresison button is clicked.
     pub on_open_expr_panel: Callback<ColumnLocator>,
 
@@ -38,7 +42,9 @@ pub struct ExprEditButtonProps {
 #[function_component]
 pub fn ExprEditButton(p: &ExprEditButtonProps) -> Html {
     let onmousedown = yew::use_callback(p.clone(), |_, p| {
-        let name = if p.is_expression {
+        let name = if p.is_window {
+            ColumnLocator::Window(p.name.clone())
+        } else if p.is_expression {
             ColumnLocator::Expression(p.name.clone())
         } else {
             ColumnLocator::Table(p.name.clone())

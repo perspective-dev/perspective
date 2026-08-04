@@ -69,6 +69,7 @@ pub struct SessionMetadataState {
     edit_port: f64,
     view_schema: Option<HashMap<String, ColumnType>>,
     expr_meta: Option<SessionViewExpressionMetadata>,
+    window_schema: HashMap<String, ColumnType>,
 }
 
 impl SessionMetadata {
@@ -92,6 +93,43 @@ impl SessionMetadata {
         view_schema: &HashMap<String, ColumnType>,
     ) -> ApiResult<()> {
         self.as_mut().unwrap().view_schema = Some(view_schema.clone());
+        Ok(())
+    }
+
+    /// Records the pre-aggregation types of the config's window columns, so
+    /// `get_column_table_type` resolves them like any other derived column.
+    /// Types mirror the engine's `t_window_engine::resolve_dtype` rules from
+    /// the window's op and its source's table type - independent of any
+    /// aggregation the view may also apply.
+    pub(super) fn update_windows(
+        &mut self,
+        windows: &perspective_client::config::Windows,
+    ) -> ApiResult<()> {
+        use perspective_client::config::WindowAggregate;
+        let window_schema = windows
+            .iter()
+            .filter_map(|(name, w)| {
+                let source = self.get_column_table_type(&w.column)?;
+                let dtype = match w.aggregate {
+                    WindowAggregate::Sum
+                    | WindowAggregate::Avg
+                    | WindowAggregate::Stddev
+                    | WindowAggregate::Var
+                    | WindowAggregate::Rate
+                    | WindowAggregate::Ema
+                    | WindowAggregate::Diff => ColumnType::Float,
+                    WindowAggregate::Count => ColumnType::Integer,
+                    WindowAggregate::Min
+                    | WindowAggregate::Max
+                    | WindowAggregate::First
+                    | WindowAggregate::Last
+                    | WindowAggregate::Lag
+                    | WindowAggregate::Lead => source,
+                };
+                Some((name.clone(), dtype))
+            })
+            .collect();
+        self.as_mut().unwrap().window_schema = window_schema;
         Ok(())
     }
 
@@ -212,6 +250,19 @@ impl SessionMetadata {
         self.as_ref().map(|meta| &meta.column_names)
     }
 
+    pub fn is_column_window(&self, name: &str) -> bool {
+        self.as_ref()
+            .map(|meta| meta.window_schema.contains_key(name))
+            .unwrap_or_default()
+    }
+
+    pub fn get_window_columns(&self) -> impl Iterator<Item = &'_ String> {
+        self.as_ref()
+            .map(|meta| meta.window_schema.keys())
+            .into_iter()
+            .flatten()
+    }
+
     pub fn is_column_expression(&self, name: &str) -> bool {
         let is_expr: Option<bool> = try {
             self.as_ref()?
@@ -253,14 +304,18 @@ impl SessionMetadata {
     pub fn get_column_table_type(&self, name: &str) -> Option<ColumnType> {
         try {
             let meta = self.as_ref()?;
-            meta.table_schema.get(name).cloned().or_else(|| {
-                meta.expr_meta
-                    .as_ref()?
-                    .expressions
-                    .expression_schema
-                    .get(name)
-                    .cloned()
-            })?
+            meta.table_schema
+                .get(name)
+                .cloned()
+                .or_else(|| {
+                    meta.expr_meta
+                        .as_ref()?
+                        .expressions
+                        .expression_schema
+                        .get(name)
+                        .cloned()
+                })
+                .or_else(|| meta.window_schema.get(name).cloned())?
         }
     }
 
@@ -282,7 +337,9 @@ impl SessionMetadata {
     /// expressions.
     pub fn locator_name_or_default(&self, locator: &ColumnLocator) -> String {
         match locator {
-            ColumnLocator::Table(s) | ColumnLocator::Expression(s) => s.clone(),
+            ColumnLocator::Table(s) | ColumnLocator::Expression(s) | ColumnLocator::Window(s) => {
+                s.clone()
+            },
             ColumnLocator::NewExpression => self.make_new_column_name(None),
         }
     }

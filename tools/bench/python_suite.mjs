@@ -73,6 +73,7 @@ perspective_bench.suite(
         await all_benchmarks.view_suite(client, metadata);
         await all_benchmarks.to_data_suite(client, metadata);
         await all_benchmarks.join_suite(client, metadata);
+        await all_benchmarks.window_suite(client, metadata);
     },
     python.start,
     python.stop,

@@ -86,6 +86,55 @@ pub async fn test_lock_seq() {
     assert_eq!(cell.get(), 10);
 }
 
+/// A dedicated [`DebounceSlot`]'s task must RUN even when the default slot
+/// has a parked runner — coalescing is scoped per slot. Pre-slot (one
+/// shared parked flag), `t4` would resolve via `t2`'s settle without its
+/// closure ever running: the resize-eaten-by-parked-update bug.
+#[wasm_bindgen_test]
+pub async fn test_slot_isolated_from_default_coalescing() {
+    let debounce_mutex = DebounceMutex::default();
+    let slot = debounce_mutex.slot();
+    let defaults: Rc<Cell<u32>> = Rc::new(Cell::new(0));
+    let slots: Rc<Cell<u32>> = Rc::new(Cell::new(0));
+
+    let t1 = debounce_mutex.lock(async {
+        set_timeout(10).await.unwrap();
+    });
+
+    let t2 = {
+        let defaults = defaults.clone();
+        debounce_mutex.debounce(async move {
+            defaults.set(defaults.get() + 1);
+            Ok(())
+        })
+    };
+
+    let t3 = {
+        let defaults = defaults.clone();
+        debounce_mutex.debounce(async move {
+            defaults.set(defaults.get() + 100);
+            Ok(())
+        })
+    };
+
+    let t4 = {
+        let slots = slots.clone();
+        slot.debounce_with(|_| async move {
+            slots.set(slots.get() + 1);
+            Ok(())
+        })
+    };
+
+    let (_, r2, r3, r4) = futures::join!(t1, t2, t3, t4);
+    r2.unwrap();
+    r3.unwrap();
+    r4.unwrap();
+
+    // `t3` coalesced onto the parked `t2`; `t4` ran its own closure.
+    assert_eq!(defaults.get(), 1);
+    assert_eq!(slots.get(), 1);
+}
+
 #[wasm_bindgen_test]
 pub async fn test_debounce_seq() {
     let debounce_mutex = DebounceMutex::default();

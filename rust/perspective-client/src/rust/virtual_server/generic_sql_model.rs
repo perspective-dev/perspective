@@ -229,7 +229,7 @@ impl GenericSQLVirtualServerModel {
         view_id: &str,
         config: &ViewConfig,
     ) -> GenericSQLResult<String> {
-        let ctx = ViewQueryContext::new(self, table_id, config);
+        let ctx = ViewQueryContext::new(self, table_id, config)?;
         let query = ctx.build_query();
         let template = self.0.create_entity.as_deref().unwrap_or("TABLE");
         Ok(format!("CREATE {} {} AS ({})", template, view_id, query))

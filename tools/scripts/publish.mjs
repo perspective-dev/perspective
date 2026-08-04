@@ -86,32 +86,32 @@ async function publish_release_assets(releases) {
         await $`mkdir -p rust/target/package && mv *.crate rust/target/package`;
 
         execSync(
-            `cargo publish -p perspective-server --allow-dirty --no-verify`,
+            `cargo publish --config .cargo/release.toml -p perspective-server --allow-dirty --no-verify`,
             SH_ENV,
         );
 
         execSync(
-            `cargo publish -p perspective-client --allow-dirty --no-verify`,
+            `cargo publish --config .cargo/release.toml -p perspective-client --allow-dirty --no-verify`,
             SH_ENV,
         );
 
         execSync(
-            `cargo publish -p perspective-python --allow-dirty --no-verify`,
+            `cargo publish --config .cargo/release.toml -p perspective-python --allow-dirty --no-verify`,
             SH_ENV,
         );
 
         execSync(
-            `cargo publish -p perspective-js --allow-dirty --no-verify`,
+            `cargo publish --config .cargo/release.toml -p perspective-js --allow-dirty --no-verify`,
             SH_ENV,
         );
 
         execSync(
-            `cargo publish -p perspective-viewer --allow-dirty --no-verify`,
+            `cargo publish --config .cargo/release.toml -p perspective-viewer --allow-dirty --no-verify`,
             SH_ENV,
         );
 
         execSync(
-            `cargo publish -p perspective --allow-dirty --no-verify`,
+            `cargo publish --config .cargo/release.toml -p perspective --allow-dirty --no-verify`,
             SH_ENV,
         );
     } else {

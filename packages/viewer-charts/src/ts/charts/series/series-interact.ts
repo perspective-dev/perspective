@@ -47,8 +47,9 @@ export function getHoveredBar(chart: SeriesChart): SeriesChartRecord | null {
 }
 
 /**
- * Handle mouse-move across all glyph types. Tests (in reverse paint order
- * so top glyphs win): scatter points → line points → bars → areas.
+ * Handle mouse-move across all glyph types. Tests glyph runs in reverse
+ * paint order so top glyphs win — paint order is the `columns`
+ * declaration order (see `_glyphRuns` / `drawGlyphRuns`).
  * Updates `_hoveredBarIdx` or `_hoveredSample` and re-renders on change.
  *
  * Faceted frames first resolve the cell under the cursor: that cell's
@@ -153,96 +154,131 @@ export function handleBarHover(
     let nextBarIdx = -1;
     let nextSample: SeriesChartRecord | null = null;
 
-    // 1. Scatter (top).
-    nextSample = hitTestPoints(
-        chart,
-        "scatter",
-        dataX,
-        dataYLeft,
-        dataYRight,
-        pxPerDataX,
-        pxPerDataYLeft,
-        pxPerDataYRight,
-        splitFilter,
-    );
+    // Test topmost-first: the REVERSE of the paint order, which is the
+    // `columns` declaration order (`_glyphRuns`, ascending `aggIdx` —
+    // see `drawGlyphRuns`). A single-run chart passes no `aggRange`,
+    // reducing to the legacy whole-type scan.
+    const runs = chart._glyphRuns;
+    const single = runs.length <= 1;
+    for (let r = runs.length - 1; r >= 0; r--) {
+        const run = runs[r];
+        const aggRange = single
+            ? undefined
+            : { start: run.aggStart, end: run.aggEnd };
+        switch (run.chartType) {
+            case "scatter":
+            case "line":
+                nextSample = hitTestPoints(
+                    chart,
+                    run.chartType,
+                    dataX,
+                    dataYLeft,
+                    dataYRight,
+                    pxPerDataX,
+                    pxPerDataYLeft,
+                    pxPerDataYRight,
+                    splitFilter,
+                    aggRange,
+                );
+                break;
+            case "bar":
+                nextBarIdx = hitTestBars(
+                    chart,
+                    dataX,
+                    dataYLeft,
+                    dataYRight,
+                    splitFilter,
+                    aggRange,
+                );
+                break;
+            case "area": {
+                const areaHit = hitTestAreas(
+                    chart,
+                    dataX,
+                    dataYLeft,
+                    dataYRight,
+                    splitFilter,
+                    aggRange,
+                );
+                if (areaHit) {
+                    if (areaHit.idx >= 0) {
+                        nextBarIdx = areaHit.idx;
+                    } else {
+                        nextSample = areaHit.bar;
+                    }
+                }
 
-    // 2. Line points (still above bars; treat as point hits).
-    if (!nextSample) {
-        nextSample = hitTestPoints(
-            chart,
-            "line",
-            dataX,
-            dataYLeft,
-            dataYRight,
-            pxPerDataX,
-            pxPerDataYLeft,
-            pxPerDataYRight,
-            splitFilter,
-        );
-    }
-
-    // 3. Bars (rect intersect).
-    if (!nextSample) {
-        const bars = chart._bars;
-        const ct = bars.chartType;
-        const sid = bars.seriesId;
-        const xC = bars.xCenter;
-        const hw = bars.halfWidth;
-        const by0 = bars.y0;
-        const by1 = bars.y1;
-        const ax = bars.axis;
-        const hidden = chart._hiddenSeries;
-        const P = chart._splitPrefixes.length;
-        for (let i = 0; i < bars.count; i++) {
-            if (ct[i] !== BAR_TYPE_BAR) {
-                continue;
-            }
-
-            if (hidden.has(sid[i])) {
-                continue;
-            }
-
-            if (splitFilter !== undefined && sid[i] % P !== splitFilter) {
-                continue;
-            }
-
-            const xc = xC[i];
-            const halfW = hw[i];
-            if (dataX < xc - halfW || dataX > xc + halfW) {
-                continue;
-            }
-
-            const dy = ax[i] === 0 ? dataYLeft : dataYRight;
-            const y0 = by0[i];
-            const y1 = by1[i];
-            const lo = y0 < y1 ? y0 : y1;
-            const hi = y0 < y1 ? y1 : y0;
-            if (dy >= lo && dy <= hi) {
-                nextBarIdx = i;
                 break;
             }
         }
-    }
 
-    // 4. Areas (strip hit — stacked records via `_bars`, unstacked via samples).
-    if (nextBarIdx < 0 && !nextSample) {
-        const areaHit = hitTestAreas(
-            chart,
-            dataX,
-            dataYLeft,
-            dataYRight,
-            splitFilter,
-        );
-        if (areaHit) {
-            if (areaHit.idx >= 0) {
-                nextBarIdx = areaHit.idx;
-            } else {
-                nextSample = areaHit.bar;
-            }
+        if (nextBarIdx >= 0 || nextSample) {
+            break;
         }
     }
 
     applyHover(chart, nextBarIdx, nextSample);
+}
+
+/**
+ * Rect-intersect hit-test over the bar-typed `_bars` records. Returns
+ * the record index, or `-1`.
+ */
+function hitTestBars(
+    chart: SeriesChart,
+    dataX: number,
+    dataYLeft: number,
+    dataYRight: number,
+    splitFilter?: number,
+    aggRange?: { start: number; end: number },
+): number {
+    const bars = chart._bars;
+    const ct = bars.chartType;
+    const sid = bars.seriesId;
+    const xC = bars.xCenter;
+    const hw = bars.halfWidth;
+    const by0 = bars.y0;
+    const by1 = bars.y1;
+    const ax = bars.axis;
+    const hidden = chart._hiddenSeries;
+    const P = Math.max(1, chart._splitPrefixes.length);
+    for (let i = 0; i < bars.count; i++) {
+        if (ct[i] !== BAR_TYPE_BAR) {
+            continue;
+        }
+
+        if (hidden.has(sid[i])) {
+            continue;
+        }
+
+        if (splitFilter !== undefined && sid[i] % P !== splitFilter) {
+            continue;
+        }
+
+        if (aggRange !== undefined) {
+            const aggIdx = Math.floor(sid[i] / P);
+            if (aggIdx < aggRange.start || aggIdx > aggRange.end) {
+                continue;
+            }
+        }
+
+        const xc = xC[i];
+        const halfW = hw[i];
+        if (dataX < xc - halfW || dataX > xc + halfW) {
+            continue;
+        }
+
+        const dy = ax[i] === 0 ? dataYLeft : dataYRight;
+        const y0 = by0[i];
+        const y1 = by1[i];
+        const lo = y0 < y1 ? y0 : y1;
+        const hi = y0 < y1 ? y1 : y0;
+        if (dy >= lo && dy <= hi) {
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 function hitTestPoints(
@@ -255,6 +291,7 @@ function hitTestPoints(
     pxPerDataYLeft: number,
     pxPerDataYRight: number,
     splitFilter?: number,
+    aggRange?: { start: number; end: number },
 ): SeriesChartRecord | null {
     const N = chart._numCategories;
     const S = chart._series.length;
@@ -280,6 +317,13 @@ function hitTestPoints(
         }
 
         if (splitFilter !== undefined && s.splitIdx !== splitFilter) {
+            continue;
+        }
+
+        if (
+            aggRange !== undefined &&
+            (s.aggIdx < aggRange.start || s.aggIdx > aggRange.end)
+        ) {
             continue;
         }
 
@@ -340,6 +384,7 @@ function hitTestAreas(
     dataYLeft: number,
     dataYRight: number,
     splitFilter?: number,
+    aggRange?: { start: number; end: number },
 ): { idx: number; bar: SeriesChartRecord | null } | null {
     // Closest category to the mouse; an area covers every [cat - 0.5, cat + 0.5]
     // slot, so use `round(dataX)` as the candidate index.
@@ -382,6 +427,13 @@ function hitTestAreas(
             continue;
         }
 
+        if (aggRange !== undefined) {
+            const aggIdx = Math.floor(sid[i] / Math.max(1, P));
+            if (aggIdx < aggRange.start || aggIdx > aggRange.end) {
+                continue;
+            }
+        }
+
         const dy = ax[i] === 0 ? dataYLeft : dataYRight;
         const y0 = by0[i];
         const y1 = by1[i];
@@ -403,6 +455,13 @@ function hitTestAreas(
         }
 
         if (splitFilter !== undefined && s.splitIdx !== splitFilter) {
+            continue;
+        }
+
+        if (
+            aggRange !== undefined &&
+            (s.aggIdx < aggRange.start || s.aggIdx > aggRange.end)
+        ) {
             continue;
         }
 

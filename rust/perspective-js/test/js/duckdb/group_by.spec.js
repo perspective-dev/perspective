@@ -174,6 +174,30 @@ describeDuckDB("group_by", (getClient) => {
         await view.delete();
     });
 
+    // `__ID__` drives identity-based consumers (e.g. the Datagrid's
+    // `SELECT_ROW_TREE` mode, which prefix-matches row identities to
+    // style descendants). For grouped views each row's identity is its
+    // `__ROW_PATH__` prefix, matching the native engine's
+    // `to_columns(id = true)` shape.
+    test("to_columns with id emits __ID__ matching __ROW_PATH__", async function () {
+        const table = await getClient().open_table("memory.superstore");
+        const view = await table.view({
+            columns: ["Sales"],
+            group_by: ["Region", "Category"],
+            aggregates: { Sales: "sum" },
+        });
+
+        const cols = await view.to_columns({ id: true });
+        expect(cols.__ID__).toEqual(cols.__ROW_PATH__);
+        expect(cols.__ID__[0]).toEqual([]);
+        expect(cols.__ID__[1]).toEqual(["Central"]);
+        expect(cols.__ID__[2]).toEqual(["Central", "Furniture"]);
+
+        const cols2 = await view.to_columns();
+        expect(cols2.__ID__).toBeUndefined();
+        await view.delete();
+    });
+
     test("group_by with max aggregate", async function () {
         const table = await getClient().open_table("memory.superstore");
         const view = await table.view({

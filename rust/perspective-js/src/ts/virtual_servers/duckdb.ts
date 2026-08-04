@@ -24,7 +24,10 @@
 import type * as perspective from "@perspective-dev/client";
 import type { ColumnType } from "@perspective-dev/client/dist/esm/ts-rs/ColumnType.d.ts";
 import type { ViewConfig } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfig.d.ts";
+import type { ViewConfigUpdate } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfigUpdate.d.ts";
 import type { ViewWindow } from "@perspective-dev/client/dist/esm/ts-rs/ViewWindow.d.ts";
+import type { WindowAggregate } from "@perspective-dev/client/dist/esm/ts-rs/WindowAggregate.d.ts";
+import type { Scalar } from "@perspective-dev/client/dist/esm/ts-rs/Scalar.d.ts";
 import type * as duckdb from "@duckdb/duckdb-wasm";
 
 const NUMBER_AGGS = [
@@ -61,6 +64,30 @@ const STRING_AGGS = [
     "countif",
     "last",
     "string_agg",
+];
+
+// The window aggregates the SQL translation supports, per source
+// column type (`ema` is recursive - no SQL window equivalent).
+const WINDOW_AGGREGATES: WindowAggregate[] = [
+    "sum",
+    "avg",
+    "count",
+    "min",
+    "max",
+    "stddev",
+    "var",
+    "lag",
+    "lead",
+    "diff",
+    "rate",
+];
+
+const WINDOW_AGGREGATES_ANY: WindowAggregate[] = [
+    "count",
+    "min",
+    "max",
+    "lag",
+    "lead",
 ];
 
 const FILTER_OPS = [
@@ -189,12 +216,21 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
         });
     }
 
-    getFeatures() {
+    getFeatures(): perspective.Features {
         return {
             group_by: true,
             split_by: true,
             sort: true,
             expressions: true,
+            window_aggregates: {
+                // `ema` is recursive and has no SQL window translation.
+                integer: WINDOW_AGGREGATES,
+                float: WINDOW_AGGREGATES,
+                string: WINDOW_AGGREGATES_ANY,
+                date: WINDOW_AGGREGATES_ANY,
+                datetime: WINDOW_AGGREGATES_ANY,
+                boolean: WINDOW_AGGREGATES_ANY,
+            },
             group_rollup_mode: ["rollup", "flat", "total"],
             filter_ops: {
                 integer: FILTER_OPS,
@@ -256,7 +292,11 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
         return Number(results[0].toJSON()["count_star()"]);
     }
 
-    async tableMakeView(tableId: string, viewId: string, config: ViewConfig) {
+    async tableMakeView(
+        tableId: string,
+        viewId: string,
+        config: ViewConfigUpdate,
+    ) {
         const query = this.sqlBuilder.tableMakeView(tableId, viewId, config);
         await runQuery(this.db, query);
     }
@@ -288,7 +328,7 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
         let [min, max] = Object.values(row);
         if (typeof min === "bigint") min = Number(min);
         if (typeof max === "bigint") max = Number(max);
-        return { min: min ?? null, max: max ?? null };
+        return { min: (min ?? null) as Scalar, max: (max ?? null) as Scalar };
     }
 
     async viewGetData(

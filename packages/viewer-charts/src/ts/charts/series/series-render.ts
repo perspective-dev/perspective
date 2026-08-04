@@ -14,6 +14,7 @@ import type { Context2D } from "../canvas-types";
 import type { WebGLContextManager } from "../../webgl/context-manager";
 import {
     ensurePalette,
+    type GlyphRun,
     type SeriesChart,
     type SeriesAutoFitCache,
 } from "./series";
@@ -114,6 +115,8 @@ export function uploadBarInstances(
     let n = 0;
 
     chart._facetBarRanges = null;
+    chart._facetBarAggRanges = null;
+    chart._barAggRanges = null;
     if (total > 0) {
         const scratch = ensureBarInstanceScratch(total);
         if (
@@ -137,32 +140,59 @@ export function uploadBarInstances(
         const by1 = bars.y1;
         const ax = bars.axis;
 
-        // Facet mode: counting sort by splitIdx (`seriesId % P`). Pass
-        // 1 counts eligible instances per split; prefix sums become the
-        // per-split write cursors AND the published ranges.
-        let writeAt: ((seriesId: number) => number) | null = null;
-        if (faceted) {
-            const counts = new Array<number>(P).fill(0);
-            for (let i = 0; i < total; i++) {
-                if (ct[i] !== BAR_TYPE_BAR || hidden.has(sid[i])) {
-                    continue;
-                }
-
-                counts[sid[i] % P]++;
+        // Counting sort so contiguous instance ranges exist for every
+        // draw grouping. Overlay: key = aggIdx, publishing
+        // `_barAggRanges` — a glyph run `[aggStart, aggEnd]` is one
+        // contiguous slice, and within-call overlap Z follows `columns`
+        // declaration order. Faceted: key = splitIdx-major then aggIdx,
+        // publishing both the per-split `_facetBarRanges` (facet
+        // dispatch) and the per-(split, agg) `_facetBarAggRanges` (run
+        // slices within a facet). Pass 1 counts eligible instances per
+        // bucket; prefix sums become the write cursors AND the ranges.
+        const M = Math.max(1, chart._aggregates.length);
+        const bucketOf = faceted
+            ? (seriesId: number) =>
+                  (seriesId % P) * M + Math.floor(seriesId / P)
+            : (seriesId: number) =>
+                  P > 0 ? Math.floor(seriesId / P) : seriesId;
+        const numBuckets = faceted ? P * M : M;
+        const counts = new Array<number>(numBuckets).fill(0);
+        for (let i = 0; i < total; i++) {
+            if (ct[i] !== BAR_TYPE_BAR || hidden.has(sid[i])) {
+                continue;
             }
 
-            const ranges: { start: number; count: number }[] = [];
-            const cursors = new Int32Array(P);
-            let acc = 0;
-            for (let p = 0; p < P; p++) {
-                ranges.push({ start: acc, count: counts[p] });
-                cursors[p] = acc;
-                acc += counts[p];
-            }
-
-            chart._facetBarRanges = ranges;
-            writeAt = (seriesId: number) => cursors[seriesId % P]++;
+            counts[bucketOf(sid[i])]++;
         }
+
+        const ranges: { start: number; count: number }[] = [];
+        const cursors = new Int32Array(numBuckets);
+        let acc = 0;
+        for (let b = 0; b < numBuckets; b++) {
+            ranges.push({ start: acc, count: counts[b] });
+            cursors[b] = acc;
+            acc += counts[b];
+        }
+
+        if (faceted) {
+            chart._barAggRanges = null;
+            chart._facetBarAggRanges = Array.from({ length: P }, (_, p) =>
+                ranges.slice(p * M, (p + 1) * M),
+            );
+            chart._facetBarRanges = Array.from({ length: P }, (_, p) => {
+                const first = ranges[p * M];
+                const last = ranges[(p + 1) * M - 1];
+                return {
+                    start: first.start,
+                    count: last.start + last.count - first.start,
+                };
+            });
+        } else {
+            chart._barAggRanges = ranges;
+            chart._facetBarAggRanges = null;
+        }
+
+        const writeAt = (seriesId: number) => cursors[bucketOf(seriesId)]++;
 
         for (let i = 0; i < total; i++) {
             if (ct[i] !== BAR_TYPE_BAR) {
@@ -174,7 +204,7 @@ export function uploadBarInstances(
                 continue;
             }
 
-            const w = writeAt ? writeAt(seriesId) : n;
+            const w = writeAt(seriesId);
             scratch.xCenters[w] = xC[i] - xOrigin;
             scratch.halfWidths[w] = hw[i];
             scratch.y0s[w] = by0[i];
@@ -643,41 +673,18 @@ export function renderBarFrame(
         );
     }
 
+    const hovered = chart._series.length > 1 ? getHoveredBar(chart) : null;
     renderInPlotFrame(gl, layout, glManager.dpr, () => {
-        // Paint order: areas behind bars (so bar borders stay crisp),
-        // bars above, lines above those, scatter points on top. X Bar
-        // only paints bars — the other glyphs bake in vertical geometry
-        // and aren't supported for horizontal orientation.
-        if (!horizontal) {
-            chart._glyphs.areas.draw(
-                chart,
-                gl,
-                glManager,
-                projLeft,
-                projRight,
-                theme.areaOpacity,
-            );
-        }
-
-        gl.useProgram(chart._program!);
-        const loc = chart._locations!;
-        gl.uniformMatrix4fv(loc.u_proj_left, false, projLeft);
-        gl.uniformMatrix4fv(loc.u_proj_right, false, projRight);
-        gl.uniform1f(loc.u_horizontal, horizontal ? 1.0 : 0.0);
-        const hovered = chart._series.length > 1 ? getHoveredBar(chart) : null;
-        gl.uniform1f(loc.u_hover_series, hovered ? hovered.seriesId : -1);
-        drawBars(chart, gl, glManager);
-
-        if (!horizontal) {
-            chart._glyphs.lines.draw(chart, gl, glManager, projLeft, projRight);
-            chart._glyphs.scatter.draw(
-                chart,
-                gl,
-                glManager,
-                projLeft,
-                projRight,
-            );
-        }
+        drawGlyphRuns(
+            chart,
+            gl,
+            glManager,
+            projLeft,
+            projRight,
+            theme.areaOpacity,
+            horizontal,
+            hovered ? hovered.seriesId : -1,
+        );
     });
 
     chart._lastXDomain = catDomain;
@@ -692,6 +699,124 @@ export function renderBarFrame(
     // doesn't present ahead of the GL glyphs on resize. Reads the
     // `_last*` frame state set above.
     chart._defer2D(() => renderBarChromeOverlay(chart));
+}
+
+/**
+ * Paint every glyph in `columns` declaration Z-order — one pass per
+ * {@link SeriesChart._glyphRuns} entry, ascending `aggIdx`, later
+ * columns on top; splits within an aggregate paint in `splitIdx`
+ * order. A homogeneous chart is a single run and takes exactly the
+ * legacy one-pass path (no per-series filtering, single instanced bar
+ * draw). X Bar (horizontal) paints bars only — the other glyphs bake
+ * vertical geometry.
+ *
+ * The caller wraps this in its plot clip (`renderInPlotFrame` /
+ * `withScissor`); `splitFilter` is the facet index in faceted frames.
+ */
+function drawGlyphRuns(
+    chart: SeriesChart,
+    gl: WebGL2RenderingContext | WebGLRenderingContext,
+    glManager: WebGLContextManager,
+    projLeft: Float32Array,
+    projRight: Float32Array,
+    areaOpacity: number,
+    horizontal: boolean,
+    hoveredSeriesId: number,
+    splitFilter?: number,
+): void {
+    const runs = chart._glyphRuns;
+    const single = runs.length <= 1;
+    for (const run of runs) {
+        const aggRange = single
+            ? undefined
+            : { start: run.aggStart, end: run.aggEnd };
+        switch (run.chartType) {
+            case "area":
+                if (!horizontal) {
+                    chart._glyphs.areas.draw(
+                        chart,
+                        gl,
+                        glManager,
+                        projLeft,
+                        projRight,
+                        areaOpacity,
+                        splitFilter,
+                        aggRange,
+                    );
+                }
+
+                break;
+            case "bar": {
+                gl.useProgram(chart._program!);
+                const loc = chart._locations!;
+                gl.uniformMatrix4fv(loc.u_proj_left, false, projLeft);
+                gl.uniformMatrix4fv(loc.u_proj_right, false, projRight);
+                gl.uniform1f(loc.u_horizontal, horizontal ? 1.0 : 0.0);
+                gl.uniform1f(loc.u_hover_series, hoveredSeriesId);
+                drawBars(
+                    chart,
+                    gl,
+                    glManager,
+                    barRunRange(chart, run, splitFilter),
+                );
+                break;
+            }
+
+            case "line":
+                if (!horizontal) {
+                    chart._glyphs.lines.draw(
+                        chart,
+                        gl,
+                        glManager,
+                        projLeft,
+                        projRight,
+                        splitFilter,
+                        aggRange,
+                    );
+                }
+
+                break;
+            case "scatter":
+                if (!horizontal) {
+                    chart._glyphs.scatter.draw(
+                        chart,
+                        gl,
+                        glManager,
+                        projLeft,
+                        projRight,
+                        splitFilter,
+                        aggRange,
+                    );
+                }
+
+                break;
+        }
+    }
+}
+
+/**
+ * The contiguous uploaded-instance slice for a bar run — per-aggregate
+ * ranges are adjacent by construction (`uploadBarInstances` counting
+ * sort), so the run `[aggStart, aggEnd]` spans from the first range's
+ * start through the last range's end. Faceted frames slice within the
+ * facet's split-major block.
+ */
+function barRunRange(
+    chart: SeriesChart,
+    run: GlyphRun,
+    splitFilter?: number,
+): { start: number; count: number } | undefined {
+    const table =
+        splitFilter !== undefined
+            ? chart._facetBarAggRanges?.[splitFilter]
+            : chart._barAggRanges;
+    if (!table) {
+        return splitFilter !== undefined ? { start: 0, count: 0 } : undefined;
+    }
+
+    const first = table[run.aggStart];
+    const last = table[run.aggEnd];
+    return { start: first.start, count: last.start + last.count - first.start };
 }
 
 /**
@@ -873,55 +998,17 @@ function renderFacetedBarFrame(
         }
 
         withScissor(gl, layout, dpr, () => {
-            // Same paint order as the single-plot path: areas behind
-            // bars, lines above, scatter on top. X Bar draws bars only
-            // (the other glyphs bake vertical geometry).
-            if (!horizontal) {
-                chart._glyphs.areas.draw(
-                    chart,
-                    gl,
-                    glManager,
-                    projLeft,
-                    projRight,
-                    theme.areaOpacity,
-                    p,
-                );
-            }
-
-            gl.useProgram(chart._program!);
-            const loc = chart._locations!;
-            gl.uniformMatrix4fv(loc.u_proj_left, false, projLeft);
-            gl.uniformMatrix4fv(loc.u_proj_right, false, projRight);
-            gl.uniform1f(loc.u_horizontal, horizontal ? 1.0 : 0.0);
-            gl.uniform1f(
-                loc.u_hover_series,
-                hovered && hovered.splitIdx === p ? hovered.seriesId : -1,
-            );
-            drawBars(
+            drawGlyphRuns(
                 chart,
                 gl,
                 glManager,
-                chart._facetBarRanges?.[p] ?? { start: 0, count: 0 },
+                projLeft,
+                projRight,
+                theme.areaOpacity,
+                horizontal,
+                hovered && hovered.splitIdx === p ? hovered.seriesId : -1,
+                p,
             );
-
-            if (!horizontal) {
-                chart._glyphs.lines.draw(
-                    chart,
-                    gl,
-                    glManager,
-                    projLeft,
-                    projRight,
-                    p,
-                );
-                chart._glyphs.scatter.draw(
-                    chart,
-                    gl,
-                    glManager,
-                    projLeft,
-                    projRight,
-                    p,
-                );
-            }
         });
     }
 

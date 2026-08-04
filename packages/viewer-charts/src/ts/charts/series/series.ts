@@ -24,6 +24,7 @@ import {
     type SeriesChartRecord,
     type NumericCategoryDomain,
     type SeriesInfo,
+    type SeriesPipelineResult,
     type BarColumns,
     emptyBarColumns,
 } from "./series-build";
@@ -64,6 +65,16 @@ export interface SeriesAutoFitCache {
     rightMin: number;
     rightMax: number;
     hasRight: boolean;
+}
+
+/**
+ * One paint pass: the contiguous span of aggregates (`columns` indices,
+ * inclusive) sharing a glyph type. See {@link SeriesChart._glyphRuns}.
+ */
+export interface GlyphRun {
+    chartType: SeriesInfo["chartType"];
+    aggStart: number;
+    aggEnd: number;
 }
 
 export interface CachedLocations {
@@ -152,6 +163,32 @@ export class SeriesChart extends CategoricalYChart {
      * the instance attributes at `start` and draws `count` instances.
      */
     _facetBarRanges: { start: number; count: number }[] | null = null;
+
+    /**
+     * Paint order of the current build: consecutive aggregates sharing
+     * a glyph type, merged into runs, in `columns` declaration order
+     * (`aggIdx` ascending — later columns paint on top). The frame
+     * draws one pass per run; a homogeneous chart is a single run and
+     * degenerates to the legacy one-pass-per-type path. `aggEnd` is
+     * inclusive.
+     */
+    _glyphRuns: GlyphRun[] = [];
+
+    /**
+     * Per-aggregate contiguous instance ranges in the uploaded bar
+     * buffers, indexed by `aggIdx` — the overlay-mode counterpart of
+     * `_facetBarRanges`, populated by `uploadBarInstances`' aggregate
+     * counting sort. `null` until first upload.
+     */
+    _barAggRanges: { start: number; count: number }[] | null = null;
+
+    /**
+     * Faceted per-(split, aggregate) instance ranges,
+     * `[splitIdx][aggIdx]` — instances are emitted split-major then
+     * aggregate-ordered, so a facet's glyph-run slice is contiguous.
+     * `null` in overlay mode.
+     */
+    _facetBarAggRanges: { start: number; count: number }[][] | null = null;
 
     /**
      * Columnar bar/area record storage. Indexed by bar slot in
@@ -248,6 +285,20 @@ export class SeriesChart extends CategoricalYChart {
      */
     _expandedLeftDomain: { min: number; max: number } | null = null;
     _expandedRightDomain: { min: number; max: number } | null = null;
+
+    /**
+     * The axis partition (per-aggregate axis side) the expand
+     * accumulators were accumulated under. An accumulator is only
+     * meaningful for the partition that produced it: when an aggregate
+     * moves sides (`columns_config.alt_axis` pin via a config-only
+     * `update()`, or a data-driven `auto_alt_y_axis` flip), the side it
+     * LEFT would otherwise retain its extent forever — the departed
+     * column's range never leaves the primary axis. A signature
+     * mismatch resets BOTH accumulators before the union. Keyed per
+     * AGGREGATE (not per series) so split-group growth on a streaming
+     * update never spuriously resets.
+     */
+    _expandedAxisSig: string | null = null;
 
     /**
      * Numeric category-axis state. Populated only when `group_by` has
@@ -564,6 +615,13 @@ export class SeriesChart extends CategoricalYChart {
         // `"fit"` (or a fresh reset) leaves the result untouched and
         // clears the accumulators so the next toggle starts fresh.
         if (this._pluginConfig.domain_mode === "expand") {
+            const axisSig = expandAxisSignature(result);
+            if (this._expandedAxisSig !== axisSig) {
+                this._expandedLeftDomain = null;
+                this._expandedRightDomain = null;
+                this._expandedAxisSig = axisSig;
+            }
+
             this._expandedLeftDomain = expandDomainInPlace(
                 this._expandedLeftDomain,
                 result.leftDomain,
@@ -578,6 +636,7 @@ export class SeriesChart extends CategoricalYChart {
         } else {
             this._expandedLeftDomain = null;
             this._expandedRightDomain = null;
+            this._expandedAxisSig = null;
         }
 
         this._aggregates = result.aggregates;
@@ -639,6 +698,25 @@ export class SeriesChart extends CategoricalYChart {
         this._primaryValueLabel = uniqueAggLabels(result.series, 0);
         this._altValueLabel = uniqueAggLabels(result.series, 1);
 
+        // Paint-order runs: every series of an aggregate shares one
+        // glyph type (`resolveChartType` is per-aggName), so sampling
+        // the aggregate's first series suffices. MUST be computed
+        // before `uploadBarInstances` below — the aggregate counting
+        // sort publishes ranges the run passes draw from.
+        this._glyphRuns.length = 0;
+        {
+            const P = Math.max(1, result.splitPrefixes.length);
+            for (let k = 0; k < result.aggregates.length; k++) {
+                const chartType = result.series[k * P].chartType;
+                const last = this._glyphRuns[this._glyphRuns.length - 1];
+                if (last && last.chartType === chartType) {
+                    last.aggEnd = k;
+                } else {
+                    this._glyphRuns.push({ chartType, aggStart: k, aggEnd: k });
+                }
+            }
+        }
+
         // Pre-build the area-strip lookup index (seriesId * 1e9 + catIdx
         // → bar slot). Legacy code rebuilt this every frame inside
         // `drawAreas`. The index is derived purely from `_bars` and is
@@ -657,6 +735,17 @@ export class SeriesChart extends CategoricalYChart {
         this._paletteCacheKey = null;
         this._catExtentsHidden = null;
         this._lastUploadedColors = null;
+
+        // Hover records index into `_bars` / `_series` and MUST NOT
+        // survive a build that replaces them: bar-column capacity is
+        // reused across builds, so a stale `_hoveredBarIdx` reads a
+        // leftover `seriesId` past the new series set (and a retained
+        // `_hoveredSample` carries one verbatim), crashing the tooltip
+        // pass of the next present when the pointer rests over a glyph
+        // through a host `restore`. The next mousemove re-hit-tests
+        // against the new data.
+        this._hoveredBarIdx = -1;
+        this._hoveredSample = null;
         this._sampleValid = result.sampleValid;
         this._leftDomain = result.leftDomain;
         this._rightDomain = result.rightDomain;
@@ -691,6 +780,7 @@ export class SeriesChart extends CategoricalYChart {
     override resetExpandedDomain(): void {
         this._expandedLeftDomain = null;
         this._expandedRightDomain = null;
+        this._expandedAxisSig = null;
     }
 
     protected destroyInternal(): void {
@@ -709,6 +799,9 @@ export class SeriesChart extends CategoricalYChart {
         this._facetActive = false;
         this._facetGrid = null;
         this._facetBarRanges = null;
+        this._facetBarAggRanges = null;
+        this._barAggRanges = null;
+        this._glyphRuns.length = 0;
         this._bars = emptyBarColumns();
         this._series = [];
         this._barSeries = [];
@@ -724,6 +817,8 @@ export class SeriesChart extends CategoricalYChart {
         this._rowPaths = [];
         this._numCategories = 0;
         this._hiddenSeries.clear();
+        this._hoveredBarIdx = -1;
+        this._hoveredSample = null;
     }
 }
 
@@ -768,6 +863,24 @@ function uniqueAggLabels(series: SeriesInfo[], axis: 0 | 1): string {
     }
 
     return ordered.join(", ");
+}
+
+/**
+ * Per-aggregate axis-partition signature for the `domain_mode:
+ * "expand"` accumulators. Invariant: every series of an aggregate
+ * shares one axis side (both axis-override loops in the build pipeline
+ * assign by `aggIdx`), so sampling the aggregate's first series
+ * suffices. NUL-joined — aggregate names may contain any printable
+ * separator.
+ */
+function expandAxisSignature(result: SeriesPipelineResult): string {
+    const P = Math.max(1, result.splitPrefixes.length);
+    const parts: string[] = [];
+    for (let k = 0; k < result.aggregates.length; k++) {
+        parts.push(`${result.aggregates[k]}:${result.series[k * P].axis}`);
+    }
+
+    return parts.join("\u0000");
 }
 
 /**

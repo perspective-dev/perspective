@@ -24,7 +24,9 @@
 import type * as perspective from "@perspective-dev/client";
 import type { ColumnType } from "@perspective-dev/client/dist/esm/ts-rs/ColumnType.d.ts";
 import type { ViewConfig } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfig.d.ts";
+import type { ViewConfigUpdate } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfigUpdate.d.ts";
 import type { ViewWindow } from "@perspective-dev/client/dist/esm/ts-rs/ViewWindow.d.ts";
+import type { WindowAggregate } from "@perspective-dev/client/dist/esm/ts-rs/WindowAggregate.d.ts";
 import type * as clickhouse from "@clickhouse/client-web";
 
 const NUMBER_AGGS = [
@@ -61,6 +63,30 @@ const STRING_AGGS = [
     "countif",
     "last",
     "string_agg",
+];
+
+// The window aggregates the SQL translation supports, per source
+// column type (`ema` is recursive - no SQL window equivalent).
+const WINDOW_AGGREGATES: WindowAggregate[] = [
+    "sum",
+    "avg",
+    "count",
+    "min",
+    "max",
+    "stddev",
+    "var",
+    "lag",
+    "lead",
+    "diff",
+    "rate",
+];
+
+const WINDOW_AGGREGATES_ANY: WindowAggregate[] = [
+    "count",
+    "min",
+    "max",
+    "lag",
+    "lead",
 ];
 
 const FILTER_OPS = [
@@ -218,12 +244,24 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
         });
     }
 
-    getFeatures() {
+    getFeatures(): perspective.Features {
         return {
             group_by: true,
             split_by: false,
             sort: true,
             expressions: true,
+            // ClickHouse has no stable `rowid`, so natural-order windows
+            // are unsupported.
+            unordered: true,
+            window_aggregates: {
+                // `ema` is recursive and has no SQL window translation.
+                integer: WINDOW_AGGREGATES,
+                float: WINDOW_AGGREGATES,
+                string: WINDOW_AGGREGATES_ANY,
+                date: WINDOW_AGGREGATES_ANY,
+                datetime: WINDOW_AGGREGATES_ANY,
+                boolean: WINDOW_AGGREGATES_ANY,
+            },
             group_rollup_mode: ["rollup", "flat", "total"],
             filter_ops: {
                 integer: FILTER_OPS,
@@ -284,7 +322,11 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
         return Number(results[0]["COUNT()"]);
     }
 
-    async tableMakeView(tableId: string, viewId: string, config: ViewConfig) {
+    async tableMakeView(
+        tableId: string,
+        viewId: string,
+        config: ViewConfigUpdate,
+    ) {
         const query = this.sqlBuilder.tableMakeView(tableId, viewId, config);
         await runQuery(this.db, query, { execute: true });
     }

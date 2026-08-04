@@ -48,3 +48,4 @@ pub mod style;
 pub mod style_controls;
 pub mod type_icon;
 pub mod viewer;
+pub mod window_editor;

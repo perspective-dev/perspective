@@ -680,6 +680,237 @@ test.describe("Column Style Tests", () => {
         });
     });
 
+    // Regression: the sidebar's ColorRange control emits a sparse config —
+    // only the side(s) that differ from the theme default are written. A
+    // one-sided fg pair (e.g. `pos_fg_color` alone) used to crash
+    // `cell_style_numeric` on negative cells ("d is not iterable"), and the
+    // mirror case (`neg_fg_color` alone) was silently ignored. Each side
+    // must fall back to the theme color independently, like the bg pair.
+    test("pos_fg_color alone renders negatives with theme fallback (no crash)", async ({
+        page,
+    }) => {
+        await page.goto("/tools/test/src/html/basic-test.html");
+        await page.evaluate(async () => {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
+                await new Promise((x) => setTimeout(x, 10));
+            }
+        });
+
+        const { cells, rejections } = await page.evaluate(async () => {
+            const rejections: string[] = [];
+            window.addEventListener("unhandledrejection", (e) => {
+                rejections.push(String(e.reason));
+            });
+
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.restore({
+                plugin: "Datagrid",
+                columns: ["Profit"],
+                sort: [["Profit", "asc"]],
+                columns_config: {
+                    Profit: {
+                        number_fg_mode: "color",
+                        pos_fg_color: "#00ff00",
+                    },
+                },
+            });
+
+            await viewer.flush();
+            await new Promise((x) => setTimeout(x, 100));
+            const tds = Array.from(
+                (
+                    viewer.querySelector("perspective-viewer-datagrid") as any
+                ).shadowRoot.querySelectorAll("regular-table tbody td"),
+            );
+
+            return {
+                rejections,
+                cells: tds.map((td: any) => ({
+                    text: td.textContent.trim(),
+                    color: td.style.color,
+                })),
+            };
+        });
+
+        expect(rejections).toEqual([]);
+        const negatives = cells.filter((c) => c.text.startsWith("-"));
+        expect(negatives.length).toBeGreaterThan(0);
+        for (const cell of negatives) {
+            expect(cell.color).not.toEqual("");
+            expect(cell.color).not.toEqual("rgb(0, 255, 0)");
+        }
+    });
+
+    test("neg_fg_color alone renders negatives with the custom color", async ({
+        page,
+    }) => {
+        await page.goto("/tools/test/src/html/basic-test.html");
+        await page.evaluate(async () => {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
+                await new Promise((x) => setTimeout(x, 10));
+            }
+        });
+
+        const errors: string[] = [];
+        page.on("pageerror", (e) => errors.push(e.message));
+
+        const cells = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.restore({
+                plugin: "Datagrid",
+                columns: ["Profit"],
+                sort: [["Profit", "asc"]],
+                columns_config: {
+                    Profit: {
+                        number_fg_mode: "color",
+                        neg_fg_color: "#ff0000",
+                    },
+                },
+            });
+
+            await viewer.flush();
+            const tds = Array.from(
+                (
+                    viewer.querySelector("perspective-viewer-datagrid") as any
+                ).shadowRoot.querySelectorAll("regular-table tbody td"),
+            );
+
+            return tds.map((td: any) => ({
+                text: td.textContent.trim(),
+                color: td.style.color,
+            }));
+        });
+
+        expect(errors).toEqual([]);
+        const negatives = cells.filter((c) => c.text.startsWith("-"));
+        expect(negatives.length).toBeGreaterThan(0);
+        for (const cell of negatives) {
+            expect(cell.color).toEqual("rgb(255, 0, 0)");
+        }
+
+        const positives = cells.filter(
+            (c) => !c.text.startsWith("-") && c.text !== "",
+        );
+        for (const cell of positives) {
+            expect(cell.color).not.toEqual("rgb(255, 0, 0)");
+        }
+    });
+
+    test("color input node is replaced on column switch and stale events write nothing", async ({
+        page,
+    }) => {
+        await page.goto("/tools/test/src/html/basic-test.html");
+        await page.evaluate(async () => {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
+                await new Promise((x) => setTimeout(x, 10));
+            }
+        });
+
+        await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.restore({
+                plugin: "Datagrid",
+                group_by: ["State"],
+                settings: true,
+            });
+            await viewer.flush();
+        });
+
+        const open_editor = async (nth: number) => {
+            const target = await page.evaluate(async (nth) => {
+                const viewer = document.querySelector("perspective-viewer")!;
+                const datagrid = viewer.querySelector(
+                    "perspective-viewer-datagrid",
+                ) as any;
+                const rt = datagrid.shadowRoot.querySelector("regular-table");
+                const ths = Array.from(
+                    rt.querySelectorAll(
+                        "#psp-column-edit-buttons th.psp-menu-enabled",
+                    ),
+                ) as any[];
+                const th = ths[nth];
+                const meta = rt.getMeta(th);
+                const rect = th.getBoundingClientRect();
+                return {
+                    column: meta?.column_header?.[0],
+                    x: Math.floor(rect.left + rect.width / 2),
+                    y: Math.floor(rect.top + rect.height / 2),
+                };
+            }, nth);
+
+            await page.mouse.click(target.x, target.y);
+            await page
+                .locator(
+                    "perspective-viewer #column_settings_sidebar #style-tab input[type=color]",
+                )
+                .first()
+                .waitFor();
+            return target.column;
+        };
+
+        const col_a = await open_editor(2);
+        await page.evaluate(() => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            const root = (viewer.shadowRoot ?? viewer) as any;
+            (window as any).__held_input__ = root.querySelector(
+                "#column_settings_sidebar #style-tab input[type=color]",
+            );
+        });
+
+        const col_b = await open_editor(4);
+        expect(col_b).not.toEqual(col_a);
+
+        // The old column's input node must have been REPLACED, which
+        // dismisses any open native color chooser bound to it.
+        const held = await page.evaluate(() => {
+            const input = (window as any).__held_input__;
+            const viewer = document.querySelector("perspective-viewer")!;
+            const root = (viewer.shadowRoot ?? viewer) as any;
+            const current = root.querySelector(
+                "#column_settings_sidebar #style-tab input[type=color]",
+            );
+            const same_node = input === current;
+            input.value = "#aa00aa";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            return { same_node, connected: input.isConnected };
+        });
+
+        expect(held.same_node).toEqual(false);
+        expect(held.connected).toEqual(false);
+
+        // The stale event must not have written ANY column's config.
+        await new Promise((x) => setTimeout(x, 300));
+        const saved = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.flush();
+            return (await viewer.save()).columns_config ?? {};
+        });
+
+        expect(JSON.stringify(saved)).not.toContain("#aa00aa");
+
+        // Sanity: the CURRENT column's input still works and writes the
+        // currently-open column.
+        await page
+            .locator(
+                "perspective-viewer #column_settings_sidebar #style-tab input[type=color]",
+            )
+            .first()
+            .evaluate((el: any) => {
+                el.value = "#00ff00";
+                el.dispatchEvent(new Event("input", { bubbles: true }));
+            });
+
+        await new Promise((x) => setTimeout(x, 300));
+        const saved2 = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.flush();
+            return (await viewer.save()).columns_config ?? {};
+        });
+
+        expect(saved2[col_b]?.pos_fg_color).toEqual("#00ff00");
+        expect(saved2[col_a]).toBeUndefined();
+    });
+
     test("repeated restore with plugin_config + columns_config is stable", async ({
         page,
     }) => {

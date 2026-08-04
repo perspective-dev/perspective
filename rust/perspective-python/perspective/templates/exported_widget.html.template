@@ -17,17 +17,21 @@
         }
 
         import * as perspective from "$psp_cdn_perspective";
-        const viewerId = $viewer_id;
+        const viewerId = "$viewer_id";
         const currentScript = document.scripts[document.scripts.length - 1];
         const envelope = document.getElementById(`perspective-envelope-$${viewerId}`);
-        const dataScript = envelope.querySelector('script[type="application/vnd.apache.arrow.file"]');;
+        const dataScript = envelope.querySelector('script[type="application/vnd.apache.arrow.file"]');
         if (!dataScript)
             throw new Error('data script missing for viewer', viewerId);
         const data = base64ToBytes(dataScript.textContent);
         const viewerAttrs = $viewer_attrs;
 
-        // Create a new worker, then a new table promise on that worker.
-        const table = await perspective.worker().table(data.buffer);
+        // Create a new worker, then a new table on that worker. `worker()`
+        // sources the client wasm from the registered `<perspective-viewer>`
+        // Custom Element, which registers asynchronously.
+        await customElements.whenDefined("perspective-viewer");
+        const client = await perspective.worker();
+        const table = await client.table(data.buffer);
         const viewer = envelope.querySelector('perspective-viewer');
         viewer.load(table);
         viewer.restore(viewerAttrs);

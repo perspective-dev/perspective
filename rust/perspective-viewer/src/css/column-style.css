@@ -13,7 +13,8 @@
 
 :host {
     #column-style-container,
-    #plugin-config-container {
+    #plugin-config-container,
+    #window-editor-container {
         outline: none;
         user-select: none;
 
@@ -81,8 +82,8 @@
         label {
             display: block;
             font-size: var(--label--font-size, 0.75em);
-            margin: 4px 0 2px 0;
             width: 100%;
+            margin: 4px 0 2px 0;
         }
 
         span.reset-default-style-disabled {
@@ -160,7 +161,7 @@
 
         .column-style-label {
             display: flex;
-            padding: 4px 0px;
+            padding: 0px;
         }
 
         .indent {

@@ -338,6 +338,8 @@ impl Component for PerspectiveViewer {
                 toggle,
             } => self.on_open_column_settings(ctx, locator, sender, toggle),
             ColumnSettingsPanelSizeUpdate(x) => self.on_column_settings_panel_size_update(x),
+            ColumnSettingsPanelAutoWidth(w) => self.on_column_settings_panel_auto_width(w),
+            ToggleColumnSettingsPin => self.on_toggle_column_settings_pin(),
             ColumnSettingsTabChanged(tab) => self.on_column_settings_tab_changed(ctx, tab),
             ToggleDebug => self.on_toggle_debug(ctx),
 

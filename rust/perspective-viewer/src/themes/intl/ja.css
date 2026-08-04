@@ -108,6 +108,13 @@ perspective-dropdown {
     /* Tabs */
     --psp-label--style-tab--content: "スタイル";
     --psp-label--attributes-tab--content: "属性";
+    --psp-label--window-tab--content: "ウィンドウ";
+    --psp-label--window-source--content: "列";
+    --psp-label--window-order-by--content: "注文方法";
+    --psp-label--window-partition-by--content: "パーティション";
+    --psp-label--window-frame--content: "フレーム";
+    --psp-label--window-offset--content: "オフセット";
+    --psp-label--window-alpha--content: "アルファ";
     --psp-label--query-tab--content: "クエリ";
     --psp-label--plugin-tab--content: "プラグイン";
     --psp-label--debug-tab--content: "JSON";

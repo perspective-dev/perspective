@@ -14,6 +14,7 @@ use std::borrow::Cow;
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::config::GroupRollupMode;
 use crate::proto::get_features_resp::{AggregateArgs, AggregateOptions, ColumnTypeOptions};
@@ -24,46 +25,64 @@ use crate::proto::{ColumnType, GetFeaturesResp};
 /// This struct is returned by
 /// [`VirtualServerHandler::get_features`](super::VirtualServerHandler::get_features)
 /// to inform clients about which operations are available.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, TS)]
 pub struct Features<'a> {
     /// Whether group-by aggregation is supported.
     #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
     pub group_by: bool,
 
     /// Which `group_by_rollup_mode` options are supported
     #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
     pub group_rollup_mode: Vec<GroupRollupMode>,
 
     /// Whether split-by (pivot) operations are supported.
     #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
     pub split_by: bool,
 
     /// Available filter operators per column type.
     #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
     pub filter_ops: IndexMap<ColumnType, Vec<Cow<'a, str>>>,
 
     /// Available aggregate functions per column type.
     #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
     pub aggregates: IndexMap<ColumnType, Vec<AggSpec<'a>>>,
 
     /// Whether sorting is supported.
     #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
     pub sort: bool,
 
     /// Whether computed expressions are supported.
     #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
     pub expressions: bool,
+
+    /// Available window aggregates.
+    #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
+    pub window_aggregates: IndexMap<ColumnType, Vec<crate::config::WindowAggregate>>,
 
     /// Whether update callbacks are supported.
     #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
     pub on_update: bool,
+
+    /// The data store has no reliable natural row order
+    #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
+    pub unordered: bool,
 }
 
 /// Specification for an aggregate function.
 ///
 /// Aggregates can either take no additional arguments ([`AggSpec::Single`])
 /// or require column type arguments ([`AggSpec::Multiple`]).
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, TS)]
 #[serde(untagged)]
 pub enum AggSpec<'a> {
     /// An aggregate function with no additional arguments.
@@ -85,6 +104,22 @@ impl<'a> From<Features<'a>> for GetFeaturesResp {
             expressions: value.expressions,
             on_update: value.on_update,
             sort: value.sort,
+            unordered: value.unordered,
+            window_aggregates: value
+                .window_aggregates
+                .iter()
+                .map(|(ty, aggs)| {
+                    (
+                        *ty as u32,
+                        crate::proto::get_features_resp::WindowAggregateOptions {
+                            options: aggs
+                                .iter()
+                                .map(|x| crate::proto::WindowAggregate::from(*x) as i32)
+                                .collect(),
+                        },
+                    )
+                })
+                .collect(),
             aggregates: value
                 .aggregates
                 .iter()

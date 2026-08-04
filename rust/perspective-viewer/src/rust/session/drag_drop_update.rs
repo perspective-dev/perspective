@@ -96,9 +96,27 @@ pub impl ViewConfig {
                 config.filter.retain(|x| x.column() != column);
                 update.filter = Some(config.filter.clone());
             },
+            DragEffect::Move(
+                DragTarget::WindowSource
+                | DragTarget::WindowOrderBy
+                | DragTarget::WindowPartitionBy,
+            ) => {
+                // Staged origins (window-editor pills) have nothing to remove
+                // HERE - the editor's draft is not part of the view config
+                // this update mutates. The open `WindowEditor` observes the
+                // same `drop_received` event and clears the origin slot in
+                // its draft, completing the move.
+            },
         }
 
         match drop {
+            DragTarget::WindowSource
+            | DragTarget::WindowOrderBy
+            | DragTarget::WindowPartitionBy => {
+                // Unreachable: staged drops never build config updates
+                // (`DragTarget::is_staged` is excluded by every committing
+                // `drop_received` subscriber).
+            },
             DragTarget::Active => {
                 if !is_swap_to_after_last {
                     if is_to_swap || is_from_required {

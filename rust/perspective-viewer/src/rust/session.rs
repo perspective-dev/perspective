@@ -806,11 +806,11 @@ impl Session {
     }
 
     /// SYNC name validation for a candidate config (I4): every referenced
-    /// column must be a table column or an expression present in the
-    /// candidate itself (syntactic presence — server-side compilability is a
-    /// run property, not a commit property). Skipped when no table is bound
-    /// yet: the config rides along until `load()` binds one, and the engine
-    /// surfaces any residual error on that run.
+    /// column must be a table column, or an expression or window column
+    /// present in the candidate itself (syntactic presence — server-side
+    /// compilability is a run property, not a commit property). Skipped
+    /// when no table is bound yet: the config rides along until `load()`
+    /// binds one, and the engine surfaces any residual error on that run.
     fn validate_names(&self, config: &ViewConfig) -> ApiResult<()> {
         let table_columns = self.all_columns();
         if table_columns.is_empty() {
@@ -819,6 +819,7 @@ impl Session {
 
         let mut allowed: HashSet<&str> = table_columns.iter().map(|x| x.as_str()).collect();
         allowed.extend(config.expressions.0.keys().map(|x| x.as_str()));
+        allowed.extend(config.windows.keys().map(|x| x.as_str()));
         let named = config
             .columns
             .iter()
@@ -1144,6 +1145,7 @@ impl Session {
         let view = table.view(Some(view_config.into())).await?;
         let view_schema = view.schema().await?;
         self.metadata_mut().update_view_schema(&view_schema)?;
+        self.metadata_mut().update_windows(&effective.windows)?;
         let on_stats = Callback::from({
             let this = self.clone();
             move |stats| this.update_stats(stats)

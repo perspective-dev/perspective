@@ -121,6 +121,32 @@ impl GetFeaturesResp {
             .first()
             .map(|x| x.as_str())
     }
+
+    /// The window aggregates this server supports for a `col_type` SOURCE
+    /// column, in the server's declared (menu) order.
+    pub fn get_window_aggregates(
+        &self,
+        col_type: ColumnType,
+    ) -> Vec<crate::config::WindowAggregate> {
+        self.window_aggregates
+            .get(&(col_type as u32))
+            .map(|x| {
+                x.options
+                    .iter()
+                    .filter_map(|x| crate::proto::WindowAggregate::try_from(*x).ok())
+                    .map(|x| x.into())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Whether this server supports window columns at all - the
+    /// `window_aggregates` declaration is the single source of truth.
+    pub fn has_window_aggregates(&self) -> bool {
+        self.window_aggregates
+            .values()
+            .any(|x| !x.options.is_empty())
+    }
 }
 
 type BoxFn<I, O> = Box<dyn Fn(I) -> O + Send + Sync + 'static>;
