@@ -81,6 +81,27 @@ pub struct GenericSQLVirtualServerModelArgs {
     /// column-path separator is `"|"`, so any other value produces views the
     /// client will not interpret as column paths.
     column_separator: Option<String>,
+
+    /// Escape character emitted as an `ESCAPE` clause after generated
+    /// `ILIKE` patterns (Perspective's `begins with` / `contains` /
+    /// `ends with` filter ops and their negations). Dialects with no
+    /// default `LIKE` escape character (DuckDB) must pass `"\\"`; dialects
+    /// where backslash escaping is implicit and the `ESCAPE` clause is
+    /// unsupported (ClickHouse) must omit it.
+    like_escape_clause: Option<String>,
+
+    /// Whether the dialect's string literal parser consumes C-style
+    /// backslash escapes (ClickHouse), requiring backslashes in emitted
+    /// literals to be doubled. Dialects with standard-conforming literals
+    /// (DuckDB) omit it.
+    backslash_escaped_literals: Option<bool>,
+
+    /// Name of the dialect's partial-match regex function, emitted as
+    /// `{regex_fn}("col", 'pattern')` for the `matches` / `not matches`
+    /// filter ops — `"regexp_matches"` for DuckDB, `"match"` for
+    /// ClickHouse (both RE2, matching the engine's semantics). When
+    /// omitted, regex filter clauses are dropped.
+    regex_fn: Option<String>,
 }
 
 /// Recovers the source column of a pivoted view column name — the longest
@@ -369,11 +390,14 @@ impl GenericSQLVirtualServerModel {
         ))
     }
 
-    fn filter_term_to_sql(term: &FilterTerm) -> Option<String> {
+    fn filter_term_to_sql(term: &FilterTerm, backslash_escaped: bool) -> Option<String> {
         match term {
-            FilterTerm::Scalar(scalar) => Self::scalar_to_sql(scalar),
+            FilterTerm::Scalar(scalar) => Self::scalar_to_sql(scalar, backslash_escaped),
             FilterTerm::Array(scalars) => {
-                let values: Vec<String> = scalars.iter().filter_map(Self::scalar_to_sql).collect();
+                let values: Vec<String> = scalars
+                    .iter()
+                    .filter_map(|x| Self::scalar_to_sql(x, backslash_escaped))
+                    .collect();
                 if values.is_empty() {
                     None
                 } else {
@@ -383,12 +407,12 @@ impl GenericSQLVirtualServerModel {
         }
     }
 
-    fn scalar_to_sql(scalar: &Scalar) -> Option<String> {
+    fn scalar_to_sql(scalar: &Scalar, backslash_escaped: bool) -> Option<String> {
         match scalar {
             Scalar::Null => None,
             Scalar::Bool(b) => Some(if *b { "TRUE" } else { "FALSE" }.to_string()),
             Scalar::Float(f) => Some(f.to_string()),
-            Scalar::String(s) => Some(format!("'{}'", s.replace('\'', "''"))),
+            Scalar::String(s) => Some(table_make_view::string_literal(s, backslash_escaped)),
         }
     }
 }

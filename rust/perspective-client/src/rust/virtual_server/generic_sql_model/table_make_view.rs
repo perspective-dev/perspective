@@ -12,8 +12,8 @@
 
 use super::GenericSQLError;
 use crate::config::{
-    Aggregate, GroupRollupMode, Sort, SortDir, ViewConfig, WindowAggregate, WindowFrame,
-    WindowSortDir, WindowSpec,
+    Aggregate, Filter, FilterTerm, GroupRollupMode, Scalar, Sort, SortDir, ViewConfig,
+    WindowAggregate, WindowFrame, WindowSortDir, WindowSpec,
 };
 
 fn aggregate_to_string(agg: &Aggregate) -> String {
@@ -209,6 +209,34 @@ fn quote_literal(value: &str) -> String {
     value.replace('\'', "''")
 }
 
+/// Encodes a string as a quoted SQL literal. `backslash_escaped` doubles
+/// backslashes for dialects whose literal parser consumes C-style escapes
+/// (ClickHouse); standard-conforming dialects (DuckDB) leave them intact.
+pub(super) fn string_literal(value: &str, backslash_escaped: bool) -> String {
+    let value = if backslash_escaped {
+        value.replace('\\', "\\\\")
+    } else {
+        value.to_string()
+    };
+
+    format!("'{}'", quote_literal(&value))
+}
+
+/// Backslash-escapes the `LIKE` pattern metacharacters (`\`, `%`, `_`) so a
+/// filter term matches literally inside a generated `ILIKE` pattern.
+fn like_escape(term: &str) -> String {
+    let mut out = String::with_capacity(term.len());
+    for c in term.chars() {
+        if matches!(c, '\\' | '%' | '_') {
+            out.push('\\');
+        }
+
+        out.push(c);
+    }
+
+    out
+}
+
 /// Precomputed context for building a SQL view query from a [`ViewConfig`].
 ///
 /// Holds the resolved column names, grouping function, and row-path aliases
@@ -220,6 +248,9 @@ pub(crate) struct ViewQueryContext<'a> {
     group_col_names: Vec<String>,
     grouping_fn: &'a str,
     column_separator: &'a str,
+    like_escape_clause: Option<&'a str>,
+    backslash_escaped_literals: bool,
+    regex_fn: Option<&'a str>,
     row_path_aliases: Vec<String>,
 }
 
@@ -284,6 +315,9 @@ impl<'a> ViewQueryContext<'a> {
             group_col_names,
             grouping_fn,
             column_separator,
+            like_escape_clause: model.0.like_escape_clause.as_deref(),
+            backslash_escaped_literals: model.0.backslash_escaped_literals.unwrap_or(false),
+            regex_fn: model.0.regex_fn.as_deref(),
             row_path_aliases,
         })
     }
@@ -653,17 +687,83 @@ impl<'a> ViewQueryContext<'a> {
             .config
             .filter
             .iter()
-            .filter_map(|flt| {
-                super::GenericSQLVirtualServerModel::filter_term_to_sql(flt.term()).map(
-                    |term_lit| format!("{} {} {}", self.col_name(flt.column()), flt.op(), term_lit),
-                )
-            })
+            .filter_map(|flt| self.filter_clause_sql(flt))
             .collect();
 
         if clauses.is_empty() {
             String::new()
         } else {
             format!(" WHERE {}", clauses.join(" AND "))
+        }
+    }
+
+    /// Translates one filter into a SQL `WHERE` clause, or `None` when it
+    /// cannot be expressed (missing term, regex with no `regex_fn`).
+    fn filter_clause_sql(&self, flt: &Filter) -> Option<String> {
+        let col = self.col_name(flt.column());
+        let op = flt.op();
+        match op {
+            "is null" => Some(format!("{col} IS NULL")),
+            "is not null" => Some(format!("{col} IS NOT NULL")),
+            "begins with" | "not begins with" | "ends with" | "not ends with" | "contains"
+            | "not contains" => {
+                let FilterTerm::Scalar(Scalar::String(term)) = flt.term() else {
+                    return None;
+                };
+
+                let term = like_escape(term);
+                let pattern = match op {
+                    "begins with" | "not begins with" => format!("{term}%"),
+                    "ends with" | "not ends with" => format!("%{term}"),
+                    _ => format!("%{term}%"),
+                };
+
+                let not = if op.starts_with("not ") { "NOT " } else { "" };
+                let escape = self
+                    .like_escape_clause
+                    .map(|c| {
+                        format!(
+                            " ESCAPE {}",
+                            string_literal(c, self.backslash_escaped_literals)
+                        )
+                    })
+                    .unwrap_or_default();
+
+                Some(format!(
+                    "{col} {not}ILIKE {}{escape}",
+                    string_literal(&pattern, self.backslash_escaped_literals)
+                ))
+            },
+            "matches" | "not matches" => {
+                let regex_fn = self.regex_fn?;
+                let FilterTerm::Scalar(Scalar::String(term)) = flt.term() else {
+                    return None;
+                };
+
+                let not = if op == "not matches" { "NOT " } else { "" };
+                Some(format!(
+                    "{not}{regex_fn}({col}, {})",
+                    string_literal(term, self.backslash_escaped_literals)
+                ))
+            },
+            "in" | "not in" => {
+                let term = super::GenericSQLVirtualServerModel::filter_term_to_sql(
+                    flt.term(),
+                    self.backslash_escaped_literals,
+                )?;
+
+                let sql_op = if op == "in" { "IN" } else { "NOT IN" };
+                Some(format!("{col} {sql_op} {term}"))
+            },
+            op => {
+                let term = super::GenericSQLVirtualServerModel::filter_term_to_sql(
+                    flt.term(),
+                    self.backslash_escaped_literals,
+                )?;
+
+                let sql_op = if op == "==" { "=" } else { op };
+                Some(format!("{col} {sql_op} {term}"))
+            },
         }
     }
 

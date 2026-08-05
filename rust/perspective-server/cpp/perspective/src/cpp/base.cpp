@@ -337,6 +337,21 @@ filter_op_to_str(t_filter_op op) {
         case FILTER_OP_CONTAINS: {
             return "contains";
         } break;
+        case FILTER_OP_NOT_BEGINS_WITH: {
+            return "not startswith";
+        } break;
+        case FILTER_OP_NOT_ENDS_WITH: {
+            return "not endswith";
+        } break;
+        case FILTER_OP_NOT_CONTAINS: {
+            return "not contains";
+        } break;
+        case FILTER_OP_MATCHES: {
+            return "matches";
+        } break;
+        case FILTER_OP_NOT_MATCHES: {
+            return "not matches";
+        } break;
         case FILTER_OP_OR: {
             return "or";
         } break;
@@ -386,11 +401,26 @@ str_to_filter_op(const std::string& str) {
     if (str == "ends with" || str == "endswith") {
         return t_filter_op::FILTER_OP_ENDS_WITH;
     }
+    if (str == "not begins with" || str == "not startswith") {
+        return t_filter_op::FILTER_OP_NOT_BEGINS_WITH;
+    }
+    if (str == "not ends with" || str == "not endswith") {
+        return t_filter_op::FILTER_OP_NOT_ENDS_WITH;
+    }
     if (str == "in") {
         return t_filter_op::FILTER_OP_IN;
     }
     if (str == "contains") {
         return t_filter_op::FILTER_OP_CONTAINS;
+    }
+    if (str == "not contains") {
+        return t_filter_op::FILTER_OP_NOT_CONTAINS;
+    }
+    if (str == "matches") {
+        return t_filter_op::FILTER_OP_MATCHES;
+    }
+    if (str == "not matches") {
+        return t_filter_op::FILTER_OP_NOT_MATCHES;
     }
     if (str == "not in") {
         return t_filter_op::FILTER_OP_NOT_IN;

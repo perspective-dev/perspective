@@ -35,6 +35,7 @@ t_fterm::t_fterm(
     m_is_primary(is_primary) {
     m_use_interned = (op == FILTER_OP_EQ || op == FILTER_OP_NE)
         && threshold.m_type == DTYPE_STR;
+    compile_pattern();
 }
 
 t_fterm::t_fterm(
@@ -51,6 +52,16 @@ t_fterm::t_fterm(
     m_is_primary(false) {
     m_use_interned = (op == FILTER_OP_EQ || op == FILTER_OP_NE)
         && threshold.m_type == DTYPE_STR;
+    compile_pattern();
+}
+
+void
+t_fterm::compile_pattern() {
+    if ((m_op == FILTER_OP_MATCHES || m_op == FILTER_OP_NOT_MATCHES)
+        && m_threshold.m_type == DTYPE_STR) {
+        m_pattern =
+            std::make_shared<RE2>(m_threshold.to_string(), RE2::Quiet);
+    }
 }
 
 void
@@ -74,7 +85,10 @@ t_fterm::get_expr() const {
         case FILTER_OP_GTEQ:
         case FILTER_OP_EQ:
         case FILTER_OP_NE:
-        case FILTER_OP_CONTAINS: {
+        case FILTER_OP_CONTAINS:
+        case FILTER_OP_NOT_CONTAINS:
+        case FILTER_OP_MATCHES:
+        case FILTER_OP_NOT_MATCHES: {
             ss << filter_op_to_str(m_op) << " ";
             ss << m_threshold.to_string(true);
         } break;
@@ -87,7 +101,9 @@ t_fterm::get_expr() const {
             ss << " )";
         } break;
         case FILTER_OP_BEGINS_WITH:
-        case FILTER_OP_ENDS_WITH: {
+        case FILTER_OP_ENDS_WITH:
+        case FILTER_OP_NOT_BEGINS_WITH:
+        case FILTER_OP_NOT_ENDS_WITH: {
             ss << "." << filter_op_to_str(m_op) << "( "
                << m_threshold.to_string(true) << " )";
         } break;
