@@ -654,9 +654,8 @@ fn test_table_make_view_pivoted_column_paths() {
 #[test]
 fn test_table_make_view_pivoted_custom_separator() {
     let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs {
-        create_entity: None,
-        grouping_fn: None,
         column_separator: Some("::".to_string()),
+        ..Default::default()
     });
 
     let mut config = ViewConfig::default();
@@ -1083,4 +1082,34 @@ fn test_table_make_view_window_ema_unsupported() {
         result,
         Err(GenericSQLError::UnsupportedOperation(_))
     ));
+}
+
+fn filters(json: serde_json::Value) -> Vec<crate::config::Filter> {
+    serde_json::from_value(json).unwrap()
+}
+
+fn duckdb_args() -> GenericSQLVirtualServerModelArgs {
+    GenericSQLVirtualServerModelArgs {
+        like_escape_clause: Some("\\".to_string()),
+        regex_fn: Some("regexp_matches".to_string()),
+        ..Default::default()
+    }
+}
+
+fn clickhouse_args() -> GenericSQLVirtualServerModelArgs {
+    GenericSQLVirtualServerModelArgs {
+        backslash_escaped_literals: Some(true),
+        regex_fn: Some("match".to_string()),
+        ..Default::default()
+    }
+}
+
+fn filter_sql(args: GenericSQLVirtualServerModelArgs, filter: serde_json::Value) -> String {
+    let builder = GenericSQLVirtualServerModel::new(args);
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("a".to_string())];
+    config.filter = filters(filter);
+    builder
+        .table_make_view("source_table", "dest_view", &config)
+        .unwrap()
 }

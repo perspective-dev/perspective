@@ -92,13 +92,34 @@ const WINDOW_AGGREGATES_ANY: WindowAggregate[] = [
 const FILTER_OPS = [
     "==",
     "!=",
-    "LIKE",
     "IS DISTINCT FROM",
     "IS NOT DISTINCT FROM",
     ">=",
     "<=",
     ">",
     "<",
+    "is null",
+    "is not null",
+];
+
+// Perspective's canonical string ops (translated to `ILIKE` / `match` by the
+// SQL builder), plus ClickHouse's raw infix pattern ops spliced verbatim.
+const STRING_FILTER_OPS = [
+    ...FILTER_OPS,
+    "begins with",
+    "not begins with",
+    "contains",
+    "not contains",
+    "ends with",
+    "not ends with",
+    "matches",
+    "not matches",
+    "in",
+    "not in",
+    "LIKE",
+    "NOT LIKE",
+    "ILIKE",
+    "NOT ILIKE",
 ];
 
 function duckdbTypeToPsp(name: string): ColumnType {
@@ -241,6 +262,8 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
             create_entity: "VIEW",
             grouping_fn: "GROUPING",
             column_separator: "|",
+            backslash_escaped_literals: true,
+            regex_fn: "match",
         });
     }
 
@@ -266,7 +289,7 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
             filter_ops: {
                 integer: FILTER_OPS,
                 float: FILTER_OPS,
-                string: FILTER_OPS,
+                string: STRING_FILTER_OPS,
                 boolean: FILTER_OPS,
                 date: FILTER_OPS,
                 datetime: FILTER_OPS,

@@ -18,7 +18,9 @@
 #include <perspective/mask.h>
 #include <perspective/scalar.h>
 #include <perspective/exports.h>
+#include <re2/re2.h>
 #include <functional>
+#include <memory>
 #include <set>
 
 namespace perspective {
@@ -158,6 +160,16 @@ struct PERSPECTIVE_EXPORT t_fterm {
             case FILTER_OP_IN: {
                 rv = std::find(m_bag.begin(), m_bag.end(), s) != m_bag.end();
             } break;
+            case FILTER_OP_MATCHES:
+            case FILTER_OP_NOT_MATCHES: {
+                if (s.m_status != STATUS_VALID || s.m_type != DTYPE_STR
+                    || !m_pattern || !m_pattern->ok()) {
+                    rv = false;
+                } else {
+                    bool match = RE2::PartialMatch(s.to_string(), *m_pattern);
+                    rv = m_op == FILTER_OP_MATCHES ? match : !match;
+                }
+            } break;
             default: {
                 rv = s.cmp(m_op, m_threshold);
             } break;
@@ -170,10 +182,13 @@ struct PERSPECTIVE_EXPORT t_fterm {
 
     void coerce_numeric(t_dtype dtype);
 
+    void compile_pattern();
+
     std::string m_colname;
     t_filter_op m_op;
     t_tscalar m_threshold;
     std::vector<t_tscalar> m_bag;
+    std::shared_ptr<RE2> m_pattern;
     bool m_negated;
     bool m_is_primary;
     bool m_use_interned;

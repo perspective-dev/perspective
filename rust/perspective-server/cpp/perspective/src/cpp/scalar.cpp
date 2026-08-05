@@ -1617,6 +1617,18 @@ t_tscalar::cmp(t_filter_op op, const t_tscalar& other) const {
         case FILTER_OP_CONTAINS: {
             return value.contains(other);
         } break;
+        case FILTER_OP_NOT_BEGINS_WITH: {
+            return m_status == STATUS_VALID && other.m_status == STATUS_VALID
+                && !value.begins_with(other);
+        } break;
+        case FILTER_OP_NOT_ENDS_WITH: {
+            return m_status == STATUS_VALID && other.m_status == STATUS_VALID
+                && !value.ends_with(other);
+        } break;
+        case FILTER_OP_NOT_CONTAINS: {
+            return m_status == STATUS_VALID && other.m_status == STATUS_VALID
+                && !value.contains(other);
+        } break;
         case FILTER_OP_IS_NULL: {
             return m_status != STATUS_VALID;
         } break;

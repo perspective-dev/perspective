@@ -127,7 +127,14 @@ let view = table.view(Some(ViewConfigUpdate {
 The available filter operators depend on the column type:
 
 **String columns**: `==`, `!=`, `>`, `>=`, `<`, `<=`, `begins with`,
-`contains`, `ends with`, `in`, `not in`, `is not null`, `is null`.
+`not begins with`, `contains`, `not contains`, `ends with`, `not ends with`,
+`matches`, `not matches`, `in`, `not in`, `is not null`, `is null`.
+
+The string matching operators (`begins with`, `contains`, `ends with` and
+their negations) are case-insensitive, and `matches` / `not matches` are
+case-sensitive partial-match [RE2](https://github.com/google/re2) regular
+expressions. Null cells match none of these operators, including the negated
+forms - filter on `is null` to select them.
 
 **Numeric columns** (`integer`, `float`): `==`, `!=`, `>`, `>=`, `<`, `<=`,
 `is not null`, `is null`.

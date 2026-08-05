@@ -133,6 +133,125 @@ describeDuckDB("filter", (getClient) => {
         await view.delete();
     });
 
+    test("filter with begins with is case-insensitive", async function () {
+        const table = await getClient().open_table("memory.superstore");
+        const view = await table.view({
+            columns: ["State"],
+            filter: [["State", "begins with", "cal"]],
+        });
+        const json = await view.to_columns();
+        expect(json["State"].length).toBeGreaterThan(0);
+        expect(new Set(json["State"])).toEqual(new Set(["California"]));
+        await view.delete();
+    });
+
+    test("filter with negated string ops complements the positive ops", async function () {
+        const table = await getClient().open_table("memory.superstore");
+        const total = await table.size();
+        for (const [op, term] of [
+            ["begins with", "new"],
+            ["ends with", "as"],
+            ["contains", "as"],
+        ]) {
+            const pos = await table.view({
+                columns: ["State"],
+                filter: [["State", op, term]],
+            });
+            const neg = await table.view({
+                columns: ["State"],
+                filter: [["State", `not ${op}`, term]],
+            });
+            const pos_rows = await pos.num_rows();
+            const neg_rows = await neg.num_rows();
+            expect(pos_rows).toBeGreaterThan(0);
+            expect(pos_rows + neg_rows).toEqual(total);
+            await pos.delete();
+            await neg.delete();
+        }
+    });
+
+    test("filter with not ends with", async function () {
+        const table = await getClient().open_table("memory.superstore");
+        const view = await table.view({
+            columns: ["State"],
+            filter: [["State", "not ends with", "as"]],
+        });
+        const json = await view.to_columns();
+        const suffixes = new Set(
+            json["State"].map((x) => x.slice(-2).toLowerCase()),
+        );
+        expect(json["State"].length).toBeGreaterThan(0);
+        expect(suffixes.has("as")).toBe(false);
+        await view.delete();
+    });
+
+    test("filter with matches", async function () {
+        const table = await getClient().open_table("memory.superstore");
+        const view = await table.view({
+            columns: ["State"],
+            filter: [["State", "matches", "^Cal"]],
+        });
+        const json = await view.to_columns();
+        expect(json["State"].length).toBeGreaterThan(0);
+        expect(new Set(json["State"])).toEqual(new Set(["California"]));
+        await view.delete();
+    });
+
+    test("filter with not matches complements matches", async function () {
+        const table = await getClient().open_table("memory.superstore");
+        const total = await table.size();
+        const pos = await table.view({
+            columns: ["State"],
+            filter: [["State", "matches", "as$"]],
+        });
+        const neg = await table.view({
+            columns: ["State"],
+            filter: [["State", "not matches", "as$"]],
+        });
+        const pos_rows = await pos.num_rows();
+        const neg_rows = await neg.num_rows();
+        expect(pos_rows).toBeGreaterThan(0);
+        expect(pos_rows + neg_rows).toEqual(total);
+        await pos.delete();
+        await neg.delete();
+    });
+
+    test("filter with is null and is not null", async function () {
+        const table = await getClient().open_table("memory.superstore");
+        const total = await table.size();
+        const nulls = await table.view({
+            columns: ["State"],
+            filter: [["State", "is null", null]],
+        });
+        const not_nulls = await table.view({
+            columns: ["State"],
+            filter: [["State", "is not null", null]],
+        });
+        expect(await nulls.num_rows()).toEqual(0);
+        expect(await not_nulls.num_rows()).toEqual(total);
+        await nulls.delete();
+        await not_nulls.delete();
+    });
+
+    test("filter with in and not in", async function () {
+        const table = await getClient().open_table("memory.superstore");
+        const total = await table.size();
+        const pos = await table.view({
+            columns: ["Region"],
+            filter: [["Region", "in", ["West", "East"]]],
+        });
+        const neg = await table.view({
+            columns: ["Region"],
+            filter: [["Region", "not in", ["West", "East"]]],
+        });
+        const pos_rows = await pos.num_rows();
+        const neg_rows = await neg.num_rows();
+        expect(pos_rows).toBeGreaterThan(0);
+        expect(pos_rows + neg_rows).toEqual(total);
+        await pos.delete();
+        await neg.delete();
+    });
+
     test("multiple filters", async function () {
         const table = await getClient().open_table("memory.superstore");
         const view = await table.view({

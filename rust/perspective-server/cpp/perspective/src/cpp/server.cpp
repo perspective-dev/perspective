@@ -1461,8 +1461,13 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             opts.add_options("<");
             opts.add_options("<=");
             opts.add_options("begins with");
+            opts.add_options("not begins with");
             opts.add_options("contains");
+            opts.add_options("not contains");
             opts.add_options("ends with");
+            opts.add_options("not ends with");
+            opts.add_options("matches");
+            opts.add_options("not matches");
             opts.add_options("in");
             opts.add_options("not in");
             opts.add_options("is not null");

@@ -498,6 +498,102 @@ const datetime_data_local = [
             });
         });
 
+        test.describe("negated string ops", function () {
+            const string_data = [
+                { x: "Cat" },
+                { x: "cathedral" },
+                { x: "dog" },
+                { x: null },
+            ];
+
+            test("x not contains 'at' excludes matches and nulls", async function () {
+                const table = await perspective.table(string_data);
+                const view = await table.view({
+                    filter: [["x", "not contains", "at"]],
+                });
+                expect(await view.to_columns()).toEqual({ x: ["dog"] });
+                view.delete();
+                table.delete();
+            });
+
+            test("x not begins with 'cat' is case-insensitive", async function () {
+                const table = await perspective.table(string_data);
+                const view = await table.view({
+                    filter: [["x", "not begins with", "cat"]],
+                });
+                expect(await view.to_columns()).toEqual({ x: ["dog"] });
+                view.delete();
+                table.delete();
+            });
+
+            test("x not ends with 'at'", async function () {
+                const table = await perspective.table(string_data);
+                const view = await table.view({
+                    filter: [["x", "not ends with", "at"]],
+                });
+                expect(await view.to_columns()).toEqual({
+                    x: ["cathedral", "dog"],
+                });
+                view.delete();
+                table.delete();
+            });
+        });
+
+        test.describe("matches", function () {
+            const string_data = [
+                { x: "Cat" },
+                { x: "cathedral" },
+                { x: "dog" },
+                { x: null },
+            ];
+
+            test("x matches '^ca' is a case-sensitive partial match", async function () {
+                const table = await perspective.table(string_data);
+                const view = await table.view({
+                    filter: [["x", "matches", "^ca"]],
+                });
+                expect(await view.to_columns()).toEqual({ x: ["cathedral"] });
+                view.delete();
+                table.delete();
+            });
+
+            test("x matches character class", async function () {
+                const table = await perspective.table(string_data);
+                const view = await table.view({
+                    filter: [["x", "matches", "d[aeiou]g"]],
+                });
+                expect(await view.to_columns()).toEqual({ x: ["dog"] });
+                view.delete();
+                table.delete();
+            });
+
+            test("x not matches 'at' excludes matches and nulls", async function () {
+                const table = await perspective.table(string_data);
+                const view = await table.view({
+                    filter: [["x", "not matches", "at"]],
+                });
+                expect(await view.to_columns()).toEqual({ x: ["dog"] });
+                view.delete();
+                table.delete();
+            });
+
+            test("an invalid pattern matches nothing for both ops", async function () {
+                const table = await perspective.table(string_data);
+                const view = await table.view({
+                    filter: [["x", "matches", "["]],
+                });
+                expect(await view.to_json()).toEqual([]);
+                view.delete();
+
+                const view2 = await table.view({
+                    filter: [["x", "not matches", "["]],
+                });
+                expect(await view2.to_json()).toEqual([]);
+                view2.delete();
+                table.delete();
+            });
+        });
+
         test.describe("Arrow types", function () {
             // https://github.com/perspective-dev/perspective/issues/2881
             test("Arrow float32 filters", async function () {
