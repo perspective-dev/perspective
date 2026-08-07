@@ -20,7 +20,9 @@ import type {
     ViewConfigUpdate,
 } from "@perspective-dev/client";
 import type {
+    DateFormatConfig,
     HTMLPerspectiveViewerElement,
+    NumberFormatConfig,
     ViewerConfig,
 } from "@perspective-dev/viewer";
 import type { RegularTableElement } from "regular-table";
@@ -45,6 +47,12 @@ export function get_psp_type(
 }
 
 // Edit mode for the datagrid
+/**
+ * Datagrid cell interaction mode (`plugin_config.edit_mode`):
+ * `"READ_ONLY"` (default), `"EDIT"` (cells editable, writing back to the
+ * `Table` - requires an editable table), or the `"SELECT_*"` modes which
+ * emit selection events instead of editing.
+ */
 export type EditMode =
     | "READ_ONLY"
     | "EDIT"
@@ -89,67 +97,125 @@ export interface SelectedPosition {
     content?: string;
 }
 
-// Column configuration values from viewer
+/**
+ * Datagrid per-column style configuration - one value of the
+ * `columns_config` map of a `ViewerConfigUpdate` when the Datagrid plugin
+ * is active. Valid keys depend on the column's type; the authoritative,
+ * value-dependent declaration is `column_config_schema()` (surfaced at
+ * runtime via the agent's `get_style_schema` tool and the Style tab).
+ */
 export interface ColumnConfig {
+    /** String / datetime columns: the applied color (CSS color). */
     color?: string;
+
+    /** Numeric columns: positive-value foreground color (CSS color). */
     pos_fg_color?: string;
+
+    /** Numeric columns: negative-value foreground color (CSS color). */
     neg_fg_color?: string;
+
+    /** Numeric columns: positive-value background color (CSS color). */
     pos_bg_color?: string;
+
+    /** Numeric columns: negative-value background color (CSS color). */
     neg_bg_color?: string;
+
+    /**
+     * Numeric columns: the absolute value at which bar/gradient
+     * foreground modes reach full scale.
+     */
     fg_gradient?: number;
+
+    /**
+     * Numeric columns: the absolute value at which gradient background
+     * mode reaches full scale.
+     */
     bg_gradient?: number;
+
+    /**
+     * Numeric columns: foreground treatment - `"color"` (default,
+     * colored text), `"bar"` (proportional bar), `"label-bar"` (bar with
+     * label) or `"disabled"`.
+     */
     number_fg_mode?: string;
+
+    /**
+     * Numeric columns: background treatment - `"disabled"` (default),
+     * `"color"` (solid fill) or `"gradient"` (fill intensity scaled to
+     * the value).
+     */
     number_bg_mode?: string;
+
+    /**
+     * String columns: color mode (`"foreground"`, `"background"` or
+     * `"series"`), paired with `color`.
+     */
     string_color_mode?: string;
+
+    /**
+     * Datetime columns: color mode (`"foreground"` or `"background"`),
+     * paired with `color`.
+     */
     datetime_color_mode?: string;
+
     fixed?: number;
+
+    /**
+     * Group-by rollup depth override for this column when the view is
+     * pivoted in `Rollup` mode.
+     */
     aggregate_depth?: number;
+
+    /** Pixel width override, written when a user drag-resizes a column. */
     column_size_override?: number;
+
+    /** String columns: display format, e.g. `"link"`, `"image"`, `"bold"`. */
     format?: string;
+
+    /** Datetime columns: display format preset or custom fields. */
     date_format?: DateFormatConfig;
+
+    /**
+     * Numeric columns: `Intl.NumberFormat`-style options controlling
+     * digits, notation, currency, etc.
+     */
     number_format?: NumberFormatConfig;
 }
 
-// Date format configuration for column styling
-export interface DateFormatConfig {
-    format?: "custom" | string;
-    timeZone?: string;
-    dateStyle?: "short" | "medium" | "long" | "full" | "disabled";
-    timeStyle?: "short" | "medium" | "long" | "full" | "disabled";
-    second?: "numeric" | "2-digit" | "disabled";
-    minute?: "numeric" | "2-digit" | "disabled";
-    hour?: "numeric" | "2-digit" | "disabled";
-    day?: "numeric" | "2-digit" | "disabled";
-    weekday?: "narrow" | "short" | "long" | "disabled";
-    month?: "numeric" | "2-digit" | "narrow" | "short" | "long" | "disabled";
-    year?: "numeric" | "2-digit" | "disabled";
-    hour12?: boolean;
-    fractionalSecondDigits?: 1 | 2 | 3;
-}
-
-// Number format configuration for column styling
-export interface NumberFormatConfig {
-    style?: "decimal" | "currency" | "percent" | "unit";
-    minimumFractionDigits?: number;
-    maximumFractionDigits?: number;
-    minimumIntegerDigits?: number;
-    minimumSignificantDigits?: number;
-    maximumSignificantDigits?: number;
-    currency?: string;
-    currencyDisplay?: "code" | "symbol" | "narrowSymbol" | "name";
-    notation?: "standard" | "scientific" | "engineering" | "compact";
-    compactDisplay?: "short" | "long";
-    useGrouping?: boolean;
-}
+// The format-object types are the VIEWER's exported contract - its
+// `createNumberFormatter` / `createDatetimeFormatter` consume them and its
+// style editors write them - so they are imported, not redefined.
+export type {
+    NumberFormatConfig,
+    DateFormatConfig,
+} from "@perspective-dev/viewer";
 
 export type ColumnsConfig = Record<string, ColumnConfig>;
 
-// Plugin save state
+/**
+ * Datagrid plugin-level configuration - the `plugin_config` slot of a
+ * `ViewerConfigUpdate` when the Datagrid plugin is active (the
+ * `save()`/`restore()` token).
+ */
 export interface DatagridPluginConfig {
+    /**
+     * Per-column state keyed by column name, e.g.
+     * `{ "Sales": { "column_size_override": 180 } }`.
+     */
     columns?: ColumnsConfig;
+
+    /** Legacy alias for `edit_mode: "EDIT"`. */
     editable?: boolean;
+
+    /**
+     * When `true`, the Datagrid keeps its scroll position pinned during
+     * data updates instead of following appended rows.
+     */
     scroll_lock?: boolean;
+
+    /** Cell interaction mode - see {@link EditMode}. */
     edit_mode?: EditMode;
+
     column_size_override?: Record<string, number>;
 }
 

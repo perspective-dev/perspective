@@ -118,6 +118,22 @@ perspective-dropdown {
     --psp-label--query-tab--content: "查询";
     --psp-label--plugin-tab--content: "插件";
     --psp-label--debug-tab--content: "JSON";
+    --psp-label--chat-tab--content: "聊天";
+
+    /* Chat panel */
+    --psp-label--chat-reasoning--content: "推理";
+    --psp-label--chat-send--content: "发送";
+    --psp-label--chat-stop--content: "停止";
+    --psp-label--chat-placeholder--content: "询问您的数据…";
+
+    /* Plugin-declared pivot roles (PluginStaticConfig) */
+    --psp-label--role--x-axis--content: "X 轴";
+    --psp-label--role--y-axis--content: "Y 轴";
+    --psp-label--role--series--content: "系列";
+    --psp-label--role--hierarchy--content: "层级";
+    --psp-label--role--facets--content: "分面";
+    --psp-label--role--row-groups--content: "行分组";
+    --psp-label--role--column-groups--content: "列分组";
 
     /* Plugin settings */
     --psp-label--edit-mode--content: "编辑模式";

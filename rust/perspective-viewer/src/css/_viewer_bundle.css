@@ -35,6 +35,7 @@
 @import "render-warning.css";
 @import "status-bar.css";
 
+@import "form/mirrored-textarea.css";
 @import "form/code-editor.css";
 @import "form/debug.css";
 

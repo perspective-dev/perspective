@@ -23,12 +23,20 @@ const fn time_style_default() -> SimpleDatetimeFormat {
     SimpleDatetimeFormat::Medium
 }
 
+/// A datetime column's `date_format` in its `Simple` preset form:
+/// `Intl.DateTimeFormatOptions`' `dateStyle`/`timeStyle` presets. This is
+/// the default form (no `format` key); setting `format: "custom"` selects
+/// the per-part `CustomDatetimeStyleConfig` instead.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
 pub struct SimpleDatetimeStyleConfig {
+    /// An IANA time zone name (e.g. `"America/New_York"`); defaults to the
+    /// browser's local time zone.
     #[serde(default)]
     #[serde(rename = "timeZone", skip_serializing_if = "Option::is_none")]
     pub time_zone: Option<String>,
 
+    /// Date preset breadth, or `"disabled"` to omit the date entirely;
+    /// defaults to `"short"`.
     #[serde(
         default = "date_style_default",
         rename = "dateStyle",
@@ -36,6 +44,8 @@ pub struct SimpleDatetimeStyleConfig {
     )]
     pub date_style: SimpleDatetimeFormat,
 
+    /// Time preset breadth, or `"disabled"` to omit the time entirely;
+    /// defaults to `"medium"`.
     #[serde(
         default = "time_style_default",
         rename = "timeStyle",

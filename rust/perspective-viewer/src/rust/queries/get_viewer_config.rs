@@ -51,10 +51,14 @@ pub async fn get_viewer_config(
         None => presentation.get_selected_theme_name().await,
     };
     let title = session.get_title();
+    // Placed ⇒ bound (or binding in flight): creation requires a `table`
+    // by type, so a panel with neither a bound nor pending table is an
+    // invariant violation, not a serializable state.
     let table = session
         .get_table()
         .map(|x| x.get_name().to_owned())
-        .or_else(|| session.pending_table());
+        .or_else(|| session.pending_table())
+        .ok_or_else(|| ApiError::from("Panel has no `table`"))?;
     let columns_config = renderer.all_columns_configs();
     Ok(ViewerConfig {
         settings,

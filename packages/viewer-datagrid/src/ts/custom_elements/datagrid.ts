@@ -126,6 +126,12 @@ export class HTMLPerspectiveViewerDatagridPluginElement
             category: "Basic",
             select_mode: "toggle",
             config_column_names: ["Columns"],
+
+            // The datagrid's pivots are structural rather than spatial:
+            // `group_by` nests rows into an expandable tree, `split_by`
+            // repeats the column set once per split value.
+            // group_by_role: "Row Groups",
+            // split_by_role: "Column Groups",
             group_rollup_modes: ["rollup", "flat", "total"],
             // Higher priority than the chart plugins so the Datagrid is
             // loaded by default.
@@ -138,7 +144,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         const fields = [];
         fields.push({
             kind: "Enum",
-            key: "edit_mode",
+            key: "edit_mode" satisfies keyof DatagridPluginConfig,
             default: "READ_ONLY",
             variants: [
                 { value: "EDIT", label: "Edit" },
@@ -152,7 +158,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
 
         fields.push({
             kind: "Bool",
-            key: "scroll_lock",
+            key: "scroll_lock" satisfies keyof DatagridPluginConfig,
             default: false,
         });
 

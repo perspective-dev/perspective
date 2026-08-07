@@ -201,12 +201,46 @@
             pointer-events: none;
         }
 
+        /* `--psp-label--pivot--content` is set inline by the pivot slot
+         * when the ACTIVE plugin declares what the field draws (a `Y Line`
+         * groups by its X axis; a `Treemap` by its hierarchy). The slot
+         * emits an intl var reference rather than words, so these labels
+         * localize like any other.
+         *
+         * The role leads and the field's own name follows as a secondary
+         * label, so the reader learns what this slot DRAWS without losing
+         * which config field it IS - and a plugin that declares no role
+         * shows just the field name, exactly as before. The slot sets
+         * `--psp-label--pivot-secondary--display` as a presence flag,
+         * since CSS cannot test whether a custom property is set. */
         #group_by label.pivot-selector-label:before {
-            content: var(--psp-label--group-by--content, "Group By");
+            content: var(
+                --psp-label--pivot--content,
+                var(--psp-label--group-by--content, "Group By")
+            );
+        }
+
+        #group_by label.pivot-selector-label:after {
+            content: "(" var(--psp-label--group-by--content, "Group By") ")";
         }
 
         #split_by label.pivot-selector-label:before {
-            content: var(--psp-label--split-by--content, "Split By");
+            content: var(
+                --psp-label--pivot--content,
+                var(--psp-label--split-by--content, "Split By")
+            );
+        }
+
+        #split_by label.pivot-selector-label:after {
+            content: "(" var(--psp-label--split-by--content, "Split By") ")";
+        }
+
+        #group_by label.pivot-selector-label:after,
+        #split_by label.pivot-selector-label:after {
+            display: var(--psp-label--pivot-secondary--display, none);
+            margin-left: 6px;
+            opacity: 0.6;
+            font-size: 0.9em;
         }
 
         #sort label.pivot-selector-label:before {

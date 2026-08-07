@@ -18,6 +18,7 @@ use web_sys::*;
 use yew::prelude::*;
 
 use crate::components::form::highlight::highlight;
+use crate::components::form::mirrored_textarea::MirroredTextarea;
 use crate::components::function_dropdown::{FunctionDropDownElement, FunctionDropDownPortal};
 use crate::exprtk::{Cursor, tokenize};
 use crate::utils::*;
@@ -174,30 +175,20 @@ pub fn code_editor(props: &CodeEditorProps) -> Html {
         <>
             <div id="editor" {class}>
                 <div id="line_numbers" ref={lineno_ref}>{ line_numbers }</div>
-                <div id="editor-inner" {class}>
-                    <textarea
-                        {disabled}
-                        id="textarea_editable"
-                        class="scrollable"
-                        ref={textarea_ref}
-                        spellcheck="false"
-                        {oninput}
-                        {onscroll}
-                        {onkeydown}
-                    />
+                <MirroredTextarea
+                    id="textarea_editable"
+                    mirror_id="content"
+                    class={classes!("editor-inner", class)}
+                    mirror={terms}
+                    {textarea_ref}
+                    mirror_ref={content_ref}
+                    {disabled}
+                    {oninput}
+                    {onscroll}
+                    {onkeydown}
+                >
                     <div id="editor-height-sizer" />
-                    <pre id="content" ref={content_ref}>
-                        { terms }
-                        { {
-                        // A linebreak which pushs a textarea into scroll overflow
-                        // may not necessarily do so in the `<pre>`, because there is
-                        // no cursor when the last line has no content, so add
-                        // some space here to make sure overlfow is in sync
-                        // with the text area.
-                        " "
-                    } }
-                    </pre>
-                </div>
+                </MirroredTextarea>
             </div>
             <FunctionDropDownPortal
                 element={(*portal_dropdown).clone()}

@@ -60,6 +60,16 @@ where
     #[prop_or_default]
     pub single_slot: bool,
 
+    /// The plugin-declared visual role this slot fills, e.g. `"X Axis"`
+    /// for a `Y Line`'s `group_by` (see `PluginStaticConfig`). Rendered
+    /// as the slot's label THROUGH the intl indirection: the role is a
+    /// key, not display text, so `--psp-label--role--x-axis--content`
+    /// supplies the words and a language variant can override them. A
+    /// role with no such label falls back to the declared English, and
+    /// no role at all falls back to the slot's own generic label.
+    #[prop_or_default]
+    pub role_label: Option<AttrValue>,
+
     /// The in-flight drag is INVALID for this list (a parent-defined rule,
     /// e.g. the window editor's Table-columns-only slots): the dragover
     /// preview is suppressed and the invalid-X overlay renders instead,
@@ -83,6 +93,7 @@ where
             && self.disabled == other.disabled
             && self.single_slot == other.single_slot
             && self.is_invalid == other.is_invalid
+            && self.role_label == other.role_label
     }
 }
 
@@ -390,10 +401,36 @@ where
         let class = classes!("rrow");
         let is_enabled = true;
 
+        // The role is data from the plugin, so the var NAME is built
+        // here while the var VALUE stays in the stylesheets - custom
+        // properties inherit, so the label's `:before` picks it up.
+        let role_style = ctx.props().role_label.as_ref().map(|role| {
+            let slug = role
+                .chars()
+                .map(|x| {
+                    if x.is_ascii_alphanumeric() {
+                        x.to_ascii_lowercase()
+                    } else {
+                        '-'
+                    }
+                })
+                .collect::<String>();
+
+            // The second var is a PRESENCE FLAG: CSS cannot ask whether a
+            // custom property is set, so the slot's stylesheet reads it as
+            // the secondary label's `display` and gets `none` by fallback
+            // when no role was declared.
+            format!(
+                "--psp-label--pivot--content: var(--psp-label--role--{slug}--content, \
+                 \"{role}\"); --psp-label--pivot-secondary--display: inline-block"
+            )
+        });
+
         html! {
             <div ref={&self.elem} {class}>
                 <div
                     id={ctx.props().name}
+                    style={role_style}
                     ondragover={is_enabled.then_some(dragover)}
                     ondragenter={is_enabled.then_some(drag_container.dragenter)}
                     ondragleave={is_enabled.then_some(drag_container.dragleave)}

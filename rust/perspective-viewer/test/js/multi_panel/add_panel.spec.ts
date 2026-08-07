@@ -10,13 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-// Full-stack panel ADDITION coverage (`.plan/WORKSPACE_TEST_PLAN.md` §2.2):
-// every add path (context-menu Duplicate / New, `addPanel`, `restoreWorkspace`,
-// upsert `restore`) must land as exactly ONE layout commit, with the model,
-// tree, frame geometry and plugin projection coherent — not merely the right
-// `getPanelNames().length`, which stayed green through both the
-// element-replacement and NaN-sizes regressions.
-
 import { test, expect } from "../helpers.ts";
 import {
     armInvariants,
@@ -54,9 +47,6 @@ test.beforeEach(async ({ page }) => {
     });
 });
 
-// Structural invariants (I1 element identity / I2 tree sanity / I3
-// model-layout-DOM coherence) gate every passing test's end state - see
-// `harness.ts` and `.plan/WORKSPACE_TEST_PLAN.md`.
 armInvariants(test);
 
 async function panelNames(page): Promise<string[]> {

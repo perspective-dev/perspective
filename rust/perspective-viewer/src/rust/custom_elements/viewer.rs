@@ -29,6 +29,8 @@ use wasm_bindgen_futures::JsFuture;
 use web_sys::HtmlElement;
 use yew::Callback;
 
+#[cfg(feature = "llm-agent")]
+use crate::agent::AgentRuntime;
 use crate::components::viewer::{PerspectiveViewerMsg, PerspectiveViewerProps};
 use crate::config::*;
 use crate::custom_events::*;
@@ -58,6 +60,16 @@ extern "C" {
     /// accessor methods.
     #[wasm_bindgen(typescript_type = "PanelOptions")]
     pub type JsPanelOptions;
+
+    /// `restore()` options dict
+    /// (`{ panel?: string, suppress_errors?: boolean }`).
+    #[wasm_bindgen(typescript_type = "RestoreOptions")]
+    pub type JsRestoreOptions;
+
+    /// `addPanel()` argument: a new panel's initial config — `table`
+    /// REQUIRED.
+    #[wasm_bindgen(typescript_type = "ViewerConfigInitial")]
+    pub type JsViewerConfigInitial;
 
     /// `download`/`export`/`copy` options dict
     /// (`{ method?: ExportMethod, panel?: string }`).
@@ -919,9 +931,12 @@ impl PerspectiveViewerElement {
     /// optional `{panel}` selector.
     ///
     /// If `panel` names no existing panel, a NEW panel is created with that id
-    /// and the config restored into it (an upsert), equivalent to
-    /// [`Self::addPanel`] but with a caller-chosen id. As with a created panel,
+    /// and the config restored into it (an upsert). As with a created panel,
     /// the element-level `settings`/`theme` fields are ignored in that case.
+    /// Unlike [`Self::addPanel`], the argument is a PATCH, so a `table` is
+    /// optional: creating without one yields a DEFERRED panel that the next
+    /// [`Self::load`] binds. Such a panel renders but cannot be serialized —
+    /// [`Self::save`] rejects with "Panel has no `table`" until it is bound.
     ///
     /// On an empty element with a pending [`Self::load`] whose payload is not
     /// yet classified, the active-target form (no `panel`) instead claims and
@@ -940,7 +955,15 @@ impl PerspectiveViewerElement {
     ///
     /// - `update` - The config to restore to, as returned by [`Self::save`] in
     ///   either "json", "string" or "arraybuffer" format.
-    /// - `name` - The panel to target, or `None` for the active panel.
+    /// - `options.panel` - The panel to target, or the active panel when
+    ///   omitted.
+    /// - `options.suppress_errors` - when `true`, a failed restore only rejects
+    ///   the returned `Promise`; the error is NOT committed to the viewer's
+    ///   visible error state and the session remains usable. The view config is
+    ///   rolled back to its pre-call value, so a rejected patch cannot re-merge
+    ///   into a later restore. Element-level state the call already applied
+    ///   (theme, title, a plugin swap) is NOT undone — restore a known-good
+    ///   config to recover those exactly.
     ///
     /// # JavaScript Examples
     ///
@@ -960,15 +983,62 @@ impl PerspectiveViewerElement {
     pub fn restore(
         &self,
         update: JsViewerConfigUpdate,
-        options: Option<JsPanelOptions>,
+        options: Option<JsRestoreOptions>,
     ) -> JsVoidPromise {
-        let PanelOptions { panel: name } = parse_options(options);
+        let RestoreOptions {
+            panel: name,
+            suppress_errors,
+        } = parse_options(options);
+
+        // `suppress_errors` failures reject the returned Promise WITHOUT
+        // committing to the viewer's visible error state — for programmatic
+        // callers (the agent's `set_view_config`) whose failed patches are
+        // caller feedback, not user-facing faults.
+        let errors = if suppress_errors.unwrap_or_default() {
+            RestoreErrors::Suppress
+        } else {
+            RestoreErrors::Publish
+        };
+
         let effect = self.workspace.effects().guard();
         let this = self.clone();
         let fut = ApiFuture::new_throttled(async move {
             let _effect = effect;
             let id = name.map(PanelId::from);
-            let update = ViewerConfigUpdate::decode(&update)?;
+            let mut update = ViewerConfigUpdate::decode(&update)?;
+
+            // `settings` is ELEMENT-level chrome, not panel state — it
+            // rides in this object only because the legacy single-panel
+            // `restore()` has always carried it. Apply it HERE and hand
+            // the panel pipeline a purely per-panel update: the
+            // panel-CREATING branch below converts to
+            // `ViewerConfigInitial`, which has no `settings` field at
+            // all, so a `restore()` against an empty element — the first
+            // call every embedding makes — would otherwise drop it
+            // silently. Applied BEFORE the panel work so the plugin
+            // draws once, already at its final size.
+            // BOTH halves move together, or the flag and the chrome
+            // disagree: `set_settings_before_open` writes the persisted
+            // `is_settings_open` (what `save()` reports) and the host
+            // `settings` attribute, while `ToggleSettingsComplete`
+            // performs the component's own toggle. `restore_and_render`
+            // used to do the first for the panel-UPDATING path only —
+            // which the creating path never reaches, since
+            // `ViewerConfigInitial` has no `settings` field to carry.
+            let settings = std::mem::replace(&mut update.settings, OptionalUpdate::Missing);
+            if !matches!(settings, OptionalUpdate::Missing) {
+                if let OptionalUpdate::Update(open) = settings {
+                    this.presentation.set_settings_before_open(open);
+                }
+
+                let (sender, receiver) = channel::<()>();
+                this.root.borrow().as_ref().into_apierror()?.send_message(
+                    PerspectiveViewerMsg::ToggleSettingsComplete(settings, sender),
+                );
+
+                receiver.await.unwrap_or_log();
+            }
+
             match this.workspace.panel_or_active(id.as_ref()) {
                 // An existing (or the active) panel — update it in place.
                 Some(panel) => {
@@ -978,9 +1048,9 @@ impl PerspectiveViewerElement {
                         &panel.renderer,
                         &this.presentation,
                         &this.workspace,
-                        Some(&this.root),
                         RestoreMode::Existing { active },
                         update,
+                        errors,
                     )
                     .await
                 },
@@ -1007,13 +1077,25 @@ impl PerspectiveViewerElement {
                                 &panel.renderer,
                                 &this.presentation,
                                 &this.workspace,
-                                Some(&this.root),
                                 RestoreMode::Existing { active: true },
                                 update,
+                                errors,
                             )
                             .await
                         },
                         None => {
+                            // The panel-creating upsert. `restore`'s
+                            // argument is a PATCH, so a `table` is
+                            // optional here as it is everywhere else on
+                            // this path: an update carrying none creates
+                            // a deferred panel, which the next `load()`
+                            // binds (it targets `active_panel()` before
+                            // reserving one of its own). The
+                            // table-required rule belongs to the
+                            // CREATION types — `addPanel`,
+                            // `restoreWorkspace`'s `panels`, the agent's
+                            // `add_panel` — which enforce it in their
+                            // own signatures.
                             create_panel(
                                 &this.elem,
                                 &this.presentation,
@@ -1063,9 +1145,9 @@ impl PerspectiveViewerElement {
                         &renderer,
                         &presentation,
                         &workspace,
-                        None,
                         RestoreMode::Fresh,
                         config,
+                        crate::tasks::RestoreErrors::Publish,
                     )
                     .await?;
                     if workspace.is_master(&id) {
@@ -1726,27 +1808,32 @@ impl PerspectiveViewerElement {
     }
 
     /// Add a new, independent panel to this viewer's layout, rendering the
-    /// supplied [`ViewerConfigUpdate`] into it. The panel uses the default
-    /// [`perspective_client::Client`] (the first passed to [`Self::load`]) to
-    /// resolve its `table`. Returns the generated panel id.
+    /// supplied [`ViewerConfigInitial`] into it. Unlike [`Self::restore`]'s
+    /// update-shaped argument, a new panel has no prior state, so `table`
+    /// is REQUIRED — a table-less call rejects before the layout is
+    /// touched. The panel uses the default [`perspective_client::Client`]
+    /// (the first passed to [`Self::load`]) to resolve its `table`. Returns
+    /// the generated panel id.
     ///
-    /// Element-level config fields (`settings`, `theme`) in the argument are
-    /// ignored — those are shared across the element, not per-panel.
+    /// The element-level `settings` field does not exist on the argument
+    /// type (it is shared across the element, not per-panel).
     #[wasm_bindgen]
-    pub fn addPanel(&self, update: JsViewerConfigUpdate) -> ApiFuture<JsValue> {
+    pub fn addPanel(&self, config: JsViewerConfigInitial) -> ApiFuture<JsValue> {
         clone!(self.elem, self.presentation, self.workspace);
         let effect = workspace.effects().guard();
         let notify = self.layout_changed_notify();
         ApiFuture::new(async move {
             let _effect = effect;
-            let update = ViewerConfigUpdate::decode(&update)?;
+            // The table-required guarantee is HERE, in the argument type
+            // and this decode — `create_panel` itself takes a patch.
+            let config = ViewerConfigInitial::decode(&config)?;
             let id = create_panel(
                 &elem,
                 &presentation,
                 &workspace,
                 &notify,
                 None,
-                update,
+                config.into(),
                 None,
             )
             .await?;
@@ -1862,5 +1949,109 @@ impl PerspectiveViewerElement {
 
             receiver.await.map_err(|_| ApiError::from("Cancelled"))
         })
+    }
+}
+
+#[cfg(feature = "llm-agent")]
+#[wasm_bindgen]
+impl PerspectiveViewerElement {
+    /// Configure the embedded LLM agent (see `prompt()`), replacing any prior
+    /// configuration and conversation.
+    ///
+    /// The agent core is provider-agnostic: one OpenAI-chat-completions
+    /// protocol over primitive connection fields. Exactly one of
+    /// `config.url` or `config.engine` is required; the `providers` presets
+    /// exported by this package are plain spreadable collections of these
+    /// fields (`{...providers.anthropic, apiKey}`).
+    ///
+    /// - `config.url` - a full chat-completions endpoint URL (any
+    ///   OpenAI-compatible service: Anthropic/Gemini compatibility endpoints,
+    ///   LM Studio, Ollama, OpenRouter, a proxy...).
+    /// - `config.engine` - an in-page engine object with an OpenAI-compatible
+    ///   `chat.completions.create(request)` method (e.g. WebLLM's `MLCEngine`);
+    ///   mutually exclusive with `url`.
+    /// - `config.headers` - extra request headers, sent verbatim.
+    /// - `config.apiKey` - sugar for the `Authorization: Bearer` header.
+    /// - `config.model` - model id sent with each request; local servers and
+    ///   engines generally answer with whatever model is loaded.
+    /// - `config.name` - cosmetic label for the chat badge (presets set this).
+    /// - `config.systemPrompt` - extra system-prompt context appended to the
+    ///   agent's built-in instructions.
+    /// - `config.maxTurns` - max model turns (tool-call rounds + the final
+    ///   answer) per `prompt()` call. Defaults to 16.
+    /// - `config.docs` - the agent metadata bundle, which supplies the
+    ///   `search_docs` corpus and the rich tool parameter schemas: the packaged
+    ///   `dist/docs/perspective-docs.json` asset as a parsed object (`import
+    ///   docs from "…json" with { type: "json" }`), a `fetch()` `Response`, an
+    ///   `ArrayBuffer`, a JSON string, or a `Promise` of any of those — and/or
+    ///   an inline array of `{title?, text}` entries for host data definitions.
+    ///   Omitted, `search_docs` searches an empty corpus and the parameter
+    ///   schemas degrade to permissive objects.
+    /// - `config.systemRole` - where the preamble (plus `systemPrompt`) is
+    ///   placed: `"system"` (default) or `"user"`. Some engines refuse a system
+    ///   message alongside `tools` because they substitute their own — WebLLM's
+    ///   Hermes function calling throws `CustomSystemPromptError` on ANY system
+    ///   message — and those need `"user"`, which folds the same text into the
+    ///   opening user turn.
+    /// - `config.entitlements` - access grants limiting which tools the agent
+    ///   is offered (and may call): any of `"read_view"`, `"configure_view"`,
+    ///   `"manage_layout"`, `"read_docs"`, `"read_data"`. Omitted, all but
+    ///   `"read_data"` are granted; `["read_view", "read_docs"]` yields a
+    ///   read-only agent.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// import { providers } from "@perspective-dev/viewer";
+    ///
+    /// viewer.agentConfig({
+    ///     ...providers.anthropic,
+    ///     apiKey: "sk-ant-...",
+    ///     docs: fetch(
+    ///         "node_modules/@perspective-dev/viewer/dist/docs/perspective-docs.json",
+    ///     ),
+    /// });
+    /// ```
+    #[wasm_bindgen(js_name = "agentConfig")]
+    pub fn agent_config(&self, config: JsValue) -> ApiResult<()> {
+        let runtime = AgentRuntime::new(&config, self.clone())?;
+        self.presentation.agent.configure(runtime);
+        Ok(())
+    }
+
+    /// Run one conversational turn of the embedded LLM agent (configured via
+    /// `agentConfig()`), resolving with the agent's final text response after
+    /// any tool calls have been applied to this element. Turns share a
+    /// conversation history (and the chat sidebar's transcript) until
+    /// `agentReset()`; a call made while a turn is already running rejects.
+    /// Tool activity is emitted as `perspective-agent-tool` CustomEvents on
+    /// this element.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// await viewer.agentPrompt("Show me sales by region as a bar chart");
+    /// ```
+    #[wasm_bindgen(js_name = "agentPrompt")]
+    pub fn agent_prompt(&self, prompt: String) -> js_sys::Promise {
+        let presentation = self.presentation.clone();
+        let fut = ApiFuture::new(async move {
+            Ok(JsValue::from(presentation.agent.run_prompt(prompt).await?))
+        });
+
+        js_sys::Promise::from(fut)
+    }
+
+    /// Clear the agent's conversation (history and chat transcript), keeping
+    /// its configuration. Cancels any in-flight turn.
+    #[wasm_bindgen(js_name = "agentReset")]
+    pub fn agent_reset(&self) -> js_sys::Promise {
+        let presentation = self.presentation.clone();
+        let fut = ApiFuture::new(async move {
+            presentation.agent.reset().await;
+            Ok(JsValue::UNDEFINED)
+        });
+
+        js_sys::Promise::from(fut)
     }
 }

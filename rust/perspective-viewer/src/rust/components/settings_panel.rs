@@ -21,7 +21,7 @@ use super::plugin_selector::PluginSelector;
 use super::plugin_tab::PluginTab;
 use crate::components::containers::sidebar_close_button::SidebarCloseButton;
 use crate::components::form::debug::DebugPanel;
-use crate::config::PluginUpdate;
+use crate::config::{PluginStaticConfig, PluginUpdate};
 use crate::presentation::{ColumnLocator, OpenColumnSettings, Presentation};
 use crate::renderer::*;
 use crate::session::column_defaults_update::*;
@@ -42,6 +42,15 @@ pub struct SettingsPanelProps {
     pub available_plugins: PtrEqRc<Vec<String>>,
     pub has_table: Option<TableLoadState>,
     pub named_column_count: usize,
+
+    /// The ACTIVE plugin's declared contract, threaded as a value prop so
+    /// that switching plugins re-renders the panes that read it. The
+    /// renderer handle cannot serve this: it is excluded from prop
+    /// equality (it is a handle, not a value), so a plugin swap that
+    /// leaves the view config untouched — Y Line back to Datagrid, both
+    /// of which name one column slot — would otherwise change nothing any
+    /// component compares.
+    pub plugin_static_config: Rc<PluginStaticConfig>,
     pub view_config: PtrEqRc<ViewConfig>,
 
     /// Snapshot of the active plugin's `plugin_config` bucket, threaded
@@ -99,6 +108,7 @@ impl PartialEq for SettingsPanelProps {
             && self.available_plugins == rhs.available_plugins
             && self.has_table == rhs.has_table
             && self.named_column_count == rhs.named_column_count
+            && self.plugin_static_config == rhs.plugin_static_config
             && self.view_config == rhs.view_config
             && self.plugin_config == rhs.plugin_config
             && self.drag_column == rhs.drag_column
@@ -116,6 +126,11 @@ pub enum SelectedTab {
     Query,
     Plugin,
     Debug,
+
+    /// The embedded LLM agent's chat panel. The variant exists in every
+    /// build; its tab button and body render only under the `llm-agent`
+    /// feature, and only once `agentConfig()` has been called.
+    Chat,
 }
 
 #[function_component]
@@ -237,6 +252,52 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
         }
     };
 
+    // The chat tab is zero-affordance until `agentConfig()` is called; the
+    // subscription re-renders this panel when that happens (and as the
+    // transcript updates while the chat body is mounted).
+    #[cfg(feature = "llm-agent")]
+    let (chat_tab_button, chat_body) = {
+        let update = use_force_update();
+        let agent = presentation.agent.clone();
+        use_effect_with((), move |_| {
+            let sub = agent
+                .on_update
+                .add_notify_listener(&Callback::from(move |_| update.force_update()));
+
+            move || drop(sub)
+        });
+
+        let button = if presentation.agent.is_configured() {
+            let on_select_column = props.on_select_column.clone();
+            let set_chat = {
+                let on_select_tab = props.on_select_tab.clone();
+                Callback::from(move |_: PointerEvent| {
+                    on_select_tab.emit(SelectedTab::Chat);
+                    on_select_column.emit(None)
+                })
+            };
+
+            html! {
+                <div
+                    id="chat_tabbar_tab"
+                    class={tab_class(selected, SelectedTab::Chat)}
+                    onpointerdown={set_chat}
+                />
+            }
+        } else {
+            html! {}
+        };
+
+        let body = html! {
+            <crate::components::chat_panel::ChatPanel agent={presentation.agent.clone()} />
+        };
+
+        (button, body)
+    };
+
+    #[cfg(not(feature = "llm-agent"))]
+    let (chat_tab_button, chat_body) = (html! {}, html! {});
+
     let on_open_expr_panel = use_callback(props.on_select_column.clone(), |c, on_select| {
         on_select.emit(Some(c))
     });
@@ -270,6 +331,7 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                     class={tab_class(selected, SelectedTab::Debug)}
                     onpointerdown={set_debug}
                 />
+                { chat_tab_button }
             </div>
             if selected == SelectedTab::Query {
                 <ColumnSelector
@@ -278,6 +340,7 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                     {selected_column}
                     has_table={props.has_table.clone()}
                     named_column_count={props.named_column_count}
+                    plugin_static_config={props.plugin_static_config.clone()}
                     view_config={props.view_config.clone()}
                     drag_column={props.drag_column.clone()}
                     metadata={props.metadata.clone()}
@@ -298,6 +361,8 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                 // initial_width={width}
                 // on_auto_width={on_auto_width.clone()}
                 />
+            } else if selected == SelectedTab::Chat {
+                { chat_body }
             } else {
                 <DebugPanel
                     {presentation}
@@ -310,7 +375,10 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
             // Sibling sizer keeps the panel width pinned across tab
             // switches; lives outside the tab-body so it survives the
             // tab subtree's unmount.
-            <div class="scroll-panel-auto-width" style={format!("width:{}px", width)} />
+            <div
+                class="scroll-panel-auto-width"
+                style={format!("width:{}px", width)}
+            />
         </div>
     }
 }

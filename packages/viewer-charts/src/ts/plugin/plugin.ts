@@ -442,6 +442,9 @@ export class HTMLPerspectiveViewerWebGLPluginElement
             max_cells: this._chartType.max_cells,
             max_columns: this._chartType.max_columns,
             group_rollup_modes: ["flat"],
+            group_by_role: this._chartType.group_by_role,
+            split_by_role: this._chartType.split_by_role,
+            connects_row_order: !!this._chartType.connects_row_order,
             priority: 0,
             can_render_column_styles:
                 !!this._chartType.default_chart_type ||

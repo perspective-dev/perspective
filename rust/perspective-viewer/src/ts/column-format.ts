@@ -24,34 +24,36 @@
  * per-field overrides (year / month / day / ...).
  */
 
-export interface NumberFormatConfig {
-    style?: "decimal" | "currency" | "percent" | "unit";
-    minimumFractionDigits?: number;
-    maximumFractionDigits?: number;
-    minimumIntegerDigits?: number;
-    minimumSignificantDigits?: number;
-    maximumSignificantDigits?: number;
-    currency?: string;
-    currencyDisplay?: "code" | "symbol" | "narrowSymbol" | "name";
-    notation?: "standard" | "scientific" | "engineering" | "compact";
-    compactDisplay?: "short" | "long";
-    useGrouping?: boolean;
-}
+import type { CustomNumberFormatConfig } from "./ts-rs/CustomNumberFormatConfig.d.ts";
+import type { NumberFormatStyle } from "./ts-rs/NumberFormatStyle.d.ts";
+import type { Notation } from "./ts-rs/Notation.d.ts";
+import type { DatetimeFormatType } from "./ts-rs/DatetimeFormatType.d.ts";
+import type { SimpleDatetimeStyleConfig } from "./ts-rs/SimpleDatetimeStyleConfig.d.ts";
 
-export interface DateFormatConfig {
-    format?: "custom" | string;
-    timeZone?: string;
-    dateStyle?: "short" | "medium" | "long" | "full" | "disabled";
-    timeStyle?: "short" | "medium" | "long" | "full" | "disabled";
-    second?: "numeric" | "2-digit" | "disabled";
-    minute?: "numeric" | "2-digit" | "disabled";
-    hour?: "numeric" | "2-digit" | "disabled";
-    day?: "numeric" | "2-digit" | "disabled";
-    weekday?: "narrow" | "short" | "long" | "disabled";
-    month?: "numeric" | "2-digit" | "narrow" | "short" | "long" | "disabled";
-    year?: "numeric" | "2-digit" | "disabled";
-    hour12?: boolean;
-    fractionalSecondDigits?: 1 | 2 | 3;
+/**
+ * A numeric column's `number_format` (`columns_config` value), exactly as
+ * the Style tab's editor WRITES it — the ts-rs projection of the Rust
+ * `CustomNumberFormatConfig`, re-composed with its serde-flattened
+ * `style` and `notation` families (ts-rs cannot flatten `Option<enum>`,
+ * so the Rust type `#[ts(skip)]`s them and they export separately).
+ */
+export type NumberFormatConfig = CustomNumberFormatConfig &
+    Partial<NumberFormatStyle> &
+    Partial<Notation>;
+
+/**
+ * A datetime column's `date_format` (`columns_config` value) — the Rust
+ * `DatetimeFormatType` union: a `Simple` preset (`dateStyle` /
+ * `timeStyle`), or per-part custom fields discriminated by
+ * `format: "custom"`.
+ */
+export type DateFormatConfig = DatetimeFormatType;
+
+/** Narrow a [`DateFormatConfig`] to its `Simple` arm, if it is one. */
+function simple_config(
+    cfg?: DateFormatConfig,
+): SimpleDatetimeStyleConfig | undefined {
+    return cfg && !("format" in cfg) ? cfg : undefined;
 }
 
 /**
@@ -85,55 +87,73 @@ export function createNumberFormatter(
     type: string,
     cfg?: NumberFormatConfig,
 ): Intl.NumberFormat {
-    const opts: Intl.NumberFormatOptions =
-        cfg ?? NUMERIC_LEGACY_DEFAULTS[type] ?? {};
+    // ts-rs renders serde-absent keys as `T | null`; the wire never
+    // carries an explicit `null` (`skip_serializing_if`), and
+    // `Intl.NumberFormat` treats both absent and `undefined` the same, so
+    // the cast is presentation-only.
+    const opts = (cfg ??
+        NUMERIC_LEGACY_DEFAULTS[type] ??
+        {}) as Intl.NumberFormatOptions;
     return new Intl.NumberFormat(navigator.languages as string[], opts);
 }
 
 export function createDatetimeFormatter(
     cfg?: DateFormatConfig,
 ): Intl.DateTimeFormat {
-    if (!cfg || cfg.format !== "custom") {
+    if (!cfg || !("format" in cfg)) {
+        const preset = simple_config(cfg);
         const opts: Intl.DateTimeFormatOptions = {
-            timeZone: cfg?.timeZone,
+            timeZone: preset?.timeZone ?? undefined,
             dateStyle:
-                cfg?.dateStyle === "disabled"
+                preset?.dateStyle === "disabled"
                     ? undefined
-                    : (cfg?.dateStyle ?? DATETIME_LEGACY_DEFAULTS.dateStyle),
+                    : (preset?.dateStyle ?? DATETIME_LEGACY_DEFAULTS.dateStyle),
             timeStyle:
-                cfg?.timeStyle === "disabled"
+                preset?.timeStyle === "disabled"
                     ? undefined
-                    : (cfg?.timeStyle ?? DATETIME_LEGACY_DEFAULTS.timeStyle),
+                    : (preset?.timeStyle ?? DATETIME_LEGACY_DEFAULTS.timeStyle),
         };
 
         return new Intl.DateTimeFormat(navigator.languages as string[], opts);
     }
 
+    // Per-part fields are the shared `CustomDatetimeFormat` enum; the
+    // editor only writes each part's `Intl`-valid subset, so the
+    // narrowing casts below are presentation-only.
     const opts: Intl.DateTimeFormatOptions = {
-        timeZone: cfg.timeZone,
+        timeZone: cfg.timeZone ?? undefined,
         hour12: cfg.hour12 ?? true,
-        fractionalSecondDigits: cfg.fractionalSecondDigits,
+        fractionalSecondDigits: cfg.fractionalSecondDigits as
+            | 1
+            | 2
+            | 3
+            | undefined,
     };
     if (cfg.year !== "disabled") {
-        opts.year = cfg.year ?? "2-digit";
+        opts.year = (cfg.year ??
+            "2-digit") as Intl.DateTimeFormatOptions["year"];
     }
     if (cfg.month !== "disabled") {
-        opts.month = cfg.month ?? "numeric";
+        opts.month = (cfg.month ??
+            "numeric") as Intl.DateTimeFormatOptions["month"];
     }
     if (cfg.day !== "disabled") {
-        opts.day = cfg.day ?? "numeric";
+        opts.day = (cfg.day ?? "numeric") as Intl.DateTimeFormatOptions["day"];
     }
     if (cfg.weekday && cfg.weekday !== "disabled") {
-        opts.weekday = cfg.weekday;
+        opts.weekday = cfg.weekday as Intl.DateTimeFormatOptions["weekday"];
     }
     if (cfg.hour !== "disabled") {
-        opts.hour = cfg.hour ?? "numeric";
+        opts.hour = (cfg.hour ??
+            "numeric") as Intl.DateTimeFormatOptions["hour"];
     }
     if (cfg.minute !== "disabled") {
-        opts.minute = cfg.minute ?? "numeric";
+        opts.minute = (cfg.minute ??
+            "numeric") as Intl.DateTimeFormatOptions["minute"];
     }
     if (cfg.second !== "disabled") {
-        opts.second = cfg.second ?? "numeric";
+        opts.second = (cfg.second ??
+            "numeric") as Intl.DateTimeFormatOptions["second"];
     }
     return new Intl.DateTimeFormat(navigator.languages as string[], opts);
 }
@@ -141,12 +161,13 @@ export function createDatetimeFormatter(
 export function createDateFormatter(
     cfg?: DateFormatConfig,
 ): Intl.DateTimeFormat {
+    const preset = simple_config(cfg);
     const opts: Intl.DateTimeFormatOptions = {
         timeZone: "utc",
         dateStyle:
-            cfg?.dateStyle === "disabled"
+            preset?.dateStyle === "disabled"
                 ? undefined
-                : (cfg?.dateStyle ?? DATE_LEGACY_DEFAULTS.dateStyle),
+                : (preset?.dateStyle ?? DATE_LEGACY_DEFAULTS.dateStyle),
     };
     return new Intl.DateTimeFormat(navigator.languages as string[], opts);
 }

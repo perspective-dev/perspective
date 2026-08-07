@@ -28,7 +28,7 @@ will be assigned randomly and the `Client` must look this up with
 ## Client/Server Replicated Mode
 
 Using Tornado and
-[`PerspectiveTornadoHandler`](python.md#perspectivetornadohandler), as well as
+[`PerspectiveTornadoHandler`](../../explanation/python.md#whats-included), as well as
 `Perspective`'s JavaScript library, we can set up "distributed" Perspective
 instances that allows multiple browser `perspective-viewer` clients to read from
 a common `perspective-python` server, as in the

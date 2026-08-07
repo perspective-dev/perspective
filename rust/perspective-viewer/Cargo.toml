@@ -34,9 +34,10 @@ path = "src/rust/lib.rs"
 [features]
 external-bootstrap = []
 metadata = []
-default = []
+default = ["llm-agent"]
 talc-allocator = ["perspective-js/talc-allocator"]
 trace-allocator = ["perspective-js/trace-allocator"]
+llm-agent = []
 
 [build-dependencies]
 lightningcss = "1.0.0-alpha.71"
@@ -121,6 +122,8 @@ web-sys.version = "0.3.85"
 
 # Browser stdlib bindings
 web-sys.features = [
+  "AbortController",
+  "AbortSignal",
   "Blob",
   "Clipboard",
   "CssStyleDeclaration",
@@ -142,6 +145,7 @@ web-sys.features = [
   "FontFaceSet",
   "FontFaceSetIterator",
   "FontFaceSetIteratorResult",
+  "Headers",
   "HtmlCollection",
   "HtmlElement",
   "HtmlTextAreaElement",
@@ -158,6 +162,14 @@ web-sys.features = [
   "Performance",
   "PerformanceMark",
   "Range",
+  "ReadableStream",
+  "ReadableStreamDefaultReader",
+  "ReadableStreamReadResult",
+  "Request",
+  "RequestInit",
+  "Response",
+  "TextDecoder",
+  "TextDecodeOptions",
   "Selection",
   "ShadowRoot",
   "ShadowRootMode",

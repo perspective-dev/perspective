@@ -10,12 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-// Full-stack API panel REMOVAL coverage (`.plan/WORKSPACE_TEST_PLAN.md`
-// §2.7): `removePanel` and shrinking/round-tripping `restoreWorkspace` must
-// dispose panels completely (layout cell, plugin element, activation) and
-// leave the model, tree and geometry coherent — the layers the existing
-// model-level assertions could not see.
-
 import { test, expect } from "../helpers.ts";
 import {
     armInvariants,
@@ -71,9 +65,6 @@ test.beforeEach(async ({ page }) => {
     });
 });
 
-// Structural invariants (I1 element identity / I2 tree sanity / I3
-// model-layout-DOM coherence) gate every passing test's end state - see
-// `harness.ts` and `.plan/WORKSPACE_TEST_PLAN.md`.
 armInvariants(test);
 
 async function restoreWorkspace(page, config): Promise<void> {

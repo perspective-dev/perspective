@@ -42,6 +42,7 @@ use super::containers::scroll_panel::*;
 use super::containers::split_panel::{Orientation, SplitPanel};
 use crate::components::column_dropdown::{ColumnDropDownElement, ColumnDropDownPortal};
 use crate::components::containers::scroll_panel_item::ScrollPanelItem;
+use crate::config::PluginStaticConfig;
 use crate::presentation::{ColumnLocator, DragDropContainer, Presentation};
 use crate::queries::{ActiveColumnState, ActiveColumnStateData, ColumnsIteratorSet};
 use crate::renderer::*;
@@ -61,6 +62,10 @@ pub struct ColumnSelectorProps {
     /// Value props threaded from root's `SessionProps` / `RendererProps`.
     pub has_table: Option<TableLoadState>,
     pub named_column_count: usize,
+
+    /// The ACTIVE plugin's declared contract — see the identically named
+    /// prop on `SettingsPanelProps`.
+    pub plugin_static_config: Rc<PluginStaticConfig>,
     pub view_config: PtrEqRc<ViewConfig>,
     pub drag_column: Option<String>,
 
@@ -103,6 +108,7 @@ impl PartialEq for ColumnSelectorProps {
         self.selected_column == rhs.selected_column
             && self.has_table == rhs.has_table
             && self.named_column_count == rhs.named_column_count
+            && self.plugin_static_config == rhs.plugin_static_config
             && self.view_config == rhs.view_config
             && self.drag_column == rhs.drag_column
             && self.metadata == rhs.metadata
@@ -346,6 +352,7 @@ impl Component for ColumnSelector {
                     drag_column={ctx.props().drag_column.clone()}
                     metadata={metadata.clone()}
                     selected_theme={ctx.props().selected_theme.clone()}
+                    plugin_static_config={ctx.props().plugin_static_config.clone()}
                     {presentation}
                     {renderer}
                     {session}

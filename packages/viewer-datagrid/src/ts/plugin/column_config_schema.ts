@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { ColumnType } from "@perspective-dev/client";
-import type { DatagridPluginElement } from "../types.js";
+import type { ColumnConfig, DatagridPluginElement } from "../types.js";
 
 interface ViewerConfigLike {
     group_by?: string[];
@@ -61,7 +61,7 @@ export default function column_config_schema(
 
         fields.push({
             kind: "Enum",
-            key: "number_fg_mode",
+            key: "number_fg_mode" satisfies keyof ColumnConfig,
             default: "color",
             variants: [
                 { value: "disabled", label: "Disabled" },
@@ -75,8 +75,8 @@ export default function column_config_schema(
         if (fg_mode !== "disabled") {
             fields.push({
                 kind: "ColorRange",
-                key_pos: "pos_fg_color",
-                key_neg: "neg_fg_color",
+                key_pos: "pos_fg_color" satisfies keyof ColumnConfig,
+                key_neg: "neg_fg_color" satisfies keyof ColumnConfig,
                 default_pos: pos_fg,
                 default_neg: neg_fg,
                 is_gradient: false,
@@ -86,7 +86,7 @@ export default function column_config_schema(
         if (fg_mode === "bar" || fg_mode === "label-bar") {
             fields.push({
                 kind: "Number",
-                key: "fg_gradient",
+                key: "fg_gradient" satisfies keyof ColumnConfig,
                 default: column_stats?.abs_max ?? 0,
                 include: true,
             });
@@ -94,7 +94,7 @@ export default function column_config_schema(
 
         fields.push({
             kind: "Enum",
-            key: "number_bg_mode",
+            key: "number_bg_mode" satisfies keyof ColumnConfig,
             default: "disabled",
             variants: [
                 { value: "disabled", label: "Disabled" },
@@ -108,8 +108,8 @@ export default function column_config_schema(
         if (bg_mode !== "disabled") {
             fields.push({
                 kind: "ColorRange",
-                key_pos: "pos_bg_color",
-                key_neg: "neg_bg_color",
+                key_pos: "pos_bg_color" satisfies keyof ColumnConfig,
+                key_neg: "neg_bg_color" satisfies keyof ColumnConfig,
                 default_pos: pos_bg,
                 default_neg: neg_bg,
                 is_gradient: bg_mode === "gradient" || bg_mode === "pulse",
@@ -119,7 +119,7 @@ export default function column_config_schema(
         if (bg_mode === "gradient") {
             fields.push({
                 kind: "Number",
-                key: "bg_gradient",
+                key: "bg_gradient" satisfies keyof ColumnConfig,
                 include: true,
                 default: column_stats?.abs_max ?? 0,
             });
@@ -131,7 +131,7 @@ export default function column_config_schema(
 
         fields.push({
             kind: "Enum",
-            key: "datetime_color_mode",
+            key: "datetime_color_mode" satisfies keyof ColumnConfig,
             default: "none",
             variants: [
                 { value: "none", label: "None" },
@@ -146,7 +146,7 @@ export default function column_config_schema(
         if (dt_mode !== "none") {
             fields.push({
                 kind: "Color",
-                key: "color",
+                key: "color" satisfies keyof ColumnConfig,
                 default: this.model!._color[0],
             });
         }
@@ -155,7 +155,7 @@ export default function column_config_schema(
 
         fields.push({
             kind: "Enum",
-            key: "string_color_mode",
+            key: "string_color_mode" satisfies keyof ColumnConfig,
             default: "none",
             variants: [
                 { value: "none", label: "None" },
@@ -169,7 +169,7 @@ export default function column_config_schema(
         if (str_mode !== "none") {
             fields.push({
                 kind: "Color",
-                key: "color",
+                key: "color" satisfies keyof ColumnConfig,
                 default: this.model!._color[0],
             });
         }

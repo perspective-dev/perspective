@@ -10,14 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-// `#app_panel` settings-pane chrome (`.plan/SETTINGS_PANE_SKIP_PLAN.md`):
-// with settings CLOSED the SplitPanel must render NO divider and NO empty
-// leading pane (the phantom pair was interactable, pinned to the container
-// edge), and toggling the sidebar must reconcile the main pane IN PLACE —
-// the `<regular-layout>` and the datagrid's `regular-table` are
-// identity-stable across toggles. Runs on `basic-test.html` (real datagrid
-// plugin) so the regular-table invariant is checkable.
-
 import { test, expect } from "../helpers.ts";
 import { armLayoutCanary, assertCoherent } from "../multi_panel/harness.ts";
 

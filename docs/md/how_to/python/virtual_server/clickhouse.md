@@ -21,7 +21,7 @@ Create a server that exposes ClickHouse tables to browser clients:
 import clickhouse_connect
 import tornado.web
 import tornado.ioloop
-from perspective import ClickhouseVirtualServer
+from perspective.virtual_servers.clickhouse import ClickhouseVirtualServer
 from perspective.handlers.tornado import PerspectiveTornadoHandler
 
 # Connect to ClickHouse

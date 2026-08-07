@@ -93,7 +93,7 @@ pub fn update_window(
                     config
                         .columns
                         .iter()
-                        .map(|col| col.as_ref().map(&rename))
+                        .map(|col| col.as_ref().map(rename))
                         .collect(),
                 );
                 update.group_by = Some(config.group_by.iter().map(&rename).collect());

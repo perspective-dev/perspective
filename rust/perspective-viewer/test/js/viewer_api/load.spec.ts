@@ -32,6 +32,32 @@ test.describe("Viewer Load", () => {
         await expect(viewer).toHaveText(/"a","b","c"/); // column titles
     });
 
+    test("load(client) > the first restore applies element-level settings", async ({
+        page,
+    }) => {
+        await page.goto("/rust/perspective-viewer/test/html/blank.html");
+        await page.waitForFunction(() => "WORKER" in window);
+
+        const viewer = page.locator("perspective-viewer");
+        const settings = await viewer.evaluate(async (viewer) => {
+            const worker = await window.WORKER;
+            await worker.table("a,b,c\n1,2,3", { name: "settings_probe" });
+            await viewer.load(worker);
+            await viewer.restore({
+                table: "settings_probe",
+                plugin: "Debug",
+                settings: true,
+            });
+
+            return (await viewer.save()).settings;
+        });
+
+        expect(settings).toBe(true);
+        await expect(
+            page.locator("perspective-viewer #settings_panel"),
+        ).toBeVisible();
+    });
+
     test("load > rejects with failed Table promise", async ({ page }) => {
         await page.goto("/rust/perspective-viewer/test/html/blank.html");
         await page.waitForFunction(() => "WORKER" in window);

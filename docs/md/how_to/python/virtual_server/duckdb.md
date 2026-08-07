@@ -21,7 +21,7 @@ Create a server that exposes a DuckDB database to browser clients:
 import duckdb
 import tornado.web
 import tornado.ioloop
-from perspective import DuckDBVirtualServer
+from perspective.virtual_servers.duckdb import DuckDBVirtualServer
 from perspective.handlers.tornado import PerspectiveTornadoHandler
 
 # Create DuckDB connection and load data

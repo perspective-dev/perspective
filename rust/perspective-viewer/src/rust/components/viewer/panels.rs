@@ -27,7 +27,7 @@ use super::wiring::{
     clear_active_callbacks, create_active_subscriptions, inject_active_callbacks,
     subscribe_panel_titles,
 };
-use crate::config::{TableUpdate, ViewerConfigUpdate};
+use crate::config::{ViewerConfigInitial, ViewerConfigUpdate};
 use crate::queries::*;
 use crate::renderer::Renderer;
 use crate::session::*;
@@ -216,18 +216,18 @@ impl PerspectiveViewer {
 
     pub(super) fn on_new_panel(&mut self, ctx: &Context<Self>, id: String) -> bool {
         if let Some(panel) = ctx.props().workspace.panel(&PanelId::from(id)) {
-            let table_name = panel.session.get_table().map(|t| t.get_name().to_owned());
+            let Some(table_name) = panel.session.get_table().map(|t| t.get_name().to_owned())
+            else {
+                tracing::warn!("Source panel has no `Table` to create a new panel from");
+                return false;
+            };
+
             let elem = ctx.props().elem.clone();
             let presentation = ctx.props().presentation.clone();
             let workspace = ctx.props().workspace.clone();
             let notify = ctx.link().callback(|_: ()| LayoutChanged);
             let activate = ctx.link().callback(|id| SetActivePanel(id, None));
             ApiFuture::spawn(async move {
-                let update = ViewerConfigUpdate {
-                    table: table_name.map(TableUpdate::Update).unwrap_or_default(),
-                    ..Default::default()
-                };
-
                 let client = panel.session.get_client();
                 let new_id = create_panel(
                     &elem,
@@ -235,7 +235,7 @@ impl PerspectiveViewer {
                     &workspace,
                     &notify,
                     None,
-                    update,
+                    ViewerConfigInitial::new(table_name).into(),
                     client,
                 )
                 .await?;
@@ -273,18 +273,13 @@ impl PerspectiveViewer {
         let notify = ctx.link().callback(|_: ()| LayoutChanged);
         let activate = ctx.link().callback(|id| SetActivePanel(id, None));
         ApiFuture::spawn(async move {
-            let update = ViewerConfigUpdate {
-                table: TableUpdate::Update(table),
-                ..Default::default()
-            };
-
             let new_id = create_panel(
                 &elem,
                 &presentation,
                 &workspace,
                 &notify,
                 None,
-                update,
+                ViewerConfigInitial::new(table).into(),
                 Some(client),
             )
             .await?;

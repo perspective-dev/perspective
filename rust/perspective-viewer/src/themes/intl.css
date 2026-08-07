@@ -108,6 +108,22 @@ perspective-dropdown {
     --psp-label--query-tab--content: "Query";
     --psp-label--plugin-tab--content: "Plugin";
     --psp-label--debug-tab--content: "JSON";
+    --psp-label--chat-tab--content: "Chat";
+
+    /* Chat panel */
+    --psp-label--chat-reasoning--content: "Reasoning";
+    --psp-label--chat-send--content: "Send";
+    --psp-label--chat-stop--content: "Stop";
+    --psp-label--chat-placeholder--content: "Ask Perspective ...";
+
+    /* Plugin-declared pivot roles (PluginStaticConfig) */
+    --psp-label--role--x-axis--content: "X Axis";
+    --psp-label--role--y-axis--content: "Y Axis";
+    --psp-label--role--series--content: "Series";
+    --psp-label--role--hierarchy--content: "Hierarchy";
+    --psp-label--role--facets--content: "Facets";
+    --psp-label--role--row-groups--content: "Row Groups";
+    --psp-label--role--column-groups--content: "Column Groups";
 
     /* Window editor */
     --psp-label--window-source--content: "Column";

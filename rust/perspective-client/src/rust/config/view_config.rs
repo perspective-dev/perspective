@@ -177,6 +177,12 @@ pub struct ViewConfigUpdate {
     /// name and a string sort direction. When `column-pivots` are applied,
     /// the additional sort directions `"col asc"` and `"col desc"` will
     /// determine the order of pivot columns groups.
+    ///
+    /// `sort` is the ONLY thing that orders a `View`'s rows — without it
+    /// they keep the `Table`'s natural (insertion) order, which any
+    /// consumer reading rows sequentially will reflect. Not to be
+    /// confused with a window column's `order_by`, which orders rows
+    /// WITHIN a window frame and does not reorder the `View`.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[ts(optional)]
@@ -213,6 +219,13 @@ pub struct ViewConfigUpdate {
     /// Perspective provides a selection of aggregate functions that can be
     /// applied to columns in the `View` constructor using a dictionary of
     /// column name to aggregate function name.
+    ///
+    /// An aggregate also determines the column's RESULT TYPE, which need
+    /// not match the input: `"count"` yields an `integer` whatever it
+    /// counts, so a `date` column left on the default `"count"` is an
+    /// `integer` in the resulting `View` — no longer a date. Set an
+    /// aggregate that preserves the type (e.g. `"any"`, `"last"`) when
+    /// the original type matters, such as a date used as a chart axis.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[ts(optional)]

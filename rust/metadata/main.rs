@@ -38,25 +38,49 @@ use perspective_client::{
 };
 use perspective_js::TypedArrayWindow;
 use perspective_viewer::config::{
-    ClientOptions, ExportMethod, ExportOptions, GetClientOptions, GetTableOptions, PanelOptions,
-    PluginStaticConfig, ViewerConfig, ViewerConfigUpdate, WorkspaceConfig, WorkspaceConfigUpdate,
+    ClientOptions, CustomNumberFormatConfig, DatetimeColorMode, DatetimeFormatType, ExportMethod,
+    ExportOptions, FormatMode, GetClientOptions, GetTableOptions, Notation, NumberFormatStyle,
+    PanelOptions, PluginStaticConfig, RestoreOptions, StringColorMode, ViewerConfig,
+    ViewerConfigInitial, ViewerConfigUpdate, WorkspaceConfig, WorkspaceConfigUpdate,
 };
 use ts_rs::TS;
 
 pub fn generate_type_bindings_viewer() -> Result<(), Box<dyn Error>> {
     let path = std::env::current_dir()?.join("../perspective-viewer/src/ts/ts-rs");
+
+    // The directory is 100% generated: wipe before export so types removed
+    // from the export graph cannot linger as stale orphans (the
+    // `ColumnConfigValues.ts` class of confusion).
+    if path.exists() {
+        fs::remove_dir_all(&path)?;
+    }
+
+    fs::create_dir_all(&path)?;
     ViewerConfigUpdate::export_all_to(&path)?;
+    ViewerConfigInitial::export_all_to(&path)?;
     ViewerConfig::<String>::export_all_to(&path)?;
     WorkspaceConfig::export_all_to(&path)?;
     WorkspaceConfigUpdate::export_all_to(&path)?;
     ExportMethod::export_all_to(&path)?;
     PanelOptions::export_all_to(&path)?;
+    RestoreOptions::export_all_to(&path)?;
     ClientOptions::export_all_to(&path)?;
     ExportOptions::export_all_to(&path)?;
     GetTableOptions::export_all_to(&path)?;
     GetClientOptions::export_all_to(&path)?;
     PluginStaticConfig::export_all_to(&path)?;
     OnUpdateData::export_all_to(&path)?;
+
+    // The column-format wire types (`columns_config` values): the
+    // flattened style/notation families export separately (ts-rs cannot
+    // flatten `Option<enum>`) and are re-composed in `column-format.ts`.
+    CustomNumberFormatConfig::export_all_to(&path)?;
+    NumberFormatStyle::export_all_to(&path)?;
+    Notation::export_all_to(&path)?;
+    DatetimeFormatType::export_all_to(&path)?;
+    StringColorMode::export_all_to(&path)?;
+    DatetimeColorMode::export_all_to(&path)?;
+    FormatMode::export_all_to(&path)?;
     Ok(())
 }
 
