@@ -88,4 +88,49 @@ describeDuckDB("typed_arrays", (getClient) => {
 
         await view.delete();
     });
+
+    test("string columns of a flat view are dictionaries", async function () {
+        const table = await getClient().open_table("memory.superstore");
+        const view = await table.view({ columns: ["Region"] });
+        let seen = 0;
+        await view.with_typed_arrays(
+            { start_row: 0, end_row: 5 },
+            (names, values, validities, dictionaries) => {
+                for (let c = 0; c < names.length; c++) {
+                    if (names[c] !== "Region") {
+                        continue;
+                    }
+
+                    seen++;
+                    const dict = dictionaries[c];
+                    expect(dict).not.toBeNull();
+                    expect(dict).toContain("South");
+                    expect(dict[values[c][0]]).toEqual("South");
+                }
+            },
+        );
+
+        expect(seen).toBe(1);
+        await view.delete();
+    });
+
+    test("a DECIMAL column of a flat view reads as Float64", async function () {
+        const table = await getClient().open_table("memory.coerce_types");
+        const view = await table.view({ columns: ["decimal"] });
+        let seen = 0;
+        await view.with_typed_arrays({}, (names, values) => {
+            for (let c = 0; c < names.length; c++) {
+                if (names[c] !== "decimal") {
+                    continue;
+                }
+
+                seen++;
+                expect(values[c]).toBeInstanceOf(Float64Array);
+                expect(values[c][0]).toBeCloseTo(1.234, 6);
+            }
+        });
+
+        expect(seen).toBe(1);
+        await view.delete();
+    });
 });

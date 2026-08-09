@@ -173,6 +173,10 @@ t_traversal::sort_by(
     const SRC_T& src,
     t_ctx2* ctx2
 ) {
+    if (m_leaves_only || m_total_only || m_nodes->empty()) {
+        return;
+    }
+
     std::vector<t_tvnode> new_nodes(m_nodes->size());
 
     // Pair is -> (old tvidx, new tvidx)

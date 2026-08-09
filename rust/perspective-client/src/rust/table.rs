@@ -99,6 +99,15 @@ pub struct TableInitOptions {
     #[serde(default)]
     #[ts(optional)]
     pub page_to_disk: Option<bool>,
+
+    /// How Arrow `LIST` and JSON `Array` columns are ingested. `zip` (the
+    /// default) and `cartesian` expand a row into one row per list element,
+    /// and are incompatible with `index`, as the rows of an expansion
+    /// repeat their index. `stringify` encodes each list as a JSON array in
+    /// a single string column instead.
+    #[serde(default)]
+    #[ts(optional)]
+    pub list_flatten: Option<crate::proto::ListFlatten>,
 }
 
 impl TableInitOptions {
@@ -112,8 +121,10 @@ impl TryFrom<TableOptions> for MakeTableOptions {
 
     fn try_from(value: TableOptions) -> Result<Self, Self::Error> {
         let page_to_disk = value.page_to_disk;
+        let list_flatten = value.list_flatten.map(|x| x as i32);
         Ok(MakeTableOptions {
             page_to_disk,
+            list_flatten,
             make_table_type: match value {
                 TableOptions {
                     index: Some(_),
@@ -137,6 +148,7 @@ pub(crate) struct TableOptions {
     pub index: Option<String>,
     pub limit: Option<u32>,
     pub page_to_disk: Option<bool>,
+    pub list_flatten: Option<crate::proto::ListFlatten>,
 }
 
 impl From<TableInitOptions> for TableOptions {
@@ -145,6 +157,7 @@ impl From<TableInitOptions> for TableOptions {
             index: value.index,
             limit: value.limit,
             page_to_disk: value.page_to_disk,
+            list_flatten: value.list_flatten,
         }
     }
 }

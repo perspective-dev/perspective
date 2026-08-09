@@ -443,6 +443,7 @@ set(SOURCE_FILES
     ${PSP_CPP_SRC}/src/cpp/aggspec.cpp
     ${PSP_CPP_SRC}/src/cpp/arg_sort.cpp
     ${PSP_CPP_SRC}/src/cpp/arrow_loader.cpp
+    ${PSP_CPP_SRC}/src/cpp/arrow_normalize.cpp
     ${PSP_CPP_SRC}/src/cpp/arrow_writer.cpp
     ${PSP_CPP_SRC}/src/cpp/base.cpp
     ${PSP_CPP_SRC}/src/cpp/base_impl_linux.cpp
@@ -485,6 +486,7 @@ set(SOURCE_FILES
     ${PSP_CPP_SRC}/src/cpp/filter.cpp
     ${PSP_CPP_SRC}/src/cpp/flat_traversal.cpp
     ${PSP_CPP_SRC}/src/cpp/get_data_extents.cpp
+    ${PSP_CPP_SRC}/src/cpp/json_loader.cpp
     ${PSP_CPP_SRC}/src/cpp/gnode.cpp
     ${PSP_CPP_SRC}/src/cpp/gnode_state.cpp
     ${PSP_CPP_SRC}/src/cpp/mask.cpp

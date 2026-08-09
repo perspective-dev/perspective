@@ -27,24 +27,8 @@ use ts_rs::TS;
 
 use crate::proto;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum WindowAggregate {
-    Sum,
-    Avg,
-    Count,
-    Min,
-    Max,
-    Stddev,
-    Var,
-    First,
-    Last,
-    Lag,
-    Lead,
-    Diff,
-    Rate,
-    Ema,
-}
+/// A window aggregate, named in the data model's own vocabulary.
+pub type WindowAggregate = String;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -221,48 +205,6 @@ impl TryFrom<RawWindowSpec> for WindowSpec {
     }
 }
 
-impl From<WindowAggregate> for proto::WindowAggregate {
-    fn from(value: WindowAggregate) -> Self {
-        match value {
-            WindowAggregate::Sum => Self::Sum,
-            WindowAggregate::Avg => Self::Avg,
-            WindowAggregate::Count => Self::Count,
-            WindowAggregate::Min => Self::Min,
-            WindowAggregate::Max => Self::Max,
-            WindowAggregate::Stddev => Self::Stddev,
-            WindowAggregate::Var => Self::Var,
-            WindowAggregate::First => Self::First,
-            WindowAggregate::Last => Self::Last,
-            WindowAggregate::Lag => Self::Lag,
-            WindowAggregate::Lead => Self::Lead,
-            WindowAggregate::Diff => Self::Diff,
-            WindowAggregate::Rate => Self::Rate,
-            WindowAggregate::Ema => Self::Ema,
-        }
-    }
-}
-
-impl From<proto::WindowAggregate> for WindowAggregate {
-    fn from(value: proto::WindowAggregate) -> Self {
-        match value {
-            proto::WindowAggregate::Sum => Self::Sum,
-            proto::WindowAggregate::Avg => Self::Avg,
-            proto::WindowAggregate::Count => Self::Count,
-            proto::WindowAggregate::Min => Self::Min,
-            proto::WindowAggregate::Max => Self::Max,
-            proto::WindowAggregate::Stddev => Self::Stddev,
-            proto::WindowAggregate::Var => Self::Var,
-            proto::WindowAggregate::First => Self::First,
-            proto::WindowAggregate::Last => Self::Last,
-            proto::WindowAggregate::Lag => Self::Lag,
-            proto::WindowAggregate::Lead => Self::Lead,
-            proto::WindowAggregate::Diff => Self::Diff,
-            proto::WindowAggregate::Rate => Self::Rate,
-            proto::WindowAggregate::Ema => Self::Ema,
-        }
-    }
-}
-
 impl From<WindowFrame> for proto::window_spec::Frame {
     fn from(value: WindowFrame) -> Self {
         match value {
@@ -309,7 +251,7 @@ impl From<WindowSpec> for proto::WindowSpec {
     fn from(value: WindowSpec) -> Self {
         proto::WindowSpec {
             source: value.column,
-            op: proto::WindowAggregate::from(value.aggregate) as i32,
+            op: value.aggregate,
             partition_by: value.partition_by,
             order_by: value.order_by.map(|x| x.into()),
             frame: value.frame.map(|x| x.into()),
@@ -323,9 +265,7 @@ impl From<proto::WindowSpec> for WindowSpec {
     fn from(value: proto::WindowSpec) -> Self {
         WindowSpec {
             column: value.source,
-            aggregate: proto::WindowAggregate::try_from(value.op)
-                .unwrap_or(proto::WindowAggregate::Sum)
-                .into(),
+            aggregate: value.op,
             partition_by: value.partition_by,
             order_by: value.order_by.map(WindowSort::from),
             frame: value.frame.map(|x| x.into()),
@@ -342,7 +282,7 @@ mod tests {
     fn spec(frame: Option<WindowFrame>) -> WindowSpec {
         WindowSpec {
             column: "price".to_string(),
-            aggregate: WindowAggregate::Sum,
+            aggregate: "sum".to_string(),
             partition_by: vec![],
             order_by: None,
             frame,

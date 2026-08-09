@@ -30,12 +30,14 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <perspective/server.h>
 #include <perspective/residency.h>
 #include <perspective/opfs.h>
 #include <re2/stringpiece.h>
 #include <string>
 #include <tsl/hopscotch_map.h>
+#include <unordered_map>
 #include <tsl/ordered_map.h>
 #include <vector>
 #include <ctime>
@@ -1421,26 +1423,70 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             features->set_on_update(true);
             features->set_expressions(true);
 
+            const auto window_agg = [](const char* name,
+                                        std::initializer_list<const char*> frames,
+                                        bool offset,
+                                        bool alpha,
+                                        std::optional<proto::ColumnType> result_type
+                                     ) {
+                proto::WindowAggregateArgs args;
+                args.set_name(name);
+                for (const auto* frame : frames) {
+                    args.add_frames(frame);
+                }
+                args.set_offset(offset);
+                args.set_alpha(alpha);
+                if (result_type.has_value()) {
+                    args.set_result_type(*result_type);
+                }
+                return args;
+            };
+
+            const std::initializer_list<const char*> frames{
+                "rows", "range", "cumulative"
+            };
+            const std::initializer_list<const char*> no_frames{};
+
             proto::GetFeaturesResp_WindowAggregateOptions numeric_aggs;
-            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_SUM);
-            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_AVG);
-            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_COUNT);
-            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_MIN);
-            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_MAX);
-            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_STDDEV);
-            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_VAR);
-            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_LAG);
-            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_LEAD);
-            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_DIFF);
-            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_RATE);
-            numeric_aggs.add_options(proto::WINDOW_AGGREGATE_EMA);
+            *numeric_aggs.add_options() =
+                window_agg("sum", frames, false, false, proto::ColumnType::FLOAT);
+            *numeric_aggs.add_options() =
+                window_agg("avg", frames, false, false, proto::ColumnType::FLOAT);
+            *numeric_aggs.add_options() =
+                window_agg("count", frames, false, false, proto::ColumnType::INTEGER);
+            *numeric_aggs.add_options() =
+                window_agg("min", frames, false, false, std::nullopt);
+            *numeric_aggs.add_options() =
+                window_agg("max", frames, false, false, std::nullopt);
+            *numeric_aggs.add_options() =
+                window_agg("stddev", frames, false, false, proto::ColumnType::FLOAT);
+            *numeric_aggs.add_options() =
+                window_agg("var", frames, false, false, proto::ColumnType::FLOAT);
+            *numeric_aggs.add_options() =
+                window_agg("lag", no_frames, true, false, std::nullopt);
+            *numeric_aggs.add_options() =
+                window_agg("lead", no_frames, true, false, std::nullopt);
+            *numeric_aggs.add_options() =
+                window_agg("diff", no_frames, true, false, proto::ColumnType::FLOAT);
+            // `rate` is defined on the order key's units, so only a `range`
+            // frame is meaningful for it.
+            *numeric_aggs.add_options() =
+                window_agg("rate", {"range"}, false, false, proto::ColumnType::FLOAT);
+            // `ema` is recursive - a smoothing factor, never a frame.
+            *numeric_aggs.add_options() =
+                window_agg("ema", no_frames, false, true, proto::ColumnType::FLOAT);
 
             proto::GetFeaturesResp_WindowAggregateOptions any_aggs;
-            any_aggs.add_options(proto::WINDOW_AGGREGATE_COUNT);
-            any_aggs.add_options(proto::WINDOW_AGGREGATE_MIN);
-            any_aggs.add_options(proto::WINDOW_AGGREGATE_MAX);
-            any_aggs.add_options(proto::WINDOW_AGGREGATE_LAG);
-            any_aggs.add_options(proto::WINDOW_AGGREGATE_LEAD);
+            *any_aggs.add_options() =
+                window_agg("count", frames, false, false, proto::ColumnType::INTEGER);
+            *any_aggs.add_options() =
+                window_agg("min", frames, false, false, std::nullopt);
+            *any_aggs.add_options() =
+                window_agg("max", frames, false, false, std::nullopt);
+            *any_aggs.add_options() =
+                window_agg("lag", no_frames, true, false, std::nullopt);
+            *any_aggs.add_options() =
+                window_agg("lead", no_frames, true, false, std::nullopt);
 
             auto& window_aggs = *features->mutable_window_aggregates();
             window_aggs[proto::ColumnType::INTEGER] = numeric_aggs;
@@ -1665,6 +1711,20 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 ? BACKING_STORE_DISK
                 : BACKING_STORE_MEMORY;
 
+            apachearrow::t_list_flatten list_flatten;
+            switch (r.options().list_flatten()) {
+                case proto::LIST_FLATTEN_CARTESIAN:
+                    list_flatten = apachearrow::LIST_FLATTEN_CARTESIAN;
+                    break;
+                case proto::LIST_FLATTEN_STRINGIFY:
+                    list_flatten = apachearrow::LIST_FLATTEN_STRINGIFY;
+                    break;
+                case proto::LIST_FLATTEN_ZIP:
+                default:
+                    list_flatten = apachearrow::LIST_FLATTEN_ZIP;
+                    break;
+            }
+
             switch (r.data().data_case()) {
                 case proto::MakeTableData::kFromView: {
                     auto view = m_resources.get_view(r.data().from_view());
@@ -1685,7 +1745,11 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     );
 
                     table = Table::from_arrow(
-                        index, std::move(*arrow), limit, backing_store
+                        index,
+                        std::move(*arrow),
+                        limit,
+                        backing_store,
+                        list_flatten
                     );
                     break;
                 }
@@ -1694,7 +1758,11 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     { auto _ = std::move(req); }
 
                     table = Table::from_arrow(
-                        index, std::move(data), limit, backing_store
+                        index,
+                        std::move(data),
+                        limit,
+                        backing_store,
+                        list_flatten
                     );
                     break;
                 }
@@ -1703,7 +1771,11 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     { auto _ = std::move(req); }
 
                     table = Table::from_csv(
-                        index, std::move(data), limit, backing_store
+                        index,
+                        std::move(data),
+                        limit,
+                        backing_store,
+                        list_flatten
                     );
                     break;
                 }
@@ -1712,7 +1784,11 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     { auto _ = std::move(req); }
 
                     table = Table::from_cols(
-                        index, std::move(data), limit, backing_store
+                        index,
+                        std::move(data),
+                        limit,
+                        backing_store,
+                        list_flatten
                     );
                     break;
                 }
@@ -1721,7 +1797,11 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     { auto _ = std::move(req); }
 
                     table = Table::from_rows(
-                        index, std::move(data), limit, backing_store
+                        index,
+                        std::move(data),
+                        limit,
+                        backing_store,
+                        list_flatten
                     );
                     break;
                 }
@@ -1730,7 +1810,11 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     { auto _ = std::move(req); }
 
                     table = Table::from_ndjson(
-                        index, std::move(data), limit, backing_store
+                        index,
+                        std::move(data),
+                        limit,
+                        backing_store,
+                        list_flatten
                     );
                     break;
                 }
@@ -2246,49 +2330,32 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     }
                 }
 
-                t_window_op op = t_window_op::WINDOW_OP_SUM;
-                switch (w.op()) {
-                    case proto::WINDOW_AGGREGATE_SUM:
-                        op = t_window_op::WINDOW_OP_SUM;
-                        break;
-                    case proto::WINDOW_AGGREGATE_AVG:
-                        op = t_window_op::WINDOW_OP_AVG;
-                        break;
-                    case proto::WINDOW_AGGREGATE_COUNT:
-                        op = t_window_op::WINDOW_OP_COUNT;
-                        break;
-                    case proto::WINDOW_AGGREGATE_MIN:
-                        op = t_window_op::WINDOW_OP_MIN;
-                        break;
-                    case proto::WINDOW_AGGREGATE_MAX:
-                        op = t_window_op::WINDOW_OP_MAX;
-                        break;
-                    case proto::WINDOW_AGGREGATE_STDDEV:
-                        op = t_window_op::WINDOW_OP_STDDEV;
-                        break;
-                    case proto::WINDOW_AGGREGATE_VAR:
-                        op = t_window_op::WINDOW_OP_VAR;
-                        break;
-                    case proto::WINDOW_AGGREGATE_LAG:
-                        op = t_window_op::WINDOW_OP_LAG;
-                        break;
-                    case proto::WINDOW_AGGREGATE_LEAD:
-                        op = t_window_op::WINDOW_OP_LEAD;
-                        break;
-                    case proto::WINDOW_AGGREGATE_DIFF:
-                        op = t_window_op::WINDOW_OP_DIFF;
-                        break;
-                    case proto::WINDOW_AGGREGATE_RATE:
-                        op = t_window_op::WINDOW_OP_RATE;
-                        break;
-                    case proto::WINDOW_AGGREGATE_EMA:
-                        op = t_window_op::WINDOW_OP_EMA;
-                        break;
-                    default:
-                        PSP_COMPLAIN_AND_ABORT(
-                            "Window `op` not implemented in this build"
-                        );
+                static const std::unordered_map<std::string, t_window_op>
+                    WINDOW_OPS{
+                        {"sum", t_window_op::WINDOW_OP_SUM},
+                        {"avg", t_window_op::WINDOW_OP_AVG},
+                        {"count", t_window_op::WINDOW_OP_COUNT},
+                        {"min", t_window_op::WINDOW_OP_MIN},
+                        {"max", t_window_op::WINDOW_OP_MAX},
+                        {"stddev", t_window_op::WINDOW_OP_STDDEV},
+                        {"var", t_window_op::WINDOW_OP_VAR},
+                        {"first", t_window_op::WINDOW_OP_FIRST},
+                        {"last", t_window_op::WINDOW_OP_LAST},
+                        {"lag", t_window_op::WINDOW_OP_LAG},
+                        {"lead", t_window_op::WINDOW_OP_LEAD},
+                        {"diff", t_window_op::WINDOW_OP_DIFF},
+                        {"rate", t_window_op::WINDOW_OP_RATE},
+                        {"ema", t_window_op::WINDOW_OP_EMA},
+                    };
+
+                const auto op_entry = WINDOW_OPS.find(w.op());
+                if (op_entry == WINDOW_OPS.end()) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Window `op` not implemented in this build: " + w.op()
+                    );
                 }
+
+                t_window_op op = op_entry->second;
 
                 // An OMITTED frame means cumulative for aggregating
                 // ops - the initializer below IS that default.

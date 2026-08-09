@@ -26,7 +26,7 @@ import type { ColumnType } from "@perspective-dev/client/dist/esm/ts-rs/ColumnTy
 import type { ViewConfig } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfig.d.ts";
 import type { ViewConfigUpdate } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfigUpdate.d.ts";
 import type { ViewWindow } from "@perspective-dev/client/dist/esm/ts-rs/ViewWindow.d.ts";
-import type { WindowAggregate } from "@perspective-dev/client/dist/esm/ts-rs/WindowAggregate.d.ts";
+import type { WindowAggSpec } from "@perspective-dev/client/dist/esm/ts-rs/WindowAggSpec.d.ts";
 import type * as clickhouse from "@clickhouse/client-web";
 
 const NUMBER_AGGS = [
@@ -65,28 +65,37 @@ const STRING_AGGS = [
     "string_agg",
 ];
 
-// The window aggregates the SQL translation supports, per source
-// column type (`ema` is recursive - no SQL window equivalent).
-const WINDOW_AGGREGATES: WindowAggregate[] = [
-    "sum",
-    "avg",
-    "count",
-    "min",
-    "max",
-    "stddev",
-    "var",
-    "lag",
-    "lead",
-    "diff",
-    "rate",
+// Window functions. Renamed from Perspective's `stddev`/`var` to the SQL
+// standard spellings DuckDB and ClickHouse both accept, since the advertised
+// name is now emitted verbatim.
+//
+// NOTE: this set is inherited from the DuckDB handler and has NOT been audited
+// against a live ClickHouse - see the aggregate lists below, which have the
+// same problem. ClickHouse's own navigation functions are `lagInFrame` /
+// `leadInFrame`, and its ranking set differs; both need verifying before being
+// advertised here.
+const FRAMES = ["rows", "range", "cumulative"];
+
+const WINDOW_AGGREGATES: WindowAggSpec[] = [
+    { name: "sum", frames: FRAMES, result_type: "float" },
+    { name: "avg", frames: FRAMES, result_type: "float" },
+    { name: "count", frames: FRAMES, result_type: "float" },
+    { name: "min", frames: FRAMES },
+    { name: "max", frames: FRAMES },
+    { name: "stddev_samp", frames: FRAMES, result_type: "float" },
+    { name: "var_samp", frames: FRAMES, result_type: "float" },
+    { name: "lag", offset: true },
+    { name: "lead", offset: true },
+    { name: "diff", offset: true, result_type: "float" },
+    { name: "rate", frames: ["range"], result_type: "float" },
 ];
 
-const WINDOW_AGGREGATES_ANY: WindowAggregate[] = [
-    "count",
-    "min",
-    "max",
-    "lag",
-    "lead",
+const WINDOW_AGGREGATES_ANY: WindowAggSpec[] = [
+    { name: "count", frames: FRAMES, result_type: "float" },
+    { name: "min", frames: FRAMES },
+    { name: "max", frames: FRAMES },
+    { name: "lag", offset: true },
+    { name: "lead", offset: true },
 ];
 
 const FILTER_OPS = [

@@ -47,6 +47,45 @@ def _get_superstore_parquet():
 SUPERSTORE_PARQUET = _get_superstore_parquet()
 
 
+def _load_coerce_types(db):
+    """A column of each DuckDB type whose Arrow needs coercing.
+
+    `ENUM` is the interesting one: DuckDB dictionary-encodes it and picks
+    the key width from cardinality, so it arrives as a dictionary with
+    unsigned keys rather than the `Int32` Perspective uses.
+    """
+    db.execute("CREATE TYPE mood AS ENUM ('happy', 'sad')")
+    db.execute("""
+        CREATE TABLE coerce_types (
+            "tiny" TINYINT,
+            "small" SMALLINT,
+            "utiny" UTINYINT,
+            "usmall" USMALLINT,
+            "uint" UINTEGER,
+            "ubig" UBIGINT,
+            "big" BIGINT,
+            "float" REAL,
+            "decimal" DECIMAL(18, 3),
+            "time" TIME,
+            "timestamp" TIMESTAMP,
+            "date" DATE,
+            "enum" mood,
+            "string" VARCHAR
+        )
+    """)
+
+    db.execute("""
+        INSERT INTO coerce_types VALUES
+            (-1, -300, 255, 65535, 4294967295, 9007199254740992,
+             9007199254740992, 1.5, 1.234, TIME '01:01:01',
+             TIMESTAMP '2023-01-01 00:00:00', DATE '2023-01-01',
+             'happy', 'a'),
+            (1, 300, 0, 0, 0, 0, -9007199254740992, -1.5, -5.678,
+             TIME '00:00:01', TIMESTAMP '2023-01-02 00:00:00',
+             DATE '2023-01-02', 'sad', 'b')
+    """)
+
+
 @pytest.fixture(scope="module")
 def client():
     db = duckdb.connect()
@@ -55,6 +94,7 @@ def client():
         f"CREATE TABLE superstore AS SELECT * FROM read_parquet('{SUPERSTORE_PARQUET}')"
     )
 
+    _load_coerce_types(db)
     server = DuckDBVirtualServer(db)
 
     def handle_request(msg):
@@ -71,7 +111,7 @@ def client():
 class TestDuckDBClient:
     def test_get_hosted_table_names(self, client):
         tables = client.get_hosted_table_names()
-        assert tables == ["memory.superstore"]
+        assert sorted(tables) == ["memory.coerce_types", "memory.superstore"]
 
 
 class TestDuckDBTable:
@@ -905,4 +945,141 @@ class TestDuckDBMinMax:
         min_val, max_val = view.get_min_max("Quantity")
         assert min_val >= 11
         assert max_val == 14
+        view.delete()
+
+
+class TestDuckDBCoerceTypes:
+    """The DuckDB types whose Arrow is not already one of Perspective's."""
+
+    def test_schema(self, client):
+        table = client.open_table("memory.coerce_types")
+        assert table.schema() == {
+            "tiny": "integer",
+            "small": "integer",
+            "utiny": "integer",
+            "usmall": "integer",
+            "uint": "float",
+            "ubig": "float",
+            "big": "float",
+            "float": "float",
+            "decimal": "float",
+            "time": "datetime",
+            "timestamp": "datetime",
+            "date": "date",
+            "enum": "string",
+            "string": "string",
+        }
+
+    def test_narrow_integers_flat(self, client):
+        table = client.open_table("memory.coerce_types")
+        view = table.view(columns=["tiny", "small", "utiny", "usmall"])
+        assert view.to_json() == [
+            {"tiny": -1, "small": -300, "utiny": 255, "usmall": 65535},
+            {"tiny": 1, "small": 300, "utiny": 0, "usmall": 0},
+        ]
+        view.delete()
+
+    def test_wide_and_fractional_numbers_flat(self, client):
+        table = client.open_table("memory.coerce_types")
+        view = table.view(columns=["uint", "ubig", "big", "float", "decimal"])
+        assert view.to_json() == [
+            {
+                "uint": 4294967295.0,
+                "ubig": 9007199254740992.0,
+                "big": 9007199254740992.0,
+                "float": 1.5,
+                "decimal": pytest.approx(1.234),
+            },
+            {
+                "uint": 0.0,
+                "ubig": 0.0,
+                "big": -9007199254740992.0,
+                "float": -1.5,
+                "decimal": pytest.approx(-5.678),
+            },
+        ]
+        view.delete()
+
+    def test_temporal_flat(self, client):
+        table = client.open_table("memory.coerce_types")
+        view = table.view(columns=["time", "timestamp", "date"])
+        assert view.to_json() == [
+            {
+                "time": 3661000,
+                "timestamp": 1672531200000,
+                "date": 1672531200000,
+            },
+            {
+                "time": 1000,
+                "timestamp": 1672617600000,
+                "date": 1672617600000,
+            },
+        ]
+        view.delete()
+
+    def test_enum_flat(self, client):
+        # Dictionary-encoded by DuckDB, with a key width chosen from the
+        # `ENUM`'s cardinality rather than the `Int32` Perspective uses.
+        table = client.open_table("memory.coerce_types")
+        view = table.view(columns=["enum", "string"])
+        assert view.to_json() == [
+            {"enum": "happy", "string": "a"},
+            {"enum": "sad", "string": "b"},
+        ]
+        view.delete()
+
+    def test_enum_group_by(self, client):
+        # The #3149 repro: the row path is read out of that dictionary.
+        table = client.open_table("memory.coerce_types")
+        view = table.view(
+            group_by=["enum"],
+            columns=["tiny"],
+            aggregates={"tiny": "sum"},
+        )
+        assert view.to_json() == [
+            {"__ROW_PATH__": [], "tiny": 0},
+            {"__ROW_PATH__": ["happy"], "tiny": -1},
+            {"__ROW_PATH__": ["sad"], "tiny": 1},
+        ]
+        view.delete()
+
+    def test_decimal_group_by(self, client):
+        table = client.open_table("memory.coerce_types")
+        view = table.view(
+            group_by=["decimal"],
+            columns=["tiny"],
+            aggregates={"tiny": "sum"},
+        )
+        assert view.to_json() == [
+            {"__ROW_PATH__": [], "tiny": 0},
+            {"__ROW_PATH__": [pytest.approx(-5.678)], "tiny": 1},
+            {"__ROW_PATH__": [pytest.approx(1.234)], "tiny": -1},
+        ]
+        view.delete()
+
+    def test_column_values_view(self, client):
+        # The filter dropdown's query shape - group by the column, select
+        # no columns at all.
+        table = client.open_table("memory.coerce_types")
+        view = table.view(group_by=["enum"], columns=[])
+        csv = view.to_csv()
+        assert [line for line in csv.splitlines() if line] == [
+            "__ROW_PATH_0__",
+            "null",
+            '"happy"',
+            '"sad"',
+        ]
+        view.delete()
+
+    def test_filter_matching_nothing(self, client):
+        # DuckDB returns a chunkless table for an empty result, which
+        # `write_table` serializes as a schema with no record batches at
+        # all. That is a view with no rows, not a broken stream.
+        table = client.open_table("memory.coerce_types")
+        view = table.view(
+            columns=["tiny"],
+            filter=[["string", "==", "no such value"]],
+        )
+        assert view.to_json() == []
+        assert view.to_columns() == {"tiny": []}
         view.delete()

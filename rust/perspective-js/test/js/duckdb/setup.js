@@ -92,6 +92,39 @@ async function loadUnderscoreData(db) {
     `);
 }
 
+async function loadCoerceTypesData(db) {
+    await db.query(`CREATE TYPE mood AS ENUM ('happy', 'sad')`);
+    await db.query(`
+        CREATE TABLE coerce_types (
+            "tiny" TINYINT,
+            "small" SMALLINT,
+            "utiny" UTINYINT,
+            "usmall" USMALLINT,
+            "uint" UINTEGER,
+            "ubig" UBIGINT,
+            "big" BIGINT,
+            "float" REAL,
+            "decimal" DECIMAL(18, 3),
+            "time" TIME,
+            "timestamp" TIMESTAMP,
+            "date" DATE,
+            "enum" mood,
+            "string" VARCHAR
+        );
+    `);
+
+    await db.query(`
+        INSERT INTO coerce_types VALUES
+            (-1, -300, 255, 65535, 4294967295, 9007199254740992,
+             9007199254740992, 1.5, 1.234, TIME '01:01:01',
+             TIMESTAMP '2023-01-01 00:00:00', DATE '2023-01-01',
+             'happy', 'a'),
+            (1, 300, 0, 0, 0, 0, -9007199254740992, -1.5, -5.678,
+             TIME '00:00:01', TIMESTAMP '2023-01-02 00:00:00',
+             DATE '2023-01-02', 'sad', 'b');
+    `);
+}
+
 export function describeDuckDB(name, fn) {
     test.describe("DuckDB Virtual Server " + name, function () {
         let db;
@@ -105,6 +138,7 @@ export function describeDuckDB(name, fn) {
             client = await perspective.worker(server);
             await loadSuperstoreData(db);
             await loadUnderscoreData(db);
+            await loadCoerceTypesData(db);
         });
 
         fn(() => client);

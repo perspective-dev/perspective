@@ -960,6 +960,42 @@ function validate_typed_array(typed_array, column_data) {
             table.delete();
         });
 
+        test("column introduced by a later record", async function () {
+            var table = await perspective.table(`{"a":1}\n{"a":2,"b":3}`, {
+                format: "ndjson",
+            });
+
+            expect(await table.schema()).toEqual({
+                a: "integer",
+                b: "integer",
+            });
+
+            var view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                a: [1, 2],
+                b: [null, 3],
+            });
+
+            view.delete();
+            table.delete();
+        });
+
+        test("column introduced as null then typed", async function () {
+            var table = await perspective.table(
+                `{"a":1,"b":null}\n{"a":2,"b":"x"}`,
+                { format: "ndjson" },
+            );
+
+            var view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                a: [1, 2],
+                b: [null, "x"],
+            });
+
+            view.delete();
+            table.delete();
+        });
+
         test("date types", async function () {
             const ndjson = [];
             for (const row of data_4) {
@@ -1075,12 +1111,21 @@ function validate_typed_array(typed_array, column_data) {
         });
 
         test("Arrow Lists constructor", async function () {
-            const table = await perspective.table(arrows.lists_arrow.slice());
+            const table = await perspective.table(arrows.lists_arrow.slice(), {
+                list_flatten: "stringify",
+            });
+
             const view = await table.view();
             const result = await view.to_columns();
             expect(result).toEqual(arrow_lists_data);
             view.delete();
             table.delete();
+        });
+
+        test("Arrow Lists constructor rejects a ragged zip", async function () {
+            await expect(
+                perspective.table(arrows.lists_arrow.slice()),
+            ).rejects.toThrow(/Cannot zip list columns/);
         });
 
         test("Arrow dictionary constructor", async function () {

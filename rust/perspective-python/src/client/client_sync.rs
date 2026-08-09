@@ -166,7 +166,7 @@ impl Client {
     /// table = client.table("x,y\n1,2\n3,4")
     /// ```
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (input, limit=None, index=None, name=None, format=None, page_to_disk=None))]
+    #[pyo3(signature = (input, limit=None, index=None, name=None, format=None, page_to_disk=None, list_flatten=None))]
     pub fn table(
         &self,
         py: Python<'_>,
@@ -176,10 +176,19 @@ impl Client {
         name: Option<Py<PyString>>,
         format: Option<Py<PyString>>,
         page_to_disk: Option<bool>,
+        list_flatten: Option<Py<PyString>>,
     ) -> PyResult<Table> {
         Ok(Table(
             self.0
-                .table(input, limit, index, name, format, page_to_disk)
+                .table(
+                    input,
+                    limit,
+                    index,
+                    name,
+                    format,
+                    page_to_disk,
+                    list_flatten,
+                )
                 .py_block_on(py)?,
         ))
     }

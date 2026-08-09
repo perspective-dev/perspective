@@ -14,7 +14,7 @@ use std::io::Cursor;
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::*;
-use arrow_array::{Array as _, ArrowPrimitiveType, PrimitiveArray};
+use arrow_array::{Array as _, ArrowPrimitiveType, DictionaryArray, PrimitiveArray, StringArray};
 use arrow_ipc::reader::StreamReader;
 use arrow_schema::{DataType, TimeUnit};
 use js_sys::{Array, Function, JsString, Uint8Array};
@@ -219,13 +219,32 @@ pub(crate) async fn decode_and_call(
                 js_dicts.set(col_idx as u32, JsValue::NULL);
             },
             DataType::Dictionary(..) => {
-                let dict = col.as_dictionary::<Int32Type>();
+                let dict = col
+                    .as_any()
+                    .downcast_ref::<DictionaryArray<Int32Type>>()
+                    .ok_or_else(|| {
+                        JsValue::from_str(&format!(
+                            "Unsupported dictionary key type for typed array: {}",
+                            col.data_type()
+                        ))
+                    })?;
+
                 let keys = dict.keys();
                 zero_invalid_slots(keys);
                 let arr = unsafe { js_sys::Int32Array::view(keys.values().as_ref()) };
                 js_values.set(col_idx as u32, arr.into());
 
-                let values = dict.values().as_string::<i32>();
+                let values = dict
+                    .values()
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or_else(|| {
+                        JsValue::from_str(&format!(
+                            "Unsupported dictionary value type for typed array: {}",
+                            dict.values().data_type()
+                        ))
+                    })?;
+
                 let js_dict = Array::new_with_length(values.len() as u32);
                 for i in 0..values.len() {
                     js_dict.set(i as u32, JsValue::from_str(values.value(i)));

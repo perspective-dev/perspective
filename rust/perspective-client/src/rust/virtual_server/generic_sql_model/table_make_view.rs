@@ -12,8 +12,8 @@
 
 use super::GenericSQLError;
 use crate::config::{
-    Aggregate, Filter, FilterTerm, GroupRollupMode, Scalar, Sort, SortDir, ViewConfig,
-    WindowAggregate, WindowFrame, WindowSortDir, WindowSpec,
+    Aggregate, Filter, FilterTerm, GroupRollupMode, Scalar, Sort, SortDir, ViewConfig, WindowFrame,
+    WindowSortDir, WindowSpec,
 };
 
 fn aggregate_to_string(agg: &Aggregate) -> String {
@@ -124,47 +124,72 @@ fn window_sql(w: &WindowSpec, resolve: &dyn Fn(&str) -> String) -> Result<String
     }
 
     let src = resolve(&w.column);
-    let agg_fn = match w.aggregate {
-        WindowAggregate::Sum => Some("SUM"),
-        WindowAggregate::Avg => Some("AVG"),
-        WindowAggregate::Count => Some("COUNT"),
-        WindowAggregate::Min => Some("MIN"),
-        WindowAggregate::Max => Some("MAX"),
-        WindowAggregate::Stddev => Some("STDDEV_SAMP"),
-        WindowAggregate::Var => Some("VAR_SAMP"),
-        _ => None,
-    };
-
-    if let Some(agg_fn) = agg_fn {
+    let op = w.aggregate.as_str();
+    if matches!(
+        op,
+        "sum"
+            | "avg"
+            | "count"
+            | "min"
+            | "max"
+            | "product"
+            | "median"
+            | "stddev_samp"
+            | "stddev_pop"
+            | "var_samp"
+            | "var_pop"
+            | "first_value"
+            | "last_value"
+    ) {
         let frame = window_frame_sql(w.frame.as_ref());
         return Ok(format!(
             "{}({}) OVER ({})",
-            agg_fn,
+            op,
             src,
             window_over_clause(w, Some(&frame))
         ));
     }
 
-    match w.aggregate {
-        WindowAggregate::Lag | WindowAggregate::Lead => Ok(format!(
+    if matches!(
+        op,
+        "row_number" | "rank" | "dense_rank" | "percent_rank" | "cume_dist"
+    ) {
+        return Ok(format!("{}() OVER ({})", op, window_over_clause(w, None)));
+    }
+
+    match op {
+        "lag" | "lead" => Ok(format!(
             "{}({}, {}) OVER ({})",
-            if w.aggregate == WindowAggregate::Lag {
-                "LAG"
-            } else {
-                "LEAD"
-            },
+            op,
             src,
             w.offset.unwrap_or(1),
             window_over_clause(w, None)
         )),
-        WindowAggregate::Diff => Ok(format!(
-            "({} - LAG({}, {}) OVER ({}))",
+        "nth_value" => {
+            let frame = window_frame_sql(w.frame.as_ref());
+            Ok(format!(
+                "nth_value({}, {}) OVER ({})",
+                src,
+                w.offset.unwrap_or(1),
+                window_over_clause(w, Some(&frame))
+            ))
+        },
+        "ntile" => Ok(format!(
+            "ntile({}) OVER ({})",
+            w.offset.unwrap_or(1),
+            window_over_clause(w, None)
+        )),
+        // `diff` and `rate` are Perspective's, not any SQL dialect's - they
+        // are synthesized here so a config authored against the engine keeps
+        // working against a SQL virtual server.
+        "diff" => Ok(format!(
+            "({} - lag({}, {}) OVER ({}))",
             src,
             src,
             w.offset.unwrap_or(1),
             window_over_clause(w, None)
         )),
-        WindowAggregate::Rate => {
+        "rate" => {
             let Some(order_by) = &w.order_by else {
                 return Err(GenericSQLError::UnsupportedOperation(
                     "window `rate` requires an explicit `order_by`".to_string(),
@@ -184,19 +209,19 @@ fn window_sql(w: &WindowSpec, resolve: &dyn Fn(&str) -> String) -> Result<String
             let over = window_over_clause(w, Some(&frame));
             let okey = format!("\"{}\"", quote_ident(&order_by.0));
             Ok(format!(
-                "(({} - FIRST_VALUE({}) OVER ({})) / NULLIF(CAST({} AS DOUBLE) - \
-                 CAST(FIRST_VALUE({}) OVER ({}) AS DOUBLE), 0))",
+                "(({} - first_value({}) OVER ({})) / NULLIF(CAST({} AS DOUBLE) - \
+                 CAST(first_value({}) OVER ({}) AS DOUBLE), 0))",
                 src, src, over, okey, okey, over
             ))
         },
-        WindowAggregate::Ema => Err(GenericSQLError::UnsupportedOperation(
+        "ema" => Err(GenericSQLError::UnsupportedOperation(
             "`ema` windows cannot be translated to a SQL window function (recursive); compute it \
              in the Perspective engine instead"
                 .to_string(),
         )),
-        _ => Err(GenericSQLError::UnsupportedOperation(format!(
-            "window op {:?} is not supported by the SQL translation",
-            w.aggregate
+        op => Err(GenericSQLError::UnsupportedOperation(format!(
+            "window op `{}` is not supported by the SQL translation",
+            op
         ))),
     }
 }

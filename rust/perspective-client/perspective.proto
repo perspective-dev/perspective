@@ -234,7 +234,7 @@ message GetFeaturesResp {
     bool unordered = 10;
 
     message WindowAggregateOptions {
-        repeated WindowAggregate options = 1;
+        repeated WindowAggregateArgs options = 1;
     }
 
     message ColumnTypeOptions {
@@ -249,6 +249,14 @@ message GetFeaturesResp {
         string name = 1;
         repeated ColumnType args = 2;
     }
+}
+
+message WindowAggregateArgs {
+    string name = 1;
+    repeated string frames = 2;
+    bool offset = 3;
+    bool alpha = 4;
+    optional ColumnType result_type = 5;
 }
 
 // `Client::get_hosted_tables`
@@ -346,7 +354,15 @@ message MakeTableReq {
         // (memory-mapped file on native; OPFS on WASM) instead of memory.
         // Orthogonal to `make_table_type`, so it is a standalone field.
         optional bool page_to_disk = 3;
+
+        optional ListFlatten list_flatten = 4;
     }
+}
+
+enum ListFlatten {
+    LIST_FLATTEN_ZIP = 0;
+    LIST_FLATTEN_CARTESIAN = 1;
+    LIST_FLATTEN_STRINGIFY = 2;
 }
 message MakeTableResp {}
 
@@ -546,26 +562,14 @@ message ServerSystemInfoResp {
 }
 
 
-enum WindowAggregate {
-    WINDOW_AGGREGATE_SUM = 0;
-    WINDOW_AGGREGATE_AVG = 1;
-    WINDOW_AGGREGATE_COUNT = 2;
-    WINDOW_AGGREGATE_MIN = 3;
-    WINDOW_AGGREGATE_MAX = 4;
-    WINDOW_AGGREGATE_STDDEV = 5;
-    WINDOW_AGGREGATE_VAR = 6;
-    WINDOW_AGGREGATE_FIRST = 7;
-    WINDOW_AGGREGATE_LAST = 8;
-    WINDOW_AGGREGATE_LAG = 9;
-    WINDOW_AGGREGATE_LEAD = 10;
-    WINDOW_AGGREGATE_DIFF = 11;
-    WINDOW_AGGREGATE_RATE = 12;
-    WINDOW_AGGREGATE_EMA = 13;
-}
-
 message WindowSpec {
     string source = 2;
-    WindowAggregate op = 3;
+
+    // The aggregate, in the data model's own vocabulary - see
+    // `GetFeaturesResp.WindowAggregateArgs`. A string rather than an enum so
+    // that a `View` can carry an op the built-in engine has never heard of,
+    // e.g. kdb+'s `mdev`.
+    string op = 3;
     repeated string partition_by = 4;
     Order order_by = 5;
     oneof frame {

@@ -36,6 +36,56 @@ with open("data.arrow", "rb") as f:
     table = perspective.table(f.read())
 ```
 
+### Nested columns
+
+Perspective's data model is flat, so Arrow `struct` and `list` columns are
+normalized on ingest.
+
+A `struct` column is hoisted into one dotted column per leaf, recursively. A
+null parent nulls every descendant leaf:
+
+```python
+arrow_table = pa.table({
+    "id": pa.array([1, 2], type=pa.int64()),
+    "s": pa.array([{"a": 10}, {"a": 20}], type=pa.struct([("a", pa.int64())])),
+})
+
+# Schema is `{"id": "integer", "s.a": "integer"}`
+table = perspective.table(arrow_table)
+```
+
+Because the flattened names are ordinary columns, a `Table` created from an
+explicit schema accepts nested updates with no further configuration:
+
+```python
+table = perspective.table({"id": "integer", "s.a": "integer"})
+table.update(arrow_table)
+```
+
+A `list` column is controlled by the `list_flatten` argument:
+
+-   `"zip"` (default) expands a row into one row per list element, repeating
+    its non-list siblings. An empty or null list yields a single row with a
+    null in that column, rather than dropping the row. When a row has more than
+    one list column, their non-empty lengths must match.
+-   `"cartesian"` expands a row into the product of its list columns' lengths,
+    with an empty or null list counting as a single null element.
+-   `"stringify"` encodes each list as a JSON array in a single string column,
+    leaving the row count unchanged.
+
+```python
+arrow_table = pa.table({
+    "x": pa.array([1, 2], type=pa.int64()),
+    "y": pa.array([[10, 20], [30]], type=pa.list_(pa.int64())),
+})
+
+# `{"x": [1, 1, 2], "y": [10, 20, 30]}`
+perspective.table(arrow_table)
+
+# `{"x": [1, 2], "y": ["[10,20]", "[30]"]}`
+perspective.table(arrow_table, list_flatten="stringify")
+```
+
 ## Polars
 
 ```python
