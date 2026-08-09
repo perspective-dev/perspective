@@ -1,0 +1,21 @@
+{
+    "name": "python-kdb-virtual",
+    "private": true,
+    "version": "5.1.0",
+    "description": "An example of streaming a `perspective-python` server to the browser.",
+    "scripts": {
+        "start": "PYTHONPATH=../../python/perspective python3 server.py"
+    },
+    "keywords": [],
+    "license": "Apache-2.0",
+    "dependencies": {
+        "@perspective-dev/client": "workspace:^",
+        "@perspective-dev/viewer": "workspace:^",
+        "@perspective-dev/viewer-charts": "workspace:^",
+        "@perspective-dev/viewer-datagrid": "workspace:^",
+        "superstore-arrow": "catalog:"
+    },
+    "devDependencies": {
+        "npm-run-all": "catalog:"
+    }
+}

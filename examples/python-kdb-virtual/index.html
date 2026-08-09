@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no" />
+        <link rel="stylesheet" crossorigin="anonymous" href="/node_modules/@perspective-dev/viewer/dist/css/themes.css" />
+        <style>
+            perspective-viewer {
+                position: absolute;
+                inset: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <perspective-viewer id="viewer" ,> </perspective-viewer>
+        <script type="module">
+            import "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
+            import "/node_modules/@perspective-dev/viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js";
+            import "/node_modules/@perspective-dev/viewer-charts/dist/cdn/perspective-viewer-charts.js";
+            import perspective from "/node_modules/@perspective-dev/client/dist/cdn/perspective.js";
+            const viewer = document.getElementById("viewer");
+
+            // Create a client that expects a Perspective server to accept
+            // Websocket connections at the specified URL.
+            const websocket = await perspective.websocket("ws://localhost:3000/websocket");
+            viewer.load(websocket);
+            viewer.restore({table: "data_source_one"})
+        </script>
+    </body>
+</html>

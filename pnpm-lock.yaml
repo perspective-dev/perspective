@@ -420,6 +420,28 @@ importers:
         specifier: 'catalog:'
         version: 4.1.5
 
+  examples/python-kdb-virtual:
+    dependencies:
+      '@perspective-dev/client':
+        specifier: workspace:^
+        version: link:../../rust/perspective-js
+      '@perspective-dev/viewer':
+        specifier: workspace:^
+        version: link:../../rust/perspective-viewer
+      '@perspective-dev/viewer-charts':
+        specifier: workspace:^
+        version: link:../../packages/viewer-charts
+      '@perspective-dev/viewer-datagrid':
+        specifier: workspace:^
+        version: link:../../packages/viewer-datagrid
+      superstore-arrow:
+        specifier: 'catalog:'
+        version: 3.2.0
+    devDependencies:
+      npm-run-all:
+        specifier: 'catalog:'
+        version: 4.1.5
+
   examples/python-polars-virtual:
     dependencies:
       '@perspective-dev/client':

@@ -15,6 +15,8 @@ Perspective ships with built-in virtual server implementations for:
   using the `clickhouse-connect` Python package.
 - [**Polars**](./virtual_server/polars.md) — query in-memory Polars DataFrames
   using the `polars` Python package.
+- [**kdb+**](./virtual_server/kdb.md) — query a q process using the `pykx`
+  Python package.
 
 You can also [**implement your own**](./virtual_server/custom.md) virtual server
 to connect Perspective to any data source by subclassing `VirtualServerHandler`.
