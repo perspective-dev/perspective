@@ -86,6 +86,52 @@ t_view_config::validate(const std::shared_ptr<t_schema>& schema) {
                << '\n';
             PSP_COMPLAIN_AND_ABORT(ss.str());
         }
+
+        const std::vector<std::string>& aggregate = agg.second;
+        if (aggregate.empty()) {
+            std::stringstream ss;
+            ss << "Missing aggregate for column '" << col
+               << "' found in View aggregates." << '\n';
+            PSP_COMPLAIN_AND_ABORT(ss.str());
+            continue;
+        }
+
+        const std::string& agg_name = aggregate[0];
+        const auto agg_type = maybe_str_to_aggtype(agg_name);
+        if (!agg_type) {
+            std::stringstream ss;
+            ss << "Invalid aggregate '" << agg_name << "' for column '" << col
+               << "' found in View aggregates." << '\n';
+            PSP_COMPLAIN_AND_ABORT(ss.str());
+            continue;
+        }
+
+        if (!is_implemented_aggtype(*agg_type)) {
+            std::stringstream ss;
+            ss << "Unimplemented aggregate '" << agg_name << "' for column '"
+               << col << "' found in View aggregates." << '\n';
+            PSP_COMPLAIN_AND_ABORT(ss.str());
+        }
+
+        if (aggtype_takes_argument(*agg_type)) {
+            if (aggregate.size() < 2) {
+                std::stringstream ss;
+                ss << "Aggregate '" << agg_name << "' for column '" << col
+                   << "' requires a column argument." << '\n';
+                PSP_COMPLAIN_AND_ABORT(ss.str());
+                continue;
+            }
+
+            const std::string& arg = aggregate[1];
+            if (!schema->has_column(arg)
+                && expression_aliases.count(arg) == 0) {
+                std::stringstream ss;
+                ss << "Invalid column '" << arg << "' found in the '"
+                   << agg_name << "' aggregate for column '" << col << "'."
+                   << '\n';
+                PSP_COMPLAIN_AND_ABORT(ss.str());
+            }
+        }
     }
 
     for (const std::string& col : m_row_pivots) {
@@ -371,17 +417,9 @@ t_view_config::fill_aggspecs(const std::shared_ptr<t_schema>& schema) {
                 agg_type = t_aggtype::AGGTYPE_UNIQUE;
             } else if (m_aggregates.count(column) > 0) {
                 auto col = m_aggregates.at(column);
-                if (col.at(0) == "weighted mean") {
+                agg_type = str_to_aggtype(col.at(0));
+                if (aggtype_takes_argument(agg_type)) {
                     dependencies.emplace_back(col.at(1), DEPTYPE_COLUMN);
-                    agg_type = AGGTYPE_WEIGHTED_MEAN;
-                } else if (col.at(0) == "max by") {
-                    dependencies.emplace_back(col.at(1), DEPTYPE_COLUMN);
-                    agg_type = AGGTYPE_MAX_BY;
-                } else if (col.at(0) == "min by") {
-                    dependencies.emplace_back(col.at(1), DEPTYPE_COLUMN);
-                    agg_type = AGGTYPE_MIN_BY;
-                } else {
-                    agg_type = str_to_aggtype(col.at(0));
                 }
             } else {
                 t_dtype dtype = schema->get_dtype(column);
@@ -461,17 +499,9 @@ t_view_config::make_aggspec(
     if (m_column_only && !m_total_only) {
         agg_type = t_aggtype::AGGTYPE_ANY;
     } else {
-        if (aggregate.at(0) == "weighted mean") {
+        agg_type = str_to_aggtype(aggregate.at(0));
+        if (aggtype_takes_argument(agg_type)) {
             dependencies.emplace_back(aggregate.at(1), DEPTYPE_COLUMN);
-            agg_type = AGGTYPE_WEIGHTED_MEAN;
-        } else if (aggregate.at(0) == "max by") {
-            dependencies.emplace_back(aggregate.at(1), DEPTYPE_COLUMN);
-            agg_type = AGGTYPE_MAX_BY;
-        } else if (aggregate.at(0) == "min by") {
-            dependencies.emplace_back(aggregate.at(1), DEPTYPE_COLUMN);
-            agg_type = AGGTYPE_MIN_BY;
-        } else {
-            agg_type = str_to_aggtype(aggregate.at(0));
         }
     }
 

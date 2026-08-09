@@ -1551,6 +1551,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             string_opts.add_aggregates()->set_name("count");
             string_opts.add_aggregates()->set_name("any");
             string_opts.add_aggregates()->set_name("distinct count");
+            string_opts.add_aggregates()->set_name("distinct leaf");
             string_opts.add_aggregates()->set_name("dominant");
             string_opts.add_aggregates()->set_name("first");
             string_opts.add_aggregates()->set_name("join");
@@ -1569,8 +1570,20 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             (*features->mutable_aggregates())[proto::ColumnType::STRING] =
                 string_opts;
 
+            proto::GetFeaturesResp_AggregateOptions bool_opts;
+            bool_opts.add_aggregates()->set_name("count");
+            bool_opts.add_aggregates()->set_name("and");
+            bool_opts.add_aggregates()->set_name("any");
+            bool_opts.add_aggregates()->set_name("distinct count");
+            bool_opts.add_aggregates()->set_name("distinct leaf");
+            bool_opts.add_aggregates()->set_name("dominant");
+            bool_opts.add_aggregates()->set_name("first");
+            bool_opts.add_aggregates()->set_name("last");
+            bool_opts.add_aggregates()->set_name("last by index");
+            bool_opts.add_aggregates()->set_name("or");
+            bool_opts.add_aggregates()->set_name("unique");
             (*features->mutable_aggregates())[proto::ColumnType::BOOLEAN] =
-                string_opts;
+                bool_opts;
 
             proto::GetFeaturesResp_AggregateOptions number_opts;
             number_opts.add_aggregates()->set_name("sum");
@@ -1579,6 +1592,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             number_opts.add_aggregates()->set_name("avg");
             number_opts.add_aggregates()->set_name("count");
             number_opts.add_aggregates()->set_name("distinct count");
+            number_opts.add_aggregates()->set_name("distinct leaf");
             number_opts.add_aggregates()->set_name("dominant");
             number_opts.add_aggregates()->set_name("first");
             number_opts.add_aggregates()->set_name("gmv");
@@ -1592,6 +1606,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             number_opts.add_aggregates()->set_name("last");
             number_opts.add_aggregates()->set_name("mean");
             number_opts.add_aggregates()->set_name("median");
+            number_opts.add_aggregates()->set_name("mul");
             number_opts.add_aggregates()->set_name("q1");
             number_opts.add_aggregates()->set_name("q3");
             number_opts.add_aggregates()->set_name("pct sum parent");
@@ -1604,6 +1619,12 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             auto args3 = number_opts.add_aggregates();
             args3->set_name("weighted mean");
             args3->add_args(proto::ColumnType::FLOAT);
+            auto args4 = number_opts.add_aggregates();
+            args4->set_name("min by");
+            args4->add_args(proto::ColumnType::FLOAT);
+            auto args5 = number_opts.add_aggregates();
+            args5->set_name("max by");
+            args5->add_args(proto::ColumnType::FLOAT);
             (*features->mutable_aggregates())[proto::ColumnType::INTEGER] =
                 number_opts;
 
@@ -1615,6 +1636,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             datetime_opts.add_aggregates()->set_name("any");
             datetime_opts.add_aggregates()->set_name("avg");
             datetime_opts.add_aggregates()->set_name("distinct count");
+            datetime_opts.add_aggregates()->set_name("distinct leaf");
             datetime_opts.add_aggregates()->set_name("dominant");
             datetime_opts.add_aggregates()->set_name("first");
             datetime_opts.add_aggregates()->set_name("high");
