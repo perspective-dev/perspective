@@ -87,7 +87,20 @@ jobs:
               id: init-step
               uses: ./.github/actions/install-deps
               with:
+                  cargo_cache: "false"
                   skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
+
+            # Caches dependency-crate artifacts (workspace crates are pruned
+            # on save); this job heads the critical path so its ~4min of
+            # cold dep compilation is pure wall-clock.
+            - name: Setup rust cache
+              if: ${{ steps.config-step.outputs.SKIP_CACHE != 'true' }}
+              uses: Swatinem/rust-cache@v2
+              with:
+                  # rust-cache doesn't read `.cargo/config.toml`'s
+                  # `target-dir = "rust/target"` redirect
+                  workspaces: ". -> rust/target"
+                  save-if: ${{ steps.config-step.outputs.SAVE_CACHE == 'true' }}
 
             - name: Metadata Build
               run: pnpm run build --ci
@@ -140,14 +153,18 @@ jobs:
                   name: perspective-metadata
                   path: rust/
 
+            # `clean: "true"` (~2-4min) dropped 2026-08: runners now start
+            # with ~88G free and no job in the workflow peaks near that; the
+            # `df -h` probe below is the canary if disk pressure returns.
             - name: Initialize Build
               id: init-step
               uses: ./.github/actions/install-deps
               with:
-                  clean: "true"
                   python: "false"
                   playwright: "true"
                   ccache: "emscripten-wasm32"
+                  emsdk_cache: "wasm32"
+                  cache_save: ${{ steps.config-step.outputs.SAVE_CACHE }}
                   skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
 
             - name: WebAssembly Build
@@ -155,6 +172,9 @@ jobs:
               env:
                   PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,react,anywidget"
                   PSP_USE_CCACHE: "1"
+
+            - name: Run df -h
+              run: df -h
 
             - uses: actions/upload-artifact@v4
               with:
@@ -208,14 +228,16 @@ jobs:
                   name: perspective-metadata
                   path: rust/
 
+            # `clean: "true"` dropped 2026-08 — see `build_js`.
             - name: Initialize Build
               id: init-step
               uses: ./.github/actions/install-deps
               with:
-                  clean: "true"
                   python: "false"
                   playwright: "true"
                   ccache: "emscripten-wasm64"
+                  emsdk_cache: "wasm64"
+                  cache_save: ${{ steps.config-step.outputs.SAVE_CACHE }}
                   skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
 
             - name: WebAssembly Build (Memory64)
@@ -224,6 +246,9 @@ jobs:
                   PACKAGE: "server"
                   PSP_WASM64: "only"
                   PSP_USE_CCACHE: "1"
+
+            - name: Run df -h
+              run: df -h
 
             - uses: actions/upload-artifact@v4
               with:
@@ -292,6 +317,9 @@ jobs:
                   name: perspective-metadata
                   path: rust/
 
+            # The C++ engine (the `perspective-server` build-script cmake
+            # step) dominates this job and caches at ~100MB/platform;
+            # `CMakeLists.txt` picks up the launcher via `PSP_USE_CCACHE`.
             - name: Initialize Build
               id: init-step
               uses: ./.github/actions/install-deps
@@ -299,6 +327,9 @@ jobs:
                   javascript: "false"
                   arch: ${{ matrix.arch }}
                   manylinux: ${{ matrix.container && 'true' || 'false' }}
+                  ccache: native-${{ matrix.os }}-${{ matrix.arch }}
+                  ccache_variant: ${{ contains(matrix.os, 'windows') && 'sccache' || 'ccache' }}
+                  cache_save: ${{ steps.config-step.outputs.SAVE_CACHE }}
                   skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
 
             - name: Run df -h
@@ -313,7 +344,11 @@ jobs:
                   PSP_ARCH: ${{ matrix.arch }}
                   PSP_ROOT_DIR: ${{ github.workspace }}
                   PSP_BUILD_WHEEL: 1
+                  PSP_USE_CCACHE: "1"
 
+            # sccache instead of ccache on Windows: stable with MSVC, and
+            # `RUSTC_WRAPPER` additionally caches the rust dependency graph
+            # (rust-cache can't follow the `D:\psp-rust` redirect here).
             - name: Python Build (Windows)
               run: |
                   New-Item -ItemType Directory -Path $env:CARGO_TARGET_DIR -Force
@@ -326,6 +361,9 @@ jobs:
                   PACKAGE: "python"
                   PSP_ARCH: ${{ matrix.arch }}
                   PSP_BUILD_WHEEL: 1
+                  PSP_USE_CCACHE: "1"
+                  PSP_CCACHE_BINARY: sccache
+                  RUSTC_WRAPPER: sccache
 
             - name: Run df -h
               if: ${{ runner.os == 'Linux' }}
@@ -391,7 +429,24 @@ jobs:
                   javascript: "false"
                   arch: ${{ matrix.arch }}
                   manylinux: "false"
+                  ccache: native-rust-${{ matrix.os }}-${{ matrix.arch }}
+                  ccache_variant: ${{ contains(matrix.os, 'windows') && 'sccache' || 'ccache' }}
+                  cargo_cache: ${{ contains(matrix.os, 'windows') && 'true' || 'false' }}
+                  cache_save: ${{ steps.config-step.outputs.SAVE_CACHE }}
                   skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
+
+            # Linux only: rust-cache cannot follow the Windows job's
+            # `CARGO_TARGET_DIR: D:\psp-rust` redirect (its `workspaces`
+            # input path-joins, mangling absolute targets) — Windows relies
+            # on ccache above, which covers its dominant C++ cost.
+            - name: Setup rust cache
+              if: ${{ !contains(matrix.os, 'windows') && steps.config-step.outputs.SKIP_CACHE != 'true' }}
+              uses: Swatinem/rust-cache@v2
+              with:
+                  # rust-cache doesn't read `.cargo/config.toml`'s
+                  # `target-dir = "rust/target"` redirect
+                  workspaces: ". -> rust/target"
+                  save-if: ${{ steps.config-step.outputs.SAVE_CACHE == 'true' }}
 
             - name: Rust Build
               run: pnpm run build
@@ -399,7 +454,9 @@ jobs:
               env:
                   PACKAGE: "rust"
                   PSP_ROOT_DIR: ${{ github.workspace }}
+                  PSP_USE_CCACHE: "1"
 
+            # sccache on Windows — see `build_python`'s Windows build step.
             - name: Rust Build (Windows)
               run: |
                   New-Item -ItemType Directory -Path $env:CARGO_TARGET_DIR -Force
@@ -409,6 +466,9 @@ jobs:
                   CARGO_TARGET_DIR: D:\psp-rust
                   PSP_ROOT_DIR: ${{ github.workspace }}
                   PACKAGE: "rust"
+                  PSP_USE_CCACHE: "1"
+                  PSP_CCACHE_BINARY: sccache
+                  RUSTC_WRAPPER: sccache
 
             - name: Rust Test
               if: ${{ !contains(matrix.os, 'windows') }}
@@ -416,6 +476,7 @@ jobs:
               env:
                   PACKAGE: "rust"
                   PSP_ROOT_DIR: ${{ github.workspace }}
+                  PSP_USE_CCACHE: "1"
 
             - name: Rust Test (Windows)
               run: |
@@ -426,16 +487,9 @@ jobs:
                   CARGO_TARGET_DIR: D:\psp-rust
                   PSP_ROOT_DIR: ${{ github.workspace }}
                   PACKAGE: "rust"
-
-            - name: Package
-              if: ${{ !contains(matrix.os, 'windows') && steps.config-step.outputs.FULL_RUN }}
-              run: cargo package --config .cargo/release.toml --no-verify --allow-dirty -p perspective -p perspective-viewer -p perspective-js -p perspective-client -p perspective-server -p perspective-python
-
-            - uses: actions/upload-artifact@v4
-              if: ${{ !contains(matrix.os, 'windows') && steps.config-step.outputs.FULL_RUN }}
-              with:
-                  name: perspective-rust
-                  path: rust/target/package/*.crate
+                  PSP_USE_CCACHE: "1"
+                  PSP_CCACHE_BINARY: sccache
+                  RUSTC_WRAPPER: sccache
 
     # ,-,---.       .    .   .-,--.           .     .
     #  '|___/ . . . |  ,-|    '|__/ . . ,-. ,-| . ,-| ,-.
@@ -472,6 +526,8 @@ jobs:
                   name: perspective-metadata
                   path: rust/
 
+            # Shares the `emscripten-wasm32` ccache prefix and `wasm32`
+            # emsdk sysroot with `build_js` — same toolchain, same target.
             - name: Initialize Build
               id: init-step
               uses: ./.github/actions/install-deps
@@ -479,7 +535,20 @@ jobs:
                   javascript: "false"
                   arch: ${{ matrix.arch }}
                   manylinux: "false"
+                  ccache: "emscripten-wasm32"
+                  emsdk_cache: "wasm32"
+                  cargo_cache: "false"
+                  cache_save: ${{ steps.config-step.outputs.SAVE_CACHE }}
                   skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
+
+            - name: Setup rust cache
+              if: ${{ steps.config-step.outputs.SKIP_CACHE != 'true' }}
+              uses: Swatinem/rust-cache@v2
+              with:
+                  # rust-cache doesn't read `.cargo/config.toml`'s
+                  # `target-dir = "rust/target"` redirect
+                  workspaces: ". -> rust/target"
+                  save-if: ${{ steps.config-step.outputs.SAVE_CACHE == 'true' }}
 
             # Place the anywidget bundle in-tree _before_ maturin runs, so the
             # pyproject.toml `include` rules package it into the wheel —
@@ -495,6 +564,7 @@ jobs:
                   PSP_PYODIDE: 1
                   PACKAGE: "python"
                   CI: 1
+                  PSP_USE_CCACHE: "1"
 
             - name: Verify wheel is PyPI-compatible (PEP 783)
               shell: bash
@@ -588,6 +658,83 @@ jobs:
     # /` |     |    /|
     # `--'     '   `-'
     #
+    build_python_sdist:
+        needs: [build_js]
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                os:
+                    - ubuntu-22.04
+                python-version:
+                    - 3.11
+                node-version: [22.x]
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Config
+              id: config-step
+              uses: ./.github/actions/config
+
+            - name: Initialize Build
+              id: init-step
+              uses: ./.github/actions/install-deps
+              with:
+                  playwright: "true"
+                  cpp: "false"
+                  emsdk_cache: "wasm32"
+                  cache_save: ${{ steps.config-step.outputs.SAVE_CACHE }}
+                  skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
+
+            - uses: actions/download-artifact@v4
+              with:
+                  name: perspective-js-dist
+                  path: .
+
+            - uses: actions/download-artifact@v4
+              with:
+                  name: perspective-metadata
+                  path: rust/
+
+            - name: Build extension
+              run: pnpm run build
+              env:
+                  # `anywidget` builds the widget bundle into the python static
+                  # dir; `jupyterlab` builds the labextension into the maturin
+                  # `data` dir the sdist packages. Order matters.
+                  PACKAGE: "anywidget,jupyterlab"
+
+            - name: Python Build sdist
+              run: pnpm run build
+              env:
+                  PACKAGE: "python"
+                  PSP_BUILD_SDIST: 1
+
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: perspective-python-sdist
+                  path: rust/target/wheels/*.tar.gz
+
+            - name: Package
+              if: ${{ steps.config-step.outputs.FULL_RUN }}
+              run: cargo package --config .cargo/release.toml --no-verify --allow-dirty -p perspective -p perspective-viewer -p perspective-js -p perspective-client -p perspective-server -p perspective-python
+
+            - uses: actions/upload-artifact@v4
+              if: ${{ steps.config-step.outputs.FULL_RUN }}
+              with:
+                  name: perspective-rust
+                  path: rust/target/package/*.crate
+
+    # A single Linux job: the injected labextension + anywidget assets are
+    # platform-independent and `repack_wheel.mjs` is a zip rewrite, so this
+    # job repacks EVERY platform's wheel (the old per-platform matrix burned
+    # 2 extra runners on it — 8.8min of pure setup on Windows — and never
+    # repacked the linux-aarch64 wheel at all, publishing it without the
+    # labextension). Repacked wheels ship as one `-repacked` artifact
+    # consumed by `publish`; the per-platform artifacts keep the original
+    # un-repacked wheels for `test_python`/`benchmark_python`.
     build_and_test_jupyterlab:
         needs: [build_js, build_python]
         runs-on: ${{ matrix.os }}
@@ -596,27 +743,9 @@ jobs:
             matrix:
                 os:
                     - ubuntu-22.04
-                    - macos-14
-                    - windows-2025
-                arch:
-                    - aarch64
-                    - x86_64
                 python-version:
                     - 3.11
                 node-version: [22.x]
-                is-release:
-                    - ${{ startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' || github.event.inputs.ci-full }}
-                exclude:
-                    - os: windows-2025
-                      arch: aarch64
-                    - os: ubuntu-22.04
-                      arch: aarch64
-                    - os: macos-14
-                      is-release: false
-                    - os: macos-14
-                      arch: x86_64
-                    - os: windows-2025
-                      is-release: false
 
         steps:
             - name: Checkout
@@ -647,7 +776,26 @@ jobs:
 
             - uses: actions/download-artifact@v4
               with:
-                  name: perspective-python-dist-${{ matrix.arch }}-${{ matrix.os }}-${{ matrix.python-version }}
+                  name: perspective-python-dist-x86_64-ubuntu-22.04-${{ matrix.python-version }}
+                  path: .
+
+            - uses: actions/download-artifact@v4
+              with:
+                  name: perspective-python-dist-aarch64-ubuntu-22.04-arm-${{ matrix.python-version }}
+                  path: .
+
+            # The win/mac wheels only exist on release-shaped runs — this
+            # condition must mirror `build_python`'s `is-release` matrix.
+            - uses: actions/download-artifact@v4
+              if: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' || github.event.inputs.ci-full == 'true' }}
+              with:
+                  name: perspective-python-dist-aarch64-macos-14-${{ matrix.python-version }}
+                  path: .
+
+            - uses: actions/download-artifact@v4
+              if: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' || github.event.inputs.ci-full == 'true' }}
+              with:
+                  name: perspective-python-dist-x86_64-windows-2025-${{ matrix.python-version }}
                   path: .
 
             - name: Build extension
@@ -660,43 +808,28 @@ jobs:
 
             - run: node tools/scripts/repack_wheel.mjs
 
-            - name: Python Build sdist
-              run: pnpm run build
-              env:
-                  PACKAGE: "python"
-                  if: ${{ runner.os == 'Linux' }}
-                  # PSP_USE_CCACHE: 1
-                  # PSP_ARCH: ${{ matrix.arch }}
-                  PSP_BUILD_SDIST: 1
-
             - uses: actions/upload-artifact@v4
               with:
-                  name: perspective-python-dist-${{ matrix.arch}}-${{ matrix.os }}-${{ matrix.python-version }}
+                  name: perspective-python-dist-repacked
                   path: "*.whl"
-                  overwrite: true
 
-            - uses: actions/upload-artifact@v4
-              if: ${{ runner.os == 'Linux' }}
+            # Only the Linux x86_64 wheel is installable on this runner —
+            # the other platforms' wheels share the working directory.
+            - uses: ./.github/actions/install-wheel
               with:
-                  name: perspective-python-sdist
-                  path: rust/target/wheels/*.tar.gz
+                  glob: "*manylinux*x86_64.whl"
 
             - uses: ./.github/actions/install-wheel
-              if: ${{ runner.os == 'Linux' }}
-
-            - uses: ./.github/actions/install-wheel
-              if: ${{ runner.os == 'Linux' }}
               with:
                   inplace: "false"
+                  glob: "*manylinux*x86_64.whl"
 
             # jlab_start.ts passes an explicit `--config`, so no
             # `jupyter lab --generate-config` is needed.
             - name: Run Jupyter Tests
-              if: ${{ runner.os == 'Linux' }}
               run: pnpm run test --jupyter
               env:
                   PACKAGE: "jupyterlab"
-
 
     #  ,--,--'      .    ,-_/              .---.               .
     #  `- | ,-. ,-. |-   '  | ,-. .  , ,-. \___  ,-. ,-. . ,-. |-
@@ -845,7 +978,7 @@ jobs:
 
     test_python_sdist:
         if: startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' || github.event.inputs.ci-full
-        needs: [build_and_test_jupyterlab, build_and_test_rust]
+        needs: [build_python_sdist]
         runs-on: ${{ matrix.os }}
         strategy:
             fail-fast: false
@@ -864,6 +997,9 @@ jobs:
               id: config-step
               uses: ./.github/actions/config
 
+            # sccache rather than ccache: pip unpacks the sdist into a
+            # randomized temp dir each run, and `RUSTC_WRAPPER` also covers
+            # the rust dependency compile inside the pip build.
             - name: Initialize Build
               uses: ./.github/actions/install-deps
               with:
@@ -871,6 +1007,9 @@ jobs:
                   cpp: "true"
                   python: "true"
                   javascript: "false"
+                  ccache: "sdist-python"
+                  ccache_variant: "sccache"
+                  cache_save: ${{ steps.config-step.outputs.SAVE_CACHE }}
                   skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
 
             - uses: actions/download-artifact@v4
@@ -902,6 +1041,10 @@ jobs:
             - name: Install perspective-python sdist
               shell: bash
               run: python -m pip install -vv ./perspective*.tar.gz
+              env:
+                  PSP_USE_CCACHE: "1"
+                  PSP_CCACHE_BINARY: sccache
+                  RUSTC_WRAPPER: sccache
 
             - name: Verify licenses are installed
               shell: bash
@@ -938,7 +1081,7 @@ jobs:
     #        `-'
     benchmark_python:
         needs: [build_python, build_js]
-        if: startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' || github.event.inputs.ci-full
+        if: startsWith(github.ref, 'refs/tags/v')
         runs-on: ${{ matrix.os }}
         strategy:
             fail-fast: false
@@ -998,7 +1141,7 @@ jobs:
     # `--'                              '
     benchmark_js:
         needs: [build_js]
-        if: startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' || github.event.inputs.ci-full
+        if: startsWith(github.ref, 'refs/tags/v')
         strategy:
             matrix:
                 os: [ubuntu-22.04]
@@ -1082,25 +1225,13 @@ jobs:
                   name: perspective-js-dist
                   path: .
 
+            # All native-platform wheels, with the labextension + anywidget
+            # assets injected by `build_and_test_jupyterlab`. The per-platform
+            # `perspective-python-dist-*` artifacts hold the un-repacked
+            # originals and must not be published.
             - uses: actions/download-artifact@v4
               with:
-                  name: perspective-python-dist-aarch64-macos-14-3.11
-
-            - uses: actions/download-artifact@v4
-              with:
-                  name: perspective-python-dist-aarch64-ubuntu-22.04-arm-3.11
-
-            # - uses: actions/download-artifact@v4
-            #   with:
-            #       name: perspective-python-dist-x86_64-macos-14-3.9
-
-            - uses: actions/download-artifact@v4
-              with:
-                  name: perspective-python-dist-x86_64-windows-2025-3.11
-
-            - uses: actions/download-artifact@v4
-              with:
-                  name: perspective-python-dist-x86_64-ubuntu-22.04-3.11
+                  name: perspective-python-dist-repacked
 
             - uses: actions/download-artifact@v4
               with:

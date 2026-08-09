@@ -124,8 +124,15 @@ else()
 endif()
 
 if(DEFINED ENV{PSP_USE_CCACHE})
-    set(CMAKE_C_COMPILER_LAUNCHER ccache)
-    set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
+    # `PSP_CCACHE_BINARY` selects an alternate launcher (CI uses `sccache`
+    # on Windows, where MSVC support in ccache is unreliable)
+    if(DEFINED ENV{PSP_CCACHE_BINARY})
+        set(CMAKE_C_COMPILER_LAUNCHER $ENV{PSP_CCACHE_BINARY})
+        set(CMAKE_CXX_COMPILER_LAUNCHER $ENV{PSP_CCACHE_BINARY})
+    else()
+        set(CMAKE_C_COMPILER_LAUNCHER ccache)
+        set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
+    endif()
 endif()
 
 if(NOT DEFINED PSP_CPP_BUILD)

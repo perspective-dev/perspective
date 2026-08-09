@@ -56,7 +56,10 @@ function playwright(pkg, is_jlab) {
         .slice(2)
         .filter(
             (x) =>
-                x !== "--ci" && x !== "--jupyter" && x !== "--fetch-snapshots",
+                x !== "--" &&
+                x !== "--ci" &&
+                x !== "--jupyter" &&
+                x !== "--fetch-snapshots",
         );
 
     const env = { ...process.env, TZ: "UTC" };

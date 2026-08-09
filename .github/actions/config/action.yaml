@@ -18,6 +18,8 @@ outputs:
         value: ${{ steps.setuppush.outputs.SKIP_CI || steps.setuppr.outputs.SKIP_CI || steps.setupmanual.outputs.SKIP_CI }}
     SKIP_CACHE:
         value: ${{ steps.setuppush.outputs.SKIP_CACHE || steps.setuppr.outputs.SKIP_CACHE || steps.setupmanual.outputs.SKIP_CACHE }}
+    SAVE_CACHE:
+        value: ${{ steps.setuppush.outputs.SAVE_CACHE || steps.setuppr.outputs.SAVE_CACHE || steps.setupmanual.outputs.SAVE_CACHE }}
     FULL_RUN:
         value: ${{ steps.setuppush.outputs.FULL_RUN || steps.setuppr.outputs.FULL_RUN || steps.setupmanual.outputs.FULL_RUN }}
     PUBLISH_RELEASE:
@@ -54,6 +56,7 @@ runs:
               echo "COMMIT_MSG=$COMMIT_MSG" >> $GITHUB_OUTPUT
               echo "SKIP_CI=$SKIP_CI" >> $GITHUB_OUTPUT
               echo "SKIP_CACHE=$SKIP_CACHE" >> $GITHUB_OUTPUT
+              echo "SAVE_CACHE=$SAVE_CACHE" >> $GITHUB_OUTPUT
               echo "FULL_RUN=$FULL_RUN" >> $GITHUB_OUTPUT
               echo "PUBLISH_RELEASE=$PUBLISH_RELEASE" >> $GITHUB_OUTPUT
               echo "SKIP_PYTHON=$SKIP_PYTHON" >> $GITHUB_OUTPUT
@@ -61,6 +64,7 @@ runs:
           env:
               SKIP_CI: ${{ contains(github.event.head_commit.message, '[ci-skip]') }}
               SKIP_CACHE: ${{ contains(github.event.head_commit.message, '[ci-skip-cache]') }}
+              SAVE_CACHE: ${{ github.ref_name == 'master' || startsWith(github.ref_name, 'v') }}
               FULL_RUN: ${{ startsWith(github.ref_name, 'v') || contains(github.event.head_commit.message, '[ci-full]') || github.ref_name == 'master' }}
               PUBLISH_RELEASE: ${{ startsWith(github.ref_name, 'v') }}
               SKIP_PYTHON: ${{ contains(github.event.head_commit.message, '[ci-skip-python]') }}
@@ -81,6 +85,7 @@ runs:
               echo "COMMIT_MSG=$COMMIT_MSG" >> $GITHUB_OUTPUT
               echo "SKIP_CI=$SKIP_CI" >> $GITHUB_OUTPUT
               echo "SKIP_CACHE=$SKIP_CACHE" >> $GITHUB_OUTPUT
+              echo "SAVE_CACHE=$SAVE_CACHE" >> $GITHUB_OUTPUT
               echo "FULL_RUN=$FULL_RUN" >> $GITHUB_OUTPUT
               echo "PUBLISH_RELEASE=$PUBLISH_RELEASE" >> $GITHUB_OUTPUT
               echo "SKIP_PYTHON=$SKIP_PYTHON" >> $GITHUB_OUTPUT
@@ -88,6 +93,7 @@ runs:
           env:
               SKIP_CI: ${{ contains(github.event.pull_request.title, '[ci-skip]') || contains(github.event.head_commit.message, '[ci-skip]') }}
               SKIP_CACHE: ${{ contains(github.event.pull_request.title, '[ci-skip-cache]') || contains(github.event.head_commit.message, '[ci-skip-cache]') }}
+              SAVE_CACHE: "false"
               FULL_RUN: ${{ contains(github.event.pull_request.title, '[ci-full]') || contains(github.event.head_commit.message, '[ci-full]') }}
               PUBLISH_RELEASE: ${{ startsWith(github.ref_name, 'v') }}
               SKIP_PYTHON: ${{ contains(github.event.pull_request.title, '[ci-skip-python]') || contains(github.event.head_commit.message, '[ci-skip-python]') }}
@@ -108,6 +114,7 @@ runs:
               echo "COMMIT_MSG=$COMMIT_MSG" >> $GITHUB_OUTPUT
               echo "SKIP_CI=$SKIP_CI" >> $GITHUB_OUTPUT
               echo "SKIP_CACHE=$SKIP_CACHE" >> $GITHUB_OUTPUT
+              echo "SAVE_CACHE=$SAVE_CACHE" >> $GITHUB_OUTPUT
               echo "FULL_RUN=$FULL_RUN" >> $GITHUB_OUTPUT
               echo "PUBLISH_RELEASE=$PUBLISH_RELEASE" >> $GITHUB_OUTPUT
               echo "SKIP_PYTHON=$SKIP_PYTHON" >> $GITHUB_OUTPUT
@@ -115,6 +122,7 @@ runs:
           env:
               SKIP_CI: false
               SKIP_CACHE: ${{ github.event.inputs.ci-skip-cache }}
+              SAVE_CACHE: "true"
               FULL_RUN: ${{ github.event.inputs.ci-full }}
               PUBLISH_RELEASE: ${{ startsWith(github.ref_name, 'v') }}
               SKIP_PYTHON: ${{ github.event.inputs.ci-skip-python }}
