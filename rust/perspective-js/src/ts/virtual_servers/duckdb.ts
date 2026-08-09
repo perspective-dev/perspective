@@ -26,7 +26,7 @@ import type { ColumnType } from "@perspective-dev/client/dist/esm/ts-rs/ColumnTy
 import type { ViewConfig } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfig.d.ts";
 import type { ViewConfigUpdate } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfigUpdate.d.ts";
 import type { ViewWindow } from "@perspective-dev/client/dist/esm/ts-rs/ViewWindow.d.ts";
-import type { WindowAggregate } from "@perspective-dev/client/dist/esm/ts-rs/WindowAggregate.d.ts";
+import type { WindowAggSpec } from "@perspective-dev/client/dist/esm/ts-rs/WindowAggSpec.d.ts";
 import type { Scalar } from "@perspective-dev/client/dist/esm/ts-rs/Scalar.d.ts";
 import type * as duckdb from "@duckdb/duckdb-wasm";
 
@@ -66,28 +66,61 @@ const STRING_AGGS = [
     "string_agg",
 ];
 
-// The window aggregates the SQL translation supports, per source
-// column type (`ema` is recursive - no SQL window equivalent).
-const WINDOW_AGGREGATES: WindowAggregate[] = [
-    "sum",
-    "avg",
-    "count",
-    "min",
-    "max",
-    "stddev",
-    "var",
-    "lag",
-    "lead",
-    "diff",
-    "rate",
+const FRAMES = ["rows", "range", "cumulative"];
+
+const WINDOW_AGGREGATES: WindowAggSpec[] = [
+    { name: "sum", frames: FRAMES, result_type: "float" },
+    { name: "avg", frames: FRAMES, result_type: "float" },
+    { name: "count", frames: FRAMES, result_type: "float" },
+    { name: "min", frames: FRAMES },
+    { name: "max", frames: FRAMES },
+    { name: "product", frames: FRAMES, result_type: "float" },
+    { name: "median", frames: FRAMES, result_type: "float" },
+    // DuckDB spells sample and population variants separately, so both are
+    // offered rather than one being picked on the user's behalf.
+    { name: "stddev_samp", frames: FRAMES, result_type: "float" },
+    { name: "stddev_pop", frames: FRAMES, result_type: "float" },
+    { name: "var_samp", frames: FRAMES, result_type: "float" },
+    { name: "var_pop", frames: FRAMES, result_type: "float" },
+    // Navigation.
+    { name: "first_value", frames: FRAMES },
+    { name: "last_value", frames: FRAMES },
+    { name: "nth_value", frames: FRAMES, offset: true },
+    { name: "lag", offset: true },
+    { name: "lead", offset: true },
+    // Ranking. These take no source column - the window's `order_by` is their
+    // input - but Perspective requires one, so the choice of source is
+    // immaterial for them.
+    { name: "row_number", result_type: "float" },
+    { name: "rank", result_type: "float" },
+    { name: "dense_rank", result_type: "float" },
+    { name: "percent_rank", result_type: "float" },
+    { name: "cume_dist", result_type: "float" },
+    // `ntile`'s argument is a bucket count rather than a row offset.
+    { name: "ntile", offset: true, result_type: "float" },
+    // Perspective's own, with no DuckDB equivalent - the SQL translation
+    // synthesizes them from `lag` and `first_value`.
+    { name: "diff", offset: true, result_type: "float" },
+    { name: "rate", frames: ["range"], result_type: "float" },
 ];
 
-const WINDOW_AGGREGATES_ANY: WindowAggregate[] = [
-    "count",
-    "min",
-    "max",
-    "lag",
-    "lead",
+// Arithmetic is undefined for the non-numeric types; ordering and navigation
+// are not.
+const WINDOW_AGGREGATES_ANY: WindowAggSpec[] = [
+    { name: "count", frames: FRAMES, result_type: "float" },
+    { name: "min", frames: FRAMES },
+    { name: "max", frames: FRAMES },
+    { name: "first_value", frames: FRAMES },
+    { name: "last_value", frames: FRAMES },
+    { name: "nth_value", frames: FRAMES, offset: true },
+    { name: "lag", offset: true },
+    { name: "lead", offset: true },
+    { name: "row_number", result_type: "float" },
+    { name: "rank", result_type: "float" },
+    { name: "dense_rank", result_type: "float" },
+    { name: "percent_rank", result_type: "float" },
+    { name: "cume_dist", result_type: "float" },
+    { name: "ntile", offset: true, result_type: "float" },
 ];
 
 const FILTER_OPS = [
@@ -123,51 +156,68 @@ const STRING_FILTER_OPS = [
     "NOT ILIKE",
 ];
 
+/**
+ * Convert a DuckDB `dtype` to a Perspective `ColumnType`.
+ */
 function duckdbTypeToPsp(name: string): ColumnType {
     name = name.toLowerCase();
-    if (name === "varchar" || name == "utf8") {
-        return "string";
+
+    if (name.startsWith("bool")) {
+        return "boolean";
     }
 
+    // 32-bit and narrower - `coerce_column` widens these to `Int32`.
     if (
-        name === "double" ||
-        name === "bigint" ||
-        name === "hugeint" ||
-        name === "float64" ||
-        name.startsWith("decimal")
+        ["tinyint", "smallint", "integer", "utinyint", "usmallint"].includes(
+            name,
+        ) ||
+        ["int8", "int16", "int32", "uint8", "uint16"].includes(name)
+    ) {
+        return "integer";
+    }
+
+    // Wider than `Int32`, or fractional - all coerce to `Float64`.
+    if (
+        ["bigint", "hugeint", "uhugeint", "uinteger", "ubigint"].includes(
+            name,
+        ) ||
+        ["float", "real", "double", "varint"].includes(name) ||
+        ["int64", "uint32", "uint64", "float32", "float64"].includes(name) ||
+        name.startsWith("decimal") ||
+        name.startsWith("numeric")
     ) {
         return "float";
-    }
-
-    if (name.startsWith("int")) {
-        return "integer";
     }
 
     if (name.startsWith("date")) {
         return "date";
     }
 
-    if (name.startsWith("bool")) {
-        return "boolean";
-    }
-
-    if (name.startsWith("timestamp")) {
+    // `timestamp`, `timestamptz`, `timestamp_ns`, and `time`/`timetz`,
+    // which coerce to `Timestamp(Millisecond)` rather than to a number.
+    if (name.startsWith("time")) {
         return "datetime";
     }
 
-    if (name.startsWith("json")) {
-        return "string";
+    // Everything else renders as text: `varchar`, `enum(...)` (which
+    // arrives dictionary-encoded), `json`, `uuid`, `blob`, `interval`,
+    // and the nested types.
+    if (
+        !(
+            name.startsWith("varchar") ||
+            name === "utf8" ||
+            name.startsWith("enum") ||
+            ["json", "uuid", "blob", "bit", "interval"].includes(name) ||
+            name.startsWith("struct") ||
+            name.startsWith("map") ||
+            name.startsWith("union") ||
+            name.endsWith("[]")
+        )
+    ) {
+        // Unknown, not fatal - the column still renders, as text.
+        console.warn(`Unknown type '${name}'`);
     }
 
-    if (name.startsWith("struct")) {
-        return "string";
-    }
-
-    if (name.startsWith("time")) {
-        return "float";
-    }
-
-    console.warn(`Unknown type '${name}'`);
     return "string";
 }
 

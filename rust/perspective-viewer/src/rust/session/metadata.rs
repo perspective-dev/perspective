@@ -98,39 +98,37 @@ impl SessionMetadata {
 
     /// Records the pre-aggregation types of the config's window columns, so
     /// `get_column_table_type` resolves them like any other derived column.
-    /// Types mirror the engine's `t_window_engine::resolve_dtype` rules from
-    /// the window's op and its source's table type - independent of any
-    /// aggregation the view may also apply.
     pub(super) fn update_windows(
         &mut self,
         windows: &perspective_client::config::Windows,
     ) -> ApiResult<()> {
-        use perspective_client::config::WindowAggregate;
         let window_schema = windows
             .iter()
             .filter_map(|(name, w)| {
                 let source = self.get_column_table_type(&w.column)?;
-                let dtype = match w.aggregate {
-                    WindowAggregate::Sum
-                    | WindowAggregate::Avg
-                    | WindowAggregate::Stddev
-                    | WindowAggregate::Var
-                    | WindowAggregate::Rate
-                    | WindowAggregate::Ema
-                    | WindowAggregate::Diff => ColumnType::Float,
-                    WindowAggregate::Count => ColumnType::Integer,
-                    WindowAggregate::Min
-                    | WindowAggregate::Max
-                    | WindowAggregate::First
-                    | WindowAggregate::Last
-                    | WindowAggregate::Lag
-                    | WindowAggregate::Lead => source,
-                };
+                let dtype = self
+                    .get_window_aggregate(source, &w.aggregate)
+                    .and_then(|spec| spec.result_type)
+                    .and_then(|ty| ColumnType::try_from(ty).ok())
+                    .unwrap_or(source);
+
                 Some((name.clone(), dtype))
             })
             .collect();
         self.as_mut().unwrap().window_schema = window_schema;
         Ok(())
+    }
+
+    /// The declaration for one window aggregate over a `source` column type.
+    pub fn get_window_aggregate(
+        &self,
+        source: ColumnType,
+        name: &str,
+    ) -> Option<perspective_client::proto::WindowAggregateArgs> {
+        self.get_features()?
+            .get_window_aggregates(source)
+            .into_iter()
+            .find(|x| x.name == name)
     }
 
     /// Whether `view_schema` has been populated by a prior successful

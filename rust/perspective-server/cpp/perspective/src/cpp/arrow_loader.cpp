@@ -17,6 +17,7 @@
 #include <arrow/array/array_primitive.h>
 #include <arrow/type.h>
 #include <arrow/type_fwd.h>
+#include <algorithm>
 #include <cstdint>
 #include <exception>
 #include <limits>
@@ -25,6 +26,7 @@
 #include <perspective/arrow_loader.h>
 #include "perspective/exception.h"
 #include <sstream>
+#include <type_traits>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
@@ -205,7 +207,9 @@ convert_type(const std::string& src) {
 }
 
 void
-ArrowLoader::initialize(const std::uint8_t* ptr, const uint32_t length) {
+ArrowLoader::initialize(
+    const std::uint8_t* ptr, const uint32_t length, t_list_flatten mode
+) {
     if (std::memcmp("ARROW1", (const void*)ptr, 6) == 0) {
         load_file(ptr, length, m_table);
     } else {
@@ -217,13 +221,22 @@ ArrowLoader::initialize(const std::uint8_t* ptr, const uint32_t length) {
         PSP_COMPLAIN_AND_ABORT(validation.ToString());
     }
 
-    std::shared_ptr<arrow::Schema> schema = m_table->schema();
-    std::vector<std::shared_ptr<arrow::Field>> fields = schema->fields();
+    if (!normalize_table_is_noop(*m_table, mode)) {
+        m_expanded = normalize_table_expands(*m_table, mode);
+        m_normalized = std::make_unique<t_normalized_table>(
+            normalize_table(m_table, mode)
+        );
+    }
 
-    for (const auto& field : fields) {
+    for (const auto& field : fields()) {
         m_names.push_back(field->name());
         m_types.push_back(convert_type(field->type()->name()));
     }
+}
+
+const std::vector<std::shared_ptr<arrow::Field>>&
+ArrowLoader::fields() const {
+    return m_normalized ? m_normalized->fields : m_table->schema()->fields();
 }
 
 void
@@ -234,9 +247,7 @@ ArrowLoader::init_csv(
         psp_schema
 ) {
     m_table = deduplicate_table(csvToTable(csv, is_update, psp_schema));
-    std::shared_ptr<arrow::Schema> schema = m_table->schema();
-    std::vector<std::shared_ptr<arrow::Field>> fields = schema->fields();
-    for (const auto& field : fields) {
+    for (const auto& field : fields()) {
         m_names.push_back(field->name());
         m_types.push_back(convert_type(field->type()->name()));
     }
@@ -251,8 +262,7 @@ ArrowLoader::fill_table(
     bool is_update
 ) {
     bool implicit_index = false;
-    std::shared_ptr<arrow::Schema> schema = m_table->schema();
-    std::vector<std::shared_ptr<arrow::Field>> fields = schema->fields();
+    const auto& arrow_fields = fields();
 
     parallel_for(int(m_names.size()), [&](int cidx) {
         auto name = m_names[cidx];
@@ -262,7 +272,7 @@ ArrowLoader::fill_table(
             // Skip columns that are defined in the arrow but not
             // in the Table's input schema.
 
-            auto raw_type = fields[cidx]->type()->name();
+            auto raw_type = arrow_fields[cidx]->type()->name();
 
             if (name == "__INDEX__") {
                 implicit_index = true;
@@ -308,18 +318,62 @@ ArrowLoader::fill_table(
     }
 }
 
-template <typename T, typename V>
+/**
+ * Read output row `i` straight through, i.e. no row expansion.
+ */
+struct t_identity_gather {
+    static constexpr bool is_identity = true;
+
+    std::int64_t operator[](std::int64_t i) const { return i; }
+
+    bool is_null(std::int64_t) const { return false; }
+};
+
+/**
+ * Read output row `i` from the source row an expansion assigned to it.
+ */
+struct t_index_gather {
+    static constexpr bool is_identity = false;
+    const std::int64_t* m_indices;
+    std::int64_t operator[](std::int64_t i) const {
+        return m_indices[i] < 0 ? 0 : m_indices[i];
+    }
+
+    bool is_null(std::int64_t i) const { return m_indices[i] < 0; }
+};
+
+#define COPY_COLUMN_PRIMITIVE(CTYPE, ARROW_TYPE)                               \
+    {                                                                          \
+        auto scol = std::static_pointer_cast<ARROW_TYPE>(src);                 \
+        const auto* vals = scol->raw_values();                                 \
+        if constexpr (GATHER::is_identity) {                                   \
+            std::memcpy(                                                       \
+                dest->get_nth<CTYPE>(offset),                                  \
+                (void*)vals,                                                   \
+                len * sizeof(CTYPE)                                            \
+            );                                                                 \
+        } else {                                                               \
+            for (std::int64_t i = 0; i < len; ++i) {                           \
+                dest->set_nth<CTYPE>(                                          \
+                    offset + i, static_cast<CTYPE>(vals[gather[i]])            \
+                );                                                             \
+            }                                                                  \
+        }                                                                      \
+    }
+
+template <typename T, typename V, typename GATHER>
 void
 iter_col_copy(
     const std::shared_ptr<t_column>& dest,
     std::shared_ptr<arrow::Array> src,
     const int64_t offset,
-    const int64_t len
+    const int64_t len,
+    const GATHER& gather
 ) {
     std::shared_ptr<T> scol = std::static_pointer_cast<T>(src);
     const typename T::value_type* vals = scol->raw_values();
-    for (uint32_t i = 0; i < len; i++) {
-        dest->set_nth<V>(offset + i, static_cast<V>(vals[i]));
+    for (int64_t i = 0; i < len; i++) {
+        dest->set_nth<V>(offset + i, static_cast<V>(vals[gather[i]]));
     }
 }
 
@@ -376,7 +430,11 @@ copy_integer_list(
         for (uint32_t j = 0; j < row_array_length; j++) {
             const auto elem_location = array_offsets[i] + j;
             const auto elem = raw_values[elem_location];
-            writer.Int64(elem);
+            if constexpr (std::is_unsigned_v<typename T::value_type>) {
+                writer.Uint64(elem);
+            } else {
+                writer.Int64(elem);
+            }
         }
         writer.EndArray();
         dest->set_nth(i, s.GetString());
@@ -432,15 +490,23 @@ copy_float_list(
     }
 }
 
+template <typename GATHER>
 void
-copy_array(
+copy_array_impl(
     const std::shared_ptr<t_column>& dest,
     const std::shared_ptr<arrow::Array>& src,
     const int64_t offset,
-    const int64_t len
+    const int64_t len,
+    const GATHER& gather
 ) {
     switch (src->type()->id()) {
         case arrow::ListType::type_id: {
+            if constexpr (!GATHER::is_identity) {
+                PSP_COMPLAIN_AND_ABORT(
+                    "Cannot expand rows of a stringified list column\n"
+                );
+            }
+
             auto list = std::static_pointer_cast<::arrow::ListArray>(src);
 
             switch (list->value_type()->id()) {
@@ -465,8 +531,20 @@ copy_array(
                 case ::arrow::Int32Type::type_id: {
                     copy_integer_list<arrow::Int32Array>(list, dest, len);
                 } break;
+                case ::arrow::Int64Type::type_id: {
+                    copy_integer_list<arrow::Int64Array>(list, dest, len);
+                } break;
+                case ::arrow::UInt8Type::type_id: {
+                    copy_integer_list<arrow::UInt8Array>(list, dest, len);
+                } break;
+                case ::arrow::UInt16Type::type_id: {
+                    copy_integer_list<arrow::UInt16Array>(list, dest, len);
+                } break;
                 case ::arrow::UInt32Type::type_id: {
                     copy_integer_list<arrow::UInt32Array>(list, dest, len);
+                } break;
+                case ::arrow::UInt64Type::type_id: {
+                    copy_integer_list<arrow::UInt64Array>(list, dest, len);
                 } break;
                 case ::arrow::StringType::type_id: {
                     copy_string_list(list, dest, len);
@@ -536,42 +614,42 @@ copy_array(
             switch (indices->type()->id()) {
                 case arrow::Int8Type::type_id: {
                     iter_col_copy<::arrow::Int8Array, t_uindex>(
-                        dest, indices, offset, len
+                        dest, indices, offset, len, gather
                     );
                 } break;
                 case ::arrow::UInt8Type::type_id: {
                     iter_col_copy<::arrow::UInt8Array, t_uindex>(
-                        dest, indices, offset, len
+                        dest, indices, offset, len, gather
                     );
                 } break;
                 case ::arrow::Int16Type::type_id: {
                     iter_col_copy<::arrow::Int16Array, t_uindex>(
-                        dest, indices, offset, len
+                        dest, indices, offset, len, gather
                     );
                 } break;
                 case ::arrow::UInt16Type::type_id: {
                     iter_col_copy<::arrow::UInt16Array, t_uindex>(
-                        dest, indices, offset, len
+                        dest, indices, offset, len, gather
                     );
                 } break;
                 case ::arrow::Int32Type::type_id: {
                     iter_col_copy<::arrow::Int32Array, t_uindex>(
-                        dest, indices, offset, len
+                        dest, indices, offset, len, gather
                     );
                 } break;
                 case ::arrow::UInt32Type::type_id: {
                     iter_col_copy<::arrow::UInt32Array, t_uindex>(
-                        dest, indices, offset, len
+                        dest, indices, offset, len, gather
                     );
                 } break;
                 case ::arrow::Int64Type::type_id: {
                     iter_col_copy<::arrow::Int64Array, t_uindex>(
-                        dest, indices, offset, len
+                        dest, indices, offset, len, gather
                     );
                 } break;
                 case ::arrow::UInt64Type::type_id: {
                     iter_col_copy<::arrow::UInt64Array, t_uindex>(
-                        dest, indices, offset, len
+                        dest, indices, offset, len, gather
                     );
                 } break;
                 default: {
@@ -592,9 +670,10 @@ copy_array(
 
             std::string elem;
 
-            for (std::uint32_t i = 0; i < len; ++i) {
-                arrow::LargeStringArray::offset_type bidx = offsets[i];
-                std::size_t es = offsets[i + 1] - bidx;
+            for (std::int64_t i = 0; i < len; ++i) {
+                const auto src_i = gather[i];
+                arrow::LargeStringArray::offset_type bidx = offsets[src_i];
+                std::size_t es = offsets[src_i + 1] - bidx;
                 elem.assign(reinterpret_cast<const char*>(values) + bidx, es);
                 dest->set_nth(offset + i, elem);
             }
@@ -608,76 +687,37 @@ copy_array(
 
             std::string elem;
 
-            for (std::uint32_t i = 0; i < len; ++i) {
-                std::int32_t bidx = offsets[i];
-                std::size_t es = offsets[i + 1] - bidx;
+            for (std::int64_t i = 0; i < len; ++i) {
+                const auto src_i = gather[i];
+                std::int32_t bidx = offsets[src_i];
+                std::size_t es = offsets[src_i + 1] - bidx;
                 elem.assign(reinterpret_cast<const char*>(values) + bidx, es);
                 dest->set_nth(offset + i, elem);
             }
         } break;
         case arrow::Int8Type::type_id: {
-            auto scol = std::static_pointer_cast<arrow::Int8Array>(src);
-            std::memcpy(
-                dest->get_nth<std::int8_t>(offset),
-                (void*)scol->raw_values(),
-                len
-            );
+            COPY_COLUMN_PRIMITIVE(std::int8_t, arrow::Int8Array);
         } break;
         case arrow::UInt8Type::type_id: {
-            auto scol = std::static_pointer_cast<arrow::UInt8Array>(src);
-            std::memcpy(
-                dest->get_nth<std::uint8_t>(offset),
-                (void*)scol->raw_values(),
-                len
-            );
+            COPY_COLUMN_PRIMITIVE(std::uint8_t, arrow::UInt8Array);
         } break;
         case arrow::Int16Type::type_id: {
-            auto scol = std::static_pointer_cast<arrow::Int16Array>(src);
-            std::memcpy(
-                dest->get_nth<std::int16_t>(offset),
-                (void*)scol->raw_values(),
-                len * 2
-            );
+            COPY_COLUMN_PRIMITIVE(std::int16_t, arrow::Int16Array);
         } break;
         case arrow::UInt16Type::type_id: {
-            auto scol = std::static_pointer_cast<arrow::UInt16Array>(src);
-            std::memcpy(
-                dest->get_nth<std::uint16_t>(offset),
-                (void*)scol->raw_values(),
-                len * 2
-            );
+            COPY_COLUMN_PRIMITIVE(std::uint16_t, arrow::UInt16Array);
         } break;
         case arrow::Int32Type::type_id: {
-            auto scol = std::static_pointer_cast<arrow::Int32Array>(src);
-            std::memcpy(
-                dest->get_nth<std::int32_t>(offset),
-                (void*)scol->raw_values(),
-                len * 4
-            );
+            COPY_COLUMN_PRIMITIVE(std::int32_t, arrow::Int32Array);
         } break;
         case arrow::UInt32Type::type_id: {
-            auto scol = std::static_pointer_cast<arrow::UInt32Array>(src);
-            std::memcpy(
-                dest->get_nth<std::uint32_t>(offset),
-                (void*)scol->raw_values(),
-                len * 4
-            );
+            COPY_COLUMN_PRIMITIVE(std::uint32_t, arrow::UInt32Array);
         } break;
         case arrow::Int64Type::type_id: {
-            auto scol = std::static_pointer_cast<arrow::Int64Array>(src);
-            std::memcpy(
-                dest->get_nth<std::int64_t>(offset),
-                (void*)scol->raw_values(),
-                len * 8
-            );
+            COPY_COLUMN_PRIMITIVE(std::int64_t, arrow::Int64Array);
         } break;
         case arrow::UInt64Type::type_id: {
-            auto scol = std::static_pointer_cast<arrow::UInt64Array>(src);
-            std::memcpy(
-                dest->get_nth<std::uint64_t>(offset),
-                (void*)scol->raw_values(),
-                len * 8
-            );
+            COPY_COLUMN_PRIMITIVE(std::uint64_t, arrow::UInt64Array);
         } break;
         case arrow::TimestampType::type_id: {
             std::shared_ptr<arrow::TimestampType> tunit =
@@ -685,28 +725,39 @@ copy_array(
             auto scol = std::static_pointer_cast<arrow::TimestampArray>(src);
             switch (tunit->unit()) {
                 case arrow::TimeUnit::MILLI: {
-                    std::memcpy(
-                        dest->get_nth<double>(offset),
-                        (void*)scol->raw_values(),
-                        len * 8
-                    );
+                    const int64_t* vals = scol->raw_values();
+                    if constexpr (GATHER::is_identity) {
+                        std::memcpy(
+                            dest->get_nth<double>(offset), (void*)vals, len * 8
+                        );
+                    } else {
+                        for (int64_t i = 0; i < len; i++) {
+                            dest->set_nth<int64_t>(offset + i, vals[gather[i]]);
+                        }
+                    }
                 } break;
                 case arrow::TimeUnit::NANO: {
                     const int64_t* vals = scol->raw_values();
-                    for (uint32_t i = 0; i < len; i++) {
-                        dest->set_nth<int64_t>(offset + i, vals[i] / 1000000);
+                    for (int64_t i = 0; i < len; i++) {
+                        dest->set_nth<int64_t>(
+                            offset + i, vals[gather[i]] / 1000000
+                        );
                     }
                 } break;
                 case arrow::TimeUnit::MICRO: {
                     const int64_t* vals = scol->raw_values();
-                    for (uint32_t i = 0; i < len; i++) {
-                        dest->set_nth<int64_t>(offset + i, vals[i] / 1000);
+                    for (int64_t i = 0; i < len; i++) {
+                        dest->set_nth<int64_t>(
+                            offset + i, vals[gather[i]] / 1000
+                        );
                     }
                 } break;
                 case arrow::TimeUnit::SECOND: {
                     const int64_t* vals = scol->raw_values();
-                    for (uint32_t i = 0; i < len; i++) {
-                        dest->set_nth<int64_t>(offset + i, vals[i] * 1000);
+                    for (int64_t i = 0; i < len; i++) {
+                        dest->set_nth<int64_t>(
+                            offset + i, vals[gather[i]] * 1000
+                        );
                     }
                 } break;
             }
@@ -716,8 +767,8 @@ copy_array(
                 std::static_pointer_cast<arrow::Date64Type>(src->type());
             auto scol = std::static_pointer_cast<arrow::Date64Array>(src);
             const int64_t* vals = scol->raw_values();
-            for (uint32_t i = 0; i < len; i++) {
-                std::chrono::milliseconds timestamp(vals[i]);
+            for (int64_t i = 0; i < len; i++) {
+                std::chrono::milliseconds timestamp(vals[gather[i]]);
                 date::sys_days days(date::floor<date::days>(timestamp));
                 auto ymd = date::year_month_day{days};
                 std::int32_t year = static_cast<std::int32_t>(ymd.year());
@@ -733,8 +784,8 @@ copy_array(
                 std::static_pointer_cast<arrow::Date32Type>(src->type());
             auto scol = std::static_pointer_cast<arrow::Date32Array>(src);
             const int32_t* vals = scol->raw_values();
-            for (uint32_t i = 0; i < len; i++) {
-                date::days days{vals[i]};
+            for (int64_t i = 0; i < len; i++) {
+                date::days days{vals[gather[i]]};
                 auto ymd = date::year_month_day{date::sys_days{days}};
                 // years are signed, month/day are unsigned
                 std::int32_t year = static_cast<std::int32_t>(ymd.year());
@@ -746,18 +797,10 @@ copy_array(
             }
         } break;
         case arrow::FloatType::type_id: {
-            auto scol = std::static_pointer_cast<arrow::FloatArray>(src);
-            std::memcpy(
-                dest->get_nth<float>(offset), (void*)scol->raw_values(), len * 4
-            );
+            COPY_COLUMN_PRIMITIVE(float, arrow::FloatArray);
         } break;
         case arrow::DoubleType::type_id: {
-            auto scol = std::static_pointer_cast<arrow::DoubleArray>(src);
-            std::memcpy(
-                dest->get_nth<double>(offset),
-                (void*)scol->raw_values(),
-                len * 8
-            );
+            COPY_COLUMN_PRIMITIVE(double, arrow::DoubleArray);
         } break;
         case arrow::Decimal128Type::type_id:
         case arrow::DecimalType::type_id: {
@@ -767,16 +810,19 @@ copy_array(
                 std::static_pointer_cast<arrow::Decimal128Type>(src->type());
             int32_t scale = decimal_type->scale();
             auto* vals = (arrow::Decimal128*)scol->raw_values();
-            for (uint32_t i = 0; i < len; ++i) {
-                dest->set_nth<double>(offset + i, vals[i].ToDouble(scale));
+            for (int64_t i = 0; i < len; ++i) {
+                dest->set_nth<double>(
+                    offset + i, vals[gather[i]].ToDouble(scale)
+                );
             }
         } break;
         case arrow::BooleanType::type_id: {
             auto scol = std::static_pointer_cast<arrow::BooleanArray>(src);
-            const uint8_t* null_bitmap = scol->values()->data();
-            for (uint32_t i = 0; i < len; ++i) {
-                std::uint8_t elem = null_bitmap[i / 8];
-                bool v = (elem & (1 << (i % 8))) != 0;
+            const uint8_t* bitmap = scol->values()->data();
+            for (int64_t i = 0; i < len; ++i) {
+                const auto src_i = gather[i] + scol->offset();
+                std::uint8_t elem = bitmap[src_i / 8];
+                bool v = (elem & (1 << (src_i % 8))) != 0;
                 dest->set_nth<bool>(offset + i, v);
             }
         } break;
@@ -786,12 +832,7 @@ copy_array(
             }
         } break;
         case arrow::Time32Type::type_id: {
-            auto scol = std::static_pointer_cast<arrow::Time32Array>(src);
-            std::memcpy(
-                dest->get_nth<std::uint32_t>(offset),
-                (void*)scol->raw_values(),
-                len * 4
-            );
+            COPY_COLUMN_PRIMITIVE(std::uint32_t, arrow::Time32Array);
         } break;
         // case arrow::Type {
             
@@ -806,39 +847,49 @@ copy_array(
     }
 }
 
+void
+copy_array(
+    const std::shared_ptr<t_column>& dest,
+    const std::shared_ptr<arrow::Array>& src,
+    const int64_t offset,
+    const int64_t len
+) {
+    copy_array_impl(dest, src, offset, len, t_identity_gather{});
+}
+
 // Defines the full matrix of type interactions between arrow arrays and
 // schema-defined tables.
 #define FILL_COLUMN_ITER(ARRAY_TYPE)                                           \
     switch (column_dtype) {                                                    \
         case DTYPE_INT8: {                                                     \
-            iter_col_copy<ARRAY_TYPE, std::int8_t>(col, array, offset, len);   \
+            iter_col_copy<ARRAY_TYPE, std::int8_t>(col, array, offset, len, gather);   \
         } break;                                                               \
         case DTYPE_UINT8: {                                                    \
-            iter_col_copy<ARRAY_TYPE, std::uint8_t>(col, array, offset, len);  \
+            iter_col_copy<ARRAY_TYPE, std::uint8_t>(col, array, offset, len, gather);  \
         } break;                                                               \
         case DTYPE_INT16: {                                                    \
-            iter_col_copy<ARRAY_TYPE, std::int16_t>(col, array, offset, len);  \
+            iter_col_copy<ARRAY_TYPE, std::int16_t>(col, array, offset, len, gather);  \
         } break;                                                               \
         case DTYPE_UINT16: {                                                   \
-            iter_col_copy<ARRAY_TYPE, std::uint16_t>(col, array, offset, len); \
+            iter_col_copy<ARRAY_TYPE, std::uint16_t>(col, array, offset, len, gather); \
         } break;                                                               \
         case DTYPE_INT32: {                                                    \
-            iter_col_copy<ARRAY_TYPE, std::int32_t>(col, array, offset, len);  \
+            iter_col_copy<ARRAY_TYPE, std::int32_t>(col, array, offset, len, gather);  \
         } break;                                                               \
         case DTYPE_UINT32: {                                                   \
-            iter_col_copy<ARRAY_TYPE, std::uint32_t>(col, array, offset, len); \
+            iter_col_copy<ARRAY_TYPE, std::uint32_t>(col, array, offset, len, gather); \
         } break;                                                               \
         case DTYPE_INT64: {                                                    \
-            iter_col_copy<ARRAY_TYPE, std::int64_t>(col, array, offset, len);  \
+            iter_col_copy<ARRAY_TYPE, std::int64_t>(col, array, offset, len, gather);  \
         } break;                                                               \
         case DTYPE_UINT64: {                                                   \
-            iter_col_copy<ARRAY_TYPE, std::uint64_t>(col, array, offset, len); \
+            iter_col_copy<ARRAY_TYPE, std::uint64_t>(col, array, offset, len, gather); \
         } break;                                                               \
         case DTYPE_FLOAT32: {                                                  \
-            iter_col_copy<ARRAY_TYPE, float>(col, array, offset, len);         \
+            iter_col_copy<ARRAY_TYPE, float>(col, array, offset, len, gather);         \
         } break;                                                               \
         case DTYPE_FLOAT64: {                                                  \
-            iter_col_copy<ARRAY_TYPE, double>(col, array, offset, len);        \
+            iter_col_copy<ARRAY_TYPE, double>(col, array, offset, len, gather);        \
         } break;                                                               \
         default: {                                                             \
             std::stringstream ss;                                              \
@@ -847,6 +898,71 @@ copy_array(
             PSP_COMPLAIN_AND_ABORT(ss.str());                                  \
         }                                                                      \
     }
+
+/**
+ * Mark `[offset, offset + len)` valid or invalid from `array`'s null bitmap,
+ * read through `gather`.
+ */
+template <typename GATHER>
+static void
+fill_validity(
+    const std::shared_ptr<t_column>& col,
+    const std::shared_ptr<arrow::Array>& array,
+    const std::int64_t offset,
+    const std::int64_t len,
+    bool is_update,
+    const GATHER& gather
+) {
+    const auto invalidate = [&](std::int64_t i) {
+        if (is_update) {
+            col->unset(offset + i);
+        } else {
+            col->clear(offset + i);
+        }
+    };
+
+    const std::int64_t null_count = array->null_count();
+    if (null_count == 0 && GATHER::is_identity) {
+        col->set_valid_range(offset, len);
+        return;
+    }
+
+    const uint8_t* null_bitmap = array->null_bitmap_data();
+    if (null_count != 0 && null_bitmap == nullptr) {
+        for (std::int64_t i = 0; i < len; ++i) {
+            invalidate(i);
+        }
+
+        return;
+    }
+
+    const std::int64_t bit_base = array->offset();
+    for (std::int64_t i = 0; i < len; ++i) {
+        bool valid = !gather.is_null(i);
+        if (valid && null_bitmap != nullptr) {
+            const std::int64_t bit = bit_base + gather[i];
+            valid = (null_bitmap[bit / 8] & (1 << (bit % 8))) != 0;
+        }
+
+        if (valid) {
+            col->set_valid(offset + i, true);
+        } else {
+            invalidate(i);
+        }
+    }
+}
+
+template <typename GATHER>
+void fill_column_chunk(
+    const std::shared_ptr<t_column>& col,
+    const std::shared_ptr<arrow::Array>& array,
+    const std::string& name,
+    t_dtype type,
+    std::int64_t offset,
+    std::int64_t len,
+    bool is_update,
+    const GATHER& gather
+);
 
 void
 ArrowLoader::fill_column(
@@ -858,9 +974,16 @@ ArrowLoader::fill_column(
     std::string& raw_type,
     bool is_update
 ) {
-    int64_t offset = 0;
-    std::shared_ptr<arrow::ChunkedArray> carray =
-        m_table->GetColumnByName(name);
+    std::shared_ptr<arrow::ChunkedArray> carray;
+    const std::vector<std::int64_t>* indices = nullptr;
+    if (m_normalized) {
+        carray = m_normalized->columns[cidx];
+        if (!m_normalized->gathers[cidx].empty()) {
+            indices = &m_normalized->gathers[cidx];
+        }
+    } else {
+        carray = m_table->GetColumnByName(name);
+    }
 
     if (carray == nullptr) {
         LOG_DEBUG(
@@ -869,9 +992,59 @@ ArrowLoader::fill_column(
         );
         return;
     }
+
+    if (indices != nullptr) {
+        if (carray->num_chunks() == 0 || carray->chunk(0)->length() == 0) {
+            for (std::size_t i = 0; i < indices->size(); ++i) {
+                if (is_update) {
+                    col->unset(i);
+                } else {
+                    col->clear(i);
+                }
+            }
+
+            return;
+        }
+
+        fill_column_chunk(
+            col,
+            carray->chunk(0),
+            name,
+            type,
+            0,
+            static_cast<std::int64_t>(indices->size()),
+            is_update,
+            t_index_gather{indices->data()}
+        );
+
+        return;
+    }
+
+    int64_t offset = 0;
     for (auto i = 0; i < carray->num_chunks(); ++i) {
         std::shared_ptr<arrow::Array> array = carray->chunk(i);
         int64_t len = array->length();
+        fill_column_chunk(
+            col, array, name, type, offset, len, is_update, t_identity_gather{}
+        );
+
+        offset += len;
+    }
+}
+
+template <typename GATHER>
+void
+fill_column_chunk(
+    const std::shared_ptr<t_column>& col,
+    const std::shared_ptr<arrow::Array>& array,
+    const std::string& name,
+    t_dtype type,
+    std::int64_t offset,
+    std::int64_t len,
+    bool is_update,
+    const GATHER& gather
+) {
+    {
 
         // If the Arrow array schema is different from the data
         // table schema, iteratively fill.
@@ -924,51 +1097,10 @@ ArrowLoader::fill_column(
                 };
             }
         } else {
-            copy_array(col, array, offset, len);
+            copy_array_impl(col, array, offset, len, gather);
         }
 
-        // Fill validity bitmap. Operate only on the current chunk's
-        // range [offset, offset+len); a whole-column fill here would
-        // clobber validity bits set by other chunks in a multi-batch
-        // ChunkedArray.
-        std::int64_t null_count = array->null_count();
-
-        if (null_count == 0) {
-            col->set_valid_range(offset, len);
-        } else {
-            const uint8_t* null_bitmap = array->null_bitmap_data();
-
-            // If the arrow column is of null type, the null
-            // bitmap is a nullptr - so just mark this chunk's rows
-            // as invalid and move on.
-            if (null_bitmap == nullptr) {
-                for (uint32_t i = 0; i < len; ++i) {
-                    if (is_update) {
-                        col->unset(offset + i);
-                    } else {
-                        col->clear(offset + i);
-                    }
-                }
-            } else {
-                // Read the null bitmap and set the correct rows
-                // as valid
-                for (uint32_t i = 0; i < len; ++i) {
-                    std::uint8_t elem = null_bitmap[i / 8];
-                    bool v = (elem & (1 << (i % 8))) != 0;
-                    if (!v) {
-                        if (is_update) {
-                            col->unset(offset + i);
-                        } else {
-                            col->clear(offset + i);
-                        }
-                    } else {
-                        col->set_valid(offset + i, v);
-                    }
-                }
-            }
-        }
-
-        offset += len;
+        fill_validity(col, array, offset, len, is_update, gather);
     }
 }
 
@@ -976,7 +1108,8 @@ ArrowLoader::fill_column(
 
 std::uint32_t
 ArrowLoader::row_count() const {
-    const std::int64_t n = m_table->num_rows();
+    const std::int64_t n =
+        m_normalized ? m_normalized->num_rows : m_table->num_rows();
     if (n < 0
         || static_cast<std::uint64_t>(n)
             > std::numeric_limits<std::uint32_t>::max()) {
@@ -986,6 +1119,33 @@ ArrowLoader::row_count() const {
     }
 
     return static_cast<std::uint32_t>(n);
+}
+
+std::optional<std::string>
+ArrowLoader::repeated_index(const std::string& index) const {
+    if (!m_expanded) {
+        return std::nullopt;
+    }
+
+    const auto is_per_element = [&](const std::string& name) {
+        const auto it = std::find(m_names.begin(), m_names.end(), name);
+        return it != m_names.end() && m_normalized
+            && m_normalized->per_element[std::distance(m_names.begin(), it)];
+    };
+
+    if (!index.empty() && !is_per_element(index)) {
+        return index;
+    }
+
+    const std::string implicit{"__INDEX__"};
+    const auto has_implicit =
+        std::find(m_names.begin(), m_names.end(), implicit) != m_names.end();
+
+    if (has_implicit && !is_per_element(implicit)) {
+        return implicit;
+    }
+
+    return std::nullopt;
 }
 
 std::vector<std::string>

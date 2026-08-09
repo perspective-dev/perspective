@@ -88,8 +88,31 @@ elem.addEventListener("perspective-global-filter-update", function (event) {
 });
 ```
 
+## Layout events
+
+A multi-panel `<perspective-viewer>` reports changes to its panel _collection_
+on two separate channels. They are distinct facts — which panels exist, and
+which one is selected — so neither event implies the other.
+
+- `perspective-layout-update` fires when a panel is added to or removed from
+  the layout. Its `detail.panels` is the placed panel ids in insertion order,
+  identical to what [`getPanelNames()`](#) returns.
+- `perspective-active-panel-update` fires when the active panel changes, with
+  a `detail.panel` of the new panel's id — or `null` at zero panels.
+
+```javascript
+elem.addEventListener("perspective-layout-update", function (event) {
+    console.log("Panels are now", event.detail.panels);
+});
+```
+
+Geometry changes — dragging a split divider, reordering tabs — do **not** fire
+these events, because they change the layout tree without changing the panel
+set. Use `saveWorkspace()` to read the current geometry.
+
 <div class="warning">The <code>workspace-layout-update</code> and
 <code>workspace-new-view</code> events from the removed
-<code>@perspective-dev/workspace</code> package no longer exist. Use
-<code>perspective-config-update</code> and
-<code>perspective-global-filter-update</code>.</div>
+<code>@perspective-dev/workspace</code> package no longer exist.
+<code>perspective-layout-update</code> is the closest replacement for the
+former; for per-panel config changes use
+<code>perspective-config-update</code>.</div>

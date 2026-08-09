@@ -68,28 +68,69 @@ STRING_AGGS = [
     "string_agg",
 ]
 
-# The window aggregates the SQL translation supports, per source column
-# type (`ema` is recursive - no SQL window equivalent).
+# Window functions, in DuckDB's own vocabulary - the advertised name is the
+# SQL function, emitted verbatim. `frames` are the frame kinds the function
+# accepts (empty = none), and `result_type` is the output column type, omitted
+# where it is the source column's.
+#
+# Result types follow `duckdb_type_to_psp`: DuckDB's counts and ranks are
+# `BIGINT`, which Perspective's 32-bit `integer` cannot hold, so they are
+# `float` - the same mapping the view's own schema will report.
+FRAMES = ["rows", "range", "cumulative"]
+
 WINDOW_AGGREGATES = [
-    "sum",
-    "avg",
-    "count",
-    "min",
-    "max",
-    "stddev",
-    "var",
-    "lag",
-    "lead",
-    "diff",
-    "rate",
+    {"name": "sum", "frames": FRAMES, "result_type": "float"},
+    {"name": "avg", "frames": FRAMES, "result_type": "float"},
+    {"name": "count", "frames": FRAMES, "result_type": "float"},
+    {"name": "min", "frames": FRAMES},
+    {"name": "max", "frames": FRAMES},
+    {"name": "product", "frames": FRAMES, "result_type": "float"},
+    {"name": "median", "frames": FRAMES, "result_type": "float"},
+    # DuckDB spells sample and population variants separately, so both are
+    # offered rather than one being picked on the user's behalf.
+    {"name": "stddev_samp", "frames": FRAMES, "result_type": "float"},
+    {"name": "stddev_pop", "frames": FRAMES, "result_type": "float"},
+    {"name": "var_samp", "frames": FRAMES, "result_type": "float"},
+    {"name": "var_pop", "frames": FRAMES, "result_type": "float"},
+    # Navigation.
+    {"name": "first_value", "frames": FRAMES},
+    {"name": "last_value", "frames": FRAMES},
+    {"name": "nth_value", "frames": FRAMES, "offset": True},
+    {"name": "lag", "offset": True},
+    {"name": "lead", "offset": True},
+    # Ranking. These take no source column - the window's `order_by` is their
+    # input - but Perspective requires one, so the choice of source is
+    # immaterial for them.
+    {"name": "row_number", "result_type": "float"},
+    {"name": "rank", "result_type": "float"},
+    {"name": "dense_rank", "result_type": "float"},
+    {"name": "percent_rank", "result_type": "float"},
+    {"name": "cume_dist", "result_type": "float"},
+    # `ntile`'s argument is a bucket count rather than a row offset.
+    {"name": "ntile", "offset": True, "result_type": "float"},
+    # Perspective's own, with no DuckDB equivalent - the SQL translation
+    # synthesizes them from `lag` and `first_value`.
+    {"name": "diff", "offset": True, "result_type": "float"},
+    {"name": "rate", "frames": ["range"], "result_type": "float"},
 ]
 
+# Arithmetic is undefined for the non-numeric types; ordering and navigation
+# are not.
 WINDOW_AGGREGATES_ANY = [
-    "count",
-    "min",
-    "max",
-    "lag",
-    "lead",
+    {"name": "count", "frames": FRAMES, "result_type": "float"},
+    {"name": "min", "frames": FRAMES},
+    {"name": "max", "frames": FRAMES},
+    {"name": "first_value", "frames": FRAMES},
+    {"name": "last_value", "frames": FRAMES},
+    {"name": "nth_value", "frames": FRAMES, "offset": True},
+    {"name": "lag", "offset": True},
+    {"name": "lead", "offset": True},
+    {"name": "row_number", "result_type": "float"},
+    {"name": "rank", "result_type": "float"},
+    {"name": "dense_rank", "result_type": "float"},
+    {"name": "percent_rank", "result_type": "float"},
+    {"name": "cume_dist", "result_type": "float"},
+    {"name": "ntile", "offset": True, "result_type": "float"},
 ]
 
 FILTER_OPS = [
@@ -228,22 +269,61 @@ class DuckDBVirtualServerHandler(VirtualServerHandler):
 
 
 def duckdb_type_to_psp(name):
-    """Convert a DuckDB `dtype` to a Perspective `ColumnType`."""
-    if name == "VARCHAR":
-        return "string"
-    if name in ("DOUBLE", "BIGINT", "HUGEINT"):
-        return "float"
-    if name == "INTEGER":
-        return "integer"
-    if name == "DATE":
-        return "date"
-    if name == "BOOLEAN":
+    """Convert a DuckDB `dtype` to a Perspective `ColumnType`.
+
+    Must agree with `coerce_column` in `perspective-client`, which decides
+    the Arrow type the same column's data arrives as - a column declared
+    `integer` whose data coerces to `Float64` gets numeric filters the
+    engine then rejects. The mapping is duplicated in `duckdb.ts` for
+    DuckDB WASM; change both.
+
+    `BIGINT` and wider go to `float` because Perspective's `integer` is
+    32-bit, matching the `Int64 -> Float64` coercion. `TIME` goes to
+    `datetime` because that is what `Time32`/`Time64` coerce to.
+    """
+    name = name.upper()
+
+    if name.startswith("BOOL"):
         return "boolean"
-    if name == "TIMESTAMP":
+
+    # 32-bit and narrower - `coerce_column` widens these to `Int32`.
+    if name in ("TINYINT", "SMALLINT", "INTEGER", "UTINYINT", "USMALLINT"):
+        return "integer"
+
+    # Wider than `Int32`, or fractional - all coerce to `Float64`.
+    if (
+        name in ("BIGINT", "HUGEINT", "UHUGEINT", "UINTEGER", "UBIGINT")
+        or name in ("FLOAT", "REAL", "DOUBLE", "VARINT")
+        or name.startswith("DECIMAL")
+        or name.startswith("NUMERIC")
+    ):
+        return "float"
+
+    if name.startswith("DATE"):
+        return "date"
+
+    # `TIMESTAMP`, `TIMESTAMPTZ`, `TIMESTAMP_NS`, and `TIME`/`TIMETZ`,
+    # which coerce to `Timestamp(Millisecond)` rather than to a number.
+    if name.startswith("TIME"):
         return "datetime"
 
-    msg = f"Unknown type '{name}'"
-    raise ValueError(msg)
+    # Everything else renders as text: `VARCHAR`, `ENUM(...)` (which
+    # arrives dictionary-encoded), `JSON`, `UUID`, `BLOB`, `INTERVAL`,
+    # and the nested types.
+    if not (
+        name.startswith("VARCHAR")
+        or name.startswith("ENUM")
+        or name in ("JSON", "UUID", "BLOB", "BIT", "INTERVAL")
+        or name.startswith("STRUCT")
+        or name.startswith("MAP")
+        or name.startswith("UNION")
+        or name.endswith("[]")
+    ):
+        # Unknown, not fatal - the column still renders, as text. Raising
+        # here would take down the whole table for one odd column.
+        logger.warning(f"Unknown type '{name}'")
+
+    return "string"
 
 
 def run_query(db, query, execute=False, columns=False):

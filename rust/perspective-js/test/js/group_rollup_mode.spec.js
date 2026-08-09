@@ -446,6 +446,102 @@ const data = {
                 table.delete();
             });
 
+            test.describe("empty result with sort", function () {
+                test("filter rejects every row", async function () {
+                    const table = await perspective.table(data);
+                    const view = await table.view({
+                        group_by: ["y"],
+                        split_by: ["z"],
+                        group_rollup_mode: "flat",
+                        sort: [["w", "desc"]],
+                        filter: [["x", "<", 0]],
+                    });
+                    expect(await view.to_columns()).toStrictEqual({
+                        __ROW_PATH__: [],
+                    });
+                    expect(await view.num_rows()).toEqual(0);
+                    view.delete();
+                    table.delete();
+                });
+
+                test("null filter operand rejects every row", async function () {
+                    const table = await perspective.table(data);
+                    const view = await table.view({
+                        group_by: ["y"],
+                        split_by: ["z"],
+                        group_rollup_mode: "flat",
+                        sort: [["w", "desc"]],
+                        filter: [["x", "<", null]],
+                    });
+                    expect(await view.to_columns()).toStrictEqual({
+                        __ROW_PATH__: [],
+                    });
+                    view.delete();
+                    table.delete();
+                });
+
+                test("update into an all-filtered view", async function () {
+                    const table = await perspective.table({
+                        w: "float",
+                        x: "integer",
+                        y: "string",
+                        z: "boolean",
+                    });
+                    const view = await table.view({
+                        group_by: ["y"],
+                        split_by: ["z"],
+                        group_rollup_mode: "flat",
+                        sort: [["w", "desc"]],
+                        filter: [["x", "<", 0]],
+                    });
+                    await table.update(data);
+                    expect(await view.to_columns()).toStrictEqual({
+                        __ROW_PATH__: [],
+                    });
+                    view.delete();
+                    table.delete();
+                });
+
+                test("remove every row", async function () {
+                    const table = await perspective.table(data, { index: "w" });
+                    const view = await table.view({
+                        group_by: ["y"],
+                        split_by: ["z"],
+                        group_rollup_mode: "flat",
+                        sort: [["w", "desc"]],
+                    });
+                    expect(await view.num_rows()).toEqual(4);
+                    await table.remove(data.w);
+                    expect(await view.to_columns()).toStrictEqual({
+                        __ROW_PATH__: [],
+                    });
+                    expect(await view.num_rows()).toEqual(0);
+                    view.delete();
+                    table.delete();
+                });
+
+                test("recovers when rows return", async function () {
+                    const table = await perspective.table(data, { index: "w" });
+                    const view = await table.view({
+                        group_by: ["y"],
+                        group_rollup_mode: "flat",
+                        sort: [["w", "desc"]],
+                    });
+                    await table.remove(data.w);
+                    expect(await view.num_rows()).toEqual(0);
+                    await table.update([{ w: 1.5, x: 1, y: "a", z: true }]);
+                    expect(await view.to_columns()).toStrictEqual({
+                        __ROW_PATH__: [["a"]],
+                        w: [1.5],
+                        x: [1],
+                        y: [1],
+                        z: [1],
+                    });
+                    view.delete();
+                    table.delete();
+                });
+            });
+
             test("viewport pagination", async function () {
                 const table = await perspective.table(data);
                 const view = await table.view({

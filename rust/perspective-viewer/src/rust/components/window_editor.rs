@@ -13,9 +13,7 @@
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use perspective_client::config::{
-    ColumnType, WindowAggregate, WindowFrame, WindowSort, WindowSortDir, WindowSpec,
-};
+use perspective_client::config::{ColumnType, WindowFrame, WindowSort, WindowSortDir, WindowSpec};
 use wasm_bindgen::JsCast;
 use web_sys::{DragEvent, HtmlInputElement, MouseEvent};
 use yew::prelude::*;
@@ -30,63 +28,33 @@ use crate::presentation::Presentation;
 use crate::session::{Session, SessionMetadataRc};
 use crate::utils::{AddListener, DragEffect, DragTarget, Subscription};
 
-fn op_label(op: WindowAggregate) -> &'static str {
-    match op {
-        WindowAggregate::Sum => "sum",
-        WindowAggregate::Avg => "avg",
-        WindowAggregate::Count => "count",
-        WindowAggregate::Min => "min",
-        WindowAggregate::Max => "max",
-        WindowAggregate::Stddev => "stddev",
-        WindowAggregate::Var => "var",
-        WindowAggregate::First => "first",
-        WindowAggregate::Last => "last",
-        WindowAggregate::Lag => "lag",
-        WindowAggregate::Lead => "lead",
-        WindowAggregate::Diff => "diff",
-        WindowAggregate::Rate => "rate",
-        WindowAggregate::Ema => "ema",
+/// The declared capabilities of one window aggregate, for a `source` column
+/// type. Which controls an aggregate needs is the data model's to state - the
+/// editor cannot infer it from a name it has never seen.
+fn op_spec(
+    metadata: &SessionMetadataRc,
+    source: &str,
+    op: &str,
+) -> Option<perspective_client::proto::WindowAggregateArgs> {
+    let ty = metadata.get_column_table_type(source)?;
+    metadata.get_window_aggregate(ty, op)
+}
+
+/// The editor's frame-type labels, as the `frames` a declaration lists.
+fn frame_label(frame: &str) -> &'static str {
+    match frame {
+        "rows" => "Rows",
+        "range" => "Range",
+        _ => "Cumulative",
     }
 }
 
-fn op_from_label(label: &str) -> Option<WindowAggregate> {
-    Some(match label {
-        "sum" => WindowAggregate::Sum,
-        "avg" => WindowAggregate::Avg,
-        "count" => WindowAggregate::Count,
-        "min" => WindowAggregate::Min,
-        "max" => WindowAggregate::Max,
-        "stddev" => WindowAggregate::Stddev,
-        "var" => WindowAggregate::Var,
-        "first" => WindowAggregate::First,
-        "last" => WindowAggregate::Last,
-        "lag" => WindowAggregate::Lag,
-        "lead" => WindowAggregate::Lead,
-        "diff" => WindowAggregate::Diff,
-        "rate" => WindowAggregate::Rate,
-        "ema" => WindowAggregate::Ema,
-        _ => return None,
-    })
-}
-
-fn is_aggregating(op: WindowAggregate) -> bool {
-    matches!(
-        op,
-        WindowAggregate::Sum
-            | WindowAggregate::Avg
-            | WindowAggregate::Count
-            | WindowAggregate::Min
-            | WindowAggregate::Max
-            | WindowAggregate::Stddev
-            | WindowAggregate::Var
-    )
-}
-
-fn is_positional(op: WindowAggregate) -> bool {
-    matches!(
-        op,
-        WindowAggregate::Lag | WindowAggregate::Lead | WindowAggregate::Diff
-    )
+fn frame_name(label: &str) -> &'static str {
+    match label {
+        "Rows" => "rows",
+        "Range" => "range",
+        _ => "cumulative",
+    }
 }
 
 fn is_orderable_for_range(ty: ColumnType) -> bool {
@@ -182,7 +150,7 @@ impl WindowDraft {
         };
 
         Self {
-            op: op_label(spec.aggregate).to_string(),
+            op: spec.aggregate.clone(),
             source: spec.column.clone(),
             order_by: spec
                 .order_by
@@ -212,7 +180,7 @@ impl WindowDraft {
     }
 
     fn validate(&self, metadata: &SessionMetadataRc) -> Result<WindowSpec, String> {
-        let op = op_from_label(&self.op).ok_or("Unknown op")?;
+        let op = self.op.clone();
 
         // Every slot takes true `Table` columns ONLY - expression aliases
         // and other window columns would create dependency cycles (and
@@ -245,18 +213,13 @@ impl WindowDraft {
 
         // Backstop for API-authored specs opened in the editor - the op
         // menu only offers the feature-declared set, so this is
-        // unreachable from the UI.
-        let available = metadata
-            .get_features()
-            .map(|x| x.get_window_aggregates(source_ty))
-            .unwrap_or_default();
-
-        if !available.contains(&op) {
-            return Err(format!(
-                "\"{}\" is not a supported window aggregate for this column",
-                op_label(op)
-            ));
-        }
+        // unreachable from the UI. The declaration also supplies the
+        // controls this op takes, below.
+        let declared = metadata
+            .get_window_aggregate(source_ty, &op)
+            .ok_or_else(|| {
+                format!("\"{op}\" is not a supported window aggregate for this column")
+            })?;
 
         // An EMPTY order slot is valid when the backend has a natural row
         // order to fall back on (primary key order in the engine, `rowid`
@@ -300,11 +263,15 @@ impl WindowDraft {
 
         // The numeric fields are typed and input-clamped to their domains,
         // so no parse or range errors are reachable here.
-        let frame = if is_aggregating(op) || op == WindowAggregate::Rate {
+        let frame = if declared.frames.is_empty() {
+            None
+        } else {
+            let chosen = frame_name(&self.frame_type);
+            if !declared.frames.iter().any(|x| x == chosen) {
+                return Err(format!("\"{op}\" does not support a {chosen} frame"));
+            }
+
             match self.frame_type.as_str() {
-                "Rows" | "Cumulative" if op == WindowAggregate::Rate => {
-                    return Err("\"rate\" requires a range frame".to_string());
-                },
                 "Rows" => Some(WindowFrame::Rows(self.frame_rows)),
                 "Range" => {
                     // The natural-order fallback has no units, so `range`
@@ -323,15 +290,13 @@ impl WindowDraft {
                 },
                 _ => None,
             }
-        } else {
-            None
         };
 
         // Emit `None` at the engine default so a spec saved without an
         // explicit `offset` round-trips unchanged (the name-stripped
         // change-detection baseline compares specs structurally).
-        let offset = (is_positional(op) && self.offset != 1).then_some(self.offset);
-        let alpha = (op == WindowAggregate::Ema).then_some(self.alpha);
+        let offset = (declared.offset && self.offset != 1).then_some(self.offset);
+        let alpha = declared.alpha.then_some(self.alpha);
 
         let mut partition_by = self.partition_by.clone();
         partition_by.retain(|col| !col.is_empty());
@@ -676,12 +641,10 @@ impl Component for WindowEditor {
                             })
                             .unwrap_or_default();
 
-                        if !op_from_label(&self.draft.op)
-                            .map(|op| available.contains(&op))
-                            .unwrap_or_default()
+                        if !available.iter().any(|x| x.name == self.draft.op)
                             && let Some(first) = available.first()
                         {
-                            self.draft.op = op_label(*first).to_string();
+                            self.draft.op = first.name.clone();
                         }
                     },
                     DragTarget::WindowOrderBy => self.draft.order_by = column,
@@ -698,11 +661,19 @@ impl Component for WindowEditor {
             WindowEditorMsg::SetOp(op) => {
                 self.draft.op = op;
 
-                // Keep the frame coherent as the op class changes (`rate`
-                // requires a Range frame; the frame-type dropdown omits the
-                // rest).
-                if op_from_label(&self.draft.op) == Some(WindowAggregate::Rate) {
-                    self.draft.frame_type = "Range".to_string();
+                // Keep the frame coherent as the op changes - an op that
+                // does not accept the current frame kind coerces to its
+                // first declared one (the dropdown omits the rest).
+                if let Some(declared) =
+                    op_spec(&ctx.props().metadata, &self.draft.source, &self.draft.op)
+                    && !declared.frames.is_empty()
+                    && !declared
+                        .frames
+                        .iter()
+                        .any(|x| x == frame_name(&self.draft.frame_type))
+                    && let Some(first) = declared.frames.first()
+                {
+                    self.draft.frame_type = frame_label(first).to_string();
                 }
             },
             WindowEditorMsg::ClearSource => self.draft.source = String::default(),
@@ -745,7 +716,7 @@ impl Component for WindowEditor {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let op = op_from_label(&self.draft.op);
+        let declared = op_spec(&ctx.props().metadata, &self.draft.source, &self.draft.op);
 
         // The op selector renders the FEATURE-DECLARED window aggregates
         // for the source column's type, in the server's declared order -
@@ -763,7 +734,7 @@ impl Component for WindowEditor {
                 })
                 .unwrap_or_default()
                 .into_iter()
-                .map(|x| SelectItem::Option(op_label(x).to_string()))
+                .map(|x| SelectItem::Option(x.name.clone()))
                 .collect(),
         );
 
@@ -782,17 +753,16 @@ impl Component for WindowEditor {
         };
 
         // Frame type as a dropdown; like the op selector, invalid choices
-        // are omitted rather than disabled (`rate` requires a Range frame,
-        // and `SetOp` already coerces the draft there).
+        // are omitted rather than disabled - the declared `frames` are the
+        // menu, and `SetOp` already coerces the draft into them.
         let frame_types: Rc<Vec<SelectItem<String>>> = Rc::new(
-            if op == Some(WindowAggregate::Rate) {
-                vec!["Range"]
-            } else {
-                vec!["Rows", "Range", "Cumulative"]
-            }
-            .into_iter()
-            .map(|x| SelectItem::Option(x.to_string()))
-            .collect(),
+            declared
+                .as_ref()
+                .map(|x| x.frames.clone())
+                .unwrap_or_default()
+                .iter()
+                .map(|x| SelectItem::Option(frame_label(x).to_string()))
+                .collect(),
         );
 
         // Slots take true `Table` columns ONLY - expression aliases and
@@ -927,10 +897,12 @@ impl Component for WindowEditor {
             </DragDropList<WindowEditor, PivotColumn, WindowPartitionByContext>>
         };
 
-        let show_frame =
-            op.map(is_aggregating).unwrap_or_default() || op == Some(WindowAggregate::Rate);
-        let show_offset = op.map(is_positional).unwrap_or_default();
-        let show_alpha = op == Some(WindowAggregate::Ema);
+        let show_frame = declared
+            .as_ref()
+            .map(|x| !x.frames.is_empty())
+            .unwrap_or_default();
+        let show_offset = declared.as_ref().map(|x| x.offset).unwrap_or_default();
+        let show_alpha = declared.as_ref().map(|x| x.alpha).unwrap_or_default();
 
         html! {
             <>

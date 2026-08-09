@@ -55,28 +55,37 @@ STRING_AGGS = [
     "string_agg",
 ]
 
-# The window aggregates the SQL translation supports, per source column
-# type (`ema` is recursive - no SQL window equivalent).
+# Window functions. Renamed from Perspective's `stddev`/`var` to the SQL
+# standard spellings DuckDB and ClickHouse both accept, since the advertised
+# name is now emitted verbatim.
+#
+# NOTE: this set is inherited from the DuckDB handler and has NOT been audited
+# against a live ClickHouse - see the aggregate lists below, which have the
+# same problem. ClickHouse's own navigation functions are `lagInFrame` /
+# `leadInFrame`, and its ranking set differs; both need verifying before being
+# advertised here.
+FRAMES = ["rows", "range", "cumulative"]
+
 WINDOW_AGGREGATES = [
-    "sum",
-    "avg",
-    "count",
-    "min",
-    "max",
-    "stddev",
-    "var",
-    "lag",
-    "lead",
-    "diff",
-    "rate",
+    {"name": "sum", "frames": FRAMES, "result_type": "float"},
+    {"name": "avg", "frames": FRAMES, "result_type": "float"},
+    {"name": "count", "frames": FRAMES, "result_type": "float"},
+    {"name": "min", "frames": FRAMES},
+    {"name": "max", "frames": FRAMES},
+    {"name": "stddev_samp", "frames": FRAMES, "result_type": "float"},
+    {"name": "var_samp", "frames": FRAMES, "result_type": "float"},
+    {"name": "lag", "offset": True},
+    {"name": "lead", "offset": True},
+    {"name": "diff", "offset": True, "result_type": "float"},
+    {"name": "rate", "frames": ["range"], "result_type": "float"},
 ]
 
 WINDOW_AGGREGATES_ANY = [
-    "count",
-    "min",
-    "max",
-    "lag",
-    "lead",
+    {"name": "count", "frames": FRAMES, "result_type": "float"},
+    {"name": "min", "frames": FRAMES},
+    {"name": "max", "frames": FRAMES},
+    {"name": "lag", "offset": True},
+    {"name": "lead", "offset": True},
 ]
 
 FILTER_OPS = [

@@ -393,16 +393,6 @@ pub struct PyVirtualDataSlice(Arc<Mutex<VirtualDataSlice>>);
 
 #[pymethods]
 impl PyVirtualDataSlice {
-    #[new]
-    pub fn py_new() -> Self {
-        use perspective_client::config::{GroupRollupMode, ViewConfig};
-        let config = ViewConfig {
-            group_rollup_mode: GroupRollupMode::Total,
-            ..Default::default()
-        };
-        PyVirtualDataSlice(Arc::new(Mutex::new(VirtualDataSlice::new(config))))
-    }
-
     #[allow(clippy::wrong_self_convention)]
     pub fn from_arrow_ipc(&self, ipc: &[u8]) -> PyResult<()> {
         self.0

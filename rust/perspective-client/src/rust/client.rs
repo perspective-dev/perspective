@@ -127,16 +127,10 @@ impl GetFeaturesResp {
     pub fn get_window_aggregates(
         &self,
         col_type: ColumnType,
-    ) -> Vec<crate::config::WindowAggregate> {
+    ) -> Vec<crate::proto::WindowAggregateArgs> {
         self.window_aggregates
             .get(&(col_type as u32))
-            .map(|x| {
-                x.options
-                    .iter()
-                    .filter_map(|x| crate::proto::WindowAggregate::try_from(*x).ok())
-                    .map(|x| x.into())
-                    .collect()
-            })
+            .map(|x| x.options.clone())
             .unwrap_or_default()
     }
 
@@ -645,6 +639,7 @@ impl Client {
                 index: Some(on.to_owned()),
                 limit: None,
                 page_to_disk: None,
+                list_flatten: None,
             })),
             resp => Err(resp.into()),
         }
@@ -689,9 +684,8 @@ impl Client {
             let options = TableOptions {
                 index: info.index,
                 limit: info.limit,
-                // `page_to_disk` is a server-side property not surfaced in table
-                // info; it does not affect client-side behavior.
                 page_to_disk: None,
+                list_flatten: None,
             };
 
             let client = self.clone();

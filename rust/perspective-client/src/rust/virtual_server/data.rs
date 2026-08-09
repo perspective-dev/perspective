@@ -20,12 +20,12 @@ use arrow_array::builder::{
 use arrow_array::cast::AsArray;
 use arrow_array::types::Int32Type;
 use arrow_array::{
-    Array, ArrayAccessor, ArrayRef, BooleanArray, Date32Array, Date64Array, Decimal128Array,
-    Float32Array, Float64Array, Int8Array, Int16Array, Int32Array, Int64Array, LargeStringArray,
-    RecordBatch, StringArray, Time32MillisecondArray, Time32SecondArray, Time64MicrosecondArray,
-    Time64NanosecondArray, TimestampMicrosecondArray, TimestampMillisecondArray,
-    TimestampNanosecondArray, TimestampSecondArray, UInt8Array, UInt16Array, UInt32Array,
-    UInt64Array,
+    Array, ArrayRef, BooleanArray, Date32Array, Date64Array, Decimal128Array, DictionaryArray,
+    Float16Array, Float32Array, Float64Array, Int8Array, Int16Array, Int32Array, Int64Array,
+    LargeStringArray, RecordBatch, RecordBatchOptions, StringArray, Time32MillisecondArray,
+    Time32SecondArray, Time64MicrosecondArray, Time64NanosecondArray, TimestampMicrosecondArray,
+    TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray, UInt8Array,
+    UInt16Array, UInt32Array, UInt64Array,
 };
 use arrow_ipc::reader::{FileReader, StreamReader};
 use arrow_ipc::writer::StreamWriter;
@@ -47,6 +47,33 @@ pub enum ColumnBuilder {
 
 fn dict_data_type() -> DataType {
     DataType::Dictionary(Box::new(DataType::Int32), Box::new(DataType::Utf8))
+}
+
+/// Reads a cell from a canonical `Dictionary(Int32, Utf8)` column, or
+/// `None` for a null slot.
+fn dict_str_value(col: &ArrayRef, row_idx: usize) -> Option<&str> {
+    if col.is_null(row_idx) {
+        return None;
+    }
+
+    let typed = col
+        .as_any()
+        .downcast_ref::<DictionaryArray<Int32Type>>()
+        .and_then(|dict| {
+            let values = dict.values().as_any().downcast_ref::<StringArray>()?;
+            Some((dict, values))
+        });
+
+    match typed {
+        Some((dict, values)) => {
+            let key = dict.keys().value(row_idx) as usize;
+            (key < values.len() && !values.is_null(key)).then(|| values.value(key))
+        },
+        None => {
+            tracing::error!("Non-canonical dictionary column {}", col.data_type());
+            None
+        },
+    }
 }
 
 /// A single cell value in a row-oriented data representation.
@@ -289,31 +316,21 @@ fn cast_to_int64(array: &ArrayRef) -> Result<Vec<i64>, Box<dyn Error>> {
     Ok(result)
 }
 
-/// Extracts a single cell from an Arrow array as a [`Scalar`].
+/// Extracts a single cell from a *coerced* Arrow array as a [`Scalar`].
 fn extract_scalar(array: &ArrayRef, row_idx: usize) -> Scalar {
     if array.is_null(row_idx) {
         return Scalar::Null;
     }
     match array.data_type() {
-        DataType::Utf8 => {
-            let arr = array.as_any().downcast_ref::<StringArray>().unwrap();
-            Scalar::String(arr.value(row_idx).to_string())
-        },
-        DataType::Dictionary(..) => {
-            let dict = array.as_dictionary::<Int32Type>();
-            let values = dict.downcast_dict::<StringArray>().unwrap();
-            Scalar::String(values.value(row_idx).to_string())
-        },
+        DataType::Dictionary(..) => dict_str_value(array, row_idx)
+            .map(|x| Scalar::String(x.to_string()))
+            .unwrap_or(Scalar::Null),
         DataType::Float64 => {
             let arr = array.as_any().downcast_ref::<Float64Array>().unwrap();
             Scalar::Float(arr.value(row_idx))
         },
         DataType::Int32 => {
             let arr = array.as_any().downcast_ref::<Int32Array>().unwrap();
-            Scalar::Float(arr.value(row_idx) as f64)
-        },
-        DataType::Int64 => {
-            let arr = array.as_any().downcast_ref::<Int64Array>().unwrap();
             Scalar::Float(arr.value(row_idx) as f64)
         },
         DataType::Boolean => {
@@ -331,9 +348,9 @@ fn extract_scalar(array: &ArrayRef, row_idx: usize) -> Scalar {
             let arr = array.as_any().downcast_ref::<Date32Array>().unwrap();
             Scalar::Float(arr.value(row_idx) as f64 * 86_400_000.0)
         },
-        _ => {
-            let scalar_arr = array.slice(row_idx, 1);
-            Scalar::String(format!("{:?}", scalar_arr))
+        dt => {
+            tracing::error!("Non-canonical row path type {}", dt);
+            Scalar::Null
         },
     }
 }
@@ -365,7 +382,12 @@ fn timestamp_to_millis(array: &ArrayRef, unit: &TimeUnit) -> ArrayRef {
             arr.iter().map(|v| v.map(|v| v / 1_000_000)).collect()
         },
         TimeUnit::Millisecond => {
-            return array.clone();
+            let arr = array
+                .as_any()
+                .downcast_ref::<TimestampMillisecondArray>()
+                .unwrap();
+
+            return Arc::new(arr.clone().with_timezone_opt(None::<Arc<str>>)) as ArrayRef;
         },
     };
     Arc::new(millis) as ArrayRef
@@ -381,7 +403,19 @@ fn coerce_column(
             Field::new(name, field.data_type().clone(), true),
             array.clone(),
         )),
-        DataType::Dictionary(..) => Ok((Field::new(name, dict_data_type(), true), array.clone())),
+        DataType::Dictionary(key, value) => {
+            if key.as_ref() == &DataType::Int32 && value.as_ref() == &DataType::Utf8 {
+                return Ok((Field::new(name, dict_data_type(), true), array.clone()));
+            }
+
+            let dict = array
+                .as_any_dictionary_opt()
+                .ok_or_else(|| format!("Column '{}' is not a dictionary array", name))?;
+
+            let values = arrow_select::take::take(dict.values(), dict.keys(), None)?;
+            let field = Field::new(name, values.data_type().clone(), true);
+            coerce_column(name, &field, &values)
+        },
         DataType::Utf8 => {
             let arr = array.as_any().downcast_ref::<StringArray>().unwrap();
             let mut builder = StringDictionaryBuilder::<Int32Type>::new();
@@ -397,7 +431,7 @@ fn coerce_column(
                 Arc::new(builder.finish()) as ArrayRef,
             ))
         },
-        DataType::Timestamp(TimeUnit::Millisecond, _) => Ok((
+        DataType::Timestamp(TimeUnit::Millisecond, None) => Ok((
             Field::new(name, DataType::Timestamp(TimeUnit::Millisecond, None), true),
             array.clone(),
         )),
@@ -461,6 +495,14 @@ fn coerce_column(
         DataType::Float32 => {
             let arr = array.as_any().downcast_ref::<Float32Array>().unwrap();
             let result: Float64Array = arr.iter().map(|v| v.map(|v| v as f64)).collect();
+            Ok((
+                Field::new(name, DataType::Float64, true),
+                Arc::new(result) as ArrayRef,
+            ))
+        },
+        DataType::Float16 => {
+            let arr = array.as_any().downcast_ref::<Float16Array>().unwrap();
+            let result: Float64Array = arr.iter().map(|v| v.map(|v| v.to_f64())).collect();
             Ok((
                 Field::new(name, DataType::Float64, true),
                 Arc::new(result) as ArrayRef,
@@ -600,36 +642,34 @@ impl VirtualDataSlice {
     /// and tree-hierarchy walkers) see them inline — matching the
     /// native `perspective-server`'s `to_arrow` output when
     /// `emit_legacy_row_path_names: false`.
-    ///
-    /// Also coerces non-standard Arrow types (e.g. `Decimal128`, `Int64`)
-    /// to Perspective-compatible types. Data column names are passed
-    /// through verbatim — pivoted views already name columns with
-    /// Perspective's column-path separator.
     pub fn from_arrow_ipc(&mut self, ipc: &[u8]) -> Result<(), Box<dyn Error>> {
         let cursor = std::io::Cursor::new(ipc);
-        let batches: Vec<RecordBatch> = if &ipc[0..6] == "ARROW1".as_bytes() {
-            FileReader::try_new(cursor, None)?.collect::<Result<Vec<_>, _>>()?
+        let (ipc_schema, batches) = if &ipc[0..6] == "ARROW1".as_bytes() {
+            let reader = FileReader::try_new(cursor, None)?;
+            let schema = reader.schema();
+            (schema, reader.collect::<Result<Vec<_>, _>>()?)
         } else {
-            StreamReader::try_new(cursor, None)?.collect::<Result<Vec<_>, _>>()?
+            let reader = StreamReader::try_new(cursor, None)?;
+            let schema = reader.schema();
+            (schema, reader.collect::<Result<Vec<_>, _>>()?)
         };
 
         let batch = match batches.len() {
-            0 => return Err("Arrow IPC stream contained no record batches".into()),
+            0 => RecordBatch::new_empty(ipc_schema),
             1 => batches.into_iter().next().unwrap(),
             _ => arrow_select::concat::concat_batches(&batches[0].schema(), &batches)?,
         };
 
         let has_group_by = !self.config.group_by.is_empty();
-        let has_split_by = !self.config.split_by.is_empty();
-        let is_total = self.config.group_rollup_mode == GroupRollupMode::Total;
-
-        if !has_group_by && !has_split_by && !is_total {
-            self.frozen = Some(batch);
-            return Ok(());
-        }
-
         let num_rows = batch.num_rows();
         let schema = batch.schema();
+
+        let coerced = schema
+            .fields()
+            .iter()
+            .enumerate()
+            .map(|(col_idx, field)| coerce_column(field.name(), field, batch.column(col_idx)))
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Phase A: Extract row_path from __GROUPING_ID__ and __ROW_PATH_N__
         if has_group_by {
@@ -641,7 +681,7 @@ impl VirtualDataSlice {
                 let grouping_id_idx = schema
                     .index_of("__GROUPING_ID__")
                     .map_err(|_| "Missing __GROUPING_ID__ column")?;
-                Some(cast_to_int64(batch.column(grouping_id_idx))?)
+                Some(cast_to_int64(&coerced[grouping_id_idx].1)?)
             };
 
             let mut row_paths: Vec<Vec<Scalar>> = (0..num_rows).map(|_| Vec::new()).collect();
@@ -651,7 +691,7 @@ impl VirtualDataSlice {
                     .index_of(&col_name)
                     .map_err(|_| format!("Missing {} column", col_name))?;
 
-                let col = batch.column(col_idx);
+                let col = &coerced[col_idx].1;
 
                 // In flat mode, all rows are leaf rows
                 if is_flat {
@@ -676,11 +716,9 @@ impl VirtualDataSlice {
             self.row_path = Some(row_paths);
         }
 
-        // Phase B: Rebuild RecordBatch without metadata columns, with
-        // column renames and type coercion.
         let mut new_fields = Vec::new();
         let mut new_arrays: Vec<ArrayRef> = Vec::new();
-        for (col_idx, field) in schema.fields().iter().enumerate() {
+        for (field, array) in coerced {
             let name = field.name();
             // `__GROUPING_ID__` is an internal SQL-rollup discriminator
             // (used in Phase A above to decide which row-path levels
@@ -701,17 +739,18 @@ impl VirtualDataSlice {
                 continue;
             }
 
-            let (coerced_field, coerced_array) = coerce_column(name, field, batch.column(col_idx))?;
-            new_fields.push(coerced_field);
-            new_arrays.push(coerced_array);
+            new_fields.push(field);
+            new_arrays.push(array);
         }
 
         let new_schema = Arc::new(Schema::new(new_fields));
-        self.frozen = if new_arrays.is_empty() {
-            Some(RecordBatch::new_empty(new_schema))
+        self.frozen = Some(if new_arrays.is_empty() {
+            let options = RecordBatchOptions::new().with_row_count(Some(num_rows));
+            RecordBatch::try_new_with_options(new_schema, new_arrays, &options)?
         } else {
-            Some(RecordBatch::try_new(new_schema, new_arrays)?)
-        };
+            RecordBatch::try_new(new_schema, new_arrays)?
+        });
+
         Ok(())
     }
 
@@ -750,11 +789,19 @@ impl VirtualDataSlice {
             }
 
             let schema = Arc::new(Schema::new(fields));
-            self.frozen = Some(
+            let batch = if arrays.is_empty() {
+                let num_rows = self.row_path.as_ref().map(|x| x.len()).unwrap_or(0);
+                let options = RecordBatchOptions::new().with_row_count(Some(num_rows));
+                RecordBatch::try_new_with_options(schema, arrays, &options)
+            } else {
                 RecordBatch::try_new(schema, arrays)
-                    .expect("RecordBatch construction should not fail for well-formed builders"),
+            };
+
+            self.frozen = Some(
+                batch.expect("RecordBatch construction should not fail for well-formed builders"),
             );
         }
+
         self.frozen.as_ref().unwrap()
     }
 
@@ -786,6 +833,13 @@ impl VirtualDataSlice {
         let num_rows = batch.num_rows();
         let schema = batch.schema();
 
+        let synthesize_row_path = style == RowPathStyle::PerLevel
+            && self.row_path.is_some()
+            && !schema
+                .fields()
+                .iter()
+                .any(|x| x.name().starts_with("__ROW_PATH_"));
+
         (0..num_rows)
             .map(|row_idx| {
                 let mut row = IndexMap::new();
@@ -797,6 +851,23 @@ impl VirtualDataSlice {
                         "__ROW_PATH__".to_string(),
                         VirtualDataCell::RowPath(rp[row_idx].clone()),
                     );
+                }
+
+                if synthesize_row_path
+                    && let Some(ref rp) = self.row_path
+                    && row_idx < rp.len()
+                {
+                    for level in 0..self.config.group_by.len() {
+                        row.insert(
+                            format!("__ROW_PATH_{}__", level),
+                            match rp[row_idx].get(level) {
+                                Some(Scalar::String(x)) => VirtualDataCell::String(Some(x.clone())),
+                                Some(Scalar::Float(x)) => VirtualDataCell::Float(Some(*x)),
+                                Some(Scalar::Bool(x)) => VirtualDataCell::Boolean(Some(*x)),
+                                Some(Scalar::Null) | None => VirtualDataCell::String(None),
+                            },
+                        );
+                    }
                 }
 
                 for (col_idx, field) in schema.fields().iter().enumerate() {
@@ -828,11 +899,9 @@ impl VirtualDataSlice {
                                 let arr = col.as_any().downcast_ref::<StringArray>().unwrap();
                                 VirtualDataCell::String(Some(arr.value(row_idx).to_string()))
                             },
-                            DataType::Dictionary(..) => {
-                                let dict = col.as_dictionary::<Int32Type>();
-                                let values = dict.downcast_dict::<StringArray>().unwrap();
-                                VirtualDataCell::String(Some(values.value(row_idx).to_string()))
-                            },
+                            DataType::Dictionary(..) => VirtualDataCell::String(
+                                dict_str_value(col, row_idx).map(|x| x.to_string()),
+                            ),
                             DataType::Float64 => {
                                 let arr = col.as_any().downcast_ref::<Float64Array>().unwrap();
                                 VirtualDataCell::Float(Some(arr.value(row_idx)))
@@ -955,21 +1024,11 @@ impl VirtualDataSlice {
                             .collect::<Vec<_>>(),
                     )?
                 },
-                DataType::Dictionary(..) => {
-                    let dict = col.as_dictionary::<Int32Type>();
-                    let values = dict.downcast_dict::<StringArray>().unwrap();
-                    serde_json::to_value(
-                        (0..num_rows)
-                            .map(|i| {
-                                if col.is_null(i) {
-                                    None
-                                } else {
-                                    Some(values.value(i))
-                                }
-                            })
-                            .collect::<Vec<_>>(),
-                    )?
-                },
+                DataType::Dictionary(..) => serde_json::to_value(
+                    (0..num_rows)
+                        .map(|i| dict_str_value(col, i))
+                        .collect::<Vec<_>>(),
+                )?,
                 DataType::Float64 => {
                     let arr = col.as_any().downcast_ref::<Float64Array>().unwrap();
                     serde_json::to_value(

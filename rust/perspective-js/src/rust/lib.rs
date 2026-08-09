@@ -66,7 +66,7 @@ export type * from "../../src/ts/ts-rs/JoinType.ts";
 export type * from "../../src/ts/ts-rs/TypedArrayWindow.ts";
 export type * from "../../src/ts/ts-rs/Features.ts";
 export type * from "../../src/ts/ts-rs/AggSpec.ts";
-export type * from "../../src/ts/ts-rs/WindowAggregate.ts";
+export type * from "../../src/ts/ts-rs/WindowAggSpec.ts";
 
 import type {ColumnWindow} from "../../src/ts/ts-rs/ColumnWindow.d.ts";
 import type {ColumnType} from "../../src/ts/ts-rs/ColumnType.d.ts";

@@ -24,7 +24,7 @@ mod server;
 
 pub use data::{RowPathStyle, SetVirtualDataColumn, VirtualDataCell, VirtualDataSlice};
 pub use error::{ResultExt, VirtualServerError};
-pub use features::{AggSpec, Features};
+pub use features::{AggSpec, Features, WindowAggSpec};
 pub use generic_sql_model::{
     GenericSQLError, GenericSQLResult, GenericSQLVirtualServerModel,
     GenericSQLVirtualServerModelArgs,

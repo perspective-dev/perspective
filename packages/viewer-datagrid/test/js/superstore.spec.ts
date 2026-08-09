@@ -188,6 +188,16 @@ test.describe("Datagrid with superstore data set", () => {
                 columns: ["State", "City", "Customer ID"],
             });
 
+            const { resolve, promise } = Promise.withResolvers();
+            window.__promise__ = promise;
+            const view = await document
+                .querySelector("perspective-viewer")!
+                .getView();
+
+            await view.on_update(() => {
+                resolve(true);
+            });
+
             return (
                 document.querySelector("perspective-viewer-datagrid") as any
             ).shadowRoot.querySelector("table tbody tr td");
@@ -199,7 +209,7 @@ test.describe("Datagrid with superstore data set", () => {
             (document.activeElement as HTMLElement | null)?.blur(),
         );
         const result = await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer")!.flush();
+            await window.__promise__;
             const view = await document
                 .querySelector("perspective-viewer")!
                 .getView();

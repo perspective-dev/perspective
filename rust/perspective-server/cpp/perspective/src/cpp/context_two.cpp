@@ -578,7 +578,8 @@ t_ctx2::notify(const t_data_table& flattened, bool /* is_registration */) {
             );
         }
     }
-    if (!m_sortby.empty()) {
+
+    if (!m_sortby.empty() && !m_leaves_only && !m_total_only) {
         sort_by(m_sortby);
     }
 
@@ -656,7 +657,8 @@ t_ctx2::notify(
         }
     }
 
-    if (!m_sortby.empty()) {
+    // See the single-argument `notify` overload.
+    if (!m_sortby.empty() && !m_leaves_only && !m_total_only) {
         sort_by(m_sortby);
     }
 

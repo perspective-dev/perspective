@@ -19,6 +19,8 @@
 #include <perspective/gnode.h>
 #include <perspective/pool.h>
 #include <perspective/data_table.h>
+#include <perspective/arrow_normalize.h>
+#include <perspective/json_loader.h>
 
 namespace perspective {
 
@@ -54,7 +56,9 @@ public:
         std::vector<t_dtype> data_types,
         std::uint32_t limit,
         std::string index,
-        t_backing_store backing_store = BACKING_STORE_MEMORY
+        t_backing_store backing_store = BACKING_STORE_MEMORY,
+        apachearrow::t_list_flatten list_flatten =
+            apachearrow::LIST_FLATTEN_ZIP
     );
 
     /**
@@ -228,42 +232,54 @@ public:
         const std::string& index,
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
-        t_backing_store backing_store = BACKING_STORE_MEMORY
+        t_backing_store backing_store = BACKING_STORE_MEMORY,
+        apachearrow::t_list_flatten list_flatten =
+            apachearrow::LIST_FLATTEN_ZIP
     );
 
     static std::shared_ptr<Table> from_cols(
         const std::string& index,
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
-        t_backing_store backing_store = BACKING_STORE_MEMORY
+        t_backing_store backing_store = BACKING_STORE_MEMORY,
+        apachearrow::t_list_flatten list_flatten =
+            apachearrow::LIST_FLATTEN_ZIP
     );
 
     static std::shared_ptr<Table> from_rows(
         const std::string& index,
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
-        t_backing_store backing_store = BACKING_STORE_MEMORY
+        t_backing_store backing_store = BACKING_STORE_MEMORY,
+        apachearrow::t_list_flatten list_flatten =
+            apachearrow::LIST_FLATTEN_ZIP
     );
 
     static std::shared_ptr<Table> from_ndjson(
         const std::string& index,
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
-        t_backing_store backing_store = BACKING_STORE_MEMORY
+        t_backing_store backing_store = BACKING_STORE_MEMORY,
+        apachearrow::t_list_flatten list_flatten =
+            apachearrow::LIST_FLATTEN_ZIP
     );
 
     static std::shared_ptr<Table> from_schema(
         const std::string& index,
         const t_schema& schema,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
-        t_backing_store backing_store = BACKING_STORE_MEMORY
+        t_backing_store backing_store = BACKING_STORE_MEMORY,
+        apachearrow::t_list_flatten list_flatten =
+            apachearrow::LIST_FLATTEN_ZIP
     );
 
     static std::shared_ptr<Table> from_arrow(
         const std::string& index,
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
-        t_backing_store backing_store = BACKING_STORE_MEMORY
+        t_backing_store backing_store = BACKING_STORE_MEMORY,
+        apachearrow::t_list_flatten list_flatten =
+            apachearrow::LIST_FLATTEN_ZIP
     );
 
     static std::shared_ptr<Table> make_table(
@@ -272,10 +288,35 @@ public:
         std::uint32_t limit,
         const std::string& index,
         const std::string_view& data,
-        t_backing_store backing_store = BACKING_STORE_MEMORY
+        t_backing_store backing_store = BACKING_STORE_MEMORY,
+        apachearrow::t_list_flatten list_flatten =
+            apachearrow::LIST_FLATTEN_ZIP
     );
 
 private:
+    /**
+     * @brief Build a `Table` from an already-parsed JSON payload, shared by the
+     * three JSON creation formats.
+     */
+    static std::shared_ptr<Table> from_json_loader(
+        json::JsonLoader& loader,
+        const std::string& index,
+        std::string&& data,
+        std::uint32_t limit,
+        t_backing_store backing_store,
+        apachearrow::t_list_flatten list_flatten
+    );
+
+    /**
+     * @brief Apply a JSON payload to this `Table`, shared by the three JSON
+     * update formats.
+     */
+    void update_json(
+        const std::string_view& data,
+        json::t_json_format format,
+        std::uint32_t port_id
+    );
+
     /**
      * @brief Make sure that the table does not have an explicit index AND an
      * implicit index (with the `__INDEX__` column in data).
@@ -324,6 +365,15 @@ private:
     const std::string m_index;
     bool m_gnode_set;
     const t_backing_store m_backing_store;
+
+    /**
+     * @brief How `arrow::Type::LIST` columns are ingested.
+     *
+     * INVARIANT: this must be applied to `update_arrow` as well as to the
+     * `from_arrow` which created the Table, or an update would produce a
+     * different column shape than the schema it is written against.
+     */
+    const apachearrow::t_list_flatten m_list_flatten;
 };
 
 } // namespace perspective

@@ -17,6 +17,10 @@ describeDuckDB("client", (getClient) => {
     test("get_hosted_table_names()", async function () {
         const client = getClient();
         const tables = await client.get_hosted_table_names();
-        expect(tables).toEqual(["memory.superstore", "memory.underscore_test"]);
+        expect(tables).toEqual([
+            "memory.coerce_types",
+            "memory.superstore",
+            "memory.underscore_test",
+        ]);
     });
 });

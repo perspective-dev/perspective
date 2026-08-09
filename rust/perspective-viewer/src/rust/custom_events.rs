@@ -261,7 +261,36 @@ pub fn wire_element_events(
         }
     });
 
+    let layout_sub = workspace.layout_changed().add_listener({
+        clone!(elem);
+        move |panels: Vec<crate::workspace::PanelId>| {
+            let ids = panels
+                .iter()
+                .map(|id| JsValue::from_str(id.as_str()))
+                .collect::<js_sys::Array>();
+
+            let detail = js_sys::Object::new();
+            let _ = js_sys::Reflect::set(&detail, &JsValue::from_str("panels"), &ids);
+            dispatch_event(&elem, "layout-update", JsValue::from(detail)).unwrap();
+        }
+    });
+
+    let active_panel_sub = workspace.active_changed().add_listener({
+        clone!(elem);
+        move |active: Option<crate::workspace::PanelId>| {
+            let panel = active
+                .map(|id| JsValue::from_str(id.as_str()))
+                .unwrap_or(JsValue::NULL);
+
+            let detail = js_sys::Object::new();
+            let _ = js_sys::Reflect::set(&detail, &JsValue::from_str("panel"), &panel);
+            dispatch_event(&elem, "active-panel-update", JsValue::from(detail)).unwrap();
+        }
+    });
+
     vec![
+        layout_sub,
+        active_panel_sub,
         theme_sub,
         before_settings_sub,
         settings_sub,

@@ -16,6 +16,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use futures::FutureExt;
+use perspective_client::proto::ListFlatten;
 use perspective_client::{
     Client, ColumnWindow, DeleteOptions, OnUpdateData, OnUpdateMode, OnUpdateOptions, Table,
     TableData, TableInitOptions, TableReadFormat, TableRef, UpdateData, UpdateOptions, View,
@@ -52,6 +53,16 @@ fn py_to_table_ref_from_owned(py: Python<'_>, val: &Py<PyAny>) -> PyResult<Table
 }
 
 /// An instance of a [`Client`] is a connection to a single
+fn parse_list_flatten(value: Option<String>) -> PyResult<Option<ListFlatten>> {
+    match value.as_deref() {
+        None => Ok(None),
+        Some("zip") => Ok(Some(ListFlatten::Zip)),
+        Some("cartesian") => Ok(Some(ListFlatten::Cartesian)),
+        Some("stringify") => Ok(Some(ListFlatten::Stringify)),
+        Some(x) => Err(PyValueError::new_err(format!("Unknown `list_flatten`"))),
+    }
+}
+
 /// `perspective_server::Server`, whether locally in-memory or remote over some
 /// transport like a WebSocket.
 ///
@@ -177,7 +188,8 @@ impl AsyncClient {
     /// ```python
     /// table = await client.table("x,y\n1,2\n3,4")
     /// ```
-    #[pyo3(signature=(input, limit=None, index=None, name=None, format=None, page_to_disk=None))]
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature=(input, limit=None, index=None, name=None, format=None, page_to_disk=None, list_flatten=None))]
     pub async fn table(
         &self,
         input: Py<PyAny>,
@@ -186,6 +198,7 @@ impl AsyncClient {
         name: Option<Py<PyString>>,
         format: Option<Py<PyString>>,
         page_to_disk: Option<bool>,
+        list_flatten: Option<Py<PyString>>,
     ) -> PyResult<AsyncTable> {
         let client = self.client.clone();
         let py_client = Python::with_gil(|_| self.clone());
@@ -193,6 +206,7 @@ impl AsyncClient {
             let mut options = TableInitOptions {
                 name: name.map(|x| x.extract::<String>(py)).transpose()?,
                 page_to_disk,
+                list_flatten: parse_list_flatten(list_flatten.map(|x| x.to_string()))?,
                 ..TableInitOptions::default()
             };
 

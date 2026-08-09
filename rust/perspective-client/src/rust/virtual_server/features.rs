@@ -18,7 +18,7 @@ use ts_rs::TS;
 
 use crate::config::GroupRollupMode;
 use crate::proto::get_features_resp::{AggregateArgs, AggregateOptions, ColumnTypeOptions};
-use crate::proto::{ColumnType, GetFeaturesResp};
+use crate::proto::{ColumnType, GetFeaturesResp, WindowAggregateArgs};
 
 /// Describes the capabilities supported by a virtual server handler.
 ///
@@ -62,10 +62,10 @@ pub struct Features<'a> {
     #[ts(optional, as = "Option<_>")]
     pub expressions: bool,
 
-    /// Available window aggregates.
+    /// Available window aggregates per column type.
     #[serde(default)]
     #[ts(optional, as = "Option<_>")]
-    pub window_aggregates: IndexMap<ColumnType, Vec<crate::config::WindowAggregate>>,
+    pub window_aggregates: IndexMap<ColumnType, Vec<WindowAggSpec<'a>>>,
 
     /// Whether update callbacks are supported.
     #[serde(default)]
@@ -76,6 +76,48 @@ pub struct Features<'a> {
     #[serde(default)]
     #[ts(optional, as = "Option<_>")]
     pub unordered: bool,
+}
+
+/// Specification for a window aggregate.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, TS)]
+pub struct WindowAggSpec<'a> {
+    pub name: Cow<'a, str>,
+
+    /// Frame kinds this aggregate accepts (`rows`, `range`, `cumulative`).
+    /// Empty means it takes no frame at all.
+    #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
+    pub frames: Vec<Cow<'a, str>>,
+
+    /// Takes a row offset, as `lag` / `lead` / `diff` do.
+    #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
+    pub offset: bool,
+
+    /// Takes a smoothing factor, as `ema` does.
+    #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
+    pub alpha: bool,
+
+    /// The output column type. `None` means the source column's type, which
+    /// is what `min` / `max` / `lag` do.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub result_type: Option<ColumnType>,
+}
+
+impl<'a> From<&'a str> for WindowAggSpec<'a> {
+    /// A bare name, taking no frame and no arguments.
+    fn from(name: &'a str) -> Self {
+        WindowAggSpec {
+            name: Cow::Borrowed(name),
+            frames: vec![],
+            offset: false,
+            alpha: false,
+            result_type: None,
+        }
+    }
 }
 
 /// Specification for an aggregate function.
@@ -114,7 +156,13 @@ impl<'a> From<Features<'a>> for GetFeaturesResp {
                         crate::proto::get_features_resp::WindowAggregateOptions {
                             options: aggs
                                 .iter()
-                                .map(|x| crate::proto::WindowAggregate::from(*x) as i32)
+                                .map(|x| WindowAggregateArgs {
+                                    name: x.name.to_string(),
+                                    frames: x.frames.iter().map(|f| f.to_string()).collect(),
+                                    offset: x.offset,
+                                    alpha: x.alpha,
+                                    result_type: x.result_type.map(|t| t as i32),
+                                })
                                 .collect(),
                         },
                     )

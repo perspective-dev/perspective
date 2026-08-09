@@ -21,7 +21,7 @@ use perspective_client::config::Filter;
 
 use crate::renderer::Renderer;
 use crate::session::Session;
-use crate::utils::{EffectLedger, PubSub, Subscription};
+use crate::utils::{EffectLedger, PubSub, Subscription, spawn_owned};
 
 /// A unique identifier for a [`Panel`] within a [`Workspace`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -243,6 +243,22 @@ struct WorkspaceData {
     /// In-flight effects (public mutators + scheduled internal flows),
     /// drained by `flush()` — see [`EffectLedger`].
     effects: EffectLedger,
+
+    /// The PLACED panel set changed since the last emit. Mutation sites set
+    /// this and emit NOTHING; the coalescing flush task owns delivery (see
+    /// [`Workspace::schedule_layout_flush`]).
+    layout_dirty: bool,
+    layout_changed: Rc<PubSub<Vec<PanelId>>>,
+
+    /// The active panel changed since the last emit. A separate channel from
+    /// `layout_dirty`: "which panel is selected" and "which panels exist" are
+    /// distinct facts, and one event may not mean both.
+    active_dirty: bool,
+    active_changed: Rc<PubSub<Option<PanelId>>>,
+
+    /// A flush task is already queued — the flag that makes N mutations
+    /// within one operation schedule ONE task rather than N.
+    flush_scheduled: bool,
 }
 
 impl Default for Workspace {
@@ -269,12 +285,73 @@ impl Workspace {
             staged_changed: Rc::new(PubSub::default()),
             reserved: None,
             effects: EffectLedger::default(),
+            layout_dirty: false,
+            layout_changed: Rc::new(PubSub::default()),
+            active_dirty: false,
+            active_changed: Rc::new(PubSub::default()),
+            flush_scheduled: false,
         })))
     }
 
     /// The element's in-flight effect ledger (see [`EffectLedger`]).
     pub fn effects(&self) -> EffectLedger {
         self.0.borrow().effects.clone()
+    }
+
+    pub fn layout_changed(&self) -> Rc<PubSub<Vec<PanelId>>> {
+        self.0.borrow().layout_changed.clone()
+    }
+
+    pub fn active_changed(&self) -> Rc<PubSub<Option<PanelId>>> {
+        self.0.borrow().active_changed.clone()
+    }
+
+    /// Queue the coalescing layout-event flush, if anything is dirty and no
+    /// flush is already pending.
+    fn schedule_layout_flush(&self) {
+        let schedule = {
+            let mut data = self.0.borrow_mut();
+            let dirty = data.layout_dirty || data.active_dirty;
+            let queued = data.flush_scheduled;
+            data.flush_scheduled |= dirty;
+            dirty && !queued
+        };
+
+        if !schedule {
+            return;
+        }
+
+        let effects = self.effects();
+        let this = self.clone();
+        spawn_owned("workspace_layout_flush", async move {
+            effects.settle().await;
+            this.flush_layout_events();
+            Ok(())
+        });
+    }
+
+    /// Emit whatever is dirty, outside any borrow.
+    fn flush_layout_events(&self) {
+        let (layout, active, panels, active_id, layout_pubsub, active_pubsub) = {
+            let mut data = self.0.borrow_mut();
+            data.flush_scheduled = false;
+            (
+                std::mem::take(&mut data.layout_dirty),
+                std::mem::take(&mut data.active_dirty),
+                data.panels.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
+                data.active.clone(),
+                data.layout_changed.clone(),
+                data.active_changed.clone(),
+            )
+        };
+
+        if layout {
+            layout_pubsub.emit(panels);
+        }
+
+        if active {
+            active_pubsub.emit(active_id);
+        }
     }
 
     /// Stage a layout tree for `MainPanel` to apply at its next `rendered`
@@ -512,16 +589,22 @@ impl Workspace {
     /// Append a [`Panel`]. When the element had zero panels, the inserted panel
     /// becomes the active one (there is no other candidate).
     pub fn insert_panel(&self, panel: Panel) {
-        let mut data = self.0.borrow_mut();
-        if data.active.is_none() {
-            data.active = Some(panel.id.clone());
+        {
+            let mut data = self.0.borrow_mut();
+            if data.active.is_none() {
+                data.active = Some(panel.id.clone());
+                data.active_dirty = true;
+            }
+
+            panel
+                .renderer
+                .set_active_flag(data.active.as_ref() == Some(&panel.id));
+            data.panels.push(panel);
+            data.layout_dirty = true;
+            Self::sync_solo_flags(&data);
         }
 
-        panel
-            .renderer
-            .set_active_flag(data.active.as_ref() == Some(&panel.id));
-        data.panels.push(panel);
-        Self::sync_solo_flags(&data);
+        self.schedule_layout_flush();
     }
 
     /// Hold `panel` in the reservation slot (see [`WorkspaceData::reserved`]):
@@ -585,8 +668,10 @@ impl Workspace {
 
             if data.active.as_ref() == Some(id) {
                 data.active = None;
+                data.active_dirty = true;
             }
 
+            data.layout_dirty |= removed.is_some();
             Self::sync_solo_flags(&data);
             (
                 removed,
@@ -605,25 +690,32 @@ impl Workspace {
             staged_pubsub.emit(());
         }
 
+        self.schedule_layout_flush();
         removed
     }
 
     /// Set the active panel. Returns `false` (no-op) if `id` is not a known
     /// panel.
     pub fn set_active(&self, id: PanelId) -> bool {
-        let mut data = self.0.borrow_mut();
-        if data.panels.iter().any(|p| p.id == id) {
-            data.active = Some(id);
-            for panel in data.panels.iter() {
-                panel
-                    .renderer
-                    .set_active_flag(data.active.as_ref() == Some(&panel.id));
-            }
+        let known = {
+            let mut data = self.0.borrow_mut();
+            if data.panels.iter().any(|p| p.id == id) {
+                data.active_dirty |= data.active.as_ref() != Some(&id);
+                data.active = Some(id);
+                for panel in data.panels.iter() {
+                    panel
+                        .renderer
+                        .set_active_flag(data.active.as_ref() == Some(&panel.id));
+                }
 
-            true
-        } else {
-            false
-        }
+                true
+            } else {
+                false
+            }
+        };
+
+        self.schedule_layout_flush();
+        known
     }
 
     /// The default [`Client`], if one has been loaded.

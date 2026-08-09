@@ -1030,3 +1030,17 @@ class TestPolarsCombinedOperations:
             ]
         )
         view.delete()
+
+    def test_column_values_view(self, client):
+        table = client.open_table("superstore")
+        view = table.view(group_by=["Region"], columns=[])
+        csv = view.to_csv()
+        assert [line for line in csv.splitlines() if line] == [
+            "__ROW_PATH_0__",
+            "null",
+            '"Central"',
+            '"East"',
+            '"South"',
+            '"West"',
+        ]
+        view.delete()
