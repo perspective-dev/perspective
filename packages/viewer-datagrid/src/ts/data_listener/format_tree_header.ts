@@ -44,7 +44,14 @@ export function* format_tree_header_row_path(
         if (formatted instanceof HTMLElement) {
             newPath = newPath.concat(formatted);
         } else {
-            newPath = newPath.concat({ toString: () => formatted as string });
+            // `format_cell` contractually returns `string | HTMLElement |
+            // null`, but this wrapper is the row-header styling's only
+            // source of text - coerce defensively so a non-string can
+            // never surface from `toString()`. `null` (a null group key)
+            // coerces to `""`, keeping the is-empty styling predicate.
+            newPath = newPath.concat({
+                toString: () => String(formatted ?? ""),
+            });
         }
 
         newPath.length = row_headers.length + 1;

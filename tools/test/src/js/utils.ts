@@ -32,6 +32,7 @@ export const DEFAULT_CONFIG: ViewerConfigUpdate = {
     filter: [],
     group_by: [],
     group_rollup_mode: "rollup",
+    split_rollup_mode: "flat",
     plugin: "",
     plugin_config: {},
     settings: false,

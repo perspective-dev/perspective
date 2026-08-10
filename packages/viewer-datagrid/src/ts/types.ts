@@ -242,6 +242,11 @@ export interface DatagridModel {
     _num_rows: number;
     _num_columns?: number;
     _schema: Schema;
+
+    /// Output types of the view's `windows` columns, synthesized in
+    /// `create.ts` - a window column used only in `group_by` appears in no
+    /// queryable schema (`view.schema()` covers visible columns only).
+    _window_schema: Schema;
     _theme: string;
     _ids: unknown[][];
     _plugin_background: number[];

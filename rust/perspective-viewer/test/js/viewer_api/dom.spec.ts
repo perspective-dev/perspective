@@ -48,6 +48,7 @@ const RESULT = {
     theme: "Pro Light",
     title: null,
     group_rollup_mode: "rollup",
+    split_rollup_mode: "flat",
 };
 
 test.beforeEach(async ({ page }) => {

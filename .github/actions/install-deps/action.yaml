@@ -44,6 +44,18 @@ inputs:
     ccache:
         default: ""
         description: "Install ccache with this cache key (empty = disabled); build steps must also set PSP_USE_CCACHE"
+    ccache_variant:
+        default: "ccache"
+        description: "'ccache' or 'sccache'; sccache also caches rustc when the build step sets RUSTC_WRAPPER, and is the stable choice for MSVC"
+    emsdk_cache:
+        default: ""
+        description: "Cache the .emsdk toolchain + generated sysroot under this key suffix (empty = disabled)"
+    cargo_cache:
+        default: "true"
+        description: "Cache the cargo registry. Disable for jobs which use rust-cache, which caches ~/.cargo itself"
+    cache_save:
+        default: "true"
+        description: "Save the ccache/sccache dir at job end (restore is unconditional). Pass config's SAVE_CACHE so PR runs don't duplicate master's entries against the 10G repo cap"
 
 runs:
     using: "composite"
@@ -83,31 +95,35 @@ runs:
           with:
               version: 9
 
+        # emsdk installs to `<workspace>/.emsdk` (`install_emsdk.mjs`), and
+        # the emscripten sysroot libraries generated during the first build
+        # land inside it, so a post-build save skips both the clone and the
+        # ~2.5min sysroot generation. Keyed per wasm32/wasm64 job because the
+        # sysroots differ and only the first save under a key wins.
         - name: Setup emsdk cache
           uses: actions/cache@v4
           id: emsdk-cache
-          if: ${{ inputs.skip_cache == 'false' && inputs.javascript == 'true' }}
+          if: ${{ inputs.skip_cache == 'false' && inputs.emsdk_cache != '' }}
           with:
-              path: |
-                  ~/boost_1_82_0/
-                  ~/.emsdk/
-                  ~/.llvm/
-              key: ${{ runner.os }}-emsdk-${{ hashFiles('package.json') }}
+              path: .emsdk/
+              key: ${{ runner.os }}-emsdk-${{ inputs.emsdk_cache }}-${{ hashFiles('package.json') }}
               restore-keys: |
-                  ${{ runner.os }}-emsdk-
+                  ${{ runner.os }}-emsdk-${{ inputs.emsdk_cache }}-
 
+        # Only the manylinux container jobs need this; everywhere else
+        # `setup-python` provides its own pip cache.
         - name: Setup pip cache
           uses: actions/cache@v4
-          if: ${{ inputs.skip_cache == 'false' && inputs.python == 'true' }}
+          if: ${{ inputs.skip_cache == 'false' && inputs.python == 'true' && inputs.manylinux == 'true' }}
           with:
               path: ~/.cache/pip
-              key: ${{ runner.os }}-pip-${{ hashFiles('**/setup.py') }}
+              key: ${{ runner.os }}-pip-${{ hashFiles('rust/perspective-python/requirements.txt') }}
               restore-keys: |
                   ${{ runner.os }}-pip-
 
         - name: Setup cargo cache
           uses: actions/cache@v4
-          if: ${{ inputs.skip_cache == 'false' && inputs.rust == 'true' }}
+          if: ${{ inputs.skip_cache == 'false' && inputs.rust == 'true' && inputs.cargo_cache == 'true' }}
           with:
               key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
               path: |
@@ -123,6 +139,8 @@ runs:
           if: ${{ inputs.ccache != '' && inputs.skip_cache == 'false' }}
           with:
               key: ${{ inputs.ccache }}
+              variant: ${{ inputs.ccache_variant }}
+              save: ${{ inputs.cache_save }}
               max-size: "1G"
 
         # https://github.com/apache/arrow/issues/38391

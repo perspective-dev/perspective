@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_client::config::GroupRollupMode;
+use perspective_client::config::{GroupRollupMode, SplitRollupMode};
 use serde::Deserialize;
 use ts_rs::TS;
 
@@ -103,6 +103,13 @@ pub struct PluginStaticConfig {
     #[ts(optional)]
     pub group_rollup_modes: Option<Vec<GroupRollupMode>>,
 
+    /// Split-rollup modes the plugin accepts, in preference order.
+    /// The first entry that matches a feature flag becomes the default.
+    #[serde(default)]
+    #[ts(as = "Option<_>")]
+    #[ts(optional)]
+    pub split_rollup_modes: Option<Vec<SplitRollupMode>>,
+
     /// Plugin load priority. Higher numbers win; ties resolve in
     /// registration order. The highest-priority plugin is loaded by
     /// default unless `restore({ plugin })` overrides it.
@@ -188,6 +195,17 @@ impl PluginStaticConfig {
 
     pub fn get_group_rollups(&self, rollup_features: &[GroupRollupMode]) -> Vec<GroupRollupMode> {
         self.group_rollup_modes
+            .clone()
+            .map(|x| {
+                x.into_iter()
+                    .filter(|y| rollup_features.is_empty() || rollup_features.contains(y))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn get_split_rollups(&self, rollup_features: &[SplitRollupMode]) -> Vec<SplitRollupMode> {
+        self.split_rollup_modes
             .clone()
             .map(|x| {
                 x.into_iter()

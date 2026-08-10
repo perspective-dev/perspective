@@ -14,6 +14,8 @@ import { RegularTableElement } from "regular-table";
 import { get_psp_type, type DatagridModel } from "../types.js";
 import { CollectedHeaderRow } from "./types.js";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
+import { apply_borders, classify_header_cell } from "./border_model.js";
+import { corner_boundary_x } from "./group_header.js";
 
 /**
  * Apply selected column styling in response to column settings toggle events.
@@ -96,11 +98,11 @@ export function styleColumnHeaderRow(
     headerRow: CollectedHeaderRow,
     regularTable: RegularTableElement,
     is_menu_row: boolean,
+    is_last_header_row: boolean,
+    single_header_row: boolean,
 ): void {
-    const header_depth =
-        model._config.group_by.length -
-        (model._config.group_rollup_mode === "flat" ? 1 : 0);
-
+    const header_depth = corner_boundary_x(model);
+    const split_by_len = model._config.split_by.length;
     const selectedColumn = model._column_settings_selected_column;
     for (const { element: td, metadata } of headerRow.cells) {
         if (
@@ -116,15 +118,45 @@ export function styleColumnHeaderRow(
 
         const sort = model._config.sort.find((x) => x[0] === column_name);
         const is_corner = typeof metadata.x === "undefined";
-        const needs_border =
-            (metadata.type === "corner" &&
-                metadata.row_header_x === header_depth) ||
-            (!is_corner &&
-                (metadata.x + 1) % model._config.columns.length === 0);
+        const borders = classify_header_cell({
+            paths: model._column_paths,
+            split_by_len,
+            x: is_corner ? undefined : metadata.x,
+            colspan: td.colSpan || 1,
+            y: split_by_len + (is_menu_row ? 1 : 0),
+            row_kind: is_menu_row ? "menu" : "name",
+            is_corner: metadata.type === "corner",
+            corner_needs_border:
+                metadata.type === "corner" &&
+                model._config.group_by.length > 0 &&
+                metadata.row_header_x === header_depth,
+            is_last_header_row,
+            single_header_row,
+        });
 
-        td.classList.toggle("psp-header-border", needs_border);
+        apply_borders(td, borders);
+        td.classList.toggle("psp-header-border", borders.right !== "none");
         td.classList.toggle("psp-header-group", false);
         td.classList.toggle("psp-header-leaf", true);
+
+        // Under `split_rollup_mode: "rollup"`, columns whose raw path has
+        // fewer levels than `split_by` are subtotal (or, with zero levels,
+        // grand-total) column groups.
+        const n_split_levels = is_corner
+            ? undefined
+            : model._column_paths[metadata.x!]?.split("|").length - 1;
+        const is_rollup_col =
+            model._config.split_by.length > 0 &&
+            n_split_levels !== undefined &&
+            n_split_levels < model._config.split_by.length;
+        td.classList.toggle(
+            "psp-split-total",
+            is_rollup_col && n_split_levels === 0,
+        );
+        td.classList.toggle(
+            "psp-split-subtotal",
+            is_rollup_col && n_split_levels! > 0,
+        );
         td.classList.toggle("psp-is-top", false);
         td.classList.toggle("psp-header-corner", is_corner);
         td.classList.toggle(

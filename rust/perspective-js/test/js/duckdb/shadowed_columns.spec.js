@@ -11,54 +11,37 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { test, expect } from "@perspective-dev/test";
-import perspective from "../perspective_client";
+import { describeDuckDB } from "./setup.js";
 
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
-
-import * as fs from "node:fs";
-
-const superstore_uncompressed = fs.readFileSync(
-    require.resolve("superstore-arrow/superstore.arrow"),
-).buffer;
-
-const superstore_lz4 = fs.readFileSync(
-    require.resolve("superstore-arrow/superstore.lz4.arrow"),
-).buffer;
-
-test.describe("to_format regressions", function () {
-    test("start_col is respected", async () => {
-        let table = await perspective.table(superstore_uncompressed.slice());
-        let view = await table.view({
+describeDuckDB("shadowed columns", (getClient) => {
+    test("group_by view schema() keeps a column which suffixes another", async function () {
+        const table = await getClient().open_table("memory.superstore");
+        const view = await table.view({
             group_by: ["State"],
-            split_by: ["Sub-Category"],
-            // sort: [["Customer Name", "desc"]],
-            group_rollup_mode: "rollup",
-            split_rollup_mode: "flat",
-            columns: ["Sales", "Quantity", "Discount", "Profit"],
+            columns: ["Category", "Sub-Category", "Sales"],
         });
 
-        const result1 = await view.to_columns({ start_col: 4, end_row: 1 });
-        const result2 = await view.to_columns({ start_col: 5, end_row: 1 });
+        expect(await view.schema()).toEqual({
+            Category: "string",
+            "Sub-Category": "string",
+            Sales: "float",
+        });
 
-        expect(result1).not.toEqual(result2);
+        await view.delete();
     });
 
-    test("start_col is respected with sort", async () => {
-        let table = await perspective.table(superstore_uncompressed.slice());
-        let view = await table.view({
-            group_by: ["State"],
-            split_by: ["Sub-Category"],
-            sort: [["Customer Name", "desc"]],
-            group_rollup_mode: "rollup",
-            split_rollup_mode: "flat",
-            columns: ["Sales", "Quantity", "Discount", "Profit"],
+    test("split_by view schema() resolves both shadower and shadowed", async function () {
+        const table = await getClient().open_table("memory.superstore");
+        const view = await table.view({
+            split_by: ["Region"],
+            columns: ["Category", "Sub-Category"],
         });
 
-        const result1 = await view.to_columns({ start_col: 4, end_row: 1 });
-        const result2 = await view.to_columns({ start_col: 5, end_row: 1 });
+        expect(await view.schema()).toEqual({
+            Category: "string",
+            "Sub-Category": "string",
+        });
 
-        expect(result1).not.toEqual(result2);
+        await view.delete();
     });
 });

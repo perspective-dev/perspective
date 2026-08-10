@@ -73,6 +73,8 @@ View<CTX_T>::View(
         _find_hidden_sort(column_sort);
     }
 
+    m_split_rollup = m_view_config->is_split_rollup() && sides() == 2;
+
     // configure data window for `get_data` and `row_delta`
     // Column-only views skip the grand total row (offset=1), but
     // total_only mode needs to return exactly that row.
@@ -169,7 +171,8 @@ View<t_ctx2>::num_columns() const {
 
         auto count = 0;
         for (t_uindex i = 0; i < col_length; ++i) {
-            if (m_ctx->unity_get_column_path(i + 1).size() != depth) {
+            if (!m_split_rollup
+                && m_ctx->unity_get_column_path(i + 1).size() != depth) {
                 continue;
             }
 
@@ -211,7 +214,8 @@ View<CTX_T>::column_names(bool skip, std::int32_t depth) const {
         }
 
         std::vector<t_tscalar> col_path = m_ctx->unity_get_column_path(key + 1);
-        if (skip && col_path.size() < static_cast<unsigned int>(depth)) {
+        if (skip && !m_split_rollup
+            && col_path.size() < static_cast<unsigned int>(depth)) {
             continue;
         }
 
@@ -294,7 +298,8 @@ View<CTX_T>::column_names_range(
         }
 
         std::vector<t_tscalar> col_path = m_ctx->unity_get_column_path(key + 1);
-        if (skip && col_path.size() < static_cast<unsigned int>(depth)) {
+        if (skip && !m_split_rollup
+            && col_path.size() < static_cast<unsigned int>(depth)) {
             start_col += 1;
             end_col += 1;
             continue;
@@ -320,7 +325,8 @@ View<CTX_T>::column_names_range(
         }
 
         std::vector<t_tscalar> col_path = m_ctx->unity_get_column_path(key + 1);
-        if (skip && col_path.size() < static_cast<unsigned int>(depth)) {
+        if (skip && !m_split_rollup
+            && col_path.size() < static_cast<unsigned int>(depth)) {
             end_col += 1;
             max = std::min(end_col, col_count);
             continue;
@@ -724,7 +730,7 @@ View<t_ctx2>::get_data(
             column_indices.push_back(0);
             for (t_uindex i = 0; i < col_length; ++i) {
                 auto col_path = m_ctx->unity_get_column_path(i + 1);
-                if (col_path.size() != depth) {
+                if (!m_split_rollup && col_path.size() != depth) {
                     continue;
                 }
 
@@ -772,6 +778,10 @@ View<t_ctx2>::get_data(
 
         std::vector<t_tscalar> slice_with_headers =
             m_ctx->get_data(start_row, end_row, start_col_index, end_col_index);
+
+        if (column_indices.empty()) {
+            slice_with_headers.clear();
+        }
 
         auto iter = slice_with_headers.begin();
         while (iter != slice_with_headers.end()) {

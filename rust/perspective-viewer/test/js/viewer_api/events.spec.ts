@@ -73,6 +73,7 @@ test.describe("Events", () => {
             plugin_config: {},
             group_by: ["State"],
             group_rollup_mode: "rollup",
+            split_rollup_mode: "flat",
             settings: true,
             sort: [],
             table: "load-viewer-csv",

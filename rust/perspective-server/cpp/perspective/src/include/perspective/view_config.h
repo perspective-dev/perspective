@@ -61,7 +61,8 @@ public:
         bool column_only,
         bool leaves_only = false,
         bool total_only = false,
-        const std::vector<t_window_spec>& windows = {}
+        const std::vector<t_window_spec>& windows = {},
+        bool split_rollup = false
     );
 
     /**
@@ -127,6 +128,7 @@ public:
 
     bool is_leaves_only() const;
     bool is_total_only() const;
+    bool is_split_rollup() const;
 
     std::int32_t get_row_pivot_depth() const;
     std::int32_t get_column_pivot_depth() const;
@@ -250,5 +252,6 @@ private:
     bool m_column_only;
     bool m_leaves_only;
     bool m_total_only;
+    bool m_split_rollup;
 };
 } // end namespace perspective

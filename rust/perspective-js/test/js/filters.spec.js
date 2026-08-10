@@ -619,6 +619,7 @@ const datetime_data_local = [
                     sort: [],
                     split_by: [],
                     group_rollup_mode: "rollup",
+                    split_rollup_mode: "flat",
                 });
 
                 view.delete();

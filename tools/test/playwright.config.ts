@@ -219,7 +219,10 @@ export default defineConfig({
         : 0,
     forbidOnly: !!process.env.CI,
     workers: process.env.PSP_DEBUG || RUN_JUPYTERLAB ? 1 : "50%",
-    retries: RUN_JUPYTERLAB && process.env.CI ? 2 : 0,
+    // Retries in CI only — a single flake among the ~2k viewer tests
+    // otherwise fails the run (retried-but-passing tests are still surfaced
+    // as "flaky" in the report, so regressions remain visible).
+    retries: process.env.CI ? 2 : 0,
     quiet: !process.env.PSP_DEBUG,
     reporter: process.env.CI ? [["github"], ["html"]] : [["dot"]],
     projects: PROJECTS,

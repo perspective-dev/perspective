@@ -40,6 +40,7 @@ class PerspectiveTraitlets(HasTraits):
     group_rollup_mode = Enum(("rollup", "flat", "total"), default_value="rollup").tag(
         sync=True
     )
+    split_rollup_mode = Enum(("flat", "rollup"), default_value="flat").tag(sync=True)
     aggregates = Dict(default_value={}).tag(sync=True)
     sort = List(default_value=[]).tag(sync=True)
     filter = List(default_value=[]).tag(sync=True)

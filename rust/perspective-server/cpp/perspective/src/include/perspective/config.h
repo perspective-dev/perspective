@@ -211,6 +211,16 @@ public:
         return m_grand_agg_str;
     }
 
+    inline void
+    set_split_rollup(bool split_rollup) {
+        m_split_rollup = split_rollup;
+    }
+
+    inline bool
+    is_split_rollup() const {
+        return m_split_rollup;
+    }
+
     // The backing store for any persistent storage created by the context built
     // from this config (currently the expression `m_master` table). Inherited
     // from the parent `Table`'s backing store. Defaults to memory.
@@ -255,6 +265,7 @@ private:
     std::string m_grand_agg_str;
     t_fmode m_fmode;
     bool m_has_pkey_agg;
+    bool m_split_rollup = false;
     t_backing_store m_backing_store = BACKING_STORE_MEMORY;
 };
 

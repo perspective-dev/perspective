@@ -16,7 +16,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::config::GroupRollupMode;
+use crate::config::{GroupRollupMode, SplitRollupMode};
 use crate::proto::get_features_resp::{AggregateArgs, AggregateOptions, ColumnTypeOptions};
 use crate::proto::{ColumnType, GetFeaturesResp, WindowAggregateArgs};
 
@@ -41,6 +41,13 @@ pub struct Features<'a> {
     #[serde(default)]
     #[ts(optional, as = "Option<_>")]
     pub split_by: bool,
+
+    /// Which `split_rollup_mode` options are supported. Empty (the default)
+    /// means `["flat"]` - a server must opt in to `"rollup"` explicitly, as
+    /// it requires emitting subtotal and grand-total column groups.
+    #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
+    pub split_rollup_mode: Vec<SplitRollupMode>,
 
     /// Available filter operators per column type.
     #[serde(default)]
@@ -141,6 +148,11 @@ impl<'a> From<Features<'a>> for GetFeaturesResp {
                 .group_rollup_mode
                 .iter()
                 .map(|x| crate::proto::GroupRollupMode::from(*x) as i32)
+                .collect(),
+            split_rollup_mode: value
+                .split_rollup_mode
+                .iter()
+                .map(|x| crate::proto::SplitRollupMode::from(*x) as i32)
                 .collect(),
             split_by: value.split_by,
             expressions: value.expressions,

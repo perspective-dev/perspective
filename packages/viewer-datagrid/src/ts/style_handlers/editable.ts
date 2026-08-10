@@ -85,19 +85,34 @@ export function applyColumnHeaderStyles(
     }
 
     // Style the actual column header rows
+    const single_header_row = len <= 1;
     const colHeadersIndex = model._config.split_by.length;
+    const menuHeadersIndex = model._config.split_by.length + 1;
     if (colHeadersIndex < headerRows.length) {
         const colHeaders = headerRows[colHeadersIndex];
         if (colHeaders) {
-            styleColumnHeaderRow(model, colHeaders, regularTable, false);
+            styleColumnHeaderRow(
+                model,
+                colHeaders,
+                regularTable,
+                false,
+                menuHeadersIndex >= headerRows.length,
+                single_header_row,
+            );
         }
     }
 
-    const menuHeadersIndex = model._config.split_by.length + 1;
     if (menuHeadersIndex < headerRows.length) {
         const menuHeaders = headerRows[menuHeadersIndex];
         if (menuHeaders) {
-            styleColumnHeaderRow(model, menuHeaders, regularTable, true);
+            styleColumnHeaderRow(
+                model,
+                menuHeaders,
+                regularTable,
+                true,
+                true,
+                single_header_row,
+            );
         }
     }
 }

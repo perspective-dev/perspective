@@ -11,54 +11,126 @@
  * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
  */
 
-.psp-header-border:not(.psp-is-top):not(.psp-header-leaf) {
-    /* right */
-    box-shadow: 1px 0px var(--psp-inactive--border-color, #8b868045);
+/* Mitered header borders - borders gapped at one or both corners, showing
+ * that a cell binds more tightly to its neighbor in that direction.
+ *
+ * Each edge of a cell is one independent `--psp-miter-*` slot, set by
+ * exactly one single-purpose class per edge (emitted by
+ * `style_handlers/border_model.ts`) and composed by the single base rule
+ * below. Custom properties on the same element merge across classes where
+ * `box-shadow` itself cannot - so edge combinations need NO per-combination
+ * rules here, and a new cell kind costs zero new CSS.
+ *
+ * Each border segment is a `box-shadow` piece: with offset `(dx, dy)` and
+ * spread `-s`, the painted region is the cell rect shrunk by `s` then
+ * translated - a 1px edge line whose ends stop `2s` short of the gapped
+ * corner(s). `--psp-mh-gap` is the miter gap; `--psp-mh-color` the line
+ * color. Both are theme-overridable on `regular-table`.
+ *
+ * Class naming: `psp-b-{t|r|b|l}` = full edge; suffix `-m{t|b|l|r|tb|lr}` =
+ * which corner(s) are mitered (gapped). */
+
+regular-table {
+    --psp-mh-color: var(--psp-inactive--border-color, #8b868045);
+    --psp-mh-gap: 8px;
 }
 
-.psp-header-group {
-    /* bottom */
-    box-shadow: 0px 10px 0 -9px var(--psp-inactive--border-color, #8b868045);
-}
-
-.psp-is-top {
-    /* top-miter-right */
-    box-shadow: 5px 4px 0px -4px var(--psp-inactive--border-color, #8b868045);
-}
-
-.psp-is-top.psp-header-group:not(.psp-header-group-corner) {
-    /* top-miter-right and bottom */
+regular-table thead th {
     box-shadow:
-        5px 4px 0px -4px var(--psp-inactive--border-color, #8b868045),
-        0px 10px 0 -9px var(--psp-inactive--border-color, #8b868045);
+        var(--psp-miter-top, 0 0 0 0 transparent),
+        var(--psp-miter-right, 0 0 0 0 transparent),
+        var(--psp-miter-bottom, 0 0 0 0 transparent),
+        var(--psp-miter-left, 0 0 0 0 transparent);
 }
 
-.psp-header-border.psp-header-group {
-    &:not(.psp-is-top):not(.psp-header-group-corner) {
-        /* right and bottom */
-        box-shadow:
-            1px 0px var(--psp-inactive--border-color, #8b868045),
-            0px 10px 0 -9px var(--psp-inactive--border-color, #8b868045);
-    }
+/* Right edge */
+
+.psp-b-r {
+    --psp-miter-right: 1px 0px 0px 0px var(--psp-mh-color);
 }
 
-perspective-viewer[settings]
-    tr.rt-autosize
-    .psp-header-leaf.psp-header-border:not(.psp-menu-enabled) {
-    box-shadow: 1px 0px var(--psp-inactive--border-color, #8b868045);
+.psp-b-r-mt {
+    --psp-miter-right: calc(var(--psp-mh-gap) / 2 + 1px)
+        calc(var(--psp-mh-gap) / 2) 0px calc(var(--psp-mh-gap) / -2)
+        var(--psp-mh-color);
 }
 
-:host-context(perspective-viewer[settings])
-    tr.rt-autosize
-    .psp-header-leaf.psp-header-border:not(.psp-menu-enabled) {
-    box-shadow: 1px 0px var(--psp-inactive--border-color, #8b868045);
+.psp-b-r-mb {
+    --psp-miter-right: calc(var(--psp-mh-gap) / 2 + 1px)
+        calc(var(--psp-mh-gap) / -2) 0px calc(var(--psp-mh-gap) / -2)
+        var(--psp-mh-color);
 }
 
-.psp-header-leaf.psp-header-border {
-    /* bottom-miter-right */
-    box-shadow: 5px -4px 0px -4px var(--psp-inactive--border-color, #8b868045);
+.psp-b-r-mtb {
+    --psp-miter-right: calc(var(--psp-mh-gap) + 1px) 0px 0px
+        calc(-1 * var(--psp-mh-gap)) var(--psp-mh-color);
 }
 
-tr:only-child th {
-    box-shadow: none !important;
+/* Left edge */
+
+.psp-b-l {
+    --psp-miter-left: -1px 0px 0px 0px var(--psp-mh-color);
+}
+
+.psp-b-l-mt {
+    --psp-miter-left: calc(var(--psp-mh-gap) / -2 - 1px)
+        calc(var(--psp-mh-gap) / 2) 0px calc(var(--psp-mh-gap) / -2)
+        var(--psp-mh-color);
+}
+
+.psp-b-l-mb {
+    --psp-miter-left: calc(var(--psp-mh-gap) / -2 - 1px)
+        calc(var(--psp-mh-gap) / -2) 0px calc(var(--psp-mh-gap) / -2)
+        var(--psp-mh-color);
+}
+
+.psp-b-l-mtb {
+    --psp-miter-left: calc(-1 * var(--psp-mh-gap) - 1px) 0px 0px
+        calc(-1 * var(--psp-mh-gap)) var(--psp-mh-color);
+}
+
+/* Bottom edge */
+
+.psp-b-b {
+    --psp-miter-bottom: 0px 1px 0px 0px var(--psp-mh-color);
+}
+
+.psp-b-b-ml {
+    --psp-miter-bottom: calc(var(--psp-mh-gap) / 2)
+        calc(var(--psp-mh-gap) / 2 + 1px) 0px calc(var(--psp-mh-gap) / -2)
+        var(--psp-mh-color);
+}
+
+.psp-b-b-mr {
+    --psp-miter-bottom: calc(var(--psp-mh-gap) / -2)
+        calc(var(--psp-mh-gap) / 2 + 1px) 0px calc(var(--psp-mh-gap) / -2)
+        var(--psp-mh-color);
+}
+
+.psp-b-b-mlr {
+    --psp-miter-bottom: 0px calc(var(--psp-mh-gap) + 1px) 0px
+        calc(-1 * var(--psp-mh-gap)) var(--psp-mh-color);
+}
+
+/* Top edge */
+
+.psp-b-t {
+    --psp-miter-top: 0px -1px 0px 0px var(--psp-mh-color);
+}
+
+.psp-b-t-ml {
+    --psp-miter-top: calc(var(--psp-mh-gap) / 2)
+        calc(var(--psp-mh-gap) / -2 - 1px) 0px calc(var(--psp-mh-gap) / -2)
+        var(--psp-mh-color);
+}
+
+.psp-b-t-mr {
+    --psp-miter-top: calc(var(--psp-mh-gap) / -2)
+        calc(var(--psp-mh-gap) / -2 - 1px) 0px calc(var(--psp-mh-gap) / -2)
+        var(--psp-mh-color);
+}
+
+.psp-b-t-mlr {
+    --psp-miter-top: 0px calc(-1 * var(--psp-mh-gap) - 1px) 0px
+        calc(-1 * var(--psp-mh-gap)) var(--psp-mh-color);
 }

@@ -215,6 +215,7 @@ test.describe("Viewer Load", () => {
             filter: [],
             group_by: ["State"],
             group_rollup_mode: "rollup",
+            split_rollup_mode: "flat",
             plugin: "Debug",
             plugin_config: {},
             settings: false,

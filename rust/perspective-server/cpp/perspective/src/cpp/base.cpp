@@ -492,8 +492,8 @@ sorttype_to_str(t_sorttype type) {
     }
 }
 
-t_aggtype
-str_to_aggtype(const std::string& str) {
+std::optional<t_aggtype>
+maybe_str_to_aggtype(const std::string& str) {
     if (str == "distinct count" || str == "distinctcount" || str == "distinct"
         || str == "distinct_count") {
         return t_aggtype::AGGTYPE_DISTINCT_COUNT;
@@ -623,12 +623,54 @@ str_to_aggtype(const std::string& str) {
         return t_aggtype::AGGTYPE_GMV;
     }
 
-    std::stringstream ss;
-    ss << "Encountered unknown aggregate operation: '" << str << "'"
-       << "\n";
-    PSP_COMPLAIN_AND_ABORT(ss.str());
-    // use any as default
-    return t_aggtype::AGGTYPE_ANY;
+    return std::nullopt;
+}
+
+t_aggtype
+str_to_aggtype(const std::string& str) {
+    const auto agg = maybe_str_to_aggtype(str);
+    if (!agg) {
+        std::stringstream ss;
+        ss << "Invalid aggregate '" << str << "'." << '\n';
+        PSP_COMPLAIN_AND_ABORT(ss.str());
+        // use any as default
+        return t_aggtype::AGGTYPE_ANY;
+    }
+
+    return *agg;
+}
+
+bool
+is_implemented_aggtype(t_aggtype agg) {
+    switch (agg) {
+        case t_aggtype::AGGTYPE_IDENTITY:
+        case t_aggtype::AGGTYPE_MEAN_BY_COUNT:
+        case t_aggtype::AGGTYPE_PY_AGG:
+        case t_aggtype::AGGTYPE_SCALED_DIV:
+        case t_aggtype::AGGTYPE_SCALED_ADD:
+        case t_aggtype::AGGTYPE_SCALED_MUL:
+        case t_aggtype::AGGTYPE_UDF_COMBINER:
+        case t_aggtype::AGGTYPE_UDF_REDUCER: {
+            return false;
+        }
+        default: {
+            return true;
+        }
+    }
+}
+
+bool
+aggtype_takes_argument(t_aggtype agg) {
+    switch (agg) {
+        case t_aggtype::AGGTYPE_WEIGHTED_MEAN:
+        case t_aggtype::AGGTYPE_MAX_BY:
+        case t_aggtype::AGGTYPE_MIN_BY: {
+            return true;
+        }
+        default: {
+            return false;
+        }
+    }
 }
 
 t_aggtype

@@ -2431,6 +2431,95 @@ const std = (nums) => {
         });
     });
 
+    test.describe("Invalid aggregates", function () {
+        const rejects = async (aggregates, message) => {
+            const table = await perspective.table(data);
+            await expect(
+                table.view({ group_by: ["y"], columns: ["x"], aggregates }),
+            ).rejects.toThrow(message);
+
+            // The `Table` survives a rejected `View` - the aggregate is
+            // refused before any context is built.
+            const view = await table.view({
+                group_by: ["y"],
+                columns: ["x"],
+                aggregates: { x: "sum" },
+            });
+
+            expect(await view.to_columns()).toEqual({
+                __ROW_PATH__: [[], ["a"], ["b"], ["c"], ["d"]],
+                x: [10, 1, 2, 3, 4],
+            });
+
+            await view.delete();
+            await table.delete();
+        };
+
+        test("unrecognized aggregate name", async function () {
+            await rejects(
+                { x: "sumz" },
+                "Abort(): Invalid aggregate 'sumz' for column 'x' found in View aggregates.",
+            );
+        });
+
+        test("`identity` is named but unimplemented", async function () {
+            await rejects(
+                { x: "identity" },
+                "Abort(): Unimplemented aggregate 'identity' for column 'x' found in View aggregates.",
+            );
+        });
+
+        test("`mean by count` is named but unimplemented", async function () {
+            await rejects(
+                { x: "mean by count" },
+                "Abort(): Unimplemented aggregate 'mean by count' for column 'x' found in View aggregates.",
+            );
+        });
+
+        test("`div` cannot be configured from a ViewConfig", async function () {
+            await rejects(
+                { x: "div" },
+                "Abort(): Unimplemented aggregate 'div' for column 'x' found in View aggregates.",
+            );
+        });
+
+        test("argument-taking aggregate with no argument", async function () {
+            await rejects(
+                { x: "weighted mean" },
+                "Abort(): Aggregate 'weighted mean' for column 'x' requires a column argument.",
+            );
+        });
+
+        test("argument-taking aggregate with an unknown argument", async function () {
+            await rejects(
+                { x: ["weighted mean", ["nosuchcolumn"]] },
+                "Abort(): Invalid column 'nosuchcolumn' found in the 'weighted mean' aggregate for column 'x'.",
+            );
+        });
+
+        test("snake_case argument-taking aggregates read their argument", async function () {
+            const table = await perspective.table([
+                { x: 1, w: 1, y: "a" },
+                { x: 3, w: 3, y: "a" },
+            ]);
+
+            const view = await table.view({
+                group_by: ["y"],
+                columns: ["x"],
+                aggregates: { x: ["weighted_mean", ["w"]] },
+            });
+
+            // (1*1 + 3*3) / (1 + 3), not null.
+            expect(await view.to_columns()).toEqual({
+                __ROW_PATH__: [[], ["a"]],
+                x: [2.5, 2.5],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+    });
+
     test.describe("Aggregates with negatives", function () {
         test("sum abs", async function () {
             var table = await perspective.table([

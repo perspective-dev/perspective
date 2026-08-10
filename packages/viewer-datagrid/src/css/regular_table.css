@@ -132,6 +132,11 @@ perspective-viewer.dragging,
     border-right-width: 0px;
 }
 
+/* Subtotal / grand-total column groups (`split_rollup_mode: "rollup"`)
+   carry `psp-split-total` / `psp-split-subtotal` marker classes for themes;
+   no default styling - group boundaries come from the mitered border
+   system. */
+
 .psp-header-sort-desc:after {
     background-repeat: no-repeat;
     background-color: var(--psp--color);

@@ -379,6 +379,7 @@ async_table = await async_client.open_table(sync_table.get_name())`,
                     filter: [],
                     group_by: [],
                     group_rollup_mode: "rollup",
+                    split_rollup_mode: "flat",
                     plugin: "Datagrid",
                     // Default plugin_config serializes empty — only
                     // non-default values appear in `save()`.
@@ -418,6 +419,7 @@ w.theme = "Pro Dark"`,
                         group_by: ["date"],
                         // Chart plugins only support "flat" rollup mode
                         group_rollup_mode: "flat",
+                        split_rollup_mode: "flat",
                         plugin: "X Bar",
                         plugin_config: {},
                         settings: true,
@@ -472,6 +474,7 @@ w.theme = "Pro Dark"`,
                     filter: [],
                     group_by: [],
                     group_rollup_mode: "rollup",
+                    split_rollup_mode: "flat",
                     plugin: "Datagrid",
                     // Default plugin_config serializes empty — only
                     // non-default values appear in `save()`.

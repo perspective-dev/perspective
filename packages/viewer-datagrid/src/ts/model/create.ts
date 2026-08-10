@@ -28,6 +28,40 @@ import {
 } from "../types.js";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 
+// Mirror of the engine's window-aggregate result types (the
+// `GetFeaturesResp.window_aggregates` table in `server.cpp`): these
+// aggregates yield a fixed type, everything else - `min`, `max`, `lag`,
+// `lead` - preserves the source column's type. Window columns appear in no
+// schema the client can query when they are not visible (the `View`'s
+// `schema()` covers visible columns only, and `table.schema()` /
+// `expression_schema()` are pre-window), so a `group_by` on a window column
+// needs this to format and style its row headers.
+const WINDOW_FLOAT_AGGREGATES = new Set([
+    "sum",
+    "avg",
+    "stddev",
+    "var",
+    "diff",
+    "rate",
+    "ema",
+]);
+
+function window_output_type(
+    aggregate: string,
+    source_column: string,
+    table_schema: Schema,
+): ColumnType {
+    if (aggregate === "count") {
+        return "integer";
+    }
+
+    if (WINDOW_FLOAT_AGGREGATES.has(aggregate)) {
+        return "float";
+    }
+
+    return table_schema[source_column] ?? "string";
+}
+
 function arraysChanged<T>(a: T[], b: T[]): boolean {
     if (a.length !== b.length) {
         return true;
@@ -180,6 +214,9 @@ export async function createModel(
         const group_rollup_mode_changed =
             old.group_rollup_mode !== config.group_rollup_mode;
 
+        const split_rollup_mode_changed =
+            old.split_rollup_mode !== config.split_rollup_mode;
+
         const theme_changed = this.model._theme !== style._theme;
         this._reset_scroll_top = group_by_changed;
         this._reset_scroll_left = split_by_changed;
@@ -192,6 +229,7 @@ export async function createModel(
 
         this._reset_column_size =
             group_rollup_mode_changed ||
+            split_rollup_mode_changed ||
             split_by_changed ||
             group_by_changed ||
             columns_changed ||
@@ -219,6 +257,13 @@ export async function createModel(
         ...(table_schema as Schema),
         ...(expression_schema as Schema),
     };
+
+    const _window_schema: Schema = Object.fromEntries(
+        Object.entries(config.windows ?? {}).map(([name, spec]) => [
+            name,
+            window_output_type(spec!.aggregate, spec!.column, _table_schema),
+        ]),
+    );
 
     const _column_paths: string[] = [];
     const _is_editable: boolean[] = [];
@@ -249,6 +294,7 @@ export async function createModel(
         _config: config,
         _num_rows: num_rows,
         _schema,
+        _window_schema,
         _ids: [],
         ...style,
         _column_paths,
@@ -260,7 +306,7 @@ export async function createModel(
             dirty: false,
         },
         _row_header_types: config.group_by.map((column_path) => {
-            return _table_schema[column_path];
+            return _table_schema[column_path] ?? _window_schema[column_path];
         }),
         _series_color_map: new Map<string, string>(),
         _series_color_seed: new Map<string, number>(),

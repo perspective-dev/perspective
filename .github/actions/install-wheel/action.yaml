@@ -17,26 +17,29 @@ inputs:
     inplace:
         default: "true"
         description: "Install in-place?"
+    glob:
+        default: "*.whl"
+        description: "Wheel filename glob; narrow this when wheels for multiple platforms share the working directory"
 
 runs:
     using: "composite"
     steps:
         - name: Install wheel (Linux)
           shell: sh
-          run: python -m pip install -U --no-dependencies *.whl --target rust/perspective-python
+          run: python -m pip install -U --no-dependencies ${{ inputs.glob }} --target rust/perspective-python
           if: ${{ inputs.inplace == 'true' && runner.os == 'Linux' }}
 
         - name: Install wheel (Linux)
           shell: sh
-          run: python -m pip install -U --no-dependencies *.whl
+          run: python -m pip install -U --no-dependencies ${{ inputs.glob }}
           if: ${{ inputs.inplace != 'true' && runner.os == 'Linux' }}
 
         - name: Install wheel (OSX)
           shell: sh
-          run: python -m pip install -U --no-dependencies *.whl --target rust/perspective-python
+          run: python -m pip install -U --no-dependencies ${{ inputs.glob }} --target rust/perspective-python
           if: ${{ runner.os == 'macOS' }}
 
         - name: Install wheel (Windows)
           shell: pwsh
-          run: python -m pip install -U --no-dependencies (Get-ChildItem .\*.whl | Select-Object -Expand FullName) --target rust/perspective-python
+          run: python -m pip install -U --no-dependencies (Get-ChildItem .\${{ inputs.glob }} | Select-Object -Expand FullName) --target rust/perspective-python
           if: ${{ runner.os == 'Windows' }}

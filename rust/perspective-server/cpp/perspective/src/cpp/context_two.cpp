@@ -423,7 +423,8 @@ t_ctx2::get_data(const std::vector<t_uindex>& rows) const {
 
     // Perspective generates extra headers for columns in the sort, which
     // needs to be skipped when generating row deltas.
-    bool should_skip_column_headers = !m_sortby.empty() && start_col < end_col;
+    bool should_skip_column_headers = !m_sortby.empty()
+        && !m_config.is_split_rollup() && start_col < end_col;
 
     if (should_skip_column_headers) {
         auto depth = m_config.get_num_cpivots();
