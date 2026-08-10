@@ -738,6 +738,7 @@ fn test_table_make_view_total_pivoted_aggregate() {
 #[test]
 fn test_column_path_source() {
     let mut config = ViewConfig::default();
+    config.split_by = vec!["state".to_string()];
     config.columns = vec![
         Some("price".to_string()),
         Some("total_price".to_string()),
@@ -758,6 +759,30 @@ fn test_column_path_source() {
     // Flat-view names equal a config column exactly — not a path.
     assert_eq!(column_path_source("price", &config), None);
     assert_eq!(column_path_source("__ROW_PATH_0__", &config), None);
+}
+
+#[test]
+fn test_column_path_source_no_split_by_never_matches() {
+    let mut config = ViewConfig::default();
+    config.group_by = vec!["State".to_string()];
+    config.columns = vec![
+        Some("Category".to_string()),
+        Some("Sub-Category".to_string()),
+    ];
+
+    assert_eq!(column_path_source("Sub-Category", &config), None);
+    assert_eq!(column_path_source("Category", &config), None);
+
+    // The same shadowing pair resolves correctly once a pivot exists.
+    config.split_by = vec!["Region".to_string()];
+    assert_eq!(
+        column_path_source("West|Sub-Category", &config),
+        Some((1, "Sub-Category"))
+    );
+    assert_eq!(
+        column_path_source("West|Category", &config),
+        Some((0, "Category"))
+    );
 }
 
 #[test]

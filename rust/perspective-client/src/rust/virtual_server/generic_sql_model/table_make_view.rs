@@ -12,8 +12,8 @@
 
 use super::GenericSQLError;
 use crate::config::{
-    Aggregate, Filter, FilterTerm, GroupRollupMode, Scalar, Sort, SortDir, ViewConfig, WindowFrame,
-    WindowSortDir, WindowSpec,
+    Aggregate, Filter, FilterTerm, GroupRollupMode, Scalar, Sort, SortDir, SplitRollupMode,
+    ViewConfig, WindowFrame, WindowSortDir, WindowSpec,
 };
 
 fn aggregate_to_string(agg: &Aggregate) -> String {
@@ -287,16 +287,6 @@ impl<'a> ViewQueryContext<'a> {
         table: &'a str,
         config: &'a ViewConfig,
     ) -> Result<Self, GenericSQLError> {
-        // SQL generation has no subtotal-column support; `Features` gating
-        // (`get_split_rollup_modes` defaults to `[Flat]`) should prevent this
-        // from ever arriving - fail loudly rather than silently emit leaves.
-        if config.split_rollup_mode == crate::config::SplitRollupMode::Rollup {
-            return Err(GenericSQLError::UnsupportedOperation(
-                "`split_rollup_mode: \"rollup\"` is not supported by SQL virtual servers"
-                    .to_string(),
-            ));
-        }
-
         let expressions = &config.expressions.0;
         let col_name_resolve = |col: &str| -> String {
             expressions
@@ -407,47 +397,69 @@ impl<'a> ViewQueryContext<'a> {
                 );
 
                 let cols: Vec<&String> = self.config.columns.iter().flatten().collect();
-                let from = if cols.is_empty() {
-                    "__PSP_PIVOT_SRC__".to_string()
-                } else {
-                    self.pivot_join(&cols, &["__ROW_NUM__".to_string()])
-                };
+                if self.is_split_rollup() && !cols.is_empty() {
+                    let n = self.config.split_by.len();
+                    let union = std::iter::once(0u64)
+                        .chain((1..=n).map(|k| (1u64 << k) - 1))
+                        .map(|mask| {
+                            format!(
+                                "SELECT *, {} AS __CGROUPING_ID__ FROM __PSP_PIVOT_BASE__",
+                                mask
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" UNION ALL ");
 
-                format!(
-                    "WITH __PSP_PIVOT_SRC__ AS ({}) SELECT * EXCLUDE (__ROW_NUM__) FROM {}",
-                    src, from
-                )
+                    format!(
+                        "WITH __PSP_PIVOT_BASE__ AS ({}), __PSP_PIVOT_SRC__ AS ({}) SELECT * \
+                         EXCLUDE (__ROW_NUM__) FROM {}",
+                        src,
+                        union,
+                        self.pivot_join(&cols, &["__ROW_NUM__".to_string()])
+                    )
+                } else {
+                    let from = if cols.is_empty() {
+                        "__PSP_PIVOT_SRC__".to_string()
+                    } else {
+                        self.pivot_join(&cols, &["__ROW_NUM__".to_string()])
+                    };
+
+                    format!(
+                        "WITH __PSP_PIVOT_SRC__ AS ({}) SELECT * EXCLUDE (__ROW_NUM__) FROM {}",
+                        src, from
+                    )
+                }
             },
             QueryOrientation::GroupedAndPivoted => {
                 let groups_joined = self.group_col_names.join(", ");
-                let split_cols_joined = self.pivot_on_expr();
+                let split_cols_joined = if self.is_split_rollup() {
+                    format!("ROLLUP({})", self.pivot_on_expr())
+                } else {
+                    self.pivot_on_expr()
+                };
+
                 let mut inner_clauses = self.select_clauses();
                 inner_clauses.extend(self.row_path_select_clauses());
                 if !self.is_flat_mode() {
                     inner_clauses.push(self.grouping_id_clause());
                 }
                 inner_clauses.extend(self.split_select_clauses());
+                if self.is_split_rollup() {
+                    inner_clauses.push(self.cgrouping_id_clause());
+                }
 
                 for (sidx, Sort(sort_col, sort_dir)) in self.config.sort.iter().enumerate() {
                     if *sort_dir != SortDir::None && !is_col_sort(sort_dir) {
-                        let agg = self.get_aggregate(sort_col);
+                        let sort_source = self.sort_source_expr(sort_col);
                         if self.is_flat_mode() {
                             inner_clauses.push(format!(
-                                "sum({}({})) OVER (PARTITION BY {}) AS __SORT_{}__",
-                                agg,
-                                self.col_name(sort_col),
-                                groups_joined,
-                                sidx,
+                                "sum({}) OVER (PARTITION BY {}) AS __SORT_{}__",
+                                sort_source, groups_joined, sidx,
                             ));
                         } else {
                             inner_clauses.push(format!(
-                                "sum({}({})) OVER (PARTITION BY {}({}), {}) AS __SORT_{}__",
-                                agg,
-                                self.col_name(sort_col),
-                                self.grouping_fn,
-                                groups_joined,
-                                groups_joined,
-                                sidx,
+                                "sum({}) OVER (PARTITION BY {}({}), {}) AS __SORT_{}__",
+                                sort_source, self.grouping_fn, groups_joined, groups_joined, sidx,
                             ));
                         }
                     }
@@ -498,6 +510,31 @@ impl<'a> ViewQueryContext<'a> {
             QueryOrientation::Total => {
                 let select = self.select_clauses().join(", ");
                 format!("SELECT {} FROM {}{}", select, self.from_expr, where_sql)
+            },
+            QueryOrientation::TotalPivoted if self.is_split_rollup() => {
+                let cols: Vec<&String> = self.config.columns.iter().flatten().collect();
+                let mut src_clauses = self.select_clauses();
+                src_clauses.push("1 AS __TOTAL_KEY__".to_string());
+                src_clauses.extend(self.split_select_clauses());
+                src_clauses.push(self.cgrouping_id_clause());
+                let src = format!(
+                    "SELECT {} FROM {}{} GROUP BY ROLLUP({})",
+                    src_clauses.join(", "),
+                    self.from_expr,
+                    where_sql,
+                    self.pivot_on_expr(),
+                );
+
+                let from = if cols.is_empty() {
+                    "__PSP_PIVOT_SRC__".to_string()
+                } else {
+                    self.pivot_join(&cols, &["__TOTAL_KEY__".to_string()])
+                };
+
+                format!(
+                    "WITH __PSP_PIVOT_SRC__ AS ({}) SELECT * EXCLUDE (__TOTAL_KEY__) FROM {}",
+                    src, from
+                )
             },
             QueryOrientation::TotalPivoted => {
                 let mut src_clauses: Vec<String> = self
@@ -621,6 +658,25 @@ impl<'a> ViewQueryContext<'a> {
             .unwrap_or_else(|| "any_value".to_string())
     }
 
+    fn sort_source_expr(&self, sort_col: &str) -> String {
+        let base = format!(
+            "{}({})",
+            self.get_aggregate(sort_col),
+            self.col_name(sort_col)
+        );
+
+        if self.is_split_rollup() {
+            format!(
+                "CASE WHEN {}({}) = 0 THEN {} END",
+                self.grouping_fn,
+                self.pivot_on_expr(),
+                base
+            )
+        } else {
+            base
+        }
+    }
+
     fn select_clauses(&self) -> Vec<String> {
         let mut clauses = Vec::new();
         if self.needs_aggregation() {
@@ -665,15 +721,57 @@ impl<'a> ViewQueryContext<'a> {
     /// DuckDB's `PIVOT` then drops (matching its native `ON` behavior).
     fn pivot_on_expr_for(&self, col: &str) -> String {
         let sep = quote_literal(self.column_separator);
-        let splits = self
-            .config
-            .split_by
+        let leaf = format!(
+            "{} || '{}{}'",
+            self.split_prefix_expr(self.config.split_by.len(), &sep),
+            sep,
+            quote_literal(col)
+        );
+
+        if !self.is_split_rollup() {
+            return leaf;
+        }
+
+        let n = self.config.split_by.len();
+        let mut arms = Vec::with_capacity(n);
+        for rolled in (1..=n).rev() {
+            let mask = (1u64 << rolled) - 1;
+            let kept = n - rolled;
+            let name = if kept == 0 {
+                format!("'{}'", quote_literal(col))
+            } else {
+                format!(
+                    "{} || '{}{}'",
+                    self.split_prefix_expr(kept, &sep),
+                    sep,
+                    quote_literal(col)
+                )
+            };
+
+            arms.push(format!("WHEN {} THEN {}", mask, name));
+        }
+
+        format!("CASE __CGROUPING_ID__ {} ELSE {} END", arms.join(" "), leaf)
+    }
+
+    fn split_prefix_expr(&self, kept: usize, sep: &str) -> String {
+        self.config.split_by[..kept]
             .iter()
             .map(|c| format!("\"{}\"", quote_ident(c)))
             .collect::<Vec<_>>()
-            .join(&format!(" || '{}' || ", sep));
+            .join(&format!(" || '{}' || ", sep))
+    }
 
-        format!("{} || '{}{}'", splits, sep, quote_literal(col))
+    fn is_split_rollup(&self) -> bool {
+        self.config.split_rollup_mode == SplitRollupMode::Rollup && !self.config.split_by.is_empty()
+    }
+
+    fn cgrouping_id_clause(&self) -> String {
+        format!(
+            "{}({}) AS __CGROUPING_ID__",
+            self.grouping_fn,
+            self.pivot_on_expr()
+        )
     }
 
     /// Builds a `FROM` expression pivoting `__PSP_PIVOT_SRC__` once per data

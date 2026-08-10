@@ -41,7 +41,9 @@ use std::fmt;
 use indexmap::IndexMap;
 use serde::Deserialize;
 
-use crate::config::{FilterTerm, GroupRollupMode, Scalar, Sort, SortDir, ViewConfig};
+use crate::config::{
+    FilterTerm, GroupRollupMode, Scalar, Sort, SortDir, SplitRollupMode, ViewConfig,
+};
 use crate::proto::{ColumnType, ViewPort};
 use crate::virtual_server::generic_sql_model::table_make_view::ViewQueryContext;
 
@@ -114,9 +116,15 @@ pub(crate) fn column_path_source<'a>(
     name: &str,
     config: &'a ViewConfig,
 ) -> Option<(usize, &'a str)> {
+    if config.split_by.is_empty() {
+        return None;
+    }
+
+    let rollup = config.split_rollup_mode == SplitRollupMode::Rollup;
+
     let mut best: Option<(usize, &'a str)> = None;
     for (idx, col) in config.columns.iter().flatten().enumerate() {
-        if name.len() > col.len()
+        if (name.len() > col.len() || rollup)
             && name.ends_with(col.as_str())
             && best.is_none_or(|(_, b)| col.len() > b.len())
         {

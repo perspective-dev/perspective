@@ -305,6 +305,7 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
                 boolean: WINDOW_AGGREGATES_ANY,
             },
             group_rollup_mode: ["rollup", "flat", "total"],
+            split_rollup_mode: ["flat", "rollup"],
             filter_ops: {
                 integer: FILTER_OPS,
                 float: FILTER_OPS,
