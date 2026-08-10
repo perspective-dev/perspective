@@ -20,11 +20,16 @@ use crate::config::PluginStaticConfig;
 
 #[extend::ext]
 pub impl ViewConfigUpdate {
-    /// Coerce this update's `group_rollup_mode` to one the plugin accepts
-    /// (`PluginStaticConfig::group_rollup_modes`, feature-filtered). An
-    /// absent mode counts as `Rollup` for the acceptance check, so a plugin
-    /// that only renders `flat` (Treemap / Sunburst) gets it stamped even
-    /// when the update never mentions rollup at all.
+    /// Coerce this update's `group_rollup_mode` / `split_rollup_mode` to one
+    /// the plugin accepts (`PluginStaticConfig::*_rollup_modes`,
+    /// feature-filtered). An absent mode counts as `current`'s committed mode
+    /// for the acceptance check — `ViewConfig::apply_update` KEEPS the
+    /// committed mode when the update's field is `None`, so acceptance must
+    /// be judged against the mode that will actually be in effect. A
+    /// hardcoded-default fallback here let a plugin swap silently retain a
+    /// mode the new plugin excludes (e.g. Datagrid's `split_rollup_mode:
+    /// "rollup"` surviving a `restore({plugin: "Y Bar"})` onto a flat-only
+    /// chart).
     ///
     /// Split out of [`Self::set_update_column_defaults`] so same-plugin
     /// restores can enforce the mode WITHOUT the column-defaulting below —
@@ -33,6 +38,7 @@ pub impl ViewConfigUpdate {
     fn set_update_rollup_defaults(
         &mut self,
         metadata: &SessionMetadata,
+        current: &ViewConfig,
         config_static: &PluginStaticConfig,
     ) {
         let rollup_features = metadata
@@ -44,7 +50,7 @@ pub impl ViewConfigUpdate {
         if !group_rollups.contains(
             self.group_rollup_mode
                 .as_ref()
-                .unwrap_or(&GroupRollupMode::Rollup),
+                .unwrap_or(&current.group_rollup_mode),
         ) {
             self.group_rollup_mode = group_rollups.first().cloned();
             tracing::debug!(
@@ -62,7 +68,7 @@ pub impl ViewConfigUpdate {
         if !split_rollups.contains(
             self.split_rollup_mode
                 .as_ref()
-                .unwrap_or(&SplitRollupMode::Flat),
+                .unwrap_or(&current.split_rollup_mode),
         ) {
             self.split_rollup_mode = split_rollups.first().cloned();
             tracing::debug!(
@@ -81,10 +87,11 @@ pub impl ViewConfigUpdate {
     fn set_update_column_defaults(
         &mut self,
         metadata: &SessionMetadata,
+        current: &ViewConfig,
         columns: &[Option<String>],
         config_static: &PluginStaticConfig,
     ) {
-        self.set_update_rollup_defaults(metadata, config_static);
+        self.set_update_rollup_defaults(metadata, current, config_static);
 
         if let (None, Some(min_cols)) = (&self.columns, config_static.min_config_columns) {
             let names_len = config_static.config_column_names.len();

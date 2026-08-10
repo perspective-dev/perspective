@@ -719,9 +719,11 @@ impl Session {
         config_static: &PluginStaticConfig,
     ) {
         use self::column_defaults_update::*;
+        let config = self.get_view_config();
         config_update.set_update_column_defaults(
             &self.metadata(),
-            &self.get_view_config().columns,
+            &config,
+            &config.columns,
             config_static,
         )
     }
@@ -737,7 +739,11 @@ impl Session {
         config_static: &PluginStaticConfig,
     ) {
         use self::column_defaults_update::*;
-        config_update.set_update_rollup_defaults(&self.metadata(), config_static)
+        config_update.set_update_rollup_defaults(
+            &self.metadata(),
+            &self.get_view_config(),
+            config_static,
+        )
     }
 
     /// Apply a `ViewConfigUpdate` to the live config — the ONLY view-config

@@ -217,6 +217,7 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
 
             update.set_update_column_defaults(
                 &session_metadata,
+                &view_config,
                 &view_config.columns,
                 plugin_config,
             );

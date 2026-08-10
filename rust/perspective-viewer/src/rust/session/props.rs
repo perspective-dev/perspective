@@ -145,6 +145,7 @@ impl SessionProps {
     ) {
         config_update.set_update_column_defaults(
             &self.metadata,
+            &self.config,
             &self.all_columns().into_iter().map(Some).collect::<Vec<_>>(),
             config_static,
         )
