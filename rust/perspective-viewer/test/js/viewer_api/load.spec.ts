@@ -224,7 +224,7 @@ test.describe("Viewer Load", () => {
             table: "load-viewer-csv",
             theme: "Pro Light",
             title: null,
-            version: "5.1.0",
+            version: "5.2.0",
         });
     });
 });

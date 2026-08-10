@@ -1,3 +1,14 @@
+# [v5.2.0](https://github.com/perspective-dev/perspective/releases/tag/v5.2.0)
+
+_10 August 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.1.0...v5.2.0))
+
+Features
+
+- Add `split_rollup_mode` [#3211](https://github.com/finos/perspective/pull/3211)
+- Add `STRUCT` and `LIST` support for Arrow/JSON, fix DuckDB Arrow coercion [#3210](https://github.com/finos/perspective/pull/3210)
+- LLM Agent for `&lt;perspective-viewer&gt;` [#3209](https://github.com/finos/perspective/pull/3209)
+- Add `not contains`, `matches` & `not matches` to `perspective-server` and Virtual Servers [#3208](https://github.com/finos/perspective/pull/3208)
+
 # [v5.1.0](https://github.com/perspective-dev/perspective/releases/tag/v5.1.0)
 
 _4 August 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.0.0...v5.1.0))

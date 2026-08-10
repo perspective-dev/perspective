@@ -97,7 +97,7 @@
         "aggregates": { "bucket(\"timestamp\", 'm')": "dominant" }
     },
     {
-        "version": "5.1.0",
+        "version": "5.2.0",
         "columns_config": {
             "Diff from market open": {
                 "number_fg_mode": "bar",
@@ -140,7 +140,7 @@
         "aggregates": {}
     },
     {
-        "version": "5.1.0",
+        "version": "5.2.0",
         "columns_config": {
             "if(\"side\"=='buy'){-1}else{1}": {
                 "aggregate_depth": 1,
