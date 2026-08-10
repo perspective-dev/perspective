@@ -67,6 +67,49 @@ impl From<GroupRollupMode> for proto::GroupRollupMode {
     }
 }
 
+/// The `split_by` corollary to [`GroupRollupMode`]. `Flat` (the default,
+/// matching this crate's historical behavior) emits only full-depth split
+/// combinations as columns; `Rollup` additionally emits grand-total and
+/// subtotal column groups in "totals before" order. There is no `Total`
+/// variant - an empty `split_by` already expresses a single grand-total
+/// column group.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq, TS)]
+pub enum SplitRollupMode {
+    #[default]
+    #[serde(rename = "flat")]
+    Flat,
+
+    #[serde(rename = "rollup")]
+    Rollup,
+}
+
+impl Display for SplitRollupMode {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(fmt, "{}", match self {
+            Self::Flat => "Flat",
+            Self::Rollup => "Rollup",
+        })
+    }
+}
+
+impl From<proto::SplitRollupMode> for SplitRollupMode {
+    fn from(value: proto::SplitRollupMode) -> Self {
+        match value {
+            proto::SplitRollupMode::Flat => Self::Flat,
+            proto::SplitRollupMode::Rollup => Self::Rollup,
+        }
+    }
+}
+
+impl From<SplitRollupMode> for proto::SplitRollupMode {
+    fn from(value: SplitRollupMode) -> Self {
+        match value {
+            SplitRollupMode::Flat => proto::SplitRollupMode::Flat,
+            SplitRollupMode::Rollup => proto::SplitRollupMode::Rollup,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ViewConfig {
@@ -85,6 +128,9 @@ pub struct ViewConfig {
     // #[serde(skip_serializing_if = "is_default_value")]
     #[serde(default)]
     pub group_rollup_mode: GroupRollupMode,
+
+    #[serde(default)]
+    pub split_rollup_mode: SplitRollupMode,
 
     #[serde(skip_serializing_if = "is_default_value")]
     #[serde(default)]
@@ -245,6 +291,11 @@ pub struct ViewConfigUpdate {
     #[serde(default)]
     #[ts(optional)]
     pub group_rollup_mode: Option<GroupRollupMode>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[ts(optional)]
+    pub split_rollup_mode: Option<SplitRollupMode>,
 }
 
 impl From<ViewConfigUpdate> for proto::ViewConfig {
@@ -293,6 +344,9 @@ impl From<ViewConfigUpdate> for proto::ViewConfig {
             group_rollup_mode: value
                 .group_rollup_mode
                 .map(|x| proto::GroupRollupMode::from(x).into()),
+            split_rollup_mode: value
+                .split_rollup_mode
+                .map(|x| proto::SplitRollupMode::from(x).into()),
         }
     }
 }
@@ -329,6 +383,7 @@ impl From<ViewConfig> for ViewConfigUpdate {
             aggregates: Some(value.aggregates),
             group_by_depth: value.group_by_depth,
             group_rollup_mode: Some(value.group_rollup_mode),
+            split_rollup_mode: Some(value.split_rollup_mode),
         }
     }
 }
@@ -371,6 +426,12 @@ impl From<proto::ViewConfig> for ViewConfig {
                 .and_then(|x| x.ok())
                 .map(|x| x.into())
                 .unwrap_or_default(),
+            split_rollup_mode: value
+                .split_rollup_mode
+                .map(proto::SplitRollupMode::try_from)
+                .and_then(|x| x.ok())
+                .map(|x| x.into())
+                .unwrap_or_default(),
         }
     }
 }
@@ -389,6 +450,7 @@ impl From<ViewConfigUpdate> for ViewConfig {
             aggregates: value.aggregates.unwrap_or_default(),
             group_by_depth: value.group_by_depth,
             group_rollup_mode: value.group_rollup_mode.unwrap_or_default(),
+            split_rollup_mode: value.split_rollup_mode.unwrap_or_default(),
         }
     }
 }
@@ -430,6 +492,10 @@ impl From<proto::ViewConfig> for ViewConfigUpdate {
             group_rollup_mode: value
                 .group_rollup_mode
                 .and_then(|x| proto::GroupRollupMode::try_from(x).ok())
+                .map(|x| x.into()),
+            split_rollup_mode: value
+                .split_rollup_mode
+                .and_then(|x| proto::SplitRollupMode::try_from(x).ok())
                 .map(|x| x.into()),
         }
     }
@@ -487,6 +553,7 @@ impl ViewConfig {
         changed = Self::_apply(&mut self.expressions, update.expressions) || changed;
         changed = Self::_apply(&mut self.windows, update.windows) || changed;
         changed = Self::_apply(&mut self.group_rollup_mode, update.group_rollup_mode) || changed;
+        changed = Self::_apply(&mut self.split_rollup_mode, update.split_rollup_mode) || changed;
         if self.group_rollup_mode == GroupRollupMode::Total && !self.group_by.is_empty() {
             tracing::info!("`total` incompatible with `group_by`");
             changed = true;

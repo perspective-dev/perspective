@@ -38,6 +38,50 @@ let view = table.view(Some(ViewConfigUpdate {
 
 </div>
 
+### `group_rollup_mode`
+
+The `group_rollup_mode` option controls how the grouped rows themselves render:
+
+-   `"rollup"` (the default) - the full hierarchy, with a subtotal row for
+    every group at every level and a grand total row, each addressable by its
+    `__ROW_PATH__`.
+-   `"flat"` - leaf rows only, one row per deepest-level group, with no
+    subtotal or grand total rows. Useful for chart plugins and exports where
+    subtotal rows would double-count.
+-   `"total"` - the grand total row _only_. `"total"` is mutually exclusive
+    with `group_by` (which is cleared when it is set) - it is the one shape
+    an empty `group_by` cannot express, since no `group_by` at all yields the
+    unaggregated dataset.
+
+<div class="javascript">
+
+```javascript
+const view = await table.view({
+    group_by: ["a"],
+    group_rollup_mode: "flat",
+});
+```
+
+</div>
+<div class="python">
+
+```python
+view = table.view(group_by=["a"], group_rollup_mode="flat")
+```
+
+</div>
+<div class="rust">
+
+```rust
+let view = table.view(Some(ViewConfigUpdate {
+    group_by: Some(vec!["a".into()]),
+    group_rollup_mode: Some(GroupRollupMode::Flat),
+    ..ViewConfigUpdate::default()
+})).await?;
+```
+
+</div>
+
 ## Split By
 
 A split by _splits_ the dataset by the unique values of each column used as a
@@ -67,6 +111,56 @@ view = table.view(split_by=["a", "c"])
 ```rust
 let view = table.view(Some(ViewConfigUpdate {
     split_by: Some(vec!["a".into(), "c".into()]),
+    ..ViewConfigUpdate::default()
+})).await?;
+```
+
+</div>
+
+### `split_rollup_mode`
+
+The `split_rollup_mode` option is the `split_by` counterpart to
+[`group_rollup_mode`](#group_rollup_mode), controlling whether subtotal
+_column groups_ are emitted:
+
+-   `"flat"` (the default) - only full-depth split combinations appear as
+    columns, e.g. `"CA|Sales"`. This is Perspective's historical behavior.
+-   `"rollup"` - additionally emits a grand-total column per aggregate (named
+    by the bare column name, e.g. `"Sales"`, aggregating across every split
+    group) and, when more than one `split_by` column is applied, a subtotal
+    column per intermediate split group (e.g. `"CA|Sales"` alongside
+    `"CA|First Class|Sales"`). Total and subtotal columns precede their
+    groups, in pre-order.
+
+<div class="javascript">
+
+```javascript
+const view = await table.view({
+    group_by: ["State"],
+    split_by: ["Ship Mode"],
+    split_rollup_mode: "rollup",
+});
+```
+
+</div>
+<div class="python">
+
+```python
+view = table.view(
+    group_by=["State"],
+    split_by=["Ship Mode"],
+    split_rollup_mode="rollup",
+)
+```
+
+</div>
+<div class="rust">
+
+```rust
+let view = table.view(Some(ViewConfigUpdate {
+    group_by: Some(vec!["State".into()]),
+    split_by: Some(vec!["Ship Mode".into()]),
+    split_rollup_mode: Some(SplitRollupMode::Rollup),
     ..ViewConfigUpdate::default()
 })).await?;
 ```

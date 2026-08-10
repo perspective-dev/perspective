@@ -452,6 +452,8 @@ private:
     t_uindex m_row_offset;
     t_uindex m_col_offset;
 
+    bool m_split_rollup;
+
     std::shared_ptr<t_view_config> m_view_config;
 };
 } // end namespace perspective

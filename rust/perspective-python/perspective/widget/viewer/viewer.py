@@ -57,6 +57,7 @@ class PerspectiveViewer(PerspectiveTraitlets, object):
         group_by=None,
         split_by=None,
         group_rollup_mode=None,
+        split_rollup_mode=None,
         aggregates=None,
         sort=None,
         filter=None,
@@ -83,6 +84,8 @@ class PerspectiveViewer(PerspectiveTraitlets, object):
                 to use as split by.
             group_rollup_mode (:obj:`str`): How group-by rollups render; one
                 of ``rollup``, ``flat``, or ``total``.
+            split_rollup_mode (:obj:`str`): Whether split-by emits subtotal
+                and grand-total column groups; one of ``flat`` or ``rollup``.
             aggregates (:obj:`dict` of :obj:`str` to :obj:`str`):  A dictionary
                 of column names to aggregate types, which specify aggregates
                 for individual columns.
@@ -128,6 +131,7 @@ class PerspectiveViewer(PerspectiveTraitlets, object):
         self.group_by = group_by or []  # validate_group_by(group_by) or []
         self.split_by = split_by or []  # validate_split_by(split_by) or []
         self.group_rollup_mode = group_rollup_mode or "rollup"
+        self.split_rollup_mode = split_rollup_mode or "flat"
         self.aggregates = aggregates or {}  # validate_aggregates(aggregates) or {}
         self.sort = sort or []  # validate_sort(sort) or []
         self.filter = filter or []  # validate_filter(filter) or []

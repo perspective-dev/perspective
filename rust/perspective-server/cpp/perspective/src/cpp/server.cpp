@@ -200,7 +200,9 @@ make_context(
     auto column_pivot_depth = view_config->get_column_pivot_depth();
     auto expressions = view_config->get_used_expressions();
 
-    t_totals total = !sortspec.empty() ? TOTALS_BEFORE : TOTALS_HIDDEN;
+    bool split_rollup = view_config->is_split_rollup();
+    t_totals total =
+        (split_rollup || !sortspec.empty()) ? TOTALS_BEFORE : TOTALS_HIDDEN;
 
     auto cfg = t_config(
         row_pivots,
@@ -214,6 +216,7 @@ make_context(
         view_config->get_windows()
     );
     cfg.set_backing_store(table->get_backing_store());
+    cfg.set_split_rollup(split_rollup);
     auto ctx2 = std::make_shared<t_ctx2>(*schema, cfg);
 
     ctx2->init();
@@ -1499,6 +1502,12 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             features->add_group_rollup_mode(proto::GroupRollupMode::ROLLUP);
             features->add_group_rollup_mode(proto::GroupRollupMode::FLAT);
             features->add_group_rollup_mode(proto::GroupRollupMode::TOTAL);
+            features->add_split_rollup_mode(
+                proto::SplitRollupMode::SPLIT_ROLLUP_MODE_FLAT
+            );
+            features->add_split_rollup_mode(
+                proto::SplitRollupMode::SPLIT_ROLLUP_MODE_ROLLUP
+            );
             proto::GetFeaturesResp_ColumnTypeOptions opts;
             opts.add_options("==");
             opts.add_options("!=");
@@ -2671,6 +2680,9 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 cfg.has_group_rollup_mode() ? cfg.group_rollup_mode() == 1 : false;
             bool total_only =
                 cfg.has_group_rollup_mode() ? cfg.group_rollup_mode() == 2 : false;
+            bool split_rollup = cfg.has_split_rollup_mode()
+                && cfg.split_rollup_mode()
+                    == proto::SplitRollupMode::SPLIT_ROLLUP_MODE_ROLLUP;
 
             auto config = std::make_shared<t_view_config>(
                 vocab,
@@ -2685,7 +2697,8 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 column_only,
                 leaves_only,
                 total_only,
-                windows
+                windows,
+                split_rollup
             );
             config->init(schema);
 
@@ -3007,6 +3020,12 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 const auto mode = proto::GroupRollupMode::ROLLUP;
                 view_config_proto->set_group_rollup_mode(mode);
             }
+
+            view_config_proto->set_split_rollup_mode(
+                view_config->is_split_rollup()
+                    ? proto::SplitRollupMode::SPLIT_ROLLUP_MODE_ROLLUP
+                    : proto::SplitRollupMode::SPLIT_ROLLUP_MODE_FLAT
+            );
 
             for (const auto& expr : view_config->get_expressions()) {
                 auto* proto_exprs = view_config_proto->mutable_expressions();

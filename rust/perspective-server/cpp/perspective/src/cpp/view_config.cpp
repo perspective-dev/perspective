@@ -31,7 +31,8 @@ t_view_config::t_view_config(
     bool column_only,
     bool leaves_only,
     bool total_only,
-    const std::vector<t_window_spec>& windows
+    const std::vector<t_window_spec>& windows,
+    bool split_rollup
 ) :
     m_init(false),
     m_vocab(std::move(vocab)),
@@ -48,7 +49,8 @@ t_view_config::t_view_config(
     m_filter_op(std::move(filter_op)),
     m_column_only(column_only),
     m_leaves_only(leaves_only),
-    m_total_only(total_only) {}
+    m_total_only(total_only),
+    m_split_rollup(split_rollup) {}
 
 void
 t_view_config::init(const std::shared_ptr<t_schema>& schema) {
@@ -337,6 +339,11 @@ t_view_config::is_leaves_only() const {
 bool
 t_view_config::is_total_only() const {
     return m_total_only;
+}
+
+bool
+t_view_config::is_split_rollup() const {
+    return m_split_rollup;
 }
 
 std::int32_t

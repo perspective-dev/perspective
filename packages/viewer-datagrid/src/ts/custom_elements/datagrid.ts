@@ -133,6 +133,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
             // group_by_role: "Row Groups",
             // split_by_role: "Column Groups",
             group_rollup_modes: ["rollup", "flat", "total"],
+            split_rollup_modes: ["flat", "rollup"],
             // Higher priority than the chart plugins so the Datagrid is
             // loaded by default.
             priority: 1,

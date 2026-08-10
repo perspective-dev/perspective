@@ -103,6 +103,25 @@ impl Features {
             })
             .collect::<Vec<_>>()
     }
+
+    /// Unlike [`Features::get_group_rollup_modes`], an empty feature list
+    /// resolves to `[Flat]` rather than "no constraint" - servers predating
+    /// (or not implementing) split rollup can only produce leaf columns, so
+    /// absence must not offer the `Rollup` option.
+    pub fn get_split_rollup_modes(&self) -> Vec<crate::config::SplitRollupMode> {
+        if self.split_rollup_mode.is_empty() {
+            return vec![crate::config::SplitRollupMode::Flat];
+        }
+
+        self.split_rollup_mode
+            .iter()
+            .map(|x| {
+                crate::config::SplitRollupMode::from(
+                    crate::proto::SplitRollupMode::try_from(*x).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>()
+    }
 }
 
 impl Deref for Features {

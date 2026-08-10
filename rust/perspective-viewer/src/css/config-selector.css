@@ -354,7 +354,8 @@
             }
         }
 
-        .group_rollup_wrapper {
+        .group_rollup_wrapper,
+        .split_rollup_wrapper {
             margin-bottom: -30px;
             flex: 0 1 auto;
             color: var(--psp-inactive--color);

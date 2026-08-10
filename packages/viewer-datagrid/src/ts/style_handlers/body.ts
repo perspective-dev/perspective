@@ -47,10 +47,36 @@ export function applyBodyCellStyles(
     for (const { element: td, metadata, isHeader } of cells) {
         const column_name =
             metadata.column_header?.[model._config.split_by.length];
+
+        // Mark subtotal/grand-total column cells (`split_rollup_mode:
+        // "rollup"`) so themes can emphasize them like row-tree totals.
+        // `x` is absent on row-header cell metadata.
+        const meta_x = (metadata as { x?: number }).x;
+        const n_split_levels =
+            meta_x === undefined
+                ? undefined
+                : model._column_paths[meta_x]?.split("|").length - 1;
+
+        const is_rollup_col =
+            model._config.split_by.length > 0 &&
+            n_split_levels !== undefined &&
+            n_split_levels < model._config.split_by.length;
+
+        td.classList.toggle(
+            "psp-split-total",
+            is_rollup_col && n_split_levels === 0,
+        );
+
+        td.classList.toggle(
+            "psp-split-subtotal",
+            is_rollup_col && n_split_levels! > 0,
+        );
+
         const type = get_psp_type(model, metadata);
         const plugin = column_name
             ? plugins[column_name.toString()]
             : undefined;
+
         const is_numeric = type === "integer" || type === "float";
 
         // Calculate aggregate depth visibility

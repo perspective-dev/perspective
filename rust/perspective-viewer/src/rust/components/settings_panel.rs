@@ -28,6 +28,7 @@ use crate::session::column_defaults_update::*;
 use crate::session::*;
 use crate::tasks::update_plugin_and_render;
 use crate::utils::*;
+use crate::workspace::Workspace;
 
 #[derive(Clone, Properties)]
 pub struct SettingsPanelProps {
@@ -99,6 +100,7 @@ pub struct SettingsPanelProps {
     pub session: Session,
     pub renderer: Renderer,
     pub presentation: Presentation,
+    pub workspace: Workspace,
 }
 
 impl PartialEq for SettingsPanelProps {
@@ -201,8 +203,15 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                 .unwrap();
 
             let group_rollups = plugin_config.get_group_rollups(&rollup_features);
+            let split_rollup_features = session_metadata
+                .get_features()
+                .map(|x| x.get_split_rollup_modes())
+                .unwrap();
+
+            let split_rollups = plugin_config.get_split_rollups(&split_rollup_features);
             let mut update = ViewConfigUpdate {
                 group_rollup_mode: group_rollups.first().cloned(),
+                split_rollup_mode: split_rollups.first().cloned(),
                 ..ViewConfigUpdate::default()
             };
 
@@ -368,6 +377,7 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                     {presentation}
                     {renderer}
                     {session}
+                    workspace={props.workspace.clone()}
                     initial_width={width}
                     on_auto_width={on_auto_width.clone()}
                 />

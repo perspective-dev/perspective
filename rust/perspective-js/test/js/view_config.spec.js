@@ -59,6 +59,7 @@ const data = [
                 sort: [],
                 split_by: [],
                 group_rollup_mode: "rollup",
+                split_rollup_mode: "flat",
             });
 
             view.delete();
@@ -83,6 +84,7 @@ const data = [
                 sort: [],
                 split_by: [],
                 group_rollup_mode: "rollup",
+                split_rollup_mode: "flat",
             });
 
             view.delete();
@@ -112,6 +114,7 @@ const data = [
                 sort: [],
                 split_by: [],
                 group_rollup_mode: "rollup",
+                split_rollup_mode: "flat",
             });
 
             view.delete();
@@ -146,6 +149,7 @@ const data = [
                 sort: [],
                 split_by: [],
                 group_rollup_mode: "rollup",
+                split_rollup_mode: "flat",
             });
 
             view.delete();
@@ -170,6 +174,7 @@ const data = [
                 sort: [],
                 split_by: [],
                 group_rollup_mode: "rollup",
+                split_rollup_mode: "flat",
             });
 
             view.delete();

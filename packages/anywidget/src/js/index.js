@@ -38,6 +38,7 @@ const PERSISTENT_ATTRIBUTES = [
     "group_by",
     "split_by",
     "group_rollup_mode",
+    "split_rollup_mode",
     "aggregates",
     "sort",
     "filter",
@@ -57,6 +58,7 @@ const STRING_ATTRIBUTES = new Set([
     "title",
     "version",
     "group_rollup_mode",
+    "split_rollup_mode",
 ]);
 
 function isEqual(a, b) {

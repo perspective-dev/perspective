@@ -217,6 +217,17 @@ enum GroupRollupMode {
     TOTAL = 2;
 }
 
+// The `split_by` corollary to `GroupRollupMode`. `FLAT` (the wire default)
+// is the historical behavior - only full-depth split combinations are
+// emitted as columns. `ROLLUP` additionally emits grand-total and subtotal
+// column groups in pre-order ("totals before"). Enum value names are
+// prefixed because proto enum values share their parent scope with
+// `GroupRollupMode`'s.
+enum SplitRollupMode {
+    SPLIT_ROLLUP_MODE_FLAT = 0;
+    SPLIT_ROLLUP_MODE_ROLLUP = 1;
+}
+
 // Informs the client of the feature set, e.g. what to expect in the
 // `ViewConfig` message.
 message GetFeaturesReq {}
@@ -232,6 +243,7 @@ message GetFeaturesResp {
     map<uint32, WindowAggregateOptions> window_aggregates = 9;
 
     bool unordered = 10;
+    repeated SplitRollupMode split_rollup_mode = 11;
 
     message WindowAggregateOptions {
         repeated WindowAggregateArgs options = 1;
@@ -598,6 +610,7 @@ message ViewConfig {
     optional uint32 group_by_depth = 9;
     optional GroupRollupMode group_rollup_mode = 10;
     map<string, WindowSpec> windows = 11;
+    optional SplitRollupMode split_rollup_mode = 12;
 
     message AggList {
         repeated string aggregations = 1;

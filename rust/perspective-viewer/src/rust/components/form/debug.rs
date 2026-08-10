@@ -23,12 +23,14 @@ use crate::presentation::*;
 use crate::renderer::*;
 use crate::session::*;
 use crate::utils::*;
+use crate::workspace::Workspace;
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct DebugPanelProps {
     pub presentation: Presentation,
     pub renderer: Renderer,
     pub session: Session,
+    pub workspace: Workspace,
 
     /// Trap-door width pinned by the parent `SettingsPanel` so switching
     /// tabs doesn't shrink the panel. Threaded into the hidden sizer
@@ -236,15 +238,16 @@ impl DebugPanelProps {
         ApiFuture::spawn(async move {
             match serde_json::from_str(&text) {
                 Ok(config) => {
-                    match crate::tasks::restore_and_render(
+                    let active =
+                        props.workspace.active_renderer().as_ref() == Some(&props.renderer);
+                    match crate::tasks::restore_panel(
                         &props.session,
                         &props.renderer,
                         &props.presentation,
-                        // A user-pasted config apply — an explicit request,
-                        // same affordance as the public `restore()`.
-                        crate::tasks::RunOrigin::Public,
+                        &props.workspace,
+                        crate::tasks::RestoreMode::Existing { active },
                         config,
-                        async { Ok(()) },
+                        crate::tasks::RestoreErrors::Suppress,
                     )
                     .await
                     {

@@ -115,8 +115,17 @@ export function createDataListener(
                 this._schema = { ...(a as Schema), ...(b as Schema) };
                 for (let i = 0; i < new_col_paths.length; i++) {
                     const column_path_parts = new_col_paths[i].split("|");
+
+                    // Subtotal/total columns (`split_rollup_mode: "rollup"`)
+                    // have fewer than `split_by.length` levels - the column
+                    // name is always the last part.
                     const column =
-                        column_path_parts[this._config.split_by.length];
+                        column_path_parts[
+                            Math.min(
+                                this._config.split_by.length,
+                                column_path_parts.length - 1,
+                            )
+                        ];
 
                     this._is_editable[i + new_window.start_col!] =
                         !!this._table_schema[column];
@@ -165,6 +174,34 @@ export function createDataListener(
         ) {
             const path = this._column_paths[ipath];
             const path_parts = path.split("|");
+
+            // Under `split_rollup_mode: "rollup"`, grand-total and subtotal
+            // columns have fewer than `split_by.length` levels. Pad between
+            // the split levels and the trailing column name so the name
+            // always lands at index `split_by.length` - every downstream
+            // `column_header` consumer indexes it there.
+            //
+            // Pads are zero-width spaces repeated by group depth, NOT `""`:
+            // regular-table merges header cells on bare value equality
+            // across the whole row, so a plain `""` pad would merge with an
+            // adjacent group's equal pad - or, for the grand-total group's
+            // row-0 cell, with the blank CORNER `<th>` beside it, swallowing
+            // the column and its group-boundary border. Depth-keying makes
+            // pads equal exactly within one group - same-depth groups are
+            // never adjacent in the pre-order column space - so pads merge
+            // inside a group and never across one. The grand-total group has
+            // no real levels, so its entire header stack is pads (rendering
+            // blank).
+            if (path_parts.length < this._config.split_by.length + 1) {
+                const column_name = path_parts.pop() as string;
+                const pad = "\u200b".repeat(path_parts.length + 1);
+                while (path_parts.length < this._config.split_by.length) {
+                    path_parts.push(pad);
+                }
+
+                path_parts.push(column_name);
+            }
+
             const column = columns[path] || new Array(y1 - y0).fill(null);
             const agg_depth = Math.min(
                 (regularTable as any)[PRIVATE_PLUGIN_SYMBOL]?.[

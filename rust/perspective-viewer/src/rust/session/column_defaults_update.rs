@@ -52,6 +52,24 @@ pub impl ViewConfigUpdate {
                 self.group_rollup_mode
             );
         }
+
+        let split_rollup_features = metadata
+            .get_features()
+            .map(|x| x.get_split_rollup_modes())
+            .unwrap_or_default();
+
+        let split_rollups = config_static.get_split_rollups(&split_rollup_features);
+        if !split_rollups.contains(
+            self.split_rollup_mode
+                .as_ref()
+                .unwrap_or(&SplitRollupMode::Flat),
+        ) {
+            self.split_rollup_mode = split_rollups.first().cloned();
+            tracing::debug!(
+                "Setting plugin-advised split rollup mode {:?}",
+                self.split_rollup_mode
+            );
+        }
     }
 
     /// Appends additional columns to the `columns` field of this

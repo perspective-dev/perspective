@@ -86,6 +86,7 @@ pub enum ConfigSelectorMsg {
     TransposePivots,
     New(DragTarget, InPlaceColumn),
     UpdateGroupRollupMode(GroupRollupMode),
+    UpdateSplitRollupMode(SplitRollupMode),
 }
 
 #[derive(Clone)]
@@ -153,6 +154,22 @@ impl Component for ConfigSelector {
             ConfigSelectorMsg::UpdateGroupRollupMode(mode) => {
                 let config = ViewConfigUpdate {
                     group_rollup_mode: Some(mode),
+                    ..ViewConfigUpdate::default()
+                };
+
+                {
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if let Ok(task) = apply_and_render(&session, &renderer, config) {
+                        spawn_owned("config-selector", task);
+                    }
+                }
+
+                false
+            },
+            ConfigSelectorMsg::UpdateSplitRollupMode(mode) => {
+                let config = ViewConfigUpdate {
+                    split_rollup_mode: Some(mode),
                     ..ViewConfigUpdate::default()
                 };
 
@@ -584,6 +601,17 @@ impl Component for ConfigSelector {
 
         let group_rollups = requirements.get_group_rollups(&rollup_features);
 
+        let on_split_rollup_mode = ctx
+            .link()
+            .callback(ConfigSelectorMsg::UpdateSplitRollupMode);
+
+        let split_rollup_features = metadata
+            .get_features()
+            .map(|x| x.get_split_rollup_modes())
+            .unwrap();
+
+        let split_rollups = requirements.get_split_rollups(&split_rollup_features);
+
         html! {
             <>
                 <div slot="top_panel" id="top_panel" {class} ondragend={dragend}>
@@ -638,14 +666,31 @@ impl Component for ConfigSelector {
                         </GroupBySelector>
                     }
                     if features.split_by {
-                        if !config.split_by.is_empty() {
+                        if !config.split_by.is_empty() || split_rollups.len() > 1 {
                             <div class="pivot_controls">
-                                <span
-                                    id="transpose_button"
-                                    class="rrow centered"
-                                    title="Transpose Pivots"
-                                    onmousedown={transpose}
-                                />
+                                if split_rollups.len() > 1 {
+                                    <Select<SplitRollupMode>
+                                        id="split_rollup_mode_selector"
+                                        wrapper_class="split_rollup_wrapper"
+                                        is_autosize=true
+                                        values={Rc::new(
+                                        split_rollups
+                                            .iter()
+                                            .map(|x| SelectItem::Option(*x))
+                                            .collect(),
+                                    )}
+                                        selected={config.split_rollup_mode}
+                                        on_select={on_split_rollup_mode}
+                                    />
+                                }
+                                if !config.split_by.is_empty() {
+                                    <span
+                                        id="transpose_button"
+                                        class="rrow centered"
+                                        title="Transpose Pivots"
+                                        onmousedown={transpose}
+                                    />
+                                }
                             </div>
                         }
                         <SplitBySelector

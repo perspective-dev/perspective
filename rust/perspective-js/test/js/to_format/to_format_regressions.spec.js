@@ -35,6 +35,7 @@ test.describe("to_format regressions", function () {
             split_by: ["Sub-Category"],
             // sort: [["Customer Name", "desc"]],
             group_rollup_mode: "rollup",
+            split_rollup_mode: "flat",
             columns: ["Sales", "Quantity", "Discount", "Profit"],
         });
 
@@ -51,6 +52,7 @@ test.describe("to_format regressions", function () {
             split_by: ["Sub-Category"],
             sort: [["Customer Name", "desc"]],
             group_rollup_mode: "rollup",
+            split_rollup_mode: "flat",
             columns: ["Sales", "Quantity", "Discount", "Profit"],
         });
 

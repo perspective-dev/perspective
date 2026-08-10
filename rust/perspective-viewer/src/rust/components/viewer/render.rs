@@ -109,6 +109,7 @@ impl PerspectiveViewer {
                     {presentation}
                     {renderer}
                     {session}
+                    workspace={ctx.props().workspace.clone()}
                 />
             }
         } else {

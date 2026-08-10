@@ -40,6 +40,7 @@ export function format_cell(
 
     const type: ColumnType = ((use_table_schema && this._table_schema[title]) ||
         this._schema[title] ||
+        this._window_schema?.[title] ||
         "string") as ColumnType;
     const plugin: ColumnConfig = plugins[title] || {};
     const is_numeric = type === "integer" || type === "float";
@@ -97,7 +98,11 @@ export function format_cell(
         italic.textContent = val as string;
         return italic;
     } else {
+        // `String(val)`, not a cast: with no formatter (e.g. an unknown
+        // column type falling back to `"string"`), a raw non-string value
+        // must not leak into consumers that expect text - see the
+        // `{ toString }` wrapper in `format_tree_header.ts`.
         const formatter = FORMAT_CACHE.get(type, plugin);
-        return formatter ? formatter.format(val) : (val as string);
+        return formatter ? formatter.format(val) : String(val);
     }
 }

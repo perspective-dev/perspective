@@ -287,6 +287,16 @@ impl<'a> ViewQueryContext<'a> {
         table: &'a str,
         config: &'a ViewConfig,
     ) -> Result<Self, GenericSQLError> {
+        // SQL generation has no subtotal-column support; `Features` gating
+        // (`get_split_rollup_modes` defaults to `[Flat]`) should prevent this
+        // from ever arriving - fail loudly rather than silently emit leaves.
+        if config.split_rollup_mode == crate::config::SplitRollupMode::Rollup {
+            return Err(GenericSQLError::UnsupportedOperation(
+                "`split_rollup_mode: \"rollup\"` is not supported by SQL virtual servers"
+                    .to_string(),
+            ));
+        }
+
         let expressions = &config.expressions.0;
         let col_name_resolve = |col: &str| -> String {
             expressions
