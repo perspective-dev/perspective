@@ -332,5 +332,143 @@ import perspective from "./perspective_client";
                 },
             ]);
         });
+        test.describe("sum aggregate with null updates (#1256)", function () {
+            test("sum does not accumulate when an indexed row flips between null and a value", async function () {
+                const table = await perspective.table(
+                    { ticker: "string", pnl: "integer" },
+                    { index: "ticker" }
+                );
+
+                await table.update([
+                    { ticker: "IBM", pnl: 100 },
+                    { ticker: "AAPL", pnl: 100 },
+                ]);
+
+                const view = await table.view({
+                    group_by: ["ticker"],
+                    columns: ["pnl"],
+                    aggregates: { pnl: "sum" },
+                });
+
+                const nulled = [
+                    { __ROW_PATH__: [], pnl: 100 },
+                    { __ROW_PATH__: ["AAPL"], pnl: 0 },
+                    { __ROW_PATH__: ["IBM"], pnl: 100 },
+                ];
+
+                const restored = [
+                    { __ROW_PATH__: [], pnl: 200 },
+                    { __ROW_PATH__: ["AAPL"], pnl: 100 },
+                    { __ROW_PATH__: ["IBM"], pnl: 100 },
+                ];
+
+                expect(await view.to_json()).toEqual(restored);
+                for (let i = 0; i < 3; i++) {
+                    await table.update([{ ticker: "AAPL", pnl: null }]);
+                    expect(await view.to_json()).toEqual(nulled);
+                    await table.update([{ ticker: "AAPL", pnl: 100 }]);
+                    expect(await view.to_json()).toEqual(restored);
+                }
+
+                view.delete();
+                table.delete();
+            });
+
+            test("float sum does not accumulate when an indexed row flips between null and a value", async function () {
+                const table = await perspective.table(
+                    { ticker: "string", pnl: "float" },
+                    { index: "ticker" }
+                );
+
+                await table.update([
+                    { ticker: "IBM", pnl: 100.5 },
+                    { ticker: "AAPL", pnl: 100.5 },
+                ]);
+
+                const view = await table.view({
+                    group_by: ["ticker"],
+                    columns: ["pnl"],
+                    aggregates: { pnl: "sum" },
+                });
+
+                const nulled = [
+                    { __ROW_PATH__: [], pnl: 100.5 },
+                    { __ROW_PATH__: ["AAPL"], pnl: 0 },
+                    { __ROW_PATH__: ["IBM"], pnl: 100.5 },
+                ];
+
+                const restored = [
+                    { __ROW_PATH__: [], pnl: 201 },
+                    { __ROW_PATH__: ["AAPL"], pnl: 100.5 },
+                    { __ROW_PATH__: ["IBM"], pnl: 100.5 },
+                ];
+
+                expect(await view.to_json()).toEqual(restored);
+                for (let i = 0; i < 3; i++) {
+                    await table.update([{ ticker: "AAPL", pnl: null }]);
+                    expect(await view.to_json()).toEqual(nulled);
+                    await table.update([{ ticker: "AAPL", pnl: 100.5 }]);
+                    expect(await view.to_json()).toEqual(restored);
+                }
+
+                view.delete();
+                table.delete();
+            });
+
+            test("sum is unchanged by a partial update which omits the column", async function () {
+                const table = await perspective.table(
+                    { ticker: "string", pnl: "integer", qty: "integer" },
+                    { index: "ticker" }
+                );
+
+                await table.update([
+                    { ticker: "IBM", pnl: 100, qty: 1 },
+                    { ticker: "AAPL", pnl: 100, qty: 1 },
+                ]);
+
+                const view = await table.view({
+                    group_by: ["ticker"],
+                    columns: ["pnl"],
+                    aggregates: { pnl: "sum" },
+                });
+
+                await table.update([{ ticker: "AAPL", qty: 2 }]);
+                expect(await view.to_json()).toEqual([
+                    { __ROW_PATH__: [], pnl: 200 },
+                    { __ROW_PATH__: ["AAPL"], pnl: 100 },
+                    { __ROW_PATH__: ["IBM"], pnl: 100 },
+                ]);
+
+                view.delete();
+                table.delete();
+            });
+
+            test("sum is unchanged by removing a row whose value is null", async function () {
+                const table = await perspective.table(
+                    { ticker: "string", pnl: "integer" },
+                    { index: "ticker" }
+                );
+
+                await table.update([
+                    { ticker: "IBM", pnl: 100 },
+                    { ticker: "AAPL", pnl: null },
+                ]);
+
+                const view = await table.view({
+                    group_by: ["ticker"],
+                    columns: ["pnl"],
+                    aggregates: { pnl: "sum" },
+                });
+
+                await table.remove(["AAPL"]);
+                expect(await view.to_json()).toEqual([
+                    { __ROW_PATH__: [], pnl: 100 },
+                    { __ROW_PATH__: ["IBM"], pnl: 100 },
+                ]);
+
+                view.delete();
+                table.delete();
+            });
+        });
     });
 })(perspective);

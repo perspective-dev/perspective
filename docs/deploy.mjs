@@ -19,12 +19,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
 const DIST = path.join(__dirname, "dist");
 const STAGING = path.join(REPO_ROOT, "dist-gh-pages");
-const BRANCH = "gh-pages";
+const DEPLOY_REPO =
+    "https://github.com/perspective-dev/perspective-dev.github.io.git";
 
 function git(args, opts = {}) {
     return execFileSync("git", args, {
         stdio: "inherit",
-        cwd: REPO_ROOT,
+        cwd: STAGING,
         ...opts,
     });
 }
@@ -47,22 +48,21 @@ if (!fs.existsSync(DIST)) {
 }
 
 if (!fs.existsSync(STAGING)) {
-    git(["worktree", "add", STAGING, BRANCH]);
+    git(["clone", DEPLOY_REPO, STAGING], { cwd: REPO_ROOT });
 } else {
-    git(["fetch", "origin", BRANCH]);
-    git(["checkout", `origin/${BRANCH}`], { cwd: STAGING });
+    git(["fetch", "origin"]);
+    git(["reset", "--hard", "origin/HEAD"]);
 }
 
-// Clear tracked + untracked content in the staging worktree, preserving
-// the worktree's `.git` link.
-git(["rm", "-rf", "--quiet", "--ignore-unmatch", "."], { cwd: STAGING });
-git(["clean", "-fdx"], { cwd: STAGING });
+// Clear tracked + untracked content in the staging clone, preserving `.git`.
+git(["rm", "-rf", "--quiet", "--ignore-unmatch", "."]);
+git(["clean", "-fdx"]);
 
 for (const entry of fs.readdirSync(DIST)) {
     copyRecursive(path.join(DIST, entry), path.join(STAGING, entry));
 }
 
-git(["add", "-A"], { cwd: STAGING });
+git(["add", "-A"]);
 
-console.log(`Staged dist/ onto ${BRANCH} at ${STAGING}`);
+console.log(`Staged dist/ onto ${DEPLOY_REPO} at ${STAGING}`);
 console.log(`Review with \`git -C ${STAGING} status\`, then commit and push.`);
