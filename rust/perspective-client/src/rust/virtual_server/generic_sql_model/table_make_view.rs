@@ -61,7 +61,12 @@ enum QueryOrientation {
     TotalPivoted,
 }
 
-fn window_over_clause(w: &WindowSpec, frame: Option<&str>, order_expr: Option<&str>) -> String {
+fn window_over_clause(
+    w: &WindowSpec,
+    frame: Option<&str>,
+    order_expr: Option<&str>,
+    row_id: &str,
+) -> String {
     let mut parts: Vec<String> = Vec::new();
     if !w.partition_by.is_empty() {
         parts.push(format!(
@@ -95,7 +100,7 @@ fn window_over_clause(w: &WindowSpec, frame: Option<&str>, order_expr: Option<&s
                 }
             ))
         },
-        None => parts.push("ORDER BY rowid ASC".to_string()),
+        None => parts.push(format!("ORDER BY {} ASC", row_id)),
     }
     if let Some(f) = frame {
         parts.push(f.to_string());
@@ -125,6 +130,7 @@ fn window_sql(
     w: &WindowSpec,
     resolve: &dyn Fn(&str) -> String,
     order_type: Option<ColumnType>,
+    row_id: &str,
 ) -> Result<String, GenericSQLError> {
     // `range` frame interval arithmetic is defined on the order key's
     // units - the natural (`rowid`) fallback is meaningless for it, so an
@@ -170,7 +176,7 @@ fn window_sql(
             "{}({}) OVER ({})",
             op,
             src,
-            window_over_clause(w, Some(&frame), lin_order.as_deref())
+            window_over_clause(w, Some(&frame), lin_order.as_deref(), row_id)
         ));
     }
 
@@ -181,7 +187,7 @@ fn window_sql(
         return Ok(format!(
             "{}() OVER ({})",
             op,
-            window_over_clause(w, None, None)
+            window_over_clause(w, None, None, row_id)
         ));
     }
 
@@ -191,7 +197,7 @@ fn window_sql(
             op,
             src,
             w.offset.unwrap_or(1),
-            window_over_clause(w, None, None)
+            window_over_clause(w, None, None, row_id)
         )),
         "nth_value" => {
             let frame = window_frame_sql(w.frame.as_ref());
@@ -199,13 +205,13 @@ fn window_sql(
                 "nth_value({}, {}) OVER ({})",
                 src,
                 w.offset.unwrap_or(1),
-                window_over_clause(w, Some(&frame), lin_order.as_deref())
+                window_over_clause(w, Some(&frame), lin_order.as_deref(), row_id)
             ))
         },
         "ntile" => Ok(format!(
             "ntile({}) OVER ({})",
             w.offset.unwrap_or(1),
-            window_over_clause(w, None, None)
+            window_over_clause(w, None, None, row_id)
         )),
         // `diff` and `rate` are Perspective's, not any SQL dialect's - they
         // are synthesized here so a config authored against the engine keeps
@@ -215,7 +221,7 @@ fn window_sql(
             src,
             src,
             w.offset.unwrap_or(1),
-            window_over_clause(w, None, None)
+            window_over_clause(w, None, None, row_id)
         )),
         "rate" => {
             let Some(order_by) = &w.order_by else {
@@ -234,16 +240,16 @@ fn window_sql(
             }
 
             let frame = window_frame_sql(w.frame.as_ref());
-            let over = window_over_clause(w, Some(&frame), lin_order.as_deref());
+            let over = window_over_clause(w, Some(&frame), lin_order.as_deref(), row_id);
             // Δk in the denominator is measured on the same linear scale
             // the frame is defined on (a raw temporal key would not CAST
-            // to DOUBLE at all).
+            // to DOUBLE PRECISION at all).
             let okey = lin_order
                 .clone()
                 .unwrap_or_else(|| format!("\"{}\"", quote_ident(&order_by.0)));
             Ok(format!(
-                "(({} - first_value({}) OVER ({})) / NULLIF(CAST({} AS DOUBLE) - \
-                 CAST(first_value({}) OVER ({}) AS DOUBLE), 0))",
+                "(({} - first_value({}) OVER ({})) / NULLIF(CAST({} AS DOUBLE PRECISION) - \
+                 CAST(first_value({}) OVER ({}) AS DOUBLE PRECISION), 0))",
                 src, src, over, okey, okey, over
             ))
         },
@@ -309,6 +315,7 @@ pub(crate) struct ViewQueryContext<'a> {
     like_escape_clause: Option<&'a str>,
     backslash_escaped_literals: bool,
     regex_fn: Option<&'a str>,
+    row_id_expr: &'a str,
     row_path_aliases: Vec<String>,
 }
 
@@ -331,6 +338,8 @@ impl<'a> ViewQueryContext<'a> {
                 .unwrap_or_else(|| format!("\"{}\"", col))
         };
 
+        let row_id_expr = model.0.row_id_expr.as_deref().unwrap_or("rowid");
+
         // Window columns materialize in a wrapping sub-select, so every
         // downstream clause (filter, group_by, aggregate, sort) sees them as
         // plain columns in all four query orientations - mirroring the
@@ -352,17 +361,19 @@ impl<'a> ViewQueryContext<'a> {
 
                 selects.push(format!(
                     "{} AS \"{}\"",
-                    window_sql(w, &col_name_resolve, order_type)?,
+                    window_sql(w, &col_name_resolve, order_type, row_id_expr)?,
                     quote_ident(name)
                 ));
             }
 
-            // `rowid` is a virtual column bound only on base tables - it
-            // does not survive `SELECT *` into the sub-select, so the
-            // natural row order is re-exported under an internal alias for
-            // the outer query's `ORDER BY` (see [`Self::natural_order_col`]).
+            // The natural row identity (`rowid`, `ctid`) is a system
+            // pseudo-column bound only on base tables - it does not survive
+            // `SELECT *` into the sub-select, so the natural row order is
+            // re-exported under an internal alias for the outer query's
+            // `ORDER BY` (see [`Self::natural_order_col`]).
             format!(
-                "(SELECT *, rowid AS __PSP_ROWID__, {} FROM {}) AS __PSP_WINDOW_SRC__",
+                "(SELECT *, {} AS \"__PSP_ROWID__\", {} FROM {}) AS __PSP_WINDOW_SRC__",
+                row_id_expr,
                 selects.join(", "),
                 table
             )
@@ -377,7 +388,7 @@ impl<'a> ViewQueryContext<'a> {
             .collect();
 
         let row_path_aliases: Vec<String> = (0..config.group_by.len())
-            .map(|i| format!("__ROW_PATH_{}__", i))
+            .map(|i| format!("\"__ROW_PATH_{}__\"", i))
             .collect();
 
         Ok(Self {
@@ -389,6 +400,7 @@ impl<'a> ViewQueryContext<'a> {
             like_escape_clause: model.0.like_escape_clause.as_deref(),
             backslash_escaped_literals: model.0.backslash_escaped_literals.unwrap_or(false),
             regex_fn: model.0.regex_fn.as_deref(),
+            row_id_expr,
             row_path_aliases,
         })
     }
@@ -431,7 +443,7 @@ impl<'a> ViewQueryContext<'a> {
                 let mut src_clauses = self.select_clauses();
                 src_clauses.extend(self.split_select_clauses());
                 src_clauses.push(format!(
-                    "ROW_NUMBER() OVER (ORDER BY {}) as __ROW_NUM__",
+                    "ROW_NUMBER() OVER (ORDER BY {}) as \"__ROW_NUM__\"",
                     self.pivot_row_num_order()
                 ));
 
@@ -449,7 +461,7 @@ impl<'a> ViewQueryContext<'a> {
                         .chain((1..=n).map(|k| (1u64 << k) - 1))
                         .map(|mask| {
                             format!(
-                                "SELECT *, {} AS __CGROUPING_ID__ FROM __PSP_PIVOT_BASE__",
+                                "SELECT *, {} AS \"__CGROUPING_ID__\" FROM __PSP_PIVOT_BASE__",
                                 mask
                             )
                         })
@@ -458,20 +470,20 @@ impl<'a> ViewQueryContext<'a> {
 
                     format!(
                         "WITH __PSP_PIVOT_BASE__ AS ({}), __PSP_PIVOT_SRC__ AS ({}) SELECT * \
-                         EXCLUDE (__ROW_NUM__) FROM {}",
+                         EXCLUDE (\"__ROW_NUM__\") FROM {}",
                         src,
                         union,
-                        self.pivot_join(&cols, &["__ROW_NUM__".to_string()])
+                        self.pivot_join(&cols, &["\"__ROW_NUM__\"".to_string()])
                     )
                 } else {
                     let from = if cols.is_empty() {
                         "__PSP_PIVOT_SRC__".to_string()
                     } else {
-                        self.pivot_join(&cols, &["__ROW_NUM__".to_string()])
+                        self.pivot_join(&cols, &["\"__ROW_NUM__\"".to_string()])
                     };
 
                     format!(
-                        "WITH __PSP_PIVOT_SRC__ AS ({}) SELECT * EXCLUDE (__ROW_NUM__) FROM {}",
+                        "WITH __PSP_PIVOT_SRC__ AS ({}) SELECT * EXCLUDE (\"__ROW_NUM__\") FROM {}",
                         src, from
                     )
                 }
@@ -499,12 +511,12 @@ impl<'a> ViewQueryContext<'a> {
                         let sort_source = self.sort_source_expr(sort_col);
                         if self.is_flat_mode() {
                             inner_clauses.push(format!(
-                                "sum({}) OVER (PARTITION BY {}) AS __SORT_{}__",
+                                "sum({}) OVER (PARTITION BY {}) AS \"__SORT_{}__\"",
                                 sort_source, groups_joined, sidx,
                             ));
                         } else {
                             inner_clauses.push(format!(
-                                "sum({}) OVER (PARTITION BY {}({}), {}) AS __SORT_{}__",
+                                "sum({}) OVER (PARTITION BY {}({}), {}) AS \"__SORT_{}__\"",
                                 sort_source, self.grouping_fn, groups_joined, groups_joined, sidx,
                             ));
                         }
@@ -533,11 +545,11 @@ impl<'a> ViewQueryContext<'a> {
 
                 let mut row_id_cols = self.row_path_aliases.clone();
                 if !self.is_flat_mode() {
-                    row_id_cols.push("__GROUPING_ID__".to_string());
+                    row_id_cols.push("\"__GROUPING_ID__\"".to_string());
                 }
                 for (sidx, Sort(_, sort_dir)) in self.config.sort.iter().enumerate() {
                     if *sort_dir != SortDir::None && !is_col_sort(sort_dir) {
-                        row_id_cols.push(format!("__SORT_{}__", sidx));
+                        row_id_cols.push(format!("\"__SORT_{}__\"", sidx));
                     }
                 }
 
@@ -560,7 +572,7 @@ impl<'a> ViewQueryContext<'a> {
             QueryOrientation::TotalPivoted if self.is_split_rollup() => {
                 let cols: Vec<&String> = self.config.columns.iter().flatten().collect();
                 let mut src_clauses = self.select_clauses();
-                src_clauses.push("1 AS __TOTAL_KEY__".to_string());
+                src_clauses.push("1 AS \"__TOTAL_KEY__\"".to_string());
                 src_clauses.extend(self.split_select_clauses());
                 src_clauses.push(self.cgrouping_id_clause());
                 let src = format!(
@@ -574,11 +586,11 @@ impl<'a> ViewQueryContext<'a> {
                 let from = if cols.is_empty() {
                     "__PSP_PIVOT_SRC__".to_string()
                 } else {
-                    self.pivot_join(&cols, &["__TOTAL_KEY__".to_string()])
+                    self.pivot_join(&cols, &["\"__TOTAL_KEY__\"".to_string()])
                 };
 
                 format!(
-                    "WITH __PSP_PIVOT_SRC__ AS ({}) SELECT * EXCLUDE (__TOTAL_KEY__) FROM {}",
+                    "WITH __PSP_PIVOT_SRC__ AS ({}) SELECT * EXCLUDE (\"__TOTAL_KEY__\") FROM {}",
                     src, from
                 )
             },
@@ -650,7 +662,7 @@ impl<'a> ViewQueryContext<'a> {
             let default_order = if self.config.split_by.is_empty() {
                 self.natural_order_col()
             } else {
-                "__ROW_NUM__"
+                "\"__ROW_NUM__\""
             };
 
             query = format!("{} ORDER BY {}", query, default_order);
@@ -797,7 +809,11 @@ impl<'a> ViewQueryContext<'a> {
             arms.push(format!("WHEN {} THEN {}", mask, name));
         }
 
-        format!("CASE __CGROUPING_ID__ {} ELSE {} END", arms.join(" "), leaf)
+        format!(
+            "CASE \"__CGROUPING_ID__\" {} ELSE {} END",
+            arms.join(" "),
+            leaf
+        )
     }
 
     fn split_prefix_expr(&self, kept: usize, sep: &str) -> String {
@@ -814,7 +830,7 @@ impl<'a> ViewQueryContext<'a> {
 
     fn cgrouping_id_clause(&self) -> String {
         format!(
-            "{}({}) AS __CGROUPING_ID__",
+            "{}({}) AS \"__CGROUPING_ID__\"",
             self.grouping_fn,
             self.pivot_on_expr()
         )
@@ -947,14 +963,11 @@ impl<'a> ViewQueryContext<'a> {
     }
 
     /// The natural row-order column as visible to clauses that select `FROM
-    /// {from_expr}` - the base table's virtual `rowid` directly, or its
-    /// re-export when windows wrap the table in a sub-select (through which
-    /// `rowid` does not propagate).
-    fn natural_order_col(&self) -> &'static str {
+    fn natural_order_col(&self) -> &str {
         if self.config.windows.is_empty() {
-            "rowid"
+            self.row_id_expr
         } else {
-            "__PSP_ROWID__"
+            "\"__PSP_ROWID__\""
         }
     }
 
@@ -988,7 +1001,7 @@ impl<'a> ViewQueryContext<'a> {
 
     fn grouping_id_clause(&self) -> String {
         format!(
-            "{}({}) AS __GROUPING_ID__",
+            "{}({}) AS \"__GROUPING_ID__\"",
             self.grouping_fn,
             self.group_col_names.join(", ")
         )
@@ -999,7 +1012,7 @@ impl<'a> ViewQueryContext<'a> {
             .group_by
             .iter()
             .enumerate()
-            .map(|(i, col)| format!("{} as __ROW_PATH_{}__", self.col_name(col), i))
+            .map(|(i, col)| format!("{} as \"__ROW_PATH_{}__\"", self.col_name(col), i))
             .collect()
     }
 
@@ -1023,10 +1036,10 @@ impl<'a> ViewQueryContext<'a> {
                         let dir = sort_dir_to_string(sort_dir);
                         if !self.config.split_by.is_empty() {
                             if is_leaf {
-                                clauses.push(format!("__SORT_{}__ {}", sidx, dir));
+                                clauses.push(format!("\"__SORT_{}__\" {}", sidx, dir));
                             } else {
                                 clauses.push(format!(
-                                    "first(__SORT_{}__) OVER __WINDOW_{}__ {}",
+                                    "first_value(\"__SORT_{}__\") OVER __WINDOW_{}__ {}",
                                     sidx, gidx, dir
                                 ));
                             }
@@ -1041,7 +1054,7 @@ impl<'a> ViewQueryContext<'a> {
                                 ));
                             } else {
                                 clauses.push(format!(
-                                    "first({}({})) OVER __WINDOW_{}__ {}",
+                                    "first_value({}({})) OVER __WINDOW_{}__ {}",
                                     agg,
                                     self.col_name(sort_col),
                                     gidx,
@@ -1059,7 +1072,7 @@ impl<'a> ViewQueryContext<'a> {
                     if *sort_dir != SortDir::None && !is_col_sort(sort_dir) {
                         let dir = sort_dir_to_string(sort_dir);
                         if !self.config.split_by.is_empty() {
-                            clauses.push(format!("__SORT_{}__ {}", sidx, dir));
+                            clauses.push(format!("\"__SORT_{}__\" {}", sidx, dir));
                         } else {
                             let agg = self.get_aggregate(sort_col);
                             clauses.push(format!("{}({}) {}", agg, self.col_name(sort_col), dir));
@@ -1072,9 +1085,9 @@ impl<'a> ViewQueryContext<'a> {
                 if !self.config.split_by.is_empty() {
                     let shift = self.config.group_by.len() - 1 - gidx;
                     if shift > 0 {
-                        clauses.push(format!("(__GROUPING_ID__ >> {}) DESC", shift));
+                        clauses.push(format!("(\"__GROUPING_ID__\" >> {}) DESC", shift));
                     } else {
-                        clauses.push("__GROUPING_ID__ DESC".to_string());
+                        clauses.push("\"__GROUPING_ID__\" DESC".to_string());
                     }
                 } else {
                     let groups_up_to = self.config.group_by[..=gidx]
@@ -1094,10 +1107,10 @@ impl<'a> ViewQueryContext<'a> {
                     let dir = sort_dir_to_string(sort_dir);
                     if !self.config.split_by.is_empty() {
                         if is_leaf {
-                            clauses.push(format!("__SORT_{}__ {}", sidx, dir));
+                            clauses.push(format!("\"__SORT_{}__\" {}", sidx, dir));
                         } else {
                             clauses.push(format!(
-                                "first(__SORT_{}__) OVER __WINDOW_{}__ {}",
+                                "first_value(\"__SORT_{}__\") OVER __WINDOW_{}__ {}",
                                 sidx, gidx, dir
                             ));
                         }
@@ -1107,7 +1120,7 @@ impl<'a> ViewQueryContext<'a> {
                             clauses.push(format!("{}({}) {}", agg, self.col_name(sort_col), dir));
                         } else {
                             clauses.push(format!(
-                                "first({}({})) OVER __WINDOW_{}__ {}",
+                                "first_value({}({})) OVER __WINDOW_{}__ {}",
                                 agg,
                                 self.col_name(sort_col),
                                 gidx,
@@ -1158,9 +1171,9 @@ impl<'a> ViewQueryContext<'a> {
             } else if !self.config.split_by.is_empty() {
                 let shift = self.config.group_by.len() - 1 - gidx;
                 let grouping_expr = if shift > 0 {
-                    format!("(__GROUPING_ID__ >> {})", shift)
+                    format!("(\"__GROUPING_ID__\" >> {})", shift)
                 } else {
-                    "__GROUPING_ID__".to_string()
+                    "\"__GROUPING_ID__\"".to_string()
                 };
 
                 let order = self.row_path_aliases.join(", ");

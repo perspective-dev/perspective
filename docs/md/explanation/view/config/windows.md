@@ -176,7 +176,7 @@ first row has no predecessor to difference against:
 ## Support
 
 Window Columns are implemented by Perspective's built-in engine, by the
-DuckDB, ClickHouse and Polars
+DuckDB, ClickHouse, PostgreSQL and Polars
 [Virtual Servers](../../virtual_servers.md), and by the
 `<perspective-viewer>` UI. Virtual Servers advertise support through their
 _features_ declaration, so the UI control is hidden for backends which do not

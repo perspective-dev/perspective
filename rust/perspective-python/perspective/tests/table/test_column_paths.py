@@ -15,7 +15,7 @@ import perspective as psp
 client = psp.Server().new_local_client()
 
 
-class TestViewColumnPaths(object):
+class TestViewColumnPaths:
     def test_column_paths(self, superstore):
         tbl = client.table(superstore)
         view = tbl.view()
