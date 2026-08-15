@@ -110,4 +110,35 @@ test.describe("Rollup-mode coercion on plugin restore", () => {
         expect(config.plugin).toBe("Y Bar");
         expect(config.split_rollup_mode).toBe("flat");
     });
+
+    test("fresh plugin-less panel keeps a configured group_rollup_mode", async ({
+        page,
+    }) => {
+        await gotoBasic(page);
+        const config = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            const table = await viewer.getTable();
+            const name = await table.get_name();
+            for (const id of viewer.getPanelNames()) {
+                await viewer.removePanel(id);
+            }
+
+            await viewer.restoreWorkspace({
+                layout: { type: "tab-layout", tabs: ["p0"], selected: 0 },
+                panels: {
+                    p0: {
+                        table: name,
+                        group_by: ["Region", "State"],
+                        columns: ["Sales", "Profit"],
+                        group_rollup_mode: "flat",
+                    },
+                },
+            });
+
+            return (await viewer.save()) as unknown as Record<string, unknown>;
+        });
+
+        expect(config.plugin).toBe("Datagrid");
+        expect(config.group_rollup_mode).toBe("flat");
+    });
 });

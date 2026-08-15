@@ -128,7 +128,13 @@ export function buildHeatmapPipeline(
         rowPaths: xLevels,
         numCategories: numX,
         rowOffset,
-    } = resolveCategoryAxis(columns, numRows, groupBy.length, levelTypes);
+    } = resolveCategoryAxis(
+        columns,
+        numRows,
+        groupBy.length,
+        levelTypes,
+        xAxisMode,
+    );
 
     // Numeric X domain: sourced from `__ROW_PATH_0__`'s raw values when
     // the single group_by is non-string.

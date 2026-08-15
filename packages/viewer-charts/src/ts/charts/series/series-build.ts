@@ -473,6 +473,7 @@ export function buildSeriesPipeline(
         numRows,
         groupBy.length,
         levelTypes,
+        axisMode,
     );
 
     if (numCategories === 0) {

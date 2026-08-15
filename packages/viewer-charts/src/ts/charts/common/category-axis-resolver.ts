@@ -203,15 +203,27 @@ export function synthesizeStringLevel(
     const seen = new Map<string, number>();
     seen.set("", 0);
 
+    const valueIdx = new Map<number, number>();
+
     for (let r = 0; r < numRows; r++) {
         const isValid = valid ? !!((valid[r >> 3] >> (r & 7)) & 1) : true;
+        if (!isValid) {
+            indices[r] = 0;
+            continue;
+        }
+
         const v = values[r] as number;
-        const label = formatLevelValue(v, isValid, levelType);
-        let dictIdx = seen.get(label);
+        let dictIdx = valueIdx.get(v);
         if (dictIdx === undefined) {
-            dictIdx = dictionary.length;
-            dictionary.push(label);
-            seen.set(label, dictIdx);
+            const label = formatLevelValue(v, true, levelType);
+            dictIdx = seen.get(label);
+            if (dictIdx === undefined) {
+                dictIdx = dictionary.length;
+                dictionary.push(label);
+                seen.set(label, dictIdx);
+            }
+
+            valueIdx.set(v, dictIdx);
         }
 
         indices[r] = dictIdx;
@@ -240,7 +252,34 @@ export function resolveCategoryAxis(
     numRows: number,
     groupByLen: number,
     levelTypes: string[] = [],
+    axisMode?: AxisMode,
 ): CategoryAxisResult {
+    if (axisMode?.mode === "numeric") {
+        const rp = columns.get("__ROW_PATH_0__");
+        if (rp && rp.type !== "string" && rp.values) {
+            let rowOffset = 0;
+            const values = rp.values;
+            const valid = rp.valid;
+            while (rowOffset < numRows) {
+                const isValid = valid
+                    ? !!((valid[rowOffset >> 3] >> (rowOffset & 7)) & 1)
+                    : true;
+                const v = values[rowOffset] as number;
+                if (isValid && v != null && !Number.isNaN(v)) {
+                    break;
+                }
+
+                rowOffset++;
+            }
+
+            return {
+                rowPaths: [],
+                numCategories: Math.max(0, numRows - rowOffset),
+                rowOffset,
+            };
+        }
+    }
+
     type RawLevel = { indices: Int32Array; dictionary: string[] };
     const rawRowPaths: RawLevel[] = [];
     for (let n = 0; ; n++) {

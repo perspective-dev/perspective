@@ -514,9 +514,12 @@ export class SeriesChart extends CategoricalYChart {
             return;
         }
 
-        const groupByValues: (string | null)[] = this._rowPaths.map(
-            (level) => level.labels[b.catIdx] ?? null,
-        );
+        const groupByValues: (string | number | null)[] =
+            this._categoryAxisMode === "numeric" && this._categoryPositions
+                ? [this._categoryPositions[b.catIdx] ?? null]
+                : this._rowPaths.map(
+                      (level) => level.labels[b.catIdx] ?? null,
+                  );
         const splitKey = this._splitPrefixes[b.splitIdx] ?? "";
         const splitByValues =
             this._splitBy.length > 0 && splitKey !== ""

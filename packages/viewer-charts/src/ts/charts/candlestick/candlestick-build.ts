@@ -281,6 +281,7 @@ export function buildCandlestickPipeline(
         numRows,
         groupBy.length,
         levelTypes,
+        axisMode,
     );
     if (numCategories === 0) {
         return {
