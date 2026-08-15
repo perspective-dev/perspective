@@ -114,7 +114,16 @@ pub fn restore_and_render(
             // subtotal rows. Rollup only; the full column-defaults pass is
             // reserved for plugin swaps, where `columns` genuinely needs
             // re-defaulting.
-            session.set_update_rollup_defaults(&mut view_config, &renderer.metadata());
+            let metadata = if renderer.active_plugin().is_none() {
+                renderer
+                    .resolve_plugin_update(&OptionalUpdate::SetDefault)
+                    .map(|(_, metadata)| metadata)
+                    .unwrap_or_else(|| renderer.metadata())
+            } else {
+                renderer.metadata()
+            };
+
+            session.set_update_rollup_defaults(&mut view_config, &metadata);
         }
 
         let plugin_idx = resolved_plugin.map(|(idx, _)| idx);
