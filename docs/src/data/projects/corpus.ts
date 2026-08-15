@@ -10,35 +10,41 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import "@perspective-dev/viewer";
-import "@perspective-dev/viewer-datagrid";
-import "@perspective-dev/viewer-charts";
+import {
+    EXPRESSIONS_PROJECTS,
+    MOVIES_PROJECTS,
+    NYPD_PROJECTS,
+    OLYMPICS_PROJECTS,
+    SF_PROJECTS,
+    SUPERSTORE_PROJECTS,
+} from "./blocks.js";
+import { DASHBOARD_PROJECTS } from "./dashboards.js";
+import { FEATURE_PROJECTS } from "./features.js";
+import { MARKET_PROJECTS, WEBCAM_PROJECTS } from "./streams.js";
+import type { Project } from "./types.js";
 
-import { initAgentDialog } from "./components/agent_dialog.js";
-import { initSidebar } from "./components/sidebar.js";
-import { initProjectGallery } from "./components/project_gallery.js";
-import { initSourceModal } from "./components/source_modal.js";
-import { initSqlDrawer } from "./components/sql_drawer.js";
-import { bindViewer } from "./data/engines.js";
-import { initTheme } from "./data/theme.js";
-import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
+/**
+ * Every saved starting point the gallery offers. Blocks first — they are the
+ * interesting ones; feature variants are a long tail.
+ */
+export const PROJECTS: Project[] = [
+    ...SUPERSTORE_PROJECTS,
+    ...EXPRESSIONS_PROJECTS,
+    ...NYPD_PROJECTS,
+    ...SF_PROJECTS,
+    ...MOVIES_PROJECTS,
+    ...OLYMPICS_PROJECTS,
+    ...DASHBOARD_PROJECTS,
+    ...MARKET_PROJECTS,
+    ...WEBCAM_PROJECTS,
+    ...FEATURE_PROJECTS,
+];
 
-const shell = document.getElementById("app")!;
-const viewer = document.getElementById(
-    "viewer",
-) as HTMLPerspectiveViewerElement;
-
-bindViewer(viewer);
-void initTheme(viewer);
-
-const sqlDrawer = initSqlDrawer(shell, viewer);
-const { createSource, browseProjects, configureAgent } = initSidebar(
-    shell,
-    viewer,
-    { openSql: () => sqlDrawer.toggle() },
-);
-
-const gallery = initProjectGallery(shell, viewer);
-browseProjects.addEventListener("click", () => gallery.openModal());
-initSourceModal(viewer, createSource);
-initAgentDialog(viewer, configureAgent);
+/**
+ * The Project `id` names, if the corpus has one.
+ *
+ * @param id a Project id, e.g. from the `?project=` route.
+ */
+export function projectById(id: string): Project | undefined {
+    return PROJECTS.find((p) => p.id === id);
+}

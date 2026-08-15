@@ -72,3 +72,5 @@ rust/perspective-server/build
 target/
 dist-gh-pages
 rust/perspective-python/perspective/widget/static
+docs/static/projects
+docs/static/data

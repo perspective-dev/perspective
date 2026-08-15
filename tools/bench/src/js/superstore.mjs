@@ -37,17 +37,59 @@ const SUPERSTORE_FEATHER = await get_buffer(
 );
 
 /**
+ * How many times the Superstore data set is replicated. Superstore is small
+ * enough that per-call fixed costs dominate some benchmarks; replicating it
+ * moves the measurement onto the per-row work. `1` is the original data set.
+ *
+ * Override with `PSP_BENCH_SUPERSTORE_COPIES` where an environment exists.
+ */
+export const SUPERSTORE_COPIES = (() => {
+    const env =
+        typeof process !== "undefined" &&
+        process.env?.PSP_BENCH_SUPERSTORE_COPIES;
+
+    return env ? parseInt(env, 10) : 1;
+})();
+
+const REPLICATED = new Map();
+
+/**
  * Load the Superstore example data set as either a Feather (LZ4) or
  * uncompressed `Arrow`, depending on whether Perspective supports Feather.
  * @param {*} metadata
  * @returns
  */
-export function new_superstore_table(metadata) {
-    if (check_version_gte(metadata.version, "2.5.0")) {
-        return SUPERSTORE_FEATHER.slice();
-    } else {
-        return SUPERSTORE_ARROW.slice();
+export async function new_superstore_table(perspective, metadata) {
+    const base = check_version_gte(metadata.version, "2.5.0")
+        ? SUPERSTORE_FEATHER
+        : SUPERSTORE_ARROW;
+
+    if (SUPERSTORE_COPIES <= 1) {
+        return base.slice();
     }
+
+    const cached = REPLICATED.get(base);
+    if (cached !== undefined) {
+        return cached.slice();
+    }
+
+    const table = await perspective.table(base.slice());
+    for (let i = 1; i < SUPERSTORE_COPIES; i++) {
+        await table.update(base.slice());
+    }
+
+    const view = await table.view();
+    const arrow = await view.to_arrow();
+    if (check_version_gte(metadata.version, "2.10.9")) {
+        await view.delete();
+    }
+
+    if (check_version_gte(metadata.version, "3.0.0")) {
+        await table.delete();
+    }
+
+    REPLICATED.set(base, arrow);
+    return arrow.slice();
 }
 
 /**

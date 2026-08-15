@@ -4,14 +4,18 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "npm run mdbook && node build.mjs && node build.config.mjs",
+        "build": "npm run mdbook && node build.config.mjs && node build.projects.mjs",
+        "watch": "node build.config.mjs --watch",
+        "dev": "docker compose up -d minio minio-init && node server.mjs",
         "start": "node server.mjs",
         "serve": "node server.mjs",
-        "clean": "rm -rf dist",
+        "clean": "rm -rf dist && rm -rf static/projects",
         "deploy": "node deploy.mjs",
-        "mdbook": "docker compose run --rm mdbook build"
+        "mdbook": "docker compose run --rm mdbook build",
+        "thumbnails": "node build.projects.mjs"
     },
     "dependencies": {
+        "@duckdb/duckdb-wasm": "catalog:",
         "@perspective-dev/viewer-charts": "workspace:",
         "@perspective-dev/viewer-datagrid": "workspace:",
         "@perspective-dev/viewer": "workspace:",
@@ -19,11 +23,9 @@
         "@perspective-dev/server": "workspace:",
         "blocks": "workspace:",
         "puppeteer": "catalog:",
-        "prismjs": "^1.29.0",
         "superstore-arrow": "catalog:"
     },
     "devDependencies": {
-        "@types/prismjs": "^1.26.0",
         "@zip.js/zip.js": "catalog:",
         "esbuild": "catalog:",
         "lightningcss": "catalog:",

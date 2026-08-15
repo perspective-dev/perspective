@@ -10,35 +10,56 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import "@perspective-dev/viewer";
-import "@perspective-dev/viewer-datagrid";
-import "@perspective-dev/viewer-charts";
+export interface SplitterOptions {
+    /** The dragged size in px implied by a pointer position. */
+    toPx(event: PointerEvent): number;
 
-import { initAgentDialog } from "./components/agent_dialog.js";
-import { initSidebar } from "./components/sidebar.js";
-import { initProjectGallery } from "./components/project_gallery.js";
-import { initSourceModal } from "./components/source_modal.js";
-import { initSqlDrawer } from "./components/sql_drawer.js";
-import { bindViewer } from "./data/engines.js";
-import { initTheme } from "./data/theme.js";
-import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
+    /** The current size in px, the base for keyboard nudges. */
+    current(): number;
 
-const shell = document.getElementById("app")!;
-const viewer = document.getElementById(
-    "viewer",
-) as HTMLPerspectiveViewerElement;
+    /** The arrow key that grows the panel; its axis partner shrinks it. */
+    growKey: "ArrowRight" | "ArrowUp";
+    shrinkKey: "ArrowLeft" | "ArrowDown";
 
-bindViewer(viewer);
-void initTheme(viewer);
+    /** Clamp, apply and persist a proposed size. */
+    apply(px: number): void;
+}
 
-const sqlDrawer = initSqlDrawer(shell, viewer);
-const { createSource, browseProjects, configureAgent } = initSidebar(
-    shell,
-    viewer,
-    { openSql: () => sqlDrawer.toggle() },
-);
+/**
+ * Pointer and keyboard wiring shared by every draggable splitter: a
+ * pointer-captured drag that feeds `apply`, and ±16px arrow-key nudges.
+ * Clamping, persistence and axis specifics stay with the caller.
+ *
+ * @param splitter the `role="separator"` element.
+ * @param opts the axis-specific behavior.
+ */
+export function initSplitter(splitter: HTMLElement, opts: SplitterOptions) {
+    splitter.addEventListener("pointerdown", (event: PointerEvent) => {
+        splitter.setPointerCapture(event.pointerId);
+        const move = (e: PointerEvent) => opts.apply(opts.toPx(e));
+        const up = (e: PointerEvent) => {
+            splitter.releasePointerCapture(e.pointerId);
+            splitter.removeEventListener("pointermove", move);
+            splitter.removeEventListener("pointerup", up);
+        };
 
-const gallery = initProjectGallery(shell, viewer);
-browseProjects.addEventListener("click", () => gallery.openModal());
-initSourceModal(viewer, createSource);
-initAgentDialog(viewer, configureAgent);
+        splitter.addEventListener("pointermove", move);
+        splitter.addEventListener("pointerup", up);
+    });
+
+    splitter.addEventListener("keydown", (event: KeyboardEvent) => {
+        const delta =
+            event.key === opts.growKey
+                ? 16
+                : event.key === opts.shrinkKey
+                  ? -16
+                  : 0;
+
+        if (!delta) {
+            return;
+        }
+
+        event.preventDefault();
+        opts.apply(opts.current() + delta);
+    });
+}

@@ -233,6 +233,9 @@ importers:
 
   docs:
     dependencies:
+      '@duckdb/duckdb-wasm':
+        specifier: 'catalog:'
+        version: 1.33.1-dev18.0
       '@perspective-dev/client':
         specifier: 'workspace:'
         version: link:../rust/perspective-js
@@ -782,7 +785,7 @@ importers:
         version: link:../../rust/perspective-viewer
       regular-table:
         specifier: 'catalog:'
-        version: 0.8.6
+        version: 0.9.0
     devDependencies:
       '@perspective-dev/esbuild-plugin':
         specifier: 'workspace:'
@@ -1061,6 +1064,9 @@ importers:
       perspective-5-0-0:
         specifier: npm:@perspective-dev/client@5.0.0
         version: '@perspective-dev/client@5.0.0'
+      perspective-5-1-0:
+        specifier: npm:@perspective-dev/client@5.1.0
+        version: '@perspective-dev/client@5.1.0'
     devDependencies:
       '@perspective-dev/client':
         specifier: 'workspace:'
@@ -1980,6 +1986,9 @@ packages:
   '@perspective-dev/client@5.0.0':
     resolution: {integrity: sha512-K+Rg+j9GNHsGyD0uI7kng8nuodtdEa/DHQecZYcUe4ikk7ztLuekTAp0DzhIEZWyEdzG5JChFpqvId4RgCuDOw==}
 
+  '@perspective-dev/client@5.1.0':
+    resolution: {integrity: sha512-nB/iP0CdB0rj7CsVesTjRROFFySbHW0jLnZ8oOWj3uEKApEDBs5e+q0dyQKNykFLhyspUdVm74NL0qnnj2i0xg==}
+
   '@perspective-dev/server@4.3.0':
     resolution: {integrity: sha512-UH3ADscynozVx42RF07DTBmPE/0PUwH+SS0cgvMLuLfBjtvnPm6msfOU0tHlgFnNZOHJO0q6RZ9WI5fD6wF07A==}
 
@@ -1991,6 +2000,9 @@ packages:
 
   '@perspective-dev/server@5.0.0':
     resolution: {integrity: sha512-tuWAHeOusI+Jva34x5PPXBVnEaXB0Yeq/rfpioUygnLwmz4LJVk+SIjfoK4uEriScbV52dgatQjSbyWzUcKtqQ==}
+
+  '@perspective-dev/server@5.1.0':
+    resolution: {integrity: sha512-lepN5Cvcx4MSCAv5FVYefA8HLqUhzVLgrO6h6FOtoLNoPR5C9N2MA7ZssSOyU3/6WSuidxs5iIqSFfldRYrRyw==}
 
   '@playwright/experimental-ct-core@1.58.0':
     resolution: {integrity: sha512-YZsjApZmRE78Kp2E6OtAvFFVheUyZDfrlZMf+lfnSshmYHrrJUy3bhdCe7EPCWsE12XfCVVAv6G0btiyAx8d0w==}
@@ -4335,10 +4347,6 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  qs@6.14.0:
-    resolution: {integrity: sha512-YWWTjgABSKcvs/nWBi9PycY/JiPJqOD4JA6o9Sej2AtvSGarXxKC3OQSk4pAarbdQlKAh5D4FCQkJNkW+GAn3w==}
-    engines: {node: '>=0.6'}
-
   qs@6.15.0:
     resolution: {integrity: sha512-mAZTtNCeetKMH+pSjrb76NAM8V9a05I9aBZOHztWy/UqcJdQYNsf59vrRKWnojAT9Y+GbIvoTBC++CPHqpDBhQ==}
     engines: {node: '>=0.6'}
@@ -4392,8 +4400,8 @@ packages:
   regular-layout@0.6.1:
     resolution: {integrity: sha512-vGDEFACgFbS/d5kLWJ6AMWY/3DYaZoF1P8+y4KIDnPUFqUQgV5bV8avX7836izmexfmz6ik8JZ4V0Xo4FhaZGQ==}
 
-  regular-table@0.8.6:
-    resolution: {integrity: sha512-jzJzu9WLtqwMgbf5ak/VdNm/YLHUDnDSCHD5SOksnHrHLuDN6l5i2stYfe7BjsHbQV1Gx9369Ma40nTBCgOFvA==}
+  regular-table@0.9.0:
+    resolution: {integrity: sha512-SY3gZvEQqN0PdMsg77qJrWHxAWWx3kJsG4+PlskcL1zAPEczo42/95SdlDXe/S0KckqOJrChrpDjPE7RrRf5jQ==}
     engines: {node: '>=16'}
 
   relateurl@0.2.7:
@@ -6544,6 +6552,18 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@perspective-dev/client@5.1.0':
+    dependencies:
+      '@perspective-dev/server': 5.1.0
+      pro_self_extracting_wasm: 0.0.9
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
   '@perspective-dev/server@4.3.0': {}
 
   '@perspective-dev/server@4.4.1': {}
@@ -6551,6 +6571,8 @@ snapshots:
   '@perspective-dev/server@4.5.1': {}
 
   '@perspective-dev/server@5.0.0': {}
+
+  '@perspective-dev/server@5.1.0': {}
 
   '@playwright/experimental-ct-core@1.58.0(@types/node@24.9.1)(jiti@1.21.7)(less@4.4.2)(lightningcss@1.32.0)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)':
     dependencies:
@@ -8791,7 +8813,7 @@ snapshots:
       chalk: 2.4.2
       cross-spawn: 6.0.6
       memorystream: 0.3.1
-      minimatch: 3.1.2
+      minimatch: 3.1.5
       pidtree: 0.3.1
       read-pkg: 3.0.0
       shell-quote: 1.8.3
@@ -9100,10 +9122,6 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  qs@6.14.0:
-    dependencies:
-      side-channel: 1.1.0
-
   qs@6.15.0:
     dependencies:
       side-channel: 1.1.0
@@ -9165,7 +9183,7 @@ snapshots:
 
   regular-layout@0.6.1: {}
 
-  regular-table@0.8.6: {}
+  regular-table@0.9.0: {}
 
   relateurl@0.2.7: {}
 
@@ -9703,7 +9721,7 @@ snapshots:
 
   union@0.5.0:
     dependencies:
-      qs: 6.14.0
+      qs: 6.15.0
 
   universal-github-app-jwt@1.2.0:
     dependencies:

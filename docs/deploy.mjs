@@ -54,7 +54,6 @@ if (!fs.existsSync(STAGING)) {
     git(["reset", "--hard", "origin/HEAD"]);
 }
 
-// Clear tracked + untracked content in the staging clone, preserving `.git`.
 git(["rm", "-rf", "--quiet", "--ignore-unmatch", "."]);
 git(["clean", "-fdx"]);
 

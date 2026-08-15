@@ -1,0 +1,164 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+.projects {
+    grid-row: 1;
+    grid-column: 2;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    background-color: var(--bg-color);
+    padding: 14px 14px 40px 14px;
+}
+
+.app-shell[data-stage="projects"] > perspective-viewer {
+    display: none;
+}
+
+.modal--projects {
+    width: min(1150px, 94vw);
+    height: min(860px, 90vh);
+    padding: 0;
+    overflow: hidden;
+}
+
+.projects--modal {
+    height: 100%;
+    overflow-y: auto;
+}
+
+.projects--busy {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+.projects__close {
+    display: none;
+}
+
+.projects--modal .projects__close {
+    display: block;
+    position: sticky;
+    top: 8px;
+    margin-left: auto;
+    margin-right: 4px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    padding: 0 6px;
+    z-index: 1;
+}
+
+.projects--modal .projects__close:hover {
+    color: var(--text-color);
+}
+
+.projects__header {
+    margin: 0 auto 20px;
+}
+
+.projects__header h1 {
+    font-size: 22px;
+    margin: 0 0 4px;
+}
+
+.projects__header p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.projects__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 14px;
+    margin: 0 auto;
+}
+
+.projects__card {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    font: inherit;
+    text-align: left;
+    color: var(--text-color);
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.projects__card:hover,
+.projects__card:focus-visible {
+    border-color: var(--color-primary);
+    outline: none;
+}
+
+.projects__card--untitled {
+    min-height: 120px;
+    justify-content: center;
+    align-items: center;
+}
+
+.projects__thumb {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    object-position: top left;
+    opacity: 0;
+    transition: opacity 200ms ease-out;
+    background-size: 220% 100%;
+    background-color: var(--bg-color);
+    background-image: linear-gradient(
+        100deg,
+        var(--bg-color) 30%,
+        var(--bg-surface) 50%,
+        var(--bg-color) 70%
+    );
+}
+
+.projects__thumb--ready {
+    opacity: 1;
+    background-image: none;
+}
+
+.projects__title {
+    display: block;
+    padding: 7px 9px;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-top: 1px solid var(--border-color);
+}
+
+.projects__card--untitled .projects__title {
+    font-size: 14px;
+    text-align: center;
+    border-top: none;
+}
+
+.projects__status:not(:empty) {
+    max-width: 1100px;
+    margin: 14px auto 0;
+    font-size: 12px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    background-color: var(--bg-surface);
+    border-left: 3px solid var(--color-primary);
+}

@@ -10,35 +10,43 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import "@perspective-dev/viewer";
-import "@perspective-dev/viewer-datagrid";
-import "@perspective-dev/viewer-charts";
+export interface Signal<T> {
+    /** The current value. */
+    get(): T;
 
-import { initAgentDialog } from "./components/agent_dialog.js";
-import { initSidebar } from "./components/sidebar.js";
-import { initProjectGallery } from "./components/project_gallery.js";
-import { initSourceModal } from "./components/source_modal.js";
-import { initSqlDrawer } from "./components/sql_drawer.js";
-import { bindViewer } from "./data/engines.js";
-import { initTheme } from "./data/theme.js";
-import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
+    /** Replace the value and notify every subscriber. */
+    set(value: T): void;
 
-const shell = document.getElementById("app")!;
-const viewer = document.getElementById(
-    "viewer",
-) as HTMLPerspectiveViewerElement;
+    /** Subscribe, invoked immediately with the current value. */
+    subscribe(listener: (value: T) => void): () => void;
+}
 
-bindViewer(viewer);
-void initTheme(viewer);
+/**
+ * A minimal observable value — the one pub/sub shape the data modules share.
+ * Listeners are notified with the value itself; treat it as an immutable
+ * snapshot and call `set` with a replacement rather than mutating in place.
+ *
+ * @param initial the starting value.
+ */
+export function signal<T>(initial: T): Signal<T> {
+    let value = initial;
+    const listeners = new Set<(value: T) => void>();
+    return {
+        get: () => value,
 
-const sqlDrawer = initSqlDrawer(shell, viewer);
-const { createSource, browseProjects, configureAgent } = initSidebar(
-    shell,
-    viewer,
-    { openSql: () => sqlDrawer.toggle() },
-);
+        set(next: T) {
+            value = next;
+            for (const listener of listeners) {
+                listener(next);
+            }
+        },
 
-const gallery = initProjectGallery(shell, viewer);
-browseProjects.addEventListener("click", () => gallery.openModal());
-initSourceModal(viewer, createSource);
-initAgentDialog(viewer, configureAgent);
+        subscribe(listener: (value: T) => void) {
+            listeners.add(listener);
+            listener(value);
+            return () => {
+                listeners.delete(listener);
+            };
+        },
+    };
+}

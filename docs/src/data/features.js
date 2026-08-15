@@ -11,17 +11,19 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 export default [
-    {
-        name: "Default",
-        description: "Data grid",
-        config: {
-            title: "Default",
-        },
-    },
+    // {
+    //     name: "Default",
+    //     description: "Data grid",
+    //     config: {
+    //         plugin: "Datagrid",
+    //         title: "Default",
+    //     },
+    // },
     {
         name: "Group By 1",
         description: "Data grid with 1 level of groups for rows",
         config: {
+            plugin: "Datagrid",
             title: "Group By 1",
             group_by: ["Sub-Category"],
         },
@@ -31,6 +33,7 @@ export default [
         name: "Group By 2",
         description: "Data grid with 2 levels of groups for rows",
         config: {
+            plugin: "Datagrid",
             title: "Group By 2",
             group_by: ["Category", "Sub-Category"],
         },
@@ -39,6 +42,7 @@ export default [
         name: "Split By",
         description: "Data grid with 1 level of categories for columns",
         config: {
+            plugin: "Datagrid",
             title: "Split By",
             split_by: ["Category"],
             columns: ["Sales", "Quantity", "Discount", "Profit"],
@@ -48,6 +52,7 @@ export default [
         name: "Split By 2",
         description: "Data grid with 2 levels of categories and columns",
         config: {
+            plugin: "Datagrid",
             title: "Split By 2",
             split_by: ["Category", "Sub-Category"],
             columns: ["Sales", "Quantity", "Discount", "Profit"],
@@ -57,6 +62,7 @@ export default [
         name: "Both",
         description: "Data grid with grouped rows and categorized columns",
         config: {
+            plugin: "Datagrid",
             title: "Both",
             group_by: ["Region"],
             split_by: ["Category"],
@@ -68,6 +74,7 @@ export default [
         description:
             "Data grid with 2 levels of groups and 2 levels of categories",
         config: {
+            plugin: "Datagrid",
             title: "Both 2",
             group_by: ["Region", "State"],
             split_by: ["Category", "Sub-Category"],
@@ -413,9 +420,6 @@ export default [
             },
         },
     },
-
-    // Y Bar
-
     {
         name: "Y Bar",
         description:
@@ -505,9 +509,6 @@ export default [
         },
         viewport: { width: 600, height: 450 },
     },
-
-    // Y Bar Multi Axis
-
     {
         name: "Y Bar Multi Axis",
         description:
@@ -535,9 +536,6 @@ export default [
             plugin_config: { splitMainValues: ["Sales"] },
         },
     },
-
-    // X Bar
-
     {
         name: "X Bar",
         description:
@@ -597,9 +595,6 @@ export default [
             sort: [["Sales", "asc"]],
         },
     },
-
-    // Y Line
-
     {
         name: "Y Line - Datetime Axis",
         description:
@@ -735,9 +730,6 @@ export default [
         },
         viewport: { width: 600, height: 450 },
     },
-
-    // Y Area
-
     {
         name: "Y Area - Datetime Axis Computed",
         description:
@@ -848,9 +840,6 @@ export default [
         },
         viewport: { width: 600, height: 450 },
     },
-
-    // X/Y Scatter
-
     {
         name: "X/Y Scatter",
         description: "Scatter plot. X is Sales. Y is Quantity.",
@@ -1029,9 +1018,6 @@ export default [
         },
         viewport: { width: 600, height: 450 },
     },
-
-    // X/Y Line
-
     {
         name: "X/Y Line",
         description:
@@ -1053,9 +1039,6 @@ export default [
             split_by: ["Region"],
         },
     },
-
-    // Treemap
-
     {
         name: "Treemap",
         description:
@@ -1144,8 +1127,22 @@ export default [
         },
         viewport: { width: 800, height: 600 },
     },
-    // Sunburst
-
+    {
+        name: "Treemap - Row And Split By Category Color 2",
+        description:
+            "Treemap with 3-level hierarchies for Region, Category, and Sub-Category, with each Category colored differently. Size is Sales.",
+        config: {
+            plugin: "Treemap",
+            theme: null,
+            title: "Treemap - Category Color 2",
+            group_by: ["State", "City"],
+            columns: ["Sales", "State", null],
+            aggregates: {
+                State: "dominant",
+            },
+        },
+        viewport: { width: 800, height: 600 },
+    },
     {
         name: "Sunburst",
         description:
@@ -1246,9 +1243,6 @@ export default [
         },
         viewport: { width: 600, height: 450 },
     },
-
-    // Heatmap
-
     {
         name: "Heatmap",
         description:
@@ -1263,9 +1257,7 @@ export default [
                 ["Profit", "desc"],
                 ["Profit", "col desc"],
             ],
-            // aggregates: {Category: "dominant"}
         },
-        // viewport: {width: 600, height: 200}
     },
     {
         name: "Heatmap 2",
@@ -1281,7 +1273,6 @@ export default [
                 ["Profit", "desc"],
                 ["Profit", "col desc"],
             ],
-            // aggregates: {Profit: "low"}
         },
         viewport: { width: 600, height: 450 },
     },

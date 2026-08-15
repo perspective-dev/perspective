@@ -12,6 +12,7 @@
 
 import * as esbuild from "esbuild";
 import * as fs from "node:fs";
+import * as http from "node:http";
 import * as path from "node:path";
 import { createRequire } from "module";
 import { bundleAsync as bundleCssAsync, composeVisitors } from "lightningcss";
@@ -19,6 +20,14 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(__dirname, "dist");
+
+const WATCH = process.argv.includes("--watch");
+const RELOAD_PORT = Number(
+    process.argv.find((x) => x.startsWith("--reload-port="))?.split("=")[1] ??
+        8081,
+);
+
+const HTML_PAGES = ["index.html"];
 
 function copyRecursive(src, dest) {
     if (!fs.existsSync(src)) return;
@@ -33,7 +42,11 @@ function copyRecursive(src, dest) {
     }
 }
 
-// Inline url() asset references as data URIs.
+/**
+ * A lightningcss visitor inlining `url()` asset references as data URIs.
+ *
+ * @param fromFile the stylesheet relative paths resolve against.
+ */
 export function inlineUrlVisitor(fromFile) {
     const dir = path.dirname(fromFile);
     return composeVisitors([
@@ -47,7 +60,6 @@ export function inlineUrlVisitor(fromFile) {
                 const resolved = path.resolve(dir, url.url);
                 if (!fs.existsSync(resolved)) {
                     throw new Error(`File not found ${url.url}`);
-                    // return;
                 }
 
                 const content = fs.readFileSync(resolved);
@@ -73,6 +85,12 @@ export function inlineUrlVisitor(fromFile) {
     ]);
 }
 
+/**
+ * A lightningcss resolver reading `node_modules` specifiers and leaving
+ * `http` imports external.
+ *
+ * @param url the module URL bare specifiers resolve against.
+ */
 export const resolveNPM = (url) => ({
     read(filePath) {
         if (filePath.startsWith("http")) {
@@ -96,33 +114,134 @@ export const resolveNPM = (url) => ({
     },
 });
 
-async function build() {
-    // Clean and create dist
-    fs.mkdirSync(DIST, { recursive: true });
+const RELOAD_CLIENTS = new Set();
 
-    // Bundle CSS
-    const { code: cssCode } = await bundleCssAsync({
+function startReloadServer() {
+    const server = http.createServer((request, response) => {
+        if (!request.url.startsWith("/livereload")) {
+            response.writeHead(404).end();
+            return;
+        }
+
+        response.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+        });
+
+        response.write("retry: 500\n\n");
+        RELOAD_CLIENTS.add(response);
+        request.on("close", () => RELOAD_CLIENTS.delete(response));
+    });
+
+    server.on("error", (e) => {
+        if (e.code === "EADDRINUSE") {
+            console.error(
+                `Live-reload port ${RELOAD_PORT} is in use. Pass ` +
+                    `--reload-port=<n> (and restart the browser tab).`,
+            );
+        } else {
+            console.error(e);
+        }
+    });
+
+    server.listen(RELOAD_PORT);
+    return server;
+}
+
+function notifyReload(reason) {
+    console.log(`  ↻ ${reason}`);
+    for (const client of RELOAD_CLIENTS) {
+        client.write(`event: reload\ndata: ${reason}\n\n`);
+    }
+}
+
+const RELOAD_SNIPPET = `<script>
+            new EventSource("http://localhost:${RELOAD_PORT}/livereload")
+                .addEventListener("reload", (event) => {
+                    if (event.data !== "css") {
+                        location.reload();
+                        return;
+                    }
+
+                    for (const link of document.querySelectorAll(
+                        'link[rel="stylesheet"]',
+                    )) {
+                        const next = new URL(link.href);
+                        next.searchParams.set("t", Date.now());
+                        link.href = next.href;
+                    }
+                });
+        </script>
+`;
+
+async function buildCss() {
+    const { code } = await bundleCssAsync({
         filename: path.join(__dirname, "./src/css/style.css"),
-        minify: true,
+        minify: !WATCH,
         resolver: resolveNPM(import.meta.url),
         visitor: inlineUrlVisitor("./src/css/style.css"),
     });
 
     fs.mkdirSync(path.join(DIST, "css"), { recursive: true });
-    fs.writeFileSync(path.join(DIST, "style.css"), cssCode);
+    fs.writeFileSync(path.join(DIST, "style.css"), code);
+}
 
-    // Bundle JS entry points
-    await esbuild.build({
-        entryPoints: [
-            path.join(__dirname, "src/index.ts"),
-            path.join(__dirname, "src/examples.ts"),
-            path.join(__dirname, "src/block.ts"),
-        ],
+function copyHtml() {
+    for (const html of HTML_PAGES) {
+        const source = fs.readFileSync(
+            path.join(__dirname, "src", html),
+            "utf8",
+        );
+
+        const output = WATCH
+            ? source.replace("</body>", `${RELOAD_SNIPPET}    </body>`)
+            : source;
+
+        fs.writeFileSync(path.join(DIST, html), output);
+    }
+}
+
+function copyStatic() {
+    copyRecursive(path.join(__dirname, "static"), DIST);
+    const arrow = path.join(
+        __dirname,
+        "node_modules/superstore-arrow/superstore.lz4.arrow",
+    );
+
+    fs.mkdirSync(path.join(DIST, "data"), { recursive: true });
+    if (fs.existsSync(arrow)) {
+        fs.copyFileSync(arrow, path.join(DIST, "data/superstore.lz4.arrow"));
+    } else {
+        console.warn("Missing superstore-arrow; Superstore Projects will 404.");
+    }
+}
+
+function copyDocsBundle() {
+    const docs_bundle = path.join(
+        __dirname,
+        "node_modules/@perspective-dev/viewer/dist/docs/perspective-docs.json",
+    );
+
+    if (fs.existsSync(docs_bundle)) {
+        fs.copyFileSync(docs_bundle, path.join(DIST, "perspective-docs.json"));
+    } else {
+        console.warn(
+            "No perspective-docs.json; the agent's `search_docs` tool will " +
+                "be unavailable until `@perspective-dev/viewer` is built.",
+        );
+    }
+}
+
+function esbuildOptions() {
+    return {
+        entryPoints: [path.join(__dirname, "src/index.ts")],
         bundle: true,
         splitting: true,
         format: "esm",
         outdir: DIST,
-        minify: true,
+        minify: !WATCH,
         sourcemap: true,
         target: ["es2022"],
         define: {
@@ -132,45 +251,118 @@ async function build() {
             ".wasm": "file",
             ".arrow": "file",
         },
-    });
+    };
+}
 
-    // Copy HTML files
-    for (const html of ["index.html", "examples.html", "block.html"]) {
-        fs.copyFileSync(
-            path.join(__dirname, "src", html),
-            path.join(DIST, html),
-        );
-    }
-
-    // Copy static assets
-    copyRecursive(path.join(__dirname, "static"), DIST);
-
-    // Generate blocks manifest
-    const blocksDir = path.join(DIST, "blocks");
-    if (fs.existsSync(blocksDir)) {
-        const manifest = {};
-        for (const example of fs.readdirSync(blocksDir)) {
-            const exDir = path.join(blocksDir, example);
-            if (!fs.statSync(exDir).isDirectory()) continue;
-            manifest[example] = fs
-                .readdirSync(exDir)
-                .filter(
-                    (f) =>
-                        !f.startsWith(".") &&
-                        !f.endsWith(".png") &&
-                        !f.endsWith(".arrow"),
-                );
-        }
-        fs.writeFileSync(
-            path.join(blocksDir, "manifest.json"),
-            JSON.stringify(manifest),
-        );
-    }
-
+async function build() {
+    fs.mkdirSync(DIST, { recursive: true });
+    await buildCss();
+    await esbuild.build(esbuildOptions());
+    copyHtml();
+    copyStatic();
+    copyDocsBundle();
     console.log("Build complete: dist/");
 }
 
-build().catch((e) => {
+function debounce(fn, ms = 60) {
+    let timer;
+    return () => {
+        clearTimeout(timer);
+        timer = setTimeout(fn, ms);
+    };
+}
+
+function watchDir(dir, handler) {
+    if (!fs.existsSync(dir)) {
+        return;
+    }
+
+    fs.watch(dir, { recursive: true }, debounce(handler));
+}
+
+async function guard(label, step) {
+    try {
+        await step();
+        notifyReload(label);
+    } catch (e) {
+        console.error(`  ✗ ${label} failed:\n${e.message ?? e}`);
+    }
+}
+
+async function watch() {
+    fs.mkdirSync(DIST, { recursive: true });
+    try {
+        await buildCss();
+    } catch (e) {
+        console.error(`  ✗ css failed:\n${e.message ?? e}`);
+    }
+
+    copyHtml();
+    copyStatic();
+    copyDocsBundle();
+
+    const ctx = await esbuild.context({
+        ...esbuildOptions(),
+        plugins: [
+            {
+                name: "livereload",
+                setup(build) {
+                    let first = true;
+                    build.onEnd((result) => {
+                        if (result.errors.length > 0) {
+                            console.error(
+                                `  ✗ js failed (${result.errors.length} error(s))`,
+                            );
+                        } else if (first) {
+                            first = false;
+                        } else {
+                            notifyReload("js");
+                        }
+                    });
+                },
+            },
+        ],
+    });
+
+    await ctx.watch();
+    watchDir(path.join(__dirname, "src/css"), () => guard("css", buildCss));
+    watchDir(path.join(__dirname, "static"), () => guard("static", copyStatic));
+    fs.watch(
+        path.join(__dirname, "src"),
+        { recursive: true },
+        debounce(() => {
+            if (HTML_PAGES.some((p) => hasChanged(p))) {
+                guard("html", copyHtml);
+            }
+        }),
+    );
+
+    const server = startReloadServer();
+    console.log(
+        `Watching docs/src — live reload on :${RELOAD_PORT}.\n` +
+            `Serve dist/ separately (\`pnpm start\`); Ctrl-C to stop.`,
+    );
+
+    for (const signal of ["SIGINT", "SIGTERM"]) {
+        process.on(signal, () => {
+            ctx.dispose();
+            server.close();
+            process.exit(0);
+        });
+    }
+}
+
+function hasChanged(page) {
+    const from = path.join(__dirname, "src", page);
+    const to = path.join(DIST, page);
+    if (!fs.existsSync(to)) {
+        return true;
+    }
+
+    return fs.statSync(from).mtimeMs > fs.statSync(to).mtimeMs;
+}
+
+(WATCH ? watch() : build()).catch((e) => {
     console.error(e);
     process.exit(1);
 });

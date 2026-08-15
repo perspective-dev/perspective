@@ -5,9 +5,9 @@ Perspective's complete API is hosted on `docs.rs`:
 - Python API
     - [`perspective`](https://perspective-dev.github.io/python/index.html)
     - [`perspective.widget`](https://perspective-dev.github.io/python/perspective/widget.html)
-    - [`perspective.handlers.aiohttp`](https://perspective-dev.github.io/python/perspective/handlers/aiohttp.htm)
-    - [`perspective.handlers.starlette`](https://perspective-dev.github.io/python/perspective/handlers/starlett.htm)
-    - [`perspective.handlers.tornado`](https://perspective-dev.github.io/python/perspective/handlers/tornado.htm)
+    - [`perspective.handlers.aiohttp`](https://perspective-dev.github.io/python/perspective/handlers/aiohttp.html)
+    - [`perspective.handlers.starlette`](https://perspective-dev.github.io/python/perspective/handlers/starlette.html)
+    - [`perspective.handlers.tornado`](https://perspective-dev.github.io/python/perspective/handlers/tornado.html)
 - JavaScript API
     - [`@perspective-dev/client` Browser](https://perspective-dev.github.io/browser/modules/src_ts_perspective.browser.ts.html)
     - [`@perspective-dev/client` Node.js](https://perspective-dev.github.io/node/modules/src_ts_perspective.node.ts.html)
