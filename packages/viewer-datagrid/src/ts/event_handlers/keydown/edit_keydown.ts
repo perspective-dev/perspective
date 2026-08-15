@@ -116,7 +116,7 @@ const moveSelection = lock(async function (
     let x = meta.x0 + dx,
         y = meta.y0 + dy;
     while (
-        !focusSelectedCell(table, selected_position_map) &&
+        !focusSelectedCell(table, selected_position_map, model) &&
         x >= xmin &&
         x < xmax &&
         y >= ymin &&

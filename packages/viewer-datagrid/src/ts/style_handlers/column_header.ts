@@ -198,8 +198,6 @@ export function styleColumnHeaderRow(
         const is_date = type === "date";
         const is_datetime = type === "datetime";
 
-        td.classList.toggle("psp-align-right", is_numeric);
-        td.classList.toggle("psp-align-left", !is_numeric);
         td.classList.toggle(
             "psp-menu-enabled",
             (is_string || is_numeric || is_date || is_datetime) &&

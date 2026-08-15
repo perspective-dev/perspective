@@ -52,8 +52,6 @@ export function applyGroupHeaderStyles(
             }
 
             td.style.backgroundColor = "";
-            td.classList.toggle("psp-align-right", false);
-            td.classList.toggle("psp-align-left", false);
             td.classList.toggle("psp-header-group", true);
             td.classList.toggle("psp-header-leaf", false);
             td.classList.toggle(

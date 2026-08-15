@@ -12,6 +12,7 @@
 
 import { RegularTableElement } from "regular-table";
 import type { DatagridModel, SelectedPositionMap } from "../types.js";
+import { ensure_editable_for_focus } from "../event_handlers/edit_focus.js";
 import { CollectedCell } from "./types.js";
 
 /**
@@ -19,7 +20,7 @@ import { CollectedCell } from "./types.js";
  * Optimized to use collected cells instead of querySelectorAll.
  */
 export function applyFocusStyle(
-    _model: DatagridModel,
+    model: DatagridModel,
     cells: CollectedCell[],
     regularTable: RegularTableElement,
     selectedPositionMap: SelectedPositionMap,
@@ -35,6 +36,7 @@ export function applyFocusStyle(
                 metadata.y === selected_position.y
             ) {
                 if (host.activeElement !== td) {
+                    ensure_editable_for_focus(model, regularTable, td);
                     td.focus({ preventScroll: true });
                 }
 
@@ -62,6 +64,7 @@ export function applyFocusStyle(
 export function focusSelectedCell(
     regularTable: RegularTableElement,
     selectedPositionMap: SelectedPositionMap,
+    model?: DatagridModel,
 ): boolean {
     const selected_position = selectedPositionMap.get(regularTable);
     if (!selected_position) {
@@ -81,6 +84,14 @@ export function focusSelectedCell(
                     metadata.y === selected_position.y
                 ) {
                     if (host.activeElement !== cell) {
+                        if (model) {
+                            ensure_editable_for_focus(
+                                model,
+                                regularTable,
+                                cell as HTMLElement,
+                            );
+                        }
+
                         (cell as HTMLElement).focus({ preventScroll: true });
                     }
 

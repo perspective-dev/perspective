@@ -433,6 +433,10 @@ regular-table table tbody td {
     cursor: pointer;
 }
 
+regular-table table tbody td.psp-editable {
+    user-select: text;
+}
+
 regular-table table {
     font-size: 1em;
     user-select: none;

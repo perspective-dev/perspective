@@ -328,6 +328,7 @@ export async function createModel(
                 | "horizontal"
                 | "vertical"
                 | "none",
+            column_classes: true,
         },
     );
 

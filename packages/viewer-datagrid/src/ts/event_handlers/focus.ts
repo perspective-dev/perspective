@@ -11,6 +11,10 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { write_cell } from "./click/edit_click.js";
+import {
+    release_cell_editable,
+    ensure_editable_for_focus,
+} from "./edit_focus.js";
 import type {
     RegularTable,
     DatagridModel,
@@ -28,8 +32,9 @@ export function createFocusoutListener(
 ): EventListener {
     return (event: Event): void => {
         const focusEvent = event as FocusEvent;
+        const target = focusEvent.target as HTMLElement;
+        let refocused = false;
         if (isEditableMode(model, viewer) && selected_position_map.has(table)) {
-            const target = focusEvent.target as HTMLElement;
             target.classList.remove("psp-error");
             const selectedPosition = selected_position_map.get(table)!;
             selected_position_map.delete(table);
@@ -38,14 +43,19 @@ export function createFocusoutListener(
                     target.textContent = selectedPosition.content || "";
                     target.classList.add("psp-error");
                     target.focus();
+                    refocused = true;
                 }
             }
+        }
+
+        if (!refocused && target?.hasAttribute?.("contenteditable")) {
+            release_cell_editable(table, target);
         }
     };
 }
 
 export function createFocusinListener(
-    _model: DatagridModel,
+    model: DatagridModel,
     table: RegularTable,
     _viewer: HTMLPerspectiveViewerElement,
     selected_position_map: SelectedPositionMap,
@@ -53,6 +63,7 @@ export function createFocusinListener(
     return (event: Event): void => {
         const focusEvent = event as FocusEvent;
         const target = focusEvent.target as HTMLElement;
+        ensure_editable_for_focus(model, table, target);
         const meta = table.getMeta(target);
         if (meta?.type === "body") {
             const new_state: SelectedPosition = {

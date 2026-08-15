@@ -21,6 +21,7 @@ import {
     createFocusinListener,
     createFocusoutListener,
 } from "../event_handlers/focus.js";
+import { createEditPointerdownListener } from "../event_handlers/edit_focus.js";
 import {
     createKeydownListener,
     createEditClickListener,
@@ -201,6 +202,15 @@ export async function activate(
         this.regular_table.addEventListener(
             "click",
             createEditClickListener(this.model, this.regular_table, viewer),
+        );
+
+        this.regular_table.addEventListener(
+            "pointerdown",
+            createEditPointerdownListener(
+                this.model,
+                this.regular_table,
+                viewer,
+            ),
         );
 
         this.regular_table.addEventListener(
