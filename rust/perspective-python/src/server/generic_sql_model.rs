@@ -74,20 +74,31 @@ impl PyGenericSQLVirtualServerModel {
             .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
+    #[pyo3(signature = (table_id, view_id, config, schema=None))]
     pub fn table_make_view(
         &self,
         table_id: &str,
         view_id: &str,
         config: Py<PyAny>,
+        schema: Option<Py<PyAny>>,
     ) -> PyResult<String> {
-        let config: ViewConfig = Python::with_gil(|py| {
-            pythonize::depythonize(config.bind(py))
-                .map_err(|e| PyValueError::new_err(e.to_string()))
-        })?;
+        Python::with_gil(|py| {
+            let config: ViewConfig = pythonize::depythonize(config.bind(py))
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
-        self.inner
-            .table_make_view(table_id, view_id, &config)
-            .map_err(|e| PyValueError::new_err(e.to_string()))
+            let schema = match &schema {
+                Some(schema) => {
+                    self.parse_schema(schema.downcast_bound::<PyDict>(py).map_err(|_| {
+                        PyValueError::new_err("Schema must be a dict mapping column names to types")
+                    })?)?
+                },
+                None => IndexMap::new(),
+            };
+
+            self.inner
+                .table_make_view(table_id, view_id, &config, &schema)
+                .map_err(|e| PyValueError::new_err(e.to_string()))
+        })
     }
 
     pub fn view_get_data(

@@ -125,6 +125,20 @@ async function loadCoerceTypesData(db) {
     `);
 }
 
+async function loadTemporalData(db) {
+    await db.query(`
+        CREATE TABLE temporal_test (ts TIMESTAMP, d DATE, x DOUBLE);
+    `);
+
+    await db.query(`
+        INSERT INTO temporal_test VALUES
+            (TIMESTAMP '2024-01-30 00:00:00', DATE '2024-01-30', 1.0),
+            (TIMESTAMP '2024-01-31 12:00:00', DATE '2024-01-31', 2.0),
+            (TIMESTAMP '2024-02-01 00:00:00', DATE '2024-02-01', 4.0),
+            (TIMESTAMP '2024-02-03 00:00:00', DATE '2024-02-03', 8.0);
+    `);
+}
+
 export function describeDuckDB(name, fn) {
     test.describe("DuckDB Virtual Server " + name, function () {
         let db;
@@ -139,6 +153,7 @@ export function describeDuckDB(name, fn) {
             await loadSuperstoreData(db);
             await loadUnderscoreData(db);
             await loadCoerceTypesData(db);
+            await loadTemporalData(db);
         });
 
         fn(() => client);

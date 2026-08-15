@@ -10,11 +10,14 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use indexmap::IndexMap;
+
 use super::GenericSQLError;
 use crate::config::{
     Aggregate, Filter, FilterTerm, GroupRollupMode, Scalar, Sort, SortDir, SplitRollupMode,
     ViewConfig, WindowFrame, WindowSortDir, WindowSpec,
 };
+use crate::proto::ColumnType;
 
 fn aggregate_to_string(agg: &Aggregate) -> String {
     match agg {
@@ -58,7 +61,7 @@ enum QueryOrientation {
     TotalPivoted,
 }
 
-fn window_over_clause(w: &WindowSpec, frame: Option<&str>) -> String {
+fn window_over_clause(w: &WindowSpec, frame: Option<&str>, order_expr: Option<&str>) -> String {
     let mut parts: Vec<String> = Vec::new();
     if !w.partition_by.is_empty() {
         parts.push(format!(
@@ -78,14 +81,16 @@ fn window_over_clause(w: &WindowSpec, frame: Option<&str>) -> String {
     // natural row order - `rowid`, the same identity unsorted view results
     // are already ordered by.
     match &w.order_by {
-        Some(order_by) => parts.push(format!(
-            "ORDER BY \"{}\" {} NULLS FIRST",
-            quote_ident(&order_by.0),
-            match order_by.1 {
+        Some(order_by) => {
+            let key = match order_expr {
+                Some(expr) => expr.to_string(),
+                None => format!("\"{}\"", quote_ident(&order_by.0)),
+            };
+            parts.push(format!("ORDER BY {} {} NULLS FIRST", key, match order_by.1 {
                 WindowSortDir::Asc => "ASC",
                 WindowSortDir::Desc => "DESC",
-            }
-        )),
+            }))
+        },
         None => parts.push("ORDER BY rowid ASC".to_string()),
     }
     if let Some(f) = frame {
@@ -112,8 +117,11 @@ fn window_frame_sql(frame: Option<&WindowFrame>) -> String {
 /// One `WindowSpec` as a SQL window-function expression - the 1:1 `OVER`
 /// mapping that keeps hot-tier and virtual-server semantics interchangeable
 /// (WINDOW_FUNCTIONS_PLAN Phase 5). `resolve` inlines expression-alias
-/// sources. `ema` is recursive and has no SQL window equivalent.
-fn window_sql(w: &WindowSpec, resolve: &dyn Fn(&str) -> String) -> Result<String, GenericSQLError> {
+fn window_sql(
+    w: &WindowSpec,
+    resolve: &dyn Fn(&str) -> String,
+    order_type: Option<ColumnType>,
+) -> Result<String, GenericSQLError> {
     // `range` frame interval arithmetic is defined on the order key's
     // units - the natural (`rowid`) fallback is meaningless for it, so an
     // explicit `order_by` is required (mirrors the engine's validation).
@@ -122,6 +130,18 @@ fn window_sql(w: &WindowSpec, resolve: &dyn Fn(&str) -> String) -> Result<String
             "window `range` frames require an explicit `order_by`".to_string(),
         ));
     }
+
+    let lin_order = match (&w.order_by, &w.frame) {
+        (Some(order_by), Some(WindowFrame::Range(_))) => {
+            let quoted = format!("\"{}\"", quote_ident(&order_by.0));
+            match order_type {
+                Some(ColumnType::Date) => Some(format!("({} - DATE '1970-01-01')", quoted)),
+                Some(ColumnType::Datetime) => Some(format!("epoch_ms({})", quoted)),
+                _ => None,
+            }
+        },
+        _ => None,
+    };
 
     let src = resolve(&w.column);
     let op = w.aggregate.as_str();
@@ -146,7 +166,7 @@ fn window_sql(w: &WindowSpec, resolve: &dyn Fn(&str) -> String) -> Result<String
             "{}({}) OVER ({})",
             op,
             src,
-            window_over_clause(w, Some(&frame))
+            window_over_clause(w, Some(&frame), lin_order.as_deref())
         ));
     }
 
@@ -154,7 +174,11 @@ fn window_sql(w: &WindowSpec, resolve: &dyn Fn(&str) -> String) -> Result<String
         op,
         "row_number" | "rank" | "dense_rank" | "percent_rank" | "cume_dist"
     ) {
-        return Ok(format!("{}() OVER ({})", op, window_over_clause(w, None)));
+        return Ok(format!(
+            "{}() OVER ({})",
+            op,
+            window_over_clause(w, None, None)
+        ));
     }
 
     match op {
@@ -163,7 +187,7 @@ fn window_sql(w: &WindowSpec, resolve: &dyn Fn(&str) -> String) -> Result<String
             op,
             src,
             w.offset.unwrap_or(1),
-            window_over_clause(w, None)
+            window_over_clause(w, None, None)
         )),
         "nth_value" => {
             let frame = window_frame_sql(w.frame.as_ref());
@@ -171,13 +195,13 @@ fn window_sql(w: &WindowSpec, resolve: &dyn Fn(&str) -> String) -> Result<String
                 "nth_value({}, {}) OVER ({})",
                 src,
                 w.offset.unwrap_or(1),
-                window_over_clause(w, Some(&frame))
+                window_over_clause(w, Some(&frame), lin_order.as_deref())
             ))
         },
         "ntile" => Ok(format!(
             "ntile({}) OVER ({})",
             w.offset.unwrap_or(1),
-            window_over_clause(w, None)
+            window_over_clause(w, None, None)
         )),
         // `diff` and `rate` are Perspective's, not any SQL dialect's - they
         // are synthesized here so a config authored against the engine keeps
@@ -187,7 +211,7 @@ fn window_sql(w: &WindowSpec, resolve: &dyn Fn(&str) -> String) -> Result<String
             src,
             src,
             w.offset.unwrap_or(1),
-            window_over_clause(w, None)
+            window_over_clause(w, None, None)
         )),
         "rate" => {
             let Some(order_by) = &w.order_by else {
@@ -206,8 +230,13 @@ fn window_sql(w: &WindowSpec, resolve: &dyn Fn(&str) -> String) -> Result<String
             }
 
             let frame = window_frame_sql(w.frame.as_ref());
-            let over = window_over_clause(w, Some(&frame));
-            let okey = format!("\"{}\"", quote_ident(&order_by.0));
+            let over = window_over_clause(w, Some(&frame), lin_order.as_deref());
+            // Δk in the denominator is measured on the same linear scale
+            // the frame is defined on (a raw temporal key would not CAST
+            // to DOUBLE at all).
+            let okey = lin_order
+                .clone()
+                .unwrap_or_else(|| format!("\"{}\"", quote_ident(&order_by.0)));
             Ok(format!(
                 "(({} - first_value({}) OVER ({})) / NULLIF(CAST({} AS DOUBLE) - \
                  CAST(first_value({}) OVER ({}) AS DOUBLE), 0))",
@@ -282,10 +311,13 @@ pub(crate) struct ViewQueryContext<'a> {
 impl<'a> ViewQueryContext<'a> {
     /// Creates a new query context by resolving expressions, the grouping
     /// function, and row-path aliases from the given model and config.
+    /// `schema` types the table's columns for window order-key
+    /// linearization; an empty map degrades to untyped emission.
     pub(crate) fn new(
         model: &'a super::GenericSQLVirtualServerModel,
         table: &'a str,
         config: &'a ViewConfig,
+        schema: &IndexMap<String, ColumnType>,
     ) -> Result<Self, GenericSQLError> {
         let expressions = &config.expressions.0;
         let col_name_resolve = |col: &str| -> String {
@@ -308,15 +340,25 @@ impl<'a> ViewQueryContext<'a> {
             windows.sort_by_key(|(name, _)| name.as_str());
             let mut selects = Vec::with_capacity(windows.len());
             for (name, w) in windows {
+                let order_type = w
+                    .order_by
+                    .as_ref()
+                    .and_then(|order_by| schema.get(&order_by.0))
+                    .copied();
+
                 selects.push(format!(
                     "{} AS \"{}\"",
-                    window_sql(w, &col_name_resolve)?,
+                    window_sql(w, &col_name_resolve, order_type)?,
                     quote_ident(name)
                 ));
             }
 
+            // `rowid` is a virtual column bound only on base tables - it
+            // does not survive `SELECT *` into the sub-select, so the
+            // natural row order is re-exported under an internal alias for
+            // the outer query's `ORDER BY` (see [`Self::natural_order_col`]).
             format!(
-                "(SELECT *, {} FROM {}) AS __PSP_WINDOW_SRC__",
+                "(SELECT *, rowid AS __PSP_ROWID__, {} FROM {}) AS __PSP_WINDOW_SRC__",
                 selects.join(", "),
                 table
             )
@@ -602,7 +644,7 @@ impl<'a> ViewQueryContext<'a> {
             && self.config.group_rollup_mode != GroupRollupMode::Total
         {
             let default_order = if self.config.split_by.is_empty() {
-                "rowid"
+                self.natural_order_col()
             } else {
                 "__ROW_NUM__"
             };
@@ -900,9 +942,21 @@ impl<'a> ViewQueryContext<'a> {
         }
     }
 
+    /// The natural row-order column as visible to clauses that select `FROM
+    /// {from_expr}` - the base table's virtual `rowid` directly, or its
+    /// re-export when windows wrap the table in a sub-select (through which
+    /// `rowid` does not propagate).
+    fn natural_order_col(&self) -> &'static str {
+        if self.config.windows.is_empty() {
+            "rowid"
+        } else {
+            "__PSP_ROWID__"
+        }
+    }
+
     /// Builds the `ORDER BY` expression for the `ROW_NUMBER()` window
     /// function used inside `PIVOT` queries. Uses sort config if available,
-    /// otherwise falls back to `rowid`.
+    /// otherwise falls back to the natural row order.
     fn pivot_row_num_order(&self) -> String {
         let sort_exprs: Vec<String> = self
             .config
@@ -913,7 +967,7 @@ impl<'a> ViewQueryContext<'a> {
             .collect();
 
         if sort_exprs.is_empty() {
-            "rowid".to_string()
+            self.natural_order_col().to_string()
         } else {
             sort_exprs.join(", ")
         }

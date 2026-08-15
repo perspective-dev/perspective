@@ -249,6 +249,7 @@ impl GenericSQLVirtualServerModel {
     /// * `view_id` - The identifier for the new view.
     /// * `config` - The view configuration specifying columns, group_by,
     ///   split_by, etc.
+    /// * `schema` - The schema of the source table (column names to types).
     ///
     /// # Returns
     /// SQL: `CREATE TABLE {view_id} AS (...)`
@@ -257,8 +258,9 @@ impl GenericSQLVirtualServerModel {
         table_id: &str,
         view_id: &str,
         config: &ViewConfig,
+        schema: &IndexMap<String, ColumnType>,
     ) -> GenericSQLResult<String> {
-        let ctx = ViewQueryContext::new(self, table_id, config)?;
+        let ctx = ViewQueryContext::new(self, table_id, config, schema)?;
         let query = ctx.build_query();
         let template = self.0.create_entity.as_deref().unwrap_or("TABLE");
         Ok(format!("CREATE {} {} AS ({})", template, view_id, query))

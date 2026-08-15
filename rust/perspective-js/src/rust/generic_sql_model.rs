@@ -111,12 +111,19 @@ impl GenericSQLVirtualServerModel {
         table_id: &str,
         view_id: &str,
         config: JsValue,
+        schema: JsValue,
     ) -> Result<String, JsValue> {
         let config: ViewConfig = serde_wasm_bindgen::from_value(config)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
+        let schema = if schema.is_undefined() || schema.is_null() {
+            IndexMap::new()
+        } else {
+            self.parse_schema(schema)?
+        };
+
         self.inner
-            .table_make_view(table_id, view_id, &config)
+            .table_make_view(table_id, view_id, &config, &schema)
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
