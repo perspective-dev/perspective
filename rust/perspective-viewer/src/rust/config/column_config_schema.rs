@@ -30,6 +30,11 @@ use super::{KeyValueOpts, NumberSeriesStyleDefaultConfig};
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ColumnConfigSchema {
     pub fields: Vec<ControlSpec>,
+
+    /// Plugin-owned keys that are persisted and passed to `restore()`, but do
+    /// not have a viewer-rendered settings control.
+    #[serde(default)]
+    pub passthrough_keys: Vec<String>,
 }
 
 impl ColumnConfigSchema {
@@ -45,6 +50,8 @@ impl ColumnConfigSchema {
                 out.insert(k.to_string());
             }
         }
+
+        out.extend(self.passthrough_keys.iter().cloned());
         out
     }
 }

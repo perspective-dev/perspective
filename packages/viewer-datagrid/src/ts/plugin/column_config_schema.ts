@@ -22,6 +22,7 @@ type ControlSpec = Record<string, unknown> & { kind: string };
 
 export interface ColumnConfigSchema {
     fields: ControlSpec[];
+    passthrough_keys?: string[];
 }
 
 /**

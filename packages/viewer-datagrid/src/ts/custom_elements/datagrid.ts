@@ -165,6 +165,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
 
         return {
             fields,
+            passthrough_keys: ["columns"],
         };
     }
 

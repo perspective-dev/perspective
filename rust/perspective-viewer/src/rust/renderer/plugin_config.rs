@@ -332,7 +332,10 @@ impl Renderer {
             return Err(JsValue::from("view_schema not initialized").into());
         }
         let Some(view_type) = session.metadata().get_column_view_type(column_name) else {
-            return Ok(ColumnConfigSchema { fields: vec![] });
+            return Ok(ColumnConfigSchema {
+                fields: vec![],
+                ..Default::default()
+            });
         };
 
         let current_js = JsValue::from_serde_ext(&current_value).unwrap_or(JsValue::NULL);

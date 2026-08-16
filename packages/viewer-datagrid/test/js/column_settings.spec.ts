@@ -65,6 +65,39 @@ test.describe("Datagrid Column Styles", function () {
             },
         });
     });
+
+    test("First restore applies and preserves column width overrides", async function ({
+        page,
+    }) {
+        const result = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.restore({
+                plugin: "Datagrid",
+                columns: ["Row ID", "Sales"],
+                plugin_config: {
+                    columns: {
+                        Sales: { column_size_override: 311.1875 },
+                    },
+                },
+            });
+
+            const plugin = document.querySelector(
+                "perspective-viewer-datagrid",
+            ) as any;
+            const index = plugin.model._column_paths.indexOf("Sales");
+            const widths = plugin.regular_table.saveColumnSizes();
+
+            return {
+                config: (await viewer.save()).plugin_config,
+                width: widths[index],
+            };
+        });
+
+        expect(result.config.columns).toEqual({
+            Sales: { column_size_override: 311.1875 },
+        });
+        expect(result.width).toBe(311.1875);
+    });
 });
 
 const runTests = (title: string, beforeEachAndLocalTests: () => void) => {

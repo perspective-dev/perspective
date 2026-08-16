@@ -73,7 +73,10 @@ pub fn get_column_config_schema(
     let view_type = if let Some(x) = metadata.get_column_view_type(column_name) {
         x
     } else {
-        return Ok(ColumnConfigSchema { fields: vec![] });
+        return Ok(ColumnConfigSchema {
+            fields: vec![],
+            ..Default::default()
+        });
     };
 
     // Route through serde_json so maps serialize as plain JS objects
