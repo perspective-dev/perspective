@@ -57,8 +57,9 @@ pub enum PerspectiveViewerMsg {
     PreloadFontsUpdate,
 
     /// Element-level reset (the public `reset()` API): reset EVERY panel and
-    /// clear the cross-filter overlay, symmetric with whole-element
-    /// `save`/`restore`. The `bool` also clears expressions/column settings.
+    /// clear the cross-filter overlay, symmetric with
+    /// `saveWorkspace`/`restoreWorkspace`. The `bool` also clears
+    /// expressions/column settings.
     Reset(bool, Option<Completion>),
 
     /// Reset ONLY the named panel — or the active panel when `None` — to its
@@ -86,10 +87,10 @@ pub enum PerspectiveViewerMsg {
     /// I6) — carrying any teardown error, which was previously dropped.
     ClosePanel(String, Option<Completion>),
 
-    /// Whole-element `restore` finished replacing the panel set in the
+    /// `restoreWorkspace` finished replacing the panel set in the
     /// `Workspace` (new models inserted, old panels ejected, layout staged):
     /// activate the named panel, re-subscribe the per-panel wiring, and
-    /// re-render — the SINGLE visible commit of the whole restore.
+    /// re-render — the SINGLE visible commit of the restore.
     CommitWorkspaceRestore(String),
 
     /// Duplicate the named panel: snapshot its config into a new independent

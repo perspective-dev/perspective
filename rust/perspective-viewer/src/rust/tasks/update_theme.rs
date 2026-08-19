@@ -19,20 +19,21 @@ use crate::presentation::Presentation;
 use crate::renderer::Renderer;
 use crate::workspace::Workspace;
 
-/// Re-seed every panel renderer's cached registry default theme from the
-/// (awaited, so initialized) theme registry, returning the default name.
-/// Every consumer of `Renderer::needs_restyle` after a registry-affecting
-/// change must run this first — a cold cache compares against `None`.
-pub(crate) async fn seed_default_themes(
-    presentation: &Presentation,
-    workspace: &Workspace,
-) -> Option<String> {
-    let default = presentation.get_default_theme_name().await;
-    for panel in workspace.panels() {
-        panel.renderer.set_default_theme(default.clone());
+/// Give `renderer` the concrete registry default IF it has none yet — the
+/// cold-boot case, where the panel was created before the registry first
+/// parsed and `active_theme_name_sync` had nothing to resolve. Only ever
+/// FILLS IN, never overwrites, so it cannot repaint a themed panel.
+pub(crate) async fn seed_panel_theme(presentation: &Presentation, renderer: &Renderer) {
+    if renderer.theme().is_none() {
+        renderer.set_theme(presentation.get_default_theme_name().await);
     }
+}
 
-    default
+/// [`seed_panel_theme`] for every panel.
+pub(crate) async fn seed_default_themes(presentation: &Presentation, workspace: &Workspace) {
+    for panel in workspace.panels() {
+        seed_panel_theme(presentation, &panel.renderer).await;
+    }
 }
 
 /// Apply a theme change and restyle the affected panel's view.
@@ -59,14 +60,17 @@ pub fn update_theme(
     workspace: &Workspace,
     theme: Option<String>,
 ) {
-    // Per-panel: record the theme on the (active) renderer so this panel keeps
-    // it independent of which panel is active. `set_theme_name` below mirrors
-    // the same value onto the host `theme` attribute (driving the chrome), and
-    // MainPanel inlines this renderer's theme on its frame only when it
-    renderer.set_theme_stamped(theme.clone());
+    // A NAMED theme needs no registry, so it stamps SYNCHRONOUSLY — no await
+    // separates the caller's config commit from the attribute the document
+    // cascade styles. Only "reset to default" has to await the registry, and
+    // it records the resolved NAME, never an empty theme.
+    if let Some(name) = &theme {
+        renderer.set_theme_stamped(Some(name.clone()));
+    }
 
     let presentation = presentation.clone();
     let workspace = workspace.clone();
+    let renderer = renderer.clone();
     ApiFuture::spawn(async move {
         match theme {
             Some(name) => {
@@ -74,10 +78,10 @@ pub fn update_theme(
             },
             None => {
                 presentation.reset_theme().await?;
+                renderer.set_theme_stamped(presentation.get_default_theme_name().await);
             },
         }
 
-        seed_default_themes(&presentation, &workspace).await;
         let panels = workspace.panels();
         join_all(panels.iter().map(|panel| async move {
             if panel.renderer.needs_restyle() {

@@ -15,7 +15,7 @@ import { armInvariants } from "./harness.ts";
 
 const TABLE = "load-viewer-csv";
 
-/// A two-panel side-by-side whole-element config.
+/// A two-panel side-by-side workspace config.
 const SPLIT_CONFIG = {
     layout: {
         type: "split-layout",
@@ -85,7 +85,7 @@ async function panel_names(page): Promise<string[]> {
 }
 
 test.describe("Multi-panel restore", () => {
-    test("restore a whole-element config with a split layout", async ({
+    test("restore a workspace config with a split layout", async ({
         page,
     }) => {
         await restore(page, SPLIT_CONFIG);

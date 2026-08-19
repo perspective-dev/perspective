@@ -87,6 +87,78 @@ test.describe("Zero panels", () => {
         expect(active).toBe("solo");
     });
 
+    test("restore without a table on an empty element rejects atomically", async ({
+        page,
+    }) => {
+        await empty(page);
+        const result = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            // @ts-ignore
+            await viewer.resetThemes(["Pro Light", "Pro Dark"]);
+            const theme_before = viewer.getAttribute("theme");
+            let message = "";
+            try {
+                // @ts-ignore
+                await viewer.restore({ theme: "Pro Dark", settings: true });
+            } catch (e) {
+                message = String(e);
+            }
+
+            return {
+                message,
+                theme_unchanged: viewer.getAttribute("theme") === theme_before,
+            };
+        });
+
+        expect(result.message).toContain("table");
+        expect(result.theme_unchanged).toBe(true);
+        expect(await panel_names(page)).toEqual([]);
+        await expect(
+            page.locator("perspective-viewer #settings_panel"),
+        ).toBeHidden();
+    });
+
+    test("restore of an empty patch on an empty element rejects", async ({
+        page,
+    }) => {
+        await empty(page);
+        const message = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            try {
+                // @ts-ignore
+                await viewer.restore({});
+                return "";
+            } catch (e) {
+                return String(e);
+            }
+        });
+
+        expect(message).toContain("table");
+        expect(await panel_names(page)).toEqual([]);
+    });
+
+    test("restore with view state but no table rejects — no deferred panel", async ({
+        page,
+    }) => {
+        await empty(page);
+        const message = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            try {
+                // @ts-ignore
+                await viewer.restore(
+                    { columns: ["Sales"] },
+                    { panel: "deferred" },
+                );
+                return "";
+            } catch (e) {
+                return String(e);
+            }
+        });
+
+        expect(message).toContain("table");
+        expect(await panel_names(page)).toEqual([]);
+    });
+
     test("addPanel from empty activates the new panel", async ({ page }) => {
         await empty(page);
         const id = await page.evaluate(async (table) => {

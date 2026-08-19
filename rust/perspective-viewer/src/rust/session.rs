@@ -895,7 +895,7 @@ impl Session {
             .pending_dispatches
             .set(self.0.pending_dispatches.get() + 1);
         let session = self.clone();
-        ApiFuture::spawn(async move {
+        ApiFuture::spawn_named("config-update-dispatch", async move {
             let result = fut.await;
             let remaining = session.0.pending_dispatches.get() - 1;
             session.0.pending_dispatches.set(remaining);

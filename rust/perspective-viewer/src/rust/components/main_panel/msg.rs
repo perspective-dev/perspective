@@ -16,8 +16,8 @@ use crate::components::panel_menu::PanelCommand;
 pub enum MainPanelMsg {
     PointerEvent(web_sys::PointerEvent),
 
-    /// The `Workspace` staged-panel set changed (`staged_changed` PubSub —
-    /// see `Workspace::stage_panel`): re-render so cells/tabs/wrappers
+    /// A panel's `PanelPhase` changed (`staged_changed` PubSub — see
+    /// `Workspace::insert_panel`/`promote`): re-render so cells/tabs/wrappers
     /// reflect it and `reconcile` inserts a promoted panel. Subscribed on
     /// MainPanel's OWN scope — the root's `LayoutChanged` delivery proved
     /// unreliable from element-API task contexts (promoted panels stranded

@@ -15,7 +15,7 @@ pub mod drag_helpers;
 mod props;
 mod sheets;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -85,6 +85,16 @@ pub struct PresentationHandle {
     /// concurrent `get_available_themes` calls await one parse instead of
     /// racing their own.
     theme_init: Mutex<()>,
+
+    /// Whether the host's theme was ever EXPLICITLY chosen — authored as a
+    /// `theme` attribute, or set by name through [`Self::set_theme_name`].
+    ///
+    /// `false` means the host merely displays the registry default, which
+    /// [`Self::reset_themes`] is free to move; `true` pins the selection
+    /// until it leaves the registry. The `theme` attribute alone cannot
+    /// carry this, because `init` stamps it unconditionally so the document
+    /// cascade has a theme to match.
+    theme_selected: Cell<bool>,
     is_settings_open: RefCell<bool>,
     open_column_settings: RefCell<OpenColumnSettings>,
     is_workspace: RefCell<Option<bool>>,
@@ -158,6 +168,7 @@ impl Presentation {
             agent: Default::default(),
             themes: Default::default(),
             theme_init: Default::default(),
+            theme_selected: Cell::new(elem.get_attribute("theme").is_some()),
             is_workspace: Default::default(),
             settings_open_changed: Default::default(),
             settings_before_open_changed: Default::default(),
@@ -315,20 +326,22 @@ impl Presentation {
         index.and_then(|x| themes.get(x).cloned())
     }
 
-    /// The default theme (first registered), used to resolve a panel's
-    /// effective theme when it has no per-panel override. `None` if no
+    /// The theme a NEW panel is born with: the host's if it has one, else
+    /// the registry default. Synchronous, because panel creation is — the
+    /// registry fallback is `None` until the registry first parses, which
+    /// [`crate::tasks::seed_panel_theme`] fills in.
+    pub fn active_theme_name_sync(&self) -> Option<String> {
+        self.0
+            .viewer_elem
+            .get_attribute("theme")
+            .or_else(|| self.0.themes.borrow().as_ref()?.first().cloned())
+    }
+
+    /// The registry default — the FIRST registered theme, which a panel or
+    /// host resolves to only when it has no theme of its own. `None` if no
     /// themes exist.
     pub async fn get_default_theme_name(&self) -> Option<String> {
         self.get_available_themes().await.ok()?.first().cloned()
-    }
-
-    /// SYNC read of the registry default theme name, derived on demand from
-    /// the memoized registry — `None` until the registry first parses (or
-    /// when no themes exist). For synchronous stamping paths that must not
-    /// await registry init; prefer [`Self::get_default_theme_name`] where
-    /// awaiting is acceptable.
-    pub fn default_theme_name_sync(&self) -> Option<String> {
-        self.0.themes.borrow().as_ref()?.first().cloned()
     }
 
     fn set_theme_attribute(&self, theme: Option<&str>) -> ApiResult<()> {
@@ -341,10 +354,41 @@ impl Presentation {
 
     pub async fn reset_theme(&self) -> ApiResult<()> {
         *self.0.is_workspace.borrow_mut() = None;
-        let themes = self.get_available_themes().await?;
-        let default_theme = themes.first().map(|x| x.as_str());
-        self.set_theme_name(default_theme).await?;
+        self.set_theme_name(None).await?;
         Ok(())
+    }
+
+    /// Adopt `themes` as the available set, KEEPING the host's theme unless
+    /// it was never explicitly chosen or has left the set — the only two
+    /// cases in which re-ordering the registry may move the viewer.
+    ///
+    /// Always re-stamps and re-emits, because the available list has changed
+    /// even when the selection has not.
+    ///
+    /// @param themes the new set, or `None` to re-parse the document.
+    ///
+    /// # Returns
+    /// The active theme after the change.
+    pub async fn reset_themes(&self, themes: Option<Vec<String>>) -> ApiResult<Option<String>> {
+        let selected = self
+            .0
+            .theme_selected
+            .get()
+            .then(|| self.0.viewer_elem.get_attribute("theme"))
+            .flatten();
+
+        self.reset_available_themes(themes).await;
+        let available = self.get_available_themes().await?;
+        let kept = selected.filter(|name| available.contains(name));
+        self.0.theme_selected.set(kept.is_some());
+        let active = kept.or_else(|| available.first().cloned());
+        self.set_theme_attribute(active.as_deref())?;
+        let index = active
+            .as_ref()
+            .and_then(|name| available.iter().position(|x| x == name));
+
+        self.theme_config_updated.emit((available, index));
+        Ok(active)
     }
 
     /// Set the theme by name, or `None` for the default theme.
@@ -368,6 +412,7 @@ impl Presentation {
     /// # Returns
     /// A `bool` indicating whether the internal state changed.
     pub async fn set_theme_name(&self, theme: Option<&str>) -> ApiResult<bool> {
+        self.0.theme_selected.set(theme.is_some());
         if let Some(theme) = theme {
             if self.0.viewer_elem.get_attribute("theme").as_deref() == Some(theme) {
                 return Ok(false);

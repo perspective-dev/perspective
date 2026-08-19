@@ -59,7 +59,7 @@ fn parse_list_flatten(value: Option<String>) -> PyResult<Option<ListFlatten>> {
         Some("zip") => Ok(Some(ListFlatten::Zip)),
         Some("cartesian") => Ok(Some(ListFlatten::Cartesian)),
         Some("stringify") => Ok(Some(ListFlatten::Stringify)),
-        Some(x) => Err(PyValueError::new_err(format!("Unknown `list_flatten`"))),
+        Some(_x) => Err(PyValueError::new_err("Unknown `list_flatten`".to_string())),
     }
 }
 

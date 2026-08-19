@@ -16,7 +16,7 @@ use perspective_client::config::Filter;
 
 use crate::config::{PanelViewerConfig, ViewerConfigInitial};
 
-/// The whole-element config format (`{version, active?, layout, panels}`) —
+/// The workspace config format (`{version, active?, layout, panels}`) —
 /// the multi-panel counterpart of the single-panel [`ViewerConfig`] — as
 /// emitted by [`PerspectiveViewerElement::save`].
 ///
@@ -58,7 +58,7 @@ pub struct WorkspaceConfig {
     pub masters: Vec<String>,
 }
 
-/// The parse target of a whole-element config in
+/// The parse target of a workspace config in
 /// [`PerspectiveViewerElement::restoreWorkspace`]. Mirrors
 /// [`WorkspaceConfig`], but `panels` entries are [`ViewerConfigInitial`]s —
 /// every entry creates a NEW panel, so `table` is required by type (a

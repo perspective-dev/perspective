@@ -10,6 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use std::cell::RefCell;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -25,13 +26,64 @@ use wasm_bindgen_futures::{JsFuture, future_to_promise};
 
 use super::errors::*;
 
+#[wasm_bindgen]
+extern "C" {
+    /// A DevTools task handle from `console.createTask` — Chrome's Async
+    /// Stack Tagging API. Bound manually, as `js_sys` does not expose it.
+    type JsConsoleTask;
+
+    #[wasm_bindgen(method, catch)]
+    fn run(this: &JsConsoleTask, f: &js_sys::Function) -> Result<JsValue, JsValue>;
+}
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(variadic, js_namespace = console , js_name = createTask, catch)]
+    pub fn createTask(name: JsValue) -> Result<JsValue, JsValue>;
+}
+
+/// Create a DevTools task, or `None` where the API is unavailable (it is
+/// Chrome-only).
+fn create_task(name: &str) -> Option<JsConsoleTask> {
+    thread_local! {
+        static CREATE_TASK: Option<(JsValue, js_sys::Function)> = (|| {
+            let global = js_sys::global();
+            let console = js_sys::Reflect::get(&global, &"console".into()).ok()?;
+            let create = js_sys::Reflect::get(&console, &"createTask".into()).ok()?;
+            Some((console, create.dyn_into().ok()?))
+        })();
+    }
+
+    CREATE_TASK.with(|x| {
+        let (console, create) = x.as_ref()?;
+        Some(create.call1(console, &name.into()).ok()?.unchecked_into())
+    })
+}
+
+thread_local! {
+    /// Scoped poll thunks for [`TRAMPOLINE`], a stack because tagged polls
+    /// nest (an `ApiFuture` awaiting another `ApiFuture`).
+    static POLL_STACK: RefCell<Vec<*mut (dyn FnMut() + 'static)>> = RefCell::new(Vec::new());
+
+    /// The single reusable JS closure handed to [`JsConsoleTask::run`].
+    static TRAMPOLINE: Closure<dyn Fn()> = Closure::new(|| {
+        let thunk = POLL_STACK.with(|x| x.borrow().last().copied());
+        if let Some(thunk) = thunk {
+            unsafe { (*thunk)() }
+        }
+    });
+}
+
 /// A newtype wrapper for a `Future` trait object which supports being
 /// marshalled to a `JsPromise`.
 ///
 /// This avoids implementing an API which requires type casting to
 /// and from `JsValue` and the associated loss of type safety.
 #[must_use]
-pub struct ApiFuture<T>(Pin<Box<dyn Future<Output = ApiResult<T>>>>)
+pub struct ApiFuture<T>(
+    Pin<Box<dyn Future<Output = ApiResult<T>>>>,
+    Option<JsConsoleTask>,
+)
 where
     Result<T, JsValue>: IntoJsResult + 'static;
 
@@ -44,13 +96,17 @@ where
     /// `Promise`, either explicitly or implcitly (when exposed via
     /// `wasm_bindgen`).
     pub fn new<U: Future<Output = ApiResult<T>> + 'static>(x: U) -> Self {
-        Self(Box::pin(x))
+        Self::new_named("perspective", x)
+    }
+
+    /// [`Self::new`] with an explicit DevTools task label, shown at the async
+    /// gap in tagged stack traces.
+    pub fn new_named<U: Future<Output = ApiResult<T>> + 'static>(name: &str, x: U) -> Self {
+        Self(Box::pin(x), create_task(name))
     }
 
     pub fn new_throttled<U: Future<Output = ApiResult<T>> + 'static>(x: U) -> ApiFuture<()> {
-        ApiFuture::<()>(Box::pin(
-            async move { x.await.ignore_view_delete().map(|_| ()) },
-        ))
+        ApiFuture::<()>::new(async move { x.await.ignore_view_delete().map(|_| ()) })
     }
 }
 
@@ -63,6 +119,11 @@ where
     /// executes on construction, the async invocation persists.
     pub fn spawn<U: Future<Output = ApiResult<T>> + 'static>(x: U) {
         drop(js_sys::Promise::from(Self::new(x)))
+    }
+
+    /// [`Self::spawn`] with an explicit DevTools task label.
+    pub fn spawn_named<U: Future<Output = ApiResult<T>> + 'static>(name: &str, x: U) {
+        drop(js_sys::Promise::from(Self::new_named(name, x)))
     }
 
     pub fn spawn_throttled<U: Future<Output = ApiResult<T>> + 'static>(x: U) {
@@ -94,7 +155,8 @@ where
     Result<T, JsValue>: IntoJsResult + 'static,
 {
     fn from(fut: ApiFuture<T>) -> Self {
-        future_to_promise(async move { Ok(fut.0.await?).into_js_result() })
+        // Await `fut` NOT `fut.0` or the stack frame is lost in Chrome.
+        future_to_promise(async move { Ok(fut.await?).into_js_result() })
     }
 }
 
@@ -145,8 +207,33 @@ where
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
-        let mut fut = unsafe { self.map_unchecked_mut(|s| &mut s.0) };
-        fut.as_mut().poll(cx)
+        // SAFETY: structural projection only — neither field is moved, and
+        // the inner future stays behind its own `Pin<Box<_>>`.
+        let Self(inner, task) = unsafe { self.get_unchecked_mut() };
+        let Some(task) = task else {
+            return inner.as_mut().poll(cx);
+        };
+
+        let mut result = None;
+        let mut thunk = || result = Some(inner.as_mut().poll(cx));
+
+        // SAFETY: the lifetime is erased for storage only. The entry is
+        // pushed and popped within this scope, and `run` invokes the
+        // trampoline synchronously, so the pointer never outlives `thunk`.
+        let short: *mut (dyn FnMut() + '_) = &mut thunk;
+        let long: *mut (dyn FnMut() + 'static) = unsafe { std::mem::transmute(short) };
+        POLL_STACK.with(|x| x.borrow_mut().push(long));
+        let _ = TRAMPOLINE.with(|x| task.run(x.as_ref().unchecked_ref()));
+        POLL_STACK.with(|x| x.borrow_mut().pop());
+
+        #[allow(clippy::drop_non_drop)]
+        drop(thunk);
+
+        match result {
+            Some(result) => result,
+            // `run` threw without invoking the trampoline.
+            None => inner.as_mut().poll(cx),
+        }
     }
 }
 

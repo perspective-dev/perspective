@@ -12,8 +12,7 @@
 
 //! The multi-panel model backing a single `<perspective-viewer>`.
 
-use std::cell::RefCell;
-use std::collections::HashSet;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use perspective_client::Client;
@@ -51,12 +50,7 @@ impl From<&str> for PanelId {
     }
 }
 
-/// The element-level global filter state (master/detail cross-filter): an
-/// unattributed `restored` bucket (from whole-element `restore` — per-master
-/// attribution is not persisted) plus one contribution per master panel, in
-/// first-contribution order. The effective set is the ordered, deduped
-/// flattening of both. Pure data — factored out of [`WorkspaceData`] so the
-/// replace/dedup/removal semantics are unit-testable without engine handles.
+/// The element-level global filter state (master/detail cross-filter.
 #[derive(Default)]
 struct GlobalFilterSet {
     restored: Vec<Filter>,
@@ -91,10 +85,7 @@ impl GlobalFilterSet {
         before != self.flatten()
     }
 
-    /// Replace `id`'s contribution (a master's new selection REPLACES its
-    /// prior one — no plugin-remembered remove-lists). A non-empty selection
-    /// also drops the `restored` bucket, which is a stale snapshot of some
-    /// pre-save master's selection. Empty removes the entry (deselect).
+    /// Replace `id`'s contribution.
     fn set_contribution(&mut self, id: &PanelId, filters: Vec<Filter>) -> bool {
         self.with_change(|s| {
             if filters.is_empty() {
@@ -109,11 +100,7 @@ impl GlobalFilterSet {
         })
     }
 
-    /// Remove the flattened-view clause at `index` from EVERY bucket (a chip
-    /// stands for the clause, not one bucket's copy — removing it from only
-    /// one would resurface the duplicate). Returns whether the effective set
-    /// changed and the OWNING master panels of the removed clause (for
-    /// selection-state cleanup). Out-of-range is a no-op.
+    /// Remove the flattened-view clause at `index` from EVERY bucket.
     fn remove_clause(&mut self, index: usize) -> (bool, Vec<PanelId>) {
         let Some(clause) = self.flatten().get(index).cloned() else {
             return (false, Vec::new());
@@ -155,7 +142,7 @@ impl GlobalFilterSet {
         (changed, owners)
     }
 
-    /// Whole-element `restore`: replace everything with an unattributed set.
+    /// `restoreWorkspace`: replace everything with an unattributed set.
     fn set_restored(&mut self, filters: Vec<Filter>) -> bool {
         self.with_change(|s| {
             s.contributions.clear();
@@ -164,19 +151,12 @@ impl GlobalFilterSet {
     }
 }
 
-/// A single, fully-independent viewer-like unit within a [`Workspace`]: its own
-/// [`Session`] (table binding + view config) and [`Renderer`] (active plugin).
+/// A single, fully-independent viewer-like unit within a [`Workspace`].
 #[derive(Clone)]
 pub struct Panel {
     pub id: PanelId,
     pub session: Session,
     pub renderer: Renderer,
-
-    /// Subscriptions owned for this panel's lifetime: its redraw subscription
-    /// (`table_updated` → redraw) plus its custom-event fanout
-    /// (`wire_panel_events`). Held here — not on the element — so they drop
-    /// exactly when the panel is removed from the [`Workspace`], with no
-    /// separate add/remove bookkeeping.
     _subs: Rc<Vec<Subscription>>,
 }
 
@@ -187,6 +167,120 @@ impl Panel {
             session,
             renderer,
             _subs: Rc::new(subs),
+        }
+    }
+}
+
+/// A placed panel's layout phase.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PanelPhase {
+    Staging,
+    Placed,
+}
+
+/// A [`Panel`] as registered in the placed set.
+struct PanelEntry {
+    panel: Panel,
+    phase: PanelPhase,
+    master: bool,
+}
+
+#[derive(Default)]
+enum Reservation {
+    #[default]
+    Idle,
+    Pending(Panel),
+    Claimed {
+        has_table: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum FlushState {
+    #[default]
+    Idle,
+    Queued {
+        layout: bool,
+        active: bool,
+    },
+}
+
+impl FlushState {
+    /// Merge newly-dirty events, returning the next state and whether a flush
+    /// task must be spawned.
+    fn mark(self, layout: bool, active: bool) -> (Self, bool) {
+        match self {
+            _ if !layout && !active => (self, false),
+            Self::Idle => (Self::Queued { layout, active }, true),
+            Self::Queued {
+                layout: l,
+                active: a,
+            } => (
+                Self::Queued {
+                    layout: l || layout,
+                    active: a || active,
+                },
+                false,
+            ),
+        }
+    }
+}
+
+#[derive(Default)]
+struct LayoutEmitter {
+    state: Cell<FlushState>,
+    layout_changed: Rc<PubSub<Vec<PanelId>>>,
+    active_changed: Rc<PubSub<Option<PanelId>>>,
+}
+
+impl LayoutEmitter {
+    fn mark(&self, layout: bool, active: bool, workspace: &Workspace) {
+        let (next, spawn) = self.state.get().mark(layout, active);
+        self.state.set(next);
+        if spawn {
+            let workspace = workspace.clone();
+            spawn_owned("workspace_layout_flush", async move {
+                workspace.effects().settle().await;
+                workspace.flush_layout_events();
+                Ok(())
+            });
+        }
+    }
+}
+
+/// The loaded-[`Client`]s registry and the default-client designation. The
+/// invariant "the default is always a registered client" holds in this one
+/// impl: every default assignment registers first, and removal clears both.
+#[derive(Default)]
+struct ClientRegistry {
+    clients: Vec<Client>,
+    default: Option<Client>,
+    client_registered: Rc<PubSub<Client>>,
+}
+
+impl ClientRegistry {
+    /// Add `client` if a client with the same (globally unique) name isn't
+    /// already present, returning — for a genuinely-new client — the pubsub
+    /// for the caller to emit OUTSIDE its borrow.
+    fn register(&mut self, client: Client) -> Option<Rc<PubSub<Client>>> {
+        if self
+            .clients
+            .iter()
+            .any(|c| c.get_name() == client.get_name())
+        {
+            return None;
+        }
+
+        self.clients.push(client);
+        Some(self.client_registered.clone())
+    }
+
+    /// Drop the client named `name`, clearing the default designation if it
+    /// referred to it.
+    fn remove(&mut self, name: &str) {
+        self.clients.retain(|c| c.get_name() != name);
+        if self.default.as_ref().is_some_and(|c| c.get_name() == name) {
+            self.default = None;
         }
     }
 }
@@ -203,62 +297,39 @@ impl PartialEq for Workspace {
 }
 
 struct WorkspaceData {
-    /// Panels in insertion order.
-    panels: Vec<Panel>,
+    /// Panels in insertion order, each with its per-panel attributes
+    /// (placement phase, master role).
+    panels: Vec<PanelEntry>,
 
     /// The currently active/selected panel (a live panel in `panels`).
     active: Option<PanelId>,
-
-    /// The first [`Client`] loaded via the element's `load()`.
-    default_client: Option<Client>,
-
-    /// Every [`Client`] ever loaded into this element (registration order.
-    clients: Vec<Client>,
-
-    /// Fires once per genuinely-new [`Client`] registration (post-dedup) —
-    /// the element subscribes each new client's hosted-tables updates for
-    /// reactive table binding (`tasks::table_lifecycle`).
-    client_registered: Rc<PubSub<Client>>,
-
-    /// Monotonic counter backing [`Workspace::generate_id`].
-    next_id: usize,
-
-    /// Panels designated as master/detail filter sources.
-    masters: HashSet<PanelId>,
 
     /// The element-level global filters.
     filters: GlobalFilterSet,
     filters_changed: Rc<PubSub<()>>,
 
-    /// A layout tree staged by whole-element `restore`.
+    /// The loaded-clients registry + default designation.
+    clients: ClientRegistry,
+
+    /// Monotonic counter backing [`Workspace::generate_id`].
+    next_id: usize,
+
+    /// The `load()` reservation slot (see [`Reservation`]).
+    reservation: Reservation,
+
+    /// A layout tree staged by `restoreWorkspace`.
     pending_layout: Option<crate::js::Layout>,
 
-    /// Freshly-created panels withheld from the `<regular-layout>`.
-    staged: HashSet<PanelId>,
-    staged_changed: Rc<PubSub<()>>,
-
-    /// The RESERVED first panel of a pending `load()`.
-    reserved: Option<Panel>,
-
     /// In-flight effects (public mutators + scheduled internal flows),
-    /// drained by `flush()` — see [`EffectLedger`].
+    /// drained by `flush()`.
     effects: EffectLedger,
 
-    /// The PLACED panel set changed since the last emit. Mutation sites set
-    /// this and emit NOTHING; the coalescing flush task owns delivery (see
-    /// [`Workspace::schedule_layout_flush`]).
-    layout_dirty: bool,
-    layout_changed: Rc<PubSub<Vec<PanelId>>>,
+    /// Fires on every [`PanelPhase`] transition.
+    staged_changed: Rc<PubSub<()>>,
 
-    /// The active panel changed since the last emit. A separate channel from
-    /// `layout_dirty`: "which panel is selected" and "which panels exist" are
-    /// distinct facts, and one event may not mean both.
-    active_dirty: bool,
-    active_changed: Rc<PubSub<Option<PanelId>>>,
-
-    /// A flush task is already queued — the flag that makes N mutations
-    /// within one operation schedule ONE task rather than N.
-    flush_scheduled: bool,
+    /// Coalesced `layout_changed`/`active_changed` delivery (see
+    /// [`LayoutEmitter`]).
+    emitter: LayoutEmitter,
 }
 
 impl Default for Workspace {
@@ -273,23 +344,15 @@ impl Workspace {
         Self(Rc::new(RefCell::new(WorkspaceData {
             panels: Vec::new(),
             active: None,
-            default_client: None,
-            clients: Vec::new(),
-            client_registered: Rc::new(PubSub::default()),
-            next_id: 0,
-            masters: HashSet::new(),
             filters: GlobalFilterSet::default(),
             filters_changed: Rc::new(PubSub::default()),
+            clients: ClientRegistry::default(),
+            next_id: 0,
+            reservation: Reservation::Idle,
             pending_layout: None,
-            staged: HashSet::new(),
-            staged_changed: Rc::new(PubSub::default()),
-            reserved: None,
             effects: EffectLedger::default(),
-            layout_dirty: false,
-            layout_changed: Rc::new(PubSub::default()),
-            active_dirty: false,
-            active_changed: Rc::new(PubSub::default()),
-            flush_scheduled: false,
+            staged_changed: Rc::new(PubSub::default()),
+            emitter: LayoutEmitter::default(),
         })))
     }
 
@@ -299,63 +362,43 @@ impl Workspace {
     }
 
     pub fn layout_changed(&self) -> Rc<PubSub<Vec<PanelId>>> {
-        self.0.borrow().layout_changed.clone()
+        self.0.borrow().emitter.layout_changed.clone()
     }
 
     pub fn active_changed(&self) -> Rc<PubSub<Option<PanelId>>> {
-        self.0.borrow().active_changed.clone()
+        self.0.borrow().emitter.active_changed.clone()
     }
 
-    /// Queue the coalescing layout-event flush, if anything is dirty and no
-    /// flush is already pending.
-    fn schedule_layout_flush(&self) {
-        let schedule = {
-            let mut data = self.0.borrow_mut();
-            let dirty = data.layout_dirty || data.active_dirty;
-            let queued = data.flush_scheduled;
-            data.flush_scheduled |= dirty;
-            dirty && !queued
-        };
-
-        if !schedule {
-            return;
-        }
-
-        let effects = self.effects();
-        let this = self.clone();
-        spawn_owned("workspace_layout_flush", async move {
-            effects.settle().await;
-            this.flush_layout_events();
-            Ok(())
-        });
-    }
-
-    /// Emit whatever is dirty, outside any borrow.
+    /// Deliver whatever the queued flush recorded, outside any borrow — the
+    /// body of the task [`LayoutEmitter::mark`] spawns.
     fn flush_layout_events(&self) {
-        let (layout, active, panels, active_id, layout_pubsub, active_pubsub) = {
-            let mut data = self.0.borrow_mut();
-            data.flush_scheduled = false;
+        let (state, panels, active_id, layout_pubsub, active_pubsub) = {
+            let data = self.0.borrow();
             (
-                std::mem::take(&mut data.layout_dirty),
-                std::mem::take(&mut data.active_dirty),
-                data.panels.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
+                data.emitter.state.replace(FlushState::Idle),
+                data.panels
+                    .iter()
+                    .map(|p| p.panel.id.clone())
+                    .collect::<Vec<_>>(),
                 data.active.clone(),
-                data.layout_changed.clone(),
-                data.active_changed.clone(),
+                data.emitter.layout_changed.clone(),
+                data.emitter.active_changed.clone(),
             )
         };
 
-        if layout {
-            layout_pubsub.emit(panels);
-        }
+        if let FlushState::Queued { layout, active } = state {
+            if layout {
+                layout_pubsub.emit(panels);
+            }
 
-        if active {
-            active_pubsub.emit(active_id);
+            if active {
+                active_pubsub.emit(active_id);
+            }
         }
     }
 
     /// Stage a layout tree for `MainPanel` to apply at its next `rendered`
-    /// pass (see `WorkspaceData::pending_layout`).
+    /// pass (see [`WorkspaceData::pending_layout`]).
     pub fn set_pending_layout(&self, layout: crate::js::Layout) {
         self.0.borrow_mut().pending_layout = Some(layout);
     }
@@ -371,38 +414,42 @@ impl Workspace {
         self.0.borrow().staged_changed.clone()
     }
 
-    /// Mark a freshly-created panel STAGED (see [`WorkspaceData::staged`]).
-    /// Emits `staged_changed` — outside the borrow.
-    pub fn stage_panel(&self, id: &PanelId) {
-        let pubsub = {
-            let mut data = self.0.borrow_mut();
-            data.staged.insert(id.clone());
-            data.staged_changed.clone()
-        };
-
-        pubsub.emit(());
-    }
-
     /// Promote a staged panel toward layout insertion, returning whether it
     /// was still staged — restore completion and the staging deadline RACE
     /// to promote, and only the winner proceeds. Emits `staged_changed` —
-    /// outside the borrow — iff the set changed.
-    pub fn clear_staged(&self, id: &PanelId) -> bool {
-        let (removed, pubsub) = {
+    /// outside the borrow — iff the phase changed.
+    pub fn promote(&self, id: &PanelId) -> bool {
+        let (promoted, pubsub) = {
             let mut data = self.0.borrow_mut();
-            (data.staged.remove(id), data.staged_changed.clone())
+            let promoted = data
+                .panels
+                .iter_mut()
+                .find(|p| &p.panel.id == id)
+                .map(|entry| {
+                    matches!(
+                        std::mem::replace(&mut entry.phase, PanelPhase::Placed),
+                        PanelPhase::Staging
+                    )
+                })
+                .unwrap_or(false);
+
+            (promoted, data.staged_changed.clone())
         };
 
-        if removed {
+        if promoted {
             pubsub.emit(());
         }
 
-        removed
+        promoted
     }
 
     /// Whether `id` is a staged (created, not yet layout-inserted) panel.
     pub fn is_staged(&self, id: &PanelId) -> bool {
-        self.0.borrow().staged.contains(id)
+        self.0
+            .borrow()
+            .panels
+            .iter()
+            .any(|p| &p.panel.id == id && p.phase == PanelPhase::Staging)
     }
 
     /// The EFFECTIVE element-level global filters (master/detail
@@ -435,10 +482,7 @@ impl Workspace {
         payload
     }
 
-    /// Replace the global filter set with an UNATTRIBUTED (restored) bucket,
-    /// dropping every master contribution — the whole-element `restore`
-    /// entry point. Callers push the new set into panel sessions via
-    /// `tasks::apply_global_filters`.
+    /// Replace the global filter set.
     pub fn set_global_filters(&self, filters: Vec<Filter>) {
         self.mutate_filters(|s| (s.set_restored(filters), ()));
     }
@@ -454,52 +498,61 @@ impl Workspace {
         self.mutate_filters(|s| (s.set_contribution(id, Vec::new()), ()));
     }
 
-    /// Remove the effective-set clause at `index` (the `GlobalFilterBar`
-    /// chip ×), returning the OWNING master panels of the removed clause so
-    /// the caller can clear their selection state
-    /// (`tasks::clear_master_selections`).
+    /// Remove the effective-set clause at `index`.
     pub fn remove_global_filter(&self, index: usize) -> Vec<PanelId> {
         self.mutate_filters(|s| s.remove_clause(index))
     }
 
     /// Drop the entire global filter set (the `GlobalFilterBar` "Clear" /
-    /// element `reset()`), returning the contribution owners for
-    /// selection-state cleanup. Master ROLES are untouched — like the
-    /// layout, they are workspace structure, not filter state.
+    /// element `reset()`).
     pub fn clear_global_filters(&self) -> Vec<PanelId> {
         self.mutate_filters(GlobalFilterSet::clear)
     }
 
-    /// The master (filter-source) panel ids, SORTED — `save()` serializes
-    /// this, and a `HashSet`'s per-instance iteration order would make
-    /// consecutive `save()` outputs byte-unstable (cf. the `panels`
-    /// `BTreeMap`).
+    /// The master (filter-source) panel ids.
     pub fn masters(&self) -> Vec<PanelId> {
-        let mut masters: Vec<_> = self.0.borrow().masters.iter().cloned().collect();
+        let mut masters: Vec<_> = self
+            .0
+            .borrow()
+            .panels
+            .iter()
+            .filter(|p| p.master)
+            .map(|p| p.panel.id.clone())
+            .collect();
+
         masters.sort();
         masters
     }
 
-    /// Replace the master role set — the whole-element `restore` entry point
-    /// (ids already remapped to the fresh panel ids).
+    /// Replace the master role set — the `restoreWorkspace` entry point
+    /// (ids already remapped to the fresh panel ids). Ids naming no panel are
+    /// dropped (the caller has already warned on them).
     pub fn set_masters(&self, ids: Vec<PanelId>) {
-        self.0.borrow_mut().masters = ids.into_iter().collect();
+        let mut data = self.0.borrow_mut();
+        for entry in data.panels.iter_mut() {
+            entry.master = ids.contains(&entry.panel.id);
+        }
     }
 
     /// Whether `id` is a master (filter-source) panel.
     pub fn is_master(&self, id: &PanelId) -> bool {
-        self.0.borrow().masters.contains(id)
+        self.0
+            .borrow()
+            .panels
+            .iter()
+            .any(|p| &p.panel.id == id && p.master)
     }
 
     /// Toggle `id`'s master/detail role, returning the new state (`true` =
-    /// master).
+    /// master). `false` (no role) if `id` names no panel.
     pub fn toggle_master(&self, id: &PanelId) -> bool {
         let mut data = self.0.borrow_mut();
-        if data.masters.remove(id) {
-            false
-        } else {
-            data.masters.insert(id.clone());
-            true
+        match data.panels.iter_mut().find(|p| &p.panel.id == id) {
+            Some(entry) => {
+                entry.master = !entry.master;
+                entry.master
+            },
+            None => false,
         }
     }
 
@@ -521,7 +574,10 @@ impl Workspace {
     pub fn active_panel(&self) -> Option<Panel> {
         let data = self.0.borrow();
         let active = data.active.as_ref()?;
-        data.panels.iter().find(|p| &p.id == active).cloned()
+        data.panels
+            .iter()
+            .find(|p| &p.panel.id == active)
+            .map(|p| p.panel.clone())
     }
 
     /// The active panel's [`Session`], or `None` with zero panels.
@@ -536,7 +592,12 @@ impl Workspace {
 
     /// Look up a [`Panel`] by id.
     pub fn panel(&self, id: &PanelId) -> Option<Panel> {
-        self.0.borrow().panels.iter().find(|p| &p.id == id).cloned()
+        self.0
+            .borrow()
+            .panels
+            .iter()
+            .find(|p| &p.panel.id == id)
+            .map(|p| p.panel.clone())
     }
 
     /// Resolve a panel by id, or the active panel when `id` is `None` — the
@@ -552,17 +613,23 @@ impl Workspace {
     /// fan-out source (fan-outs collect per-panel results; they never
     /// sequential-abort on one panel's error).
     pub fn panels(&self) -> Vec<Panel> {
-        self.0.borrow().panels.to_vec()
+        self.0
+            .borrow()
+            .panels
+            .iter()
+            .map(|p| p.panel.clone())
+            .collect()
     }
 
     /// The number of PLACED panels (panels minus staged) — the single
     /// source for panel-count chrome (`single`/`multi`, closable,
     /// draggable, `only-child`).
     pub fn placed_count(&self) -> usize {
-        let data = self.0.borrow();
-        data.panels
+        self.0
+            .borrow()
+            .panels
             .iter()
-            .filter(|p| !data.staged.contains(&p.id))
+            .filter(|p| p.phase == PanelPhase::Placed)
             .count()
     }
 
@@ -572,7 +639,7 @@ impl Workspace {
             .borrow()
             .panels
             .iter()
-            .map(|p| p.id.clone())
+            .map(|p| p.panel.id.clone())
             .collect()
     }
 
@@ -586,56 +653,119 @@ impl Workspace {
         self.0.borrow().panels.is_empty()
     }
 
-    /// Append a [`Panel`]. When the element had zero panels, the inserted panel
-    /// becomes the active one (there is no other candidate).
-    pub fn insert_panel(&self, panel: Panel) {
-        {
+    /// Append a [`Panel`] at `phase`. When the element had zero panels, the
+    /// inserted panel becomes the active one (there is no other candidate).
+    /// A [`PanelPhase::Staging`] insert emits `staged_changed` — outside the
+    /// borrow — so the phase and its announcement are one operation.
+    pub fn insert_panel(&self, panel: Panel, phase: PanelPhase) {
+        let staged_pubsub = {
             let mut data = self.0.borrow_mut();
-            if data.active.is_none() {
+            let activated = if data.active.is_none() {
                 data.active = Some(panel.id.clone());
-                data.active_dirty = true;
-            }
+                true
+            } else {
+                false
+            };
 
             panel
                 .renderer
                 .set_active_flag(data.active.as_ref() == Some(&panel.id));
-            data.panels.push(panel);
-            data.layout_dirty = true;
-            Self::sync_solo_flags(&data);
-        }
+            data.panels.push(PanelEntry {
+                panel,
+                phase,
+                master: false,
+            });
 
-        self.schedule_layout_flush();
+            Self::sync_solo_flags(&data);
+            data.emitter.mark(true, activated, self);
+            (phase == PanelPhase::Staging).then(|| data.staged_changed.clone())
+        };
+
+        if let Some(pubsub) = staged_pubsub {
+            pubsub.emit(());
+        }
     }
 
-    /// Hold `panel` in the reservation slot (see [`WorkspaceData::reserved`]):
+    /// Hold `panel` in the reservation slot ([`Reservation::Pending`]):
     /// NOT placed, invisible to every placed-panel consumer, awaiting a
     /// pending `load()`'s payload classification or an interim claimant.
+    /// Resets any prior claim record — the slot serves one `load()` cycle at
+    /// a time.
     pub fn reserve_panel(&self, panel: Panel) {
-        self.0.borrow_mut().reserved = Some(panel);
+        let mut data = self.0.borrow_mut();
+        debug_assert!(
+            !matches!(data.reservation, Reservation::Pending(_)),
+            "reservation overwritten while pending — adopt via `reserved_panel` first"
+        );
+
+        data.reservation = Reservation::Pending(panel);
     }
 
     /// The reservation slot's current occupant (shared handles), without a
     /// transfer — a second `load()` on a still-empty element adopts the same
     /// reservation rather than creating a competing one.
     pub fn reserved_panel(&self) -> Option<Panel> {
-        self.0.borrow().reserved.clone()
+        match &self.0.borrow().reservation {
+            Reservation::Pending(panel) => Some(panel.clone()),
+            _ => None,
+        }
     }
 
-    /// PLACE the reserved panel: transfer it out of the reservation slot into
+    /// CLAIM the reserved panel: transfer it out of the reservation slot into
     /// the placed set ([`Self::insert_panel`] — auto-activating on an empty
-    /// element). `None` when the slot is empty (no reservation, or the other
-    /// actor transferred first).
-    pub fn claim_reserved(&self) -> Option<Panel> {
-        let panel = self.0.borrow_mut().reserved.take()?;
-        self.insert_panel(panel.clone());
+    /// element), recording `has_table` — whether the claimant carried a
+    /// `table` — atomically with the transfer ([`Reservation::Claimed`]).
+    /// `None` when nothing is pending (no reservation, or the other actor
+    /// transferred first).
+    pub fn claim_reserved(&self, has_table: bool) -> Option<Panel> {
+        let panel = {
+            let mut data = self.0.borrow_mut();
+            match std::mem::take(&mut data.reservation) {
+                Reservation::Pending(panel) => {
+                    data.reservation = Reservation::Claimed { has_table };
+                    Some(panel)
+                },
+                other => {
+                    data.reservation = other;
+                    None
+                },
+            }
+        }?;
+
+        self.insert_panel(panel.clone(), PanelPhase::Placed);
         Some(panel)
     }
 
     /// DISCARD the reserved panel: transfer it out of the reservation slot
     /// WITHOUT placing it, for disposal (an inert `Client` payload with no
-    /// claimant, or teardown draining). `None` when the slot is empty.
+    /// claimant, or teardown draining). `None` when nothing is pending; a
+    /// claim record is left intact for [`Self::resolve_claim`].
     pub fn take_reserved(&self) -> Option<Panel> {
-        self.0.borrow_mut().reserved.take()
+        let mut data = self.0.borrow_mut();
+        match std::mem::take(&mut data.reservation) {
+            Reservation::Pending(panel) => Some(panel),
+            other => {
+                data.reservation = other;
+                None
+            },
+        }
+    }
+
+    /// ONE-SHOT read of the claim record: `Some(has_table)` if the
+    /// reservation was claimed ([`Reservation::Claimed`]) — resetting the
+    /// slot to [`Reservation::Idle`] — or `None` if no claim happened.
+    /// Consuming closes the stale-flag window the former boolean had —
+    /// `load()`'s inert-`Client` epilogue is the only reader, and reads it
+    /// exactly once (eviction arms on `Some(false)`).
+    pub fn resolve_claim(&self) -> Option<bool> {
+        let mut data = self.0.borrow_mut();
+        match data.reservation {
+            Reservation::Claimed { has_table } => {
+                data.reservation = Reservation::Idle;
+                Some(has_table)
+            },
+            _ => None,
+        }
     }
 
     /// Sync every panel renderer's solo (lone-panel) flag with the current
@@ -644,83 +774,79 @@ impl Workspace {
     /// locked plugin dispatch — see `Renderer::stamp_active`).
     fn sync_solo_flags(data: &WorkspaceData) {
         let is_solo = data.panels.len() == 1;
-        for panel in data.panels.iter() {
-            panel.renderer.set_solo_flag(is_solo);
+        for entry in data.panels.iter() {
+            entry.panel.renderer.set_solo_flag(is_solo);
         }
     }
 
-    /// Remove a [`Panel`] by id, returning it if present.
-    /// Remove a [`Panel`] by id, returning it if present. Model cleanup is
-    /// structural: EVERY removal path (close, whole-element restore's batch
-    /// replacement) drops the panel's master role and its global-filter
-    /// contribution here, so neither can outlive the panel.
+    /// Remove a [`Panel`] by id, returning it if present. The entry's
+    /// attributes (phase, master role) leave with it structurally; its
+    /// global-filter contribution is dropped here, so neither can outlive
+    /// the panel on ANY removal path (close, `restoreWorkspace`'s batch
+    /// replacement).
     pub fn remove_panel(&self, id: &PanelId) -> Option<Panel> {
-        let (removed, changed, pubsub, staged_removed, staged_pubsub) = {
+        let (removed, changed, filters_pubsub, was_staged, staged_pubsub) = {
             let mut data = self.0.borrow_mut();
-            data.masters.remove(id);
-            let staged_removed = data.staged.remove(id);
             let changed = data.filters.set_contribution(id, Vec::new());
-            let removed = data
-                .panels
-                .iter()
-                .position(|p| &p.id == id)
-                .map(|idx| data.panels.remove(idx));
+            let (removed, was_staged) = match data.panels.iter().position(|p| &p.panel.id == id) {
+                Some(idx) => {
+                    let entry = data.panels.remove(idx);
+                    (Some(entry.panel), entry.phase == PanelPhase::Staging)
+                },
+                None => (None, false),
+            };
 
-            if data.active.as_ref() == Some(id) {
+            let deactivated = data.active.as_ref() == Some(id);
+            if deactivated {
                 data.active = None;
-                data.active_dirty = true;
             }
 
-            data.layout_dirty |= removed.is_some();
             Self::sync_solo_flags(&data);
+            data.emitter.mark(removed.is_some(), deactivated, self);
             (
                 removed,
                 changed,
                 data.filters_changed.clone(),
-                staged_removed,
+                was_staged,
                 data.staged_changed.clone(),
             )
         };
 
         if changed {
-            pubsub.emit(());
+            filters_pubsub.emit(());
         }
 
-        if staged_removed {
+        if was_staged {
             staged_pubsub.emit(());
         }
 
-        self.schedule_layout_flush();
         removed
     }
 
     /// Set the active panel. Returns `false` (no-op) if `id` is not a known
     /// panel.
     pub fn set_active(&self, id: PanelId) -> bool {
-        let known = {
-            let mut data = self.0.borrow_mut();
-            if data.panels.iter().any(|p| p.id == id) {
-                data.active_dirty |= data.active.as_ref() != Some(&id);
-                data.active = Some(id);
-                for panel in data.panels.iter() {
-                    panel
-                        .renderer
-                        .set_active_flag(data.active.as_ref() == Some(&panel.id));
-                }
-
-                true
-            } else {
-                false
+        let mut data = self.0.borrow_mut();
+        if data.panels.iter().any(|p| p.panel.id == id) {
+            let changed = data.active.as_ref() != Some(&id);
+            data.active = Some(id);
+            for entry in data.panels.iter() {
+                entry
+                    .panel
+                    .renderer
+                    .set_active_flag(data.active.as_ref() == Some(&entry.panel.id));
             }
-        };
 
-        self.schedule_layout_flush();
-        known
+            data.emitter.mark(false, changed, self);
+            true
+        } else {
+            false
+        }
     }
 
     /// The default [`Client`], if one has been loaded.
     pub fn default_client(&self) -> Option<Client> {
-        self.0.borrow().default_client.clone()
+        self.0.borrow().clients.default.clone()
     }
 
     /// The active panel's bound [`Client`], if any — the default target of a
@@ -736,8 +862,13 @@ impl Workspace {
             .borrow()
             .panels
             .iter()
-            .filter(|p| p.session.get_client().is_some_and(|c| c.get_name() == name))
-            .map(|p| p.id.clone())
+            .filter(|p| {
+                p.panel
+                    .session
+                    .get_client()
+                    .is_some_and(|c| c.get_name() == name)
+            })
+            .map(|p| p.panel.id.clone())
             .collect()
     }
 
@@ -747,26 +878,27 @@ impl Workspace {
     /// [`Workspace::panels_for_client`]) — `clients()` unions in live panel
     /// sessions, so a lingering panel would resurrect it.
     pub fn remove_client(&self, name: &str) {
-        let mut data = self.0.borrow_mut();
-        data.clients.retain(|c| c.get_name() != name);
-        if data
-            .default_client
-            .as_ref()
-            .is_some_and(|c| c.get_name() == name)
-        {
-            data.default_client = None;
-        }
+        self.0.borrow_mut().clients.remove(name);
     }
 
     /// Record the default [`Client`] if not already set (first-wins, matching
     /// the "first `Client` passed to `load()` is the default" rule). Always
     /// registers the client (see [`Workspace::register_client`]) — first-wins
-    /// applies only to the *default* designation.
+    /// applies only to the *default* designation, which is assigned BEFORE
+    /// the registration event fires, so listeners observe both together.
     pub fn set_default_client(&self, client: Client) {
-        self.register_client(client.clone());
-        let mut data = self.0.borrow_mut();
-        if data.default_client.is_none() {
-            data.default_client = Some(client);
+        let pubsub = {
+            let mut data = self.0.borrow_mut();
+            let pubsub = data.clients.register(client.clone());
+            if data.clients.default.is_none() {
+                data.clients.default = Some(client.clone());
+            }
+
+            pubsub
+        };
+
+        if let Some(pubsub) = pubsub {
+            pubsub.emit(client);
         }
     }
 
@@ -774,27 +906,15 @@ impl Workspace {
     /// same (globally unique) name isn't already present. Emits
     /// `client_registered` — outside the borrow — for a genuinely-new client.
     pub fn register_client(&self, client: Client) {
-        let pubsub = {
-            let mut data = self.0.borrow_mut();
-            if data
-                .clients
-                .iter()
-                .any(|c| c.get_name() == client.get_name())
-            {
-                return;
-            }
-
-            data.clients.push(client.clone());
-            data.client_registered.clone()
-        };
-
-        pubsub.emit(client);
+        let pubsub = self.0.borrow_mut().clients.register(client.clone());
+        if let Some(pubsub) = pubsub {
+            pubsub.emit(client);
+        }
     }
 
-    /// A handle to the `client_registered` PubSub (see
-    /// [`WorkspaceData::client_registered`]).
+    /// A handle to the `client_registered` PubSub (see [`ClientRegistry`]).
     pub fn client_registered(&self) -> Rc<PubSub<Client>> {
-        self.0.borrow().client_registered.clone()
+        self.0.borrow().clients.client_registered.clone()
     }
 
     /// All loaded [`Client`]s: the registry, unioned with every panel
@@ -802,9 +922,9 @@ impl Workspace {
     /// bypasses registration), deduped by name in registration order.
     pub fn clients(&self) -> Vec<Client> {
         let data = self.0.borrow();
-        let mut clients = data.clients.clone();
-        for panel in &data.panels {
-            if let Some(client) = panel.session.get_client()
+        let mut clients = data.clients.clients.clone();
+        for entry in &data.panels {
+            if let Some(client) = entry.panel.session.get_client()
                 && !clients.iter().any(|c| c.get_name() == client.get_name())
             {
                 clients.push(client);
@@ -934,5 +1054,48 @@ mod tests {
         assert_eq!(owners, vec![p("x")]);
         assert_eq!(s.flatten(), Vec::<Filter>::new());
         assert_eq!(s.clear(), (false, Vec::new()));
+    }
+
+    #[test]
+    fn flush_state_spawns_exactly_once_per_cycle() {
+        let (state, spawn) = FlushState::Idle.mark(true, false);
+        assert!(spawn);
+        assert_eq!(state, FlushState::Queued {
+            layout: true,
+            active: false
+        });
+
+        // Subsequent marks merge without re-spawning.
+        let (state, spawn) = state.mark(false, true);
+        assert!(!spawn);
+        assert_eq!(state, FlushState::Queued {
+            layout: true,
+            active: true
+        });
+
+        let (state, spawn) = state.mark(true, true);
+        assert!(!spawn);
+        assert_eq!(state, FlushState::Queued {
+            layout: true,
+            active: true
+        });
+    }
+
+    #[test]
+    fn flush_state_ignores_empty_marks() {
+        // A no-event mark neither queues nor spawns — `Queued{false,false}`
+        // is unconstructible through `mark`.
+        let (state, spawn) = FlushState::Idle.mark(false, false);
+        assert!(!spawn);
+        assert_eq!(state, FlushState::Idle);
+
+        let queued = FlushState::Queued {
+            layout: true,
+            active: false,
+        };
+
+        let (state, spawn) = queued.mark(false, false);
+        assert!(!spawn);
+        assert_eq!(state, queued);
     }
 }

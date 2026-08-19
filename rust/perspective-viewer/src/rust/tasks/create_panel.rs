@@ -20,7 +20,7 @@ use crate::renderer::*;
 use crate::session::{ResetOptions, Session};
 use crate::tasks::*;
 use crate::utils::*;
-use crate::workspace::{Panel, PanelId, Workspace};
+use crate::workspace::{Panel, PanelId, PanelPhase, Workspace};
 use crate::*;
 
 /// Build the full set of subscriptions a [`Panel`] owns for its lifetime: its
@@ -70,29 +70,19 @@ fn wire_panel_render_sub(session: &Session, renderer: &Renderer) -> Subscription
 }
 
 /// Create a new independent panel (own `Session` + `Renderer` + id) and
-/// restore `update` into it. Shared by `addPanel`, `restore`'s
-/// create-if-missing upsert, and `restorePanel`. `id` is the panel's id —
-/// provided when restoring into a specific named slot, or `None` to
-/// generate a fresh one. `theme` is stripped (element-level, not
-/// per-panel) and `client` — or the element's default client when `None` —
-/// is bound so the config's `table` resolves against it.
-///
-/// A `table` is OPTIONAL here: an update with none creates a deferred
-/// panel that a later `load()` binds, which is the pre-existing
-/// `restore`-then-`load` contract and the same state the reserved
-/// `load()` path produces. The routes where a table-less panel WOULD be
-/// permanently blank require one in their own argument types instead —
-/// `addPanel`'s [`ViewerConfigInitial`], `WorkspaceConfigUpdate`'s
-/// `panels` entries, and the agent's `add_panel` — so the guarantee sits
-/// at the boundary that owns it rather than here, which would sweep
-/// `restore`'s patch in with them.
+/// restore `config` into it. Shared by `addPanel` and `restore`'s
+/// create-if-missing upsert. `id` is the panel's id — provided when
+/// restoring into a specific named slot, or `None` to generate a fresh
+/// one. `theme` is stripped (element-level, not per-panel) and `client` —
+/// or the element's default client when `None` — is bound so the config's
+/// `table` resolves against it.
 pub(crate) async fn create_panel(
     elem: &HtmlElement,
     presentation: &Presentation,
     workspace: &Workspace,
     notify: &Callback<()>,
     id: Option<PanelId>,
-    update: ViewerConfigUpdate,
+    config: ViewerConfigInitial,
     client: Option<perspective_client::Client>,
 ) -> ApiResult<PanelId> {
     let (id, session, renderer, update) = create_panel_model(
@@ -100,36 +90,25 @@ pub(crate) async fn create_panel(
         presentation,
         workspace,
         id,
-        update,
+        config.into(),
         client,
-        Placement::Placed,
+        Placement::Staged,
     );
 
     stamp_global_overlay(workspace, &id, &session);
-    // STAGE the panel (model-first): `MainPanel` renders its plugin slot
-    // into a hidden pre-sized wrapper — not a layout cell — so the restore
-    // below completes its first draw invisibly at (near-)final size. The
-    // promote below then re-renders, and `MainPanel::reconcile` inserts an
-    // ALREADY-DRAWN panel: the one layout transition reveals content,
-    // never a blank frame.
-    workspace.stage_panel(&id);
     notify.emit(());
 
-    // The staging deadline: a slow restore promotes EARLY (placed, still
-    // loading — the pre-staging progressive reveal) rather than leaving
-    // the layout without feedback. Races the completion promote below on
-    // the staged flag; only the winner re-renders.
-    {
+    ApiFuture::spawn({
         clone!(workspace, id, notify);
-        ApiFuture::spawn(async move {
+        async move {
             set_timeout(STAGING_DEADLINE_MS).await?;
-            if workspace.clear_staged(&id) {
+            if workspace.promote(&id) {
                 notify.emit(());
             }
 
             Ok(())
-        });
-    }
+        }
+    });
 
     // A fresh panel is never the active one, so it needs no `root` for the
     // (active-only) settings-sidebar sequencing.
@@ -146,7 +125,7 @@ pub(crate) async fn create_panel(
 
     // Promote on completion AND error — a failed restore's error state
     // must become visible too.
-    if workspace.clear_staged(&id) {
+    if workspace.promote(&id) {
         notify.emit(());
     }
 
@@ -156,9 +135,16 @@ pub(crate) async fn create_panel(
 
 /// Where [`create_panel_model`] registers the new panel model.
 pub(crate) enum Placement {
-    /// Into the placed panel set ([`Workspace::insert_panel`]) — a live,
-    /// visible panel from the start.
+    /// Into the placed panel set at [`PanelPhase::Placed`] — a live, visible
+    /// panel from the start (`restoreWorkspace` mounts panels directly at
+    /// their saved layout positions).
     Placed,
+
+    /// Into the placed panel set at [`PanelPhase::Staging`] — withheld from
+    /// the layout while its first draw completes in the hidden staging
+    /// wrapper, then promoted ([`Workspace::promote`]) by restore completion
+    /// or the [`STAGING_DEADLINE_MS`] deadline, whichever wins.
+    Staged,
 
     /// Into the reservation slot ([`Workspace::reserve_panel`]) — a pending
     /// `load()`'s first panel, held out of the placed set until it is
@@ -180,32 +166,23 @@ pub(crate) fn create_panel_model(
     client: Option<perspective_client::Client>,
     placement: Placement,
 ) -> (PanelId, Session, Renderer, ViewerConfigUpdate) {
-    // Authored-theme boot: the FIRST panel of an empty element with no explicit
-    // theme adopts the element's `theme` attribute (a one-time initial
-    // selection; the attribute is otherwise an active-panel mirror). Captured
-    // before `insert_panel` makes the workspace non-empty.
-    let boot_theme = (workspace.is_empty() && matches!(update.theme, OptionalUpdate::Missing))
-        .then(|| elem.get_attribute("theme"))
-        .flatten();
-
     let session = Session::new();
     let renderer = Renderer::new(elem);
     let id = id.unwrap_or_else(|| workspace.generate_id());
     renderer.set_slot_name(id.as_str());
-    renderer.set_default_theme(presentation.default_theme_name_sync());
     let subs = wire_panel_subs(elem, presentation, &session, &renderer);
     let panel = Panel::new(id.clone(), session.clone(), renderer.clone(), subs);
     match placement {
-        Placement::Placed => workspace.insert_panel(panel),
+        Placement::Placed => workspace.insert_panel(panel, PanelPhase::Placed),
+        Placement::Staged => workspace.insert_panel(panel, PanelPhase::Staging),
         Placement::Reserved => workspace.reserve_panel(panel),
     }
 
     update.settings = OptionalUpdate::Missing;
-    if let OptionalUpdate::Update(theme) = &update.theme {
-        renderer.set_theme(Some(theme.clone()));
-    } else if let Some(theme) = boot_theme {
-        renderer.set_theme(Some(theme));
-    }
+    renderer.set_theme(match &update.theme {
+        OptionalUpdate::Update(theme) => Some(theme.clone()),
+        _ => presentation.active_theme_name_sync(),
+    });
 
     update.theme = OptionalUpdate::Missing;
     if let Some(client) = client.or_else(|| workspace.default_client()) {
@@ -221,8 +198,18 @@ pub(crate) fn create_panel_model(
     (id, session, renderer, update)
 }
 
-pub(crate) fn place_reserved(workspace: &Workspace, notify: &Callback<()>) -> Option<Panel> {
-    let panel = workspace.claim_reserved()?;
+/// Claim the pending `load()` reservation into the placed set
+/// ([`Workspace::claim_reserved`]), stamping the global-filter overlay and
+/// notifying the root. `has_table` is whether the claimant carried a
+/// `table`, recorded atomically with the claim — pass `true` when `load()`
+/// itself places its reservation (a `Table` payload, or error surfacing),
+/// which is not a restore claim and must never arm the epilogue's eviction.
+pub(crate) fn place_reserved(
+    workspace: &Workspace,
+    notify: &Callback<()>,
+    has_table: bool,
+) -> Option<Panel> {
+    let panel = workspace.claim_reserved(has_table)?;
     stamp_global_overlay(workspace, &panel.id, &panel.session);
     notify.emit(());
     Some(panel)
@@ -230,7 +217,7 @@ pub(crate) fn place_reserved(workspace: &Workspace, notify: &Callback<()>) -> Op
 
 /// Tear down a [`Panel`] already removed from the [`Workspace`]: dispose its
 /// renderer (slot-scoped plugin + light-DOM cleanup) and eject its table.
-/// Shared by the root's `ClosePanel` handler and whole-element `restore`'s
+/// Shared by the root's `ClosePanel` handler and `restoreWorkspace`'s
 /// batch replacement of the pre-existing panel set.
 pub(crate) fn eject_panel(panel: Panel) -> ApiFuture<()> {
     let was_errored = panel.session.is_errored();

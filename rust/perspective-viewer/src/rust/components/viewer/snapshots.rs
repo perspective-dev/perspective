@@ -52,18 +52,17 @@ impl PerspectiveViewer {
         ctx: &Context<Self>,
         props: PresentationProps,
     ) -> bool {
-        // Default-theme fan-out: when the registry default (first available
-        // theme) changes — the async theme discovery resolving at boot, or a
-        // `resetThemes` — push the new default into every panel's renderer
-        // cache (locked draws stamp the effective theme from it), and
-        // restyle the panels whose captured `--psp-*` CSS is STALE against
-        // the new effective value (`Renderer::needs_restyle` — the plugin's
-        // captured theme is the baseline; plugins only re-read CSS at
-        // `restyle()`/first-draw, so a plain redraw would not repaint a
-        // panel that first drew before discovery resolved, while a panel
-        // that captured post-discovery — or owes its first paint — restyles
-        // nothing). The outer default-diff scopes the scan; the per-panel
-        // gate is state, never call history or DOM state.
+        // Boot fill-in: theme discovery resolving turns an empty registry
+        // into a real one, and any panel created before that has no theme to
+        // stamp. Give those — and ONLY those — the new default, then restyle
+        // the ones whose captured `--psp-*` CSS is now stale
+        // (`Renderer::needs_restyle`; plugins re-read CSS only at
+        // `restyle()`/first-draw, so a plain redraw would not repaint them).
+        //
+        // A panel that already has a theme is never touched here: `theme` is
+        // concrete state, so re-ordering the registry — or any other
+        // `resetThemes` that leaves a panel's theme available — must repaint
+        // nothing.
         let old_default = self.presentation_props.available_themes.first().cloned();
         let new_default = props.available_themes.first().cloned();
         if old_default != new_default {
@@ -74,7 +73,11 @@ impl PerspectiveViewer {
                 .into_iter()
                 .filter_map(|id| ctx.props().workspace.panel(&id))
             {
-                panel.renderer.set_default_theme(new_default.clone());
+                if panel.renderer.theme().is_some() {
+                    continue;
+                }
+
+                panel.renderer.set_theme(new_default.clone());
                 if panel.renderer.needs_restyle() {
                     let renderer = panel.renderer.clone();
                     crate::utils::spawn_owned("default-theme-restyle", async move {

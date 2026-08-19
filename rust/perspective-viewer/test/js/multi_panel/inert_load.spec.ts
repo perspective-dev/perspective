@@ -136,4 +136,26 @@ test.describe("Reserved panel vs. `load(Promise<Client>)`", () => {
 
         expect(panels).toEqual([]);
     });
+
+    test("unawaited load(Promise<Client>) + table-less restore evicts the claimed panel and fails the load", async ({
+        page,
+    }) => {
+        const result = await page.evaluate(async () => {
+            const worker = (window as any).__TEST_WORKER__;
+            const v = document.createElement("perspective-viewer") as any;
+            document.body.appendChild(v);
+            const load = v.load(Promise.resolve(worker)).then(
+                () => "",
+                (e: unknown) => String(e),
+            );
+
+            await v.restore({ theme: "Pro Dark" });
+            const loadError = await load;
+            await new Promise((x) => setTimeout(x, 250));
+            return { panels: v.getPanelNames(), loadError };
+        });
+
+        expect(result.loadError).toContain("table");
+        expect(result.panels).toEqual([]);
+    });
 });

@@ -23,7 +23,7 @@ use perspective_js::utils::*;
 /// (invariant I6); use this only at event-listener leaves where no caller
 /// exists.
 pub fn spawn_owned(tag: &'static str, fut: impl Future<Output = ApiResult<()>> + 'static) {
-    ApiFuture::spawn(async move {
+    ApiFuture::spawn_named(tag, async move {
         if let Err(e) = fut.await.ignore_view_delete() {
             tracing::error!("[{}] unhandled task error: {}", tag, e);
         }

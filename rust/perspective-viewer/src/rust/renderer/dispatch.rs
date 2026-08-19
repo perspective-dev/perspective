@@ -49,7 +49,7 @@ impl Renderer {
         let active_plugin = self.active_plugin();
         if let Some(plugin) = plugin.or(active_plugin.as_ref()) {
             let theme_elem = plugin.unchecked_ref::<HtmlElement>();
-            match self.effective_theme() {
+            match self.theme() {
                 Some(theme)
                     if theme_elem.get_attribute("theme").as_deref() != Some(theme.as_str()) =>
                 {
@@ -73,7 +73,7 @@ impl Renderer {
             let _pin = self.pin_context(&guard, ctx.clone());
             let plugin = self.ensure_plugin_selected()?;
             let meta = self.metadata();
-            let stamped_theme = self.effective_theme();
+            let stamped_theme = self.theme();
             self.stamp_theme(Some(&plugin));
             self.stamp_active(&plugin);
             plugin.restyle();
@@ -134,7 +134,19 @@ impl Renderer {
 
     pub async fn resize(&self) -> ApiResult<()> {
         self.0.geometry_cmd.set(Some(GeometryCmd::Measure));
-        self.geometry_task().await.map(|_| ())
+
+        // This caller queued a `Measure`, but the parked run it resolves
+        // through executes the LATEST `geometry_cmd` — which a concurrent
+        // presize sweep may have swapped to a `Presize` whose sweep
+        // coalesced (and so received `None`). Any present closure returned
+        // here is therefore held by no one else: invoke it, or the
+        // transport's present-hold leaks and the plot freezes on its
+        // last-blitted frame.
+        if let Some(present) = self.geometry_task().await? {
+            present.call0(&JsValue::NULL)?;
+        }
+
+        Ok(())
     }
 
     /// Public one-shot resize to explicit dimensions (`viewer.resize({
@@ -416,7 +428,7 @@ impl Renderer {
         let viewer_elem = self.0.borrow().viewer_elem.clone();
         let slot = self.slot_name();
         let first_paint = !self.0.has_drawn.get();
-        let stamped_theme = self.effective_theme();
+        let stamped_theme = self.theme();
         self.stamp_active(&plugin);
         self.stamp_theme(Some(&plugin));
         if self.needs_restyle() {

@@ -28,17 +28,13 @@ pub(crate) enum RestoreMode {
     Fresh,
 }
 
-/// Where a failed restore's error goes. `Publish` (every user-facing path)
-/// commits it to the session — the visible error UI and errored session
-/// state. `Suppress` (the agent's `set_view_config` tool) returns it ONLY
-/// to the caller: the model receives the error as a tool result and
-/// self-corrects, so the transient failure is noise to the human user —
-/// and the errored session state would otherwise BLOCK the corrected
-/// retry, since error recovery below requires a `table` field the model's
-/// patches don't carry.
+/// Where a failed restore's error goes.
 #[derive(Clone, Copy)]
 pub(crate) enum RestoreErrors {
+    // Raise errors in the UI.
     Publish,
+
+    // Report only in the API.
     Suppress,
 }
 
@@ -61,8 +57,8 @@ pub(crate) async fn bind_table_task(
 }
 
 /// Apply a [`ViewerConfigUpdate`] to a single panel and re-draw — the one
-/// pipeline shared by `restorePanel` (an existing panel), whole-element
-/// `restoreWorkspace`, and `addPanel` (both fresh panels).
+/// pipeline shared by `restorePanel` (an existing panel), `restoreWorkspace`,
+/// and `addPanel` (both fresh panels).
 pub(crate) async fn restore_panel(
     session: &Session,
     renderer: &Renderer,
@@ -76,7 +72,11 @@ pub(crate) async fn restore_panel(
     let fresh = matches!(mode, RestoreMode::Fresh);
     match &update.theme {
         OptionalUpdate::Update(theme) => renderer.set_theme_stamped(Some(theme.clone())),
-        OptionalUpdate::SetDefault => renderer.set_theme_stamped(None),
+        // `SetDefault` resolves to a CONCRETE registry default here, rather
+        // than clearing the panel's theme — nothing downstream re-resolves.
+        OptionalUpdate::SetDefault => {
+            renderer.set_theme_stamped(presentation.get_default_theme_name().await)
+        },
         OptionalUpdate::Missing => {},
     }
 

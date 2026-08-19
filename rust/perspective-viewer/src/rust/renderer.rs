@@ -142,18 +142,13 @@ pub struct RendererData {
     /// coexist there.
     slot_name: RefCell<Option<String>>,
 
-    /// This panel's selected theme name (per-panel theming), or `None` to
-    /// inherit the element-level (active) theme.
+    /// This panel's theme name — CONCRETE, resolved once at creation from
+    /// the config's `theme`, else the host's, else the registry default.
+    /// There is no "unthemed panel" that resolves against live element
+    /// state at draw time: a registry re-ordering must never repaint a
+    /// panel, so nothing but an explicit write may change this. `None` only
+    /// while no themes exist at all.
     theme: RefCell<Option<String>>,
-
-    /// The registry default theme name (first registered), cached here so
-    /// LOCKED draw paths can resolve this panel's EFFECTIVE theme
-    /// synchronously (`Presentation::get_default_theme_name` is async — it
-    /// awaits theme discovery). Seeded by every content-load path before its
-    /// first locked draw (`restore_and_render`, `load()`, the
-    /// resize-observer's deferred first render) and kept fresh by the root's
-    /// `UpdatePresentation` default-theme fan-out and `resetThemes`.
-    default_theme: RefCell<Option<String>>,
 
     /// Whether the active plugin has completed a draw. An EXPLICIT flag —
     /// not inferred from DOM connectedness — because plugin elements may be
@@ -276,7 +271,6 @@ impl Renderer {
             on_render_limits_changed: Default::default(),
             slot_name: Default::default(),
             theme: Default::default(),
-            default_theme: Default::default(),
             has_drawn: Cell::new(false),
             captured_theme: Default::default(),
             cached_context: Default::default(),
@@ -299,45 +293,24 @@ impl Renderer {
         self.0.slot_name.borrow().clone()
     }
 
-    /// Set this panel's theme name (`None` = inherit the element-level theme).
+    /// Set this panel's theme name. Callers must pass a CONCRETE name —
+    /// resolve "the default" through `Presentation` before calling, never by
+    /// leaving this empty.
     pub fn set_theme(&self, name: Option<String>) {
         *self.0.theme.borrow_mut() = name;
     }
 
-    /// This panel's selected theme name, if any (per-panel theming).
+    /// This panel's theme name.
     pub fn theme(&self) -> Option<String> {
         self.0.theme.borrow().clone()
     }
 
-    /// [`Self::set_theme`] plus a synchronous [`Self::stamp_theme`] when the
-    /// effective theme is resolvable now (a named theme needs no registry; a
-    /// reset stamps only from a warm default cache — a cold one would stamp
-    /// attribute-removal). The shared "stamp-with-commit" head of every
-    /// per-panel theme mutation site.
+    /// [`Self::set_theme`] plus a synchronous [`Self::stamp_theme`] — the
+    /// shared "stamp-with-commit" head of every per-panel theme mutation
+    /// site.
     pub fn set_theme_stamped(&self, theme: Option<String>) {
-        let stamp = theme.is_some() || self.default_theme().is_some();
         self.set_theme(theme);
-        if stamp {
-            self.stamp_theme(None);
-        }
-    }
-
-    /// Set the cached registry default theme name (see the field docs on
-    /// [`RendererData`]).
-    pub fn set_default_theme(&self, name: Option<String>) {
-        *self.0.default_theme.borrow_mut() = name;
-    }
-
-    /// The cached registry default theme name.
-    pub fn default_theme(&self) -> Option<String> {
-        self.0.default_theme.borrow().clone()
-    }
-
-    /// This panel's EFFECTIVE theme: its own ([`Self::theme`]), else the
-    /// cached registry default ([`Self::default_theme`]) — the value
-    /// [`Self::stamp_theme`] stamps.
-    pub fn effective_theme(&self) -> Option<String> {
-        self.theme().or_else(|| self.default_theme())
+        self.stamp_theme(None);
     }
 
     /// Whether the active plugin's captured `--psp-*` CSS is STALE — the
@@ -352,7 +325,7 @@ impl Renderer {
     /// paint captures fresh by construction ("stamp before draw").
     pub fn needs_restyle(&self) -> bool {
         match &*self.0.captured_theme.borrow() {
-            Some(captured) => *captured != self.effective_theme(),
+            Some(captured) => *captured != self.theme(),
             None => false,
         }
     }

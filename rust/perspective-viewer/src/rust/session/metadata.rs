@@ -187,7 +187,7 @@ impl SessionMetadata {
     }
 
     pub fn get_expression_columns(&self) -> impl Iterator<Item = &'_ String> {
-        try {
+        let mut columns = try {
             self.as_ref()?
                 .expr_meta
                 .as_ref()?
@@ -197,6 +197,10 @@ impl SessionMetadata {
         }
         .into_iter()
         .flatten()
+        .collect::<Vec<_>>();
+
+        columns.sort_unstable();
+        columns.into_iter()
     }
 
     /// Returns the full original expression `String` for an expression alias.

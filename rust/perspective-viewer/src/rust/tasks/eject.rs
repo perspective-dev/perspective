@@ -23,11 +23,14 @@ use crate::workspace::Workspace;
 /// Tear down the entire viewer: dispose EVERY panel's engines (emit
 /// `table_unloaded`, destroy the renderer under its own draw lock, eject the
 /// session), then drop the Yew root once. Fans out over all panels — not just
-/// the seed — so panels added via `addPanel` or a whole-element `restore` don't
+/// the seed — so panels added via `addPanel` or `restoreWorkspace` don't
 /// leak their `View`/`Table` + plugin when the element is deleted or ejected.
 pub fn delete_all<T: Component>(workspace: &Workspace, root: &Root<T>) -> ApiFuture<()> {
     clone!(workspace, root);
     ApiFuture::new(async move {
+        // A staged-but-unapplied `restoreWorkspace` layout tree must not
+        // outlive the panels it names.
+        workspace.take_pending_layout();
         let panels = workspace
             .take_reserved()
             .into_iter()

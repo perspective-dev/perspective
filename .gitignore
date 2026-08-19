@@ -9,6 +9,7 @@ __pycache__/
 .clangd
 .DS_Store
 .emsdk
+.binaryen
 .plan
 .pnpm-store
 .ipynb_checkpoints

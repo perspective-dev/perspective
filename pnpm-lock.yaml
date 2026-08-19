@@ -251,9 +251,6 @@ importers:
       blocks:
         specifier: 'workspace:'
         version: link:../examples/blocks
-      prismjs:
-        specifier: ^1.29.0
-        version: 1.30.0
       puppeteer:
         specifier: 'catalog:'
         version: 24.26.1(typescript@5.9.3)
@@ -261,9 +258,6 @@ importers:
         specifier: 'catalog:'
         version: 3.2.0
     devDependencies:
-      '@types/prismjs':
-        specifier: ^1.26.0
-        version: 1.26.6
       '@zip.js/zip.js':
         specifier: 'catalog:'
         version: 2.8.8
@@ -2220,9 +2214,6 @@ packages:
 
   '@types/node@24.9.1':
     resolution: {integrity: sha512-QoiaXANRkSXK6p0Duvt56W208du4P9Uye9hWLWgGMDTEoKPhuenzNcC4vGUmrNkiOKTlIrBoyNQYNpSwfEZXSg==}
-
-  '@types/prismjs@1.26.6':
-    resolution: {integrity: sha512-vqlvI7qlMvcCBbVe0AKAb4f97//Hy0EBTaiW8AalRnG/xAN5zOiWWyrNqNXeq8+KAuvRewjCVY1+IPxk4RdNYw==}
 
   '@types/prop-types@15.7.15':
     resolution: {integrity: sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw==}
@@ -4295,10 +4286,6 @@ packages:
 
   pretty-error@4.0.0:
     resolution: {integrity: sha512-AoJ5YMAcXKYxKhuJGdcvse+Voc6v1RgnsR3nWcYU7q4t6z0Q6T86sv5Zq8VIRbOWWFpvdGE83LtdSMNd+6Y0xw==}
-
-  prismjs@1.30.0:
-    resolution: {integrity: sha512-DEvV2ZF2r2/63V+tK8hQvrR2ZGn10srHbXviTlcv7Kpzw8jWiNTqbVgjO3IY8RxrrOUF8VPMQQFysYYYv0YZxw==}
-    engines: {node: '>=6'}
 
   pro_self_extracting_wasm@0.0.9:
     resolution: {integrity: sha512-95/dZfLmlGc/6Xp7gqvRBgXF8M+osw/Xtalz1U/Va8MpSC1TiR7rM4lEvAs1p/q4v/EZk6bow3tKEclbMGsSFQ==}
@@ -6799,8 +6786,6 @@ snapshots:
     dependencies:
       undici-types: 7.16.0
 
-  '@types/prismjs@1.26.6': {}
-
   '@types/prop-types@15.7.15': {}
 
   '@types/react-dom@18.3.7(@types/react@19.2.2)':
@@ -9031,8 +9016,6 @@ snapshots:
     dependencies:
       lodash: 4.17.21
       renderkid: 3.0.0
-
-  prismjs@1.30.0: {}
 
   pro_self_extracting_wasm@0.0.9:
     dependencies:

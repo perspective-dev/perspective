@@ -150,6 +150,10 @@ fn dispatch_config_update(
     renderer: &Renderer,
     presentation: &Presentation,
 ) {
+    if session.get_table().is_none() && session.pending_table().is_none() {
+        return;
+    }
+
     clone!(session, renderer, presentation);
     let elem = elem.clone();
     let tracker = session.clone();
