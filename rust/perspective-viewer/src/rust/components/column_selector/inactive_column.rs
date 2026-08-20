@@ -18,7 +18,7 @@ use yew::prelude::*;
 use super::expr_edit_button::*;
 use crate::components::type_icon::TypeIcon;
 use crate::config::ColumnSelectMode;
-use crate::presentation::{ColumnLocator, Presentation};
+use crate::presentation::{ColumnSettingsTarget, Presentation};
 use crate::renderer::*;
 use crate::session::*;
 use crate::tasks::apply_and_render;
@@ -61,7 +61,7 @@ pub struct InactiveColumnProps {
     pub onselect: Callback<()>,
 
     /// Fires when this column's expression/config button is clicked.
-    pub on_open_expr_panel: Callback<ColumnLocator>,
+    pub on_open_expr_panel: Callback<ColumnSettingsTarget>,
 
     // State
     pub presentation: Presentation,

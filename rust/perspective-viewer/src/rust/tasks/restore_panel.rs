@@ -154,8 +154,6 @@ pub(crate) async fn restore_panel(
 
     if fresh {
         renderer.resize().await.unwrap_or_log();
-    } else if renderer.needs_restyle() {
-        renderer.restyle_all().await?;
     }
 
     Ok(())

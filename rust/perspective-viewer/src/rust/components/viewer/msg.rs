@@ -22,7 +22,9 @@ use wasm_bindgen::JsValue;
 
 use crate::components::settings_panel::SelectedTab;
 use crate::config::*;
-use crate::presentation::{ColumnLocator, ColumnSettingsTab, DragDropProps, PresentationProps};
+use crate::presentation::{
+    ColumnSettingsTab, ColumnSettingsTarget, DragDropProps, PresentationProps,
+};
 use crate::renderer::RendererProps;
 use crate::session::{SessionProps, TableLoadState, ViewStats};
 use crate::utils::Completion;
@@ -51,7 +53,7 @@ pub enum PerspectiveViewerMsg {
     ToggleColumnSettingsPinComplete(Sender<()>),
     ColumnSettingsTabChanged(ColumnSettingsTab),
     OpenColumnSettings {
-        locator: Option<ColumnLocator>,
+        target: Option<ColumnSettingsTarget>,
         sender: Option<Sender<()>>,
         toggle: bool,
     },
@@ -151,8 +153,34 @@ pub enum PerspectiveViewerMsg {
     SettingsPanelTabChanged(SelectedTab),
     SettingsPanelAutoWidth(f64),
     ToggleDebug,
+
+    /// The toggle choreography's INTERNAL completion leaf: flip the pane
+    /// and resolve on the render commit. Never send this to toggle
+    /// settings from outside `settings.rs` — it skips the presize/resize
+    /// sweep (the pane's `SplitPanel` emits no `before-resize` and the
+    /// host box is unchanged, so nothing else resizes the plugins), which
+    /// leaves canvas plugins CSS-stretched at their old backing size. API
+    /// entry points send [`Self::ToggleSettingsInit`].
     ToggleSettingsComplete(SettingsUpdate, Sender<()>),
-    ToggleSettingsInit(Option<SettingsUpdate>, Option<Sender<ApiResult<JsValue>>>),
+
+    /// Toggle (or force) the settings pane with the FULL choreography:
+    /// presize every visible plugin to its post-toggle box, commit the
+    /// pane, then the exactness-finalizer resize. The `Sender` resolves
+    /// after the sweep. The one settings-toggle entry point for both the
+    /// toolbar and the element API (`toggleConfig`, `restore({settings})`,
+    /// `restoreWorkspace`).
+    ///
+    /// The `bool` is `announce`: `true` when this toggle is the SOLE
+    /// carrier of the config change (a user gesture — toolbar,
+    /// `toggleConfig`), which emits `toggle-settings` + one
+    /// `perspective-config-update`; `false` for the `restore` family,
+    /// whose own view-config commit dispatch announces the settings field
+    /// — one API call, one config-update.
+    ToggleSettingsInit(
+        Option<SettingsUpdate>,
+        bool,
+        Option<Sender<ApiResult<JsValue>>>,
+    ),
     UpdateSession(Box<SessionProps>),
     UpdateRenderer(Box<RendererProps>),
     UpdatePresentation(Box<PresentationProps>),

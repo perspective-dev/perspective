@@ -316,6 +316,7 @@ export class RendererTransport {
             gridlinesOC = opts.gridlines.transferControlToOffscreen();
             chromeOC = opts.chrome.transferControlToOffscreen();
         }
+
         const rect = opts.gl.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
         const themeVars = snapshotThemeVars(opts.gl);

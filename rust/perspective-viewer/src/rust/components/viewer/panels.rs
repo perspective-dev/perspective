@@ -314,6 +314,7 @@ impl PerspectiveViewer {
             // activating it must not restate (and thereby pin) that value.
             if let Some(theme) = workspace.active_renderer().and_then(|x| x.theme()) {
                 presentation.set_theme_name(Some(&theme)).await?;
+                presentation.publish_theme_config().await?;
             }
 
             Ok(())

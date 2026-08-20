@@ -392,6 +392,11 @@ function drawCellsInstanced(
  * Chrome overlay: X axis + Y axis + color legend + (optional) tooltip.
  */
 export function renderHeatmapChromeOverlay(chart: HeatmapChart): void {
+    paintHeatmapChromeOverlay(chart);
+    chart.presentOverlay();
+}
+
+function paintHeatmapChromeOverlay(chart: HeatmapChart): void {
     if (!chart._chromeCanvas) {
         return;
     }

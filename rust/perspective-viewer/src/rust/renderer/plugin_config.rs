@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 use futures::future::join_all;
 use perspective_client::config::ViewConfig;
-use perspective_js::utils::{ApiResult, JsValueSerdeExt};
+use perspective_js::utils::{ApiError, ApiResult, JsValueSerdeExt};
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
 
@@ -61,6 +61,50 @@ impl Renderer {
                     .map(|b| b.columns.clone())
             })
             .unwrap_or_default()
+    }
+
+    fn resolve_css_refs_in(&self, column: &str, entry: &mut serde_json::Map<String, Value>) {
+        let host = self.borrow().viewer_elem.clone();
+        let lookup = |name: &str| crate::utils::read_custom_property(&host, name);
+        for (key, name) in resolve_css_refs(entry, &lookup) {
+            tracing::warn!(
+                "Dropping `columns_config[\"{column}\"].{key}`: `var({name})` is undefined or not \
+                 a valid value of its kind"
+            );
+        }
+    }
+
+    /// Every CSS literal stored in the active plugin's per-column bucket
+    /// with its schema kind, sorted by `(column, key)`.
+    pub fn css_literals_in_use(
+        &self,
+        view_config: &ViewConfig,
+        session: &Session,
+    ) -> Vec<CssLiteralUse> {
+        let mut out = vec![];
+        for (column, entry) in self.all_columns_configs() {
+            let Ok(schema) =
+                self.query_column_config_schema(view_config, session, &column, Some(&entry))
+            else {
+                continue;
+            };
+
+            for (key, value) in &entry {
+                if let (Some(kind), Some(literal)) = (schema.css_kind_of(key), value.as_str())
+                    && parse_var_ref(literal).is_none()
+                {
+                    out.push(CssLiteralUse {
+                        column: column.clone(),
+                        key: key.clone(),
+                        kind,
+                        literal: literal.to_owned(),
+                    });
+                }
+            }
+        }
+
+        out.sort_by(|a, b| (&a.column, &a.key).cmp(&(&b.column, &b.key)));
+        out
     }
 
     /// Restore-prep snapshot: like [`Self::all_columns_configs`], but
@@ -173,15 +217,15 @@ impl Renderer {
             .cloned()
     }
 
-    /// Wholesale update the active plugin's per-column config map
+    /// Wholesale update the active plugin's per-column config map.
     pub fn update_columns_configs(
         &self,
         view_config: &ViewConfig,
         session: &Session,
         update: ColumnConfigUpdate,
-    ) -> bool {
+    ) -> ApiResult<bool> {
         let Some(n) = self.active_plugin_name() else {
-            return false;
+            return Ok(false);
         };
 
         match update {
@@ -190,24 +234,31 @@ impl Renderer {
                 let bucket = st.plugin_states.entry(n).or_default();
                 let was_nonempty = !bucket.columns.is_empty();
                 bucket.columns.clear();
-                was_nonempty
+                Ok(was_nonempty)
             },
-            OptionalUpdate::Missing => false,
+            OptionalUpdate::Missing => Ok(false),
             OptionalUpdate::Update(map) => {
-                let stripped: Vec<(String, serde_json::Map<String, serde_json::Value>)> = map
-                    .into_iter()
-                    .map(|(col, mut cfg)| {
-                        if let Ok(schema) =
-                            self.query_column_config_schema(view_config, session, &col, Some(&cfg))
-                        {
-                            let active = schema.active_keys();
-                            cfg.retain(|k, _| active.contains(k));
-                            strip_default_values(&schema, &mut cfg);
+                let mut stripped: Vec<(String, serde_json::Map<String, serde_json::Value>)> =
+                    Vec::with_capacity(map.len());
+                for (col, mut cfg) in map {
+                    if let Ok(schema) =
+                        self.query_column_config_schema(view_config, session, &col, Some(&cfg))
+                    {
+                        let active = schema.active_keys();
+                        cfg.retain(|k, _| active.contains(k));
+                        let errors = normalize_css_values(&schema, &mut cfg);
+                        if let Some((key, error)) = errors.first() {
+                            return Err(ApiError::from(JsValue::from_str(&format!(
+                                "Invalid `columns_config[\"{col}\"].{key}`: {error}"
+                            ))));
                         }
 
-                        (col, cfg)
-                    })
-                    .collect();
+                        self.resolve_css_refs_in(&col, &mut cfg);
+                        strip_default_values(&schema, &mut cfg);
+                    }
+
+                    stripped.push((col, cfg));
+                }
 
                 let mut st = self.borrow_mut();
                 let bucket = st.plugin_states.entry(n).or_default();
@@ -226,7 +277,7 @@ impl Renderer {
                     }
                 }
 
-                changed
+                Ok(changed)
             },
         }
     }
@@ -253,22 +304,45 @@ impl Renderer {
             &column_name,
             current_value.as_ref(),
         ) {
+            for (key, error) in normalize_css_values(&schema, &mut update.value) {
+                tracing::error!("Dropping `{column_name}`.`{key}`: {error}");
+            }
+
+            self.resolve_css_refs_in(&column_name, &mut update.value);
             strip_default_values(&schema, &mut update.value);
         }
 
+        let next = {
+            let mut st = self.borrow_mut();
+            let bucket = st.plugin_states.entry(n.clone()).or_default();
+            let entry = bucket.columns.entry(column_name.clone()).or_default();
+            for k in &update.keys {
+                entry.remove(k);
+            }
+            for (k, v) in update.value {
+                if update.keys.contains(&k) {
+                    entry.insert(k, v);
+                }
+            }
+
+            entry.clone()
+        };
+
+        let active = self
+            .query_column_config_schema(view_config, session, &column_name, Some(&next))
+            .ok()
+            .map(|schema| schema.active_keys());
+
         let mut st = self.borrow_mut();
         let bucket = st.plugin_states.entry(n).or_default();
-        let entry = bucket.columns.entry(column_name.clone()).or_default();
-        for k in &update.keys {
-            entry.remove(k);
-        }
-        for (k, v) in update.value {
-            if update.keys.contains(&k) {
-                entry.insert(k, v);
+        if let Some(entry) = bucket.columns.get_mut(&column_name) {
+            if let Some(active) = &active {
+                entry.retain(|k, _| active.contains(k));
             }
-        }
-        if entry.is_empty() {
-            bucket.columns.remove(&column_name);
+
+            if entry.is_empty() {
+                bucket.columns.remove(&column_name);
+            }
         }
     }
 
@@ -305,7 +379,9 @@ impl Renderer {
         let plugin = self.ensure_plugin_selected()?;
         let view_config_js = JsValue::from_serde_ext(view_config).unwrap_or(JsValue::NULL);
         let raw = plugin._plugin_config_schema(&view_config_js)?;
-        serde_wasm_bindgen::from_value(raw).map_err(|e| e.into())
+        serde_wasm_bindgen::from_value::<ColumnConfigSchema>(raw)
+            .map(|schema| schema.canonicalize_defaults())
+            .map_err(|e| e.into())
     }
 
     /// Per-column counterpart of [`query_plugin_config_schema`]. Used by
@@ -352,7 +428,9 @@ impl Renderer {
             &stats_js,
         )?;
 
-        serde_wasm_bindgen::from_value(raw).map_err(|e| e.into())
+        serde_wasm_bindgen::from_value::<ColumnConfigSchema>(raw)
+            .map(|schema| schema.canonicalize_defaults())
+            .map_err(|e| e.into())
     }
 
     /// Wholesale update the active plugin's plugin-level config map.
@@ -365,9 +443,9 @@ impl Renderer {
         &self,
         view_config: &ViewConfig,
         update: PluginConfigUpdate,
-    ) -> bool {
+    ) -> ApiResult<bool> {
         let Some(n) = self.active_plugin_name() else {
-            return false;
+            return Ok(false);
         };
 
         let schema = self.query_plugin_config_schema(view_config).ok();
@@ -377,14 +455,21 @@ impl Renderer {
             OptionalUpdate::SetDefault => {
                 let changed = !bucket.plugin.is_empty();
                 bucket.plugin.clear();
-                changed
+                Ok(changed)
             },
-            OptionalUpdate::Missing => false,
+            OptionalUpdate::Missing => Ok(false),
             OptionalUpdate::Update(mut map) => {
                 let mut changed = false;
                 if let Some(s) = &schema {
                     let active = s.active_keys();
                     map.retain(|k, _| active.contains(k));
+                    let errors = normalize_css_values(s, &mut map);
+                    if let Some((key, error)) = errors.first() {
+                        return Err(ApiError::from(JsValue::from_str(&format!(
+                            "Invalid `plugin_config.{key}`: {error}"
+                        ))));
+                    }
+
                     map.retain(|key, value| {
                         let is_default = s
                             .fields
@@ -408,7 +493,7 @@ impl Renderer {
                     }
                 }
 
-                changed
+                Ok(changed)
             },
         }
     }
@@ -424,6 +509,10 @@ impl Renderer {
         };
 
         if let Ok(schema) = self.query_plugin_config_schema(view_config) {
+            for (key, error) in normalize_css_values(&schema, &mut update.value) {
+                tracing::error!("Dropping `plugin_config`.`{key}`: {error}");
+            }
+
             strip_default_values(&schema, &mut update.value);
         }
 
@@ -444,6 +533,34 @@ impl Renderer {
 
         changed
     }
+}
+
+fn normalize_css_values(
+    schema: &ColumnConfigSchema,
+    map: &mut serde_json::Map<String, serde_json::Value>,
+) -> Vec<(String, String)> {
+    let mut errors = vec![];
+    for (key, value) in map.iter_mut() {
+        let Some(kind) = schema.css_kind_of(key) else {
+            continue;
+        };
+
+        let canonical = match value.as_str() {
+            Some(src) => kind.canonicalize(src),
+            None => Err(format!("expected a CSS string, got `{value}`")),
+        };
+
+        match canonical {
+            Ok(canonical) => *value = Value::String(canonical),
+            Err(error) => errors.push((key.clone(), error)),
+        }
+    }
+
+    for (key, _) in &errors {
+        map.remove(key);
+    }
+
+    errors
 }
 
 fn strip_default_values(
@@ -479,17 +596,162 @@ fn matches_declared_default(spec: &ControlSpec, key: &str, value: &Value) -> boo
         } if k == key => value.as_str() == Some(default.as_str()),
         ControlSpec::Color {
             key: k, default, ..
-        } if k == key => value.as_str() == Some(default.as_str()),
-        ControlSpec::ColorRange {
-            key_pos,
-            default_pos,
-            ..
-        } if key_pos == key => value.as_str() == Some(default_pos.as_str()),
-        ControlSpec::ColorRange {
-            key_neg,
-            default_neg,
-            ..
-        } if key_neg == key => value.as_str() == Some(default_neg.as_str()),
+        } if k == key => css_matches(CssKind::Color, value, default),
+        ControlSpec::Palette {
+            key: k, default, ..
+        } if k == key => css_matches(CssKind::Palette, value, default),
+        ControlSpec::GradientStops {
+            key: k, default, ..
+        } if k == key => css_matches(CssKind::Gradient, value, default),
         _ => false,
+    }
+}
+
+fn css_matches(kind: CssKind, value: &Value, default: &str) -> bool {
+    value
+        .as_str()
+        .and_then(|src| kind.canonicalize(src).ok())
+        .is_some_and(|canonical| canonical == default)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn palette_default_matches_canonically() {
+        let spec = ControlSpec::Palette {
+            key: "palette".to_owned(),
+            default: "linear-gradient(to right, #0366d6, #ff7f0e)".to_owned(),
+            max: None,
+        };
+
+        assert!(matches_declared_default(
+            &spec,
+            "palette",
+            &json!("linear-gradient(to right, #0366d6, #ff7f0e)")
+        ));
+
+        assert!(matches_declared_default(
+            &spec,
+            "palette",
+            &json!("linear-gradient(90deg, RGB(3,102,214), #FF7F0E)")
+        ));
+
+        assert!(!matches_declared_default(
+            &spec,
+            "palette",
+            &json!("linear-gradient(to right, #ff7f0e, #0366d6)")
+        ));
+
+        assert!(!matches_declared_default(
+            &spec,
+            "palette",
+            &json!("var(--psp-user--palette-1)")
+        ));
+
+        assert!(!matches_declared_default(
+            &spec,
+            "palette",
+            &json!(["#0366d6"])
+        ));
+        assert!(!matches_declared_default(
+            &spec,
+            "other",
+            &json!("linear-gradient(to right, #0366d6, #ff7f0e)")
+        ));
+    }
+
+    #[test]
+    fn gradient_default_matches_canonical_values() {
+        let spec = ControlSpec::GradientStops {
+            key: "gradient".to_owned(),
+            default: "linear-gradient(to right, #0366d6 0%, #ff7f0e 33.3%)".to_owned(),
+            discrete: false,
+        };
+
+        assert!(matches_declared_default(
+            &spec,
+            "gradient",
+            &json!("linear-gradient(#0366d6, #ff7f0e 33.3%)")
+        ));
+
+        assert!(!matches_declared_default(
+            &spec,
+            "gradient",
+            &json!("linear-gradient(to right, #0366d6 0%, #ff7f0e 33.4%)")
+        ));
+
+        let color = ControlSpec::Color {
+            key: "color".to_owned(),
+            default: "#ff7f0e".to_owned(),
+        };
+
+        assert!(matches_declared_default(&color, "color", &json!("#FF7F0E")));
+        assert!(matches_declared_default(
+            &color,
+            "color",
+            &json!("rgb(255, 127, 14)")
+        ));
+        assert!(!matches_declared_default(
+            &color,
+            "color",
+            &json!("var(--psp-user--color-1)")
+        ));
+    }
+
+    #[test]
+    fn normalize_css_values_canonicalizes_and_reports() {
+        let schema = ColumnConfigSchema {
+            fields: vec![
+                ControlSpec::Color {
+                    key: "color".to_owned(),
+                    default: "#000000".to_owned(),
+                },
+                ControlSpec::Palette {
+                    key: "palette".to_owned(),
+                    default: "linear-gradient(to right, #000000)".to_owned(),
+                    max: None,
+                },
+                ControlSpec::GradientStops {
+                    key: "gradient".to_owned(),
+                    default: "linear-gradient(to right, #000000 0%, #ffffff 100%)".to_owned(),
+                    discrete: false,
+                },
+                ControlSpec::Bool {
+                    key: "flag".to_owned(),
+                    default: false,
+                },
+            ],
+        };
+
+        let mut map = json!({
+            "color": "RGB(255,0,0)",
+            "palette": "var(--psp-user--palette-warm)",
+            "gradient": [{ "color": "#000000", "offset": 0 }],
+            "flag": true,
+            "foreign": "linear-gradient(red, blue)",
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+
+        let errors = normalize_css_values(&schema, &mut map);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].0, "gradient");
+        assert_eq!(
+            map,
+            json!({
+                "color": "#ff0000",
+                "palette": "var(--psp-user--palette-warm)",
+                "flag": true,
+                "foreign": "linear-gradient(red, blue)",
+            })
+            .as_object()
+            .unwrap()
+            .clone()
+        );
     }
 }

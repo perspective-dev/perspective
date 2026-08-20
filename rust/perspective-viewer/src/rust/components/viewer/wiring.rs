@@ -343,7 +343,9 @@ pub(super) fn create_active_subscriptions(
 pub(super) fn create_shared_subscriptions(ctx: &Context<PerspectiveViewer>) -> Vec<Subscription> {
     let presentation_props_sub = {
         let presentation = ctx.props().presentation.clone();
-        let cb_settings = ctx.link().callback(UpdateSettingsOpen);
+        let cb_settings = ctx
+            .link()
+            .callback(|(open, _): (bool, bool)| UpdateSettingsOpen(open));
         let cb_theme = {
             let pres = presentation.clone();
             ctx.link()
@@ -366,17 +368,6 @@ pub(super) fn create_shared_subscriptions(ctx: &Context<PerspectiveViewer>) -> V
             .add_listener(cb_column_settings);
 
         vec![sub1, sub2, sub3]
-    };
-
-    let dragdrop_props_sub = {
-        let cb_clear = ctx.link().callback(|_: ()| UpdateDragDrop(Box::default()));
-        let sub1 = ctx
-            .props()
-            .presentation
-            .drop_received
-            .add_notify_listener(&cb_clear);
-
-        vec![sub1]
     };
 
     // The `Workspace`-owned global filter set → the root's render snapshot.
@@ -404,7 +395,6 @@ pub(super) fn create_shared_subscriptions(ctx: &Context<PerspectiveViewer>) -> V
 
     let mut subscriptions = Vec::new();
     subscriptions.extend(presentation_props_sub);
-    subscriptions.extend(dragdrop_props_sub);
     subscriptions.push(filters_sub);
     subscriptions.push(staged_sub);
     subscriptions
@@ -447,15 +437,13 @@ pub(super) fn inject_active_callbacks(
         let cb = ctx.link().batch_callback(move |limits: RenderLimits| {
             let mut msgs = vec![UpdateRenderer(Box::new(r.to_props(Some(limits))))];
             if !limits.is_update {
-                let locator = get_current_column_locator(
-                    &presentation.get_open_column_settings(),
-                    &r,
-                    &s.get_view_config(),
-                    &s.metadata(),
-                );
+                let ocs = presentation.get_open_column_settings();
+                let still_open =
+                    get_current_column_locator(&ocs, &r, &s.get_view_config(), &s.metadata())
+                        .is_some();
 
                 msgs.push(OpenColumnSettings {
-                    locator,
+                    target: ocs.target.filter(|_| still_open),
                     sender: None,
                     toggle: false,
                 });

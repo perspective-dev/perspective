@@ -94,6 +94,20 @@ export interface IPerspectiveViewerPlugin {
     column_style_config?: (view_type: string, group: string) => any;
 
     /**
+     * The per-column Style-tab schema: the controls the viewer renders
+     * for one column, re-queried on every field edit so the field set
+     * may depend on `current_value`.
+     */
+    column_config_schema?(
+        view_type: string,
+        group: string | undefined,
+        column_name: string,
+        current_value: Record<string, unknown> | null,
+        viewer_config?: Record<string, unknown>,
+        column_stats?: Record<string, unknown>,
+    ): { fields: Array<Record<string, unknown> & { kind: string }> };
+
+    /**
      * Render this plugin using the provided `View`.  While there is no
      * provision to cancel a render in progress per se, calling a method on
      * a `View` which has been deleted will throw an exception.

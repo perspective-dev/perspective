@@ -88,6 +88,10 @@ extern "C" {
     #[wasm_bindgen(typescript_type = "WorkspaceConfigUpdate")]
     pub type JsWorkspaceConfigUpdate;
 
+    /// `saveWorkspace()` options dict (`{ full_palette?: boolean }`).
+    #[wasm_bindgen(typescript_type = "SaveWorkspaceOptions")]
+    pub type JsSaveWorkspaceOptions;
+
     /// `saveWorkspace()` return: a workspace config.
     #[wasm_bindgen(typescript_type = "Promise<WorkspaceConfig>")]
     pub type JsWorkspaceConfigPromise;
@@ -201,7 +205,7 @@ impl PerspectiveViewerElement {
             .map(|el| el.unchecked_into())
     }
 
-    async fn workspace_config(this: Self) -> ApiResult<JsValue> {
+    async fn workspace_config(this: Self, full_palette: bool) -> ApiResult<JsValue> {
         let mut panels: std::collections::BTreeMap<String, PanelViewerConfig> = Default::default();
         for id in &this.workspace.panel_ids() {
             let panel = this.workspace.panel(id).into_apierror()?;
@@ -214,6 +218,26 @@ impl PerspectiveViewerElement {
                 .await?;
 
             panels.insert(id.as_str().to_owned(), config.panel);
+        }
+
+        let mut palette = palette_set(&this.workspace, &this.presentation);
+        let mut referenced = std::collections::BTreeSet::new();
+        for (id, item) in styles_in_use(&this.workspace) {
+            let Some(name) = palette_name_for(&palette, item.kind, &item.literal) else {
+                continue;
+            };
+
+            if let Some(entry) = panels
+                .get_mut(id.as_str())
+                .and_then(|panel| panel.columns_config.get_mut(&item.column))
+            {
+                entry.insert(item.key, serde_json::Value::String(format_var_ref(&name)));
+                referenced.insert(name);
+            }
+        }
+
+        if !full_palette {
+            palette.retain(|name, _| referenced.contains(name));
         }
 
         let active = this
@@ -240,6 +264,7 @@ impl PerspectiveViewerElement {
                 .iter()
                 .map(|id| id.as_str().to_owned())
                 .collect(),
+            palette,
         })?)
     }
 }
@@ -1066,16 +1091,25 @@ impl PerspectiveViewerElement {
             };
 
             if !matches!(settings, OptionalUpdate::Missing) {
-                if let OptionalUpdate::Update(open) = settings {
-                    this.presentation.set_settings_before_open(open);
-                }
-
-                let (sender, receiver) = channel::<()>();
+                // Through `ToggleSettingsInit` — the SAME full choreography
+                // the toolbar toggle drives (presize every visible plugin
+                // to its post-toggle box, then the exactness-finalizer
+                // resize) — NOT the bare `ToggleSettingsComplete` leaf,
+                // which only re-renders the pane. The pane is the outer
+                // `SplitPanel` (no `before-resize` event) and the host box
+                // is unchanged, so a leaf-only toggle left every canvas
+                // plugin CSS-stretched at its old backing size.
+                //
+                // No `set_settings_before_open` here: `is_settings_open` is
+                // Init's toggle-vs-no-op DISPATCH state, so pre-writing the
+                // target makes every call resolve as a no-op. Init owns the
+                // write, as it does for the toolbar and `toggleConfig`.
+                let (sender, receiver) = channel::<ApiResult<JsValue>>();
                 this.root.borrow().as_ref().into_apierror()?.send_message(
-                    PerspectiveViewerMsg::ToggleSettingsComplete(settings, sender),
+                    PerspectiveViewerMsg::ToggleSettingsInit(Some(settings), false, Some(sender)),
                 );
 
-                receiver.await.unwrap_or_log();
+                receiver.await.map_err(|_| ApiError::new("Cancelled"))??;
             }
 
             match target {
@@ -1248,10 +1282,11 @@ impl PerspectiveViewerElement {
     }
 
     /// Save the ENTIRE element to a [`WorkspaceConfig`]
-    /// (`{version, active?, layout, panels, ...}`) — the multi-panel
-    /// counterpart of [`Self::save`]. Unlike [`Self::save`] (which emits a
-    /// single `ViewerConfig` for one panel), this ALWAYS emits the
-    /// workspace format, restorable via [`Self::restoreWorkspace`].
+    /// (`{version, active?, layout, panels, palette?, ...}`) — the
+    /// multi-panel counterpart of [`Self::save`]. Unlike [`Self::save`]
+    /// (which emits a single `ViewerConfig` for one panel), this ALWAYS
+    /// emits the workspace format, restorable via
+    /// [`Self::restoreWorkspace`].
     ///
     /// # JavaScript Examples
     ///
@@ -1259,9 +1294,13 @@ impl PerspectiveViewerElement {
     /// const token = await viewer.saveWorkspace();
     /// await viewer.restoreWorkspace(token);
     /// ```
-    pub fn saveWorkspace(&self) -> JsWorkspaceConfigPromise {
+    pub fn saveWorkspace(
+        &self,
+        options: Option<JsSaveWorkspaceOptions>,
+    ) -> JsWorkspaceConfigPromise {
+        let SaveWorkspaceOptions { full_palette } = parse_options(options);
         let this = self.clone();
-        let fut = ApiFuture::new(Self::workspace_config(this));
+        let fut = ApiFuture::new(Self::workspace_config(this, full_palette.unwrap_or(false)));
         js_sys::Promise::from(fut).unchecked_into()
     }
 
@@ -1730,6 +1769,7 @@ impl PerspectiveViewerElement {
                 }
             }
 
+            presentation.publish_theme_config().await?;
             Ok(JsValue::UNDEFINED)
         })
     }
@@ -1784,7 +1824,7 @@ impl PerspectiveViewerElement {
             let force = force.map(SettingsUpdate::Update);
             let (sender, receiver) = channel::<ApiResult<wasm_bindgen::JsValue>>();
             root.borrow().as_ref().into_apierror()?.send_message(
-                PerspectiveViewerMsg::ToggleSettingsInit(force, Some(sender)),
+                PerspectiveViewerMsg::ToggleSettingsInit(force, true, Some(sender)),
             );
 
             receiver.await.map_err(|_| JsValue::from("Cancelled"))?
@@ -1943,7 +1983,12 @@ impl PerspectiveViewerElement {
             let _effect = effect;
             let panel = this.resolve_panel(name)?;
             let was_active = this.workspace.active_id().as_ref() == Some(&panel.id);
-            let locator = get_column_locator(&panel.session.metadata(), Some(column_name));
+            let target = {
+                let config = panel.session.get_view_config();
+                let metadata = panel.session.metadata();
+                classify_column(&column_name, &config, &metadata)
+                    .map(|_| crate::presentation::ColumnSettingsTarget::Column(column_name))
+            };
             if !was_active {
                 this.root.borrow().as_ref().into_apierror()?.send_message(
                     PerspectiveViewerMsg::SetActivePanel(panel.id.as_str().to_owned(), None),
@@ -1953,7 +1998,7 @@ impl PerspectiveViewerElement {
             let (sender, receiver) = channel::<()>();
             this.root.borrow().as_ref().into_apierror()?.send_message(
                 PerspectiveViewerMsg::OpenColumnSettings {
-                    locator,
+                    target,
                     sender: Some(sender),
                     toggle: was_active,
                 },

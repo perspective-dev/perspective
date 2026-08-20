@@ -17,20 +17,27 @@
 //! [`ColorSelector`]) so that they visually match the rich Yew widgets in
 //! the same sidebar.
 
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use itertools::Itertools;
 use serde_json::Value;
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlInputElement, MouseEvent};
-use yew::{Callback, Html, Properties, classes, function_component, html, use_callback};
+use yew::{Callback, Html, Properties, function_component, html, use_callback};
 
 use crate::components::containers::select::{Select, SelectItem};
-use crate::components::form::color_range_selector::ColorRangeSelector;
 use crate::components::form::color_selector::ColorSelector;
+use crate::components::form::multi_stop_gradient_selector::MultiStopGradientSelector;
+use crate::components::form::named_value_picker::NamedValuePicker;
 use crate::components::form::number_field::NumberField;
 use crate::components::form::optional_field::OptionalField;
-use crate::config::{ColumnConfigFieldUpdate, EnumVariant};
+use crate::components::form::palette_selector::PaletteSelector;
+use crate::config::{
+    ColumnConfigFieldUpdate, CssColor, CssGradient, CssKind, CssPalette, EnumVariant,
+    GradientStopSpec, NamedValue, canonicalize_css_color, discrete_pair, gradient_to_css,
+    palette_name_for,
+};
 
 fn emit(on_change: &Callback<ColumnConfigFieldUpdate>, key: &str, value: Option<Value>) {
     let mut map = serde_json::Map::new();
@@ -41,28 +48,6 @@ fn emit(on_change: &Callback<ColumnConfigFieldUpdate>, key: &str, value: Option<
     on_change.emit(ColumnConfigFieldUpdate {
         keys: vec![key.to_owned()],
         value: map,
-    });
-}
-
-fn emit_color_range(
-    on_change: &Callback<ColumnConfigFieldUpdate>,
-    key_pos: &str,
-    key_neg: &str,
-    default_pos: &str,
-    default_neg: &str,
-    new_pos: &str,
-    new_neg: &str,
-) {
-    let mut value = serde_json::Map::new();
-    if new_pos != default_pos {
-        value.insert(key_pos.to_owned(), Value::String(new_pos.to_owned()));
-    }
-    if new_neg != default_neg {
-        value.insert(key_neg.to_owned(), Value::String(new_neg.to_owned()));
-    }
-    on_change.emit(ColumnConfigFieldUpdate {
-        keys: vec![key_pos.to_owned(), key_neg.to_owned()],
-        value,
     });
 }
 
@@ -239,106 +224,242 @@ pub fn NumberFieldPrimitive(props: &NumberFieldPrimitiveProps) -> Html {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn css_field_controls(
+    kind: CssKind,
+    named: &Rc<Vec<NamedValue>>,
+    restored: &BTreeMap<String, String>,
+    current: &str,
+    is_modified: bool,
+    on_select: Callback<String>,
+    on_pin: Callback<()>,
+) -> Html {
+    let can_pin = is_modified && palette_name_for(restored, kind, current).is_none();
+    if named.is_empty() && !can_pin {
+        return html! {};
+    }
+
+    html! { <NamedValuePicker {kind} entries={named.clone()} {on_select} {can_pin} {on_pin} /> }
+}
+
+fn named_literal(named: &[NamedValue], name: &str) -> Option<String> {
+    named
+        .iter()
+        .find(|entry| entry.name == name)
+        .map(|entry| entry.value.clone())
+}
+
 #[derive(Properties, PartialEq)]
-pub struct ColorRangeFieldProps {
-    pub field_key_pos: String,
-    pub field_key_neg: String,
-    pub default_pos: String,
-    pub default_neg: String,
-    pub current_pos: Option<String>,
-    pub current_neg: Option<String>,
-    pub is_gradient: bool,
+pub struct PaletteFieldProps {
+    pub field_key: String,
+    /// Canonical palette string.
+    pub default: String,
+    pub max: Option<usize>,
+    /// Canonical palette string.
+    pub current: Option<String>,
     pub on_change: Callback<ColumnConfigFieldUpdate>,
+
+    /// Named palettes (workspace set ∪ theme), for the loader.
+    #[prop_or_default]
+    pub named: Rc<Vec<NamedValue>>,
+
+    /// The restored palette — the set Pin adds to.
+    #[prop_or_default]
+    pub restored: Rc<BTreeMap<String, String>>,
+
+    /// Pin the field's `(kind, literal)` into the restored palette.
+    #[prop_or_default]
+    pub on_pin: Callback<(CssKind, String)>,
+}
+
+fn palette_colors(src: &str, default: &str) -> Vec<String> {
+    let literal = |css: &str| match CssPalette::parse(css) {
+        Ok(CssPalette::Literal(colors)) => Some(colors),
+        _ => None,
+    };
+
+    literal(src)
+        .or_else(|| literal(default))
+        .unwrap_or_default()
 }
 
 #[function_component]
-pub fn ColorRangeField(props: &ColorRangeFieldProps) -> Html {
-    let pos = props
-        .current_pos
-        .clone()
-        .unwrap_or_else(|| props.default_pos.clone());
-    let neg = props
-        .current_neg
-        .clone()
-        .unwrap_or_else(|| props.default_neg.clone());
-    let is_modified = (props.current_pos.is_some()
-        && props.current_pos.as_deref() != Some(props.default_pos.as_str()))
-        || (props.current_neg.is_some()
-            && props.current_neg.as_deref() != Some(props.default_neg.as_str()));
+pub fn PaletteField(props: &PaletteFieldProps) -> Html {
+    let current = props.current.as_deref().unwrap_or(&props.default);
+    let values = palette_colors(current, &props.default);
+    let is_modified = props.current.is_some() && props.current.as_ref() != Some(&props.default);
+    let emit_css = {
+        let key = props.field_key.clone();
+        let default = props.default.clone();
+        let on_change = props.on_change.clone();
+        move |css: String| {
+            if css == default {
+                emit(&on_change, &key, None);
+            } else {
+                emit(&on_change, &key, Some(Value::String(css)));
+            }
+        }
+    };
 
-    // Multi-key emit: write whichever side(s) differ from default,
-    // clear the others. Mirrors the apply semantics of
-    // `ColumnConfigFieldUpdate { keys, value }` with both keys owned.
-    let on_pos_color = use_callback(
-        (
-            props.field_key_pos.clone(),
-            props.field_key_neg.clone(),
-            props.default_pos.clone(),
-            props.default_neg.clone(),
-            props.on_change.clone(),
-            neg.clone(),
-        ),
-        |new_pos: String, (key_pos, key_neg, default_pos, default_neg, on_change, neg)| {
-            emit_color_range(
-                on_change,
-                key_pos,
-                key_neg,
-                default_pos,
-                default_neg,
-                &new_pos,
-                neg,
-            );
-        },
-    );
+    let on_change_palette = {
+        let emit_css = emit_css.clone();
+        Callback::from(move |values: Vec<String>| {
+            emit_css(CssPalette::Literal(values).to_css());
+        })
+    };
 
-    let on_neg_color = use_callback(
-        (
-            props.field_key_pos.clone(),
-            props.field_key_neg.clone(),
-            props.default_pos.clone(),
-            props.default_neg.clone(),
-            props.on_change.clone(),
-            pos.clone(),
-        ),
-        |new_neg: String, (key_pos, key_neg, default_pos, default_neg, on_change, pos)| {
-            emit_color_range(
-                on_change,
-                key_pos,
-                key_neg,
-                default_pos,
-                default_neg,
-                pos,
-                &new_neg,
-            );
-        },
-    );
+    let on_select = {
+        let emit_css = emit_css.clone();
+        let named = props.named.clone();
+        Callback::from(move |name: String| {
+            if let Some(literal) = named_literal(&named, &name) {
+                emit_css(literal);
+            }
+        })
+    };
 
     let on_reset = use_callback(
-        (
-            props.field_key_pos.clone(),
-            props.field_key_neg.clone(),
-            props.on_change.clone(),
-        ),
-        |_: (), (key_pos, key_neg, on_change)| {
-            on_change.emit(ColumnConfigFieldUpdate {
-                keys: vec![key_pos.clone(), key_neg.clone()],
-                value: serde_json::Map::new(),
-            });
-        },
+        (props.field_key.clone(), props.on_change.clone()),
+        |_: (), (key, on_change)| emit(on_change, key, None),
     );
+
+    let on_pin = {
+        let on_pin = props.on_pin.clone();
+        let literal = current.to_owned();
+        Callback::from(move |()| on_pin.emit((CssKind::Palette, literal.clone())))
+    };
 
     html! {
         <div class="row">
-            <ColorRangeSelector
-                pos_class={classes!(props.field_key_pos.clone())}
-                neg_class={classes!(props.field_key_neg.clone())}
-                pos_color={pos}
-                neg_color={neg}
-                is_gradient={props.is_gradient}
-                {on_pos_color}
-                {on_neg_color}
+            { css_field_controls(
+                CssKind::Palette,
+                &props.named,
+                &props.restored,
+                current,
+                is_modified,
+                on_select,
+                on_pin,
+            ) }
+            <PaletteSelector
+                {values}
+                max={props.max}
+                on_change={on_change_palette}
                 {on_reset}
                 {is_modified}
+                title={Some(format!("{}-label", props.field_key))}
+            />
+        </div>
+    }
+}
+
+#[derive(Properties, PartialEq)]
+pub struct GradientStopsFieldProps {
+    pub field_key: String,
+    /// Canonical gradient string.
+    pub default: String,
+    pub discrete: bool,
+    /// Canonical gradient string.
+    pub current: Option<String>,
+    pub on_change: Callback<ColumnConfigFieldUpdate>,
+
+    /// Named gradients (workspace set ∪ theme), for the loader.
+    #[prop_or_default]
+    pub named: Rc<Vec<NamedValue>>,
+
+    /// The restored palette — the set Pin adds to.
+    #[prop_or_default]
+    pub restored: Rc<BTreeMap<String, String>>,
+
+    /// Pin the field's `(kind, literal)` into the restored palette.
+    #[prop_or_default]
+    pub on_pin: Callback<(CssKind, String)>,
+}
+
+fn gradient_stops(src: &str, default: &str) -> Vec<GradientStopSpec> {
+    let literal = |css: &str| match CssGradient::parse(css) {
+        Ok(CssGradient::Literal(stops)) => Some(stops),
+        _ => None,
+    };
+
+    literal(src)
+        .or_else(|| literal(default))
+        .unwrap_or_default()
+}
+
+#[function_component]
+pub fn GradientStopsField(props: &GradientStopsFieldProps) -> Html {
+    let current = props.current.as_deref().unwrap_or(&props.default);
+    let stops = gradient_stops(current, &props.default);
+    let is_modified = props.current.is_some() && props.current.as_ref() != Some(&props.default);
+    let emit_css = {
+        let key = props.field_key.clone();
+        let default = props.default.clone();
+        let on_change = props.on_change.clone();
+        move |css: String| {
+            if css == default {
+                emit(&on_change, &key, None);
+            } else {
+                emit(&on_change, &key, Some(Value::String(css)));
+            }
+        }
+    };
+
+    let on_change_stops = {
+        let emit_css = emit_css.clone();
+        Callback::from(move |stops: Vec<GradientStopSpec>| {
+            emit_css(gradient_to_css(&stops));
+        })
+    };
+
+    let on_select = {
+        let emit_css = emit_css.clone();
+        let named = props.named.clone();
+        let discrete = props.discrete;
+        Callback::from(move |name: String| {
+            let Some(literal) = named_literal(&named, &name) else {
+                return;
+            };
+
+            let literal = match CssGradient::parse(&literal) {
+                Ok(CssGradient::Literal(stops)) if discrete && stops.len() > 2 => {
+                    gradient_to_css(&discrete_pair(stops))
+                },
+                _ => literal,
+            };
+
+            emit_css(literal);
+        })
+    };
+
+    let on_reset = use_callback(
+        (props.field_key.clone(), props.on_change.clone()),
+        |_: (), (key, on_change)| emit(on_change, key, None),
+    );
+
+    let on_pin = {
+        let on_pin = props.on_pin.clone();
+        let literal = current.to_owned();
+        Callback::from(move |()| on_pin.emit((CssKind::Gradient, literal.clone())))
+    };
+
+    html! {
+        <div class="row">
+            { css_field_controls(
+                CssKind::Gradient,
+                &props.named,
+                &props.restored,
+                current,
+                is_modified,
+                on_select,
+                on_pin,
+            ) }
+            <MultiStopGradientSelector
+                {stops}
+                discrete={props.discrete}
+                on_change={on_change_stops}
+                {on_reset}
+                {is_modified}
+                title={Some(format!("{}-label", props.field_key))}
             />
         </div>
     }
@@ -347,42 +468,88 @@ pub fn ColorRangeField(props: &ColorRangeFieldProps) -> Html {
 #[derive(Properties, PartialEq)]
 pub struct ColorFieldProps {
     pub field_key: String,
+    /// Canonical `#rrggbb`.
     pub default: String,
+    /// Canonical `#rrggbb`.
     pub current: Option<String>,
     pub on_change: Callback<ColumnConfigFieldUpdate>,
+
+    /// Named colors (workspace set ∪ theme), for the loader.
+    #[prop_or_default]
+    pub named: Rc<Vec<NamedValue>>,
+
+    /// The restored palette — the set Pin adds to.
+    #[prop_or_default]
+    pub restored: Rc<BTreeMap<String, String>>,
+
+    /// Pin the field's `(kind, literal)` into the restored palette.
+    #[prop_or_default]
+    pub on_pin: Callback<(CssKind, String)>,
 }
 
 #[function_component]
 pub fn ColorField(props: &ColorFieldProps) -> Html {
-    let color = props
-        .current
-        .clone()
-        .unwrap_or_else(|| props.default.clone());
+    let current = props.current.as_deref().unwrap_or(&props.default);
+    let color = match CssColor::parse(current) {
+        Ok(CssColor::Literal(color)) => color,
+        _ => props.default.clone(),
+    };
+
     let is_modified =
         props.current.as_deref() != Some(props.default.as_str()) && props.current.is_some();
 
-    let on_color = use_callback(
-        (
-            props.field_key.clone(),
-            props.default.clone(),
-            props.on_change.clone(),
-        ),
-        |value: String, (key, default, on_change)| {
-            if value == *default {
-                emit(on_change, key, None);
+    let emit_css = {
+        let key = props.field_key.clone();
+        let default = props.default.clone();
+        let on_change = props.on_change.clone();
+        move |css: String| {
+            if css == default {
+                emit(&on_change, &key, None);
             } else {
-                emit(on_change, key, Some(Value::String(value)));
+                emit(&on_change, &key, Some(Value::String(css)));
             }
-        },
-    );
+        }
+    };
+
+    let on_color = {
+        let emit_css = emit_css.clone();
+        Callback::from(move |value: String| {
+            emit_css(canonicalize_css_color(&value).unwrap_or(value));
+        })
+    };
+
+    let on_select = {
+        let emit_css = emit_css.clone();
+        let named = props.named.clone();
+        Callback::from(move |name: String| {
+            if let Some(literal) = named_literal(&named, &name) {
+                emit_css(literal);
+            }
+        })
+    };
 
     let on_reset = use_callback(
         (props.field_key.clone(), props.on_change.clone()),
         |_: (), (key, on_change)| emit(on_change, key, None),
     );
 
+    let on_pin = {
+        let on_pin = props.on_pin.clone();
+        let literal = current.to_owned();
+        Callback::from(move |()| on_pin.emit((CssKind::Color, literal.clone())))
+    };
+
     html! {
         <div class="row">
+            { css_field_controls(
+                CssKind::Color,
+                &props.named,
+                &props.restored,
+                current,
+                is_modified,
+                on_select,
+                on_pin,
+            ) }
             <ColorSelector
                 {color}
                 {on_color}

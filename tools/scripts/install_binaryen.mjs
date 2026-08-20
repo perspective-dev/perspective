@@ -47,7 +47,9 @@ function platform() {
 
 function version_check() {
     const marker = path.join(base(), "VERSION");
-    return fs.existsSync(marker) && fs.readFileSync(marker, "utf8") === binaryen;
+    return (
+        fs.existsSync(marker) && fs.readFileSync(marker, "utf8") === binaryen
+    );
 }
 
 async function toolchain_install() {

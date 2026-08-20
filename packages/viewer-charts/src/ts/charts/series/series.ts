@@ -41,6 +41,7 @@ import {
     showBarPinnedTooltipForSample,
 } from "./series-interact";
 import { resolvePalette } from "../../theme/palette";
+import { resolveSeriesColorOverride } from "./series-type";
 import { LineGlyph } from "./glyphs/draw-lines";
 import { ScatterGlyph } from "./glyphs/draw-scatter";
 import { AreaGlyph } from "./glyphs/draw-areas";
@@ -250,13 +251,16 @@ export class SeriesChart extends CategoricalYChart {
     /**
      * Cached palette + identity-keys for short-circuiting per-frame
      * resolution. Inputs (`seriesPalette` ref, `gradientStops` ref,
-     * `series.length`) only change on data load or `restyle()`.
+     * `series.length`, `_columnsConfig` ref — per-series color
+     * overrides) only change on data load, `restyle()`, or
+     * `setColumnsConfig`.
      */
     _paletteCache: [number, number, number][] | null = null;
     _paletteCacheKey: {
         seriesPalette: [number, number, number][] | null;
         gradientStops: unknown;
         seriesLength: number;
+        columnsConfig: unknown;
     } | null = null;
 
     /**
@@ -517,9 +521,7 @@ export class SeriesChart extends CategoricalYChart {
         const groupByValues: (string | number | null)[] =
             this._categoryAxisMode === "numeric" && this._categoryPositions
                 ? [this._categoryPositions[b.catIdx] ?? null]
-                : this._rowPaths.map(
-                      (level) => level.labels[b.catIdx] ?? null,
-                  );
+                : this._rowPaths.map((level) => level.labels[b.catIdx] ?? null);
         const splitKey = this._splitPrefixes[b.splitIdx] ?? "";
         const splitByValues =
             this._splitBy.length > 0 && splitKey !== ""
@@ -906,6 +908,7 @@ export function ensurePalette(chart: SeriesChart): boolean {
     const theme = chart._resolveTheme();
     const seriesPalette = theme.seriesPalette;
     const gradientStops = theme.gradientStops;
+    const columnsConfig = chart._columnsConfig;
     const paletteCount = chart._facetActive
         ? Math.max(1, chart._aggregates.length)
         : chart._series.length;
@@ -916,7 +919,8 @@ export function ensurePalette(chart: SeriesChart): boolean {
         key &&
         key.seriesPalette === seriesPalette &&
         key.gradientStops === gradientStops &&
-        key.seriesLength === paletteCount
+        key.seriesLength === paletteCount &&
+        key.columnsConfig === columnsConfig
     ) {
         return false;
     }
@@ -931,12 +935,18 @@ export function ensurePalette(chart: SeriesChart): boolean {
         seriesPalette,
         gradientStops,
         seriesLength: paletteCount,
+        columnsConfig,
     };
 
     for (let i = 0; i < chart._series.length; i++) {
-        chart._series[i].color = chart._facetActive
-            ? palette[chart._series[i].aggIdx]
-            : palette[i];
+        const series = chart._series[i];
+        const themed = chart._facetActive ? palette[series.aggIdx] : palette[i];
+        series.color =
+            resolveSeriesColorOverride(
+                series,
+                chart._facetActive,
+                columnsConfig,
+            ) ?? themed;
     }
 
     return true;

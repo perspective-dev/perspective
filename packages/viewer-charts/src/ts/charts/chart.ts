@@ -85,6 +85,11 @@ export interface ChartImplementation {
     setChromeCanvas?(canvas: HTMLCanvasElement | OffscreenCanvas): void;
 
     /**
+     * Install the renderer's overlay-present hook.
+     */
+    setOverlayPresenter?(cb: () => void): void;
+
+    /**
      * Hand the chart a pre-computed CSS-variable map produced on the
      * main thread via `snapshotThemeVars(el)`, which it can decode into
      * a full `Theme` without touching the DOM (charts always run inside

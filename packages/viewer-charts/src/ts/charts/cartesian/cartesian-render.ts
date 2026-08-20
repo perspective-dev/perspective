@@ -699,6 +699,11 @@ function renderFacetedFrame(
  * Redraw the chrome canvas only. Used for lightweight hover updates.
  */
 export function renderCartesianChromeOverlay(chart: CartesianChart): void {
+    paintCartesianChromeOverlay(chart);
+    chart.presentOverlay();
+}
+
+function paintCartesianChromeOverlay(chart: CartesianChart): void {
     if (
         !chart._chromeCanvas ||
         !chart._lastLayout ||

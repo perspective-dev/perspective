@@ -14,32 +14,30 @@ use std::rc::Rc;
 
 use itertools::Itertools;
 use web_sys::{FocusEvent, HtmlInputElement, KeyboardEvent};
-use yew::{Callback, Component, Html, NodeRef, Properties, TargetCast, classes, html};
+use yew::prelude::*;
 
 use super::type_icon::TypeIconType;
 use crate::components::type_icon::TypeIcon;
-use crate::session::{Session, SessionMetadataRc};
+use crate::session::SessionMetadataRc;
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct EditableHeaderProps {
     pub icon_type: Option<TypeIconType>,
     pub on_change: Callback<(Option<String>, bool)>,
     pub editable: bool,
+
+    /// The owner's draft.
+    pub value: Option<String>,
+
+    /// The saved name the draft is measured against.
     pub initial_value: Option<String>,
     pub placeholder: Rc<String>,
-
-    // TODO remove this pattern
-    #[prop_or_default]
-    pub reset_count: u8,
 
     #[prop_or_default]
     pub update_on_input: bool,
 
     /// Session metadata snapshot — threaded from `SessionProps`.
     pub metadata: SessionMetadataRc,
-
-    // State
-    pub session: Session,
 }
 
 impl EditableHeaderProps {
@@ -55,152 +53,95 @@ impl EditableHeaderProps {
             Some((idx, _)) => split[..idx].to_owned(),
         }
     }
+
+    fn is_valid(&self, value: &Option<String>, placeholder: &str) -> bool {
+        let Some(value) = value else {
+            return true;
+        };
+
+        if value == placeholder || Some(value) == self.initial_value.as_ref() {
+            return true;
+        }
+
+        let metadata = &self.metadata;
+        let Some(table_columns) = metadata.get_table_columns() else {
+            return true;
+        };
+
+        !table_columns
+            .iter()
+            .chain(metadata.get_expression_columns())
+            .chain(metadata.get_window_columns())
+            .contains(value)
+    }
 }
 
-pub enum EditableHeaderMsg {
-    SetNewValue(String),
-    OnClick(()),
-}
-
-#[derive(Debug)]
-pub struct EditableHeader {
-    noderef: NodeRef,
-    edited: bool,
-    valid: bool,
-    value: Option<String>,
-    placeholder: String,
-}
-
-impl Component for EditableHeader {
-    type Message = EditableHeaderMsg;
-    type Properties = EditableHeaderProps;
-
-    fn create(ctx: &yew::prelude::Context<Self>) -> Self {
-        Self {
-            value: ctx.props().initial_value.clone(),
-            placeholder: ctx.props().split_placeholder(),
-            valid: true,
-            noderef: NodeRef::default(),
-            edited: false,
-        }
+#[function_component(EditableHeader)]
+pub fn editable_header(props: &EditableHeaderProps) -> Html {
+    let noderef = use_node_ref();
+    let placeholder = props.split_placeholder();
+    let edited = props.value != props.initial_value;
+    let valid = props.is_valid(&props.value, &placeholder);
+    let mut classes = classes!("sidebar_header_contents");
+    if props.editable {
+        classes.push("editable");
     }
 
-    fn changed(&mut self, ctx: &yew::prelude::Context<Self>, old_props: &Self::Properties) -> bool {
-        if ctx.props().reset_count != old_props.reset_count {
-            self.value.clone_from(&ctx.props().initial_value);
-        }
-        if ctx.props().initial_value != old_props.initial_value {
-            self.edited = false;
-            self.value.clone_from(&ctx.props().initial_value);
-        }
-        if !ctx.props().editable {
-            self.edited = false;
-        }
-        self.placeholder = ctx.props().split_placeholder();
-        ctx.props() != old_props
+    if !valid {
+        classes.push("invalid");
     }
 
-    fn update(&mut self, ctx: &yew::prelude::Context<Self>, msg: Self::Message) -> bool {
-        match msg {
-            EditableHeaderMsg::SetNewValue(new_value) => {
-                let maybe_value = (!new_value.is_empty()).then_some(new_value.clone());
-                self.edited = ctx.props().initial_value != maybe_value;
-
-                self.valid = (|| -> Option<bool> {
-                    if maybe_value
-                        .as_ref()
-                        .map(|v| v == &self.placeholder)
-                        .unwrap_or(true)
-                    {
-                        return Some(true);
-                    }
-                    if !self.edited {
-                        return Some(true);
-                    }
-                    let metadata = &ctx.props().metadata;
-                    let expressions = metadata.get_expression_columns();
-                    let windows = metadata.get_window_columns();
-                    let found = metadata
-                        .get_table_columns()?
-                        .iter()
-                        .chain(expressions)
-                        .chain(windows)
-                        .contains(&new_value);
-                    Some(!found)
-                })()
-                .unwrap_or(true);
-
-                self.value.clone_from(&maybe_value);
-                ctx.props().on_change.emit((maybe_value, self.valid));
-                true
-            },
-            EditableHeaderMsg::OnClick(()) => {
-                self.noderef
-                    .cast::<HtmlInputElement>()
-                    .unwrap()
-                    .focus()
-                    .unwrap();
-                false
-            },
-        }
+    if edited {
+        classes.push("edited");
     }
 
-    fn view(&self, ctx: &yew::prelude::Context<Self>) -> Html {
-        let mut classes = classes!("sidebar_header_contents");
-        if ctx.props().editable {
-            classes.push("editable");
-        }
+    let on_value = {
+        let props = props.clone();
+        let placeholder = placeholder.clone();
+        Callback::from(move |value: String| {
+            let value = (!value.is_empty()).then_some(value);
+            let valid = props.is_valid(&value, &placeholder);
+            props.on_change.emit((value, valid));
+        })
+    };
 
-        if !self.valid {
-            classes.push("invalid");
-        }
-
-        if self.edited {
-            classes.push("edited");
-        }
-
-        let onkeyup = ctx.link().callback(|e: KeyboardEvent| {
-            let value = e.target_unchecked_into::<HtmlInputElement>().value();
-            EditableHeaderMsg::SetNewValue(value)
-        });
-
-        let onblur = ctx.link().callback(|e: FocusEvent| {
-            let value = e.target_unchecked_into::<HtmlInputElement>().value();
-            EditableHeaderMsg::SetNewValue(value)
-        });
-
-        let update_on_input = ctx.props().update_on_input;
-        let oninput = ctx.link().batch_callback(move |e: yew::InputEvent| {
+    let onkeyup =
+        on_value.reform(|e: KeyboardEvent| e.target_unchecked_into::<HtmlInputElement>().value());
+    let onblur =
+        on_value.reform(|e: FocusEvent| e.target_unchecked_into::<HtmlInputElement>().value());
+    let oninput = {
+        let update_on_input = props.update_on_input;
+        let on_value = on_value.clone();
+        Callback::from(move |e: InputEvent| {
             if update_on_input {
-                let value = e.target_unchecked_into::<HtmlInputElement>().value();
-                vec![EditableHeaderMsg::SetNewValue(value)]
-            } else {
-                vec![]
+                on_value.emit(e.target_unchecked_into::<HtmlInputElement>().value());
             }
-        });
+        })
+    };
 
-        html! {
-            <div class={classes} onclick={ctx.link().callback(|_| EditableHeaderMsg::OnClick(()))}>
-                if let Some(icon) = ctx.props().icon_type { <TypeIcon ty={icon} /> }
-                <input
-                    ref={self.noderef.clone()}
-                    type="search"
-                    class="sidebar_header_title"
-                    disabled={!ctx.props().editable}
-                    {onblur}
-                    {onkeyup}
-                    {oninput}
-                    value={self.value.clone()}
-                    placeholder={self.placeholder.clone()}
-                />
-            </div>
-        }
+    let onclick = {
+        let noderef = noderef.clone();
+        Callback::from(move |_: MouseEvent| {
+            if let Some(input) = noderef.cast::<HtmlInputElement>() {
+                let _ = input.focus();
+            }
+        })
+    };
+
+    html! {
+        <div class={classes} {onclick}>
+            if let Some(icon) = props.icon_type { <TypeIcon ty={icon} /> }
+            <input
+                ref={noderef}
+                type="search"
+                class="sidebar_header_title"
+                disabled={!props.editable}
+                {onblur}
+                {onkeyup}
+                {oninput}
+                value={props.value.clone()}
+                {placeholder}
+            />
+        </div>
     }
-}
-
-#[derive(Default, Debug, PartialEq, Copy, Clone)]
-pub enum ValueState {
-    #[default]
-    Unedited,
-    Edited,
 }

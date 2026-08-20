@@ -27,6 +27,7 @@ import type {
 } from "@perspective-dev/viewer";
 import type { RegularTableElement } from "regular-table";
 import type { CellMetadata, DataResponse } from "regular-table/dist/esm/types";
+import type { GradientStopRgb } from "./color_utils.js";
 
 // Re-export types from regular-table for use throughout the codebase
 export type { RegularTableElement as RegularTable };
@@ -108,17 +109,18 @@ export interface ColumnConfig {
     /** String / datetime columns: the applied color (CSS color). */
     color?: string;
 
-    /** Numeric columns: positive-value foreground color (CSS color). */
-    pos_fg_color?: string;
+    /**
+     * Numeric columns: foreground sign-split colors — a CSS
+     * `linear-gradient(to right, #rrggbb 0%, #rrggbb 100%)`, t-ordered
+     * (the first stop is the negative color, the last the positive).
+     */
+    fg_colors?: string;
 
-    /** Numeric columns: negative-value foreground color (CSS color). */
-    neg_fg_color?: string;
-
-    /** Numeric columns: positive-value background color (CSS color). */
-    pos_bg_color?: string;
-
-    /** Numeric columns: negative-value background color (CSS color). */
-    neg_bg_color?: string;
+    /**
+     * Numeric columns: background color scale, t-ordered with the
+     * sign pivot at offset 0.5.
+     */
+    bg_colors?: string;
 
     /**
      * Numeric columns: the absolute value at which bar/gradient
@@ -148,9 +150,16 @@ export interface ColumnConfig {
 
     /**
      * String columns: color mode (`"foreground"`, `"background"` or
-     * `"series"`), paired with `color`.
+     * `"series"`). `"foreground"` / `"background"` pair with `color`;
+     * `"series"` pairs with `palette`.
      */
     string_color_mode?: string;
+
+    /**
+     * String columns, `"series"` mode: explicit palette assigned to
+     * distinct values in encounter order.
+     */
+    palette?: string;
 
     /**
      * Datetime columns: color mode (`"foreground"` or `"background"`),
@@ -243,6 +252,10 @@ export interface DatagridModel {
     _neg_fg_color: ColorRecord;
     _pos_bg_color: ColorRecord;
     _neg_bg_color: ColorRecord;
+
+    _default_bg_color_stops: GradientStopRgb[];
+
+    _series_palette: string[];
     _column_paths: string[];
     _column_types: ColumnType[];
     _is_editable: boolean[];

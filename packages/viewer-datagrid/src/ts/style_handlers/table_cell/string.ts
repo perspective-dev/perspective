@@ -11,12 +11,9 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import {
-    hslToRgb,
     infer_foreground_from_background,
     parseColor,
     rgbaToRgb,
-    rgbToHex,
-    rgbToHsl,
 } from "../../color_utils.js";
 import type { DatagridModel, ColumnConfig, ColorRecord } from "../../types.js";
 
@@ -28,6 +25,9 @@ interface CellMetaWithExtras {
 
 interface PluginWithColor extends Omit<ColumnConfig, "color"> {
     color?: ColorRecord;
+
+    /** `palette` parsed once at restore (`#rrggbb` entries). */
+    palette_colors?: string[];
 }
 
 export function cell_style_string(
@@ -87,10 +87,15 @@ export function cell_style_string(
         }
 
         const color_seed = series_map.get(metadata.user!) ?? 0;
-        const [h, s, l] = rgbToHsl(parseColor(hex));
-        const rotated = hslToRgb([h + ((color_seed * 150) % 360), s, l]);
-        const [r2, g2, b2] = rotated;
-        const hex2 = rgbToHex(rotated);
+
+        const palette_colors = plugin?.palette_colors;
+        const palette =
+            palette_colors && palette_colors.length > 0
+                ? palette_colors
+                : model._series_palette;
+
+        const hex2 = palette[color_seed % palette.length];
+        const [r2, g2, b2] = parseColor(hex2);
         const source = model._plugin_background as [number, number, number];
         const foreground = infer_foreground_from_background(
             rgbaToRgb([r2, g2, b2, 1], source),

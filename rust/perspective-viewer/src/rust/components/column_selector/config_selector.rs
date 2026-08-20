@@ -279,6 +279,14 @@ impl Component for ConfigSelector {
                     ctx.props().metadata.get_features().unwrap(),
                 );
 
+                super::close_column_settings_if_displaced(
+                    &ctx.props().presentation,
+                    &ctx.props().renderer,
+                    &ctx.props().metadata,
+                    &ctx.props().view_config,
+                    &update,
+                );
+
                 {
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();

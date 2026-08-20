@@ -81,6 +81,16 @@ perspective-viewer [theme="Botanical"] {
     --psp-charts--series-8--color: rgb(210, 140, 80);
     --psp-charts--series-9--color: rgb(130, 120, 190);
     --psp-charts--series-10--color: rgb(170, 200, 110);
+    --psp-datagrid--series-1--color: rgb(90, 158, 75);
+    --psp-datagrid--series-2--color: rgb(206, 176, 104);
+    --psp-datagrid--series-3--color: rgb(160, 110, 180);
+    --psp-datagrid--series-4--color: rgb(80, 170, 150);
+    --psp-datagrid--series-5--color: rgb(140, 170, 90);
+    --psp-datagrid--series-6--color: rgb(200, 120, 140);
+    --psp-datagrid--series-7--color: rgb(100, 150, 190);
+    --psp-datagrid--series-8--color: rgb(210, 140, 80);
+    --psp-datagrid--series-9--color: rgb(130, 120, 190);
+    --psp-datagrid--series-10--color: rgb(170, 200, 110);
 
     --psp-charts--gradient--background: linear-gradient(
         #e8836a 0%,

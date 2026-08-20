@@ -20,7 +20,7 @@ use perspective_client::config::ViewConfig;
 use yew::prelude::*;
 
 use crate::components::column_settings_sidebar::style_tab::primitive_field::{
-    BoolField, ColorField, ColorRangeField, EnumField, NumberFieldPrimitive,
+    BoolField, ColorField, EnumField, NumberFieldPrimitive,
 };
 use crate::config::ControlSpec;
 use crate::queries::get_plugin_config_schema;
@@ -143,32 +143,6 @@ pub fn PluginTab(props: &PluginTabProps) -> Html {
                         />
                     }
                 },
-                ControlSpec::ColorRange {
-                    key_pos,
-                    key_neg,
-                    default_pos,
-                    default_neg,
-                    is_gradient,
-                } => {
-                    let current_pos = raw_config
-                        .get(&key_pos)
-                        .and_then(|v| v.as_str().map(|s| s.to_string()));
-                    let current_neg = raw_config
-                        .get(&key_neg)
-                        .and_then(|v| v.as_str().map(|s| s.to_string()));
-                    html! {
-                        <ColorRangeField
-                            field_key_pos={key_pos}
-                            field_key_neg={key_neg}
-                            {default_pos}
-                            {default_neg}
-                            {current_pos}
-                            {current_neg}
-                            {is_gradient}
-                            on_change={on_change.clone()}
-                        />
-                    }
-                },
                 ControlSpec::Number {
                     key,
                     default,
@@ -199,7 +173,9 @@ pub fn PluginTab(props: &PluginTabProps) -> Html {
                 | ControlSpec::StringFormat
                 | ControlSpec::Symbols { .. }
                 | ControlSpec::NumberFormat
-                | ControlSpec::String { .. } => {
+                | ControlSpec::String { .. }
+                | ControlSpec::Palette { .. }
+                | ControlSpec::GradientStops { .. } => {
                     return None;
                 },
             };

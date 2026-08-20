@@ -1088,6 +1088,11 @@ export function layoutForRecord(
  * Draw axes chrome + legend + tooltip onto the overlay canvas.
  */
 export function renderBarChromeOverlay(chart: SeriesChart): void {
+    paintBarChromeOverlay(chart);
+    chart.presentOverlay();
+}
+
+function paintBarChromeOverlay(chart: SeriesChart): void {
     if (
         !chart._chromeCanvas ||
         !chart._lastLayout ||

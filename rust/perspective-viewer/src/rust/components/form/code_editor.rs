@@ -45,6 +45,9 @@ pub struct CodeEditorProps {
     #[prop_or_default]
     pub error: Option<ExprValidationError>,
 
+    #[prop_or_default]
+    pub contained: bool,
+
     /// Selected theme name, threaded for PortalModal consumers.
     #[prop_or_default]
     pub theme: String,
@@ -165,20 +168,27 @@ pub fn code_editor(props: &CodeEditorProps) -> Html {
         ))
         .collect::<Html>();
 
-    let class = if props.wordwrap {
-        "wordwrap scrollable"
-    } else {
-        "scrollable"
+    let mut outer_class = classes!("scrollable");
+    let mut inner_class = classes!("editor-inner", "scrollable");
+
+    if props.wordwrap {
+        outer_class.push("wordwrap");
+        inner_class.push("wordwrap");
     };
+
+    if props.contained {
+        outer_class.push("contained")
+    }
+
     clone!(props.disabled);
     html! {
         <>
-            <div id="editor" {class}>
+            <div id="editor" class={outer_class}>
                 <div id="line_numbers" ref={lineno_ref}>{ line_numbers }</div>
                 <MirroredTextarea
                     id="textarea_editable"
                     mirror_id="content"
-                    class={classes!("editor-inner", class)}
+                    class={inner_class}
                     mirror={terms}
                     {textarea_ref}
                     mirror_ref={content_ref}

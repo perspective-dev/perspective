@@ -115,6 +115,11 @@ export class WorkerRenderer {
      */
     private _composeCanvas: OffscreenCanvas | null = null;
     private _composeCtx: OffscreenCanvasRenderingContext2D | null = null;
+
+    private _lastPlot: ImageBitmap | null = null;
+
+    private _frameSerial = 0;
+    private _overlayPresentQueued = false;
     client: Client;
     view: View;
 
@@ -203,9 +208,11 @@ export class WorkerRenderer {
         this.chrome = msg.chromeCanvas ?? new OffscreenCanvas(w, h);
         if (msg.renderMode === "blit") {
             this.glManager.setFrameCallback((bitmap) => {
+                this._frameSerial += 1;
                 const frame = this._composeFrame(bitmap);
                 this.post({ kind: "frameBitmap", bitmap: frame }, [frame]);
             });
+            this.chartImpl.setOverlayPresenter?.(() => this._presentOverlay());
         }
 
         this.cssWidth = msg.cssWidth;
@@ -646,12 +653,45 @@ export class WorkerRenderer {
         }
 
         ctx.drawImage(plot, 0, 0);
-        plot.close();
+        if (this._lastPlot !== plot) {
+            this._lastPlot?.close();
+            this._lastPlot = plot;
+        }
+
         if (this.chrome.width === w && this.chrome.height === h) {
             ctx.drawImage(this.chrome, 0, 0);
         }
 
         return canvas.transferToImageBitmap();
+    }
+
+    private _presentOverlay(): void {
+        if (this._overlayPresentQueued) {
+            return;
+        }
+
+        this._overlayPresentQueued = true;
+        const mark = this._frameSerial;
+        queueMicrotask(() => {
+            this._overlayPresentQueued = false;
+            const plot = this._lastPlot;
+            if (this._frameSerial !== mark || !plot) {
+                return;
+            }
+
+            const w = Math.max(1, Math.round(this.cssWidth * this.dpr));
+            const h = Math.max(1, Math.round(this.cssHeight * this.dpr));
+            if (plot.width !== w || plot.height !== h) {
+                return;
+            }
+
+            const frame = this._composeFrame(plot);
+            if (frame === plot) {
+                return;
+            }
+
+            this.post({ kind: "frameBitmap", bitmap: frame }, [frame]);
+        });
     }
 
     /**
@@ -715,6 +755,8 @@ export class WorkerRenderer {
         // next-RAF `drain()` can't paint/present against a dead
         // context (the "scheduler: present failed" path).
         unregister(this.glManager);
+        this._lastPlot?.close();
+        this._lastPlot = null;
         this.chartImpl.destroy();
         this.glManager.destroy();
     }

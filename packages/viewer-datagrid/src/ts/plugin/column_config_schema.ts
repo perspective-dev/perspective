@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { ColumnType } from "@perspective-dev/client";
+import { colorsToCss, rgbToHex, stopsToCss } from "../color_utils.js";
 import type { ColumnConfig, DatagridPluginElement } from "../types.js";
 
 interface ViewerConfigLike {
@@ -84,12 +85,13 @@ export default function column_config_schema(
         const fg_mode = (current_value?.number_fg_mode as string) ?? "color";
         if (fg_mode !== "disabled") {
             fields.push({
-                kind: "ColorRange",
-                key_pos: "pos_fg_color" satisfies keyof ColumnConfig,
-                key_neg: "neg_fg_color" satisfies keyof ColumnConfig,
-                default_pos: pos_fg,
-                default_neg: neg_fg,
-                is_gradient: false,
+                kind: "GradientStops",
+                key: "fg_colors" satisfies keyof ColumnConfig,
+                default: stopsToCss([
+                    { color: neg_fg, offset: 0 },
+                    { color: pos_fg, offset: 1 },
+                ]),
+                discrete: true,
             });
         }
 
@@ -116,14 +118,36 @@ export default function column_config_schema(
 
         const bg_mode = (current_value?.number_bg_mode as string) ?? "disabled";
         if (bg_mode !== "disabled") {
-            fields.push({
-                kind: "ColorRange",
-                key_pos: "pos_bg_color" satisfies keyof ColumnConfig,
-                key_neg: "neg_bg_color" satisfies keyof ColumnConfig,
-                default_pos: pos_bg,
-                default_neg: neg_bg,
-                is_gradient: bg_mode === "gradient" || bg_mode === "pulse",
-            });
+            if (bg_mode === "color") {
+                fields.push({
+                    kind: "GradientStops",
+                    key: "bg_colors" satisfies keyof ColumnConfig,
+                    default: stopsToCss([
+                        { color: neg_bg, offset: 0 },
+                        { color: pos_bg, offset: 1 },
+                    ]),
+                    discrete: true,
+                });
+            } else {
+                fields.push({
+                    kind: "GradientStops",
+                    key: "bg_colors" satisfies keyof ColumnConfig,
+                    default: stopsToCss([
+                        { color: neg_bg, offset: 0 },
+                        {
+                            color: rgbToHex(
+                                this.model!._plugin_background as [
+                                    number,
+                                    number,
+                                    number,
+                                ],
+                            ),
+                            offset: 0.5,
+                        },
+                        { color: pos_bg, offset: 1 },
+                    ]),
+                });
+            }
         }
 
         if (bg_mode === "gradient") {
@@ -176,7 +200,13 @@ export default function column_config_schema(
         });
 
         const str_mode = (current_value?.string_color_mode as string) ?? "none";
-        if (str_mode !== "none") {
+        if (str_mode === "series") {
+            fields.push({
+                kind: "Palette",
+                key: "palette" satisfies keyof ColumnConfig,
+                default: colorsToCss(this.model!._series_palette),
+            });
+        } else if (str_mode !== "none") {
             fields.push({
                 kind: "Color",
                 key: "color" satisfies keyof ColumnConfig,

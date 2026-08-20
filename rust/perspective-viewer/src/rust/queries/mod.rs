@@ -29,6 +29,7 @@ mod exports;
 mod fetch_column_stats;
 mod get_viewer_config;
 mod is_invalid_drop;
+mod palette_set;
 mod plugin_column_styles;
 mod validate_expression;
 
@@ -40,5 +41,6 @@ pub use self::exports::*;
 pub use self::fetch_column_stats::*;
 pub use self::get_viewer_config::*;
 pub use self::is_invalid_drop::*;
+pub use self::palette_set::*;
 pub use self::plugin_column_styles::*;
 pub use self::validate_expression::*;

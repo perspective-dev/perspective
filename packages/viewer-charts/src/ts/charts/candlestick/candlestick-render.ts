@@ -230,7 +230,15 @@ export function renderCandlestickFrame(
     chart._defer2D(() => renderCandlestickChromeOverlay(chart));
 }
 
+/**
+ * Draw axes chrome + (optional) tooltip onto the overlay canvas.
+ */
 export function renderCandlestickChromeOverlay(chart: CandlestickChart): void {
+    paintCandlestickChromeOverlay(chart);
+    chart.presentOverlay();
+}
+
+function paintCandlestickChromeOverlay(chart: CandlestickChart): void {
     if (
         !chart._chromeCanvas ||
         !chart._lastLayout ||

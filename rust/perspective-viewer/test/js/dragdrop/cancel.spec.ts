@@ -18,6 +18,7 @@ import {
     getSettingsPanelContents,
     INACTIVE_DRAG,
     shadowDragCancel,
+    shadowDragReleaseInGap,
 } from "./dragdrop_test_utils";
 
 test.beforeEach(async ({ page }) => {
@@ -155,6 +156,65 @@ test.describe("Drag and Drop", () => {
             const config = await view.save();
             expect(config.filter).toEqual([]);
             expect(config.columns).toEqual(["Sales"]);
+            const contents = await getSettingsPanelContents(page);
+            await compareContentsToSnapshot(contents);
+        });
+
+        test("drag inactive column over Group By, release in gap below it", async ({
+            page,
+        }) => {
+            const view = new PageView(page);
+            await view.restore({ settings: true, columns: ["Sales"] });
+            await shadowDragReleaseInGap(
+                page,
+                view.container.locator(INACTIVE_DRAG).first(),
+                view.container.locator("#group_by"),
+                view.container.locator("#split_by"),
+            );
+
+            await expect(view.container.locator("#top_panel")).not.toHaveClass(
+                /dragdrop-highlight/,
+            );
+
+            await expect(
+                view.container.locator("#active-columns"),
+            ).not.toHaveClass(/dragdrop-highlight/);
+
+            const config = await view.save();
+            expect(config.group_by).toEqual([]);
+            expect(config.split_by).toEqual([]);
+            expect(config.columns).toEqual(["Sales"]);
+            const contents = await getSettingsPanelContents(page);
+            await compareContentsToSnapshot(contents);
+        });
+
+        test("drag active column over Sort, release in gap below it", async ({
+            page,
+        }) => {
+            const view = new PageView(page);
+            await view.restore({
+                settings: true,
+                columns: ["Sales", "Profit"],
+            });
+
+            await shadowDragReleaseInGap(
+                page,
+                view.container.locator(ACTIVE_DRAG).first(),
+                view.container.locator("#sort"),
+                view.container.locator("#filter"),
+            );
+
+            await expect(view.container.locator("#top_panel")).not.toHaveClass(
+                /dragdrop-highlight/,
+            );
+
+            await expect(
+                view.container.locator("#active-columns"),
+            ).not.toHaveClass(/dragdrop-highlight/);
+
+            const config = await view.save();
+            expect(config.sort).toEqual([]);
+            expect(config.columns).toEqual(["Sales", "Profit"]);
             const contents = await getSettingsPanelContents(page);
             await compareContentsToSnapshot(contents);
         });

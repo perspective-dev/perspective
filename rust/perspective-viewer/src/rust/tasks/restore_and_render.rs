@@ -114,6 +114,11 @@ pub fn restore_and_render(
         })
         .await?;
 
+        if renderer.needs_restyle() {
+            renderer.restyle_all().await?;
+        }
+
+        presentation.publish_theme_config().await?;
         Ok(())
     })
 }

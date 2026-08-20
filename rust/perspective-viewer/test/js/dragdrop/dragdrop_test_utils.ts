@@ -68,9 +68,9 @@ export async function shadowDragCancel(
     const srcX = srcBox.x + srcBox.width / 2;
     const srcY = srcBox.y + srcBox.height / 2;
 
-    await page.evaluate(() => {
+    await src.evaluate((el) => {
         window["dragend_resolvers"] = Promise.withResolvers();
-        document.body.addEventListener("dragend", () => {
+        el.addEventListener("dragend", () => {
             window["dragend_resolvers"].resolve();
         });
     });
@@ -93,6 +93,48 @@ export async function shadowDragCancel(
 
     // Cancel the drag (fires dragend with no preceding drop).
     await page.keyboard.press("Escape");
+    await page.evaluate(async () => {
+        await window["dragend_resolvers"].promise;
+    });
+}
+
+export async function shadowDragReleaseInGap(
+    page: Page,
+    src: Locator,
+    overTgt: Locator,
+    belowTgt: Locator,
+) {
+    const srcBox = (await src.boundingBox())!;
+    const overBox = (await overTgt.boundingBox())!;
+    const belowBox = (await belowTgt.boundingBox())!;
+    const gapTop = overBox.y + overBox.height;
+    const gap = belowBox.y - gapTop;
+    if (gap <= 0) {
+        throw new Error(`No vertical gap between drop targets (${gap}px)`);
+    }
+
+    await src.evaluate((el) => {
+        window["dragend_resolvers"] = Promise.withResolvers();
+        el.addEventListener("dragend", () => {
+            window["dragend_resolvers"].resolve();
+        });
+    });
+
+    await page.mouse.move(
+        srcBox.x + srcBox.width / 2,
+        srcBox.y + srcBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(srcBox.x + srcBox.width / 2 + 5, srcBox.y, {
+        steps: 2,
+    });
+
+    const x = overBox.x + overBox.width / 2;
+    await page.mouse.move(x, overBox.y + overBox.height / 2, { steps: 10 });
+    await page.waitForTimeout(100);
+    await page.mouse.move(x, gapTop + gap / 2, { steps: 5 });
+    await page.waitForTimeout(100);
+    await page.mouse.up();
     await page.evaluate(async () => {
         await window["dragend_resolvers"].promise;
     });

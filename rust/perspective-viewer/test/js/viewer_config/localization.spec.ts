@@ -43,7 +43,7 @@ test.describe("Localization", function () {
                 .filter((x) => x != "");
         });
 
-        expect(contents).toEqual(["+", "-"]);
+        expect(contents).toEqual([]);
     });
 
     const intl = fs

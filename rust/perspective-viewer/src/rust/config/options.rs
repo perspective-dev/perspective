@@ -87,3 +87,13 @@ pub struct GetClientOptions {
     #[ts(optional)]
     pub panel: Option<String>,
 }
+
+/// Options for the `saveWorkspace()` method.
+#[derive(Deserialize, Default, TS)]
+pub struct SaveWorkspaceOptions {
+    /// When `true`, the emitted `palette` is the full set the element
+    /// holds rather than only the values the panels reference.
+    #[serde(default)]
+    #[ts(optional)]
+    pub full_palette: Option<bool>,
+}

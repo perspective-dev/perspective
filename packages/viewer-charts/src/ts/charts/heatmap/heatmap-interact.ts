@@ -254,9 +254,10 @@ export function renderHeatmapTooltip(chart: HeatmapChart): void {
 
     const xPath =
         chart._xAxisMode.mode === "numeric" && xPositions
-            ? chart.getColumnFormatter(chart._groupBy[0], "value")(
-                  xPositions[cell.xIdx],
-              )
+            ? chart.getColumnFormatter(
+                  chart._groupBy[0],
+                  "value",
+              )(xPositions[cell.xIdx])
             : formatHierarchicalPath(xLevels, cell.xIdx);
     const yPath = formatHierarchicalPath(yLevels, cell.yIdx);
     if (xPath) {

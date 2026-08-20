@@ -94,6 +94,7 @@ pub fn update_theme(
         .into_iter()
         .collect::<ApiResult<Vec<_>>>()?;
 
+        presentation.publish_theme_config().await?;
         Ok(())
     });
 }

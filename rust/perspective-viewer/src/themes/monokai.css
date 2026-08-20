@@ -78,6 +78,16 @@ perspective-viewer [theme="Monokai"] {
     --psp-charts--series-8--color: rgb(221, 99, 103);
     --psp-charts--series-9--color: rgb(120, 104, 206);
     --psp-charts--series-10--color: rgb(23, 166, 123);
+    --psp-datagrid--series-1--color: rgb(71, 120, 194);
+    --psp-datagrid--series-2--color: rgb(204, 120, 48);
+    --psp-datagrid--series-3--color: rgb(158, 84, 192);
+    --psp-datagrid--series-4--color: rgb(51, 150, 153);
+    --psp-datagrid--series-5--color: rgb(102, 114, 143);
+    --psp-datagrid--series-6--color: rgb(211, 103, 189);
+    --psp-datagrid--series-7--color: rgb(109, 124, 77);
+    --psp-datagrid--series-8--color: rgb(221, 99, 103);
+    --psp-datagrid--series-9--color: rgb(120, 104, 206);
+    --psp-datagrid--series-10--color: rgb(23, 166, 123);
     --psp-charts--gradient--background: linear-gradient(
         #dd6367 0%,
         #242526 50%,
@@ -157,6 +167,18 @@ perspective-viewer [theme="Monokai"] {
     --psp-charts--series-10--color: #e6db74;
     --psp-charts--series-11--color: #a6e22e;
     --psp-charts--series-12--color: #ae81ff;
+    --psp-datagrid--series-1--color: #78dce8;
+    --psp-datagrid--series-2--color: #ff6188;
+    --psp-datagrid--series-3--color: #fc9867;
+    --psp-datagrid--series-4--color: #ffd866;
+    --psp-datagrid--series-5--color: #a9dc76;
+    --psp-datagrid--series-6--color: #ab9df2;
+    --psp-datagrid--series-7--color: #66d9ef;
+    --psp-datagrid--series-8--color: #f92672;
+    --psp-datagrid--series-9--color: #fd971f;
+    --psp-datagrid--series-10--color: #e6db74;
+    --psp-datagrid--series-11--color: #a6e22e;
+    --psp-datagrid--series-12--color: #ae81ff;
 
     --psp-charts--gradient--background: linear-gradient(
         #ff6188 0%,

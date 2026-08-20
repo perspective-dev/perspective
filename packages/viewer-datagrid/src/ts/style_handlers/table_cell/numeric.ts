@@ -13,8 +13,11 @@
 import { style_cell_flash } from "./cell_flash.js";
 import { format_raw } from "../../data_listener/format_cell.js";
 import {
-    rgbaToRgb,
     infer_foreground_from_background,
+    rgbaToRgb,
+    rgbToHex,
+    sampleGradientRgb,
+    type GradientStopRgb,
 } from "../../color_utils.js";
 import type { DatagridModel, ColumnConfig, ColorRecord } from "../../types.js";
 import type { ColumnType } from "@perspective-dev/client";
@@ -37,6 +40,12 @@ interface PluginWithColors
     neg_bg_color?: ColorRecord;
     pos_fg_color?: ColorRecord;
     neg_fg_color?: ColorRecord;
+
+    /**
+     * Resolved `bg_colors` scale for the gradient sampler, written by
+     * `restore.ts` when the key is stored.
+     */
+    bg_color_stops?: GradientStopRgb[];
 }
 
 /**
@@ -138,21 +147,26 @@ export function cell_style_numeric(
             td.style.animation = "";
             td.style.backgroundColor = hex;
         } else if (plugin?.number_bg_mode === "gradient") {
-            const a = Math.max(
-                0,
-                Math.min(
-                    1,
-                    Math.abs((metadata.user ?? 0) / (plugin.bg_gradient ?? 1)),
-                ),
-            );
-            const source = model._plugin_background as [number, number, number];
-            const foreground = infer_foreground_from_background(
-                rgbaToRgb([r, g, b, a], source),
-            );
+            const stops =
+                plugin.bg_color_stops ?? model._default_bg_color_stops;
+
+            const t =
+                0.5 +
+                0.5 *
+                    Math.max(
+                        -1,
+                        Math.min(
+                            1,
+                            (metadata.user ?? 0) / (plugin.bg_gradient ?? 1),
+                        ),
+                    );
+
+            const sample = sampleGradientRgb(stops, t);
+            const foreground = infer_foreground_from_background(sample);
 
             td.style.animation = "";
             td.style.color = foreground;
-            td.style.backgroundColor = `rgba(${r},${g},${b},${a})`;
+            td.style.backgroundColor = rgbToHex(sample);
         } else if (plugin?.number_bg_mode === "pulse") {
             style_cell_flash(
                 model,

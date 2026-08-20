@@ -16,12 +16,13 @@
         position: relative;
         flex: 1 1 auto;
         height: 100%;
+        font-size: 12px;
 
         &:after {
             content: attr(data-value) " ";
             visibility: hidden;
             white-space: nowrap;
-            padding-right: 17px;
+            padding-right: 20px;
         }
 
         select {

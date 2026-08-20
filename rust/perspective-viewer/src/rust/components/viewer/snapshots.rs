@@ -21,21 +21,18 @@ use yew::prelude::*;
 
 use super::PerspectiveViewer;
 use crate::presentation::{DragDropProps, PresentationProps};
-use crate::tasks::resize_visible_panels;
 use crate::renderer::RendererProps;
 use crate::session::{SessionProps, TableLoadState, ViewStats};
+use crate::tasks::resize_visible_panels;
 
 impl PerspectiveViewer {
-    /// A session snapshot can flip the column-settings drawer's mount
-    /// predicate without any `UpdateColumnSettings` traffic — e.g. a drag
-    /// replacing the open column in `columns` invalidates its locator, and
-    /// this snapshot's render unmounts the DOCKED drawer, moving
-    /// `#main_panel_container`. Unlike the presentation-driven transitions
-    /// (deferred + presized in `settings.rs`), the snapshot is applied
-    /// immediately — it feeds the column selector, stats, and the config
-    /// redraw already racing this render, so a staged frame would be
-    /// stale on arrival — and the panels are owed the reactive geometry
-    /// finalizer on this render's commit instead (I6).
+    pub(super) fn refresh_session_snapshot(&mut self, ctx: &Context<Self>) {
+        let props = self.active_session.to_props();
+        if props != self.session_props {
+            self.on_update_session(ctx, props);
+        }
+    }
+
     pub(super) fn on_update_session(&mut self, ctx: &Context<Self>, props: SessionProps) -> bool {
         let changed = props != self.session_props;
         let was_mounted =
@@ -43,7 +40,10 @@ impl PerspectiveViewer {
         self.session_props = props;
         let now_mounted =
             self.is_column_settings_mounted(&self.presentation_props.open_column_settings);
-        if self.settings_geometry.column_settings_pinned && was_mounted != now_mounted {
+        if self.settings_geometry.column_settings_pinned
+            && was_mounted != now_mounted
+            && !self.settings_geometry.column_settings_commit_pending
+        {
             let (notify, rendered) = channel::<()>();
             self.on_rendered.push(notify);
             let workspace = ctx.props().workspace.clone();

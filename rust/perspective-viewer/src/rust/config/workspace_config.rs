@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 
 use perspective_client::config::Filter;
 
-use crate::config::{PanelViewerConfig, ViewerConfigInitial};
+use crate::config::{CssKind, PanelViewerConfig, ViewerConfigInitial};
 
 /// The workspace config format (`{version, active?, layout, panels}`) —
 /// the multi-panel counterpart of the single-panel [`ViewerConfig`] — as
@@ -56,6 +56,14 @@ pub struct WorkspaceConfig {
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub masters: Vec<String>,
+
+    /// Named color-scale definitions shared by every panel: CSS custom
+    /// property name (`--psp-user--<kind>-<name>`) → canonical CSS
+    /// value.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    #[ts(as = "Option<_>")]
+    #[ts(optional)]
+    pub palette: BTreeMap<String, String>,
 }
 
 /// The parse target of a workspace config in
@@ -79,15 +87,134 @@ pub struct WorkspaceConfigUpdate {
     /// The element-level global (master/detail cross-) filters to re-apply as
     /// a transient overlay on every DETAIL panel. Restored as one
     /// unattributed bucket: the next selection on any master replaces it.
+    /// `Option` so an explicit `undefined` property deserializes as
+    /// `None` like an absent key (also `masters` / `palette` below).
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
-    pub global_filters: Vec<Filter>,
+    pub global_filters: Option<Vec<Filter>>,
 
     /// The master (filter-source) panels, by saved `panels` key. An id not in
     /// `panels` warns and is dropped.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
-    pub masters: Vec<String>,
+    pub masters: Option<Vec<String>>,
+
+    /// Named color-scale definitions to apply to the host (see
+    /// [`WorkspaceConfig::palette`]), replacing any previously restored
+    /// palette.
+    #[serde(default)]
+    #[ts(as = "Option<_>")]
+    #[ts(optional)]
+    pub palette: Option<BTreeMap<String, String>>,
+}
+
+/// Validate a restored palette map: each key's `--psp-user--<kind>-`
+/// prefix selects the reader that canonicalizes its value.
+pub fn validate_palette(
+    palette: BTreeMap<String, String>,
+) -> Result<BTreeMap<String, String>, String> {
+    palette
+        .into_iter()
+        .map(|(name, value)| {
+            let kind = CssKind::of_var(&name).ok_or_else(|| {
+                format!(
+                    "`palette` key `{name}` must start with `--psp-user--gradient-`, \
+                     `--psp-user--palette-` or `--psp-user--color-`"
+                )
+            })?;
+
+            let canonical = kind
+                .canonicalize(&value)
+                .map_err(|error| format!("`palette[\"{name}\"]`: {error}"))?;
+
+            Ok((name, canonical))
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn palette_serializes_only_when_present() {
+        let config = WorkspaceConfig {
+            version: "x".to_owned(),
+            active: None,
+            layout: None,
+            panels: BTreeMap::new(),
+            global_filters: vec![],
+            masters: vec![],
+            palette: BTreeMap::new(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(&config).unwrap(),
+            json!({ "version": "x", "layout": null, "panels": {} })
+        );
+
+        let mut palette = BTreeMap::new();
+        palette.insert("--psp-user--color-hot".to_owned(), "#ff0000".to_owned());
+
+        let config = WorkspaceConfig { palette, ..config };
+        assert_eq!(
+            serde_json::to_value(&config).unwrap(),
+            json!({
+                "version": "x",
+                "layout": null,
+                "panels": {},
+                "palette": { "--psp-user--color-hot": "#ff0000" },
+            })
+        );
+    }
+
+    #[test]
+    fn update_palette_defaults_empty_and_validates_by_prefix() {
+        let update: WorkspaceConfigUpdate =
+            serde_json::from_value(json!({ "panels": {} })).unwrap();
+        assert!(update.palette.is_none());
+
+        let update: WorkspaceConfigUpdate = serde_json::from_value(json!({
+            "panels": {},
+            "palette": {
+                "--psp-user--gradient-1": "linear-gradient(#000, #fff)",
+                "--psp-user--palette-warm": "linear-gradient(90deg, RGB(255,0,0), #ff0)",
+                "--psp-user--color-hot": "#F00",
+            },
+        }))
+        .unwrap();
+
+        let valid = validate_palette(update.palette.unwrap()).unwrap();
+        assert_eq!(
+            valid.get("--psp-user--gradient-1").unwrap(),
+            "linear-gradient(to right, #000000 0%, #ffffff 100%)"
+        );
+        assert_eq!(
+            valid.get("--psp-user--palette-warm").unwrap(),
+            "linear-gradient(to right, #ff0000, #ffff00)"
+        );
+        assert_eq!(valid.get("--psp-user--color-hot").unwrap(), "#ff0000");
+
+        let bad = |name: &str, value: &str| {
+            let mut map = BTreeMap::new();
+            map.insert(name.to_owned(), value.to_owned());
+            validate_palette(map).unwrap_err()
+        };
+
+        assert!(bad("--psp-user--other-1", "#ff0000").contains("--psp-user--other-1"));
+        assert!(bad("--psp-charts--gradient", "#ff0000").contains("must start with"));
+        assert!(
+            bad(
+                "--psp-user--palette-1",
+                "linear-gradient(#000 0%, #fff 100%)"
+            )
+            .contains("--psp-user--palette-1")
+        );
+        assert!(bad("--psp-user--gradient-1", "#ff0000").contains("linear-gradient"));
+        assert!(bad("--psp-user--color-1", "red").contains("red"));
+    }
 }

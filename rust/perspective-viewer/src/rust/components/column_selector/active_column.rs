@@ -23,7 +23,7 @@ use super::expr_edit_button::*;
 use crate::components::column_dropdown::ColumnDropDownElement;
 use crate::components::column_selector::{EmptyColumn, InvalidColumn};
 use crate::config::ColumnSelectMode;
-use crate::presentation::{ColumnLocator, Presentation};
+use crate::presentation::{ColumnSettingsTarget, Presentation};
 use crate::queries::*;
 use crate::renderer::*;
 use crate::session::*;
@@ -51,7 +51,7 @@ pub struct ActiveColumnProps {
     pub onselect: Callback<()>,
 
     /// Fires when this component's expression/config button is clicked.
-    pub on_open_expr_panel: Callback<ColumnLocator>,
+    pub on_open_expr_panel: Callback<ColumnSettingsTarget>,
 
     /// Is this column in a grouped context (does the aggregate selector
     /// need to be visible)?

@@ -100,7 +100,10 @@ export function applyBodyCellStyles(
     const n_split_by = model._config.split_by.length;
     const group_by_len = model._config.group_by.length;
     const theme = model._pos_bg_color;
-    const menu_col = model._column_settings_selected_column;
+    const menu_col =
+        model._config.columns.length > 1
+            ? model._column_settings_selected_column
+            : undefined;
     const col_states: Map<number, ColState> = new Map();
     const col_state = (
         key: number,

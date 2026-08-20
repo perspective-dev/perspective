@@ -14,14 +14,16 @@ use perspective_client::clone;
 use perspective_client::config::{Filter, ViewConfigUpdate, WindowSpec};
 
 use super::apply_and_render;
-use crate::presentation::{ColumnLocator, ColumnSettingsTab, OpenColumnSettings, Presentation};
+use crate::presentation::{
+    ColumnSettingsTab, ColumnSettingsTarget, OpenColumnSettings, Presentation,
+};
 use crate::renderer::Renderer;
 use crate::session::Session;
 use crate::*;
 
 fn reopen(presentation: &Presentation, name: String) {
     presentation.set_open_column_settings(Some(OpenColumnSettings {
-        locator: Some(ColumnLocator::Window(name)),
+        target: Some(ColumnSettingsTarget::Column(name)),
         tab: Some(ColumnSettingsTab::Window),
     }));
 }
@@ -36,7 +38,6 @@ pub fn save_window(
     name: String,
     spec: WindowSpec,
 ) -> ApiResult<()> {
-    let presentation = presentation.clone();
     let task = {
         let mut windows = session.get_view_config().windows.clone();
         windows.insert(name.clone(), spec);
@@ -46,12 +47,8 @@ pub fn save_window(
         })
     }?;
 
-    ApiFuture::spawn(async move {
-        task.await?;
-        reopen(&presentation, name);
-        Ok(())
-    });
-
+    reopen(presentation, name);
+    ApiFuture::spawn(task);
     Ok(())
 }
 
@@ -134,8 +131,9 @@ pub fn update_window(
             update
         };
 
-        apply_and_render(&session, &renderer, update)?.await?;
+        let run = apply_and_render(&session, &renderer, update)?;
         reopen(&presentation, new_name);
+        run.await?;
         Ok(())
     });
 }

@@ -336,7 +336,7 @@ import perspective from "./perspective_client";
             test("sum does not accumulate when an indexed row flips between null and a value", async function () {
                 const table = await perspective.table(
                     { ticker: "string", pnl: "integer" },
-                    { index: "ticker" }
+                    { index: "ticker" },
                 );
 
                 await table.update([
@@ -377,7 +377,7 @@ import perspective from "./perspective_client";
             test("float sum does not accumulate when an indexed row flips between null and a value", async function () {
                 const table = await perspective.table(
                     { ticker: "string", pnl: "float" },
-                    { index: "ticker" }
+                    { index: "ticker" },
                 );
 
                 await table.update([
@@ -418,7 +418,7 @@ import perspective from "./perspective_client";
             test("sum is unchanged by a partial update which omits the column", async function () {
                 const table = await perspective.table(
                     { ticker: "string", pnl: "integer", qty: "integer" },
-                    { index: "ticker" }
+                    { index: "ticker" },
                 );
 
                 await table.update([
@@ -446,7 +446,7 @@ import perspective from "./perspective_client";
             test("sum is unchanged by removing a row whose value is null", async function () {
                 const table = await perspective.table(
                     { ticker: "string", pnl: "integer" },
-                    { index: "ticker" }
+                    { index: "ticker" },
                 );
 
                 await table.update([

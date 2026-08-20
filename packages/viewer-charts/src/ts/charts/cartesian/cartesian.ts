@@ -61,6 +61,10 @@ export class CartesianChart extends AbstractChart {
         this.glyph = glyph;
     }
 
+    protected override colorScaleColumn(): string | null {
+        return this._colorName || null;
+    }
+
     /**
      * Rendering pipeline selector. `"cartesian"` is the default —
      * draws axes, gridlines, and ticks via the chrome canvas.

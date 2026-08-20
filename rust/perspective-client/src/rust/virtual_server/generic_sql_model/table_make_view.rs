@@ -86,10 +86,14 @@ fn window_over_clause(w: &WindowSpec, frame: Option<&str>, order_expr: Option<&s
                 Some(expr) => expr.to_string(),
                 None => format!("\"{}\"", quote_ident(&order_by.0)),
             };
-            parts.push(format!("ORDER BY {} {} NULLS FIRST", key, match order_by.1 {
-                WindowSortDir::Asc => "ASC",
-                WindowSortDir::Desc => "DESC",
-            }))
+            parts.push(format!(
+                "ORDER BY {} {} NULLS FIRST",
+                key,
+                match order_by.1 {
+                    WindowSortDir::Asc => "ASC",
+                    WindowSortDir::Desc => "DESC",
+                }
+            ))
         },
         None => parts.push("ORDER BY rowid ASC".to_string()),
     }

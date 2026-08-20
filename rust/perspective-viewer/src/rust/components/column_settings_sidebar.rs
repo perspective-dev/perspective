@@ -42,6 +42,7 @@ use crate::tasks::{
     delete_expr, delete_window, save_expr, save_window, update_expr, update_window,
 };
 use crate::utils::PtrEqRc;
+use crate::workspace::Workspace;
 
 #[derive(Clone, Derivative, Properties)]
 #[derivative(Debug)]
@@ -91,12 +92,13 @@ pub struct ColumnSettingsPanelProps {
 
     #[derivative(Debug = "ignore")]
     pub session: Session,
+
+    #[derivative(Debug = "ignore")]
+    pub workspace: Workspace,
 }
 
-impl ColumnSettingsPanelProps {
-    /// Everything EXCEPT the trap-door `auto_width`: the props whose change
-    /// invalidates the drafts that `initialize` rebuilds.
-    fn identity_eq(&self, other: &Self) -> bool {
+impl PartialEq for ColumnSettingsPanelProps {
+    fn eq(&self, other: &Self) -> bool {
         self.selected_column == other.selected_column
             && self.selected_tab == other.selected_tab
             && self.plugin_name == other.plugin_name
@@ -104,14 +106,46 @@ impl ColumnSettingsPanelProps {
             && self.view_config == other.view_config
             && self.column_stats == other.column_stats
             && self.selected_theme == other.selected_theme
+            && self.auto_width == other.auto_width
+            && self.is_pinned == other.is_pinned
     }
 }
 
-impl PartialEq for ColumnSettingsPanelProps {
-    fn eq(&self, other: &Self) -> bool {
-        self.identity_eq(other)
-            && self.auto_width == other.auto_width
-            && self.is_pinned == other.is_pinned
+#[derive(Clone, PartialEq)]
+struct Initials {
+    column_name: String,
+    expr: Rc<String>,
+    header: Option<String>,
+    window: Option<WindowSpec>,
+}
+
+impl Initials {
+    fn of(props: &ColumnSettingsPanelProps) -> Self {
+        let column_name = props
+            .metadata
+            .locator_name_or_default(&props.selected_column);
+
+        let expr = props
+            .metadata
+            .get_expression_by_alias(&column_name)
+            .or_else(|| props.view_config.expressions.get(&column_name).cloned())
+            .unwrap_or_default();
+
+        let expr = Rc::new(expr);
+        let header = (*expr != column_name).then_some(column_name.clone());
+
+        let window = props
+            .selected_column
+            .name()
+            .and_then(|name| props.view_config.windows.get(name))
+            .cloned();
+
+        Self {
+            column_name,
+            expr,
+            header,
+            window,
+        }
     }
 }
 
@@ -172,22 +206,23 @@ impl Component for ColumnSettingsPanel {
             initial_window_value: None,
             window_value: None,
             tabs: vec![],
-            on_input: Callback::default(),
-            on_save: Callback::default(),
-            on_validate: Callback::default(),
+            on_input: ctx.link().callback(ColumnSettingsPanelMsg::SetExprValue),
+            on_save: ctx
+                .link()
+                .callback(ColumnSettingsPanelMsg::OnSaveAttributes),
+            on_validate: ctx.link().callback(ColumnSettingsPanelMsg::SetExprValid),
         };
 
-        this.initialize(ctx);
+        this.reset_to(ctx, Initials::of(ctx.props()));
         this
     }
 
     fn changed(&mut self, ctx: &yew::prelude::Context<Self>, old_props: &Self::Properties) -> bool {
-        // Only reached when props are unequal. Re-`initialize` (which wipes
-        // in-progress expression/window drafts) only on IDENTITY changes -
-        // a trap-door `auto_width` change re-renders the `Sidebar` sizer
-        // alone.
-        if !ctx.props().identity_eq(old_props) {
-            self.initialize(ctx);
+        let next = Initials::of(ctx.props());
+        if ctx.props().selected_column != old_props.selected_column || next != self.initials() {
+            self.reset_to(ctx, next);
+        } else {
+            self.refresh_derived(ctx);
         }
 
         true
@@ -353,9 +388,9 @@ impl Component for ColumnSettingsPanel {
         };
 
         let header_props = props!(EditableHeaderProps {
+            value: self.header_value.clone(),
             initial_value: self.initial_header_value.clone(),
             placeholder: header_placeholder,
-            reset_count: self.reset_count,
             editable: (ctx.props().selected_column.is_expr()
                 && matches!(
                     ctx.props().selected_tab,
@@ -374,7 +409,6 @@ impl Component for ColumnSettingsPanel {
                 ]
             }),
             metadata: ctx.props().metadata.clone(),
-            session: &ctx.props().session
         });
 
         let expr_editor = props!(ExpressionEditorProps {
@@ -382,6 +416,7 @@ impl Component for ColumnSettingsPanel {
             on_save: self.on_save.clone(),
             on_validate: self.on_validate.clone(),
             alias: ctx.props().selected_column.name().cloned(),
+            initial_expr: self.initial_expr_value.clone(),
             disabled: !ctx.props().selected_column.is_expr(),
             reset_count: self.reset_count,
             metadata: ctx.props().metadata.clone(),
@@ -457,6 +492,7 @@ impl Component for ColumnSettingsPanel {
             presentation: ctx.props().presentation.clone(),
             renderer: ctx.props().renderer.clone(),
             session: ctx.props().session.clone(),
+            workspace: ctx.props().workspace.clone(),
         };
 
         let tab_children = self.tabs.iter().map(|tab| match tab {
@@ -506,38 +542,22 @@ impl ColumnSettingsPanel {
         self.save_enabled = changed && valid;
     }
 
-    fn initialize(&mut self, ctx: &yew::prelude::Context<Self>) {
-        let column_name = ctx
-            .props()
-            .metadata
-            .locator_name_or_default(&ctx.props().selected_column);
+    fn initials(&self) -> Initials {
+        Initials {
+            column_name: self.column_name.clone(),
+            expr: self.initial_expr_value.clone(),
+            header: self.initial_header_value.clone(),
+            window: self.initial_window_value.clone(),
+        }
+    }
 
-        let initial_expr_value = ctx
-            .props()
-            .metadata
-            .get_expression_by_alias(&column_name)
-            .unwrap_or_default();
-
-        let initial_expr_value = Rc::new(initial_expr_value);
-        let initial_header_value =
-            (*initial_expr_value != column_name).then_some(column_name.clone());
-
-        let maybe_ty = ctx
+    fn refresh_derived(&mut self, ctx: &yew::prelude::Context<Self>) {
+        self.maybe_ty = ctx
             .props()
             .metadata
             .locator_view_type(&ctx.props().selected_column);
 
-        // Specs are unnamed (the `windows` map key names them, and the
-        // editable header owns naming in the UI), so drafts and saved specs
-        // compare directly.
-        let initial_window_value = ctx
-            .props()
-            .selected_column
-            .name()
-            .and_then(|name| ctx.props().view_config.windows.get(name))
-            .cloned();
-
-        let tabs = {
+        self.tabs = {
             let mut tabs = vec![];
             let is_new_expr = ctx.props().selected_column.is_new_expr();
             let show_styles = !is_new_expr
@@ -571,28 +591,27 @@ impl ColumnSettingsPanel {
 
             tabs
         };
+    }
 
-        let on_input = ctx.link().callback(ColumnSettingsPanelMsg::SetExprValue);
-        let on_save = ctx
-            .link()
-            .callback(ColumnSettingsPanelMsg::OnSaveAttributes);
-
-        let on_validate = ctx.link().callback(ColumnSettingsPanelMsg::SetExprValid);
-        *self = Self {
+    fn reset_to(&mut self, ctx: &yew::prelude::Context<Self>, initials: Initials) {
+        let Initials {
             column_name,
-            expr_value: initial_expr_value.clone(),
-            initial_expr_value,
-            header_value: initial_header_value.clone(),
-            initial_header_value,
-            maybe_ty,
-            window_value: initial_window_value.clone(),
-            initial_window_value,
-            tabs,
-            header_valid: true,
-            on_input,
-            on_save,
-            on_validate,
-            ..*self
-        }
+            expr,
+            header,
+            window,
+        } = initials;
+
+        self.column_name = column_name;
+        self.expr_value = expr.clone();
+        self.initial_expr_value = expr;
+        self.header_value = header.clone();
+        self.initial_header_value = header;
+        self.window_value = window.clone();
+        self.initial_window_value = window;
+        self.header_valid = true;
+        self.save_enabled = false;
+        self.reset_enabled = false;
+        self.reset_count = self.reset_count.wrapping_add(1);
+        self.refresh_derived(ctx);
     }
 }

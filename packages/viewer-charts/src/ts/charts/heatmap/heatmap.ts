@@ -69,6 +69,10 @@ export interface HeatmapFacet {
  * scale and a single legend.
  */
 export class HeatmapChart extends AbstractChart {
+    protected override colorScaleColumn(): string | null {
+        return this._columnSlots[0] || null;
+    }
+
     _program: WebGLProgram | null = null;
     _locations: HeatmapLocations | null = null;
     _cornerBuffer: WebGLBuffer | null = null;

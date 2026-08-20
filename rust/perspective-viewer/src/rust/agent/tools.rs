@@ -630,24 +630,55 @@ fn control_schema_entries(spec: &ControlSpec) -> Vec<(String, Value)> {
         },
         ControlSpec::Color { key, default } => vec![(
             key.clone(),
-            json!({ "type": "string", "format": "color", "default": default }),
+            json!({
+                "type": "string",
+                "description": "A CSS color (`#rrggbb`, `rgb()`), or a host-defined named color `var(--psp-user--color-<name>)`",
+                "default": default,
+            }),
         )],
-        ControlSpec::ColorRange {
-            key_pos,
-            key_neg,
-            default_pos,
-            default_neg,
-            ..
-        } => vec![
-            (
-                key_pos.clone(),
-                json!({ "type": "string", "format": "color", "default": default_pos }),
-            ),
-            (
-                key_neg.clone(),
-                json!({ "type": "string", "format": "color", "default": default_neg }),
-            ),
-        ],
+        ControlSpec::Palette { key, default, max } => {
+            let mut description = "Ordered discrete color palette, cycled over the column's \
+                                   categories/series: a CSS `linear-gradient(to right, #rrggbb, \
+                                   #rrggbb, …)` of N colors WITHOUT positions, or a host-defined \
+                                   named palette `var(--psp-user--palette-<name>)`"
+                .to_owned();
+            if let Some(max) = max {
+                description.push_str(&format!(" (at most {max} colors)"));
+            }
+
+            vec![(
+                key.clone(),
+                json!({
+                    "type": "string",
+                    "description": description,
+                    "default": default,
+                }),
+            )]
+        },
+        ControlSpec::GradientStops {
+            key,
+            default,
+            discrete,
+        } => {
+            let mut description = "Multi-stop color gradient: a CSS `linear-gradient(to right, \
+                                   #rrggbb P%, …)` with positioned stops (direction normalized to \
+                                   `to right`; stops[0] maps to the most negative value), or a \
+                                   host-defined named gradient `var(--psp-user--gradient-<name>)`"
+                .to_owned();
+
+            if *discrete {
+                description.push_str(" — exactly 2 stops (the negative and positive colors)");
+            }
+
+            vec![(
+                key.clone(),
+                json!({
+                    "type": "string",
+                    "description": description,
+                    "default": default,
+                }),
+            )]
+        },
         ControlSpec::DatetimeFormat => vec![(
             "date_format".to_owned(),
             json!({ "description": "Datetime display format: a style preset or custom format fields" }),

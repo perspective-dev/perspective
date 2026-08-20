@@ -50,6 +50,9 @@ test.describe("Datagrid Column Styles", function () {
             );
         });
 
+        const width = (await view.save()).columns_config["Row ID"]
+            .column_size_override;
+
         const editBtn = view.dataGrid.regularTable.editBtnRow
             .locator("th.psp-menu-enabled span")
             .first();
@@ -57,13 +60,14 @@ test.describe("Datagrid Column Styles", function () {
         await editBtn.click();
         await view.columnSettingsSidebar.container.waitFor();
         await page
-            .locator('div[data-value="Decimal"] select')
+            .locator("div.row", { has: page.locator("label#style-label") })
+            .locator("select")
             .selectOption("Percent");
         const token = await view.save();
         test.expect(token.columns_config).toEqual({
             "Row ID": {
-                column_size_override: 150,
-                number_string_format: {
+                column_size_override: width,
+                number_format: {
                     style: "percent",
                 },
             },
@@ -370,5 +374,39 @@ runTests("Datagrid Column Styles - Split-by", () => {
         await expect(btn).toBeVisible();
         await btn.click();
         await expect(headers).not.toBeAttached();
+    });
+
+    test("Datagrid Column Styles - Single column draws no body highlight", async ({
+        page,
+    }) => {
+        await page.goto("/tools/test/src/html/superstore-test.html");
+        await page.evaluate(async () => {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
+                await new Promise((x) => setTimeout(x, 10));
+            }
+        });
+
+        const viewer = new PspViewer(page);
+        const table = viewer.dataGrid.regularTable;
+        const bodyHighlight = table.table.locator("tbody td.psp-menu-open");
+        const headerHighlight = table.editBtnRow.locator("th.psp-menu-open");
+
+        await viewer.restore({
+            columns: ["Sales", "Profit"],
+            group_by: [],
+            split_by: [],
+            settings: true,
+        });
+        const btn = await table.getEditBtnByName("Sales");
+        await btn.locator("span:not(.rt-column-resize)").click();
+        await expect(headerHighlight).toHaveCount(1);
+        await expect(bodyHighlight.first()).toBeAttached();
+
+        await viewer.restore({ columns: ["Sales"] });
+        await expect(headerHighlight).toHaveCount(1);
+        await expect(bodyHighlight).toHaveCount(0);
+
+        await viewer.restore({ columns: ["Sales", "Profit"] });
+        await expect(bodyHighlight.first()).toBeAttached();
     });
 });

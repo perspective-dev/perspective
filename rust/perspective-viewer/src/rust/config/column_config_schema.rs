@@ -15,18 +15,12 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{KeyValueOpts, NumberSeriesStyleDefaultConfig};
+use super::{CssKind, KeyValueOpts, NumberSeriesStyleDefaultConfig};
 
 /// The full schema for one column at one point in time. Plugins may return
 /// different schemas for the same column based on the column's current
 /// stored value (e.g. to hide dependent fields), so this is re-queried on
 /// every field update.
-///
-/// Each entry is a [`ControlSpec`]. Primitive variants carry their own
-/// `key` (JSON storage key) inline; the sidebar UI label is supplied by
-/// CSS via `--psp-label--<key>--content`. Composite variants render a
-/// self-contained Yew component that supplies its own labels and owns a
-/// fixed key namespace via [`ControlSpec::serialized_keys`].
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ColumnConfigSchema {
     pub fields: Vec<ControlSpec>,
@@ -93,33 +87,21 @@ pub enum ControlSpec {
         key: String,
         default: String,
     },
-    /// Paired pos/neg color picker rendered as a single horizontal
-    /// gradient/range bar. Used to expose the existing
-    /// [`crate::components::form::color_range_selector::ColorRangeSelector`]
-    /// widget at primitive granularity. Owns two top-level keys
-    /// (`key_pos` + `key_neg`); the visible label is derived from
-    /// `key_pos`.
-    ColorRange {
-        key_pos: String,
-        key_neg: String,
-        default_pos: String,
-        default_neg: String,
-        /// When `true`, the bar renders as a continuous gradient
-        /// (e.g. for `gradient` color modes); when `false`, the bar
-        /// renders as a hard pos/neg split. Currently only changes the
-        /// visual; pos/neg semantics are unchanged.
-        #[serde(default)]
-        is_gradient: bool,
-    },
+    Palette {
+        key: String,
+        default: String,
 
-    /// Residual format-only widget for datetime columns — owns
-    /// `date_format` only. Pair with primitive `Enum` and `Color` fields
-    /// for `datetime_color_mode` + `color` to fully decompose datetime
-    /// styling.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max: Option<usize>,
+    },
+    GradientStops {
+        key: String,
+        default: String,
+
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        discrete: bool,
+    },
     DatetimeFormat,
-    /// Residual format-only widget for string columns — owns `format`
-    /// only. Pair with primitive `Enum` and `Color` fields for
-    /// `string_color_mode` + `color` to fully decompose string styling.
     StringFormat,
     NumberSeriesStyle {
         default: NumberSeriesStyleDefaultConfig,
@@ -138,6 +120,90 @@ pub struct EnumVariant {
     pub label: Option<String>,
 }
 
+/// One stop of a [`ControlSpec::GradientStops`] value in its in-memory
+/// form: a `#rrggbb` color at `offset` ∈ `[0, 1]`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct GradientStopSpec {
+    pub color: String,
+    pub offset: f64,
+}
+
+/// The [`ControlSpec::GradientStops`] canonical stop order: offsets
+/// clamped to `[0, 1]` and rounded to 3 decimals, stops sorted stably
+/// by offset.
+pub fn canonicalize_gradient_stops(mut stops: Vec<GradientStopSpec>) -> Vec<GradientStopSpec> {
+    for stop in &mut stops {
+        stop.offset = (stop.offset.clamp(0.0, 1.0) * 1000.0).round() / 1000.0;
+    }
+
+    stops.sort_by(|a, b| {
+        a.offset
+            .partial_cmp(&b.offset)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    stops
+}
+
+/// Fit `stops` to a `discrete` field's fixed pair: an over-length value
+/// keeps only its two end colors, pinned to `0`/`1`.
+pub fn discrete_pair(stops: Vec<GradientStopSpec>) -> Vec<GradientStopSpec> {
+    let stops = canonicalize_gradient_stops(stops);
+    match (stops.first(), stops.last()) {
+        (Some(first), Some(last)) if stops.len() > 2 => vec![
+            GradientStopSpec {
+                color: first.color.clone(),
+                offset: 0.0,
+            },
+            GradientStopSpec {
+                color: last.color.clone(),
+                offset: 1.0,
+            },
+        ],
+        _ => stops,
+    }
+}
+
+impl ColumnConfigSchema {
+    /// Canonicalize every CSS-valued default at schema ingest, dropping
+    /// (and logging) fields whose default fails its kind's reader.
+    pub fn canonicalize_defaults(mut self) -> Self {
+        self.fields.retain_mut(|spec| {
+            let (kind, key, default) = match spec {
+                ControlSpec::Color { key, default } => (CssKind::Color, key, default),
+                ControlSpec::Palette { key, default, .. } => (CssKind::Palette, key, default),
+                ControlSpec::GradientStops { key, default, .. } => {
+                    (CssKind::Gradient, key, default)
+                },
+                _ => return true,
+            };
+
+            match kind.canonicalize(default) {
+                Ok(canonical) => {
+                    *default = canonical;
+                    true
+                },
+                Err(error) => {
+                    tracing::error!("Dropping `{key}` — invalid schema default: {error}");
+                    false
+                },
+            }
+        });
+
+        self
+    }
+
+    /// The CSS kind of the control owning `key`, if it is CSS-valued.
+    pub fn css_kind_of(&self, key: &str) -> Option<CssKind> {
+        self.fields.iter().find_map(|spec| match spec {
+            ControlSpec::Color { key: k, .. } if k == key => Some(CssKind::Color),
+            ControlSpec::Palette { key: k, .. } if k == key => Some(CssKind::Palette),
+            ControlSpec::GradientStops { key: k, .. } if k == key => Some(CssKind::Gradient),
+            _ => None,
+        })
+    }
+}
+
 impl ControlSpec {
     /// Top-level JSON keys this control owns when its value is serialized
     /// into a column's config map. For primitives this is just `[key]`;
@@ -152,14 +218,13 @@ impl ControlSpec {
             ControlSpec::Symbols { .. } => vec!["symbols"],
             ControlSpec::NumberFormat => vec!["number_format"],
             ControlSpec::AggregateDepth => vec!["aggregate_depth"],
-            ControlSpec::ColorRange {
-                key_pos, key_neg, ..
-            } => vec![key_pos.as_str(), key_neg.as_str()],
             ControlSpec::Enum { key, .. }
             | ControlSpec::Bool { key, .. }
             | ControlSpec::Number { key, .. }
             | ControlSpec::String { key, .. }
-            | ControlSpec::Color { key, .. } => vec![key.as_str()],
+            | ControlSpec::Color { key, .. }
+            | ControlSpec::Palette { key, .. }
+            | ControlSpec::GradientStops { key, .. } => vec![key.as_str()],
         }
     }
 }
@@ -168,12 +233,6 @@ impl ControlSpec {
 /// declares which top-level keys the update is allowed to write
 /// (`keys` — equivalent to the field's [`ControlSpec::serialized_keys`])
 /// and a partial new sub-state (`value`).
-///
-/// Apply semantics: keys in `keys` are *cleared* from the column's config
-/// map, then keys present in `value` are *inserted*. Defaults are
-/// pre-stripped by the caller (typically via `skip_serializing_if`), so
-/// "no value set for key K" means the schema default applies and K is
-/// not serialized.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ColumnConfigFieldUpdate {
     pub keys: Vec<String>,

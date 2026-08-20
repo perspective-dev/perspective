@@ -207,3 +207,68 @@ test.describe("Attributes Tab", () => {
         // `enum ColumnLocator {TableColumn(String), ExprColumn(Option<String>), NewExpr()}`
     });
 });
+
+test.describe("Column settings header drafts", () => {
+    test("a header draft survives a tab switch and an unrelated commit", async ({
+        page,
+    }) => {
+        const view = new PageView(page);
+        await view.restore({
+            settings: true,
+            expressions: { expr: "12345" },
+            columns: ["Row ID", "expr"],
+        });
+
+        const expr =
+            await view.settingsPanel.activeColumns.getColumnByName("expr");
+        await expr.editBtn.click();
+        const sidebar = view.columnSettingsSidebar;
+        await sidebar.openTab("Attributes");
+        await sidebar.nameInput.fill("renamed");
+        await expect(sidebar.nameInputWrapper).toHaveClass(/edited/);
+        await expect(sidebar.attributesTab.saveBtn).toBeEnabled();
+
+        await sidebar.openTab("Style");
+        await sidebar.openTab("Attributes");
+        await expect(sidebar.nameInput).toHaveValue("renamed");
+        await expect(sidebar.attributesTab.saveBtn).toBeEnabled();
+
+        await view.restore({ sort: [["Row ID", "desc"]] });
+        await expect(sidebar.nameInput).toHaveValue("renamed");
+        await expect(sidebar.attributesTab.saveBtn).toBeEnabled();
+
+        await sidebar.attributesTab.resetBtn.click();
+        await expect(sidebar.nameInput).toHaveValue("expr");
+        await expect(sidebar.nameInputWrapper).not.toHaveClass(/edited/);
+        await expect(sidebar.attributesTab.saveBtn).toBeDisabled();
+    });
+
+    test("renaming re-targets the drawer on the new name, still editable", async ({
+        page,
+    }) => {
+        const view = new PageView(page);
+        await view.restore({
+            settings: true,
+            expressions: { expr: "12345" },
+            columns: ["Row ID", "expr"],
+        });
+
+        const expr =
+            await view.settingsPanel.activeColumns.getColumnByName("expr");
+        await expr.editBtn.click();
+        const sidebar = view.columnSettingsSidebar;
+        await sidebar.openTab("Attributes");
+        await sidebar.nameInput.fill("renamed");
+        await sidebar.attributesTab.saveBtn.click();
+
+        await expect(sidebar.nameInput).toHaveValue("renamed");
+        await expect(sidebar.nameInput).toBeEnabled();
+        await expect(sidebar.attributesTab.saveBtn).toBeDisabled();
+        await expect(sidebar.nameInputWrapper).not.toHaveClass(/edited/);
+        expect(await sidebar.getTabs()).toEqual(["Style", "Attributes"]);
+
+        const config = await view.save();
+        expect(Object.keys(config.expressions ?? {})).toEqual(["renamed"]);
+        expect(config.columns).toEqual(["Row ID", "renamed"]);
+    });
+});

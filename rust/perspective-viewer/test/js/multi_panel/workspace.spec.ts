@@ -85,9 +85,7 @@ async function panel_names(page): Promise<string[]> {
 }
 
 test.describe("Multi-panel restore", () => {
-    test("restore a workspace config with a split layout", async ({
-        page,
-    }) => {
+    test("restore a workspace config with a split layout", async ({ page }) => {
         await restore(page, SPLIT_CONFIG);
         const names = await panel_names(page);
         expect(names.length).toBe(2);

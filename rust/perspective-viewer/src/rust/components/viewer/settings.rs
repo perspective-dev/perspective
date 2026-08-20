@@ -25,7 +25,7 @@ use super::msg::PerspectiveViewerMsg::*;
 use crate::components::font_loader::FontLoaderStatus;
 use crate::components::settings_panel::SelectedTab;
 use crate::config::*;
-use crate::presentation::{ColumnLocator, ColumnSettingsTab, OpenColumnSettings};
+use crate::presentation::{ColumnSettingsTab, ColumnSettingsTarget, OpenColumnSettings};
 use crate::queries::get_current_column_locator;
 use crate::tasks::*;
 
@@ -90,6 +90,7 @@ impl PerspectiveViewer {
         &mut self,
         ctx: &Context<Self>,
         update: Option<SettingsUpdate>,
+        announce: bool,
         resolve: Option<Sender<ApiResult<JsValue>>>,
     ) -> bool {
         match (update, resolve) {
@@ -99,15 +100,15 @@ impl PerspectiveViewer {
                 false
             },
             (Some(SettingsUpdate::SetDefault), resolve) => {
-                self.init_toggle_settings_task(ctx, Some(false), resolve);
+                self.init_toggle_settings_task(ctx, Some(false), announce, resolve);
                 false
             },
             (Some(SettingsUpdate::Update(force)), resolve) => {
-                self.init_toggle_settings_task(ctx, Some(force), resolve);
+                self.init_toggle_settings_task(ctx, Some(force), announce, resolve);
                 false
             },
             (None, resolve) => {
-                self.init_toggle_settings_task(ctx, None, resolve);
+                self.init_toggle_settings_task(ctx, None, announce, resolve);
                 false
             },
         }
@@ -164,6 +165,7 @@ impl PerspectiveViewer {
         &mut self,
         ctx: &Context<Self>,
         force: Option<bool>,
+        announce: bool,
         sender: Option<Sender<ApiResult<JsValue>>>,
     ) {
         let is_open = ctx.props().presentation.is_settings_open();
@@ -209,7 +211,7 @@ impl PerspectiveViewer {
                             let presents = presize_visible_panels_grown(&workspace, &elem).await;
                             let (notify, rendered) = channel::<()>();
                             callback.emit(notify);
-                            presentation.set_settings_open(false);
+                            presentation.set_settings_open(false, announce);
                             rendered.await?;
                             // `notify` fires in `rendered()` (same task as the
                             // Yew DOM patch) and this future resumes as one of
@@ -233,7 +235,7 @@ impl PerspectiveViewer {
 
                             let (notify, rendered) = channel::<()>();
                             callback.emit(notify);
-                            presentation.set_settings_open(true);
+                            presentation.set_settings_open(true, announce);
                             rendered.await?;
                             presents.reveal();
                             resize_visible_panels(&workspace).await;
@@ -353,36 +355,34 @@ impl PerspectiveViewer {
     pub(super) fn on_open_column_settings(
         &mut self,
         ctx: &Context<Self>,
-        locator: Option<ColumnLocator>,
+        target: Option<ColumnSettingsTarget>,
         sender: Option<Sender<()>>,
         toggle: bool,
     ) -> bool {
         let mut open_column_settings = ctx.props().presentation.get_open_column_settings();
-        if locator == open_column_settings.locator {
+        if target == open_column_settings.target {
             if toggle {
                 ctx.props().presentation.set_open_column_settings(None);
             }
         } else {
-            open_column_settings.locator.clone_from(&locator);
-            open_column_settings.tab = if matches!(locator, Some(ColumnLocator::NewExpression)) {
-                Some(ColumnSettingsTab::Attributes)
-            } else {
-                locator.as_ref().and_then(|x| {
-                    x.name().map(|x| {
-                        if self.session_props.is_column_active(x) {
-                            ColumnSettingsTab::Style
-                        } else {
-                            ColumnSettingsTab::Attributes
-                        }
+            open_column_settings.target.clone_from(&target);
+            open_column_settings.tab = match &target {
+                Some(ColumnSettingsTarget::NewExpression) => Some(ColumnSettingsTab::Attributes),
+                Some(ColumnSettingsTarget::Column(name)) => {
+                    Some(if self.session_props.is_column_active(name) {
+                        ColumnSettingsTab::Style
+                    } else {
+                        ColumnSettingsTab::Attributes
                     })
-                })
+                },
+                None => None,
             };
 
             ctx.props()
                 .presentation
                 .set_open_column_settings(Some(open_column_settings));
 
-            if locator.is_some() {
+            if target.is_some() {
                 self.settings_geometry.selected_tab = SelectedTab::Query;
             }
         }
@@ -450,9 +450,7 @@ impl PerspectiveViewer {
         let callback = ctx.link().callback(commit_msg);
         ApiFuture::spawn(async move {
             let presents = match delta_w {
-                Some(delta_w) => {
-                    presize_visible_panels_open(&workspace, &elem, delta_w, 0.0).await
-                },
+                Some(delta_w) => presize_visible_panels_open(&workspace, &elem, delta_w, 0.0).await,
                 None => StagedPresents::default(),
             };
 
@@ -493,6 +491,7 @@ impl PerspectiveViewer {
         ctx: &Context<Self>,
         ocs: OpenColumnSettings,
     ) -> bool {
+        self.refresh_session_snapshot(ctx);
         let effective = self
             .settings_geometry
             .column_settings_target

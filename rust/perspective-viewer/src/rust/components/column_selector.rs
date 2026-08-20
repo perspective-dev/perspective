@@ -29,7 +29,7 @@ use std::rc::Rc;
 pub use column_selector_column_row::*;
 pub use empty_column::*;
 pub use invalid_column::*;
-use perspective_client::config::ViewConfig;
+use perspective_client::config::{ViewConfig, ViewConfigUpdate};
 pub use pivot_column::*;
 use web_sys::*;
 use yew::prelude::*;
@@ -43,8 +43,10 @@ use super::containers::split_panel::{Orientation, SplitPanel};
 use crate::components::column_dropdown::{ColumnDropDownElement, ColumnDropDownPortal};
 use crate::components::containers::scroll_panel_item::ScrollPanelItem;
 use crate::config::PluginStaticConfig;
-use crate::presentation::{ColumnLocator, DragDropContainer, Presentation};
-use crate::queries::{ActiveColumnState, ActiveColumnStateData, ColumnsIteratorSet};
+use crate::presentation::{ColumnLocator, ColumnSettingsTarget, DragDropContainer, Presentation};
+use crate::queries::{
+    ActiveColumnState, ActiveColumnStateData, ColumnsIteratorSet, get_current_column_locator,
+};
 use crate::renderer::*;
 use crate::session::drag_drop_update::*;
 use crate::session::*;
@@ -54,7 +56,7 @@ use crate::utils::*;
 #[derive(Properties)]
 pub struct ColumnSelectorProps {
     /// Fires when the expression/config column is open.
-    pub on_open_expr_panel: Callback<ColumnLocator>,
+    pub on_open_expr_panel: Callback<ColumnSettingsTarget>,
 
     /// This is passed to the add_expression_button for styling.
     pub selected_column: Option<ColumnLocator>,
@@ -135,6 +137,32 @@ pub struct ColumnSelector {
     drag_container: DragDropContainer,
     column_dropdown: ColumnDropDownElement,
     on_reset: Rc<PubSub<()>>,
+}
+
+fn close_column_settings_if_displaced(
+    presentation: &Presentation,
+    renderer: &Renderer,
+    metadata: &SessionMetadata,
+    view_config: &ViewConfig,
+    update: &ViewConfigUpdate,
+) {
+    let Some(columns) = &update.columns else {
+        return;
+    };
+
+    let ocs = presentation.get_open_column_settings();
+    if get_current_column_locator(&ocs, renderer, view_config, metadata).is_none() {
+        return;
+    }
+
+    let next_config = ViewConfig {
+        columns: columns.clone(),
+        ..view_config.clone()
+    };
+
+    if get_current_column_locator(&ocs, renderer, &next_config, metadata).is_none() {
+        presentation.set_open_column_settings(None);
+    }
 }
 
 impl Component for ColumnSelector {
@@ -224,6 +252,14 @@ impl Component for ColumnSelector {
                         ctx.props().metadata.get_features().unwrap(),
                     );
 
+                    close_column_settings_if_displaced(
+                        &ctx.props().presentation,
+                        &ctx.props().renderer,
+                        &ctx.props().metadata,
+                        &ctx.props().view_config,
+                        &update,
+                    );
+
                     let session = ctx.props().session.clone();
                     let renderer = ctx.props().renderer.clone();
                     if let Ok(task) = apply_and_render(&session, &renderer, update) {
@@ -247,6 +283,14 @@ impl Component for ColumnSelector {
                     effect,
                     &ctx.props().renderer.metadata(),
                     ctx.props().metadata.get_features().unwrap(),
+                );
+
+                close_column_settings_if_displaced(
+                    &ctx.props().presentation,
+                    &ctx.props().renderer,
+                    &ctx.props().metadata,
+                    &ctx.props().view_config,
+                    &update,
                 );
 
                 let session = ctx.props().session.clone();

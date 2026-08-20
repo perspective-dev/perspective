@@ -42,7 +42,10 @@ function is_cell_text_editable(
     const meta = table.getMeta(td);
     if (
         meta?.type !== "body" ||
-        !isEditableMode(model, undefined as unknown as HTMLPerspectiveViewerElement)
+        !isEditableMode(
+            model,
+            undefined as unknown as HTMLPerspectiveViewerElement,
+        )
     ) {
         return false;
     }
@@ -52,8 +55,7 @@ function is_cell_text_editable(
     }
 
     const type = get_psp_type(model, meta);
-    const plugins: ColumnsConfig =
-        (table as any)[PRIVATE_PLUGIN_SYMBOL] || {};
+    const plugins: ColumnsConfig = (table as any)[PRIVATE_PLUGIN_SYMBOL] || {};
     const column_name = meta.column_header?.[model._config.split_by.length];
     const format = column_name
         ? plugins[column_name.toString()]?.format

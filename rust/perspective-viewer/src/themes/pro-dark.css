@@ -81,6 +81,16 @@ perspective-viewer [theme="Pro Dark"] {
     --psp-charts--series-8--color: rgb(221, 99, 103);
     --psp-charts--series-9--color: rgb(120, 104, 206);
     --psp-charts--series-10--color: rgb(23, 166, 123);
+    --psp-datagrid--series-1--color: rgb(71, 120, 194);
+    --psp-datagrid--series-2--color: rgb(204, 120, 48);
+    --psp-datagrid--series-3--color: rgb(158, 84, 192);
+    --psp-datagrid--series-4--color: rgb(51, 150, 153);
+    --psp-datagrid--series-5--color: rgb(102, 114, 143);
+    --psp-datagrid--series-6--color: rgb(211, 103, 189);
+    --psp-datagrid--series-7--color: rgb(109, 124, 77);
+    --psp-datagrid--series-8--color: rgb(221, 99, 103);
+    --psp-datagrid--series-9--color: rgb(120, 104, 206);
+    --psp-datagrid--series-10--color: rgb(23, 166, 123);
 
     --psp-charts--gradient--background: linear-gradient(
         #dd6367 0%,

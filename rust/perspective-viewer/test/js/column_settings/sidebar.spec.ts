@@ -261,9 +261,12 @@ test.describe("Column Settings Sidebar", () => {
         };
         expect(await selectedTab()).toBe("Style");
         const getFgColorNeg = async () => {
-            return view.columnSettingsSidebar.styleTab.container.locator(
-                "input.neg_fg_color",
-            );
+            return view.columnSettingsSidebar.styleTab.container
+                .locator("fieldset.style-control", {
+                    has: page.locator("#fg_colors-label"),
+                })
+                .locator(".gradient-stop-handle input[type=color]")
+                .first();
         };
 
         let fgColorNeg = await getFgColorNeg();
