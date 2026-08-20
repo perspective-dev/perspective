@@ -62,6 +62,9 @@ export async function draw(
 
     restore_column_size_overrides.call(this, old_sizes);
     await drawPromise;
+    if (Object.keys(old_sizes).length > 0) {
+        restore_column_size_overrides.call(this, old_sizes);
+    }
 
     this._toolbar?.classList.toggle(
         "aggregated",

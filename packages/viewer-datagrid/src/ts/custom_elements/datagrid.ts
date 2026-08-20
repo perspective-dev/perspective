@@ -29,6 +29,7 @@ import { sourceColumn } from "@perspective-dev/viewer/src/ts/column-format.js";
 
 import type { View, ViewWindow } from "@perspective-dev/client";
 import type {
+    HTMLPerspectiveViewerElement,
     IPerspectiveViewerPlugin,
     PluginStaticConfig,
 } from "@perspective-dev/viewer";
@@ -73,6 +74,50 @@ export class HTMLPerspectiveViewerDatagridPluginElement
     _reset_scroll_left?: boolean;
     _reset_select?: boolean;
     _reset_column_size?: boolean;
+    _columns_config: ColumnsConfig = {};
+
+    private _persist_column_sizes = (): void => {
+        if (!this.model || this.model._config.split_by?.length > 0) {
+            return;
+        }
+
+        const columns_config = structuredClone(this._columns_config);
+        for (const column of [...this.model._column_paths, "__ROW_PATH__"]) {
+            if (columns_config[column]) {
+                delete columns_config[column].column_size_override;
+            }
+        }
+
+        const overrides = save_column_size_overrides.call(this);
+        for (const [column, width] of Object.entries(overrides)) {
+            if (width !== undefined) {
+                columns_config[column] ??= {};
+                columns_config[column].column_size_override = width;
+            }
+        }
+
+        this._columns_config = columns_config;
+        const viewer = this.parentElement as HTMLPerspectiveViewerElement;
+        void viewer?.restore?.(
+            { columns_config },
+            { panel: this.model._panel },
+        );
+    };
+
+    private _on_column_resize = (event: MouseEvent): void => {
+        const is_resize = event.composedPath().some((target) => {
+            return (
+                target instanceof HTMLElement &&
+                target.classList.contains("rt-column-resize")
+            );
+        });
+
+        if (is_resize) {
+            document.addEventListener("mouseup", this._persist_column_sizes, {
+                once: true,
+            });
+        }
+    };
 
     constructor() {
         super();
@@ -101,6 +146,11 @@ export class HTMLPerspectiveViewerDatagridPluginElement
     }
 
     connectedCallback(): void {
+        this.regular_table.addEventListener(
+            "mousedown",
+            this._on_column_resize,
+        );
+
         if (!this._toolbar) {
             this._toolbar = document.createElement(
                 "perspective-viewer-datagrid-toolbar",
@@ -113,6 +163,11 @@ export class HTMLPerspectiveViewerDatagridPluginElement
     }
 
     disconnectedCallback(): void {
+        this.regular_table.removeEventListener(
+            "mousedown",
+            this._on_column_resize,
+        );
+        document.removeEventListener("mouseup", this._persist_column_sizes);
         this._toolbar?.parentElement?.removeChild?.(this._toolbar);
     }
 
@@ -173,7 +228,11 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         group: string | undefined,
         column_name: string,
         current_value: Record<string, unknown> | null,
-        viewer_config?: { group_by?: string[]; group_rollup_mode?: string },
+        viewer_config?: {
+            group_by?: string[];
+            split_by?: string[];
+            group_rollup_mode?: string;
+        },
         column_stats?: { abs_max: number },
     ): ColumnConfigSchema {
         return column_config_schema.call(
