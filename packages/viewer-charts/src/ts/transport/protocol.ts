@@ -100,8 +100,20 @@ export interface InitMsg {
      * `dpr` and there is no host-side GL drawing buffer.
      */
     glCanvas?: OffscreenCanvas;
-    gridlinesCanvas: OffscreenCanvas;
-    chromeCanvas: OffscreenCanvas;
+
+    /**
+     * The gridlines (bottom) and chrome/axes (top) 2D layers.
+     * Transferred via `transferControlToOffscreen` on the host, present
+     * iff `renderMode === "direct"` — their pixels reach the screen
+     * through the compositor. In blit mode the renderer allocates
+     * worker-local surfaces instead and composites both layers into the
+     * shipped `FrameBitmapMsg`, so every layer of the frame rides the
+     * host's staged-present hold (a transferred canvas presents on the
+     * compositor's own schedule, unsynchronized with the host's layout
+     * commits — the one-frame axes warp on anticipated resizes).
+     */
+    gridlinesCanvas?: OffscreenCanvas;
+    chromeCanvas?: OffscreenCanvas;
 
     /**
      * `MessagePort` to the host's `ProxySession`. Worker mode only —
