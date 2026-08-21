@@ -339,19 +339,23 @@ impl Component for PerspectiveViewer {
             } => self.on_open_column_settings(ctx, locator, sender, toggle),
             ColumnSettingsPanelSizeUpdate(x) => self.on_column_settings_panel_size_update(x),
             ColumnSettingsPanelAutoWidth(w) => self.on_column_settings_panel_auto_width(w),
-            ToggleColumnSettingsPin => self.on_toggle_column_settings_pin(),
+            ToggleColumnSettingsPin => self.on_toggle_column_settings_pin(ctx),
+            ToggleColumnSettingsPinComplete(resolve) => {
+                self.on_toggle_column_settings_pin_complete(resolve)
+            },
             ColumnSettingsTabChanged(tab) => self.on_column_settings_tab_changed(ctx, tab),
             ToggleDebug => self.on_toggle_debug(ctx),
 
             // Value-semantic snapshot plumbing (`snapshots.rs`)
-            UpdateSession(props) => self.on_update_session(*props),
+            UpdateSession(props) => self.on_update_session(ctx, *props),
             UpdateSessionStats(stats, has_table) => self.on_update_session_stats(stats, has_table),
             UpdateGlobalFilters => self.on_update_global_filters(ctx),
             UpdateRenderer(props) => self.on_update_renderer(*props),
             UpdatePresentation(props) => self.on_update_presentation(ctx, *props),
             UpdateSettingsOpen(open) => self.on_update_settings_open(open),
             UpdateIsWorkspace(is_workspace) => self.on_update_is_workspace(is_workspace),
-            UpdateColumnSettings(ocs) => self.on_update_column_settings(*ocs),
+            UpdateColumnSettings(ocs) => self.on_update_column_settings(ctx, *ocs),
+            UpdateColumnSettingsCommit(resolve) => self.on_update_column_settings_commit(resolve),
             UpdateDragDrop(props) => self.on_update_dragdrop(*props),
             UpdateInFlight(count) => self.on_update_in_flight(count),
         }

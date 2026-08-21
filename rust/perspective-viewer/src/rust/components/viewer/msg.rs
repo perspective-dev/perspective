@@ -48,6 +48,7 @@ pub enum PerspectiveViewerMsg {
     ColumnSettingsPanelSizeUpdate(Option<i32>),
     ColumnSettingsPanelAutoWidth(f64),
     ToggleColumnSettingsPin,
+    ToggleColumnSettingsPinComplete(Sender<()>),
     ColumnSettingsTabChanged(ColumnSettingsTab),
     OpenColumnSettings {
         locator: Option<ColumnLocator>,
@@ -162,7 +163,16 @@ pub enum PerspectiveViewerMsg {
     UpdateIsWorkspace(bool),
 
     /// Update only `open_column_settings` in the presentation snapshot.
+    /// Handled in `settings.rs` (not `snapshots.rs`): a docked-drawer
+    /// mount/unmount defers the snapshot behind a presize sweep.
     UpdateColumnSettings(Box<crate::presentation::OpenColumnSettings>),
+
+    /// Every visible panel has rendered at its post-transition box — NOW
+    /// apply the newest deferred `open_column_settings` target (the
+    /// latest-wins slot, not a copy captured at sweep spawn); the `Sender`
+    /// resolves on the render commit so the staged presents reveal in the
+    /// same paint (mirrors `ToggleSettingsComplete`).
+    UpdateColumnSettingsCommit(Sender<()>),
     UpdateDragDrop(Box<DragDropProps>),
 
     /// Update only stats-related fields of `session_props` without touching

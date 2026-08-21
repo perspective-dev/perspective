@@ -15,17 +15,45 @@
 //! subscriptions/callbacks) into the root's props fields, re-rendering only
 //! on an actual change.
 
+use futures::channel::oneshot::channel;
+use perspective_js::utils::ApiFuture;
 use yew::prelude::*;
 
 use super::PerspectiveViewer;
-use crate::presentation::{DragDropProps, OpenColumnSettings, PresentationProps};
+use crate::presentation::{DragDropProps, PresentationProps};
+use crate::tasks::resize_visible_panels;
 use crate::renderer::RendererProps;
 use crate::session::{SessionProps, TableLoadState, ViewStats};
 
 impl PerspectiveViewer {
-    pub(super) fn on_update_session(&mut self, props: SessionProps) -> bool {
+    /// A session snapshot can flip the column-settings drawer's mount
+    /// predicate without any `UpdateColumnSettings` traffic — e.g. a drag
+    /// replacing the open column in `columns` invalidates its locator, and
+    /// this snapshot's render unmounts the DOCKED drawer, moving
+    /// `#main_panel_container`. Unlike the presentation-driven transitions
+    /// (deferred + presized in `settings.rs`), the snapshot is applied
+    /// immediately — it feeds the column selector, stats, and the config
+    /// redraw already racing this render, so a staged frame would be
+    /// stale on arrival — and the panels are owed the reactive geometry
+    /// finalizer on this render's commit instead (I6).
+    pub(super) fn on_update_session(&mut self, ctx: &Context<Self>, props: SessionProps) -> bool {
         let changed = props != self.session_props;
+        let was_mounted =
+            self.is_column_settings_mounted(&self.presentation_props.open_column_settings);
         self.session_props = props;
+        let now_mounted =
+            self.is_column_settings_mounted(&self.presentation_props.open_column_settings);
+        if self.settings_geometry.column_settings_pinned && was_mounted != now_mounted {
+            let (notify, rendered) = channel::<()>();
+            self.on_rendered.push(notify);
+            let workspace = ctx.props().workspace.clone();
+            ApiFuture::spawn(async move {
+                rendered.await?;
+                resize_visible_panels(&workspace).await;
+                Ok(())
+            });
+        }
+
         changed
     }
 
@@ -102,12 +130,6 @@ impl PerspectiveViewer {
     pub(super) fn on_update_is_workspace(&mut self, is_workspace: bool) -> bool {
         let changed = is_workspace != self.presentation_props.is_workspace;
         self.presentation_props.is_workspace = is_workspace;
-        changed
-    }
-
-    pub(super) fn on_update_column_settings(&mut self, ocs: OpenColumnSettings) -> bool {
-        let changed = ocs != self.presentation_props.open_column_settings;
-        self.presentation_props.open_column_settings = ocs;
         changed
     }
 
