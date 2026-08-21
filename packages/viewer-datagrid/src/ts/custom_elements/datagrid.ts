@@ -99,7 +99,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         this._columns_config = columns_config;
         const viewer = this.parentElement as HTMLPerspectiveViewerElement;
         void viewer?.restore?.(
-            { columns_config },
+            { columns_config: JSON.parse(JSON.stringify(columns_config)) },
             { panel: this.model._panel },
         );
     };
