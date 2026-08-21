@@ -15,6 +15,7 @@ import type { ColumnConfig, DatagridPluginElement } from "../types.js";
 
 interface ViewerConfigLike {
     group_by?: string[];
+    split_by?: string[];
     group_rollup_mode?: string;
 }
 
@@ -52,6 +53,15 @@ export default function column_config_schema(
     column_stats?: ColumnStats,
 ): ColumnConfigSchema {
     const fields: ControlSpec[] = [];
+
+    if ((viewer_config?.split_by?.length ?? 0) === 0) {
+        fields.push({
+            kind: "Number",
+            key: "column_size_override" satisfies keyof ColumnConfig,
+            default: 0,
+            min: 1,
+        });
+    }
 
     if (type === "integer" || type === "float") {
         const pos_fg = this.model!._pos_fg_color[0];

@@ -27,7 +27,6 @@ import type {
 } from "../types.js";
 
 interface RestoreToken {
-    columns?: Record<string, { column_size_override?: number }>;
     edit_mode?: EditMode;
     scroll_lock?: boolean;
 }
@@ -59,14 +58,17 @@ export function restore(
     columns = JSON.parse(JSON.stringify(columns));
     const overrides: ColumnOverrides = {};
 
-    if (token.columns) {
-        for (const [col, value] of Object.entries(token.columns)) {
-            if (value.column_size_override !== undefined) {
+    for (const [col, value] of Object.entries(columns)) {
+        if (value.column_size_override !== undefined) {
+            if (!this.model?._config.split_by?.length) {
                 overrides[col] = value.column_size_override;
-                delete value["column_size_override"];
             }
+
+            delete value.column_size_override;
         }
     }
+
+    this._columns_config = structuredClone(columns);
 
     const styles: Record<string, StylesConfig> = {};
     if (columns) {

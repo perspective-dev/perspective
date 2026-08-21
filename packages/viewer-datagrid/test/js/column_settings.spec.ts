@@ -27,7 +27,7 @@ test.describe("Datagrid Column Styles", function () {
         });
     });
 
-    test.skip("Interacting with column settings does not override column width", async function ({
+    test("Interacting with column settings does not override column width", async function ({
         page,
     }) {
         const view = new PspViewer(page);
@@ -41,6 +41,14 @@ test.describe("Datagrid Column Styles", function () {
         await page.mouse.down();
         await page.mouse.move(pos!.x + 100, pos!.y + 5);
         await page.mouse.up();
+        await page.waitForFunction(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            const token = await viewer.save();
+            return (
+                token.columns_config?.["Row ID"]?.column_size_override !==
+                undefined
+            );
+        });
 
         const editBtn = view.dataGrid.regularTable.editBtnRow
             .locator("th.psp-menu-enabled span")
@@ -54,16 +62,64 @@ test.describe("Datagrid Column Styles", function () {
         const token = await view.save();
         test.expect(token.columns_config).toEqual({
             "Row ID": {
+                column_size_override: 150,
                 number_string_format: {
                     style: "percent",
                 },
             },
         });
-        test.expect(token.plugin_config.columns).toEqual({
-            "Row ID": {
-                column_size_override: 150,
-            },
+        test.expect(token.plugin_config.columns).toBeUndefined();
+    });
+
+    test("First restore applies and preserves column width overrides", async function ({
+        page,
+    }) {
+        const result = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.restore({
+                plugin: "Datagrid",
+                columns: ["Row ID", "Sales"],
+                columns_config: {
+                    Sales: { column_size_override: 311.1875 },
+                },
+            });
+
+            const plugin = document.querySelector(
+                "perspective-viewer-datagrid",
+            ) as any;
+            const index = plugin.model._column_paths.indexOf("Sales");
+            const widths = plugin.regular_table.saveColumnSizes();
+
+            return {
+                config: (await viewer.save()).columns_config,
+                width: widths[index],
+            };
         });
+
+        expect(result.config).toEqual({
+            Sales: { column_size_override: 311.1875 },
+        });
+        expect(result.width).toBe(311.1875);
+    });
+
+    test("Column width persistence is disabled with split-by", async function ({
+        page,
+    }) {
+        const result = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.restore({
+                plugin: "Datagrid",
+                columns: ["Row ID", "Sales"],
+                split_by: ["Category"],
+                columns_config: {
+                    Sales: { column_size_override: 311.1875 },
+                },
+            });
+
+            return (await viewer.save()).columns_config?.Sales;
+        });
+
+        expect(result?.column_size_override).toBeUndefined();
     });
 });
 
