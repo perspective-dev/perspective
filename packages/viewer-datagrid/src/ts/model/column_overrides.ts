@@ -34,12 +34,12 @@ export function restore_column_size_overrides(
     old_sizes: ColumnOverrides,
     cache = false,
 ): void {
-    if (!this._initialized) {
-        return;
-    }
-
     if (cache) {
         this._cached_column_sizes = old_sizes;
+    }
+
+    if (!this._initialized) {
+        return;
     }
 
     const regular_table = this.regular_table as RegularTableWithOverrides;

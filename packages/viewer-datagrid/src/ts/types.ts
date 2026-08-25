@@ -198,12 +198,6 @@ export type ColumnsConfig = Record<string, ColumnConfig>;
  * `save()`/`restore()` token).
  */
 export interface DatagridPluginConfig {
-    /**
-     * Per-column state keyed by column name, e.g.
-     * `{ "Sales": { "column_size_override": 180 } }`.
-     */
-    columns?: ColumnsConfig;
-
     /** Legacy alias for `edit_mode: "EDIT"`. */
     editable?: boolean;
 
@@ -342,6 +336,7 @@ export type SortRotationOrder = Record<string, SortDir | undefined>;
 export interface DatagridPluginElement extends HTMLElement {
     regular_table: RegularTableElement;
     model?: DatagridModel;
+    _columns_config: ColumnsConfig;
     _toolbar?: DatagridToolbarElement;
     _edit_button?: HTMLElement;
     _scroll_lock?: HTMLElement;
