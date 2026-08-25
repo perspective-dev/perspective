@@ -283,62 +283,31 @@ View<CTX_T>::column_names_range(
         aggregate_names[i] = aggs[i].name();
     }
 
-    auto col_count = m_ctx->unity_get_column_count();
-    // start_col++;
-    // end_col++;
-
-    t_uindex key = 0;
-    while (key < start_col && key < col_count) {
-        key++;
+    t_uindex visible = 0;
+    for (t_uindex key = 0, max = m_ctx->unity_get_column_count();
+         key != max && visible < end_col;
+         ++key) {
         const std::string& name = aggregate_names[key % aggregate_names.size()];
+
         if (name == "psp_okey") {
-            start_col += 1;
-            end_col += 1;
             continue;
         }
 
         std::vector<t_tscalar> col_path = m_ctx->unity_get_column_path(key + 1);
         if (skip && !m_split_rollup
             && col_path.size() < static_cast<unsigned int>(depth)) {
-            start_col += 1;
-            end_col += 1;
             continue;
         }
 
         if (!m_hidden_sort.empty()) {
             if (std::find(m_hidden_sort.begin(), m_hidden_sort.end(), name)
                 != m_hidden_sort.end()) {
-                start_col += 1;
-                end_col += 1;
                 continue;
             }
         }
-    }
 
-    for (t_uindex max = std::min(end_col, col_count); key <= max; ++key) {
-        const std::string& name = aggregate_names[key % aggregate_names.size()];
-
-        if (name == "psp_okey") {
-            end_col += 1;
-            max = std::min(end_col, col_count);
+        if (visible++ < start_col) {
             continue;
-        }
-
-        std::vector<t_tscalar> col_path = m_ctx->unity_get_column_path(key + 1);
-        if (skip && !m_split_rollup
-            && col_path.size() < static_cast<unsigned int>(depth)) {
-            end_col += 1;
-            max = std::min(end_col, col_count);
-            continue;
-        }
-
-        if (!m_hidden_sort.empty()) {
-            if (std::find(m_hidden_sort.begin(), m_hidden_sort.end(), name)
-                != m_hidden_sort.end()) {
-                end_col += 1;
-                max = std::min(end_col, col_count);
-                continue;
-            }
         }
 
         std::vector<t_tscalar> new_path;

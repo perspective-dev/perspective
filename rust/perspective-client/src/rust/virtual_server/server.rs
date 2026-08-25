@@ -304,7 +304,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 let resp = ViewExpressionSchemaResp { schema };
                 respond!(msg, ViewExpressionSchemaResp { ..resp })
             },
-            ViewColumnPathsReq(_) => {
+            ViewColumnPathsReq(view_column_paths_req) => {
                 let config = self.view_configs.get(&msg.entity_id).unwrap();
                 let mut paths: Vec<String> = self
                     .handler
@@ -317,6 +317,13 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 if !config.split_by.is_empty() {
                     sort_column_paths(&mut paths, config);
                 }
+
+                let start = view_column_paths_req.start_col.unwrap_or(0) as usize;
+                let end = view_column_paths_req
+                    .end_col
+                    .map_or(paths.len(), |x| x as usize);
+
+                let paths = paths.into_iter().take(end).skip(start).collect::<Vec<_>>();
 
                 respond!(msg, ViewColumnPathsResp { paths })
             },
