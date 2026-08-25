@@ -15,17 +15,45 @@
 //! subscriptions/callbacks) into the root's props fields, re-rendering only
 //! on an actual change.
 
+use futures::channel::oneshot::channel;
+use perspective_js::utils::ApiFuture;
 use yew::prelude::*;
 
 use super::PerspectiveViewer;
-use crate::presentation::{DragDropProps, OpenColumnSettings, PresentationProps};
+use crate::presentation::{DragDropProps, PresentationProps};
 use crate::renderer::RendererProps;
 use crate::session::{SessionProps, TableLoadState, ViewStats};
+use crate::tasks::resize_visible_panels;
 
 impl PerspectiveViewer {
-    pub(super) fn on_update_session(&mut self, props: SessionProps) -> bool {
+    pub(super) fn refresh_session_snapshot(&mut self, ctx: &Context<Self>) {
+        let props = self.active_session.to_props();
+        if props != self.session_props {
+            self.on_update_session(ctx, props);
+        }
+    }
+
+    pub(super) fn on_update_session(&mut self, ctx: &Context<Self>, props: SessionProps) -> bool {
         let changed = props != self.session_props;
+        let was_mounted =
+            self.is_column_settings_mounted(&self.presentation_props.open_column_settings);
         self.session_props = props;
+        let now_mounted =
+            self.is_column_settings_mounted(&self.presentation_props.open_column_settings);
+        if self.settings_geometry.column_settings_pinned
+            && was_mounted != now_mounted
+            && !self.settings_geometry.column_settings_commit_pending
+        {
+            let (notify, rendered) = channel::<()>();
+            self.on_rendered.push(notify);
+            let workspace = ctx.props().workspace.clone();
+            ApiFuture::spawn(async move {
+                rendered.await?;
+                resize_visible_panels(&workspace).await;
+                Ok(())
+            });
+        }
+
         changed
     }
 
@@ -52,18 +80,17 @@ impl PerspectiveViewer {
         ctx: &Context<Self>,
         props: PresentationProps,
     ) -> bool {
-        // Default-theme fan-out: when the registry default (first available
-        // theme) changes — the async theme discovery resolving at boot, or a
-        // `resetThemes` — push the new default into every panel's renderer
-        // cache (locked draws stamp the effective theme from it), and
-        // restyle the panels whose captured `--psp-*` CSS is STALE against
-        // the new effective value (`Renderer::needs_restyle` — the plugin's
-        // captured theme is the baseline; plugins only re-read CSS at
-        // `restyle()`/first-draw, so a plain redraw would not repaint a
-        // panel that first drew before discovery resolved, while a panel
-        // that captured post-discovery — or owes its first paint — restyles
-        // nothing). The outer default-diff scopes the scan; the per-panel
-        // gate is state, never call history or DOM state.
+        // Boot fill-in: theme discovery resolving turns an empty registry
+        // into a real one, and any panel created before that has no theme to
+        // stamp. Give those — and ONLY those — the new default, then restyle
+        // the ones whose captured `--psp-*` CSS is now stale
+        // (`Renderer::needs_restyle`; plugins re-read CSS only at
+        // `restyle()`/first-draw, so a plain redraw would not repaint them).
+        //
+        // A panel that already has a theme is never touched here: `theme` is
+        // concrete state, so re-ordering the registry — or any other
+        // `resetThemes` that leaves a panel's theme available — must repaint
+        // nothing.
         let old_default = self.presentation_props.available_themes.first().cloned();
         let new_default = props.available_themes.first().cloned();
         if old_default != new_default {
@@ -74,7 +101,11 @@ impl PerspectiveViewer {
                 .into_iter()
                 .filter_map(|id| ctx.props().workspace.panel(&id))
             {
-                panel.renderer.set_default_theme(new_default.clone());
+                if panel.renderer.theme().is_some() {
+                    continue;
+                }
+
+                panel.renderer.set_theme(new_default.clone());
                 if panel.renderer.needs_restyle() {
                     let renderer = panel.renderer.clone();
                     crate::utils::spawn_owned("default-theme-restyle", async move {
@@ -99,12 +130,6 @@ impl PerspectiveViewer {
     pub(super) fn on_update_is_workspace(&mut self, is_workspace: bool) -> bool {
         let changed = is_workspace != self.presentation_props.is_workspace;
         self.presentation_props.is_workspace = is_workspace;
-        changed
-    }
-
-    pub(super) fn on_update_column_settings(&mut self, ocs: OpenColumnSettings) -> bool {
-        let changed = ocs != self.presentation_props.open_column_settings;
-        self.presentation_props.open_column_settings = ocs;
         changed
     }
 

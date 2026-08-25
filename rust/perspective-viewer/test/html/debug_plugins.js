@@ -42,16 +42,24 @@ class DebugStyledPlugin extends BasePlugin {
         };
     }
 
-    column_config_schema(type) {
+    column_config_schema(type, _group, _column_name, current_value) {
         const fields = [];
         if (type === "integer" || type === "float") {
             fields.push({
-                kind: "ColorRange",
-                key_pos: "pos_fg_color",
-                key_neg: "neg_fg_color",
-                default_pos: "#2771a8",
-                default_neg: "#ff471e",
-                is_gradient: false,
+                kind: "GradientStops",
+                key: "fg_colors",
+                default: "linear-gradient(to right, #ff471e 0%, #2771a8 100%)",
+                discrete: true,
+            });
+            fields.push({
+                kind: "GradientStops",
+                key: "gradient",
+                default: "linear-gradient(to right, #2771a8 0%, #ff471e 100%)",
+            });
+            fields.push({
+                kind: "Color",
+                key: "color",
+                default: "#2771a8",
             });
             fields.push({ kind: "NumberFormat" });
         } else if (type === "date") {
@@ -68,6 +76,33 @@ class DebugStyledPlugin extends BasePlugin {
                 ],
             });
         } else if (type === "string") {
+            fields.push({
+                kind: "Enum",
+                key: "string_color_mode",
+                default: "none",
+                variants: [
+                    { value: "none", label: "None" },
+                    { value: "background", label: "Background" },
+                    { value: "series", label: "Series" },
+                ],
+            });
+
+            if (current_value?.string_color_mode === "background") {
+                fields.push({
+                    kind: "Color",
+                    key: "color",
+                    default: "#2771a8",
+                });
+            } else if (current_value?.string_color_mode === "series") {
+                fields.push({
+                    kind: "Palette",
+                    key: "palette",
+                    default:
+                        "linear-gradient(to right, #2771a8, #8b86ff, #ff471e)",
+                    max: 6,
+                });
+            }
+
             fields.push({ kind: "StringFormat" });
         }
 

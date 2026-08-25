@@ -61,11 +61,11 @@ pub fn reset_all(
 
         presentation.reset_available_themes(None).await;
         if all {
-            // Clear this panel's own per-panel theme so it reverts to inheriting
-            // the (reset-to-default) host theme — `reset_theme` only resets the
-            // host, which an explicitly-themed panel would otherwise override.
-            renderer.set_theme(None);
+            // Put this panel back on the registry default CONCRETELY —
+            // `reset_theme` only resets the host, which an explicitly-themed
+            // panel would otherwise keep overriding.
             presentation.reset_theme().await?;
+            renderer.set_theme(presentation.get_default_theme_name().await);
         }
 
         // For `all = true`, route the bucket clears through `restore_and_render`'s

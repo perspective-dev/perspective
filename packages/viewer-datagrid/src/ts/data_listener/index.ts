@@ -154,7 +154,6 @@ export function createDataListener(
                 return acc;
             }, new Map<string, number>());
         } else {
-            this._div_factory.clear();
             num_columns = await this._view.num_columns();
         }
 

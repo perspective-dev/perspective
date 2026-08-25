@@ -34,7 +34,9 @@ pub fn set_edit_mode(session: &Session, renderer: &Renderer, mode: &str) {
         serde_json::Value::String(mode.to_owned()),
     );
 
-    let changed = renderer.update_plugin_config(&view_config, OptionalUpdate::Update(map));
+    let changed = renderer
+        .update_plugin_config(&view_config, OptionalUpdate::Update(map))
+        .unwrap_or_default();
     clone!(session, renderer);
     ApiFuture::spawn(async move {
         if changed {

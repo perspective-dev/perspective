@@ -221,34 +221,224 @@
             align-items: center;
             flex-wrap: nowrap;
             flex: 1 1 100%;
-            .color-thermometer {
+        }
+
+        .palette-selector {
+            .palette-swatches {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 4px;
                 flex: 1 1 auto;
+                width: 0px;
+                max-height: 84px;
+                overflow-y: auto;
+                overflow-x: hidden;
+                padding: 0px 0 4px 0;
+            }
+
+            .palette-swatch {
+                position: relative;
+                width: 24px;
                 height: 24px;
+                touch-action: none;
+
+                input[type="color"] {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 3px;
+                }
+
+                &.dragging {
+                    opacity: 0.5;
+                    outline: 1px dashed var(--psp--color);
+                    outline-offset: -1px;
+                    border-radius: 3px;
+                }
+
+                .palette-swatch-remove {
+                    position: absolute;
+                    top: -2px;
+                    right: -7px;
+                    width: 14px;
+                    height: 14px;
+                    cursor: pointer;
+                    display: none;
+                    background-color: var(--psp--color);
+                    -webkit-mask-size: cover;
+                    mask-size: cover;
+                    -webkit-mask-image: var(--psp-icon--close--mask-image);
+                    mask-image: var(--psp-icon--close--mask-image);
+                }
+
+                &:hover .palette-swatch-remove {
+                    display: inline-block;
+                }
+            }
+
+            .palette-swatches.reordering .palette-swatch-remove {
+                display: none;
+            }
+
+            .palette-add {
+                width: 22px;
+                height: 22px;
+                border: 1px dashed var(--psp-inactive--color);
+                border-radius: 3px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+
+                &:before {
+                    content: "+";
+                    font-size: 14px;
+                    line-height: 1;
+                    color: var(--psp-inactive--color);
+                }
+
+                &:hover {
+                    border-color: var(--psp--color);
+
+                    &:before {
+                        color: var(--psp--color);
+                    }
+                }
             }
         }
 
-        .color-selector {
-            display: grid;
+        .gradient-stops-selector {
+            padding: 12px 0 16px 0;
 
-            input {
-                grid-column: 1;
-                grid-row: 1;
-            }
-            .color-label {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                font-size: 14px;
-                grid-column: 1;
-                grid-row: 1;
-                margin: 0;
-                font-family: var(--psp-button--font-family, inherit);
-                color: var(--sign--color, white);
-                width: 36px;
+            .gradient-stops-bar {
+                cursor: copy;
+                position: relative;
+                flex: 1 1 auto;
                 height: 24px;
-                text-align: center;
-                z-index: 1;
-                pointer-events: none;
+                border-radius: 2px;
+            }
+
+            .gradient-stops-bar.discrete {
+                cursor: auto;
+                position: relative;
+                flex: 1 1 auto;
+                height: 24px;
+                border-radius: 2px;
+            }
+
+            .gradient-stop-handle {
+                position: absolute;
+                top: 0;
+                transform: translateX(-50%);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                width: 14px;
+            }
+
+            .gradient-stop-grip {
+                width: 14px;
+                height: 24px;
+                cursor: ew-resize;
+                touch-action: none;
+
+                &.disabled {
+                    cursor: default;
+                }
+
+                &:before {
+                    content: "";
+                    display: block;
+                    width: 0px;
+                    height: 100%;
+                    margin: 0 auto;
+                    border: 1px solid var(--psp--background-color, #fff);
+                }
+            }
+
+            .gradient-stop-remove {
+                position: absolute;
+                top: -14px;
+                width: 14px;
+                height: 13px;
+                cursor: pointer;
+                display: inline-block;
+                background-color: var(--psp--color);
+                -webkit-mask-size: cover;
+                mask-size: cover;
+                -webkit-mask-image: var(--psp-icon--close--mask-image);
+                mask-image: var(--psp-icon--close--mask-image);
+
+                &.disabled {
+                    cursor: default;
+                    background-color: var(--psp-inactive--color);
+                }
+            }
+
+            .gradient-stop-lock {
+                position: absolute;
+                top: -14px;
+                width: 14px;
+                height: 13px;
+                display: inline-block;
+                background-color: var(--psp--color);
+                -webkit-mask-size: cover;
+                mask-size: cover;
+                -webkit-mask-image: var(--psp-icon--lock--mask-image);
+                mask-image: var(--psp-icon--lock--mask-image);
+            }
+
+            .gradient-stop-handle input[type="color"] {
+                width: 14px;
+                height: 14px;
+                margin-top: 2px;
+                border-radius: 3px;
+            }
+        }
+
+        .named-value-controls {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+            flex: 1 1 100%;
+            height: 0;
+            margin-top: 10px;
+            margin-bottom: -10px;
+            margin-right: 24px;
+            position: relative;
+            z-index: 1;
+            font-size: var(--label--font-size, 0.75em);
+            color: var(--psp-inactive--color);
+
+            select.named-value-select {
+                height: 15px;
+                padding: 0;
+                font-size: var(--label--font-size, 0.75em);
+                color: inherit;
+                background: none;
+                border: none;
+                cursor: pointer;
+
+                &:hover {
+                    color: var(--psp--color, inherit);
+                }
+            }
+
+            .named-value-pin {
+                cursor: pointer;
+                user-select: none;
+                line-height: 15px;
+
+                &:before {
+                    font-family: var(--psp-button--font-family, inherit);
+                    color: var(--psp-inactive--color, #666);
+                    content: var(--psp-label--pin-button--content, "Save");
+                }
+
+                &:hover:before {
+                    color: var(--psp--color, inherit);
+                }
             }
         }
 
@@ -259,22 +449,10 @@
             padding: 0;
             font-family: inherit;
             overflow: hidden;
-            border-radius: 12px;
+            border-radius: 3px;
 
             &:hover {
                 opacity: 0.8;
-            }
-
-            &.pos-color-param {
-                width: 36px;
-                border-radius: 12px 0 0 12px;
-                margin: 0 1px 0 0;
-            }
-
-            &.neg-color-param {
-                width: 36px;
-                border-radius: 0 12px 12px 0;
-                margin: 0 0 0 1px;
             }
         }
 

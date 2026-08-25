@@ -69,6 +69,10 @@ export interface HeatmapFacet {
  * scale and a single legend.
  */
 export class HeatmapChart extends AbstractChart {
+    protected override colorScaleColumn(): string | null {
+        return this._columnSlots[0] || null;
+    }
+
     _program: WebGLProgram | null = null;
     _locations: HeatmapLocations | null = null;
     _cornerBuffer: WebGLBuffer | null = null;
@@ -176,9 +180,10 @@ export class HeatmapChart extends AbstractChart {
         xIdx: number,
         yIdx: number,
     ): Promise<void> {
-        const groupByValues: (string | null)[] = this._xLevels.map(
-            (level) => level.labels[xIdx] ?? null,
-        );
+        const groupByValues: (string | number | null)[] =
+            this._xAxisMode.mode === "numeric" && this._xPositions
+                ? [this._xPositions[xIdx] ?? null]
+                : this._xLevels.map((level) => level.labels[xIdx] ?? null);
         const splitByValues: (string | null)[] = this._yLevels
             .slice(0, this._splitBy.length)
             .map((level) => level.labels[yIdx] ?? null);

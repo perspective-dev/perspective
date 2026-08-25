@@ -299,15 +299,24 @@ export class RendererTransport {
         // `ImageBitmap`. Direct mode transfers the visible canvas's
         // drawing buffer to the renderer so GL paints straight to
         // screen.
+        // Blit mode also keeps the gridlines/chrome layers worker-side:
+        // a transferred canvas presents on the compositor's schedule,
+        // unsynchronized with the host's layout commits, so it can't
+        // participate in the staged-present hold. The renderer
+        // composites both layers into the shipped frame instead, and
+        // the host-side placeholder canvases stay untouched
+        // (transparent). Direct mode transfers all three surfaces.
         let glOC: OffscreenCanvas | undefined;
+        let gridlinesOC: OffscreenCanvas | undefined;
+        let chromeOC: OffscreenCanvas | undefined;
         if (opts.renderBlitMode === "blit") {
             this._displayCtx = opts.gl.getContext("2d");
         } else {
             glOC = opts.gl.transferControlToOffscreen();
+            gridlinesOC = opts.gridlines.transferControlToOffscreen();
+            chromeOC = opts.chrome.transferControlToOffscreen();
         }
 
-        const gridlinesOC = opts.gridlines.transferControlToOffscreen();
-        const chromeOC = opts.chrome.transferControlToOffscreen();
         const rect = opts.gl.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
         const themeVars = snapshotThemeVars(opts.gl);
@@ -365,14 +374,19 @@ export class RendererTransport {
             // Worker mode: the bootstrap is triggered by posting the
             // init message into the worker's scope (which the
             // `if (IS_WORKER_SCOPE)` block in `renderer.worker.ts`
-            // listens for). `glOC` is omitted in blit mode (the
-            // renderer allocates its own offscreen) — only include the
-            // GL canvas in the transfer list when present.
-            const transfer: Transferable[] = [
-                gridlinesOC,
-                chromeOC,
-                this._proxyChannel!.port2,
-            ];
+            // listens for). All three canvases are omitted in blit mode
+            // (the renderer allocates its own offscreens and ships
+            // composited frames) — only include the transferred
+            // surfaces present on this mode's init message.
+            const transfer: Transferable[] = [this._proxyChannel!.port2];
+            if (chromeOC) {
+                transfer.unshift(chromeOC);
+            }
+
+            if (gridlinesOC) {
+                transfer.unshift(gridlinesOC);
+            }
+
             if (glOC) {
                 transfer.unshift(glOC);
             }

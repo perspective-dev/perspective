@@ -997,4 +997,39 @@ test.describe("Window columns", function () {
         await view.delete();
         await table.delete();
     });
+
+    test("range frame over a date order column measures days", async function () {
+        const table = await perspective.table({ d: "date", x: "float" });
+        await table.update([
+            { d: "2024-01-30", x: 1 },
+            { d: "2024-01-31", x: 2 },
+            { d: "2024-02-01", x: 4 },
+            { d: "2024-02-03", x: 8 },
+        ]);
+
+        const view = await table.view({
+            columns: ["rsum", "r"],
+            sort: [["d", "asc"]],
+            windows: {
+                rsum: {
+                    column: "x",
+                    aggregate: "sum",
+                    order_by: ["d", "asc"],
+                    range: 2,
+                },
+                r: {
+                    column: "x",
+                    aggregate: "rate",
+                    order_by: ["d", "asc"],
+                    range: 2,
+                },
+            },
+        });
+
+        const result = await view.to_columns();
+        expect(result["rsum"]).toEqual([1, 3, 7, 12]);
+        expect(result["r"]).toEqual([null, 1, 1.5, 2]);
+        await view.delete();
+        await table.delete();
+    });
 });

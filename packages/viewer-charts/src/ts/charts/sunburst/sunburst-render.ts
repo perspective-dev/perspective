@@ -501,7 +501,16 @@ function drawArcs(
 
 //  Chrome overlay (Canvas2D)
 
+/**
+ * Render the chrome overlay (labels, center text, hover highlight +
+ * tooltip).
+ */
 export function renderSunburstChromeOverlay(chart: SunburstChart): void {
+    paintSunburstChromeOverlay(chart);
+    chart.presentOverlay();
+}
+
+function paintSunburstChromeOverlay(chart: SunburstChart): void {
     if (!chart._chromeCanvas || chart._currentRootId === NULL_NODE) {
         return;
     }

@@ -359,7 +359,18 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
         viewId: string,
         config: ViewConfigUpdate,
     ) {
-        const query = this.sqlBuilder.tableMakeView(tableId, viewId, config);
+        // Window order keys need column types for `range` frame emission.
+        const schema = Object.keys(config.windows ?? {}).length
+            ? await this.tableSchema(tableId)
+            : undefined;
+
+        const query = this.sqlBuilder.tableMakeView(
+            tableId,
+            viewId,
+            config,
+            schema,
+        );
+
         await runQuery(this.db, query, { execute: true });
     }
 

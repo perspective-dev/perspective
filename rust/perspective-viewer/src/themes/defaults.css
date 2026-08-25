@@ -104,6 +104,16 @@ perspective-string-column-style {
     --psp-charts--series-8--color: #7f7f7f;
     --psp-charts--series-9--color: #bcbd22;
     --psp-charts--series-10--color: #17becf;
+    --psp-datagrid--series-1--color: #0366d6;
+    --psp-datagrid--series-2--color: #ff7f0e;
+    --psp-datagrid--series-3--color: #2ca02c;
+    --psp-datagrid--series-4--color: #d62728;
+    --psp-datagrid--series-5--color: #9467bd;
+    --psp-datagrid--series-6--color: #8c564b;
+    --psp-datagrid--series-7--color: #e377c2;
+    --psp-datagrid--series-8--color: #7f7f7f;
+    --psp-datagrid--series-9--color: #bcbd22;
+    --psp-datagrid--series-10--color: #17becf;
     --psp-charts--gradient--background: linear-gradient(
         #4d342f 0%,
         #e4521b 22.5%,
@@ -167,6 +177,8 @@ perspective-string-column-style {
     --psp-openlayers--attribution--filter: initial;
     --psp-charts--series-11--color: initial;
     --psp-charts--series-12--color: initial;
+    --psp-datagrid--series-11--color: initial;
+    --psp-datagrid--series-12--color: initial;
     --psp-charts--map-tiles--url: initial;
     --psp-column-type--boolean--color: initial;
     --psp-column-type--date--color: initial;

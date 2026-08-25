@@ -15,7 +15,6 @@ import type { DatagridModel, ColumnsConfig, ColumnConfig } from "../types.js";
 import type { ColumnType } from "@perspective-dev/client";
 
 const FORMAT_CACHE = new FormatterCache();
-const MAX_BAR_WIDTH_PCT = 1;
 
 export function format_raw(
     type: ColumnType,
@@ -47,42 +46,11 @@ export function format_cell(
 
     if (
         is_numeric &&
+        !use_table_schema &&
         (plugin?.number_fg_mode === "bar" ||
             plugin?.number_fg_mode === "label-bar")
     ) {
-        const a = Math.max(
-            0,
-            Math.min(
-                MAX_BAR_WIDTH_PCT,
-                Math.abs((val as number) / plugin.fg_gradient!) *
-                    MAX_BAR_WIDTH_PCT,
-            ),
-        );
-
-        const anchor = (val as number) >= 0 ? "" : "justify-self:flex-end;";
-        const pct = (a * 100).toFixed(2);
-
-        if (plugin.number_fg_mode === "bar") {
-            const div = this._div_factory.get();
-            div.className = "psp-bar";
-            div.setAttribute(
-                "style",
-                `${anchor}width:${pct}%;height:80%;top:10%;pointer-events:none;background:var(--psp-label-bar-color)`,
-            );
-
-            return div;
-        } else {
-            const formatter = FORMAT_CACHE.get(type, plugin);
-            const label = formatter ? formatter.format(val) : (val as string);
-
-            const div = this._div_factory.get();
-            div.className = "psp-bar";
-            div.setAttribute(
-                "style",
-                `--label:"${label}";${anchor}width:${pct}%;height:80%;top:10%;pointer-events:none;background:var(--psp-label-bar-color)`,
-            );
-            return div;
-        }
+        return "";
     } else if (plugin?.format === "link" && type === "string") {
         const anchor = document.createElement("a");
         anchor.setAttribute("href", val as string);

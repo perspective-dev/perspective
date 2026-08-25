@@ -17,14 +17,16 @@
 //! parent module directly.
 
 pub mod code_editor;
-pub mod color_range_selector;
 pub mod color_selector;
 pub mod debug;
 pub mod mirrored_textarea;
+pub mod multi_stop_gradient_selector;
+pub mod named_value_picker;
 pub mod number_field;
 pub mod number_input;
 pub mod number_range_field;
 pub mod optional_field;
+pub mod palette_selector;
 pub mod select_enum_field;
 pub mod select_value_field;
 

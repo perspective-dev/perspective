@@ -37,7 +37,7 @@ await Promise.all([
 
 const CLIENT = await perspective.worker();
 
-/// The merged `<perspective-viewer>` whole-element config: a `regular-layout`
+/// The merged `<perspective-viewer>` workspace config: a `regular-layout`
 /// tree + a per-panel `ViewerConfig` map. (Formerly
 /// `@perspective-dev/workspace`'s `PerspectiveWorkspaceConfig`.)
 interface MultiPanelConfig {

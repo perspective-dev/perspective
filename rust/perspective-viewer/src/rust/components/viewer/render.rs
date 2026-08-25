@@ -53,7 +53,7 @@ impl PerspectiveViewer {
         }
 
         let on_open_expr_panel = ctx.link().callback(|c| OpenColumnSettings {
-            locator: c,
+            target: c,
             sender: None,
             toggle: true,
         });
@@ -62,7 +62,9 @@ impl PerspectiveViewer {
             .link()
             .callback(|(x, _)| ColumnSettingsPanelSizeUpdate(Some(x)));
 
-        let on_close_settings = ctx.link().callback(|()| ToggleSettingsInit(None, None));
+        let on_close_settings = ctx
+            .link()
+            .callback(|()| ToggleSettingsInit(None, true, None));
         let on_debug = ctx.link().callback(|_| ToggleDebug);
         let selected_column = get_current_column_locator(
             &self.presentation_props.open_column_settings,
@@ -116,7 +118,9 @@ impl PerspectiveViewer {
             html! { <></> }
         };
 
-        let on_settings = ctx.link().callback(|()| ToggleSettingsInit(None, None));
+        let on_settings = ctx
+            .link()
+            .callback(|()| ToggleSettingsInit(None, true, None));
         let on_select_tab = ctx.link().callback(ColumnSettingsTabChanged);
         // Pinning the drawer is a pure CSS positioning flip on `#modal_panel`
         // (absolute overlay over the main panel <-> static flex sibling
@@ -153,6 +157,7 @@ impl PerspectiveViewer {
                         {presentation}
                         {renderer}
                         {session}
+                        workspace={ctx.props().workspace.clone()}
                     />
                     <></>
                 </SplitPanel>

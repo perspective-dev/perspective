@@ -131,11 +131,14 @@ pub async fn presize_visible_panels_grown(
     presize_visible_panels_scaled(workspace, elem, width_ratio, height_ratio).await
 }
 
-/// Pre-size each visible plugin to its SHRUNK post-open cell *before* the
-/// settings pane mounts (P2), using the open-state geometry deltas cached at
-/// the last close (`(layout_area.w − mpc.w, main_column.h − mpc.h)` — the pane
-/// and divider width and the docked status-bar height, both stable across a
-/// close/open cycle since the pane width persists in the override).
+/// Pre-size each visible plugin to its cell SHRUNK by `(delta_w, delta_h)` —
+/// GROWN when a delta is negative — *before* the layout change commits. Used
+/// by the settings-pane open (P2, deltas `(layout_area.w − mpc.w,
+/// main_column.h − mpc.h)` cached at the last close — the pane and divider
+/// width and the docked status-bar height, both stable across a close/open
+/// cycle since the pane width persists in the override) and by the
+/// column-settings pin toggle and docked-drawer mount/unmount (signed delta
+/// measured live at toggle time).
 pub async fn presize_visible_panels_open(
     workspace: &Workspace,
     elem: &web_sys::HtmlElement,
@@ -199,6 +202,7 @@ async fn presize_visible_panels_scaled(
         return StagedPresents::default();
     }
 
+    let mpc = shadow_rect(elem, "#main_panel_container");
     let mut last_chrome: Option<(f64, f64)> = None;
     let targets = workspace
         .panels()
@@ -222,6 +226,23 @@ async fn presize_visible_panels_scaled(
 
             last_chrome = chrome.or(last_chrome);
             let (cw, ch) = last_chrome.unwrap_or(super::CHROME_FALLBACK);
+
+            // Per axis, chrome can never exceed the container's
+            // non-plugin remainder: with no sibling panel on that axis,
+            // `mpc − box` IS the exact chrome, while the frame-margin
+            // measurement overcounts (margins that overlap container
+            // padding) — the source of a ~2px target miss that pushed
+            // every commit past the plugin transport's ±0.5px resize
+            // dedupe, costing an extra corrective render. With siblings
+            // the remainder is large and the measured chrome wins.
+            let (cw, ch) = match &mpc {
+                Some(mpc) => (
+                    cw.min((mpc.width() - plugin_box.width()).max(0.0)),
+                    ch.min((mpc.height() - plugin_box.height()).max(0.0)),
+                ),
+                None => (cw, ch),
+            };
+
             let w = ((plugin_box.width() + cw) * width_ratio - cw).max(0.0);
             let h = ((plugin_box.height() + ch) * height_ratio - ch).max(0.0);
             Some((panel, w, h))
@@ -298,6 +319,24 @@ pub fn measure_settings_open_deltas(elem: &web_sys::HtmlElement) -> Option<(f64,
         (layout_area.width() - mpc.width()).max(0.0),
         (main_column.height() - mpc.height()).max(0.0),
     ))
+}
+
+/// The signed `#main_panel_container` width delta a column-settings pin
+/// toggle will cause: the docked `#modal_panel`'s flex box spans its drawer
+/// child plus the overlapping divider (`drawer.right − divider.left`, the
+/// same span in both modes since `.pinned` reparents nothing) — PINNING
+/// takes it from the main column (positive, shrink), UNPINNING releases it
+/// back (negative, grow). `None` when the drawer isn't mounted.
+pub fn measure_column_settings_pin_delta(
+    elem: &web_sys::HtmlElement,
+    is_pinned: bool,
+) -> Option<f64> {
+    let drawer = shadow_rect(elem, "#modal_panel > .split-panel-child:first-child")?;
+    let divider_left = shadow_rect(elem, "#modal_panel > .split-panel-divider")
+        .map(|r| r.left())
+        .unwrap_or_else(|| drawer.left());
+    let width = (drawer.right() - divider_left).max(0.0);
+    Some(if is_pinned { -width } else { width })
 }
 
 /// The frame chrome a plugin's grid cell has that the plugin itself doesn't

@@ -20,7 +20,7 @@ export async function join_suite(perspective, metadata) {
     if (check_version_gte(metadata.version, "4.4.0")) {
         async function before_all() {
             const left = await perspective.table(
-                new_superstore_table(metadata),
+                await new_superstore_table(perspective, metadata),
             );
 
             const columns = await left.columns();
@@ -66,7 +66,9 @@ export async function window_suite(perspective, metadata) {
     }
 
     async function before_all() {
-        const table = await perspective.table(new_superstore_table(metadata));
+        const table = await perspective.table(
+            await new_superstore_table(perspective, metadata),
+        );
         const view = await table.view();
         const arrow = await view.to_arrow();
         await view.delete();
@@ -147,7 +149,9 @@ export async function window_suite(perspective, metadata) {
 
 export async function to_data_suite(perspective, metadata) {
     async function before_all() {
-        const table = await perspective.table(new_superstore_table(metadata));
+        const table = await perspective.table(
+            await new_superstore_table(perspective, metadata),
+        );
         const view = await table.view();
         return { table, view };
     }
@@ -205,7 +209,9 @@ export async function to_data_suite(perspective, metadata) {
 
 export async function view_suite(perspective, metadata) {
     async function before_all() {
-        const table = await perspective.table(new_superstore_table(metadata));
+        const table = await perspective.table(
+            await new_superstore_table(perspective, metadata),
+        );
 
         const schema = await table.schema();
         return { table, schema };
@@ -305,7 +311,7 @@ export async function table_suite(perspective, metadata) {
     async function before_all() {
         try {
             const table = await perspective.table(
-                new_superstore_table(metadata),
+                await new_superstore_table(perspective, metadata),
             );
 
             const view = await table.view();

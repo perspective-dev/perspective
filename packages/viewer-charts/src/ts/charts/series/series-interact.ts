@@ -628,19 +628,8 @@ export function formatBarCategoryPath(
     chart: SeriesChart,
     catIdx: number,
 ): string {
-    // Numeric category mode: resolve from the bar's xCenter (real data
-    // value) rather than the row-path label array, which is empty when
-    // the single group_by level is non-string.
-    if (chart._categoryAxisMode === "numeric" && chart._numericCategoryDomain) {
-        const bars = chart._bars;
-        let v: number | null = null;
-        for (let i = 0; i < bars.count; i++) {
-            if (bars.catIdx[i] === catIdx) {
-                v = bars.xCenter[i];
-                break;
-            }
-        }
-
+    if (chart._categoryAxisMode === "numeric" && chart._categoryPositions) {
+        const v = chart._categoryPositions[catIdx];
         if (v == null) {
             return "";
         }

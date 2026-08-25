@@ -10,6 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+import { colorsToCss, stopsToCss } from "../theme/gradient";
 import type { View } from "@perspective-dev/client";
 import type {
     HTMLPerspectiveViewerElement,
@@ -27,6 +28,10 @@ import {
 import { RawEventForwarder } from "../interaction/raw-event-forwarder";
 import { RendererTransport } from "../transport/renderer-transport";
 import { RENDER_BLIT_MODE } from "../config";
+import { snapshotThemeVars } from "../theme/theme-snapshot";
+import { resolveThemeFromVars, type Theme } from "../theme/theme";
+import { resolvePalette } from "../theme/palette";
+import { vec3ToHexColor } from "../utils/css";
 
 /**
  * Facet-rendering defaults shared by every chart. Per-chart overrides
@@ -449,23 +454,79 @@ export class HTMLPerspectiveViewerWebGLPluginElement
             priority: 0,
             can_render_column_styles:
                 !!this._chartType.default_chart_type ||
-                this._chartType.category === "Cartesian Charts",
+                this._chartType.category === "Cartesian Charts" ||
+                this._chartType.category === "Hierarchical Charts" ||
+                this._chartType.category === "Map Charts",
         };
     }
 
     column_config_schema(
         column_type: string,
-        _group: string | undefined,
-        _column_name: string,
+        group: string | undefined,
+        column_name: string,
         current_value: Record<string, unknown> | null,
-        _viewer_config?: { group_by?: string[]; group_rollup_mode?: string },
+        viewer_config?: {
+            columns?: (string | null)[];
+            group_by?: string[];
+            split_by?: string[];
+            group_rollup_mode?: string;
+        },
     ) {
         const fields: Array<Record<string, unknown> & { kind: string }> = [];
+
+        if (group === "Color") {
+            const numeric_gradient =
+                this._chartType.category === "Hierarchical Charts"
+                    ? column_type === "integer" ||
+                      column_type === "float" ||
+                      column_type === "date" ||
+                      column_type === "datetime"
+                    : column_type !== "string";
+            if (numeric_gradient) {
+                fields.push({
+                    kind: "GradientStops",
+                    key: "gradient",
+                    default: this._themeGradientStopsSpec(),
+                });
+            } else {
+                fields.push({
+                    kind: "Palette",
+                    key: "palette",
+                    default: this._themeSeriesPaletteHex(),
+                });
+            }
+        }
 
         // Y-series plugins expose the per-column chart_type picker; non-Y
         // plugins leave `default_chart_type` unset.
         const def = this._chartType.default_chart_type;
         if (def && (column_type === "integer" || column_type === "float")) {
+            const is_series_glyph =
+                def === "bar" ||
+                def === "line" ||
+                def === "scatter" ||
+                def === "area";
+
+            if (is_series_glyph) {
+                const has_split = (viewer_config?.split_by?.length ?? 0) > 0;
+                if (has_split) {
+                    fields.push({
+                        kind: "Palette",
+                        key: "palette",
+                        default: this._themeSeriesPaletteHex(),
+                    });
+                } else {
+                    const slot = (viewer_config?.columns ?? [])
+                        .filter((c): c is string => !!c)
+                        .indexOf(column_name);
+                    fields.push({
+                        kind: "Color",
+                        key: "color",
+                        default: this._themeSeriesColorHex(Math.max(0, slot)),
+                    });
+                }
+            }
+
             fields.push({
                 kind: "Enum",
                 key: "chart_type",
@@ -492,12 +553,6 @@ export class HTMLPerspectiveViewerWebGLPluginElement
                     default: supports_stack,
                 });
             }
-
-            const is_series_glyph =
-                def === "bar" ||
-                def === "line" ||
-                def === "scatter" ||
-                def === "area";
 
             if (is_series_glyph) {
                 fields.push({
@@ -555,6 +610,36 @@ export class HTMLPerspectiveViewerWebGLPluginElement
         );
 
         return { fields };
+    }
+
+    private _resolvedTheme(): Theme {
+        return resolveThemeFromVars(snapshotThemeVars(this));
+    }
+
+    private static readonly GRADIENT_PALETTE_FALLBACK_COUNT = 6;
+
+    private _themeSeriesPaletteHex(): string {
+        const theme = this._resolvedTheme();
+        const count =
+            theme.seriesPalette.length ||
+            HTMLPerspectiveViewerWebGLPluginElement.GRADIENT_PALETTE_FALLBACK_COUNT;
+        return colorsToCss(
+            resolvePalette(theme.seriesPalette, theme.gradientStops, count),
+        );
+    }
+
+    private _themeSeriesColorHex(idx: number): string {
+        const theme = this._resolvedTheme();
+        const count = Math.max(theme.seriesPalette.length, idx + 1);
+        return vec3ToHexColor(
+            resolvePalette(theme.seriesPalette, theme.gradientStops, count)[
+                idx
+            ],
+        );
+    }
+
+    private _themeGradientStopsSpec(): string {
+        return stopsToCss(this._resolvedTheme().gradientStops);
     }
 
     async draw(view: View): Promise<void> {

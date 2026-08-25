@@ -11,11 +11,18 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { style_cell_flash } from "./cell_flash.js";
+import { format_raw } from "../../data_listener/format_cell.js";
 import {
-    rgbaToRgb,
     infer_foreground_from_background,
+    rgbaToRgb,
+    rgbToHex,
+    sampleGradientRgb,
+    type GradientStopRgb,
 } from "../../color_utils.js";
 import type { DatagridModel, ColumnConfig, ColorRecord } from "../../types.js";
+import type { ColumnType } from "@perspective-dev/client";
+
+const MAX_BAR_WIDTH_PCT = 1;
 
 interface CellMetaWithExtras {
     _is_hidden_by_aggregate_depth?: boolean;
@@ -33,11 +40,67 @@ interface PluginWithColors
     neg_bg_color?: ColorRecord;
     pos_fg_color?: ColorRecord;
     neg_fg_color?: ColorRecord;
+
+    /**
+     * Resolved `bg_colors` scale for the gradient sampler, written by
+     * `restore.ts` when the key is stored.
+     */
+    bg_color_stops?: GradientStopRgb[];
+}
+
+/**
+ * Write the value-derived bar presentation onto the `<td>` itself: bar
+ * length/anchor as the `--psp-bar-size`/`--psp-bar-anchor` custom properties
+ * (consumed by the `psp-color-mode-*` `background-image` rules) and the
+ * formatted label as the `data-psp-label` attribute (consumed via
+ * `content: attr(...)` by the `psp-color-mode-label-bar` pseudo-elements).
+ * This runs only at commit time against the mounted table - the
+ * `DataListener` returns `""` for these cells and holds no DOM references,
+ * so a staged `predraw()` can never repaint mounted cells (the panel-resize
+ * row-shift corruption).
+ */
+function style_cell_bar(
+    td: HTMLElement,
+    plugin: PluginWithColors,
+    type: ColumnType | undefined,
+    user: number | null | undefined,
+): void {
+    if (user === null || user === undefined) {
+        td.style.removeProperty("--psp-bar-size");
+        td.removeAttribute("data-psp-label");
+        return;
+    }
+
+    const a = Math.max(
+        0,
+        Math.min(
+            MAX_BAR_WIDTH_PCT,
+            Math.abs(user / plugin.fg_gradient!) * MAX_BAR_WIDTH_PCT,
+        ),
+    );
+
+    const pct = Number.isFinite(a) ? (a * 100).toFixed(2) : "100";
+    td.style.setProperty("--psp-bar-size", `${pct}%`);
+    td.style.setProperty("--psp-bar-anchor", user < 0 ? "100%" : "0%");
+    if (plugin.number_fg_mode === "label-bar") {
+        const formatter = format_raw(
+            type ?? "float",
+            plugin as unknown as ColumnConfig,
+        );
+
+        td.setAttribute(
+            "data-psp-label",
+            formatter ? formatter.format(user) : String(user),
+        );
+    } else {
+        td.removeAttribute("data-psp-label");
+    }
 }
 
 export function cell_style_numeric(
     model: DatagridModel,
     plugin: PluginWithColors | undefined,
+    type: ColumnType | undefined,
     td: HTMLElement,
     metadata: CellMetaWithExtras,
     is_settings_open: boolean,
@@ -84,21 +147,26 @@ export function cell_style_numeric(
             td.style.animation = "";
             td.style.backgroundColor = hex;
         } else if (plugin?.number_bg_mode === "gradient") {
-            const a = Math.max(
-                0,
-                Math.min(
-                    1,
-                    Math.abs((metadata.user ?? 0) / (plugin.bg_gradient ?? 1)),
-                ),
-            );
-            const source = model._plugin_background as [number, number, number];
-            const foreground = infer_foreground_from_background(
-                rgbaToRgb([r, g, b, a], source),
-            );
+            const stops =
+                plugin.bg_color_stops ?? model._default_bg_color_stops;
+
+            const t =
+                0.5 +
+                0.5 *
+                    Math.max(
+                        -1,
+                        Math.min(
+                            1,
+                            (metadata.user ?? 0) / (plugin.bg_gradient ?? 1),
+                        ),
+                    );
+
+            const sample = sampleGradientRgb(stops, t);
+            const foreground = infer_foreground_from_background(sample);
 
             td.style.animation = "";
             td.style.color = foreground;
-            td.style.backgroundColor = `rgba(${r},${g},${b},${a})`;
+            td.style.backgroundColor = rgbToHex(sample);
         } else if (plugin?.number_bg_mode === "pulse") {
             style_cell_flash(
                 model,
@@ -154,6 +222,8 @@ export function cell_style_numeric(
     if (metadata._is_hidden_by_aggregate_depth) {
         td.style.backgroundColor = "";
         td.style.color = "";
+        td.style.removeProperty("--psp-bar-size");
+        td.removeAttribute("data-psp-label");
     } else if (plugin?.number_fg_mode === "disabled") {
         if (plugin?.number_bg_mode === "color") {
             const source = model._plugin_background as [number, number, number];
@@ -166,15 +236,14 @@ export function cell_style_numeric(
         } else {
             td.style.color = "";
         }
-    } else if (plugin?.number_fg_mode === "bar") {
-        td.style.color = "";
-        td.style.position = "relative";
-        td.style.setProperty("--psp-label-bar-color", gradhex);
-        td.style.setProperty("--psp-label-bar-bg", hex);
-    } else if (plugin?.number_fg_mode === "label-bar") {
+    } else if (
+        plugin?.number_fg_mode === "bar" ||
+        plugin?.number_fg_mode === "label-bar"
+    ) {
         td.style.color = "";
         td.style.setProperty("--psp-label-bar-color", gradhex);
         td.style.setProperty("--psp-label-bar-bg", hex);
+        style_cell_bar(td, plugin, type, metadata.user);
     } else if (plugin?.number_fg_mode === "color" || !plugin?.number_fg_mode) {
         td.style.color = hex;
     }

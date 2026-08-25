@@ -235,9 +235,9 @@ impl Layout {
     }
 
     /// Rewrite every panel id through `f`, returning the remapped tree. Ids for
-    /// which `f` returns `None` are left unchanged. Used by whole-element
-    /// `restore`, which recreates panels under fresh (collision-free) ids and
-    /// must point the saved layout tree at them.
+    /// which `f` returns `None` are left unchanged. Used by `restoreWorkspace`,
+    /// which recreates panels under fresh (collision-free) ids and must point
+    /// the saved layout tree at them.
     pub fn remap(&self, f: &impl Fn(&str) -> Option<String>) -> Layout {
         match self {
             Layout::Split(split) => Layout::Split(SplitLayout {

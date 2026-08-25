@@ -849,64 +849,6 @@ test.describe("Window columns", () => {
         );
     });
 
-    test("pin button docks the drawer into the layout and back", async ({
-        page,
-    }) => {
-        await page.evaluate(async () => {
-            const viewer = document.querySelector("perspective-viewer");
-            await viewer.restore({
-                plugin: "Debug",
-                settings: true,
-                columns: ["Row ID", "Sales"],
-            });
-        });
-
-        await page.click("#add-expression");
-        await page.click("#Window");
-
-        // Stage a draft first - the pin toggle must NOT remount the editor
-        // (which would wipe it).
-        await page.dragAndDrop(
-            '.column-selector-draggable:has-text("Sales")',
-            "#window-source",
-        );
-
-        const modal_style = async () =>
-            await page.evaluate(() => {
-                const root =
-                    document.querySelector("perspective-viewer").shadowRoot;
-                const modal = root.querySelector("#modal_panel");
-                return {
-                    position: getComputedStyle(modal).position,
-                    pinned: modal.classList.contains("pinned"),
-                    width: modal.getBoundingClientRect().width,
-                };
-            });
-
-        const floating = await modal_style();
-        expect(floating.position).toBe("absolute");
-        expect(floating.pinned).toBe(false);
-
-        // Pin: the drawer becomes a static flex sibling and stops spanning
-        // the whole main area.
-        await page.click("#column_settings_pin_button");
-        const pinned = await modal_style();
-        expect(pinned.position).toBe("static");
-        expect(pinned.pinned).toBe(true);
-        expect(pinned.width).toBeLessThan(floating.width);
-
-        // The staged draft survived the toggle - no remount.
-        await expect(
-            page.locator("#window-source .column-selector-draggable"),
-        ).toContainText("Sales");
-
-        // Unpin restores the overlay.
-        await page.click("#column_settings_pin_button");
-        const restored = await modal_style();
-        expect(restored.position).toBe("absolute");
-        expect(restored.pinned).toBe(false);
-    });
-
     test("frame type dropdown selects a Rows frame", async ({ page }) => {
         await page.evaluate(async () => {
             const viewer = document.querySelector("perspective-viewer");

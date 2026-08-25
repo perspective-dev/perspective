@@ -41,7 +41,10 @@ export async function build_all() {
     if (!process.env.PSP_SKIP_WASM) {
         execSync(
             `cargo bundle --target=${get_host()} -- perspective_viewer ${IS_DEBUG ? "" : "--release"}`,
-            INHERIT,
+            {
+                ...INHERIT,
+                env: { ...process.env, PSP_ROOT_DIR: "../.." },
+            },
         );
 
         await compress(

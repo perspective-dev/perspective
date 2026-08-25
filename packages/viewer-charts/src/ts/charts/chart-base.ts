@@ -44,6 +44,7 @@ import {
 import type { PerspectiveClickDetail } from "../event-detail";
 import type { ViewConfig } from "@perspective-dev/client";
 import { resolveThemeFromVars, type Theme } from "../theme/theme";
+import { applyColumnColorOverrides } from "../theme/overrides";
 import { requestRender as scheduleRender } from "../render/scheduler";
 
 // TODO I don't know if this is the behavior we want. On the plus side, this
@@ -141,6 +142,7 @@ export abstract class AbstractChart implements ChartImplementation {
     _glManager: WebGLContextManager | null = null;
     _gridlineCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
     _chromeCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
+    _overlayPresenter: (() => void) | null = null;
 
     /**
      * 2D-canvas draw closures collected during `_fullRender` (the GL
@@ -259,11 +261,15 @@ export abstract class AbstractChart implements ChartImplementation {
 
     /**
      * Cached resolved theme — populated on first `_resolveTheme()` call,
-     * cleared by `invalidateTheme()` (driven from `plugin.restyle()`).
-     * `getComputedStyle` / `getPropertyValue` reads cost ~100µs each;
-     * zoom/hover dispatch redraws at 60Hz so we resolve once and reuse.
+     * cleared by `invalidateTheme()` (driven from `plugin.restyle()`)
+     * and by `setColumnsConfig` (per-column color overrides patch the
+     * resolved theme). `getComputedStyle` / `getPropertyValue` reads
+     * cost ~100µs each; zoom/hover dispatch redraws at 60Hz so we
+     * resolve once and reuse.
      */
     _theme: Theme | null = null;
+
+    _themeColorColumn: string | null = null;
 
     /**
      * On-demand single-row fetcher used by lazy tooltip column
@@ -285,6 +291,18 @@ export abstract class AbstractChart implements ChartImplementation {
 
     setChromeCanvas(canvas: HTMLCanvasElement | OffscreenCanvas): void {
         this._chromeCanvas = canvas;
+    }
+
+    setOverlayPresenter(cb: () => void): void {
+        this._overlayPresenter = cb;
+    }
+
+    /**
+     * Present a chrome-overlay repaint that ran outside the scheduler's
+     * frame chain.
+     */
+    presentOverlay(): void {
+        this._overlayPresenter?.();
     }
 
     setTheme(vars: Record<string, string>): void {
@@ -434,6 +452,8 @@ export abstract class AbstractChart implements ChartImplementation {
     setColumnsConfig(cfg: Record<string, any>): void {
         this._columnsConfig = cfg ?? {};
         this._rebuildColumnFormatters();
+
+        this._theme = null;
     }
 
     /**
@@ -599,16 +619,28 @@ export abstract class AbstractChart implements ChartImplementation {
             cfg.series_zoom_mode === "dynamic";
     }
 
+    protected colorScaleColumn(): string | null {
+        return null;
+    }
+
     /**
-     * Lazily decode the host-supplied theme vars. Subsequent calls hit
-     * the cache until `invalidateTheme()` clears it. Render-path
-     * callers should always read theme values through this method so
-     * the parsed `Theme` (gradient stops, palette, etc.) amortizes
-     * across an entire frame.
+     * Lazily decode the host-supplied theme vars, then patch in any
+     * per-column color-scale override for `colorScaleColumn()`.
+     * Subsequent calls hit the cache until `invalidateTheme()` /
+     * `setColumnsConfig` clears it or the color column changes.
+     * Render-path callers should always read theme values through this
+     * method so the parsed `Theme` (gradient stops, palette, etc.)
+     * amortizes across an entire frame.
      */
     _resolveTheme(): Theme {
-        if (!this._theme) {
-            this._theme = resolveThemeFromVars(this._themeVars);
+        const colorColumn = this.colorScaleColumn();
+        if (!this._theme || this._themeColorColumn !== colorColumn) {
+            this._themeColorColumn = colorColumn;
+            this._theme = applyColumnColorOverrides(
+                resolveThemeFromVars(this._themeVars),
+                this._columnsConfig,
+                colorColumn,
+            );
         }
 
         return this._theme;

@@ -51,9 +51,6 @@ pub async fn get_viewer_config(
         None => presentation.get_selected_theme_name().await,
     };
     let title = session.get_title();
-    // Placed ⇒ bound (or binding in flight): creation requires a `table`
-    // by type, so a panel with neither a bound nor pending table is an
-    // invariant violation, not a serializable state.
     let table = session
         .get_table()
         .map(|x| x.get_name().to_owned())

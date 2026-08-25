@@ -111,6 +111,11 @@ export interface PerspectiveViewerProps {
      * literal on each render does not re-apply. Combine with
      * {@link PerspectiveViewerProps.onConfigUpdate} to use the viewer as a
      * controlled component.
+     *
+     * When {@link PerspectiveViewerProps.client} is a bare `Client` (which
+     * creates no panel by itself), the config must include `table` — a
+     * panel-creating `restore()` without one rejects. `Table` clients bind
+     * their own panel, so `table` may be omitted there.
      */
     config?: pspViewer.ViewerConfigUpdate | pspViewer.WorkspaceConfigUpdate;
 

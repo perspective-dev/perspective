@@ -404,7 +404,6 @@ test.describe("Column Style Tests", () => {
 
     // ──────────────────────────────────────────────────────────────────
     // Sidebar should re-query schema and surface extra controls (the
-    // background `ColorRange` and gradient `Number` max) when
     // `number_bg_mode` is set to `gradient`.
     // ──────────────────────────────────────────────────────────────────
     test("Sidebar surfaces gradient controls when bg_mode = gradient", async ({
@@ -446,9 +445,6 @@ test.describe("Column Style Tests", () => {
 
         await page.mouse.click(x, y);
 
-        // The schema for `Profit` with bg_mode=gradient should emit a
-        // `ColorRange` (background-pos/neg) and a `Number` field for
-        // `bg_gradient`. Both are tab-section children in the StyleTab.
         await page
             .locator("perspective-viewer #column_settings_sidebar")
             .waitFor();
@@ -457,10 +453,12 @@ test.describe("Column Style Tests", () => {
             "perspective-viewer #column_settings_sidebar #style-tab",
         );
 
-        // Background ColorRange ids derive from the `label`
-        // ("background") in the Datagrid schema.
-        await sidebar_locator.locator(".pos_bg_color").waitFor();
-        await sidebar_locator.locator(".neg_bg_color").waitFor();
+        const bg_field = sidebar_locator.locator("fieldset.style-control", {
+            has: page.locator("#bg_colors-label"),
+        });
+
+        await bg_field.locator(".gradient-stops-selector").waitFor();
+        await expect(bg_field.locator(".gradient-stop-handle")).toHaveCount(3);
 
         // Snapshot the sidebar's style-tab DOM as a holistic check.
         const contents = await sidebar_locator.innerHTML();
@@ -680,15 +678,13 @@ test.describe("Column Style Tests", () => {
         });
     });
 
-    // Regression: the sidebar's ColorRange control emits a sparse config —
-    // only the side(s) that differ from the theme default are written. A
-    // one-sided fg pair (e.g. `pos_fg_color` alone) used to crash
-    // `cell_style_numeric` on negative cells ("d is not iterable"), and the
-    // mirror case (`neg_fg_color` alone) was silently ignored. Each side
-    // must fall back to the theme color independently, like the bg pair.
-    test("pos_fg_color alone renders negatives with theme fallback (no crash)", async ({
-        page,
-    }) => {
+    // ──────────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────
+
+    async function gradient_cells(
+        page: Page,
+        columns_config: Record<string, unknown>,
+    ): Promise<Array<{ text: string; bg: string }>> {
         await page.goto("/tools/test/src/html/basic-test.html");
         await page.evaluate(async () => {
             while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
@@ -696,24 +692,14 @@ test.describe("Column Style Tests", () => {
             }
         });
 
-        const { cells, rejections } = await page.evaluate(async () => {
-            const rejections: string[] = [];
-            window.addEventListener("unhandledrejection", (e) => {
-                rejections.push(String(e.reason));
-            });
-
+        return await page.evaluate(async (columns_config) => {
             const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Profit"],
                 sort: [["Profit", "asc"]],
-                columns_config: {
-                    Profit: {
-                        number_fg_mode: "color",
-                        pos_fg_color: "#00ff00",
-                    },
-                },
-            });
+                columns_config,
+            } as any);
 
             await viewer.flush();
             await new Promise((x) => setTimeout(x, 100));
@@ -723,25 +709,14 @@ test.describe("Column Style Tests", () => {
                 ).shadowRoot.querySelectorAll("regular-table tbody td"),
             );
 
-            return {
-                rejections,
-                cells: tds.map((td: any) => ({
-                    text: td.textContent.trim(),
-                    color: td.style.color,
-                })),
-            };
-        });
+            return tds.map((td: any) => ({
+                text: td.textContent.trim(),
+                bg: td.style.backgroundColor,
+            }));
+        }, columns_config);
+    }
 
-        expect(rejections).toEqual([]);
-        const negatives = cells.filter((c) => c.text.startsWith("-"));
-        expect(negatives.length).toBeGreaterThan(0);
-        for (const cell of negatives) {
-            expect(cell.color).not.toEqual("");
-            expect(cell.color).not.toEqual("rgb(0, 255, 0)");
-        }
-    });
-
-    test("neg_fg_color alone renders negatives with the custom color", async ({
+    test("string series mode cycles the theme's --psp-datagrid--series-N--color palette", async ({
         page,
     }) => {
         await page.goto("/tools/test/src/html/basic-test.html");
@@ -751,48 +726,129 @@ test.describe("Column Style Tests", () => {
             }
         });
 
-        const errors: string[] = [];
-        page.on("pageerror", (e) => errors.push(e.message));
-
-        const cells = await page.evaluate(async () => {
+        const { cells, palette } = await page.evaluate(async () => {
             const viewer = document.querySelector("perspective-viewer")!;
             await viewer.restore({
                 plugin: "Datagrid",
-                columns: ["Profit"],
-                sort: [["Profit", "asc"]],
-                columns_config: {
-                    Profit: {
-                        number_fg_mode: "color",
-                        neg_fg_color: "#ff0000",
-                    },
-                },
-            });
+                columns: ["Category"],
+                columns_config: { Category: { string_color_mode: "series" } },
+            } as any);
 
             await viewer.flush();
+            await new Promise((x) => setTimeout(x, 100));
+            const style = getComputedStyle(viewer);
+            const palette: string[] = [];
+            for (let i = 1; ; i++) {
+                const raw = style
+                    .getPropertyValue(`--psp-datagrid--series-${i}--color`)
+                    .trim();
+                if (!raw) {
+                    break;
+                }
+
+                const probe = document.createElement("div");
+                probe.style.color = raw;
+                document.body.appendChild(probe);
+                palette.push(getComputedStyle(probe).color);
+                probe.remove();
+            }
+
             const tds = Array.from(
                 (
                     viewer.querySelector("perspective-viewer-datagrid") as any
                 ).shadowRoot.querySelectorAll("regular-table tbody td"),
             );
 
-            return tds.map((td: any) => ({
-                text: td.textContent.trim(),
-                color: td.style.color,
-            }));
+            return {
+                palette,
+                cells: tds.map((td: any) => ({
+                    text: td.textContent.trim(),
+                    bg: td.style.backgroundColor,
+                })),
+            };
         });
 
-        expect(errors).toEqual([]);
-        const negatives = cells.filter((c) => c.text.startsWith("-"));
-        expect(negatives.length).toBeGreaterThan(0);
-        for (const cell of negatives) {
-            expect(cell.color).toEqual("rgb(255, 0, 0)");
+        expect(palette.length).toBeGreaterThan(1);
+        const filled = cells.filter((c) => c.text !== "");
+        expect(filled.length).toBeGreaterThan(0);
+        for (const cell of filled) {
+            expect(palette).toContain(cell.bg);
         }
 
+        expect(filled[0].bg).toBe(palette[0]);
+        const by_value = new Map<string, string>();
+        for (const cell of filled) {
+            const prior = by_value.get(cell.text);
+            expect(prior === undefined || prior === cell.bg).toBe(true);
+            by_value.set(cell.text, cell.bg);
+        }
+    });
+
+    test("bg gradient renders full-scale end colors beyond the domain", async ({
+        page,
+    }) => {
+        const cells = await gradient_cells(page, {
+            Profit: {
+                number_bg_mode: "gradient",
+                bg_gradient: 100,
+                bg_colors:
+                    "linear-gradient(to right, #ff0000 0%, #ffffff 50%, #0000ff 100%)",
+            },
+        });
+
+        const saturated = cells.filter(
+            (c) =>
+                c.text !== "" &&
+                Math.abs(parseFloat(c.text.replace(/,/g, ""))) > 100,
+        );
+        expect(saturated.length).toBeGreaterThan(0);
+        for (const cell of saturated) {
+            expect(cell.bg).toEqual(
+                cell.text.startsWith("-") ? "rgb(255, 0, 0)" : "rgb(0, 0, 255)",
+            );
+        }
+    });
+
+    test("bg gradient samples interior stops", async ({ page }) => {
+        const cells = await gradient_cells(page, {
+            Profit: {
+                number_bg_mode: "gradient",
+                bg_gradient: 1e12,
+                bg_colors:
+                    "linear-gradient(to right, #ff0000 0%, #123456 50%, #0000ff 100%)",
+            },
+        });
+
+        const filled = cells.filter((c) => c.text !== "");
+        expect(filled.length).toBeGreaterThan(0);
+        for (const cell of filled) {
+            expect(cell.bg).toEqual("rgb(18, 52, 86)");
+        }
+    });
+
+    test("bg_colors under color mode renders the END colors by sign", async ({
+        page,
+    }) => {
+        const cells = await gradient_cells(page, {
+            Profit: {
+                number_bg_mode: "color",
+                bg_colors: "linear-gradient(#ff0000, #123456, #0000ff)",
+            },
+        });
+
+        const negatives = cells.filter((c) => c.text.startsWith("-"));
         const positives = cells.filter(
             (c) => !c.text.startsWith("-") && c.text !== "",
         );
+
+        expect(negatives.length).toBeGreaterThan(0);
+        expect(positives.length).toBeGreaterThan(0);
+        for (const cell of negatives) {
+            expect(cell.bg).toEqual("rgb(255, 0, 0)");
+        }
+
         for (const cell of positives) {
-            expect(cell.color).not.toEqual("rgb(255, 0, 0)");
+            expect(cell.bg).toEqual("rgb(0, 0, 255)");
         }
     });
 
@@ -907,7 +963,9 @@ test.describe("Column Style Tests", () => {
             return (await viewer.save()).columns_config ?? {};
         });
 
-        expect(saved2[col_b]?.pos_fg_color).toEqual("#00ff00");
+        expect(saved2[col_b]?.fg_colors).toMatch(
+            /^linear-gradient\(to right, #00ff00 0%, #[0-9a-f]{6} 100%\)$/,
+        );
         expect(saved2[col_a]).toBeUndefined();
     });
 

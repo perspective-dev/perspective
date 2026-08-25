@@ -34,3 +34,15 @@ export function parseCSSColorToVec3(
 
     return [0.5, 0.5, 0.5];
 }
+
+/**
+ * Format a `[0, 1]`-range RGB triple as a plain `#rrggbb` string.
+ */
+export function vec3ToHexColor(c: [number, number, number]): string {
+    const channel = (x: number) =>
+        Math.round(Math.max(0, Math.min(1, x)) * 255)
+            .toString(16)
+            .padStart(2, "0");
+
+    return `#${channel(c[0])}${channel(c[1])}${channel(c[2])}`;
+}

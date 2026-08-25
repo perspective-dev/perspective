@@ -199,4 +199,108 @@ describeDuckDB("windows", (getClient) => {
         }
         await view.delete();
     });
+
+    test("unsorted window view takes the natural row order", async function () {
+        const rows = await raw_rows(getClient());
+        const table = await getClient().open_table("memory.superstore");
+        const view = await table.view({
+            columns: ["Row ID", "rsum"],
+            windows: {
+                rsum: {
+                    column: "Sales",
+                    aggregate: "sum",
+                    order_by: ["Order Date", "asc"],
+                    range: 0,
+                },
+            },
+        });
+
+        const result = await view.to_columns();
+        expect(result["Row ID"].length).toBe(rows.length);
+        expect(result["Row ID"].slice(0, 5)).toEqual([1, 2, 3, 4, 5]);
+        await view.delete();
+    });
+
+    test("range frame over a date order column measures days", async function () {
+        const table = await getClient().open_table("memory.temporal_test");
+        const view = await table.view({
+            columns: ["x", "rsum"],
+            windows: {
+                rsum: {
+                    column: "x",
+                    aggregate: "sum",
+                    order_by: ["d", "asc"],
+                    range: 2,
+                },
+            },
+        });
+
+        const result = await view.to_columns();
+        expect(result["rsum"]).toEqual([1, 3, 7, 12]);
+        await view.delete();
+    });
+
+    test("range frame over a datetime order column measures ms", async function () {
+        const table = await getClient().open_table("memory.temporal_test");
+        const view = await table.view({
+            columns: ["x", "rsum"],
+            windows: {
+                rsum: {
+                    column: "x",
+                    aggregate: "sum",
+                    order_by: ["ts", "asc"],
+                    // 36 hours.
+                    range: 129600000,
+                },
+            },
+        });
+
+        const result = await view.to_columns();
+        expect(result["rsum"]).toEqual([1, 3, 6, 8]);
+        await view.delete();
+    });
+
+    test("rate over a date order column measures per-day slope", async function () {
+        const table = await getClient().open_table("memory.temporal_test");
+        const view = await table.view({
+            columns: ["x", "r"],
+            windows: {
+                r: {
+                    column: "x",
+                    aggregate: "rate",
+                    order_by: ["d", "asc"],
+                    range: 2,
+                },
+            },
+        });
+
+        const result = await view.to_columns();
+        expect(result["r"]).toEqual([null, 1, 1.5, 2]);
+        await view.delete();
+    });
+
+    test("unsorted window view with split_by takes the natural row order", async function () {
+        const rows = await raw_rows(getClient());
+        const table = await getClient().open_table("memory.superstore");
+        const view = await table.view({
+            columns: ["cumsum"],
+            split_by: ["Region"],
+            windows: {
+                cumsum: {
+                    column: "Sales",
+                    aggregate: "sum",
+                    order_by: ["Row ID", "asc"],
+                    partition_by: ["Region"],
+                    cumulative: true,
+                },
+            },
+        });
+
+        const result = await view.to_columns();
+        const first = Object.keys(result).filter((k) =>
+            k.endsWith("cumsum"),
+        )[0];
+        expect(result[first].length).toBe(rows.length);
+        await view.delete();
+    });
 });

@@ -285,12 +285,12 @@ pub(crate) async fn locked_run(
 
             let view_config_snapshot = session.get_view_config().clone();
             let plugin_config_changed =
-                renderer.update_plugin_config(&view_config_snapshot, spec.plugin_config);
+                renderer.update_plugin_config(&view_config_snapshot, spec.plugin_config)?;
             let columns_config_changed = renderer.update_columns_configs(
                 &view_config_snapshot,
                 &session,
                 spec.columns_config,
-            );
+            )?;
 
             let changed = plugin_config_changed || columns_config_changed;
             if changed || plugin_swapped {

@@ -58,6 +58,7 @@ export type * from "./ts-rs/FilterReducer.d.ts";
 export type * from "./ts-rs/PluginStaticConfig.ts";
 export type * from "./ts-rs/ExportMethod.d.ts";
 export type * from "./ts-rs/PanelOptions.d.ts";
+export type * from "./ts-rs/SaveWorkspaceOptions.d.ts";
 export type * from "./ts-rs/ClientOptions.d.ts";
 export type * from "./ts-rs/ExportOptions.d.ts";
 export type * from "./ts-rs/GetTableOptions.d.ts";

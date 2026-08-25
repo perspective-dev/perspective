@@ -46,8 +46,11 @@ pub fn sync_update_panels(
         panels,
         global_filters,
         masters,
+        palette,
     } = update.into_serde_ext()?;
 
+    let palette = validate_palette(palette.unwrap_or_default())
+        .map_err(|e| ApiError::from(JsValue::from_str(&e)))?;
     let old_ids = this.workspace.panel_ids();
 
     // Phase 1 — models only, NO renders and NO draws
@@ -92,6 +95,8 @@ pub fn sync_update_panels(
         }
     }
 
+    this.presentation.set_palette(palette)?;
+
     // Phase 2 — stage the remapped layout tree on the Workspace
     if let Some(layout) = layout {
         this.workspace
@@ -113,13 +118,17 @@ pub fn sync_update_panels(
     }
 
     if let Some(app) = this.root.borrow().as_ref() {
+        // Silent (`announce: false`): each restored panel's own view-config
+        // commit dispatch announces the config, settings field included.
         app.send_message(PerspectiveViewerMsg::ToggleSettingsInit(
             Some(SettingsUpdate::Update(sidebar_open)),
+            false,
             None,
         ));
     }
 
     let masters = masters
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|saved| match id_map.get(&saved) {
             Some(fresh) => Some(PanelId::from(fresh.as_str())),
@@ -131,6 +140,7 @@ pub fn sync_update_panels(
         .collect::<Vec<_>>();
 
     this.workspace.set_masters(masters);
-    this.workspace.set_global_filters(global_filters);
+    this.workspace
+        .set_global_filters(global_filters.unwrap_or_default());
     Ok((contents, eject_tasks))
 }

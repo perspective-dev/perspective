@@ -22,7 +22,9 @@ use wasm_bindgen::JsValue;
 
 use crate::components::settings_panel::SelectedTab;
 use crate::config::*;
-use crate::presentation::{ColumnLocator, ColumnSettingsTab, DragDropProps, PresentationProps};
+use crate::presentation::{
+    ColumnSettingsTab, ColumnSettingsTarget, DragDropProps, PresentationProps,
+};
 use crate::renderer::RendererProps;
 use crate::session::{SessionProps, TableLoadState, ViewStats};
 use crate::utils::Completion;
@@ -48,17 +50,19 @@ pub enum PerspectiveViewerMsg {
     ColumnSettingsPanelSizeUpdate(Option<i32>),
     ColumnSettingsPanelAutoWidth(f64),
     ToggleColumnSettingsPin,
+    ToggleColumnSettingsPinComplete(Sender<()>),
     ColumnSettingsTabChanged(ColumnSettingsTab),
     OpenColumnSettings {
-        locator: Option<ColumnLocator>,
+        target: Option<ColumnSettingsTarget>,
         sender: Option<Sender<()>>,
         toggle: bool,
     },
     PreloadFontsUpdate,
 
     /// Element-level reset (the public `reset()` API): reset EVERY panel and
-    /// clear the cross-filter overlay, symmetric with whole-element
-    /// `save`/`restore`. The `bool` also clears expressions/column settings.
+    /// clear the cross-filter overlay, symmetric with
+    /// `saveWorkspace`/`restoreWorkspace`. The `bool` also clears
+    /// expressions/column settings.
     Reset(bool, Option<Completion>),
 
     /// Reset ONLY the named panel — or the active panel when `None` — to its
@@ -86,10 +90,10 @@ pub enum PerspectiveViewerMsg {
     /// I6) — carrying any teardown error, which was previously dropped.
     ClosePanel(String, Option<Completion>),
 
-    /// Whole-element `restore` finished replacing the panel set in the
+    /// `restoreWorkspace` finished replacing the panel set in the
     /// `Workspace` (new models inserted, old panels ejected, layout staged):
     /// activate the named panel, re-subscribe the per-panel wiring, and
-    /// re-render — the SINGLE visible commit of the whole restore.
+    /// re-render — the SINGLE visible commit of the restore.
     CommitWorkspaceRestore(String),
 
     /// Duplicate the named panel: snapshot its config into a new independent
@@ -149,8 +153,34 @@ pub enum PerspectiveViewerMsg {
     SettingsPanelTabChanged(SelectedTab),
     SettingsPanelAutoWidth(f64),
     ToggleDebug,
+
+    /// The toggle choreography's INTERNAL completion leaf: flip the pane
+    /// and resolve on the render commit. Never send this to toggle
+    /// settings from outside `settings.rs` — it skips the presize/resize
+    /// sweep (the pane's `SplitPanel` emits no `before-resize` and the
+    /// host box is unchanged, so nothing else resizes the plugins), which
+    /// leaves canvas plugins CSS-stretched at their old backing size. API
+    /// entry points send [`Self::ToggleSettingsInit`].
     ToggleSettingsComplete(SettingsUpdate, Sender<()>),
-    ToggleSettingsInit(Option<SettingsUpdate>, Option<Sender<ApiResult<JsValue>>>),
+
+    /// Toggle (or force) the settings pane with the FULL choreography:
+    /// presize every visible plugin to its post-toggle box, commit the
+    /// pane, then the exactness-finalizer resize. The `Sender` resolves
+    /// after the sweep. The one settings-toggle entry point for both the
+    /// toolbar and the element API (`toggleConfig`, `restore({settings})`,
+    /// `restoreWorkspace`).
+    ///
+    /// The `bool` is `announce`: `true` when this toggle is the SOLE
+    /// carrier of the config change (a user gesture — toolbar,
+    /// `toggleConfig`), which emits `toggle-settings` + one
+    /// `perspective-config-update`; `false` for the `restore` family,
+    /// whose own view-config commit dispatch announces the settings field
+    /// — one API call, one config-update.
+    ToggleSettingsInit(
+        Option<SettingsUpdate>,
+        bool,
+        Option<Sender<ApiResult<JsValue>>>,
+    ),
     UpdateSession(Box<SessionProps>),
     UpdateRenderer(Box<RendererProps>),
     UpdatePresentation(Box<PresentationProps>),
@@ -161,7 +191,16 @@ pub enum PerspectiveViewerMsg {
     UpdateIsWorkspace(bool),
 
     /// Update only `open_column_settings` in the presentation snapshot.
+    /// Handled in `settings.rs` (not `snapshots.rs`): a docked-drawer
+    /// mount/unmount defers the snapshot behind a presize sweep.
     UpdateColumnSettings(Box<crate::presentation::OpenColumnSettings>),
+
+    /// Every visible panel has rendered at its post-transition box — NOW
+    /// apply the newest deferred `open_column_settings` target (the
+    /// latest-wins slot, not a copy captured at sweep spawn); the `Sender`
+    /// resolves on the render commit so the staged presents reveal in the
+    /// same paint (mirrors `ToggleSettingsComplete`).
+    UpdateColumnSettingsCommit(Sender<()>),
     UpdateDragDrop(Box<DragDropProps>),
 
     /// Update only stats-related fields of `session_props` without touching

@@ -14,3 +14,35 @@ services:
             - serve
             - --hostname
             - "0.0.0.0"
+
+    # A local S3-compatible backend for developing the "Create Data Source"
+    # S3 form. DEVELOPMENT ONLY: it is reachable because the dev page is also
+    # `http://localhost`, so the mixed-content block that stops an HTTPS
+    # deployment from reaching a plain-HTTP endpoint does not apply here.
+    # MinIO is also more lenient than AWS about signatures, so a green MinIO
+    # is necessary but not sufficient.
+    minio:
+        container_name: minio
+        image: minio/minio
+        ports:
+            - 9000:9000
+            - 9001:9001
+        environment:
+            MINIO_ROOT_USER: perspective
+            MINIO_ROOT_PASSWORD: perspective
+            MINIO_API_CORS_ALLOW_ORIGIN: "http://localhost:8080"
+        command: server /data --console-address ":9001"
+
+    minio-init:
+        image: minio/mc
+        depends_on:
+            - minio
+        volumes:
+            - ${PWD}/../node_modules/superstore-arrow:/fixtures:ro
+        entrypoint: >
+            /bin/sh -c "
+            until mc alias set local http://minio:9000 perspective perspective; do sleep 1; done;
+            mc mb --ignore-existing local/perspective;
+            mc cp /fixtures/superstore.lz4.arrow local/perspective/arrow/superstore.arrow;
+            exit 0;
+            "

@@ -150,15 +150,15 @@
         content: var(--psp-label--number-fg-mode--content, "Foreground");
     }
 
-    label#pos_fg_color-label:before {
+    label#fg_colors-label:before {
         content: var(--psp-label--number-fg-mode--content, "Foreground");
     }
 
     label#number_bg_mode-label:before {
-        content: var(--psp-label--number-fg-mode--content, "Background");
+        content: var(--psp-label--number-bg-mode--content, "Background");
     }
 
-    label#pos_bg_color-label:before {
+    label#bg_colors-label:before {
         content: var(--psp-label--pos-bg-color--content, "Background");
     }
 
@@ -187,8 +187,12 @@
         content: var(--psp-label--series--content, "Series");
     }
 
-    label#color-range-label:before {
-        content: var(--psp-label--color-range--content, "Color Range");
+    label#palette-label:before {
+        content: var(--psp-label--palette--content, "Palette");
+    }
+
+    label#gradient-label:before {
+        content: var(--psp-label--gradient--content, "Gradient");
     }
 
     label#style-label:before {

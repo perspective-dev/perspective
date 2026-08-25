@@ -106,6 +106,20 @@ export class WorkerRenderer {
     cssWidth: number;
     cssHeight: number;
     dpr: number;
+
+    /**
+     * Blit-mode compose surface: gridlines + GL frame + chrome are
+     * drawn here each `endFrame` and shipped as ONE `ImageBitmap`, so
+     * every layer rides the host's staged-present hold (see
+     * `InitMsg.gridlinesCanvas`). `null` in direct mode.
+     */
+    private _composeCanvas: OffscreenCanvas | null = null;
+    private _composeCtx: OffscreenCanvasRenderingContext2D | null = null;
+
+    private _lastPlot: ImageBitmap | null = null;
+
+    private _frameSerial = 0;
+    private _overlayPresentQueued = false;
     client: Client;
     view: View;
 
@@ -182,20 +196,31 @@ export class WorkerRenderer {
             });
         }
 
+        // Blit mode: the 2D layers are worker-local (the host omits
+        // them from the init message) and every shipped frame is the
+        // full composite — gridlines under the GL plot under chrome,
+        // the same stacking as the host's canvas elements and the
+        // `snapshotPng` composite. Direct mode draws into the host's
+        // transferred surfaces and ships nothing.
+        const w = Math.max(1, Math.round(msg.cssWidth * msg.dpr));
+        const h = Math.max(1, Math.round(msg.cssHeight * msg.dpr));
+        this.gridlines = msg.gridlinesCanvas ?? new OffscreenCanvas(w, h);
+        this.chrome = msg.chromeCanvas ?? new OffscreenCanvas(w, h);
         if (msg.renderMode === "blit") {
             this.glManager.setFrameCallback((bitmap) => {
-                this.post({ kind: "frameBitmap", bitmap }, [bitmap]);
+                this._frameSerial += 1;
+                const frame = this._composeFrame(bitmap);
+                this.post({ kind: "frameBitmap", bitmap: frame }, [frame]);
             });
+            this.chartImpl.setOverlayPresenter?.(() => this._presentOverlay());
         }
 
-        this.gridlines = msg.gridlinesCanvas;
-        this.chrome = msg.chromeCanvas;
         this.cssWidth = msg.cssWidth;
         this.cssHeight = msg.cssHeight;
         this.dpr = msg.dpr;
 
-        this.chartImpl.setGridlineCanvas?.(msg.gridlinesCanvas);
-        this.chartImpl.setChromeCanvas?.(msg.chromeCanvas);
+        this.chartImpl.setGridlineCanvas?.(this.gridlines);
+        this.chartImpl.setChromeCanvas?.(this.chrome);
         this.chartImpl.setTheme?.(msg.themeVars);
 
         if (msg.defaultChartType) {
@@ -589,6 +614,87 @@ export class WorkerRenderer {
     }
 
     /**
+     * Blit-mode frame composite: draw the gridlines (bottom), the GL
+     * plot bitmap (middle) and the chrome/axes (top) into the compose
+     * surface and transfer the result — the single `ImageBitmap` the
+     * host blits, and the unit the staged-present hold stages. Runs in
+     * `endFrame`, which the scheduler orders after `render2D`'s 2D
+     * flush, so both layers hold this frame's content.
+     *
+     * A layer whose buffer differs from the plot's dimensions is
+     * skipped rather than scaled: its content is a stale-sized frame
+     * mid-resize (the 2D draws re-size their canvas to `css × dpr` on
+     * the next flush), and scaling it would re-introduce exactly the
+     * warp this composite exists to prevent.
+     */
+    private _composeFrame(plot: ImageBitmap): ImageBitmap {
+        const w = plot.width;
+        const h = plot.height;
+        if (!this._composeCanvas) {
+            this._composeCanvas = new OffscreenCanvas(w, h);
+            this._composeCtx = this._composeCanvas.getContext("2d");
+        }
+
+        const canvas = this._composeCanvas;
+        const ctx = this._composeCtx;
+        if (!ctx) {
+            return plot;
+        }
+
+        if (canvas.width !== w || canvas.height !== h) {
+            canvas.width = w;
+            canvas.height = h;
+        } else {
+            ctx.clearRect(0, 0, w, h);
+        }
+
+        if (this.gridlines.width === w && this.gridlines.height === h) {
+            ctx.drawImage(this.gridlines, 0, 0);
+        }
+
+        ctx.drawImage(plot, 0, 0);
+        if (this._lastPlot !== plot) {
+            this._lastPlot?.close();
+            this._lastPlot = plot;
+        }
+
+        if (this.chrome.width === w && this.chrome.height === h) {
+            ctx.drawImage(this.chrome, 0, 0);
+        }
+
+        return canvas.transferToImageBitmap();
+    }
+
+    private _presentOverlay(): void {
+        if (this._overlayPresentQueued) {
+            return;
+        }
+
+        this._overlayPresentQueued = true;
+        const mark = this._frameSerial;
+        queueMicrotask(() => {
+            this._overlayPresentQueued = false;
+            const plot = this._lastPlot;
+            if (this._frameSerial !== mark || !plot) {
+                return;
+            }
+
+            const w = Math.max(1, Math.round(this.cssWidth * this.dpr));
+            const h = Math.max(1, Math.round(this.cssHeight * this.dpr));
+            if (plot.width !== w || plot.height !== h) {
+                return;
+            }
+
+            const frame = this._composeFrame(plot);
+            if (frame === plot) {
+                return;
+            }
+
+            this.post({ kind: "frameBitmap", bitmap: frame }, [frame]);
+        });
+    }
+
+    /**
      * Composite the three layers into a single PNG `Blob`.
      */
     async snapshotPng(): Promise<Blob> {
@@ -649,6 +755,8 @@ export class WorkerRenderer {
         // next-RAF `drain()` can't paint/present against a dead
         // context (the "scheduler: present failed" path).
         unregister(this.glManager);
+        this._lastPlot?.close();
+        this._lastPlot = null;
         this.chartImpl.destroy();
         this.glManager.destroy();
     }

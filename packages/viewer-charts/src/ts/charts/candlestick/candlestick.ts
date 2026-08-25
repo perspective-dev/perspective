@@ -212,9 +212,10 @@ export class CandlestickChart extends CategoricalYChart {
 
         const catIdx = this._candles.catIdx[idx];
         const splitIdx = this._candles.splitIdx[idx];
-        const groupByValues: (string | null)[] = this._rowPaths.map(
-            (level) => level.labels[catIdx] ?? null,
-        );
+        const groupByValues: (string | number | null)[] =
+            this._categoryAxisMode === "numeric" && this._categoryPositions
+                ? [this._categoryPositions[catIdx] ?? null]
+                : this._rowPaths.map((level) => level.labels[catIdx] ?? null);
         const splitKey = this._splitPrefixes[splitIdx] ?? "";
         const splitByValues =
             this._splitBy.length > 0 && splitKey !== ""

@@ -53,6 +53,13 @@ perspective-viewer [theme="Solarized Dark"] {
     --psp-charts--series-5--color: #2aa198;
     --psp-charts--series-6--color: #6c71c4;
     --psp-charts--series-7--color: #d33682;
+    --psp-datagrid--series-1--color: #268bd2;
+    --psp-datagrid--series-2--color: #cb4b16;
+    --psp-datagrid--series-3--color: #b58900;
+    --psp-datagrid--series-4--color: #859900;
+    --psp-datagrid--series-5--color: #2aa198;
+    --psp-datagrid--series-6--color: #6c71c4;
+    --psp-datagrid--series-7--color: #d33682;
     /* perspective-viewer-solarized-dark--colors */
     color: #93a1a1;
     background-color: #002b36;

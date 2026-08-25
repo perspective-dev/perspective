@@ -72,7 +72,105 @@ async function read_neg_cell_color(page: any) {
     });
 }
 
+async function read_max_cell_background(page: any) {
+    return await page.evaluate(async () => {
+        const norm = (color: string) => {
+            const el = document.createElement("div");
+            el.style.color = color;
+            document.body.appendChild(el);
+            const out = getComputedStyle(el).color;
+            el.remove();
+            return out;
+        };
+
+        const datagrid = document.querySelector(
+            "perspective-viewer-datagrid",
+        ) as any;
+
+        const td = datagrid.regular_table.querySelector("tbody td");
+        const sidebar = document
+            .querySelector("perspective-viewer")!
+            .shadowRoot!.querySelector("#column_settings_sidebar");
+        const handles = sidebar?.querySelectorAll(
+            "#bg_colors-label ~ * .gradient-stop-handle input, fieldset:has(#bg_colors-label) .gradient-stop-handle input",
+        );
+        const last = handles?.[handles.length - 1] as
+            | HTMLInputElement
+            | undefined;
+        return {
+            cell: norm(td.style.backgroundColor),
+            theme_var: norm(datagrid.model._pos_bg_color[0]),
+            sidebar_pos_stop: last ? norm(last.value) : undefined,
+        };
+    });
+}
+
 test.describe("Datagrid restyle()", () => {
+    test("default gradient background follows a theme change", async ({
+        page,
+    }) => {
+        await goto_ready(page);
+
+        await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            await viewer.restore({
+                theme: "Pro Light",
+                settings: true,
+                sort: [["Row ID", "desc"]],
+            });
+        });
+
+        const { x, y } = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            const editBtn = (
+                viewer.querySelector("perspective-viewer-datagrid") as any
+            ).shadowRoot.querySelector(
+                "#psp-column-edit-buttons th.psp-menu-enabled:nth-child(1) span",
+            );
+
+            const rect = editBtn.getBoundingClientRect();
+            return {
+                x: Math.floor(rect.left + rect.width / 2),
+                y: Math.floor(rect.top + rect.height / 2),
+            };
+        });
+
+        await page.mouse.click(x, y);
+        const sidebar = page.locator(
+            "perspective-viewer #column_settings_sidebar",
+        );
+        await sidebar.waitFor();
+        await sidebar
+            .locator("fieldset.style-control", {
+                has: page.locator("#number_bg_mode-label"),
+            })
+            .locator("select")
+            .selectOption("gradient");
+
+        await expect
+            .poll(async () => (await read_max_cell_background(page)).cell)
+            .toEqual((await read_max_cell_background(page)).theme_var);
+        const light = await read_max_cell_background(page);
+
+        await page.evaluate(async (theme: string) => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            await viewer.restore({ theme });
+        }, "Pro Dark");
+
+        const dark = await read_max_cell_background(page);
+        expect(dark.theme_var).not.toEqual(light.theme_var);
+
+        expect(dark.cell).toEqual(dark.theme_var);
+
+        await expect
+            .poll(
+                async () =>
+                    (await read_max_cell_background(page)).sidebar_pos_stop,
+                { timeout: 5000 },
+            )
+            .toEqual(dark.theme_var);
+    });
+
     test("theme change repaints cells with the new theme's colors", async ({
         page,
     }) => {
@@ -111,12 +209,6 @@ test.describe("Datagrid restyle()", () => {
         expect(light2.cell).toEqual(light.theme_var);
     });
 
-    // Asserted at the plugin level (`regular-table` override store +
-    // `plugin.save()`) rather than through `viewer.save()`/`restore()`:
-    // the host's schema-driven `plugin_config` bucket strips the `columns`
-    // key on both sides (`update_plugin_config`'s `active_keys()` retain),
-    // so column widths do not round-trip through the public viewer config
-    // at all today — a pre-existing gap unrelated to `restyle()`.
     test("user-set column widths survive a theme change", async ({ page }) => {
         await goto_ready(page);
         await page.evaluate(async () => {
@@ -151,13 +243,28 @@ test.describe("Datagrid restyle()", () => {
             ) as any;
             return {
                 live: datagrid.regular_table.saveColumnSizes(),
-                token: datagrid.save(),
                 model_theme: datagrid.model._theme,
             };
         });
 
         expect(state.live).toEqual({ "0": 300 });
-        expect(state.token.columns.Profit.column_size_override).toEqual(300);
+        await expect
+            .poll(async () => {
+                return await page.evaluate(async () => {
+                    const datagrid = document.querySelector(
+                        "perspective-viewer-datagrid",
+                    ) as any;
+
+                    datagrid._persist_column_sizes();
+                    const viewer = document.querySelector(
+                        "perspective-viewer",
+                    ) as any;
+
+                    const token = await viewer.save();
+                    return token.columns_config?.Profit?.column_size_override;
+                });
+            })
+            .toEqual(300);
 
         // Proof the restyle actually ran (the bracket was exercised, not
         // skipped): the model captured the new theme.

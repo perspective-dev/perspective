@@ -14,7 +14,6 @@ import {
     PRIVATE_PLUGIN_SYMBOL,
     readThemeStyle,
     save_column_size_overrides,
-    restore_column_size_overrides,
 } from "../model/index.js";
 import { activate } from "../plugin/activate.js";
 import { restore } from "../plugin/restore.js";
@@ -382,11 +381,6 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         }
 
         Object.assign(this.model, readThemeStyle(this.regular_table));
-        if (this._initialized) {
-            const old_sizes = save_column_size_overrides.call(this);
-            this.regular_table.resetAutoSize();
-            restore_column_size_overrides.call(this, old_sizes);
-        }
     }
 
     delete(): void {

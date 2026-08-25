@@ -18,6 +18,7 @@
 
 mod browser;
 mod completion;
+mod css_vars;
 mod custom_element;
 mod datetime;
 mod debounce;
@@ -35,6 +36,7 @@ mod tests;
 
 pub use browser::*;
 pub use completion::*;
+pub use css_vars::*;
 pub use custom_element::*;
 pub use datetime::*;
 pub use debounce::*;

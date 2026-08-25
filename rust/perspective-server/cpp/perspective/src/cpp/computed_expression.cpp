@@ -12,9 +12,99 @@
 
 #include <perspective/computed_expression.h>
 
+#include <cstdint>
 #include <utility>
 
 namespace perspective {
+
+namespace {
+
+// Runtime guards for the single-shot `expression.value()` calls in
+// `precompute()` / `get_dtype()`. ExprTk only emits its bounds-checked
+// `*_rtc_node` AST variants when a check is registered on the parser at
+// compile() time, so these must NEVER be registered on the parser owned by
+// `t_computed_expression` -- `compute()` must keep the unchecked node
+// variants on the per-row path, which is only ever reached by expressions
+// that already passed validation.
+
+// Out-of-range dynamic vector access (e.g. `v[i]` where `i` is only known
+// at eval time) traps or silently corrupts the heap without this check.
+struct t_validation_vector_access_check
+    : exprtk::vector_access_runtime_check {
+    bool
+    handle_runtime_violation(violation_context& /*context*/) override {
+        // Returning false clamps the access to the vector's base element,
+        // so evaluation completes harmlessly; the flag turns the result
+        // into a validation error afterwards. The base impl throws.
+        m_violation = true;
+        return false;
+    }
+
+    bool m_violation = false;
+};
+
+// Iteration budget, so a mid-edit `while (1 > 0) {}` fails validation
+// instead of hanging the engine.
+struct t_validation_loop_check : exprtk::loop_runtime_check {
+    explicit t_validation_loop_check(std::uint64_t budget) :
+        m_remaining(budget) {
+        loop_set = e_all_loops;
+        max_loop_iterations = budget;
+    }
+
+    // ExprTk's own `max_loop_iterations` is per loop *entry*, which nested
+    // loops multiply; this virtual is consulted on every iteration of every
+    // loop, so it enforces the budget cumulatively across the whole
+    // evaluation.
+    bool
+    check() override {
+        if (m_remaining == 0) {
+            return false;
+        }
+        --m_remaining;
+        return true;
+    }
+
+    void
+    handle_runtime_violation(const violation_context& /*context*/) override {
+        // Must not throw (the base impl does): returning normally lets the
+        // loop node terminate via check() == false and evaluation completes
+        // cleanly, with every subsequent loop entry short-circuiting.
+        m_violation = true;
+    }
+
+    std::uint64_t m_remaining;
+    bool m_violation = false;
+};
+
+// Generous for any sane single-row evaluation, small enough to keep a
+// pathological validation bounded well under a second.
+constexpr std::uint64_t VALIDATION_MAX_LOOP_ITERATIONS = 1000000;
+
+// Registration is parser-wide state; scope it strictly to the validation
+// compile + value() call so no other compile on this parser can observe it.
+struct t_validation_check_guard {
+    PSP_NON_COPYABLE(t_validation_check_guard);
+
+    t_validation_check_guard(
+        exprtk::parser<t_tscalar>& parser,
+        t_validation_vector_access_check& vector_check,
+        t_validation_loop_check& loop_check
+    ) :
+        m_parser(parser) {
+        m_parser.register_vector_access_runtime_check(vector_check);
+        m_parser.register_loop_runtime_check(loop_check);
+    }
+
+    ~t_validation_check_guard() {
+        m_parser.clear_vector_access_runtime_check();
+        m_parser.clear_loop_runtime_check();
+    }
+
+    exprtk::parser<t_tscalar>& m_parser;
+};
+
+} // namespace
 
 computed_function::bucket t_computed_expression_parser::BUCKET_FN =
     computed_function::bucket();
@@ -361,6 +451,10 @@ t_computed_expression_parser::precompute(
         sym_table.add_variable(column_id, values[cidx]);
     }
 
+    t_validation_vector_access_check vector_check;
+    t_validation_loop_check loop_check(VALIDATION_MAX_LOOP_ITERATIONS);
+    const t_validation_check_guard guard(*m_parser, vector_check, loop_check);
+
     exprtk::expression<t_tscalar> expr_definition;
     expr_definition.register_symbol_table(sym_table);
 
@@ -375,6 +469,18 @@ t_computed_expression_parser::precompute(
 
     t_tscalar v = expr_definition.value();
     function_store.clear_computed_function_state();
+
+    if (vector_check.m_violation || loop_check.m_violation) {
+        std::stringstream ss;
+        ss << "[t_computed_expression_parser::precompute] Runtime error in "
+              "expression: `"
+           << parsed_expression_string << "`, "
+           << (vector_check.m_violation
+                   ? "vector index out of bounds"
+                   : "exceeded maximum loop iterations")
+           << '\n';
+        PSP_COMPLAIN_AND_ABORT(ss.str());
+    }
 
     return std::make_shared<t_computed_expression>(
         expression_alias,
@@ -451,6 +557,10 @@ t_computed_expression_parser::get_dtype(
         sym_table.add_variable(column_id, values[cidx]);
     }
 
+    t_validation_vector_access_check vector_check;
+    t_validation_loop_check loop_check(VALIDATION_MAX_LOOP_ITERATIONS);
+    const t_validation_check_guard guard(*m_parser, vector_check, loop_check);
+
     exprtk::expression<t_tscalar> expr_definition;
     expr_definition.register_symbol_table(sym_table);
 
@@ -490,6 +600,21 @@ t_computed_expression_parser::get_dtype(
     t_dtype dtype = v.get_dtype();
 
     function_store.clear_computed_function_state();
+
+    if (vector_check.m_violation) {
+        error.m_error_message = "Runtime Error - Vector index out of bounds.";
+        error.m_line = 0;
+        error.m_column = 0;
+        return DTYPE_NONE;
+    }
+
+    if (loop_check.m_violation) {
+        error.m_error_message =
+            "Runtime Error - Exceeded maximum loop iterations.";
+        error.m_line = 0;
+        error.m_column = 0;
+        return DTYPE_NONE;
+    }
 
     if (v.m_status == STATUS_CLEAR || dtype == DTYPE_NONE) {
         error.m_error_message =

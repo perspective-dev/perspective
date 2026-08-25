@@ -719,9 +719,11 @@ impl Session {
         config_static: &PluginStaticConfig,
     ) {
         use self::column_defaults_update::*;
+        let config = self.get_view_config();
         config_update.set_update_column_defaults(
             &self.metadata(),
-            &self.get_view_config().columns,
+            &config,
+            &config.columns,
             config_static,
         )
     }
@@ -737,7 +739,11 @@ impl Session {
         config_static: &PluginStaticConfig,
     ) {
         use self::column_defaults_update::*;
-        config_update.set_update_rollup_defaults(&self.metadata(), config_static)
+        config_update.set_update_rollup_defaults(
+            &self.metadata(),
+            &self.get_view_config(),
+            config_static,
+        )
     }
 
     /// Apply a `ViewConfigUpdate` to the live config — the ONLY view-config
@@ -889,7 +895,7 @@ impl Session {
             .pending_dispatches
             .set(self.0.pending_dispatches.get() + 1);
         let session = self.clone();
-        ApiFuture::spawn(async move {
+        ApiFuture::spawn_named("config-update-dispatch", async move {
             let result = fut.await;
             let remaining = session.0.pending_dispatches.get() - 1;
             session.0.pending_dispatches.set(remaining);
@@ -1165,9 +1171,6 @@ impl Session {
         let old = self.borrow_mut().view_sub.take();
         ApiFuture::spawn(old.delete());
         self.borrow_mut().view_sub = Some(sub);
-        // REBUILD: a `View` was genuinely constructed and bound — the one
-        // place `view_created` may fire, and the one place the `FreshView`
-        // full-draw witness is minted from a rebuild.
         self.view_created.emit(());
         self.commit_reconciled.emit(());
         match self.get_view() {

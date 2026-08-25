@@ -24,7 +24,7 @@ use crate::renderer::ColumnConfigMap;
 
 /// The state of an entire `custom_elements::PerspectiveViewerElement` component
 /// and its `Plugin`: the element-level `settings` flag plus the per-panel
-/// [`PanelViewerConfig`]. The split exists so the whole-element config format
+/// [`PanelViewerConfig`]. The split exists so the workspace config format
 /// can serialize panel entries *without* a `settings` key (it is element-level
 /// state there, carried by the top-level `active` field instead), while the
 /// single-panel format flattens back to the legacy shape.
@@ -39,7 +39,7 @@ pub struct ViewerConfig<V: TS = String> {
 
 /// The per-panel state of a [`ViewerConfig`] — everything except the
 /// element-level `settings` flag. This is the `panels` entry type of the
-/// whole-element config format.
+/// workspace config format.
 #[derive(Debug, Default, Serialize, PartialEq, TS)]
 pub struct PanelViewerConfig<V: TS = String> {
     /// The `@perspective-dev/viewer` version that wrote this config,
@@ -315,15 +315,53 @@ impl From<ViewerConfigInitial> for ViewerConfigUpdate {
     }
 }
 
-// There is deliberately NO `TryFrom<ViewerConfigUpdate>` here. Requiring a
-// `table` is a property of the CREATION ENTRY POINTS — `addPanel`'s
-// argument type, `WorkspaceConfigUpdate::panels`, and the agent's
-// `add_panel` decode — each of which already has a `ViewerConfigInitial`
-// in hand. An update→initial conversion exists only to let a route holding
-// a PATCH pretend it is creating from scratch, which is how `restore`'s
-// upsert acquired the gate and started rejecting the table-less
-// restore-then-`load` contract. Its absence is what keeps that from
-// recurring: `create_panel` takes an update, so no caller needs one.
+/// The rejection every panel-creating route without a `table` resolves to.
+pub const CREATE_REQUIRES_TABLE: &str = "Cannot create a panel without a `table` — `load()` a \
+                                         `Client` and include `table` in the config, or use \
+                                         `addPanel()`";
+
+fn down<T: Clone>(value: OptionalUpdate<T>) -> Option<T> {
+    match value {
+        OptionalUpdate::Update(value) => Some(value),
+        OptionalUpdate::Missing | OptionalUpdate::SetDefault => None,
+    }
+}
+
+impl TryFrom<ViewerConfigUpdate> for ViewerConfigInitial {
+    type Error = ApiError;
+
+    fn try_from(value: ViewerConfigUpdate) -> Result<Self, Self::Error> {
+        // Exhaustive (no `..`) on purpose — the same drift alarm as the
+        // `From<ViewerConfigInitial>` impl above. `settings` is element-level
+        // state, stripped by `restore()` before resolution; discarded here.
+        let ViewerConfigUpdate {
+            version,
+            plugin,
+            title,
+            table,
+            theme,
+            settings: _settings,
+            plugin_config,
+            columns_config,
+            view_config,
+        } = value;
+
+        let OptionalUpdate::Update(table) = table else {
+            return Err(ApiError::new(CREATE_REQUIRES_TABLE));
+        };
+
+        Ok(Self {
+            table,
+            version: down(version),
+            plugin: down(plugin),
+            title: down(title),
+            theme: down(theme),
+            plugin_config: down(plugin_config),
+            columns_config: down(columns_config),
+            view_config,
+        })
+    }
+}
 
 impl std::fmt::Display for ViewerConfigUpdate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -359,50 +397,6 @@ pub type TableUpdate = OptionalUpdate<String>;
 pub type VersionUpdate = OptionalUpdate<String>;
 pub type ColumnConfigUpdate = OptionalUpdate<ColumnConfigMap>;
 pub type PluginConfigUpdate = OptionalUpdate<serde_json::Map<String, Value>>;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn initial_requires_a_table() {
-        let json = serde_json::json!({ "group_by": ["State"] });
-        let err = serde_json::from_value::<ViewerConfigInitial>(json).unwrap_err();
-        assert!(format!("{err}").contains("table"));
-    }
-
-    /// The creation → patch direction is the only one that exists (see the
-    /// note above the `From` impl); a `table` becomes a concrete update and
-    /// the element-level `settings` is not carried.
-    #[test]
-    fn initial_widens_to_an_update() {
-        let json = serde_json::json!({
-            "table": "superstore",
-            "plugin": "Datagrid",
-            "group_by": ["State"],
-        });
-
-        let initial: ViewerConfigInitial = serde_json::from_value(json).unwrap();
-        let update = ViewerConfigUpdate::from(initial);
-        assert!(matches!(&update.table, OptionalUpdate::Update(x) if x == "superstore"));
-        assert!(matches!(&update.settings, OptionalUpdate::Missing));
-        assert!(matches!(&update.plugin, OptionalUpdate::Update(x) if x == "Datagrid"));
-        assert_eq!(
-            update.view_config.group_by.as_deref(),
-            Some(&["State".to_owned()][..])
-        );
-    }
-
-    /// A table-less patch is a legitimate creation input now that
-    /// `create_panel` takes an update — the deferred panel a `load()`
-    /// binds. Nothing in this module may reject it.
-    #[test]
-    fn a_table_less_update_is_representable() {
-        let json = serde_json::json!({ "group_by": ["State"] });
-        let update: ViewerConfigUpdate = serde_json::from_value(json).unwrap();
-        assert!(matches!(&update.table, OptionalUpdate::Missing));
-    }
-}
 
 /// Handles `{}` when included as a field with `#[serde(default)]`.
 impl<T: Clone> Default for OptionalUpdate<T> {

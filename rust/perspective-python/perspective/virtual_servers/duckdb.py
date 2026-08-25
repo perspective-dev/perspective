@@ -236,7 +236,9 @@ class DuckDBVirtualServerHandler(VirtualServerHandler):
         return results[0][0]
 
     def table_make_view(self, table_name, view_name, config):
-        query = self.sql_builder.table_make_view(table_name, view_name, config)
+        # Window order keys need column types for `range` frame emission.
+        schema = self.table_schema(table_name) if config.get("windows") else None
+        query = self.sql_builder.table_make_view(table_name, view_name, config, schema)
         run_query(self.db, query, execute=True)
 
     def table_validate_expression(self, view_name, expression):

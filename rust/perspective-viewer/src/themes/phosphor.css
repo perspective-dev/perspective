@@ -98,6 +98,11 @@ perspective-viewer [theme="Phosphor"] {
     --psp-charts--series-3--color: #ff0055;
     --psp-charts--series-4--color: #ffd700;
     --psp-charts--series-5--color: #7fffd4;
+    --psp-datagrid--series-1--color: #00ff41;
+    --psp-datagrid--series-2--color: #00bfff;
+    --psp-datagrid--series-3--color: #ff0055;
+    --psp-datagrid--series-4--color: #ffd700;
+    --psp-datagrid--series-5--color: #7fffd4;
 
     --psp-charts--gradient--background: linear-gradient(
         #ff3333 0%,

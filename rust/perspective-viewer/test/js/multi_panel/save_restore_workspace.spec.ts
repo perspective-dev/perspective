@@ -15,7 +15,7 @@ import { armInvariants } from "./harness.ts";
 
 const TABLE = "load-viewer-csv";
 
-/// A two-panel side-by-side whole-element config.
+/// A two-panel side-by-side workspace config.
 const SPLIT_CONFIG = {
     layout: {
         type: "split-layout",
@@ -109,7 +109,7 @@ async function panel_names(page): Promise<string[]> {
 }
 
 test.describe("saveWorkspace / restoreWorkspace", () => {
-    test("saveWorkspace always emits the whole-element format for one panel", async ({
+    test("saveWorkspace always emits the workspace format for one panel", async ({
         page,
     }) => {
         // On load there is a single seed panel with the `TABLE` loaded.

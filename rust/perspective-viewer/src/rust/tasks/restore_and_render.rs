@@ -18,6 +18,7 @@ use futures::Future;
 use perspective_client::clone;
 
 use super::pipeline::{RunOrigin, RunSpec, locked_run};
+use super::update_theme::seed_panel_theme;
 use crate::config::{OptionalUpdate, ViewerConfigUpdate};
 use crate::presentation::Presentation;
 use crate::renderer::Renderer;
@@ -70,11 +71,6 @@ pub fn restore_and_render(
             session.set_title(None);
         }
 
-        // Mirror a config-carried theme onto the host attribute (the shared
-        // chrome). The restyle a theme change requires is owned by the
-        // MUTATION SITES (`restorePanel`'s own-theme tail, the theme-picker
-        // task), not here — this run's own draw below already stamps the new
-        // effective theme before the plugin's first style read.
         match theme_name {
             OptionalUpdate::SetDefault => {
                 let current_name = presentation.get_selected_theme_name().await;
@@ -83,59 +79,31 @@ pub fn restore_and_render(
                 }
             },
             OptionalUpdate::Update(x) => {
-                // No pre-resolution gate: `set_theme_name` stamps the host
-                // attribute SYNCHRONOUSLY before its registry await and
-                // no-ops on literal equality itself. The old
-                // `get_selected_theme_name().await` guard was precisely
-                // the former-theme window on a cold registry — the host
-                // held the old attribute until stylesheet parsing (and
-                // everything queued behind it) resolved.
                 presentation.set_theme_name(Some(&x)).await?;
             },
             _ => {},
         };
 
-        // Resolve the target plugin here (pure — needed now for
-        // `set_update_column_defaults`), but COMMIT it only inside the locked
-        // run below, atomically with the view rebind it belongs to. No swap
-        // intent may exist outside that run: an unrelated run that wins the
-        // lock first (e.g. a `table_updated` redraw) must observe either the
-        // fully-old or fully-new world, never a staged half of this one.
         let resolved_plugin = renderer.resolve_plugin_update(&plugin);
         if let Some((_, metadata)) = &resolved_plugin {
             session.set_update_column_defaults(&mut view_config, metadata);
         } else {
-            // Same-plugin (or plugin-less) restore: `resolve_plugin_update`
-            // returns `None`, but the plugin-advised `group_rollup_mode`
-            // must STILL be enforced against the active plugin's metadata —
-            // `restorePanel`'s table-change reset wipes the committed mode,
-            // and nothing else on this path would restore it, leaving a
-            // flat-only chart (Treemap / Sunburst) rendering rollup
-            // subtotal rows. Rollup only; the full column-defaults pass is
-            // reserved for plugin swaps, where `columns` genuinely needs
-            // re-defaulting.
-            session.set_update_rollup_defaults(&mut view_config, &renderer.metadata());
+            let metadata = if renderer.active_plugin().is_none() {
+                renderer
+                    .resolve_plugin_update(&OptionalUpdate::SetDefault)
+                    .map(|(_, metadata)| metadata)
+                    .unwrap_or_else(|| renderer.metadata())
+            } else {
+                renderer.metadata()
+            };
+
+            session.set_update_rollup_defaults(&mut view_config, &metadata);
         }
 
         let plugin_idx = resolved_plugin.map(|(idx, _)| idx);
-
-        // The config COMMIT: synchronous, validated, atomic (I1/I4). Under
-        // I2/I3 committing before the lock is safe — whichever queued run
-        // snapshots next picks it up, and this run's own snapshot (taken
-        // inside the lock below) can only be this commit or fresher.
         session.commit_view_config(view_config)?;
-
-        // Spinner accounting (RAII): held to the end of this restore —
-        // INCLUDING the deferred-draw exit (no table yet → no
-        // `bind_snapshot`), which under the old edge-counted scheme
-        // stranded the `StatusIndicator` spinner permanently.
         let _run_token = session.begin_config_run();
-
-        // Awaits theme-registry init, so the stamp below can never observe a
-        // pre-init (empty) theme set on a cold first load. Seeds this
-        // panel's renderer default-theme cache, which every locked draw
-        // stamps the effective theme from.
-        renderer.set_default_theme(presentation.get_default_theme_name().await);
+        seed_panel_theme(&presentation, &renderer).await;
         locked_run(&session, &renderer, RunSpec {
             origin,
             plugin_idx,
@@ -146,6 +114,11 @@ pub fn restore_and_render(
         })
         .await?;
 
+        if renderer.needs_restyle() {
+            renderer.restyle_all().await?;
+        }
+
+        presentation.publish_theme_config().await?;
         Ok(())
     })
 }

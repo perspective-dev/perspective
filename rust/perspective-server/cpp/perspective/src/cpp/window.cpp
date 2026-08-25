@@ -14,6 +14,7 @@
 #include <perspective/column.h>
 #include <perspective/scalar.h>
 #include <tsl/hopscotch_set.h>
+#include <date/date.h>
 #include <algorithm>
 #include <cmath>
 #include <deque>
@@ -110,10 +111,34 @@ partition_first_valid(const ROWS_T& rows) {
     return lo;
 }
 
-// Range-frame interval arithmetic. Keys compared as doubles (`Range`
-// frames require a numeric or temporal order key, so intervals are defined
-// on the column's raw units); keys are sorted in the spec's direction, so
-// "before" any boundary is a positional prefix in either direction.
+// Linear order-key scale for `Range` frame arithmetic. DTYPE_DATE's raw
+// storage is a packed y/m/d bitfield - a month boundary jumps it by 256 -
+// so it converts to days since epoch, matching the SQL model's `DATE` day
+// units; DTYPE_TIME (ms since epoch) and the numeric types are already
+// linear in their raw value. Ordering itself never uses this - `key_less`
+// compares scalars, and packed y/m/d is order-preserving.
+double
+order_key_to_double(const t_tscalar& s) {
+    if (s.get_dtype() == DTYPE_DATE) {
+        t_date val = s.get<t_date>();
+        // `t_date::month()` is [0-11], `date::month` is [1-12].
+        date::year_month_day ymd(
+            date::year{val.year()},
+            date::month{static_cast<std::uint32_t>(val.month() + 1)},
+            date::day{static_cast<std::uint32_t>(val.day())}
+        );
+        return static_cast<double>(
+            date::sys_days(ymd).time_since_epoch().count()
+        );
+    }
+
+    return s.to_double();
+}
+
+// Range-frame interval arithmetic. Keys compared as doubles on the linear
+// scale above (`Range` frames require a numeric or temporal order key);
+// keys are sorted in the spec's direction, so "before" any boundary is a
+// positional prefix in either direction.
 
 // First position in [first_valid, size) at or inside a boundary key:
 // ascending the first key >= `boundary`, descending the first key <=
@@ -129,7 +154,7 @@ frame_lower_bound(
     std::size_t hi = rows.size();
     while (lo < hi) {
         std::size_t mid = lo + (hi - lo) / 2;
-        double v = rows[mid].m_order.to_double();
+        double v = order_key_to_double(rows[mid].m_order);
         if (desc ? v > boundary : v < boundary) {
             lo = mid + 1;
         } else {
@@ -157,7 +182,7 @@ reach_upper_bound(
     std::size_t hi = rows.size();
     while (lo < hi) {
         std::size_t mid = lo + (hi - lo) / 2;
-        double v = rows[mid].m_order.to_double();
+        double v = order_key_to_double(rows[mid].m_order);
         if (desc ? v >= limit : v <= limit) {
             lo = mid + 1;
         } else {
@@ -730,7 +755,7 @@ t_window_engine::recompute_range(
             if (spec.m_op == t_window_op::WINDOW_OP_RATE) {
                 for (std::size_t pos = start; pos < hi; ++pos) {
                     t_uindex out_ridx = rows[pos].m_ridx;
-                    double key = rows[pos].m_order.to_double();
+                    double key = order_key_to_double(rows[pos].m_order);
                     std::size_t frame_lo = frame_lower_bound(
                         rows,
                         desc ? key + spec.m_frame_range
@@ -747,7 +772,8 @@ t_window_engine::recompute_range(
 
                     // Δv/Δk is the same slope whichever end of the frame is
                     // "first" - for desc both deltas negate.
-                    double dk = key - rows[frame_lo].m_order.to_double();
+                    double dk =
+                        key - order_key_to_double(rows[frame_lo].m_order);
                     if (dk == 0) {
                         out.clear(out_ridx);
                         continue;
@@ -769,8 +795,10 @@ t_window_engine::recompute_range(
             );
             std::size_t frame_start = frame_lower_bound(
                 rows,
-                desc ? rows[start].m_order.to_double() + spec.m_frame_range
-                     : rows[start].m_order.to_double() - spec.m_frame_range,
+                desc ? order_key_to_double(rows[start].m_order)
+                        + spec.m_frame_range
+                     : order_key_to_double(rows[start].m_order)
+                        - spec.m_frame_range,
                 first_valid,
                 desc
             );
@@ -779,16 +807,18 @@ t_window_engine::recompute_range(
             }
 
             for (std::size_t pos = start; pos < hi; ++pos) {
-                double key = rows[pos].m_order.to_double();
+                double key = order_key_to_double(rows[pos].m_order);
                 double boundary =
                     desc ? key + spec.m_frame_range
                          : key - spec.m_frame_range;
                 for (; frame_start < pos
                      && (desc
-                             ? rows[frame_start].m_order.to_double()
-                                 > boundary
-                             : rows[frame_start].m_order.to_double()
-                                 < boundary);
+                             ? order_key_to_double(
+                                   rows[frame_start].m_order
+                               ) > boundary
+                             : order_key_to_double(
+                                   rows[frame_start].m_order
+                               ) < boundary);
                      ++frame_start) {
                     sliding.evict(frame_start);
                 }
@@ -1327,7 +1357,7 @@ t_window_engine::collect_invalidations(
                             break;
                         }
 
-                        double k = key.first.to_double();
+                        double k = order_key_to_double(key.first);
                         std::size_t lo = frame_lower_bound(
                             rows, k, first_valid, spec.m_order_desc
                         );

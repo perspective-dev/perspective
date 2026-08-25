@@ -12,6 +12,10 @@
  */
 
 :host {
+    #editor.contained {
+        contain: inline-size;
+    }
+
     #editor {
         display: flex;
         flex: 1 1 auto;
@@ -64,10 +68,6 @@
             color: var(--code-editor-error--color, red);
             white-space: pre;
             overflow: hidden;
-
-            span {
-                /* display: contents; */
-            }
 
             .comment {
                 color: var(--psp-code-editor--comment--color, orange);

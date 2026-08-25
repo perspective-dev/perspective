@@ -56,7 +56,7 @@ fn test_table_make_view_simple() {
     let mut config = ViewConfig::default();
     config.columns = vec![Some("col1".to_string()), Some("col2".to_string())];
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.starts_with("CREATE TABLE dest_view AS"));
@@ -71,7 +71,7 @@ fn test_table_make_view_with_group_by() {
     config.columns = vec![Some("value".to_string())];
     config.group_by = vec!["category".to_string()];
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains("GROUP BY ROLLUP"));
@@ -87,7 +87,7 @@ fn test_table_make_view_with_group_by_and_split_by() {
     config.group_by = vec!["category".to_string()];
     config.split_by = vec!["quarter".to_string()];
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains("GROUP BY ROLLUP"), "expected ROLLUP: {}", sql);
@@ -119,7 +119,7 @@ fn test_table_make_view_with_sort_group_by_and_split_by() {
     )]);
 
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains("__SORT_0__"), "expected __SORT_0__: {}", sql);
@@ -156,7 +156,7 @@ fn test_table_make_view_with_sort_multi_group_by_and_split_by() {
     )]);
 
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -191,7 +191,7 @@ fn test_table_make_view_with_sort_and_group_by_no_split_by() {
     )]);
 
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -221,7 +221,7 @@ fn test_table_make_view_col_sort_excludes_row_order_by() {
     )]);
 
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -263,7 +263,7 @@ fn test_table_make_view_mixed_row_and_col_sort() {
     ]);
 
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -287,7 +287,7 @@ fn test_table_make_view_pivoted_with_sort() {
     config.split_by = vec!["quarter".to_string()];
     config.sort = vec![Sort("value".to_string(), SortDir::Desc)];
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains("PIVOT"), "expected PIVOT: {}", sql);
@@ -397,7 +397,7 @@ fn test_table_make_view_flat_group_by() {
     config.group_by = vec!["category".to_string()];
     config.group_rollup_mode = GroupRollupMode::Flat;
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -431,7 +431,7 @@ fn test_table_make_view_flat_group_by_with_split_by() {
     config.split_by = vec!["quarter".to_string()];
     config.group_rollup_mode = GroupRollupMode::Flat;
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains("PIVOT"), "expected PIVOT: {}", sql);
@@ -465,7 +465,7 @@ fn test_table_make_view_flat_group_by_with_sort() {
     )]);
     config.group_rollup_mode = GroupRollupMode::Flat;
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -499,7 +499,7 @@ fn test_table_make_view_flat_group_by_with_split_by_and_sort() {
     )]);
     config.group_rollup_mode = GroupRollupMode::Flat;
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains("PIVOT"), "expected PIVOT: {}", sql);
@@ -573,7 +573,7 @@ fn test_table_make_view_total() {
         Aggregate::SingleAggregate("sum".to_string()),
     )]);
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -600,7 +600,7 @@ fn test_table_make_view_flat_preserves_underscores() {
     let mut config = ViewConfig::default();
     config.columns = vec![Some("account_number".to_string())];
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -625,7 +625,7 @@ fn test_table_make_view_pivoted_column_paths() {
     ];
     config.split_by = vec!["state".to_string()];
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -661,7 +661,7 @@ fn test_table_make_view_pivoted_custom_separator() {
     config.columns = vec![Some("account_number".to_string())];
     config.split_by = vec!["state".to_string()];
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -678,7 +678,7 @@ fn test_table_make_view_multi_split_by_separator() {
     config.columns = vec![Some("value".to_string())];
     config.split_by = vec!["region".to_string(), "state".to_string()];
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -696,7 +696,7 @@ fn test_table_make_view_grouped_pivoted_null_safe_join() {
     config.group_by = vec!["category".to_string()];
     config.split_by = vec!["quarter".to_string()];
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -725,7 +725,7 @@ fn test_table_make_view_total_pivoted_aggregate() {
         Aggregate::SingleAggregate("sum".to_string()),
     )]);
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -871,7 +871,7 @@ fn test_table_make_view_total_with_split_by() {
         Aggregate::SingleAggregate("sum".to_string()),
     )]);
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains("PIVOT"), "expected PIVOT: {}", sql);
@@ -908,7 +908,7 @@ fn test_table_make_view_window_natural_order() {
     spec.order_by = None;
     config.windows = Windows(HashMap::from([(name, spec)]));
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     // An omitted `order_by` takes the model's natural order - the same
@@ -928,7 +928,7 @@ fn test_table_make_view_window_range_requires_order_by() {
     let (name, mut spec) = window_spec("rs", "sum", Some(WindowFrame::Range(10.0)));
     spec.order_by = None;
     config.windows = Windows(HashMap::from([(name, spec)]));
-    let result = builder.table_make_view("source_table", "dest_view", &config);
+    let result = builder.table_make_view("source_table", "dest_view", &config, &IndexMap::new());
     assert!(matches!(
         result,
         Err(GenericSQLError::UnsupportedOperation(_))
@@ -944,7 +944,7 @@ fn test_table_make_view_window_order_desc() {
     spec.order_by.as_mut().unwrap().1 = WindowSortDir::Desc;
     config.windows = Windows(HashMap::from([(name, spec)]));
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(
@@ -965,7 +965,7 @@ fn test_table_make_view_window_cumulative_sum() {
         Some(WindowFrame::Cumulative),
     )]));
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains(
@@ -986,7 +986,7 @@ fn test_table_make_view_window_rows_and_range_frames() {
         window_spec("rsum", "sum", Some(WindowFrame::Range(100.0))),
     ]));
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains("avg(\"price\") OVER"));
@@ -1006,7 +1006,7 @@ fn test_table_make_view_window_lag_diff() {
         window_spec("df", "diff", None),
     ]));
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains(
@@ -1026,7 +1026,7 @@ fn test_table_make_view_window_rate() {
         Some(WindowFrame::Range(10.0)),
     )]));
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains("first_value(\"price\") OVER"));
@@ -1047,7 +1047,7 @@ fn test_table_make_view_window_over_expression_source() {
     w.column = "double_price".to_string();
     config.windows = Windows(HashMap::from([(w_name, w)]));
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains("sum(\"price\" * 2) OVER"));
@@ -1069,7 +1069,7 @@ fn test_table_make_view_window_group_by_over_window_column() {
         Some(WindowFrame::Cumulative),
     )]));
     let sql = builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap();
 
     assert!(sql.contains("GROUP BY"));
@@ -1085,7 +1085,7 @@ fn test_table_make_view_window_ema_unsupported() {
     let (w_name, mut w) = window_spec("e", "ema", None);
     w.alpha = Some(0.5);
     config.windows = Windows(HashMap::from([(w_name, w)]));
-    let result = builder.table_make_view("source_table", "dest_view", &config);
+    let result = builder.table_make_view("source_table", "dest_view", &config, &IndexMap::new());
     assert!(matches!(
         result,
         Err(GenericSQLError::UnsupportedOperation(_))
@@ -1118,6 +1118,6 @@ fn filter_sql(args: GenericSQLVirtualServerModelArgs, filter: serde_json::Value)
     config.columns = vec![Some("a".to_string())];
     config.filter = filters(filter);
     builder
-        .table_make_view("source_table", "dest_view", &config)
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap()
 }

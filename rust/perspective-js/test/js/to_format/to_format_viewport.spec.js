@@ -289,4 +289,94 @@ test.describe("to_format viewport", function () {
             table.delete();
         });
     });
+
+    // `column_paths` takes the same half-open column window as `to_columns`,
+    // and the datagrid's copy/export path (GH #3216) relies on the two
+    // agreeing: every path returned for a window must be a key of
+    // `to_columns` called with that window.
+    test.describe("column_paths viewport", function () {
+        test("0 sided", async function () {
+            const table = await perspective.table(data);
+            const view = await table.view({});
+            const paths = await view.column_paths({
+                start_col: 1,
+                end_col: 3,
+            });
+            expect(paths).toEqual(["x", "y"]);
+            view.delete();
+            table.delete();
+        });
+
+        test("1 sided", async function () {
+            const table = await perspective.table(data);
+            const view = await table.view({ group_by: ["y"] });
+            expect(
+                await view.column_paths({ start_col: 0, end_col: 1 }),
+            ).toEqual(["w"]);
+            expect(
+                await view.column_paths({ start_col: 1, end_col: 3 }),
+            ).toEqual(["x", "y"]);
+            view.delete();
+            table.delete();
+        });
+
+        test("2 sided", async function () {
+            const table = await perspective.table(data);
+            const view = await table.view({
+                group_by: ["y"],
+                split_by: ["z"],
+            });
+            expect(
+                await view.column_paths({ start_col: 0, end_col: 1 }),
+            ).toEqual(["false|w"]);
+            expect(
+                await view.column_paths({ start_col: 1, end_col: 2 }),
+            ).toEqual(["false|x"]);
+            expect(
+                await view.column_paths({ start_col: 3, end_col: 5 }),
+            ).toEqual(["false|z", "true|w"]);
+            view.delete();
+            table.delete();
+        });
+
+        test("column only", async function () {
+            const table = await perspective.table(data);
+            const view = await table.view({ split_by: ["z"] });
+            expect(
+                await view.column_paths({ start_col: 0, end_col: 1 }),
+            ).toEqual(["false|w"]);
+            view.delete();
+            table.delete();
+        });
+
+        test("matches to_columns keys for a single-cell viewport", async function () {
+            const table = await perspective.table(data);
+            const view = await table.view({
+                group_by: ["y"],
+                split_by: ["z"],
+            });
+
+            for (const start_col of [0, 1, 2]) {
+                const viewport = {
+                    start_col,
+                    end_col: start_col + 1,
+                    start_row: 0,
+                    end_row: 1,
+                };
+
+                const cols = await view.to_columns(viewport);
+                const paths = await view.column_paths({
+                    start_col: viewport.start_col,
+                    end_col: viewport.end_col,
+                });
+
+                expect(paths).toEqual(
+                    Object.keys(cols).filter((x) => x !== "__ROW_PATH__"),
+                );
+            }
+
+            view.delete();
+            table.delete();
+        });
+    });
 });

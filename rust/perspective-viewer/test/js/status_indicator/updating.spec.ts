@@ -83,32 +83,6 @@ test.describe("StatusIndicator 'updating' settles", () => {
         await assert_settled(page);
     });
 
-    test("after a deferred-draw restore, before and after load (T3)", async ({
-        page,
-    }) => {
-        await goto(page, "/rust/perspective-viewer/test/html/superstore.html");
-        await page.evaluate(async () => {
-            const viewer = document.createElement("perspective-viewer") as any;
-            viewer.setAttribute("id", "deferred");
-            viewer.style.cssText =
-                "position:absolute;top:0;left:0;width:400px;height:300px;";
-            document.body.appendChild(viewer);
-            await viewer.restore({ group_by: ["State"] });
-        });
-
-        await page.evaluate(async () => {
-            const viewer = document.querySelector("#deferred") as any;
-            const table = await (window as any).__TEST_WORKER__.table(
-                "x,y\n1,2\n3,4",
-                { name: "deferred-table" },
-            );
-            await viewer.load(table);
-        });
-
-        await open_settings(page, "#deferred");
-        await assert_settled(page, "#deferred");
-    });
-
     test("after a table-binding restore (commit_table_defaults) (T4)", async ({
         page,
     }) => {

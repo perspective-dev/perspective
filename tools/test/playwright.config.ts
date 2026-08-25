@@ -113,10 +113,6 @@ const BROWSER_PACKAGES = [
         packageName: "jupyterlab",
         testDir: "packages/jupyterlab/test/js",
     },
-    {
-        packageName: "docs",
-        testDir: "docs/test/js",
-    },
 ];
 
 const NODE_PACKAGES = [

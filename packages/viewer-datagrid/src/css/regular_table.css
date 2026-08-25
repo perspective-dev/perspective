@@ -343,67 +343,44 @@ regular-table:not(.flat-group-rollup-mode) {
     text-align: right;
 }
 
-.psp-color-mode-bar {
+.psp-color-mode-bar,
+.psp-color-mode-label-bar {
     padding: 0 2px;
+    background-image: var(--psp-label-bar-color);
+    background-repeat: no-repeat;
+    background-origin: content-box;
+    background-size: var(--psp-bar-size, 0%) 80%;
+    background-position-x: var(--psp-bar-anchor, 0%);
+    background-position-y: center;
 }
 
 .psp-color-mode-label-bar {
     position: relative;
-    padding: 0 2px;
-
-    .psp-bar {
-        isolation: isolate;
-        position: unset;
-    }
-
-    .psp-bar:before {
-        color: transparent;
-        pointer-events: none;
-        content: var(--label);
-        display: inline-flex;
-        justify-content: flex-end;
-        align-items: center;
-        padding: 0 3px;
-    }
-
-    .psp-bar:after {
-        color: var(--psp-label-bar-bg);
-        content: var(--label);
-        mix-blend-mode: difference;
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        display: inline-flex;
-        justify-content: flex-end;
-        align-items: center;
-        padding: 0 5px;
-    }
+    isolation: isolate;
 }
 
-.psp-label-bar {
-    inset: 0;
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    padding: 0px;
+.psp-color-mode-label-bar:before {
+    color: transparent;
+    content: attr(data-psp-label);
+    display: block;
+    height: 0;
+    white-space: nowrap;
+    padding: 0 3px;
 }
 
-.psp-label-bar-fill {
-    position: absolute;
-    top: 10%;
-    height: 80%;
-    background: var(--psp-label-bar-color);
-    pointer-events: none;
-}
-
-.psp-label-bar-text {
-    position: relative;
+.psp-color-mode-label-bar:after {
     color: var(--psp-label-bar-bg);
+    content: attr(data-psp-label);
     mix-blend-mode: difference;
-    pointer-events: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: inline-flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0 5px;
 }
 
 .psp-align-left {
@@ -431,6 +408,10 @@ regular-table table tbody td {
 
 .boolean-editable {
     cursor: pointer;
+}
+
+regular-table table tbody td.psp-editable {
+    user-select: text;
 }
 
 regular-table table {

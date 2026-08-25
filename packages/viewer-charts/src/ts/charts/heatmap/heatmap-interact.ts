@@ -215,6 +215,7 @@ export function renderHeatmapTooltip(chart: HeatmapChart): void {
     let layout: import("../../layout/plot-layout").PlotLayout | null;
     let xLevels: CategoricalLevel[];
     let yLevels: CategoricalLevel[];
+    let xPositions: Float64Array | null;
     let facetLabel: string | null = null;
 
     if (chart._hoveredFacetIdx >= 0) {
@@ -226,6 +227,7 @@ export function renderHeatmapTooltip(chart: HeatmapChart): void {
         layout = facet.layout;
         xLevels = facet.pipeline.xLevels;
         yLevels = facet.pipeline.yLevels;
+        xPositions = facet.pipeline.xPositions;
         facetLabel = facet.label;
     } else {
         if (!chart._lastLayout) {
@@ -235,6 +237,7 @@ export function renderHeatmapTooltip(chart: HeatmapChart): void {
         layout = chart._lastLayout;
         xLevels = chart._xLevels;
         yLevels = chart._yLevels;
+        xPositions = chart._xPositions;
     }
 
     const cell = chart._hoveredCell;
@@ -249,7 +252,13 @@ export function renderHeatmapTooltip(chart: HeatmapChart): void {
         lines.push(facetLabel);
     }
 
-    const xPath = formatHierarchicalPath(xLevels, cell.xIdx);
+    const xPath =
+        chart._xAxisMode.mode === "numeric" && xPositions
+            ? chart.getColumnFormatter(
+                  chart._groupBy[0],
+                  "value",
+              )(xPositions[cell.xIdx])
+            : formatHierarchicalPath(xLevels, cell.xIdx);
     const yPath = formatHierarchicalPath(yLevels, cell.yIdx);
     if (xPath) {
         lines.push(xPath);

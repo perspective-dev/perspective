@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { parseCSSColorToVec3 } from "../utils/css";
+import { parseCSSColorToVec3, vec3ToHexColor } from "../utils/css";
 
 /**
  * A single stop on a parsed CSS gradient. `offset` ∈ [0, 1].
@@ -176,6 +176,246 @@ export function parseCssGradient(
     });
 
     return result;
+}
+
+/**
+ * A color literal — `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()` or
+ * `rgba()` — as a `[0, 1]` RGB triple, or `null` for anything else.
+ */
+export function parseCssColorStrict(
+    src: string,
+): [number, number, number] | null {
+    const s = src.trim();
+    if (s.startsWith("#")) {
+        const hex = s.slice(1);
+        if (!/^[0-9a-f]+$/i.test(hex)) {
+            return null;
+        }
+
+        if (hex.length === 3 || hex.length === 4) {
+            return [
+                parseInt(hex[0] + hex[0], 16) / 255,
+                parseInt(hex[1] + hex[1], 16) / 255,
+                parseInt(hex[2] + hex[2], 16) / 255,
+            ];
+        }
+
+        if (hex.length === 6 || hex.length === 8) {
+            return [
+                parseInt(hex.slice(0, 2), 16) / 255,
+                parseInt(hex.slice(2, 4), 16) / 255,
+                parseInt(hex.slice(4, 6), 16) / 255,
+            ];
+        }
+
+        return null;
+    }
+
+    const m = s.match(/^rgba?\(([^)]*)\)$/i);
+    if (!m) {
+        return null;
+    }
+
+    const tokens = m[1]
+        .split("/")[0]
+        .split(/[\s,]+/)
+        .filter((x) => x.length > 0);
+    if (tokens.length < 3 || tokens.length > 4) {
+        return null;
+    }
+
+    const channel = (token: string): number | null => {
+        const pct = token.endsWith("%");
+        const n = parseFloat(pct ? token.slice(0, -1) : token);
+        if (!isFinite(n)) {
+            return null;
+        }
+
+        const v = pct ? (n / 100) * 255 : n;
+        return Math.max(0, Math.min(255, Math.round(v))) / 255;
+    };
+
+    const r = channel(tokens[0]);
+    const g = channel(tokens[1]);
+    const b = channel(tokens[2]);
+    return r === null || g === null || b === null ? null : [r, g, b];
+}
+
+/**
+ * The shared `linear-gradient(...)` tokenizer of the viewer's CSS-valued
+ * config grammar.
+ */
+export function tokenizeLinearGradient(
+    src: string,
+): Array<[[number, number, number], number | null]> | null {
+    const m = src.trim().match(/^linear-gradient\s*\((.*)\)$/is);
+    if (!m) {
+        return null;
+    }
+
+    const body = m[1];
+    const parts: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < body.length; i++) {
+        const ch = body[i];
+        if (ch === "(") {
+            depth++;
+        } else if (ch === ")") {
+            depth--;
+        } else if (ch === "," && depth === 0) {
+            parts.push(body.substring(start, i));
+            start = i + 1;
+        }
+    }
+
+    parts.push(body.substring(start));
+    const out: Array<[[number, number, number], number | null]> = [];
+    for (let i = 0; i < parts.length; i++) {
+        const piece = parts[i].trim();
+        if (!piece) {
+            return null;
+        }
+
+        const lower = piece.toLowerCase();
+        if (
+            i === 0 &&
+            (lower.startsWith("to ") ||
+                /^[-\d.]+(deg|rad|grad|turn)$/.test(lower))
+        ) {
+            continue;
+        }
+
+        const posMatch = piece.match(/\s([^\s)]+)$/);
+        let color = piece;
+        let offset: number | null = null;
+        if (posMatch) {
+            const tail = posMatch[1];
+            if (tail.endsWith("%")) {
+                const n = parseFloat(tail.slice(0, -1));
+                if (!isFinite(n)) {
+                    return null;
+                }
+
+                color = piece.substring(0, posMatch.index).trim();
+                offset = n / 100;
+            } else if (/^[-\d.]/.test(tail)) {
+                return null;
+            }
+        }
+
+        const rgb = parseCssColorStrict(color);
+        if (!rgb) {
+            return null;
+        }
+
+        out.push([rgb, offset]);
+    }
+
+    return out;
+}
+
+/**
+ * Strict gradient reader: a `linear-gradient(...)` with ≥ 2 stops,
+ * positions optional, offsets clamped to `[0, 1]` and sorted, or `null`
+ * on malformed input.
+ */
+export function parseCssGradientStrict(src: string): GradientStop[] | null {
+    const entries = tokenizeLinearGradient(src);
+    if (!entries || entries.length < 2) {
+        return null;
+    }
+
+    const offsets: Array<number | null> = entries.map(([, p]) => p);
+    const last = offsets.length - 1;
+    if (offsets[0] === null) {
+        offsets[0] = 0;
+    }
+
+    if (offsets[last] === null) {
+        offsets[last] = 1;
+    }
+
+    for (let i = 1; i < last; i++) {
+        if (offsets[i] !== null) {
+            continue;
+        }
+
+        let j = i + 1;
+        while (offsets[j] === null) {
+            j++;
+        }
+
+        const before = offsets[i - 1]!;
+        const after = offsets[j]!;
+        const span = j - (i - 1);
+        for (let k = i; k < j; k++) {
+            offsets[k] = before + ((k - (i - 1)) / span) * (after - before);
+        }
+
+        i = j - 1;
+    }
+
+    const stops: GradientStop[] = entries.map(([rgb], i) => ({
+        offset: Math.max(0, Math.min(1, offsets[i]!)),
+        color: [rgb[0], rgb[1], rgb[2], 1],
+    }));
+
+    stops.sort((a, b) => a.offset - b.offset);
+    return stops;
+}
+
+/**
+ * Strict palette reader: a `linear-gradient(...)` of ≥ 1 colors with no
+ * positions, or `null` on malformed input.
+ */
+export function parseCssColorList(
+    src: string,
+): Array<[number, number, number]> | null {
+    const entries = tokenizeLinearGradient(src);
+    if (!entries || entries.length === 0) {
+        return null;
+    }
+
+    const out: Array<[number, number, number]> = [];
+    for (const [rgb, offset] of entries) {
+        if (offset !== null) {
+            return null;
+        }
+
+        out.push(rgb);
+    }
+
+    return out;
+}
+
+function formatPercent(offset: number): string {
+    const rounded = Math.round(Math.max(0, Math.min(1, offset)) * 1000) / 10;
+    return `${rounded}%`;
+}
+
+/**
+ * The viewer's canonical gradient string for `stops`: `linear-gradient(to
+ * right, #rrggbb P%, …)`, sorted, positions at 0.1% resolution.
+ */
+export function stopsToCss(stops: GradientStop[]): string {
+    const body = [...stops]
+        .sort((a, b) => a.offset - b.offset)
+        .map(
+            (stop) =>
+                `${vec3ToHexColor([stop.color[0], stop.color[1], stop.color[2]])} ${formatPercent(stop.offset)}`,
+        )
+        .join(", ");
+
+    return `linear-gradient(to right, ${body})`;
+}
+
+/**
+ * The viewer's canonical palette string for `colors`: the same frame
+ * with bare `#rrggbb` entries and no positions.
+ */
+export function colorsToCss(colors: Array<[number, number, number]>): string {
+    return `linear-gradient(to right, ${colors.map(vec3ToHexColor).join(", ")})`;
 }
 
 /**

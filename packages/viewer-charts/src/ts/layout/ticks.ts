@@ -112,6 +112,30 @@ export function formatTickValue(val: number): string {
 }
 
 /**
+ * Cached `Intl.DateTimeFormat` per option shape. `Date.prototype.
+ * toLocale*` constructs a fresh `DateTimeFormat` (plus its ICU
+ * backing) on EVERY call — ~30µs each — which turned per-row label
+ * synthesis over large pivots into a multi-second stall. A cached
+ * formatter's `format()` is ~1µs. Keyed by precision tier; the
+ * default locale is fixed for the lifetime of the worker, so entries
+ * never invalidate.
+ */
+const DATE_FORMAT_CACHE = new Map<string, Intl.DateTimeFormat>();
+
+function cachedDateFormat(
+    key: string,
+    options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+    let fmt = DATE_FORMAT_CACHE.get(key);
+    if (!fmt) {
+        fmt = new Intl.DateTimeFormat(undefined, options);
+        DATE_FORMAT_CACHE.set(key, fmt);
+    }
+
+    return fmt;
+}
+
+/**
  * Format a timestamp (ms since epoch) as a human-readable date/time label.
  * Adapts precision based on the tick spacing.
  */
@@ -129,49 +153,49 @@ export function formatDateTickValue(val: number, stepMs?: number): string {
 
         if (stepMs >= DAY * 28) {
             // Monthly or longer — show year-month
-            return d.toLocaleDateString(undefined, {
+            return cachedDateFormat("ym", {
                 year: "numeric",
                 month: "short",
-            });
+            }).format(d);
         }
 
         if (stepMs >= DAY) {
             // Daily — show month and day
-            return d.toLocaleDateString(undefined, {
+            return cachedDateFormat("md", {
                 month: "short",
                 day: "numeric",
-            });
+            }).format(d);
         }
 
         if (stepMs >= HOUR) {
             // Hourly
-            return d.toLocaleString(undefined, {
+            return cachedDateFormat("mdh", {
                 month: "short",
                 day: "numeric",
                 hour: "numeric",
-            });
+            }).format(d);
         }
 
         if (stepMs >= MINUTE) {
             // Minutes
-            return d.toLocaleTimeString(undefined, {
+            return cachedDateFormat("hm", {
                 hour: "numeric",
                 minute: "2-digit",
-            });
+            }).format(d);
         }
 
         // Sub-minute
-        return d.toLocaleTimeString(undefined, {
+        return cachedDateFormat("hms", {
             hour: "numeric",
             minute: "2-digit",
             second: "2-digit",
-        });
+        }).format(d);
     }
 
     // Default: show date only
-    return d.toLocaleDateString(undefined, {
+    return cachedDateFormat("ymd", {
         year: "numeric",
         month: "short",
         day: "numeric",
-    });
+    }).format(d);
 }

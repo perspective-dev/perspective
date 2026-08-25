@@ -17,7 +17,13 @@ import {
     toggle_scroll_lock,
 } from "../model/toolbar.js";
 import { PRIVATE_PLUGIN_SYMBOL } from "../model/index.js";
-import { make_color_record } from "../color_utils.js";
+import {
+    make_color_record,
+    parseCssColorList,
+    parseCssGradientStops,
+    rgbToHex,
+    type GradientStopRgb,
+} from "../color_utils.js";
 import type {
     DatagridPluginElement,
     ColumnOverrides,
@@ -31,22 +37,31 @@ interface RestoreToken {
     scroll_lock?: boolean;
 }
 
-// interface ColumnConfigWithColors {
-//     pos_fg_color?: string;
-//     neg_fg_color?: string;
-//     pos_bg_color?: string;
-//     neg_bg_color?: string;
-//     color?: string;
-//     [key: string]: unknown;
-// }
-
 interface StylesConfig {
     pos_fg_color?: ColorRecord;
     neg_fg_color?: ColorRecord;
     pos_bg_color?: ColorRecord;
     neg_bg_color?: ColorRecord;
     color?: ColorRecord;
+    bg_color_stops?: GradientStopRgb[];
+    palette_colors?: string[];
     [key: string]: unknown;
+}
+
+function parse_stops(raw: unknown): GradientStopRgb[] | undefined {
+    if (typeof raw !== "string") {
+        return undefined;
+    }
+
+    return parseCssGradientStops(raw) ?? undefined;
+}
+
+function parse_palette(raw: unknown): string[] | undefined {
+    if (typeof raw !== "string") {
+        return undefined;
+    }
+
+    return parseCssColorList(raw)?.map(rgbToHex) ?? undefined;
 }
 
 export function restore(
@@ -73,23 +88,25 @@ export function restore(
     const styles: Record<string, StylesConfig> = {};
     if (columns) {
         for (const [col_name, controls] of Object.entries(columns)) {
+            const fg_stops = parse_stops(controls.fg_colors);
+            const bg_stops = parse_stops(controls.bg_colors);
+            const end = (stops: GradientStopRgb[], i: number) =>
+                make_color_record(rgbToHex(stops[i].rgb));
             styles[col_name] = {
                 ...controls,
-                pos_fg_color: controls.pos_fg_color
-                    ? make_color_record(controls.pos_fg_color)
+                pos_fg_color: fg_stops
+                    ? end(fg_stops, fg_stops.length - 1)
                     : undefined,
-                neg_fg_color: controls.neg_fg_color
-                    ? make_color_record(controls.neg_fg_color)
+                neg_fg_color: fg_stops ? end(fg_stops, 0) : undefined,
+                pos_bg_color: bg_stops
+                    ? end(bg_stops, bg_stops.length - 1)
                     : undefined,
-                pos_bg_color: controls.pos_bg_color
-                    ? make_color_record(controls.pos_bg_color)
-                    : undefined,
-                neg_bg_color: controls.neg_bg_color
-                    ? make_color_record(controls.neg_bg_color)
-                    : undefined,
+                neg_bg_color: bg_stops ? end(bg_stops, 0) : undefined,
                 color: controls.color
                     ? make_color_record(controls.color)
                     : undefined,
+                bg_color_stops: bg_stops,
+                palette_colors: parse_palette(controls.palette),
             };
         }
     }

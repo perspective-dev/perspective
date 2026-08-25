@@ -15,6 +15,7 @@
 
 mod column_config_schema;
 mod columns_config;
+mod css_scale;
 mod datetime_column_style;
 mod export_method;
 mod kvpair;
@@ -29,6 +30,7 @@ mod workspace_config;
 
 pub use column_config_schema::*;
 pub use columns_config::*;
+pub use css_scale::*;
 pub use datetime_column_style::*;
 pub use export_method::*;
 pub use number_series_style::*;

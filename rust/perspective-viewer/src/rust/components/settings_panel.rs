@@ -22,7 +22,8 @@ use super::plugin_tab::PluginTab;
 use crate::components::containers::sidebar_close_button::SidebarCloseButton;
 use crate::components::form::debug::DebugPanel;
 use crate::config::{PluginStaticConfig, PluginUpdate};
-use crate::presentation::{ColumnLocator, OpenColumnSettings, Presentation};
+use crate::presentation::{ColumnLocator, ColumnSettingsTarget, OpenColumnSettings, Presentation};
+use crate::queries::classify_column;
 use crate::renderer::*;
 use crate::session::column_defaults_update::*;
 use crate::session::*;
@@ -34,7 +35,7 @@ use crate::workspace::Workspace;
 pub struct SettingsPanelProps {
     pub on_close: Callback<()>,
     pub on_resize: Rc<PubSub<()>>,
-    pub on_select_column: Callback<Option<ColumnLocator>>,
+    pub on_select_column: Callback<Option<ColumnSettingsTarget>>,
     pub on_debug: Callback<()>,
     pub is_debug: bool,
 
@@ -145,25 +146,28 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
     } = &props;
 
     let selected_column = {
-        let locator = props.open_column_settings.locator.clone();
         let config = &props.view_config;
-        locator.filter(|locator| match locator {
-            ColumnLocator::Table(_name) => {
-                locator
-                    .name()
-                    .map(|n| {
-                        config.columns.iter().any(|maybe_col| {
-                            maybe_col.as_ref().map(|col| col == n).unwrap_or_default()
-                        }) || config.group_by.iter().any(|col| col == n)
-                            || config.split_by.iter().any(|col| col == n)
-                            || config.filter.iter().any(|col| col.column() == n)
-                            || config.sort.iter().any(|col| &col.0 == n)
-                    })
-                    .unwrap_or_default()
-                    && props.renderer.can_render_column_styles()
-            },
-            _ => true,
-        })
+        props
+            .open_column_settings
+            .target
+            .as_ref()
+            .and_then(|target| match target {
+                ColumnSettingsTarget::NewExpression => Some(ColumnLocator::NewExpression),
+                ColumnSettingsTarget::Column(n) => {
+                    let locator = classify_column(n, config, &props.metadata)?;
+                    if !matches!(locator, ColumnLocator::Table(_)) {
+                        return Some(locator);
+                    }
+
+                    let used = config.columns.iter().any(|maybe_col| {
+                        maybe_col.as_ref().map(|col| col == n).unwrap_or_default()
+                    }) || config.group_by.iter().any(|col| col == n)
+                        || config.split_by.iter().any(|col| col == n)
+                        || config.filter.iter().any(|col| col.column() == n)
+                        || config.sort.iter().any(|col| &col.0 == n);
+                    (used && props.renderer.can_render_column_styles()).then_some(locator)
+                },
+            })
     };
 
     let plugin_name = props.plugin_name.clone();
@@ -217,6 +221,7 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
 
             update.set_update_column_defaults(
                 &session_metadata,
+                &view_config,
                 &view_config.columns,
                 plugin_config,
             );

@@ -20,6 +20,7 @@ describeDuckDB("client", (getClient) => {
         expect(tables).toEqual([
             "memory.coerce_types",
             "memory.superstore",
+            "memory.temporal_test",
             "memory.underscore_test",
         ]);
     });

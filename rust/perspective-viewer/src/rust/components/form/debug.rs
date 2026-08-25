@@ -178,6 +178,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                         <CodeEditor
                             expr={&*expr}
                             disabled=false
+                            contained=true
                             {oninput}
                             {onsave}
                             select_all={select_all.subscriber()}

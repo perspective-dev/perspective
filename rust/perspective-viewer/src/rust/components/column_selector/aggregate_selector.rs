@@ -10,9 +10,9 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use std::collections::HashSet;
 use std::rc::Rc;
 
+use itertools::Itertools;
 use perspective_client::config::*;
 use yew::prelude::*;
 
@@ -163,8 +163,7 @@ impl AggregateSelector {
                 Aggregate::MultiAggregate(x, _) => Some(x),
                 _ => None,
             })
-            .collect::<HashSet<_>>()
-            .into_iter()
+            .unique()
             .map(|x| {
                 SelectItem::OptGroup(
                     x.clone().into(),

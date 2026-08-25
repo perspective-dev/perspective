@@ -10,28 +10,35 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { initTheme, createThemeToggle } from "./components/theme.js";
-import { initDemo } from "./components/demo.js";
-import { initGallery } from "./components/gallery.js";
+import "@perspective-dev/viewer";
+import "@perspective-dev/viewer-datagrid";
+import "@perspective-dev/viewer-charts";
 
-initTheme();
-document.getElementById("theme-toggle")!.replaceWith(createThemeToggle());
+import { initAgentDialog } from "./components/agent_dialog.js";
+import { initSidebar } from "./components/sidebar.js";
+import { initProjectGallery } from "./components/project_gallery.js";
+import { initSourceModal } from "./components/source_modal.js";
+import { initSqlDrawer } from "./components/sql_drawer.js";
+import { bindViewer } from "./data/engines.js";
+import { initTheme } from "./data/theme.js";
+import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 
-const page = document.getElementById("page")!;
+const shell = document.getElementById("app")!;
+const viewer = document.getElementById(
+    "viewer",
+) as HTMLPerspectiveViewerElement;
 
-function handleScroll() {
-    const scrollTop = document.documentElement.scrollTop;
-    if (scrollTop > 90 && page.classList.contains("header-shift")) {
-        page.classList.remove("header-shift");
-    } else if (scrollTop <= 90 && !page.classList.contains("header-shift")) {
-        page.classList.add("header-shift");
-    }
-}
+bindViewer(viewer);
+void initTheme(viewer);
 
-document.addEventListener("scroll", handleScroll);
+const sqlDrawer = initSqlDrawer(shell, viewer);
+const { createSource, browseProjects, configureAgent } = initSidebar(
+    shell,
+    viewer,
+    { openSql: () => sqlDrawer.toggle() },
+);
 
-const demoContainer = document.getElementById("demo-container")!;
-initDemo(demoContainer);
-
-const gallery = document.getElementById("gallery")!;
-initGallery(gallery);
+const gallery = initProjectGallery(shell, viewer);
+browseProjects.addEventListener("click", () => gallery.openModal());
+initSourceModal(viewer, createSource);
+initAgentDialog(viewer, configureAgent);

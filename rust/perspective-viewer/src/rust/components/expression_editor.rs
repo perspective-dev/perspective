@@ -16,7 +16,7 @@ use perspective_client::{ExprValidationError, clone};
 use yew::prelude::*;
 
 use super::form::code_editor::*;
-use crate::session::{Session, SessionMetadata, SessionMetadataRc};
+use crate::session::{Session, SessionMetadataRc};
 use crate::tasks::{ExprValidation, validate_expression};
 
 #[derive(Properties, PartialEq, Clone)]
@@ -26,6 +26,9 @@ pub struct ExpressionEditorProps {
     pub on_input: Callback<Rc<String>>,
     pub alias: Option<String>,
     pub disabled: bool,
+
+    /// The saved expression text this editor edits against.
+    pub initial_expr: Rc<String>,
 
     #[prop_or_default]
     pub reset_count: u8,
@@ -69,7 +72,7 @@ impl Component for ExpressionEditor {
 
     fn create(ctx: &Context<Self>) -> Self {
         let oninput = ctx.link().callback(ExpressionEditorMsg::SetExpr);
-        let expr = initial_expr(&ctx.props().metadata, &ctx.props().alias);
+        let expr = ctx.props().initial_expr.clone();
         ctx.link()
             .send_message(Self::Message::SetExpr(expr.clone()));
 
@@ -156,24 +159,14 @@ impl Component for ExpressionEditor {
     fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool {
         if ctx.props().alias != old_props.alias
             || ctx.props().reset_count != old_props.reset_count
-            || (ctx.props().alias.is_some() && ctx.props().metadata != old_props.metadata)
+            || ctx.props().initial_expr != old_props.initial_expr
         {
-            ctx.link()
-                .send_message(ExpressionEditorMsg::SetExpr(initial_expr(
-                    &ctx.props().metadata,
-                    &ctx.props().alias,
-                )));
+            ctx.link().send_message(ExpressionEditorMsg::SetExpr(
+                ctx.props().initial_expr.clone(),
+            ));
             false
         } else {
             true
         }
     }
-}
-
-fn initial_expr(metadata: &SessionMetadata, alias: &Option<String>) -> Rc<String> {
-    alias
-        .as_ref()
-        .and_then(|alias| metadata.get_expression_by_alias(alias))
-        .unwrap_or_default()
-        .into()
 }

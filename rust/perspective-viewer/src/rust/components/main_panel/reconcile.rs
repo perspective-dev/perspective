@@ -41,7 +41,7 @@ const LAYOUT_PHYSICS: LayoutPhysics = LayoutPhysics {
 
 impl MainPanel {
     /// Size each STAGED panel's hidden wrapper (`.psp-staging` — see
-    /// `MainPanel::render` and `Workspace::stage_panel`) to its PREDICTED
+    /// `MainPanel::render` and `PanelPhase::Staging`) to its PREDICTED
     /// post-insert cell: an equal share of the layout box's width (the
     /// reconcile insert splits the root horizontally with equal
     /// redistribution) minus the frame-chrome fallback the presize sweep
@@ -139,7 +139,7 @@ impl MainPanel {
         let layout: RegularLayout = el.unchecked_into();
         let panel_ids = &ctx.props().panel_ids;
 
-        // Whole-element restore stages its saved layout tree on the Workspace
+        // `restoreWorkspace` stages its saved layout tree on the Workspace
         // (the model; regular-layout is a slave view). Apply it here, BEFORE
         // the insert reconcile, and seed `inserted` from its panel names — so
         // restored panels mount directly at their saved positions in ONE
@@ -165,8 +165,8 @@ impl MainPanel {
 
             // STAGED panels are withheld from the layout: their first draw
             // is completing in the hidden staging wrapper (see
-            // `Workspace::stage_panel`). The promote re-render clears the
-            // flag, and this loop then inserts the already-drawn panel.
+            // `PanelPhase::Staging`). The promote re-render flips the phase,
+            // and this loop then inserts the already-drawn panel.
             if ctx.props().workspace.is_staged(id) {
                 continue;
             }

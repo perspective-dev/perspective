@@ -150,6 +150,10 @@ fn dispatch_config_update(
     renderer: &Renderer,
     presentation: &Presentation,
 ) {
+    if session.get_table().is_none() && session.pending_table().is_none() {
+        return;
+    }
+
     clone!(session, renderer, presentation);
     let elem = elem.clone();
     let tracker = session.clone();
@@ -218,7 +222,16 @@ pub fn wire_element_events(
 
     let settings_sub = presentation.settings_open_changed.add_listener({
         clone!(elem, presentation, workspace);
-        move |open: bool| {
+        move |(open, announce): (bool, bool)| {
+            // A silent toggle (`restore`/`restoreWorkspace`) is announced
+            // by its own view-config commit dispatch — emitting here too
+            // would double-fire `perspective-config-update`, the first
+            // carrying the intermediate config (see
+            // `PresentationHandle::settings_open_changed`).
+            if !announce {
+                return;
+            }
+
             dispatch_event(&elem, "toggle-settings", open).unwrap();
             if let Some(panel) = workspace.active_panel() {
                 dispatch_config_update(&elem, &panel.session, &panel.renderer, &presentation);

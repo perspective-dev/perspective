@@ -467,6 +467,11 @@ function emitRect(
  * tooltip + highlight on top.
  */
 export function renderTreemapChromeOverlay(chart: TreemapChart): void {
+    paintTreemapChromeOverlay(chart);
+    chart.presentOverlay();
+}
+
+function paintTreemapChromeOverlay(chart: TreemapChart): void {
     if (!chart._chromeCanvas || chart._currentRootId === NULL_NODE) {
         return;
     }

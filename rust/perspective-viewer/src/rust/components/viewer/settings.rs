@@ -25,7 +25,8 @@ use super::msg::PerspectiveViewerMsg::*;
 use crate::components::font_loader::FontLoaderStatus;
 use crate::components::settings_panel::SelectedTab;
 use crate::config::*;
-use crate::presentation::{ColumnLocator, ColumnSettingsTab};
+use crate::presentation::{ColumnSettingsTab, ColumnSettingsTarget, OpenColumnSettings};
+use crate::queries::get_current_column_locator;
 use crate::tasks::*;
 
 /// The settings sidebar's geometry state, folded into one field on
@@ -69,6 +70,19 @@ pub(super) struct SettingsGeometry {
     /// than FLOATING over the main panel (the default absolute overlay).
     /// Session UI state, not part of the saved config.
     pub column_settings_pinned: bool,
+
+    /// Latest-wins deferred `open_column_settings` snapshot: the newest
+    /// target not yet applied while a docked-drawer presize sweep is in
+    /// flight. `UpdateColumnSettingsCommit` applies THIS slot (not a copy
+    /// captured at spawn), so a newer target arriving mid-sweep wins and
+    /// out-of-order commits are inexpressible.
+    pub column_settings_target: Option<OpenColumnSettings>,
+    pub column_settings_commit_pending: bool,
+
+    /// The docked drawer's span, cached whenever it is measurable (pin
+    /// toggle, docked unmount) - used to presize for a drawer that MOUNTS
+    /// directly into pinned mode, when it isn't in the DOM to measure.
+    pub column_settings_docked_width: Option<f64>,
 }
 
 impl PerspectiveViewer {
@@ -76,6 +90,7 @@ impl PerspectiveViewer {
         &mut self,
         ctx: &Context<Self>,
         update: Option<SettingsUpdate>,
+        announce: bool,
         resolve: Option<Sender<ApiResult<JsValue>>>,
     ) -> bool {
         match (update, resolve) {
@@ -85,15 +100,15 @@ impl PerspectiveViewer {
                 false
             },
             (Some(SettingsUpdate::SetDefault), resolve) => {
-                self.init_toggle_settings_task(ctx, Some(false), resolve);
+                self.init_toggle_settings_task(ctx, Some(false), announce, resolve);
                 false
             },
             (Some(SettingsUpdate::Update(force)), resolve) => {
-                self.init_toggle_settings_task(ctx, Some(force), resolve);
+                self.init_toggle_settings_task(ctx, Some(force), announce, resolve);
                 false
             },
             (None, resolve) => {
-                self.init_toggle_settings_task(ctx, None, resolve);
+                self.init_toggle_settings_task(ctx, None, announce, resolve);
                 false
             },
         }
@@ -150,10 +165,10 @@ impl PerspectiveViewer {
         &mut self,
         ctx: &Context<Self>,
         force: Option<bool>,
+        announce: bool,
         sender: Option<Sender<ApiResult<JsValue>>>,
     ) {
         let is_open = ctx.props().presentation.is_settings_open();
-        ctx.props().presentation.set_settings_before_open(!is_open);
         match force {
             Some(force) if is_open == force => {
                 if let Some(sender) = sender {
@@ -161,6 +176,7 @@ impl PerspectiveViewer {
                 }
             },
             Some(_) | None => {
+                ctx.props().presentation.set_settings_before_open(!is_open);
                 let force = !is_open;
                 let callback = ctx.link().callback(move |resolve| {
                     let update = SettingsUpdate::Update(force);
@@ -195,7 +211,7 @@ impl PerspectiveViewer {
                             let presents = presize_visible_panels_grown(&workspace, &elem).await;
                             let (notify, rendered) = channel::<()>();
                             callback.emit(notify);
-                            presentation.set_settings_open(false);
+                            presentation.set_settings_open(false, announce);
                             rendered.await?;
                             // `notify` fires in `rendered()` (same task as the
                             // Yew DOM patch) and this future resumes as one of
@@ -219,7 +235,7 @@ impl PerspectiveViewer {
 
                             let (notify, rendered) = channel::<()>();
                             callback.emit(notify);
-                            presentation.set_settings_open(true);
+                            presentation.set_settings_open(true, announce);
                             rendered.await?;
                             presents.reveal();
                             resize_visible_panels(&workspace).await;
@@ -339,36 +355,34 @@ impl PerspectiveViewer {
     pub(super) fn on_open_column_settings(
         &mut self,
         ctx: &Context<Self>,
-        locator: Option<ColumnLocator>,
+        target: Option<ColumnSettingsTarget>,
         sender: Option<Sender<()>>,
         toggle: bool,
     ) -> bool {
         let mut open_column_settings = ctx.props().presentation.get_open_column_settings();
-        if locator == open_column_settings.locator {
+        if target == open_column_settings.target {
             if toggle {
                 ctx.props().presentation.set_open_column_settings(None);
             }
         } else {
-            open_column_settings.locator.clone_from(&locator);
-            open_column_settings.tab = if matches!(locator, Some(ColumnLocator::NewExpression)) {
-                Some(ColumnSettingsTab::Attributes)
-            } else {
-                locator.as_ref().and_then(|x| {
-                    x.name().map(|x| {
-                        if self.session_props.is_column_active(x) {
-                            ColumnSettingsTab::Style
-                        } else {
-                            ColumnSettingsTab::Attributes
-                        }
+            open_column_settings.target.clone_from(&target);
+            open_column_settings.tab = match &target {
+                Some(ColumnSettingsTarget::NewExpression) => Some(ColumnSettingsTab::Attributes),
+                Some(ColumnSettingsTarget::Column(name)) => {
+                    Some(if self.session_props.is_column_active(name) {
+                        ColumnSettingsTab::Style
+                    } else {
+                        ColumnSettingsTab::Attributes
                     })
-                })
+                },
+                None => None,
             };
 
             ctx.props()
                 .presentation
                 .set_open_column_settings(Some(open_column_settings));
 
-            if locator.is_some() {
+            if target.is_some() {
                 self.settings_geometry.selected_tab = SelectedTab::Query;
             }
         }
@@ -402,9 +416,135 @@ impl PerspectiveViewer {
         }
     }
 
-    pub(super) fn on_toggle_column_settings_pin(&mut self) -> bool {
+    pub(super) fn on_toggle_column_settings_pin(&mut self, ctx: &Context<Self>) -> bool {
+        let is_pinned = self.settings_geometry.column_settings_pinned;
+        let delta_w = measure_column_settings_pin_delta(&ctx.props().elem, is_pinned);
+        if let Some(delta_w) = delta_w {
+            self.settings_geometry.column_settings_docked_width = Some(delta_w.abs());
+        }
+
+        self.presize_column_settings_shift(ctx, delta_w, ToggleColumnSettingsPinComplete);
+        false
+    }
+
+    pub(super) fn on_toggle_column_settings_pin_complete(&mut self, resolve: Sender<()>) -> bool {
         self.settings_geometry.column_settings_pinned =
             !self.settings_geometry.column_settings_pinned;
+        self.on_rendered.push(resolve);
+        true
+    }
+
+    /// Shared presize choreography for a column-settings geometry shift:
+    /// pre-size every visible panel by `delta_w` (`None` = no sweep, commit
+    /// only), send `commit_msg` to apply the deferred state on the render
+    /// commit, reveal the staged frames in that same paint, then reactively
+    /// finalize at the exact settled cells (I6).
+    fn presize_column_settings_shift(
+        &self,
+        ctx: &Context<Self>,
+        delta_w: Option<f64>,
+        commit_msg: fn(Sender<()>) -> super::msg::PerspectiveViewerMsg,
+    ) {
+        let workspace = ctx.props().workspace.clone();
+        let elem = ctx.props().elem.clone();
+        let callback = ctx.link().callback(commit_msg);
+        ApiFuture::spawn(async move {
+            let presents = match delta_w {
+                Some(delta_w) => presize_visible_panels_open(&workspace, &elem, delta_w, 0.0).await,
+                None => StagedPresents::default(),
+            };
+
+            let (notify, rendered) = channel::<()>();
+            callback.emit(notify);
+            rendered.await?;
+            presents.reveal();
+            resize_visible_panels(&workspace).await;
+            Ok(())
+        });
+    }
+
+    /// Whether the drawer renders for this `open_column_settings` snapshot
+    /// (the `render()` mount predicate). Sensitive to the session snapshot
+    /// too — `snapshots.rs` re-evaluates it across an `UpdateSession` apply,
+    /// which can invalidate the open column's locator (e.g. a drag
+    /// replacing it in `columns`) and unmount the drawer without any
+    /// `UpdateColumnSettings` traffic.
+    pub(super) fn is_column_settings_mounted(&self, ocs: &OpenColumnSettings) -> bool {
+        get_current_column_locator(
+            ocs,
+            &self.active_renderer,
+            &self.session_props.config,
+            &self.session_props.metadata,
+        )
+        .is_some()
+    }
+
+    /// The `open_column_settings` snapshot handler: mount/unmount of the
+    /// DOCKED drawer moves `#main_panel_container`'s flex box just like the
+    /// pin toggle — and no `before-resize` fires for it — so those
+    /// transitions defer the snapshot behind the presize choreography.
+    /// Floating transitions and in-place locator changes apply synchronously
+    /// as before, unless a deferred commit is in flight (they queue into the
+    /// latest-wins slot to preserve commit order).
+    pub(super) fn on_update_column_settings(
+        &mut self,
+        ctx: &Context<Self>,
+        ocs: OpenColumnSettings,
+    ) -> bool {
+        self.refresh_session_snapshot(ctx);
+        let effective = self
+            .settings_geometry
+            .column_settings_target
+            .as_ref()
+            .unwrap_or(&self.presentation_props.open_column_settings);
+        if ocs == *effective {
+            return false;
+        }
+
+        let was_mounted =
+            self.is_column_settings_mounted(&self.presentation_props.open_column_settings);
+        let will_mount = self.is_column_settings_mounted(&ocs);
+        let needs_presize =
+            self.settings_geometry.column_settings_pinned && was_mounted != will_mount;
+        if !needs_presize && !self.settings_geometry.column_settings_commit_pending {
+            self.presentation_props.open_column_settings = ocs;
+            return true;
+        }
+
+        self.settings_geometry.column_settings_target = Some(ocs);
+        if self.settings_geometry.column_settings_commit_pending {
+            return false;
+        }
+
+        self.settings_geometry.column_settings_commit_pending = true;
+        let delta_w = if !needs_presize {
+            None
+        } else if was_mounted {
+            // Unmounting - the docked drawer is still in the DOM, and its
+            // freed span is the same measurement as an unpin.
+            let delta = measure_column_settings_pin_delta(&ctx.props().elem, true);
+            if let Some(delta) = delta {
+                self.settings_geometry.column_settings_docked_width = Some(delta.abs());
+            }
+
+            delta
+        } else {
+            // Mounting directly into pinned mode - not yet in the DOM; the
+            // span cached at the last dock/unmount predicts the shrink.
+            self.settings_geometry.column_settings_docked_width
+        };
+
+        self.presize_column_settings_shift(ctx, delta_w, UpdateColumnSettingsCommit);
+        false
+    }
+
+    pub(super) fn on_update_column_settings_commit(&mut self, resolve: Sender<()>) -> bool {
+        self.settings_geometry.column_settings_commit_pending = false;
+        self.on_rendered.push(resolve);
+        if let Some(ocs) = self.settings_geometry.column_settings_target.take() {
+            self.presentation_props.open_column_settings = ocs;
+        }
+
         true
     }
 

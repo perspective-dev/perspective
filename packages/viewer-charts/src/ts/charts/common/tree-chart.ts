@@ -40,6 +40,10 @@ export function firstNonMetadataColumn(columns: ColumnDataMap): string {
  * layout modules can read/write them without friction.
  */
 export abstract class TreeChartBase extends AbstractChart {
+    protected override colorScaleColumn(): string | null {
+        return this._columnSlots[1] || null;
+    }
+
     //  Shared column-slot resolution
     _sizeName = "";
     _colorName = "";

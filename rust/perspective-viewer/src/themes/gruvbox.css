@@ -75,6 +75,16 @@ perspective-viewer [theme="Gruvbox Light"] {
     --psp-charts--series-8--color: var(--theme-alt-green);
     --psp-charts--series-9--color: var(--theme-alt-purple);
     --psp-charts--series-10--color: var(--theme-alt-aqua);
+    --psp-datagrid--series-1--color: var(--theme-blue);
+    --psp-datagrid--series-2--color: var(--theme-red);
+    --psp-datagrid--series-3--color: var(--theme-green);
+    --psp-datagrid--series-4--color: var(--theme-purple);
+    --psp-datagrid--series-5--color: var(--theme-aqua);
+    --psp-datagrid--series-6--color: var(--theme-alt-blue);
+    --psp-datagrid--series-7--color: var(--theme-alt-red);
+    --psp-datagrid--series-8--color: var(--theme-alt-green);
+    --psp-datagrid--series-9--color: var(--theme-alt-purple);
+    --psp-datagrid--series-10--color: var(--theme-alt-aqua);
 
     --psp-charts--gradient--background: linear-gradient(
         var(--theme-alt-red),

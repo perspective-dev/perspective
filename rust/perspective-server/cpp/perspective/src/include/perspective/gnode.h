@@ -628,9 +628,25 @@ t_gnode::_process_column(
                     prev_pkey_eq
                 );
 
-                dcolumn->set_nth<DATA_T>(
-                    added_count, cur_valid ? cur_value - prev_value : DATA_T(0)
-                );
+                // Mirrors `t_gstate::update_master_column`: an invalid cell
+                // is an explicit null if CLEAR (removes this row's
+                // contribution from additive aggregates), and a no-op if
+                // INVALID (column omitted from a partial update). A slot's
+                // raw bits are unspecified when its validity flag is false,
+                // so only the valid side of a transition may be read (#1256).
+                DATA_T delta_value;
+                if (cur_valid) {
+                    delta_value =
+                        cur_value - (prev_valid ? prev_value : DATA_T(0));
+                } else if (fcolumn->is_cleared(idx) && prev_valid) {
+                    SUPPRESS_WARNINGS_VC(4146)
+                    delta_value = -prev_value;
+                    RESTORE_WARNINGS_VC()
+                } else {
+                    delta_value = DATA_T(0);
+                }
+
+                dcolumn->set_nth<DATA_T>(added_count, delta_value);
                 dcolumn->set_valid(added_count, true);
 
                 pcolumn->set_nth<DATA_T>(added_count, prev_value);
@@ -658,7 +674,9 @@ t_gnode::_process_column(
                     ccolumn->set_valid(added_count, prev_valid);
 
                     SUPPRESS_WARNINGS_VC(4146)
-                    dcolumn->set_nth<DATA_T>(added_count, -prev_value);
+                    dcolumn->set_nth<DATA_T>(
+                        added_count, prev_valid ? -prev_value : DATA_T(0)
+                    );
                     RESTORE_WARNINGS_VC()
                     dcolumn->set_valid(added_count, true);
 

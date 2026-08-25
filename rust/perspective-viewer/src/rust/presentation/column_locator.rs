@@ -66,6 +66,23 @@ impl ColumnLocator {
     }
 }
 
+/// What the column-settings drawer is opened on, as held in presentation
+/// state: a column by name, or the not-yet-saved expression.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ColumnSettingsTarget {
+    Column(String),
+    NewExpression,
+}
+
+impl ColumnSettingsTarget {
+    pub fn name(&self) -> Option<&String> {
+        match self {
+            Self::Column(name) => Some(name),
+            Self::NewExpression => None,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 
 pub enum ColumnSettingsTab {
@@ -83,16 +100,13 @@ impl Display for ColumnSettingsTab {
 
 #[derive(Clone, Default, Debug, PartialEq)]
 pub struct OpenColumnSettings {
-    pub locator: Option<ColumnLocator>,
+    pub target: Option<ColumnSettingsTarget>,
     pub tab: Option<ColumnSettingsTab>,
 }
 
 impl OpenColumnSettings {
     pub fn name(&self) -> Option<String> {
-        self.locator
-            .as_ref()
-            .and_then(|l| l.name())
-            .map(|s| s.to_owned())
+        self.target.as_ref().and_then(|t| t.name()).cloned()
     }
 }
 

@@ -12,7 +12,7 @@
 
 use yew::prelude::*;
 
-use super::ColumnLocator;
+use super::ColumnSettingsTarget;
 
 #[derive(PartialEq, Clone, Properties)]
 pub struct ExprEditButtonProps {
@@ -27,7 +27,7 @@ pub struct ExprEditButtonProps {
     pub is_window: bool,
 
     /// Fires when the config/expresison button is clicked.
-    pub on_open_expr_panel: Callback<ColumnLocator>,
+    pub on_open_expr_panel: Callback<ColumnSettingsTarget>,
 
     /// Is the expression/config panel open?
     pub is_editing: bool,
@@ -42,14 +42,8 @@ pub struct ExprEditButtonProps {
 #[function_component]
 pub fn ExprEditButton(p: &ExprEditButtonProps) -> Html {
     let onmousedown = yew::use_callback(p.clone(), |_, p| {
-        let name = if p.is_window {
-            ColumnLocator::Window(p.name.clone())
-        } else if p.is_expression {
-            ColumnLocator::Expression(p.name.clone())
-        } else {
-            ColumnLocator::Table(p.name.clone())
-        };
-        p.on_open_expr_panel.emit(name)
+        p.on_open_expr_panel
+            .emit(ColumnSettingsTarget::Column(p.name.clone()))
     });
 
     let class = if p.is_disabled {

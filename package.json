@@ -14,6 +14,7 @@
     },
     "type": "module",
     "emscripten": "4.0.9",
+    "binaryen": "version_132",
     "llvm": "17.0.6",
     "pyodide": "0.29.4",
     "engines": {
@@ -59,6 +60,7 @@
     "scripts": {
         "preinstall": "npx only-allow pnpm",
         "postinstall": "npm-run-all postinstall:*",
+        "postinstall:binaryen": "node tools/scripts/install_binaryen.mjs",
         "postinstall:emsdk": "node tools/scripts/install_emsdk.mjs",
         "postinstall:playwright": "npx playwright install --with-deps chromium",
         "postinstall:vscode": "cp -n ./.vscode/settings.default.json ./.vscode/settings.json || true",

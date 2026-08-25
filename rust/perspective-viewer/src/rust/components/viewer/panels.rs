@@ -27,7 +27,7 @@ use super::wiring::{
     clear_active_callbacks, create_active_subscriptions, inject_active_callbacks,
     subscribe_panel_titles,
 };
-use crate::config::{ViewerConfigInitial, ViewerConfigUpdate};
+use crate::config::ViewerConfigInitial;
 use crate::queries::*;
 use crate::renderer::Renderer;
 use crate::session::*;
@@ -124,7 +124,7 @@ impl PerspectiveViewer {
         }
     }
 
-    /// Whole-element `restore`'s single commit: the `Workspace` already holds
+    /// `restoreWorkspace`'s single commit: the `Workspace` already holds
     /// the final panel set (models inserted, olds ejected) and the staged
     /// layout. Re-subscribe the per-panel title wiring (the set changed
     /// wholesale), activate the restored panel, and re-render — `MainPanel`'s
@@ -193,7 +193,8 @@ impl PerspectiveViewer {
                     })
                     .await?;
 
-                let update = ViewerConfigUpdate::decode(&config.encode()?)?;
+                // TODO(texodus): what the ****?
+                let update = ViewerConfigInitial::decode(&config.encode()?)?;
                 let client = panel.session.get_client();
                 let new_id = create_panel(
                     &elem,
@@ -235,7 +236,7 @@ impl PerspectiveViewer {
                     &workspace,
                     &notify,
                     None,
-                    ViewerConfigInitial::new(table_name).into(),
+                    ViewerConfigInitial::new(table_name),
                     client,
                 )
                 .await?;
@@ -279,7 +280,7 @@ impl PerspectiveViewer {
                 &workspace,
                 &notify,
                 None,
-                ViewerConfigInitial::new(table).into(),
+                ViewerConfigInitial::new(table),
                 Some(client),
             )
             .await?;
@@ -308,11 +309,12 @@ impl PerspectiveViewer {
         let presentation = ctx.props().presentation.clone();
         let workspace = ctx.props().workspace.clone();
         ApiFuture::spawn(async move {
-            let default_theme = presentation.get_default_theme_name().await;
-            if let Some(renderer) = workspace.active_renderer()
-                && let Some(theme) = renderer.theme().or(default_theme)
-            {
+            // Only an EXPLICITLY themed panel mirrors onto the host; an
+            // unpinned one inherits whatever the host already shows, so
+            // activating it must not restate (and thereby pin) that value.
+            if let Some(theme) = workspace.active_renderer().and_then(|x| x.theme()) {
                 presentation.set_theme_name(Some(&theme)).await?;
+                presentation.publish_theme_config().await?;
             }
 
             Ok(())
