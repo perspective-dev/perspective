@@ -251,9 +251,6 @@ importers:
       '@perspective-dev/viewer-datagrid':
         specifier: 'workspace:'
         version: link:../packages/viewer-datagrid
-      blocks:
-        specifier: 'workspace:'
-        version: link:../examples/blocks
       puppeteer:
         specifier: 'catalog:'
         version: 24.26.1(typescript@5.9.3)
@@ -273,34 +270,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
-
-  examples/blocks:
-    dependencies:
-      '@perspective-dev/client':
-        specifier: 'workspace:'
-        version: link:../../rust/perspective-js
-      '@perspective-dev/server':
-        specifier: 'workspace:'
-        version: link:../../rust/perspective-server
-      '@perspective-dev/viewer':
-        specifier: 'workspace:'
-        version: link:../../rust/perspective-viewer
-      '@perspective-dev/viewer-charts':
-        specifier: 'workspace:'
-        version: link:../../packages/viewer-charts
-      '@perspective-dev/viewer-datagrid':
-        specifier: 'workspace:'
-        version: link:../../packages/viewer-datagrid
-      superstore-arrow:
-        specifier: 'catalog:'
-        version: 3.2.0
-    devDependencies:
-      '@zip.js/zip.js':
-        specifier: 'catalog:'
-        version: 2.8.8
-      esbuild:
-        specifier: 'catalog:'
-        version: 0.25.11
 
   examples/esbuild-clickhouse-virtual:
     dependencies:

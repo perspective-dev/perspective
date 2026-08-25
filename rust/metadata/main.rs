@@ -40,8 +40,8 @@ use perspective_js::TypedArrayWindow;
 use perspective_viewer::config::{
     ClientOptions, CustomNumberFormatConfig, DatetimeColorMode, DatetimeFormatType, ExportMethod,
     ExportOptions, FormatMode, GetClientOptions, GetTableOptions, Notation, NumberFormatStyle,
-    PanelOptions, PluginStaticConfig, RestoreOptions, StringColorMode, ViewerConfig,
-    ViewerConfigInitial, ViewerConfigUpdate, WorkspaceConfig, WorkspaceConfigUpdate,
+    PanelOptions, PluginStaticConfig, RestoreOptions, SaveWorkspaceOptions, StringColorMode,
+    ViewerConfig, ViewerConfigInitial, ViewerConfigUpdate, WorkspaceConfig, WorkspaceConfigUpdate,
 };
 use ts_rs::TS;
 
@@ -70,6 +70,7 @@ pub fn generate_type_bindings_viewer() -> Result<(), Box<dyn Error>> {
     GetClientOptions::export_all_to(&path)?;
     PluginStaticConfig::export_all_to(&path)?;
     OnUpdateData::export_all_to(&path)?;
+    SaveWorkspaceOptions::export_all_to(&path)?;
 
     // The column-format wire types (`columns_config` values): the
     // flattened style/notation families export separately (ts-rs cannot

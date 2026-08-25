@@ -21,7 +21,6 @@
         "@perspective-dev/viewer": "workspace:",
         "@perspective-dev/client": "workspace:",
         "@perspective-dev/server": "workspace:",
-        "blocks": "workspace:",
         "puppeteer": "catalog:",
         "superstore-arrow": "catalog:"
     },

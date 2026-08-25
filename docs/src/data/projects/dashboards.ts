@@ -77,7 +77,6 @@ export const DASHBOARD_PROJECTS: Project[] = [
         description: TRADING_DESK_DESCRIPTION,
         source: MARKET_SOURCE,
         workspace: {
-            version: "5.2.0",
             active: "PERSPECTIVE_GENERATED_ID_0",
             layout: {
                 type: "split-layout",
@@ -172,7 +171,6 @@ export const DASHBOARD_PROJECTS: Project[] = [
         description: TRADING_DESK_DESCRIPTION,
         source: MARKET_SOURCE,
         workspace: {
-            version: "5.2.0",
             active: "PERSPECTIVE_GENERATED_ID_2",
             layout: {
                 type: "split-layout",
@@ -303,7 +301,6 @@ export const DASHBOARD_PROJECTS: Project[] = [
         description: VIDEO_WALL_DESCRIPTION,
         source: WEBCAM_SOURCE,
         workspace: {
-            version: "5.2.0",
             layout: {
                 type: "split-layout",
                 children: [
@@ -335,7 +332,6 @@ export const DASHBOARD_PROJECTS: Project[] = [
             },
             panels: {
                 PERSPECTIVE_GENERATED_ID_0: {
-                    version: "5.2.0",
                     columns_config: {},
                     plugin: "Heatmap",
                     plugin_config: {},
@@ -356,7 +352,6 @@ export const DASHBOARD_PROJECTS: Project[] = [
                     aggregates: {},
                 },
                 PERSPECTIVE_GENERATED_ID_1: {
-                    version: "5.2.0",
                     columns_config: {},
                     plugin: "Y Bar",
                     plugin_config: {},
@@ -378,7 +373,6 @@ export const DASHBOARD_PROJECTS: Project[] = [
                     aggregates: {},
                 },
                 PERSPECTIVE_GENERATED_ID_2: {
-                    version: "5.2.0",
                     columns_config: {},
                     plugin: "X/Y Scatter",
                     plugin_config: {},

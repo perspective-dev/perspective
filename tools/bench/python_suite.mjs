@@ -42,16 +42,19 @@ const CLIENT_VERSION = {
     "3.3.0": "perspective-3-3-0",
     "3.2.0": "perspective-3-2-0",
     "3.1.0": "perspective-3-1-0",
-    "3.0.3": "perspective-3-0-0",
-    "2.10.1": "perspective-2-10-0",
-    "2.9.0": "perspective-2-9-0",
-    "2.8.0": "perspective-2-8-0",
-    "2.7.0": "perspective-2-7-0",
-    "2.6.0": "perspective-2-6-0",
-    "2.5.0": "perspective-2-5-0",
-    "2.4.0": "perspective-2-4-0",
-    "2.3.2": "perspective-2-3-0",
-    "2.3.1": "perspective-2-3-0",
+
+    // TODO(texodus): These suites are legacy broken with python 3.9+ and can't
+    // run in CI anymore, need to add python sandboxing to support them.
+    // "3.0.3": "perspective-3-0-0",
+    // "2.10.1": "perspective-2-10-0",
+    // "2.9.0": "perspective-2-9-0",
+    // "2.8.0": "perspective-2-8-0",
+    // "2.7.0": "perspective-2-7-0",
+    // "2.6.0": "perspective-2-6-0",
+    // "2.5.0": "perspective-2-5-0",
+    // "2.4.0": "perspective-2-4-0",
+    // "2.3.2": "perspective-2-3-0",
+    // "2.3.1": "perspective-2-3-0",
 };
 
 fs.mkdirSync(path.join(__dirname, "./dist"), { recursive: true });

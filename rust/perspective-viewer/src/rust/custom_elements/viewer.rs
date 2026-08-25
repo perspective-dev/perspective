@@ -206,6 +206,7 @@ impl PerspectiveViewerElement {
     }
 
     async fn workspace_config(this: Self, full_palette: bool) -> ApiResult<JsValue> {
+        this.workspace.effects().settle().await;
         let mut panels: std::collections::BTreeMap<String, PanelViewerConfig> = Default::default();
         for id in &this.workspace.panel_ids() {
             let panel = this.workspace.panel(id).into_apierror()?;
@@ -1266,6 +1267,7 @@ impl PerspectiveViewerElement {
         let PanelOptions { panel: name } = parse_options(options);
         let this = self.clone();
         let fut = ApiFuture::new(async move {
+            this.workspace.effects().settle().await;
             let panel = this.resolve_panel(name)?;
             let viewer_config = panel
                 .renderer
