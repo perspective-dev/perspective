@@ -213,12 +213,6 @@ export interface DatagridPluginConfig {
     column_size_override?: Record<string, number>;
 }
 
-// Element factory for reusing DOM elements
-export interface ElemFactory {
-    clear(): void;
-    get(): HTMLElement;
-}
-
 export type Schema = Record<string, ColumnType>;
 
 // Model object stored on regular-table
@@ -259,7 +253,6 @@ export interface DatagridModel {
     _row_header_types: ColumnType[];
     _series_color_map: Map<string, Map<string, number>>;
     _series_color_seed: Map<string, number>;
-    _div_factory: ElemFactory;
     _last_window?: ViewWindow;
     _is_old_viewport?: boolean;
     _reverse_columns?: Map<string, number>;

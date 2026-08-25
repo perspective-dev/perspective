@@ -131,7 +131,9 @@ export function applyBodyCellStyles(
         const value_styled =
             (is_numeric &&
                 (plugin?.number_bg_mode === "gradient" ||
-                    plugin?.number_bg_mode === "pulse")) ||
+                    plugin?.number_bg_mode === "pulse" ||
+                    plugin?.number_fg_mode === "bar" ||
+                    plugin?.number_fg_mode === "label-bar")) ||
             (type === "string" &&
                 (plugin?.string_color_mode === "series" ||
                     plugin?.format === "link"));
@@ -279,6 +281,7 @@ export function applyBodyCellStyles(
             cell_style_numeric(
                 model,
                 c.plugin as any,
+                c.type,
                 td,
                 metadata as any,
                 isSettingsOpen,

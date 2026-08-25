@@ -23,7 +23,6 @@ import {
     type DatagridPluginElement,
     type RegularTable,
     type Schema,
-    type ElemFactory,
     type EditMode,
 } from "../types.js";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
@@ -157,32 +156,6 @@ export function readThemeStyle(regular: HTMLElement): ThemeStyle {
     };
 }
 
-class ElemFactoryImpl implements ElemFactory {
-    private _name: string;
-    private _elements: HTMLElement[];
-    private _index: number;
-
-    constructor(name: string) {
-        this._name = name;
-        this._elements = [];
-        this._index = 0;
-    }
-
-    clear(): void {
-        this._index = 0;
-    }
-
-    get(): HTMLElement {
-        if (!this._elements[this._index]) {
-            this._elements[this._index] = document.createElement(this._name);
-        }
-
-        const elem = this._elements[this._index];
-        this._index += 1;
-        return elem;
-    }
-}
-
 export async function createModel(
     this: DatagridPluginElement,
     regular: RegularTable,
@@ -310,9 +283,6 @@ export async function createModel(
         }),
         _series_color_map: new Map<string, string>(),
         _series_color_seed: new Map<string, number>(),
-
-        // get_psp_type,
-        _div_factory: extend._div_factory || new ElemFactoryImpl("div"),
     }) as DatagridModel;
 
     regular.setDataListener(
