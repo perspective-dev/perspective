@@ -70,7 +70,6 @@ export const SUPERSTORE_PROJECTS: Project[] = [
             "underneath.",
         source: SUPERSTORE,
         workspace: {
-            version: "5.2.0",
             active: "PERSPECTIVE_GENERATED_ID_1",
             layout: {
                 type: "split-layout",
@@ -103,7 +102,6 @@ export const SUPERSTORE_PROJECTS: Project[] = [
             },
             panels: {
                 PERSPECTIVE_GENERATED_ID_0: {
-                    version: "5.2.0",
                     columns_config: {},
                     plugin: "Y Bar",
                     plugin_config: {},
@@ -120,7 +118,6 @@ export const SUPERSTORE_PROJECTS: Project[] = [
                     aggregates: {},
                 },
                 PERSPECTIVE_GENERATED_ID_1: {
-                    version: "5.2.0",
                     columns_config: {
                         Profit: {
                             number_fg_mode: "label-bar",
@@ -142,7 +139,6 @@ export const SUPERSTORE_PROJECTS: Project[] = [
                     aggregates: {},
                 },
                 PERSPECTIVE_GENERATED_ID_2: {
-                    version: "5.2.0",
                     columns_config: {},
                     plugin: "Treemap",
                     plugin_config: {},
@@ -190,7 +186,6 @@ export const OLYMPICS_PROJECTS: Project[] = [
             name: "olympics",
         },
         workspace: {
-            version: "5.2.0",
             active: "PERSPECTIVE_GENERATED_ID_0",
             layout: {
                 type: "split-layout",
@@ -661,7 +656,6 @@ export const SF_PROJECTS: Project[] = [
             name: "evictions",
         },
         workspace: singlePanel({
-            version: "5.2.0",
             columns_config: {},
             plugin: "Map Scatter",
             plugin_config: {

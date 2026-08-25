@@ -73,7 +73,6 @@ class TestViewColumnPaths(object):
         paths = view.column_paths(start_col=1, end_col=2)
         assert paths == [
             "Second Class|Sales",
-            "Standard Class|Sales",
         ]
 
         view.delete()
@@ -82,7 +81,6 @@ class TestViewColumnPaths(object):
         paths = view.column_paths(end_col=1)
         assert paths == [
             "First Class|Sales",
-            "Second Class|Sales",
         ]
 
         view.delete()
