@@ -1,3 +1,16 @@
+# [v5.3.0](https://github.com/perspective-dev/perspective/releases/tag/v5.3.0)
+
+_25 August 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.2.0...v5.3.0))
+
+Features
+
+- Palette & gradient style controls + new docs site [#3217](https://github.com/finos/perspective/pull/3217)
+
+Misc
+
+- Fix jupyter windows build [#3218](https://github.com/finos/perspective/pull/3218)
+- fix(datagrid): persist column widths in columns config [#3215](https://github.com/finos/perspective/pull/3215)
+
 # [v5.2.0](https://github.com/perspective-dev/perspective/releases/tag/v5.2.0)
 
 _10 August 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.1.0...v5.2.0))
