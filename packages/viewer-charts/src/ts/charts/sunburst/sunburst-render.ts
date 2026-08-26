@@ -28,6 +28,7 @@ import {
     INNER_RING_PX,
 } from "./sunburst-layout";
 import { buildFacetGrid } from "../../layout/facet-grid";
+import { legendTreeGutter } from "../../interaction/legend-controller";
 import { withChromeCache } from "../common/chrome-cache";
 import {
     renderBreadcrumbs as renderTreeBreadcrumbs,
@@ -106,7 +107,7 @@ export function renderSunburstFrame(
               chart._colorMin < chart._colorMax;
     const breadcrumbH =
         !hasSplits && chart._breadcrumbIds.length > 1 ? BREADCRUMB_H : 0;
-    const legendW = hasLegend ? LEGEND_W : 0;
+    const legendW = legendTreeGutter(chart._pluginConfig, hasLegend, LEGEND_W);
 
     if (hasSplits) {
         layoutFacetedSunburst(chart, cssWidth, cssHeight, legendW);

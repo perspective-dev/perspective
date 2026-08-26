@@ -20,7 +20,10 @@ import {
     renderCategoricalLegend,
     renderCategoricalLegendAt,
     renderLegend,
+    renderLegendAt,
+    type LegendPaintView,
 } from "../../axis/legend";
+import { legendSidebarWidth } from "../../interaction/legend-controller";
 import type { TreeChartBase } from "./tree-chart";
 import { drawTooltipBox } from "./draw-tooltip-box";
 
@@ -159,50 +162,96 @@ export function renderTreeColorLegend(
     cssHeight: number,
     categoricalRect: PlotRect | null = null,
 ): void {
-    if (chart._colorMode === "series" && chart._uniqueColorLabels.size > 1) {
-        if (categoricalRect) {
+    const cfg = chart._pluginConfig;
+    const hasCategorical =
+        chart._colorMode === "series" && chart._uniqueColorLabels.size > 1;
+    const hasNumeric =
+        chart._colorMode === "numeric" && chart._colorMin < chart._colorMax;
+    if (cfg.legend_mode === "none" || (!hasCategorical && !hasNumeric)) {
+        chart._legend.clearPainted();
+        return;
+    }
+
+    const floating = cfg.legend_mode === "floating";
+    const view: LegendPaintView = {
+        mode: floating ? "floating" : "sidebar",
+        legend: chart._legend,
+        title: chart._colorName || "Legend",
+        opacity: cfg.legend_opacity,
+    };
+    const floatBox = floating
+        ? chart._legend.floatingBox(cfg, cssWidth, cssHeight)
+        : null;
+
+    if (hasCategorical) {
+        if (floatBox) {
+            renderCategoricalLegendAt(
+                canvas,
+                floatBox,
+                chart._uniqueColorLabels,
+                palette,
+                theme,
+                view,
+            );
+        } else if (categoricalRect) {
             renderCategoricalLegendAt(
                 canvas,
                 categoricalRect,
                 chart._uniqueColorLabels,
                 palette,
                 theme,
+                { ...view, sidebarGutter: categoricalRect.width },
             );
         } else {
             renderCategoricalLegend(
                 canvas,
-                syntheticLegendLayout(cssWidth, cssHeight),
+                syntheticLegendLayout(cssWidth, cssHeight, cfg),
                 chart._uniqueColorLabels,
                 palette,
                 theme,
+                view,
             );
         }
-    } else if (
-        chart._colorMode === "numeric" &&
-        chart._colorMin < chart._colorMax
-    ) {
-        renderLegend(
-            canvas,
-            syntheticLegendLayout(cssWidth, cssHeight),
-            {
-                min: chart._colorMin,
-                max: chart._colorMax,
-                label: chart._colorName,
-            },
-            stops,
-            theme,
-            chart.getColumnFormatter(chart._colorName, "value"),
-        );
+    } else {
+        const colorDomain = {
+            min: chart._colorMin,
+            max: chart._colorMax,
+            label: chart._colorName,
+        };
+        const formatter = chart.getColumnFormatter(chart._colorName, "value");
+        if (floatBox) {
+            renderLegendAt(
+                canvas,
+                floatBox,
+                colorDomain,
+                stops,
+                theme,
+                formatter,
+                view,
+            );
+        } else {
+            renderLegend(
+                canvas,
+                syntheticLegendLayout(cssWidth, cssHeight, cfg),
+                colorDomain,
+                stops,
+                theme,
+                formatter,
+                view,
+            );
+        }
     }
 }
 
 function syntheticLegendLayout(
     cssWidth: number,
     cssHeight: number,
+    cfg: TreeChartBase["_pluginConfig"],
 ): PlotLayout {
     return new PlotLayout(cssWidth, cssHeight, {
         hasXLabel: false,
         hasYLabel: false,
         hasLegend: true,
+        rightExtra: legendSidebarWidth(cfg, 80),
     });
 }

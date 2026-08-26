@@ -53,6 +53,7 @@ export type WorkerMsg =
     | SetCursorMsg
     | UserClickMsg
     | UserSelectMsg
+    | PluginConfigDeltaMsg
     | LoadAndRenderAckMsg
     | ResizeAckMsg
     | FrameBitmapMsg
@@ -317,6 +318,7 @@ export interface LoadAndRenderMsg {
 export interface LoadAndRenderAckMsg {
     kind: "loadAndRenderAck";
     msgId: number;
+    error?: string;
 }
 
 export interface RedrawMsg {
@@ -417,7 +419,8 @@ export interface SnapshotPngReqMsg {
 export interface SnapshotPngReplyMsg {
     kind: "snapshotPngReply";
     requestId: number;
-    blob: Blob;
+    blob?: Blob;
+    error?: string;
 }
 
 export interface DestroyMsg {
@@ -499,6 +502,21 @@ export interface DismissTooltipMsg {
 export interface SetCursorMsg {
     kind: "setCursor";
     cursor: string;
+}
+
+/**
+ * Renderer → host: a completed legend gesture (sidebar width drag,
+ * floating move / resize) produced new values for the legend's
+ * `plugin_config` fields. Posted ONCE per gesture, at pointerup — never
+ * per pointermove — with only the fields the gesture changed. The host
+ * plugin persists them through the viewer's public `restore` surface
+ * (a user-gesture echo), which merges the host bucket, refreshes the
+ * settings form, and echoes one `setPluginConfig` back with the same
+ * values (a no-op by the worker's legend-field equality guard).
+ */
+export interface PluginConfigDeltaMsg {
+    kind: "pluginConfigDelta";
+    fields: Record<string, string | number | boolean>;
 }
 
 /**

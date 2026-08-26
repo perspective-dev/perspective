@@ -93,7 +93,11 @@ export function dispatch(r: WorkerRenderer, msg: ControlMsg): void {
                     r.post({ kind: "snapshotPngReply", requestId, blob });
                 })
                 .catch((err) => {
-                    r.post({ kind: "error", message: String(err) });
+                    r.post({
+                        kind: "snapshotPngReply",
+                        requestId,
+                        error: String(err),
+                    });
                 });
             break;
         }

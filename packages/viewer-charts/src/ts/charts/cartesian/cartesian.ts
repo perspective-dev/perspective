@@ -66,6 +66,15 @@ export class CartesianChart extends AbstractChart {
     }
 
     /**
+     * Chrome-only repaint for legend scroll / floating-legend drag —
+     * the same lightweight path hover updates use. No GL pass; the
+     * composite re-presents over the retained plot bitmap.
+     */
+    repaintChrome(): void {
+        renderCartesianChromeOverlay(this);
+    }
+
+    /**
      * Rendering pipeline selector. `"cartesian"` is the default —
      * draws axes, gridlines, and ticks via the chrome canvas.
      * `"map"` (set by `MapChart` subclasses) suppresses cartesian

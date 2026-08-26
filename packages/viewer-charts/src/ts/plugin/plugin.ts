@@ -115,6 +115,29 @@ const FIELD_SCHEMAS: Record<PluginConfigField, FieldSpec> = {
         ],
     },
     map_tile_alpha: { kind: "Number", min: 0, max: 1, step: 0.05 },
+    legend_mode: {
+        kind: "Enum",
+        variants: [
+            { value: "sidebar", label: "Sidebar" },
+            { value: "none", label: "None" },
+            { value: "floating", label: "Floating" },
+        ],
+    },
+    // 0 = auto (the chart family's historical gutter width).
+    legend_width_px: { kind: "Number", min: 0, max: 512, step: 1 },
+    legend_height_px: { kind: "Number", min: 48, max: 1024, step: 1 },
+    legend_anchor: {
+        kind: "Enum",
+        variants: [
+            { value: "top-right", label: "Top Right" },
+            { value: "top-left", label: "Top Left" },
+            { value: "bottom-right", label: "Bottom Right" },
+            { value: "bottom-left", label: "Bottom Left" },
+        ],
+    },
+    legend_x: { kind: "Number", min: 0, max: 1, step: 0.01 },
+    legend_y: { kind: "Number", min: 0, max: 1, step: 0.01 },
+    legend_opacity: { kind: "Number", min: 0, max: 1, step: 0.05 },
 };
 
 function fieldSpec(
@@ -398,6 +421,19 @@ export class HTMLPerspectiveViewerWebGLPluginElement
                 if (zoomControls) {
                     zoomControls.classList.toggle("visible", !isDefault);
                 }
+            },
+            onPluginConfigDelta: (fields) => {
+                this._pluginConfig = { ...this._pluginConfig, ...fields };
+                const host = this
+                    .parentElement as HTMLPerspectiveViewerElement | null;
+                (
+                    host?.restore(
+                        { plugin_config: fields },
+                        panel ? { panel } : undefined,
+                    ) as Promise<void> | undefined
+                )?.catch((e: unknown) => {
+                    console.error("legend config persistence failed", e);
+                });
             },
         });
 

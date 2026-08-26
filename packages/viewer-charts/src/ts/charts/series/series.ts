@@ -30,6 +30,7 @@ import {
 } from "./series-build";
 import {
     renderBarFrame,
+    renderBarChromeOverlay,
     uploadBarInstances,
     invalidateGlyphBuffers,
     rebuildGlyphBuffers,
@@ -124,6 +125,15 @@ export class SeriesChart extends CategoricalYChart {
      */
     protected override getZoomConfig(): ZoomConfig {
         return { lockAxis: this._isHorizontal ? "x" : "y" };
+    }
+
+    /**
+     * Chrome-only repaint for legend scroll / floating-legend drag —
+     * the same lightweight path hover updates use. No GL pass; the
+     * composite re-presents over the retained plot bitmap.
+     */
+    repaintChrome(): void {
+        renderBarChromeOverlay(this);
     }
 
     _locations: CachedLocations | null = null;

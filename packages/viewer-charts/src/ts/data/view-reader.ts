@@ -95,12 +95,9 @@ export async function viewToColumnDataMap(
                 } else if (vals instanceof Float64Array) {
                     // Datetime/Date columns are emitted as Float64 to keep
                     // millisecond precision; numeric Float64 also lands here
-                    // when `float32` mode is off. Keep them as f64 — the
-                    // chart's CPU mirrors and extents will rebase to f32 at
-                    // upload time.
+                    // when `float32` mode is off.
                     result.set(name, { type: "float64", values: vals, valid });
                 } else {
-                    // Fallback: treat as float32
                     // TODO: Instance check if this needs a copy?
                     result.set(name, {
                         type: "float32",

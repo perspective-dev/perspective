@@ -54,7 +54,12 @@ import {
     renderLegendAt,
     renderCategoricalLegend,
     renderCategoricalLegendAt,
+    type LegendPaintView,
 } from "../../axis/legend";
+import {
+    legendRightGutter,
+    legendSidebarWidth,
+} from "../../interaction/legend-controller";
 
 /**
  * NaN guard: `_xOrigin`/`_yOrigin` start as NaN before the first valid sample.
@@ -368,7 +373,7 @@ function renderSinglePlotFrame(
 
     // One-pass plot-width / plot-height estimate to size the
     // categorical gutter overrides; same approach as series-render.
-    const estRight = hasColorCol ? 80 : 16;
+    const estRight = legendRightGutter(chart._pluginConfig, hasColorCol);
     const estLeftPlain = 55 + (chart._yLabel ? 16 : 0);
     const estPlotWidth = Math.max(1, cssWidth - estLeftPlain - estRight);
     const leftExtra = chart._yCategoryDomain
@@ -384,6 +389,7 @@ function renderSinglePlotFrame(
         hasLegend: hasColorCol,
         leftExtra,
         bottomExtra,
+        rightExtra: estRight,
     });
     chart._lastLayout = layout;
     if (chart._zoomController) {
@@ -521,7 +527,8 @@ function renderFacetedFrame(
         cssHeight,
         xAxis: chart._lastEffectiveSharedX ? "outer" : "cell",
         yAxis: chart._lastEffectiveSharedY ? "outer" : "cell",
-        hasLegend,
+        hasLegend: hasLegend && chart._pluginConfig.legend_mode === "sidebar",
+        legendWidth: legendSidebarWidth(chart._pluginConfig, 96),
         hasXLabel: !!chart._xLabel,
         hasYLabel: !!chart._yLabel,
         gap: chart._facetConfig.facet_padding,
@@ -748,35 +755,89 @@ function renderSinglePlotChromeOverlay(chart: CartesianChart): void {
         );
     }
 
-    if (chart._lastHasColorCol) {
+    const legendMode = chart._pluginConfig.legend_mode;
+    let legendPainted = false;
+    if (chart._lastHasColorCol && legendMode !== "none") {
         const stops = chart._lastGradientStops ?? theme.gradientStops;
+        const floating = legendMode === "floating";
+        const view: LegendPaintView = {
+            mode: floating ? "floating" : "sidebar",
+            legend: chart._legend,
+            title: chart._colorName ?? undefined,
+            opacity: chart._pluginConfig.legend_opacity,
+        };
+        const floatBox = floating
+            ? chart._legend.floatingBox(
+                  chart._pluginConfig,
+                  layout.cssWidth,
+                  layout.cssHeight,
+              )
+            : null;
         if (chart._colorIsString && chart._uniqueColorLabels.size > 0) {
             const palette = resolvePalette(
                 theme.seriesPalette,
                 stops,
                 chart._uniqueColorLabels.size,
             );
-            renderCategoricalLegend(
-                chart._chromeCanvas!,
-                layout,
-                chart._uniqueColorLabels,
-                palette,
-                theme,
-            );
+            if (floatBox) {
+                renderCategoricalLegendAt(
+                    chart._chromeCanvas!,
+                    floatBox,
+                    chart._uniqueColorLabels,
+                    palette,
+                    theme,
+                    view,
+                );
+            } else {
+                renderCategoricalLegend(
+                    chart._chromeCanvas!,
+                    layout,
+                    chart._uniqueColorLabels,
+                    palette,
+                    theme,
+                    view,
+                );
+            }
+
+            legendPainted = true;
         } else if (chart._colorName) {
-            renderLegend(
-                chart._chromeCanvas!,
-                layout,
-                {
-                    min: chart._colorMin,
-                    max: chart._colorMax,
-                    label: chart._colorName,
-                },
-                stops,
-                theme,
-                chart.getColumnFormatter(chart._colorName, "value"),
+            const colorDomain = {
+                min: chart._colorMin,
+                max: chart._colorMax,
+                label: chart._colorName,
+            };
+            const formatter = chart.getColumnFormatter(
+                chart._colorName,
+                "value",
             );
+            if (floatBox) {
+                renderLegendAt(
+                    chart._chromeCanvas!,
+                    floatBox,
+                    colorDomain,
+                    stops,
+                    theme,
+                    formatter,
+                    view,
+                );
+            } else {
+                renderLegend(
+                    chart._chromeCanvas!,
+                    layout,
+                    colorDomain,
+                    stops,
+                    theme,
+                    formatter,
+                    view,
+                );
+            }
+
+            legendPainted = true;
         }
+    }
+
+    if (!legendPainted) {
+        chart._legend.clearPainted();
     }
 
     renderScatterLabels(chart, chart._chromeCanvas!, layout, 0, 1);
@@ -919,10 +980,25 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
     }
 
     // Shared legend: categorical (string color) or gradient
-    // (numeric color). Position derives from `grid.legendRect`
-    // which `buildFacetGrid` populates when `hasLegend` was set.
-    if (chart._lastHasColorCol && grid.legendRect) {
+    const legendMode = chart._pluginConfig.legend_mode;
+    const floating = legendMode === "floating";
+    const legendAnchor = floating
+        ? chart._legend.floatingBox(
+              chart._pluginConfig,
+              chart._lastLayout!.cssWidth,
+              chart._lastLayout!.cssHeight,
+          )
+        : grid.legendRect;
+    let legendPainted = false;
+    if (chart._lastHasColorCol && legendMode !== "none" && legendAnchor) {
         const stops = chart._lastGradientStops ?? theme.gradientStops;
+        const view: LegendPaintView = {
+            mode: floating ? "floating" : "sidebar",
+            legend: chart._legend,
+            title: chart._colorName ?? undefined,
+            sidebarGutter: floating ? undefined : grid.legendRect?.width,
+            opacity: chart._pluginConfig.legend_opacity,
+        };
         if (chart._colorIsString && chart._uniqueColorLabels.size > 0) {
             const palette = resolvePalette(
                 theme.seriesPalette,
@@ -931,23 +1007,27 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
             );
             renderCategoricalLegendAt(
                 canvas,
-                grid.legendRect,
+                legendAnchor,
                 chart._uniqueColorLabels,
                 palette,
                 theme,
+                view,
             );
+            legendPainted = true;
         } else if (chart._colorName) {
             // Numeric gradient legend in the shared outer rect. The
             // label sits above the bar, so inset the rect's top by
             // the usual 20 px that `renderLegend` reserves.
             renderLegendAt(
                 canvas,
-                {
-                    x: grid.legendRect.x,
-                    y: grid.legendRect.y + 20,
-                    width: grid.legendRect.width,
-                    height: grid.legendRect.height - 20,
-                },
+                floating
+                    ? legendAnchor
+                    : {
+                          x: legendAnchor.x,
+                          y: legendAnchor.y + 20,
+                          width: legendAnchor.width,
+                          height: legendAnchor.height - 20,
+                      },
                 {
                     min: chart._colorMin,
                     max: chart._colorMax,
@@ -956,8 +1036,14 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
                 stops,
                 theme,
                 chart.getColumnFormatter(chart._colorName, "value"),
+                view,
             );
+            legendPainted = true;
         }
+    }
+
+    if (!legendPainted) {
+        chart._legend.clearPainted();
     }
 
     // Coordinated hover / click indicators across facets. The tooltip

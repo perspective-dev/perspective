@@ -198,6 +198,8 @@ export interface ChartImplementation {
      */
     deselect?(): void;
 
+    repaintChrome?(): void;
+
     destroy(): void;
 }
 
@@ -446,7 +448,47 @@ export interface PluginConfig {
      * shows the tiles at full opacity.
      */
     map_tile_alpha: number;
+
+    /**
+     * Legend presentation mode.
+     */
+    legend_mode: "sidebar" | "none" | "floating";
+
+    /**
+     * Legend width in CSS pixels. `0` (default) = automatic — each
+     * chart family keeps its historical gutter width (80–96px). In
+     * `"sidebar"` mode this is the full right-gutter width; in
+     * `"floating"` mode it is the panel width. Clamped at paint time
+     * to at most half the canvas width so a saved wide legend cannot
+     * crush a small panel.
+     */
+    legend_width_px: number;
+
+    /**
+     * Floating-legend panel height in CSS pixels. Ignored in
+     * `"sidebar"` mode (the legend spans the plot height). Clamped at
+     * paint time to the canvas height.
+     */
+    legend_height_px: number;
+
+    /**
+     * Canvas corner that `legend_x` / `legend_y` are measured FROM.
+     * Floating mode only. The panel keeps its distance to this corner
+     * across panel resizes — anchor `"bottom-right"` with small
+     * offsets stays glued to the bottom-right.
+     */
+    legend_anchor: LegendAnchor;
+
+    legend_x: number;
+    legend_y: number;
+    legend_opacity: number;
 }
+
+export type LegendAnchor =
+    | "top-left"
+    | "top-right"
+    | "bottom-left"
+    | "bottom-right";
 
 export const DEFAULT_PLUGIN_CONFIG: PluginConfig = {
     auto_alt_y_axis: false,
@@ -467,4 +509,11 @@ export const DEFAULT_PLUGIN_CONFIG: PluginConfig = {
     gradient_color_mode: "mean",
     map_tile_provider: "carto-positron",
     map_tile_alpha: 1.0,
+    legend_mode: "sidebar",
+    legend_width_px: 0,
+    legend_height_px: 160,
+    legend_anchor: "top-right",
+    legend_x: 0,
+    legend_y: 0,
+    legend_opacity: 1.0,
 };

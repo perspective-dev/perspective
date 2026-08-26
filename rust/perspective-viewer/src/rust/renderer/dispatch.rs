@@ -165,10 +165,8 @@ impl Renderer {
         width: f64,
         height: f64,
     ) -> ApiResult<Option<js_sys::Function>> {
-        self.0.presize_pending.set(self.0.presize_pending.get() + 1);
-        let result = self.presize_inner(None, width, height).await;
-        self.0.presize_pending.set(self.0.presize_pending.get() - 1);
-        result
+        let _pending = PresizePendingGuard::increment(self);
+        self.presize_inner(None, width, height).await
     }
 
     /// Pre-size AND pre-position the plugin to its target layout bo.
@@ -179,10 +177,8 @@ impl Renderer {
         width: f64,
         height: f64,
     ) -> ApiResult<Option<js_sys::Function>> {
-        self.0.presize_pending.set(self.0.presize_pending.get() + 1);
-        let result = self.presize_inner(Some((dx, dy)), width, height).await;
-        self.0.presize_pending.set(self.0.presize_pending.get() - 1);
-        result
+        let _pending = PresizePendingGuard::increment(self);
+        self.presize_inner(Some((dx, dy)), width, height).await
     }
 
     async fn presize_inner(
@@ -374,7 +370,14 @@ impl Renderer {
             .debounce_with(|guard| async move {
                 set_timeout(timer.get_throttle()).await?;
                 if self.0.presize_pending.get() > 0 {
+                    // Record the drop like the hidden-panel path
+                    // (`wire_panel_render_sub`) does — a silently
+                    // discarded update otherwise leaves the plugin's
+                    // retained frame stale until the NEXT data tick,
+                    // or forever if none comes. `draw_view` /
+                    // `activation_render` consume the marker.
                     tracing::debug!("Update skipped, presize pending");
+                    self.set_data_stale();
                     return Ok(());
                 }
 
@@ -471,5 +474,28 @@ impl Renderer {
 
     fn draw_lock(&self) -> DebounceMutex {
         self.draw_lock.clone()
+    }
+}
+
+/// RAII increment of [`RendererData::presize_pending`], the counter that
+/// gates [`Renderer::update_lazy`] dispatches. Decrementing on `Drop`
+/// (not on the happy path) makes the release unconditional — a presize
+/// future cancelled mid-await can never strand the counter above zero,
+/// which would silently discard every subsequent debounced update for
+/// the panel's lifetime.
+struct PresizePendingGuard(Renderer);
+
+impl PresizePendingGuard {
+    fn increment(renderer: &Renderer) -> Self {
+        let cell = &renderer.0.presize_pending;
+        cell.set(cell.get() + 1);
+        Self(renderer.clone())
+    }
+}
+
+impl Drop for PresizePendingGuard {
+    fn drop(&mut self) {
+        let cell = &self.0.0.presize_pending;
+        cell.set(cell.get() - 1);
     }
 }

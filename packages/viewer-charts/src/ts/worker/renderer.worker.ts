@@ -283,6 +283,7 @@ export class WorkerRenderer {
      */
     async loadAndRender(msg: LoadAndRenderMsg): Promise<void> {
         const myGen = ++this._renderGen;
+        let error: string | undefined;
         try {
             const [numRows, schema, exprSchema, tableSchema] =
                 await Promise.all([
@@ -352,9 +353,10 @@ export class WorkerRenderer {
         } catch (err) {
             if ((err + "").indexOf("View not found") === -1) {
                 console.error("loadAndRender failed", err);
+                error = String(err);
             }
         } finally {
-            this.post({ kind: "loadAndRenderAck", msgId: msg.msgId });
+            this.post({ kind: "loadAndRenderAck", msgId: msg.msgId, error });
         }
     }
 
@@ -523,7 +525,59 @@ export class WorkerRenderer {
         return { controller: this.zoomController, layout };
     }
 
+    /**
+     * Legend-first interaction routing. The chart's `LegendController`
+     * sees every forwarded event BEFORE the zoom / tooltip paths, so
+     * legend gestures (scroll, width drag, floating move / resize)
+     * structurally preempt plot pan / zoom / hover — a wheel over the
+     * legend can never zoom the plot under it, and a floating-panel
+     * drag can never start a pan.
+     */
+    private _legendInteraction(event: InteractionEvent): boolean {
+        const chart = this.chartImpl as any;
+        const legend = chart?._legend;
+        const cfg = chart?._pluginConfig;
+        if (!legend || !cfg) {
+            return false;
+        }
+
+        return legend.handleEvent(event, {
+            cfg,
+            cssWidth: this.cssWidth,
+            cssHeight: this.cssHeight,
+            legendRects: chart._legendRects ?? [],
+            repaint: (relayout: boolean) => {
+                if (!relayout && typeof chart.repaintChrome === "function") {
+                    chart.repaintChrome();
+                } else {
+                    this.chartImpl.requestRender(this.glManager);
+                }
+            },
+            postDelta: (fields: Record<string, string | number | boolean>) =>
+                this.post({ kind: "pluginConfigDelta", fields }),
+            setCursor: (cursor: string) => chart._hostSink?.setCursor?.(cursor),
+            dispatchLeave: () => this._tooltip()?.dispatchLeave(),
+        });
+    }
+
     onInteraction(event: InteractionEvent): void {
+        try {
+            this._routeInteraction(event);
+        } catch (err) {
+            this._dragTarget = null;
+            (this.chartImpl as any)?._legend?.cancelGesture?.();
+            console.error("interaction dispatch failed", err);
+        }
+    }
+
+    private _routeInteraction(event: InteractionEvent): void {
+        const plotDragging =
+            this._dragTarget !== null &&
+            (event.type === "pointermove" || event.type === "pointerup");
+        if (!plotDragging && this._legendInteraction(event)) {
+            return;
+        }
+
         switch (event.type) {
             case "wheel": {
                 const target = this._resolveTarget(event.mx, event.my);

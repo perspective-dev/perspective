@@ -156,6 +156,10 @@ export class RendererTransport {
     private _pendingCounter = 0;
     private _onZoomChanged: ((isDefault: boolean) => void) | null = null;
 
+    private _onPluginConfigDelta:
+        | ((fields: Record<string, string | number | boolean>) => void)
+        | null = null;
+
     /**
      * Cached zoom-default flag pushed by the renderer after each zoom
      * mutation. Surfaced sync via `allZoomsDefault()`; updates between
@@ -235,6 +239,9 @@ export class RendererTransport {
         maxCells: number;
         precompileShaders?: boolean;
         onZoomChanged?: (isDefault: boolean) => void;
+        onPluginConfigDelta?: (
+            fields: Record<string, string | number | boolean>,
+        ) => void;
     }) {
         this._client = opts.client;
         this._view = opts.view;
@@ -246,6 +253,7 @@ export class RendererTransport {
         this._maxCells = opts.maxCells;
         this._precompileShaders = opts.precompileShaders ?? false;
         this._onZoomChanged = opts.onZoomChanged ?? null;
+        this._onPluginConfigDelta = opts.onPluginConfigDelta ?? null;
         this._ready = new Promise((resolve, reject) => {
             this._resolveReady = resolve;
             this._rejectReady = reject;
@@ -815,6 +823,9 @@ export class RendererTransport {
             case "setCursor":
                 this._ensureHostSink()?.setCursor(msg.cursor);
                 break;
+            case "pluginConfigDelta":
+                this._onPluginConfigDelta?.(msg.fields);
+                break;
             case "userClick":
                 this._dispatchOnViewer(
                     new CustomEvent<PerspectiveClickDetail>(
@@ -878,13 +889,35 @@ export class RendererTransport {
                 this._rejectReady(new Error(msg.message));
                 break;
             case "loadAndRenderAck":
-                this._resolvePending(msg.msgId, "loadAndRender", undefined);
+                if (msg.error !== undefined) {
+                    this._rejectPending(
+                        msg.msgId,
+                        "loadAndRender",
+                        new Error(msg.error),
+                    );
+                } else {
+                    this._resolvePending(msg.msgId, "loadAndRender", undefined);
+                }
+
                 break;
             case "resizeAck":
                 this._resolvePending(msg.msgId, "resize", undefined);
                 break;
             case "snapshotPngReply":
-                this._resolvePending(msg.requestId, "snapshotPng", msg.blob);
+                if (msg.error !== undefined) {
+                    this._rejectPending(
+                        msg.requestId,
+                        "snapshotPng",
+                        new Error(msg.error),
+                    );
+                } else {
+                    this._resolvePending(
+                        msg.requestId,
+                        "snapshotPng",
+                        msg.blob,
+                    );
+                }
+
                 break;
         }
     }
@@ -908,6 +941,20 @@ export class RendererTransport {
 
         this._pending.delete(id);
         entry.resolve(value);
+    }
+
+    private _rejectPending(
+        id: number,
+        kind: PendingRenderType,
+        error: Error,
+    ): void {
+        const entry = this._pending.get(id);
+        if (!entry || entry.kind !== kind) {
+            return;
+        }
+
+        this._pending.delete(id);
+        entry.reject(error);
     }
 
     /**

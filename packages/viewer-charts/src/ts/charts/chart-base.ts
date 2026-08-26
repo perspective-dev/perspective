@@ -41,6 +41,7 @@ import {
     type UserClickPayload,
     type UserSelectPayload,
 } from "../interaction/tooltip-controller";
+import { LegendController } from "../interaction/legend-controller";
 import type { PerspectiveClickDetail } from "../event-detail";
 import type { ViewConfig } from "@perspective-dev/client";
 import { resolveThemeFromVars, type Theme } from "../theme/theme";
@@ -238,6 +239,7 @@ export abstract class AbstractChart implements ChartImplementation {
      */
     _pluginConfig: PluginConfig = { ...DEFAULT_PLUGIN_CONFIG };
 
+    _legend = new LegendController();
     _tooltip = new TooltipController();
 
     /**
@@ -608,6 +610,11 @@ export abstract class AbstractChart implements ChartImplementation {
      * inputs in `uploadAndRender`; they take effect on next data load.
      */
     setPluginConfig(cfg: PluginConfig): void {
+        // Persistence echo vs. real change: a restore whose legend
+        // fields equal the current values (the round-trip of a
+        // completed drag) must not disturb legend scroll or an
+        // in-flight gesture; different values win and cancel any drag.
+        this._legend.reconcileConfig(this._pluginConfig, cfg);
         this._pluginConfig = { ...cfg };
         this._facetConfig = {
             ...this._facetConfig,
