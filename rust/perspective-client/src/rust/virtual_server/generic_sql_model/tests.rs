@@ -124,13 +124,13 @@ fn test_table_make_view_with_sort_group_by_and_split_by() {
 
     assert!(sql.contains("__SORT_0__"), "expected __SORT_0__: {}", sql);
     assert!(
-        sql.contains("__GROUPING_ID__, __SORT_0__"),
+        sql.contains("\"__GROUPING_ID__\", \"__SORT_0__\""),
         "expected __SORT_0__ in GROUP BY: {}",
         sql
     );
 
     assert!(
-        sql.contains("__SORT_0__ ASC"),
+        sql.contains("\"__SORT_0__\" ASC"),
         "expected __SORT_0__ ASC in ORDER BY: {}",
         sql
     );
@@ -160,14 +160,14 @@ fn test_table_make_view_with_sort_multi_group_by_and_split_by() {
         .unwrap();
 
     assert!(
-        sql.contains("PARTITION BY (__GROUPING_ID__ >> 1)"),
+        sql.contains("PARTITION BY (\"__GROUPING_ID__\" >> 1)"),
         "expected shifted __GROUPING_ID__ in WINDOW: {}",
         sql
     );
 
     assert!(
-        sql.contains("first(__SORT_0__) OVER __WINDOW_0__"),
-        "expected first(__SORT_0__) OVER __WINDOW_0__: {}",
+        sql.contains("first_value(\"__SORT_0__\") OVER __WINDOW_0__"),
+        "expected first_value(\"__SORT_0__\") OVER __WINDOW_0__: {}",
         sql
     );
 
@@ -297,8 +297,8 @@ fn test_table_make_view_pivoted_with_sort() {
         sql
     );
     assert!(
-        sql.ends_with("ORDER BY __ROW_NUM__)"),
-        "should end with ORDER BY __ROW_NUM__: {}",
+        sql.ends_with("ORDER BY \"__ROW_NUM__\")"),
+        "should end with ORDER BY \"__ROW_NUM__\": {}",
         sql
     );
 }
@@ -519,7 +519,7 @@ fn test_table_make_view_flat_group_by_with_split_by_and_sort() {
         sql
     );
     assert!(
-        sql.contains("__SORT_0__ DESC"),
+        sql.contains("\"__SORT_0__\" DESC"),
         "expected __SORT_0__ DESC in ORDER BY: {}",
         sql
     );
@@ -700,13 +700,14 @@ fn test_table_make_view_grouped_pivoted_null_safe_join() {
         .unwrap();
 
     assert!(
-        sql.contains("GROUP BY __ROW_PATH_0__, __GROUPING_ID__"),
+        sql.contains("GROUP BY \"__ROW_PATH_0__\", \"__GROUPING_ID__\""),
         "expected pivot GROUP BY on row keys: {}",
         sql
     );
     assert!(
         sql.contains(
-            "__PSP_PIVOT_0__.__ROW_PATH_0__ IS NOT DISTINCT FROM __PSP_PIVOT_1__.__ROW_PATH_0__"
+            "__PSP_PIVOT_0__.\"__ROW_PATH_0__\" IS NOT DISTINCT FROM \
+             __PSP_PIVOT_1__.\"__ROW_PATH_0__\""
         ),
         "rollup rows have NULL row-path keys, join must be NULL-safe: {}",
         sql
@@ -1030,7 +1031,7 @@ fn test_table_make_view_window_rate() {
         .unwrap();
 
     assert!(sql.contains("first_value(\"price\") OVER"));
-    assert!(sql.contains("NULLIF(CAST(\"t\" AS DOUBLE)"));
+    assert!(sql.contains("NULLIF(CAST(\"t\" AS DOUBLE PRECISION)"));
     assert!(sql.contains("RANGE BETWEEN 10 PRECEDING AND CURRENT ROW"));
 }
 
@@ -1120,4 +1121,128 @@ fn filter_sql(args: GenericSQLVirtualServerModelArgs, filter: serde_json::Value)
     builder
         .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
         .unwrap()
+}
+
+fn postgres_args() -> GenericSQLVirtualServerModelArgs {
+    GenericSQLVirtualServerModelArgs {
+        create_entity: Some("TEMPORARY VIEW".to_string()),
+        drop_entity: Some("VIEW".to_string()),
+        grouping_fn: Some("GROUPING".to_string()),
+        row_id_expr: Some("ctid".to_string()),
+        like_escape_clause: Some("\\".to_string()),
+        regex_fn: Some("regexp_like".to_string()),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn test_view_delete_custom_drop_entity() {
+    let builder = GenericSQLVirtualServerModel::new(postgres_args());
+    assert_eq!(
+        builder.view_delete("my_view").unwrap(),
+        "DROP VIEW IF EXISTS my_view"
+    );
+}
+
+#[test]
+fn test_table_make_view_custom_create_entity() {
+    let builder = GenericSQLVirtualServerModel::new(postgres_args());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("col1".to_string())];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
+        .unwrap();
+
+    assert!(
+        sql.starts_with("CREATE TEMPORARY VIEW dest_view AS"),
+        "expected TEMPORARY VIEW: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_flat_row_id_expr() {
+    let builder = GenericSQLVirtualServerModel::new(postgres_args());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("col1".to_string())];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
+        .unwrap();
+
+    assert!(
+        sql.ends_with("ORDER BY ctid)"),
+        "flat default order should use the dialect row id: {}",
+        sql
+    );
+    assert!(!sql.contains("rowid"), "no rowid for postgres: {}", sql);
+}
+
+#[test]
+fn test_table_make_view_window_natural_order_row_id_expr() {
+    let builder = GenericSQLVirtualServerModel::new(postgres_args());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("t".to_string()), Some("cumsum".to_string())];
+    let (name, mut spec) = window_spec("cumsum", "sum", Some(WindowFrame::Cumulative));
+    spec.order_by = None;
+    config.windows = Windows(HashMap::from([(name, spec)]));
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
+        .unwrap();
+
+    assert!(
+        sql.contains("PARTITION BY \"sym\" ORDER BY ctid ASC"),
+        "natural window order should use the dialect row id: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_window_src_projects_row_id() {
+    // System pseudo-columns (`rowid`, `ctid`) do not survive `SELECT *`
+    // through the window sub-select, so the model projects them under
+    // `__PSP_ROWID__` and refers to the alias in the outer default order.
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("t".to_string()), Some("cumsum".to_string())];
+    config.windows = Windows(HashMap::from([window_spec(
+        "cumsum",
+        "sum",
+        Some(WindowFrame::Cumulative),
+    )]));
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
+        .unwrap();
+
+    assert!(
+        sql.contains("SELECT *, rowid AS \"__PSP_ROWID__\","),
+        "window sub-select should project the row id: {}",
+        sql
+    );
+    assert!(
+        sql.ends_with("ORDER BY \"__PSP_ROWID__\")"),
+        "outer default order should use the projected alias: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_grouping_fn_in_rollup_order() {
+    let builder = GenericSQLVirtualServerModel::new(postgres_args());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string())];
+    config.group_by = vec!["category".to_string()];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
+        .unwrap();
+
+    assert!(
+        sql.contains("GROUPING(\"category\") AS \"__GROUPING_ID__\""),
+        "expected custom grouping fn: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("GROUPING_ID("),
+        "should not use the default grouping fn: {}",
+        sql
+    );
 }

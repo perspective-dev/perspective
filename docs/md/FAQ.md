@@ -157,7 +157,8 @@ const view = await table.view({
 ```
 
 Window Columns are supported by Perspective's built-in engine, by the DuckDB,
-ClickHouse and Polars [Virtual Servers](./explanation/virtual_servers.md), and
+ClickHouse, PostgreSQL and Polars
+[Virtual Servers](./explanation/virtual_servers.md), and
 by the `<perspective-viewer>` UI. They update incrementally as the `Table`
 updates.
 
@@ -373,9 +374,9 @@ No. The WebSocket `Server` is not a security boundary. Every connected `Client`
 is treated as the author of the queries it submits, and is permitted to create
 and delete `Table`/`View` resources, author arbitrary
 [expression columns](./explanation/view/config/expressions.md), and — for
-[Virtual Server](./explanation/virtual_servers.md) backends like DuckDB or
-ClickHouse — author SQL fragments executed under the configured database
-role. The bundled WebSocket adapters
+[Virtual Server](./explanation/virtual_servers.md) backends like DuckDB,
+ClickHouse or PostgreSQL — author SQL fragments executed under the configured
+database role. The bundled WebSocket adapters
 (`tornado.py`/`aiohttp.py`/`starlette.py`/`WebSocketServer`) are reference
 integrations and do not authenticate, authorize, or enforce origin policy.
 

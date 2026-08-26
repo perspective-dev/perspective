@@ -76,7 +76,20 @@ pub type GenericSQLResult<T> = Result<T, GenericSQLError>;
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct GenericSQLVirtualServerModelArgs {
     create_entity: Option<String>,
+
+    /// Entity keyword for `view_delete`'s `DROP {drop_entity} IF EXISTS`.
+    /// Must agree with `create_entity` — Postgres rejects `DROP TABLE` on a
+    /// view (`"VIEW"`), while DuckDB's temp tables take the default
+    /// (`"TABLE"`).
+    drop_entity: Option<String>,
+
     grouping_fn: Option<String>,
+
+    /// Expression for the dialect's natural row identity, used for unsorted
+    /// view order and natural-order window frames — `rowid` (DuckDB, the
+    /// default) or `ctid` (Postgres). Dialects with no such pseudo-column
+    /// (ClickHouse) should advertise `unordered` instead.
+    row_id_expr: Option<String>,
 
     /// Separator joining `split_by` values and the column name in pivoted
     /// view column names, e.g. `"CA|Sales"` for separator `"|"`. Perspective's
@@ -236,9 +249,10 @@ impl GenericSQLVirtualServerModel {
     /// * `view_id` - The identifier of the view to delete.
     ///
     /// # Returns
-    /// SQL: `DROP TABLE IF EXISTS {view_id}`
+    /// SQL: `DROP {drop_entity} IF EXISTS {view_id}`
     pub fn view_delete(&self, view_id: &str) -> GenericSQLResult<String> {
-        Ok(format!("DROP TABLE IF EXISTS {}", view_id))
+        let entity = self.0.drop_entity.as_deref().unwrap_or("TABLE");
+        Ok(format!("DROP {} IF EXISTS {}", entity, view_id))
     }
 
     /// Returns the SQL query to create a view from a table with the given
@@ -389,7 +403,7 @@ impl GenericSQLVirtualServerModel {
         let has_grouping_id =
             !config.group_by.is_empty() && config.group_rollup_mode != GroupRollupMode::Flat;
         let where_clause = if has_grouping_id {
-            " WHERE __GROUPING_ID__ = 0"
+            " WHERE \"__GROUPING_ID__\" = 0"
         } else {
             ""
         };

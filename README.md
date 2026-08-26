@@ -49,7 +49,8 @@ Node.js and Rust — or delegates to a database you already have.
   server-side, streaming only what's visible.
 
 - Virtual servers that run Perspective's UI directly on external engines like
-  [DuckDB](https://duckdb.org/), [ClickHouse](https://clickhouse.com/) and
+  [DuckDB](https://duckdb.org/), [ClickHouse](https://clickhouse.com/),
+  [PostgreSQL](https://www.postgresql.org/) and
   [Polars](https://pola.rs/), translating view configurations into native
   queries — no ETL or data copy required.
 
@@ -76,6 +77,7 @@ Node.js and Rust — or delegates to a database you already have.
     - [`perspective.handlers.tornado`](https://perspective-dev.github.io/python/perspective/handlers/tornado.html)
     - [`perspective.virtual_servers.clickhouse`](https://perspective-dev.github.io/python/perspective/virtual_servers/clickhouse.html)
     - [`perspective.virtual_servers.duckdb`](https://perspective-dev.github.io/python/perspective/virtual_servers/duckdb.html)
+    - [`perspective.virtual_servers.postgres`](https://perspective-dev.github.io/python/perspective/virtual_servers/postgres.html)
 - Rust API
     - [`perspective`](https://docs.rs/perspective/latest/perspective/)
 

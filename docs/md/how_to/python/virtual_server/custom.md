@@ -115,6 +115,6 @@ app = tornado.web.Application([
 ])
 ```
 
-The built-in [DuckDB](./duckdb.md), [ClickHouse](./clickhouse.md) and
-[Polars](./polars.md) implementations all follow exactly this shape and are
-worth reading as complete references.
+The built-in [DuckDB](./duckdb.md), [ClickHouse](./clickhouse.md),
+[PostgreSQL](./postgres.md) and [Polars](./polars.md) implementations all
+follow exactly this shape and are worth reading as complete references.

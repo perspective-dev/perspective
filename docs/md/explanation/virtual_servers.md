@@ -57,6 +57,8 @@ Perspective ships with virtual server implementations for:
 - **ClickHouse** — query a ClickHouse server from the browser
   ([JavaScript](../how_to/javascript/virtual_server/clickhouse.md)) or from
   Python ([Python](../how_to/python/virtual_server/clickhouse.md)).
+- **PostgreSQL** — query a PostgreSQL server (16 or later) from Python
+  ([Python](../how_to/python/virtual_server/postgres.md)).
 
 ## Custom implementations
 
