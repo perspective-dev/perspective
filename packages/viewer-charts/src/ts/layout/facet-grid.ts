@@ -50,6 +50,13 @@ export interface FacetGridOptions {
      */
     hasLegend?: boolean;
 
+    /**
+     * Width of the legend gutter when `hasLegend` is set. Defaults to
+     * the historical `LEGEND_GUTTER` (96). Callers resolve this from
+     * `plugin_config.legend_width_px` via `legendSidebarWidth`.
+     */
+    legendWidth?: number;
+
     /** Axis-label allowance (consumed only when the corresponding axis
      *  mode produces a gutter — outer band or per-cell). */
     hasXLabel?: boolean;
@@ -220,7 +227,7 @@ export function buildFacetGrid(
     }
 
     const titleBand = opts.titleBand ?? TITLE_BAND_DEFAULT;
-    const legendW = opts.hasLegend ? LEGEND_GUTTER : 0;
+    const legendW = opts.hasLegend ? (opts.legendWidth ?? LEGEND_GUTTER) : 0;
 
     const xMode: AxisMode = opts.xAxis ?? "cell";
     const yMode: AxisMode = opts.yAxis ?? "cell";

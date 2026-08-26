@@ -22,7 +22,7 @@ import type { Canvas2D, Context2D } from "../canvas-types";
 import type { ZoomConfig } from "../../interaction/zoom-controller";
 import type { PluginConfig } from "../chart";
 import { TileLayer } from "../../map/tile-layer";
-import { tileSourceFor, type TileProviderId } from "../../map/tile-source";
+import { TILE_SOURCES } from "../../map/tile-source";
 import { lonLatToMercator } from "../../map/mercator";
 import { getScaledContext } from "../../axis/canvas";
 
@@ -76,7 +76,7 @@ export class MapChart extends CartesianChart {
         if (this._glManager) {
             this._tileLayer.setSource(
                 this._glManager.gl,
-                tileSourceFor(cfg.map_tile_provider as TileProviderId),
+                TILE_SOURCES.sourceFor(cfg.map_tile_provider),
             );
         }
 
@@ -97,9 +97,7 @@ export class MapChart extends CartesianChart {
         if (!this._tileLayer.source) {
             this._tileLayer.setSource(
                 glManager.gl,
-                tileSourceFor(
-                    this._pluginConfig.map_tile_provider as TileProviderId,
-                ),
+                TILE_SOURCES.sourceFor(this._pluginConfig.map_tile_provider),
             );
             this._tileLayer.setAlpha(this._pluginConfig.map_tile_alpha);
         }

@@ -137,7 +137,7 @@ export function cell_style_numeric(
             ];
 
     {
-        const [hex, r, g, b] = bg_tuple;
+        const [hex, _r, _g, _b] = bg_tuple;
 
         td.style.position = "";
         if (metadata._is_hidden_by_aggregate_depth) {

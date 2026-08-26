@@ -336,6 +336,14 @@ export interface SeriesPipelineResult {
      * is the position. Indexed by `catIdx` (0..numCategories-1).
      */
     categoryPositions: Float64Array | null;
+
+    /**
+     * One entry per (aggregate × split), in `k * P + p` order. INVARIANT:
+     * `series.length === aggregates.length * splitPrefixes.length` —
+     * consumers index `series[k * P]` directly (glyph runs, the
+     * `domain_mode: "expand"` axis signature), so an empty `series` MUST
+     * be paired with empty `aggregates` / `splitPrefixes`.
+     */
     series: SeriesInfo[];
 
     /**
@@ -477,10 +485,14 @@ export function buildSeriesPipeline(
     );
 
     if (numCategories === 0) {
+        // NOT `aggregates` / `splitPrefixes`: `series` is empty here, and
+        // carrying the non-empty lists would break the `series.length ===
+        // M * P` invariant — `series[k * P]` consumers then read
+        // `undefined` (the `loadAndRender failed … reading 'axis'` crash).
+        // Same shape as the `aggregates.length === 0` return above, which
+        // every downstream path already renders as an empty chart.
         return {
             ...empty,
-            aggregates,
-            splitPrefixes,
             rowPaths,
             rowOffset,
         };

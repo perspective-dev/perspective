@@ -41,6 +41,7 @@ import {
     type AxisDomain,
 } from "../../axis/numeric-axis";
 import { initCanvas, getScaledContext } from "../../axis/canvas";
+import { computeMapDegreeTicks } from "../../axis/map-ticks";
 import {
     type CategoricalDomain,
     type CategoricalLevel,
@@ -54,7 +55,12 @@ import {
     renderLegendAt,
     renderCategoricalLegend,
     renderCategoricalLegendAt,
+    type LegendPaintView,
 } from "../../axis/legend";
+import {
+    legendRightGutter,
+    legendSidebarWidth,
+} from "../../interaction/legend-controller";
 
 /**
  * NaN guard: `_xOrigin`/`_yOrigin` start as NaN before the first valid sample.
@@ -368,7 +374,7 @@ function renderSinglePlotFrame(
 
     // One-pass plot-width / plot-height estimate to size the
     // categorical gutter overrides; same approach as series-render.
-    const estRight = hasColorCol ? 80 : 16;
+    const estRight = legendRightGutter(chart._pluginConfig, hasColorCol);
     const estLeftPlain = 55 + (chart._yLabel ? 16 : 0);
     const estPlotWidth = Math.max(1, cssWidth - estLeftPlain - estRight);
     const leftExtra = chart._yCategoryDomain
@@ -378,13 +384,33 @@ function renderSinglePlotFrame(
         ? measureCategoricalAxisHeight(chart._xCategoryDomain, estPlotWidth)
         : undefined;
 
-    const layout = new PlotLayout(cssWidth, cssHeight, {
-        hasXLabel: !!chart._xLabel,
-        hasYLabel: !!chart._yLabel,
-        hasLegend: hasColorCol,
-        leftExtra,
-        bottomExtra,
-    });
+    const isMap = chart._renderMode === "map";
+    const bareMap = isMap && !chart._pluginConfig.numeric_axes;
+    const layout = new PlotLayout(
+        cssWidth,
+        cssHeight,
+        bareMap
+            ? {
+                  hasXLabel: false,
+                  hasYLabel: false,
+                  hasLegend: hasColorCol,
+                  leftExtra: 0,
+                  bottomExtra: 0,
+                  rightExtra:
+                      hasColorCol &&
+                      chart._pluginConfig.legend_mode === "sidebar"
+                          ? legendSidebarWidth(chart._pluginConfig, 80)
+                          : 0,
+              }
+            : {
+                  hasXLabel: !!chart._xLabel,
+                  hasYLabel: !!chart._yLabel,
+                  hasLegend: hasColorCol,
+                  leftExtra,
+                  bottomExtra,
+                  rightExtra: estRight,
+              },
+    );
     chart._lastLayout = layout;
     if (chart._zoomController) {
         chart._zoomController.updateLayout(layout);
@@ -407,8 +433,6 @@ function renderSinglePlotFrame(
     const numericTicks = computeTicks(xDomain, yDomain, layout);
     const xTicks = chart._xIsString ? [] : numericTicks.xTicks;
     const yTicks = chart._yIsString ? [] : numericTicks.yTicks;
-
-    const isMap = chart._renderMode === "map";
 
     // Defer the gridline draw past the GPU fence (see `_defer2D`) so the
     // gridline canvas doesn't present ahead of the GL glyphs on resize.
@@ -516,14 +540,25 @@ function renderFacetedFrame(
     // charts always have both axes, so the false branch maps to
     // per-cell mode (never to "none", which is reserved for tree
     // charts).
+    const isMap = chart._renderMode === "map";
+    const bareMap = isMap && !chart._pluginConfig.numeric_axes;
     const grid: FacetGrid = buildFacetGrid(labels, {
         cssWidth,
         cssHeight,
-        xAxis: chart._lastEffectiveSharedX ? "outer" : "cell",
-        yAxis: chart._lastEffectiveSharedY ? "outer" : "cell",
-        hasLegend,
-        hasXLabel: !!chart._xLabel,
-        hasYLabel: !!chart._yLabel,
+        xAxis: bareMap
+            ? "none"
+            : chart._lastEffectiveSharedX
+              ? "outer"
+              : "cell",
+        yAxis: bareMap
+            ? "none"
+            : chart._lastEffectiveSharedY
+              ? "outer"
+              : "cell",
+        hasLegend: hasLegend && chart._pluginConfig.legend_mode === "sidebar",
+        legendWidth: legendSidebarWidth(chart._pluginConfig, 96),
+        hasXLabel: !bareMap && !!chart._xLabel,
+        hasYLabel: !bareMap && !!chart._yLabel,
         gap: chart._facetConfig.facet_padding,
     });
     chart._facetGrid = grid;
@@ -618,7 +653,6 @@ function renderFacetedFrame(
         // own domain). Map mode skips gridlines entirely; the
         // basemap layer is rendered into the GL canvas inside the
         // facet's scissor below.
-        const isMap = chart._renderMode === "map";
         if (gridlineCanvas && !isMap) {
             // Deferred to the post-fence 2D flush. The closure captures
             // this facet's `cell` (whose `cell.layout` already carries
@@ -733,6 +767,30 @@ function renderSinglePlotChromeOverlay(chart: CartesianChart): void {
     const isMap = chart._renderMode === "map";
 
     if (isMap) {
+        if (chart._pluginConfig.numeric_axes) {
+            const mt = computeMapDegreeTicks(layout);
+            renderCellXAxis(
+                chart._chromeCanvas!,
+                chart._lastXDomain!,
+                layout,
+                mt.xTicks,
+                theme,
+                !!chart._xLabel,
+                dpr,
+                mt.formatX,
+            );
+            renderCellYAxis(
+                chart._chromeCanvas!,
+                chart._lastYDomain!,
+                layout,
+                mt.yTicks,
+                theme,
+                !!chart._yLabel,
+                dpr,
+                mt.formatY,
+            );
+        }
+
         chart.renderMapChrome(chart._chromeCanvas!, layout, theme, dpr);
     } else {
         renderCartesianCellAxes(
@@ -748,35 +806,89 @@ function renderSinglePlotChromeOverlay(chart: CartesianChart): void {
         );
     }
 
-    if (chart._lastHasColorCol) {
+    const legendMode = chart._pluginConfig.legend_mode;
+    let legendPainted = false;
+    if (chart._lastHasColorCol && legendMode !== "none") {
         const stops = chart._lastGradientStops ?? theme.gradientStops;
+        const floating = legendMode === "floating";
+        const view: LegendPaintView = {
+            mode: floating ? "floating" : "sidebar",
+            legend: chart._legend,
+            title: chart._colorName ?? undefined,
+            opacity: chart._pluginConfig.legend_opacity,
+        };
+        const floatBox = floating
+            ? chart._legend.floatingBox(
+                  chart._pluginConfig,
+                  layout.cssWidth,
+                  layout.cssHeight,
+              )
+            : null;
         if (chart._colorIsString && chart._uniqueColorLabels.size > 0) {
             const palette = resolvePalette(
                 theme.seriesPalette,
                 stops,
                 chart._uniqueColorLabels.size,
             );
-            renderCategoricalLegend(
-                chart._chromeCanvas!,
-                layout,
-                chart._uniqueColorLabels,
-                palette,
-                theme,
-            );
+            if (floatBox) {
+                renderCategoricalLegendAt(
+                    chart._chromeCanvas!,
+                    floatBox,
+                    chart._uniqueColorLabels,
+                    palette,
+                    theme,
+                    view,
+                );
+            } else {
+                renderCategoricalLegend(
+                    chart._chromeCanvas!,
+                    layout,
+                    chart._uniqueColorLabels,
+                    palette,
+                    theme,
+                    view,
+                );
+            }
+
+            legendPainted = true;
         } else if (chart._colorName) {
-            renderLegend(
-                chart._chromeCanvas!,
-                layout,
-                {
-                    min: chart._colorMin,
-                    max: chart._colorMax,
-                    label: chart._colorName,
-                },
-                stops,
-                theme,
-                chart.getColumnFormatter(chart._colorName, "value"),
+            const colorDomain = {
+                min: chart._colorMin,
+                max: chart._colorMax,
+                label: chart._colorName,
+            };
+            const formatter = chart.getColumnFormatter(
+                chart._colorName,
+                "value",
             );
+            if (floatBox) {
+                renderLegendAt(
+                    chart._chromeCanvas!,
+                    floatBox,
+                    colorDomain,
+                    stops,
+                    theme,
+                    formatter,
+                    view,
+                );
+            } else {
+                renderLegend(
+                    chart._chromeCanvas!,
+                    layout,
+                    colorDomain,
+                    stops,
+                    theme,
+                    formatter,
+                    view,
+                );
+            }
+
+            legendPainted = true;
         }
+    }
+
+    if (!legendPainted) {
+        chart._legend.clearPainted();
     }
 
     renderScatterLabels(chart, chart._chromeCanvas!, layout, 0, 1);
@@ -816,35 +928,44 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
     // (one pass per leftmost-column cell). Map mode replaces both
     // with `renderMapChrome` (attribution + scale bar), painted once
     // over the whole facet grid.
+    const mapAxes = isMap && chart._pluginConfig.numeric_axes;
+    const sharedMapTicks =
+        mapAxes && grid.cells.length > 0
+            ? computeMapDegreeTicks(grid.cells[0].layout)
+            : null;
     if (isMap) {
         chart.renderMapChrome(canvas, chart._lastLayout!, theme, dpr);
     }
 
-    if (!isMap && sharedX && grid.outerXAxisRect) {
+    if ((!isMap || sharedMapTicks) && sharedX && grid.outerXAxisRect) {
         renderOuterXAxis(
             canvas,
             grid.outerXAxisRect,
             xDomain,
-            sharedXTicks,
+            sharedMapTicks ? sharedMapTicks.xTicks : sharedXTicks,
             bottomRowLayouts(grid),
             theme,
             !!chart._xLabel,
             dpr,
-            chart.getColumnFormatter(chart._xName, "tick"),
+            sharedMapTicks
+                ? sharedMapTicks.formatX
+                : chart.getColumnFormatter(chart._xName, "tick"),
         );
     }
 
-    if (!isMap && sharedY && grid.outerYAxisRect) {
+    if ((!isMap || sharedMapTicks) && sharedY && grid.outerYAxisRect) {
         renderOuterYAxis(
             canvas,
             grid.outerYAxisRect,
             yDomain,
-            sharedYTicks,
+            sharedMapTicks ? sharedMapTicks.yTicks : sharedYTicks,
             leftColumnLayouts(grid),
             theme,
             !!chart._yLabel,
             dpr,
-            chart.getColumnFormatter(chart._yName, "tick"),
+            sharedMapTicks
+                ? sharedMapTicks.formatY
+                : chart.getColumnFormatter(chart._yName, "tick"),
         );
     }
 
@@ -857,11 +978,16 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
         const d = zc ? zc.getVisibleDomain() : null;
         const localX = d ? { ...xDomain, min: d.xMin, max: d.xMax } : xDomain;
         const localY = d ? { ...yDomain, min: d.yMin, max: d.yMax } : yDomain;
-        const ticks = independent
-            ? computeTicks(localX, localY, cell.layout)
-            : { xTicks: sharedXTicks, yTicks: sharedYTicks };
+        const cellMapTicks = mapAxes
+            ? computeMapDegreeTicks(cell.layout)
+            : null;
+        const ticks = cellMapTicks
+            ? cellMapTicks
+            : independent
+              ? computeTicks(localX, localY, cell.layout)
+              : { xTicks: sharedXTicks, yTicks: sharedYTicks };
 
-        if (!isMap && !sharedX) {
+        if ((!isMap || cellMapTicks) && !sharedX) {
             if (chart._xIsString && chart._xCategoryDomain) {
                 const cellCtx = getScaledContext(canvas, dpr);
                 if (cellCtx) {
@@ -881,12 +1007,14 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
                     theme,
                     !!chart._xLabel,
                     dpr,
-                    chart.getColumnFormatter(chart._xName, "tick"),
+                    cellMapTicks
+                        ? cellMapTicks.formatX
+                        : chart.getColumnFormatter(chart._xName, "tick"),
                 );
             }
         }
 
-        if (!isMap && !sharedY) {
+        if ((!isMap || cellMapTicks) && !sharedY) {
             if (chart._yIsString && chart._yCategoryDomain) {
                 const cellCtx = getScaledContext(canvas, dpr);
                 if (cellCtx) {
@@ -906,7 +1034,9 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
                     theme,
                     !!chart._yLabel,
                     dpr,
-                    chart.getColumnFormatter(chart._yName, "tick"),
+                    cellMapTicks
+                        ? cellMapTicks.formatY
+                        : chart.getColumnFormatter(chart._yName, "tick"),
                 );
             }
         }
@@ -919,10 +1049,25 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
     }
 
     // Shared legend: categorical (string color) or gradient
-    // (numeric color). Position derives from `grid.legendRect`
-    // which `buildFacetGrid` populates when `hasLegend` was set.
-    if (chart._lastHasColorCol && grid.legendRect) {
+    const legendMode = chart._pluginConfig.legend_mode;
+    const floating = legendMode === "floating";
+    const legendAnchor = floating
+        ? chart._legend.floatingBox(
+              chart._pluginConfig,
+              chart._lastLayout!.cssWidth,
+              chart._lastLayout!.cssHeight,
+          )
+        : grid.legendRect;
+    let legendPainted = false;
+    if (chart._lastHasColorCol && legendMode !== "none" && legendAnchor) {
         const stops = chart._lastGradientStops ?? theme.gradientStops;
+        const view: LegendPaintView = {
+            mode: floating ? "floating" : "sidebar",
+            legend: chart._legend,
+            title: chart._colorName ?? undefined,
+            sidebarGutter: floating ? undefined : grid.legendRect?.width,
+            opacity: chart._pluginConfig.legend_opacity,
+        };
         if (chart._colorIsString && chart._uniqueColorLabels.size > 0) {
             const palette = resolvePalette(
                 theme.seriesPalette,
@@ -931,23 +1076,27 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
             );
             renderCategoricalLegendAt(
                 canvas,
-                grid.legendRect,
+                legendAnchor,
                 chart._uniqueColorLabels,
                 palette,
                 theme,
+                view,
             );
+            legendPainted = true;
         } else if (chart._colorName) {
             // Numeric gradient legend in the shared outer rect. The
             // label sits above the bar, so inset the rect's top by
             // the usual 20 px that `renderLegend` reserves.
             renderLegendAt(
                 canvas,
-                {
-                    x: grid.legendRect.x,
-                    y: grid.legendRect.y + 20,
-                    width: grid.legendRect.width,
-                    height: grid.legendRect.height - 20,
-                },
+                floating
+                    ? legendAnchor
+                    : {
+                          x: legendAnchor.x,
+                          y: legendAnchor.y + 20,
+                          width: legendAnchor.width,
+                          height: legendAnchor.height - 20,
+                      },
                 {
                     min: chart._colorMin,
                     max: chart._colorMax,
@@ -956,8 +1105,14 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
                 stops,
                 theme,
                 chart.getColumnFormatter(chart._colorName, "value"),
+                view,
             );
+            legendPainted = true;
         }
+    }
+
+    if (!legendPainted) {
+        chart._legend.clearPainted();
     }
 
     // Coordinated hover / click indicators across facets. The tooltip

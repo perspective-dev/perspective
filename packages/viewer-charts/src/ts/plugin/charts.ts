@@ -95,11 +95,21 @@ const Y_AXIS = ["Y Axis"];
 const SELECT = "select";
 const TOGGLE = "toggle";
 
-const DEFAULT_MAX_CELLS = 2_000_000;
+const DEFAULT_MAX_CELLS = 10_000_000;
 const DEFAULT_MAX_COLUMNS = 10_000;
 
 //  Plugin-config field sets, by chart family.
 //
+const LEGEND_FIELDS: readonly PluginConfigField[] = [
+    "legend_mode",
+    "legend_width_px",
+    "legend_height_px",
+    "legend_anchor",
+    "legend_x",
+    "legend_y",
+    "legend_opacity",
+];
+
 // Series charts paint bars / lines / scatter / area glyphs (selected
 // per-column via `chart_type`), so the union covers every glyph that
 // might appear. `auto_alt_y_axis` + `series_zoom_mode` are Series-only.
@@ -113,6 +123,7 @@ const SERIES_FIELDS: readonly PluginConfigField[] = [
     "point_size_px",
     "band_inner_frac",
     "bar_inner_pad",
+    ...LEGEND_FIELDS,
 ];
 
 // The band pipeline's historical split_by rendering is a single plot
@@ -137,6 +148,7 @@ const CARTESIAN_FIELDS: readonly PluginConfigField[] = [
     "domain_mode",
     "line_width_px",
     "point_size_px",
+    ...LEGEND_FIELDS,
 ];
 
 // Candlestick/OHLC share the categorical-X build pipeline (band slots)
@@ -151,11 +163,13 @@ const FIN_FIELDS: readonly PluginConfigField[] = [
     "ohlc_line_width_px",
 ];
 
-// Hierarchical — none of the listed fields apply.
-const NO_FIELDS: readonly PluginConfigField[] = [];
+const TREE_FIELDS: readonly PluginConfigField[] = [...LEGEND_FIELDS];
 
 // Heatmap
-const HEATMAP_FIELDS: readonly PluginConfigField[] = ["facet_zoom_mode"];
+const HEATMAP_FIELDS: readonly PluginConfigField[] = [
+    "facet_zoom_mode",
+    ...LEGEND_FIELDS,
+];
 
 // Map — reuses the cartesian build pipeline with a Mercator
 // projection hook. Carries the basemap controls (`map_tile_provider`,
@@ -168,6 +182,8 @@ const MAP_BASE_FIELDS: readonly PluginConfigField[] = [
     "domain_mode",
     "map_tile_provider",
     "map_tile_alpha",
+    "numeric_axes",
+    ...LEGEND_FIELDS,
 ];
 const MAP_SCATTER_FIELDS: readonly PluginConfigField[] = [
     ...MAP_BASE_FIELDS,
@@ -197,6 +213,7 @@ const DENSITY_FIELDS: readonly PluginConfigField[] = [
     "gradient_radius_px",
     "gradient_intensity",
     "gradient_heat_max",
+    ...LEGEND_FIELDS,
 ];
 
 function make(
@@ -314,10 +331,10 @@ const CHARTS: ChartTypeConfig[] = [
         DENSITY_FIELDS,
         { ...CART_ROLES },
     ),
-    make("Treemap", "treemap", HIER, TOGGLE, 1, HIER_NAMES, NO_FIELDS, {
+    make("Treemap", "treemap", HIER, TOGGLE, 1, HIER_NAMES, TREE_FIELDS, {
         ...HIER_ROLES,
     }),
-    make("Sunburst", "sunburst", HIER, TOGGLE, 1, HIER_NAMES, NO_FIELDS, {
+    make("Sunburst", "sunburst", HIER, TOGGLE, 1, HIER_NAMES, TREE_FIELDS, {
         ...HIER_ROLES,
     }),
     make("Heatmap", "heatmap", HIER, SELECT, 1, ["Color"], HEATMAP_FIELDS, {

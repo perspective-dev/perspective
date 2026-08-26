@@ -57,6 +57,17 @@ import { drawFacetTitle } from "../../axis/facet-chrome";
 import { getScaledContext, initCanvas } from "../../axis/canvas";
 import { drawGridlinesX, drawGridlinesY } from "../../axis/axis-primitives";
 import { buildBarTooltipLines } from "./series-interact";
+import {
+    LEGEND_LINE_HEIGHT,
+    paintFloatingLegendFrame,
+    paintLegendScrollbar,
+    truncateText,
+    type LegendPaintView,
+} from "../../axis/legend";
+import {
+    legendRightGutter,
+    legendSidebarWidth,
+} from "../../interaction/legend-controller";
 
 /**
  * Reusable scratch for bar instance uploads.
@@ -529,7 +540,7 @@ export function renderBarFrame(
             ? 55
             : measureCategoricalAxisWidth(provisionalDomain);
         const estLeft = leftExtra + (hasCatLabel ? 16 : 0);
-        const estRight = hasLegend ? 80 : 16;
+        const estRight = legendRightGutter(chart._pluginConfig, hasLegend);
         const estPlotWidthH = Math.max(1, cssWidth - estLeft - estRight);
         const bottomExtra = valueCatActive
             ? measureCategoricalAxisHeight(valueCatDomain, estPlotWidthH)
@@ -540,6 +551,7 @@ export function renderBarFrame(
             hasLegend,
             leftExtra,
             bottomExtra,
+            rightExtra: estRight,
         });
     } else if (numericCat) {
         // Y Bar with numeric category axis on X. Value axis (Y, left)
@@ -553,6 +565,7 @@ export function renderBarFrame(
             hasLegend,
             bottomExtra: 24,
             leftExtra,
+            rightExtra: legendRightGutter(chart._pluginConfig, hasLegend),
         });
     } else {
         // Y Bar with categorical X. Value axis on the left may be
@@ -561,7 +574,7 @@ export function renderBarFrame(
             ? measureCategoricalAxisWidth(valueCatDomain)
             : 55;
         const estLeft = leftExtraBase + 16;
-        const estRight = hasLegend ? 80 : 16;
+        const estRight = legendRightGutter(chart._pluginConfig, hasLegend);
         const estPlotWidth = Math.max(1, cssWidth - estLeft - estRight);
         const bottomExtra = measureCategoricalAxisHeight(
             provisionalDomain,
@@ -573,6 +586,7 @@ export function renderBarFrame(
             hasLegend,
             bottomExtra,
             leftExtra: valueCatActive ? leftExtraBase : undefined,
+            rightExtra: estRight,
         });
     }
 
@@ -898,7 +912,8 @@ function renderFacetedBarFrame(
         cssHeight,
         xAxis: horizontal ? valAxisMode : catAxisMode,
         yAxis: horizontal ? catAxisMode : valAxisMode,
-        hasLegend,
+        hasLegend: hasLegend && chart._pluginConfig.legend_mode === "sidebar",
+        legendWidth: legendSidebarWidth(chart._pluginConfig, 96),
         hasXLabel: horizontal ? true : hasCatLabel,
         hasYLabel: horizontal ? hasCatLabel : true,
         gap: chart._facetConfig.facet_padding,
@@ -1351,66 +1366,89 @@ function renderFacetedBarChromeOverlay(chart: SeriesChart): void {
 }
 
 /**
- * Aggregate-level legend for the faceted frame, painted into the
- * grid's shared right gutter. One entry per aggregate (facets absorb
- * the split dimension; every split of an aggregate shares its color —
- * see `ensurePalette`). A legend toggle targets the aggregate's full
- * seriesId set, so hiding "Sales" hides it in every facet at once; an
- * entry reads as hidden only when ALL of its series are hidden.
+ * One toggleable legend row, resolved lazily — only rows inside the
+ * visible scroll window are ever materialized.
  */
-function renderFacetedBarLegend(chart: SeriesChart, grid: FacetGrid): void {
-    chart._legendRects = [];
-    if (!chart._chromeCanvas || !grid.legendRect) {
-        return;
-    }
+interface SeriesLegendEntry {
+    label: string;
+    color: [number, number, number];
+    seriesIds: number[];
+    hidden: boolean;
+}
 
-    const M = chart._aggregates.length;
-    if (M <= 1) {
-        return;
-    }
-
-    const ctx = chart._chromeCanvas.getContext("2d") as Context2D | null;
+/**
+ * Shared swatch-list painter for both series legends (per-series and
+ * per-aggregate). Paints only the rows inside the scroll window,
+ * clipped to the content rect, rebuilds `chart._legendRects` with the
+ * visible rows' canvas-space rects (so toggle clicks stay correct
+ * while scrolled), and reports the painted geometry to the chart's
+ * `LegendController`.
+ */
+function paintSeriesLegend(
+    chart: SeriesChart,
+    box: PlotRect,
+    view: LegendPaintView,
+    count: number,
+    entryAt: (i: number) => SeriesLegendEntry,
+): void {
+    const ctx = chart._chromeCanvas!.getContext("2d") as Context2D | null;
     if (!ctx) {
         return;
     }
 
     ctx.save();
-
     const theme = chart._resolveTheme();
-    const swatchSize = 10;
-    const lineHeight = 18;
-    const x = grid.legendRect.x + 12;
-    let y = grid.legendRect.y + 10;
+    let content = box;
+    if (view.mode === "floating") {
+        content = paintFloatingLegendFrame(
+            ctx,
+            box,
+            theme,
+            view.title,
+            view.opacity,
+        );
+    }
 
+    const swatchSize = 10;
+    const lineHeight = LEGEND_LINE_HEIGHT;
+    const contentHeight = count * lineHeight;
+    const scroll = chart._legend.clampScroll(content.height, contentHeight);
+    const scrollable = contentHeight > content.height;
+    const textMax = Math.max(
+        0,
+        content.width - swatchSize - 6 - (scrollable ? 10 : 0),
+    );
+
+    ctx.beginPath();
+    ctx.rect(content.x, content.y, content.width, content.height);
+    ctx.clip();
     ctx.font = `11px ${theme.fontFamily}`;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
 
-    for (let k = 0; k < M; k++) {
-        const seriesIds: number[] = [];
-        let color: [number, number, number] = [0.5, 0.5, 0.5];
-        for (const s of chart._series) {
-            if (s.aggIdx === k) {
-                seriesIds.push(s.seriesId);
-                color = s.color;
-            }
-        }
+    const x = content.x;
+    const start = Math.floor(scroll / lineHeight);
+    let y = content.y + lineHeight / 2 + start * lineHeight - scroll;
+    for (
+        let i = start;
+        i < count && y - lineHeight / 2 < content.y + content.height;
+        i++
+    ) {
+        const e = entryAt(i);
+        const r = Math.round(e.color[0] * 255);
+        const g = Math.round(e.color[1] * 255);
+        const b = Math.round(e.color[2] * 255);
 
-        const label = chart._aggregates[k];
-        const hidden = seriesIds.every((sid) => chart._hiddenSeries.has(sid));
-        const r = Math.round(color[0] * 255);
-        const g = Math.round(color[1] * 255);
-        const b = Math.round(color[2] * 255);
-
-        ctx.globalAlpha = hidden ? 0.3 : 1.0;
+        ctx.globalAlpha = e.hidden ? 0.3 : 1.0;
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.fillRect(x, y - swatchSize / 2, swatchSize, swatchSize);
 
+        const shown = truncateText(ctx, e.label, textMax);
+        const textW = ctx.measureText(shown).width;
         ctx.fillStyle = theme.legendText;
-        ctx.fillText(label, x + swatchSize + 6, y);
+        ctx.fillText(shown, x + swatchSize + 6, y);
 
-        const textW = ctx.measureText(label).width;
-        if (hidden) {
+        if (e.hidden) {
             ctx.strokeStyle = theme.legendText;
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -1422,11 +1460,14 @@ function renderFacetedBarLegend(chart: SeriesChart, grid: FacetGrid): void {
         ctx.globalAlpha = 1.0;
 
         chart._legendRects.push({
-            seriesIds,
+            seriesIds: e.seriesIds,
             rect: {
                 x: x - 2,
                 y: y - lineHeight / 2,
-                width: swatchSize + 6 + textW + 4,
+                width: Math.min(
+                    swatchSize + 6 + textW + 4,
+                    Math.max(1, content.width),
+                ),
                 height: lineHeight,
             },
         });
@@ -1435,38 +1476,87 @@ function renderFacetedBarLegend(chart: SeriesChart, grid: FacetGrid): void {
     }
 
     ctx.restore();
+    paintLegendScrollbar(ctx, content, scroll, contentHeight, theme);
+
+    chart._legend.setPainted({
+        mode: view.mode,
+        box,
+        content,
+        contentHeight,
+        sidebarGutter: view.sidebarGutter,
+    });
 }
 
 /**
- * Cached parallel array of measured legend text widths. The legend
- * renderer reads from this each frame instead of re-running
- * `ctx.measureText` per series; the widths only change on series-set
- * or theme change. `_legendCacheValid` gates rebuild.
+ * Aggregate-level legend for the faceted frame, painted into the
+ * grid's shared right gutter (or as a floating panel). One entry per
+ * aggregate (facets absorb the split dimension; every split of an
+ * aggregate shares its color — see `ensurePalette`). A legend toggle
+ * targets the aggregate's full seriesId set, so hiding "Sales" hides
+ * it in every facet at once; an entry reads as hidden only when ALL of
+ * its series are hidden.
  */
-let _legendTextWidths: Float64Array = new Float64Array(0);
-
-function ensureLegendLayout(
-    chart: SeriesChart,
-    ctx: Context2D,
-    fontFamily: string,
-): void {
-    if (chart._legendCacheValid) {
+function renderFacetedBarLegend(chart: SeriesChart, grid: FacetGrid): void {
+    chart._legendRects = [];
+    if (!chart._chromeCanvas || !chart._lastLayout) {
         return;
     }
 
-    const series = chart._series;
-    if (_legendTextWidths.length < series.length) {
-        _legendTextWidths = new Float64Array(series.length);
+    const cfg = chart._pluginConfig;
+    const M = chart._aggregates.length;
+    const floating = cfg.legend_mode === "floating";
+    if (
+        M <= 1 ||
+        cfg.legend_mode === "none" ||
+        (!floating && !grid.legendRect)
+    ) {
+        chart._legend.clearPainted();
+        return;
     }
 
-    ctx.save();
-    ctx.font = `11px ${fontFamily}`;
-    for (let i = 0; i < series.length; i++) {
-        _legendTextWidths[i] = ctx.measureText(series[i].label).width;
+    // Pre-bucket series by aggregate once (O(series)) so the per-row
+    // resolver is O(1) — the windowed painter may touch only a few of
+    // potentially many rows.
+    const idsByAgg: number[][] = Array.from({ length: M }, () => []);
+    const colorByAgg: [number, number, number][] = Array.from(
+        { length: M },
+        () => [0.5, 0.5, 0.5],
+    );
+    for (const s of chart._series) {
+        if (s.aggIdx >= 0 && s.aggIdx < M) {
+            idsByAgg[s.aggIdx].push(s.seriesId);
+            colorByAgg[s.aggIdx] = s.color;
+        }
     }
 
-    ctx.restore();
-    chart._legendCacheValid = true;
+    const layout = chart._lastLayout;
+    const box = floating
+        ? chart._legend.floatingBox(cfg, layout.cssWidth, layout.cssHeight)
+        : {
+              x: grid.legendRect!.x + 12,
+              y: grid.legendRect!.y + 10,
+              width: Math.max(1, grid.legendRect!.width - 16),
+              height: Math.max(1, grid.legendRect!.height - 20),
+          };
+
+    paintSeriesLegend(
+        chart,
+        box,
+        {
+            mode: floating ? "floating" : "sidebar",
+            legend: chart._legend,
+            title: "Legend",
+            sidebarGutter: floating ? undefined : grid.legendRect!.width,
+            opacity: cfg.legend_opacity,
+        },
+        M,
+        (k) => ({
+            label: chart._aggregates[k],
+            color: colorByAgg[k],
+            seriesIds: idsByAgg[k],
+            hidden: idsByAgg[k].every((sid) => chart._hiddenSeries.has(sid)),
+        }),
+    );
 }
 
 function renderBarLegend(chart: SeriesChart): void {
@@ -1475,73 +1565,48 @@ function renderBarLegend(chart: SeriesChart): void {
         return;
     }
 
-    if (chart._series.length <= 1) {
+    const cfg = chart._pluginConfig;
+    const series = chart._series;
+    if (series.length <= 1 || cfg.legend_mode === "none") {
+        chart._legend.clearPainted();
         return;
     }
-
-    const ctx = chart._chromeCanvas.getContext("2d") as Context2D | null;
-    if (!ctx) {
-        return;
-    }
-
-    ctx.save();
-
-    const theme = chart._resolveTheme();
-    const textColor = theme.legendText;
-    const fontFamily = theme.fontFamily;
-
-    ensureLegendLayout(chart, ctx, fontFamily);
 
     const layout = chart._lastLayout;
-    const swatchSize = 10;
-    const lineHeight = 18;
-    const x = layout.plotRect.x + layout.plotRect.width + 12;
-    let y = layout.margins.top + 10;
+    const floating = cfg.legend_mode === "floating";
+    const box = floating
+        ? chart._legend.floatingBox(cfg, layout.cssWidth, layout.cssHeight)
+        : {
+              x: layout.plotRect.x + layout.plotRect.width + 12,
+              y: layout.margins.top + 10,
+              width: Math.max(
+                  1,
+                  layout.cssWidth -
+                      layout.plotRect.x -
+                      layout.plotRect.width -
+                      16,
+              ),
+              height: Math.max(1, layout.plotRect.height - 10),
+          };
 
-    ctx.font = `11px ${fontFamily}`;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-
-    const series = chart._series;
-    const widths = _legendTextWidths;
-    for (let i = 0; i < series.length; i++) {
-        const s = series[i];
-        const hidden = chart._hiddenSeries.has(s.seriesId);
-        const r = Math.round(s.color[0] * 255);
-        const g = Math.round(s.color[1] * 255);
-        const b = Math.round(s.color[2] * 255);
-
-        ctx.globalAlpha = hidden ? 0.3 : 1.0;
-        ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.fillRect(x, y - swatchSize / 2, swatchSize, swatchSize);
-
-        ctx.fillStyle = textColor;
-        ctx.fillText(s.label, x + swatchSize + 6, y);
-
-        const textW = widths[i];
-        if (hidden) {
-            ctx.strokeStyle = textColor;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(x + swatchSize + 6, y);
-            ctx.lineTo(x + swatchSize + 6 + textW, y);
-            ctx.stroke();
-        }
-
-        ctx.globalAlpha = 1.0;
-
-        const rect: PlotRect = {
-            x: x - 2,
-            y: y - lineHeight / 2,
-            width: swatchSize + 6 + textW + 4,
-            height: lineHeight,
-        };
-        chart._legendRects.push({ seriesIds: [s.seriesId], rect });
-
-        y += lineHeight;
-    }
-
-    ctx.restore();
+    paintSeriesLegend(
+        chart,
+        box,
+        {
+            mode: floating ? "floating" : "sidebar",
+            legend: chart._legend,
+            title: chart._splitBy.join(" / ") || "Legend",
+            sidebarGutter: floating ? undefined : layout.margins.right,
+            opacity: cfg.legend_opacity,
+        },
+        series.length,
+        (i) => ({
+            label: series[i].label,
+            color: series[i].color,
+            seriesIds: [series[i].seriesId],
+            hidden: chart._hiddenSeries.has(series[i].seriesId),
+        }),
+    );
 }
 
 function renderBarTooltipCanvas(chart: SeriesChart): void {

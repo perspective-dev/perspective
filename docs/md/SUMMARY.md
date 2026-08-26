@@ -44,6 +44,7 @@
     - [Saving and restoring UI state](./how_to/javascript/save_restore.md)
     - [Listening for events](./how_to/javascript/events.md)
     - [Plugin render limits](./how_to/javascript/plugin_settings.md)
+    - [Map tile sources](./how_to/javascript/map_tile_sources.md)
     - [Configuring the LLM agent](./how_to/javascript/agent.md)
 - [Virtual Servers](./how_to/javascript/virtual_server.md)
     - [DuckDB](./how_to/javascript/virtual_server/duckdb.md)

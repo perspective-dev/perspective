@@ -18,7 +18,7 @@ import type * as wasm_module_type from "@perspective-dev/viewer/dist/wasm/perspe
 import { WebGLContextManager } from "../webgl/context-manager";
 import { ContextPool } from "../webgl/context-pool";
 import { RENDER_CONTEXT_POOL_SIZE } from "../config";
-import { ChartImplementation } from "../charts/chart";
+import { ChartImplementation, type PluginConfig } from "../charts/chart";
 import { ZoomController } from "../interaction/zoom-controller";
 import {
     applyPan,
@@ -36,6 +36,7 @@ import type {
     WorkerMsg,
 } from "../transport/protocol";
 import { viewToColumnDataMap } from "../data/view-reader";
+import { TILE_SOURCES, type TileSourceSpec } from "../map/tile-source";
 import { loadFontDeduped } from "./font-loader";
 import { dispatch } from "./dispatch";
 import { installSessionHost } from "./session-host";
@@ -166,6 +167,13 @@ export class WorkerRenderer {
 
         this.chartImpl = new ImplClass();
 
+        // Registry write must precede the chart impl's first
+        // `setPluginConfig` — `pluginConfig.map_tile_provider` may
+        // name this runtime-registered source.
+        if (msg.tileSource) {
+            TILE_SOURCES.register(msg.tileSource);
+        }
+
         // Three surfaces, by mode:
         //  - direct: the host's transferred `.webgl-canvas` (1:1 with a
         //    context, permanently).
@@ -254,6 +262,20 @@ export class WorkerRenderer {
     }
 
     /**
+     * Registry write precedes the config apply — `cfg` may name the
+     * spec riding alongside it (see `SetPluginConfigMsg.tileSource`),
+     * and a replaced template must be registered first so the map
+     * chart's rebind sees the new content-derived cache id.
+     */
+    setPluginConfig(cfg: PluginConfig, tileSource?: TileSourceSpec): void {
+        if (tileSource) {
+            TILE_SOURCES.register(tileSource);
+        }
+
+        this.chartImpl.setPluginConfig?.(cfg);
+    }
+
+    /**
      * Full data-fetch + render pipeline. Owns every `Client`/`Table`/
      * `View` await on the render path:
      *
@@ -283,6 +305,7 @@ export class WorkerRenderer {
      */
     async loadAndRender(msg: LoadAndRenderMsg): Promise<void> {
         const myGen = ++this._renderGen;
+        let error: string | undefined;
         try {
             const [numRows, schema, exprSchema, tableSchema] =
                 await Promise.all([
@@ -352,9 +375,10 @@ export class WorkerRenderer {
         } catch (err) {
             if ((err + "").indexOf("View not found") === -1) {
                 console.error("loadAndRender failed", err);
+                error = String(err);
             }
         } finally {
-            this.post({ kind: "loadAndRenderAck", msgId: msg.msgId });
+            this.post({ kind: "loadAndRenderAck", msgId: msg.msgId, error });
         }
     }
 
@@ -523,7 +547,59 @@ export class WorkerRenderer {
         return { controller: this.zoomController, layout };
     }
 
+    /**
+     * Legend-first interaction routing. The chart's `LegendController`
+     * sees every forwarded event BEFORE the zoom / tooltip paths, so
+     * legend gestures (scroll, width drag, floating move / resize)
+     * structurally preempt plot pan / zoom / hover — a wheel over the
+     * legend can never zoom the plot under it, and a floating-panel
+     * drag can never start a pan.
+     */
+    private _legendInteraction(event: InteractionEvent): boolean {
+        const chart = this.chartImpl as any;
+        const legend = chart?._legend;
+        const cfg = chart?._pluginConfig;
+        if (!legend || !cfg) {
+            return false;
+        }
+
+        return legend.handleEvent(event, {
+            cfg,
+            cssWidth: this.cssWidth,
+            cssHeight: this.cssHeight,
+            legendRects: chart._legendRects ?? [],
+            repaint: (relayout: boolean) => {
+                if (!relayout && typeof chart.repaintChrome === "function") {
+                    chart.repaintChrome();
+                } else {
+                    this.chartImpl.requestRender(this.glManager);
+                }
+            },
+            postDelta: (fields: Record<string, string | number | boolean>) =>
+                this.post({ kind: "pluginConfigDelta", fields }),
+            setCursor: (cursor: string) => chart._hostSink?.setCursor?.(cursor),
+            dispatchLeave: () => this._tooltip()?.dispatchLeave(),
+        });
+    }
+
     onInteraction(event: InteractionEvent): void {
+        try {
+            this._routeInteraction(event);
+        } catch (err) {
+            this._dragTarget = null;
+            (this.chartImpl as any)?._legend?.cancelGesture?.();
+            console.error("interaction dispatch failed", err);
+        }
+    }
+
+    private _routeInteraction(event: InteractionEvent): void {
+        const plotDragging =
+            this._dragTarget !== null &&
+            (event.type === "pointermove" || event.type === "pointerup");
+        if (!plotDragging && this._legendInteraction(event)) {
+            return;
+        }
+
         switch (event.type) {
             case "wheel": {
                 const target = this._resolveTarget(event.mx, event.my);

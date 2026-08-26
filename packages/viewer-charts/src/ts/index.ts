@@ -15,6 +15,8 @@ import { HTMLPerspectiveViewerWebGLPluginElement } from "./plugin/plugin";
 
 export type { PerspectiveClickDetail } from "./event-detail";
 export { PerspectiveSelectDetail } from "./event-detail";
+export { registerTileSource } from "./plugin/plugin";
+export { tileSources, type TileSourceSpec } from "./map/tile-source";
 
 export function register(...plugin_names: string[]) {
     const plugins = new Set(

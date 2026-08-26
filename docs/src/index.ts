@@ -21,6 +21,7 @@ import { initSourceModal } from "./components/source_modal.js";
 import { initSqlDrawer } from "./components/sql_drawer.js";
 import { bindViewer } from "./data/engines.js";
 import { initTheme } from "./data/theme.js";
+import { registerCartoTileSources } from "./data/tile_sources.js";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 
 const shell = document.getElementById("app")!;
@@ -28,6 +29,7 @@ const viewer = document.getElementById(
     "viewer",
 ) as HTMLPerspectiveViewerElement;
 
+registerCartoTileSources();
 bindViewer(viewer);
 void initTheme(viewer);
 

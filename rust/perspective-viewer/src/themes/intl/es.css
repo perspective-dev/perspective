@@ -80,7 +80,7 @@ perspective-dropdown {
     --psp-label--style--content: "Estilo";
     --psp-label--stack--content: "Apilar";
     --psp-label--alt-axis--content: "Eje Alterno";
-    --psp-label--interpolate--content: "Interpolar";
+    --psp-label--interpolate--content: "Interpolar nulos";
     --psp-label--minimum-integer-digits--content: "Dígitos enteros mínimos";
     --psp-label--rounding-increment--content: "Incremento de redondeo";
     --psp-label--notation--content: "Notación";
@@ -159,4 +159,12 @@ perspective-dropdown {
     --psp-label--gradient-heat-max--content: "Calor máximo";
     --psp-label--map-tile-provider--content: "Proveedor de mapa";
     --psp-label--map-tile-alpha--content: "Opacidad del mapa";
+    --psp-label--numeric-axes--content: "Ejes numéricos";
+    --psp-label--legend-mode--content: "Modo de leyenda";
+    --psp-label--legend-width-px--content: "Ancho de leyenda";
+    --psp-label--legend-height-px--content: "Altura de leyenda";
+    --psp-label--legend-anchor--content: "Anclaje de leyenda";
+    --psp-label--legend-x--content: "Desplazamiento X de leyenda";
+    --psp-label--legend-y--content: "Desplazamiento Y de leyenda";
+    --psp-label--legend-opacity--content: "Opacidad de leyenda";
 }

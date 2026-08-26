@@ -10,51 +10,52 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-attribute vec2 a_position;
-attribute float a_color_value;
-attribute float a_size_value;
+import { registerTileSource } from "@perspective-dev/viewer-charts";
 
-uniform mat4 u_projection;
-uniform float u_point_size;
-// Data extents of the color column. The vertex shader folds these into a
-// sign-aware `t` whose 50% stop is always the sign pivot, matching the
-// CPU-side `colorValueToT` helper used by heatmap and the Canvas2D
-// legend / tooltip.
-uniform vec2 u_color_range;
-uniform vec2 u_size_range;
-uniform vec2 u_point_size_range;
+/**
+ * The CARTO basemaps, registered through the public `viewer-charts`
+ * tile-source API so the docs site's map examples offer them alongside
+ * the bundled providers. They live here rather than in the library's
+ * bundled metadata — this file doubles as the worked example for the
+ * "Map tile sources" guide page (how_to/javascript/map_tile_sources.md);
+ * keep the two in sync, except the guide's templates append a
+ * placeholder `?api_key=CARTO_API_KEY` to illustrate keyed providers —
+ * these live registrations stay key-less (the public CARTO basemaps
+ * don't require one).
+ */
+const CARTO_TILE_SOURCES = [
+    {
+        id: "carto-positron",
+        label: "Light (Positron)",
+        template: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+        subdomains: ["a", "b", "c", "d"],
+        attribution: "© OpenStreetMap contributors © CARTO",
+        tile_size: 256,
+        max_zoom: 19,
+    },
+    {
+        id: "carto-dark-matter",
+        label: "Dark Matter",
+        template: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+        subdomains: ["a", "b", "c", "d"],
+        attribution: "© OpenStreetMap contributors © CARTO",
+        tile_size: 256,
+        max_zoom: 19,
+    },
+    {
+        id: "carto-voyager",
+        label: "Voyager",
+        template:
+            "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+        subdomains: ["a", "b", "c", "d"],
+        attribution: "© OpenStreetMap contributors © CARTO",
+        tile_size: 256,
+        max_zoom: 19,
+    },
+];
 
-varying float v_color_t;
-varying float v_point_size;
-
-void main() {
-    // No unused-slot discard: tight per-series draws in `points.ts`
-    // already bound `gl.drawArrays(gl.POINTS, s*cap, count[s])` to
-    // valid rows, so the shader never sees a tail slot. A historical
-    // sentinel branch here culled `a_color_value < 0.0`, which under
-    // current dispatch silently dropped real numeric color data
-    // whenever the user's color column legitimately went negative
-    // (e.g., a diverging `Profit` column).
-    gl_Position = u_projection * vec4(a_position, 0.0, 1.0);
-
-    float sizeRange = u_size_range.y - u_size_range.x;
-    if(sizeRange > 0.0) {
-        float size_t = clamp((a_size_value - u_size_range.x) / sizeRange, 0.0, 1.0);
-        gl_PointSize = mix(u_point_size_range.x, u_point_size_range.y, size_t);
-    } else {
-        gl_PointSize = u_point_size;
-    }
-
-    v_point_size = gl_PointSize;
-
-    float cmin = u_color_range.x;
-    float cmax = u_color_range.y;
-    if(cmax <= cmin) {
-        v_color_t = 0.5;
-    } else if(cmin < 0.0 && cmax > 0.0) {
-        float denom = max(-cmin, cmax);
-        v_color_t = clamp(0.5 + 0.5 * (a_color_value / denom), 0.0, 1.0);
-    } else {
-        v_color_t = clamp((a_color_value - cmin) / (cmax - cmin), 0.0, 1.0);
+export function registerCartoTileSources(): void {
+    for (const spec of CARTO_TILE_SOURCES) {
+        registerTileSource(spec);
     }
 }

@@ -13,6 +13,7 @@
 import type { FacetConfig, PluginConfig } from "../charts/chart";
 import type { PerspectiveClickDetail } from "../event-detail";
 import type { ThemeSnapshot } from "../theme/theme";
+import type { TileSourceSpec } from "../map/tile-source";
 import type { ViewConfig } from "@perspective-dev/client";
 
 export type { ThemeSnapshot };
@@ -53,6 +54,7 @@ export type WorkerMsg =
     | SetCursorMsg
     | UserClickMsg
     | UserSelectMsg
+    | PluginConfigDeltaMsg
     | LoadAndRenderAckMsg
     | ResizeAckMsg
     | FrameBitmapMsg
@@ -186,6 +188,17 @@ export interface InitMsg {
     defaultChartType?: string;
 
     /**
+     * Resolved spec for `pluginConfig.map_tile_provider`, when the
+     * plugin realm's registry knows the id — see
+     * {@link SetPluginConfigMsg.tileSource} for the invariant. Applied
+     * to the worker realm's registry before the chart impl is
+     * constructed. Bundled [map/tile-sources.json] entries ship inside
+     * the worker bundle, so this matters only for runtime-registered
+     * providers.
+     */
+    tileSource?: TileSourceSpec;
+
+    /**
      * Pre-resolved CSS-variable theme snapshot from the host.
      */
     themeVars: ThemeSnapshot;
@@ -271,6 +284,18 @@ export interface SetColumnsConfigMsg {
 export interface SetPluginConfigMsg {
     kind: "setPluginConfig";
     cfg: PluginConfig;
+
+    /**
+     * Resolved spec for `cfg.map_tile_provider`, when the plugin
+     * realm's registry knows the id. Riding the config keeps the two
+     * realms' registries convergent with NO eager mirroring: the
+     * worker registers this spec before applying `cfg`, so it can
+     * never hold a config whose provider it cannot resolve —
+     * regardless of when `registerTileSource` ran relative to
+     * renderer construction. Absent for unknown ids (the worker falls
+     * back to the default basemap).
+     */
+    tileSource?: TileSourceSpec;
 }
 
 export interface SetBufferMaxCapacityMsg {
@@ -317,6 +342,7 @@ export interface LoadAndRenderMsg {
 export interface LoadAndRenderAckMsg {
     kind: "loadAndRenderAck";
     msgId: number;
+    error?: string;
 }
 
 export interface RedrawMsg {
@@ -417,7 +443,8 @@ export interface SnapshotPngReqMsg {
 export interface SnapshotPngReplyMsg {
     kind: "snapshotPngReply";
     requestId: number;
-    blob: Blob;
+    blob?: Blob;
+    error?: string;
 }
 
 export interface DestroyMsg {
@@ -499,6 +526,21 @@ export interface DismissTooltipMsg {
 export interface SetCursorMsg {
     kind: "setCursor";
     cursor: string;
+}
+
+/**
+ * Renderer → host: a completed legend gesture (sidebar width drag,
+ * floating move / resize) produced new values for the legend's
+ * `plugin_config` fields. Posted ONCE per gesture, at pointerup — never
+ * per pointermove — with only the fields the gesture changed. The host
+ * plugin persists them through the viewer's public `restore` surface
+ * (a user-gesture echo), which merges the host bucket, refreshes the
+ * settings form, and echoes one `setPluginConfig` back with the same
+ * values (a no-op by the worker's legend-field equality guard).
+ */
+export interface PluginConfigDeltaMsg {
+    kind: "pluginConfigDelta";
+    fields: Record<string, string | number | boolean>;
 }
 
 /**

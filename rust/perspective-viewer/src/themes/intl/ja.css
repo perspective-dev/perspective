@@ -81,7 +81,7 @@ perspective-dropdown {
     --psp-label--style--content: "スタイル";
     --psp-label--stack--content: "スタック";
     --psp-label--alt-axis--content: "副軸";
-    --psp-label--interpolate--content: "補間";
+    --psp-label--interpolate--content: "null値を補間";
     --psp-label--minimum-integer-digits--content: "整数の最小桁数";
     --psp-label--rounding-increment--content: "丸め増分";
     --psp-label--notation--content: "表記";
@@ -159,4 +159,12 @@ perspective-dropdown {
     --psp-label--gradient-heat-max--content: "最大ヒート";
     --psp-label--map-tile-provider--content: "地図プロバイダー";
     --psp-label--map-tile-alpha--content: "地図の不透明度";
+    --psp-label--numeric-axes--content: "数値軸";
+    --psp-label--legend-mode--content: "凡例モード";
+    --psp-label--legend-width-px--content: "凡例の幅";
+    --psp-label--legend-height-px--content: "凡例の高さ";
+    --psp-label--legend-anchor--content: "凡例のアンカー";
+    --psp-label--legend-x--content: "凡例Xオフセット";
+    --psp-label--legend-y--content: "凡例Yオフセット";
+    --psp-label--legend-opacity--content: "凡例の不透明度";
 }

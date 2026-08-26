@@ -96,4 +96,36 @@
     label#map_tile_alpha-label:before {
         content: var(--psp-label--map-tile-alpha--content);
     }
+
+    label#numeric_axes-label:before {
+        content: var(--psp-label--numeric-axes--content);
+    }
+
+    label#legend_mode-label:before {
+        content: var(--psp-label--legend-mode--content);
+    }
+
+    label#legend_width_px-label:before {
+        content: var(--psp-label--legend-width-px--content);
+    }
+
+    label#legend_height_px-label:before {
+        content: var(--psp-label--legend-height-px--content);
+    }
+
+    label#legend_anchor-label:before {
+        content: var(--psp-label--legend-anchor--content);
+    }
+
+    label#legend_x-label:before {
+        content: var(--psp-label--legend-x--content);
+    }
+
+    label#legend_y-label:before {
+        content: var(--psp-label--legend-y--content);
+    }
+
+    label#legend_opacity-label:before {
+        content: var(--psp-label--legend-opacity--content);
+    }
 }

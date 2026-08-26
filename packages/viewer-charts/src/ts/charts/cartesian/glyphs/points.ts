@@ -14,6 +14,7 @@ import type { WebGLContextManager } from "../../../webgl/context-manager";
 import type { CartesianChart } from "../cartesian";
 import type { Glyph } from "../glyph";
 import { bindGradientTexture } from "../../../webgl/gradient-texture";
+import { colorRangePivot } from "../../../theme/gradient";
 import { compileProgram } from "../../../webgl/program-cache";
 import { buildPointRowTooltipLines } from "../tooltip-lines";
 import scatterVert from "../../../shaders/scatter.vert.glsl";
@@ -155,10 +156,13 @@ function setUniforms(
     gl.uniformMatrix4fv(cache.u_projection, false, projection);
     gl.uniform1f(cache.u_point_size, chart._pluginConfig.point_size_px * dpr);
 
-    if (chart._colorMin < chart._colorMax) {
-        gl.uniform2f(cache.u_color_range, chart._colorMin, chart._colorMax);
-    } else {
+    if (chart._colorMin >= chart._colorMax) {
         gl.uniform2f(cache.u_color_range, 0.0, 0.0);
+    } else if (chart._colorName && !chart._colorIsString) {
+        const [lo, hi] = colorRangePivot(chart._colorMin, chart._colorMax);
+        gl.uniform2f(cache.u_color_range, lo, hi);
+    } else {
+        gl.uniform2f(cache.u_color_range, chart._colorMin, chart._colorMax);
     }
 
     if (chart._sizeMin < chart._sizeMax) {
