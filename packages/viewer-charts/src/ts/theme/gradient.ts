@@ -497,6 +497,30 @@ export function colorValueToT(
     return t < 0 ? 0 : t > 1 ? 1 : t;
 }
 
+export function colorRangePivot(
+    colorMin: number,
+    colorMax: number,
+): [number, number] {
+    if (!isFinite(colorMin) || !isFinite(colorMax) || colorMin >= colorMax) {
+        return [0, 0];
+    }
+
+    let denom: number;
+    if (colorMin >= 0) {
+        denom = colorMax;
+    } else if (colorMax <= 0) {
+        denom = -colorMin;
+    } else {
+        denom = Math.max(-colorMin, colorMax);
+    }
+
+    if (denom <= 0) {
+        return [0, 0];
+    }
+
+    return [-denom, denom];
+}
+
 /**
  * Convert a discrete series palette (from `--psp-charts--series-N--color`)
  * into a `GradientStop[]` with stops at `i / (N - 1)`. The resulting

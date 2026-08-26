@@ -21,8 +21,11 @@
 // `a_color_start` / `a_color_end` carry the segment endpoints' raw
 // color values (numeric data value for gradient, dictionary index for
 // categorical). The gradient LUT is sampled using the same mapping the
-// scatter shader uses — `(v - cmin) / (cmax - cmin)` with sign-aware
-// handling for zero-crossing domains. The two endpoints' colors are
+// scatter shader uses — `u_color_range` arrives PRE-SHAPED by the host:
+// the symmetric sign-pivot range (`colorRangePivot`) for numeric
+// columns, so linear normalization matches the CPU `colorValueToT`
+// used by the legend / heatmap / tree charts; raw `[0, N-1]` extents
+// for categorical index domains. The two endpoints' colors are
 // averaged so the segment reads as a single chord in gradient space.
 attribute vec2 a_start;
 attribute vec2 a_end;

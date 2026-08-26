@@ -19,6 +19,7 @@ import {
     getInstancing,
 } from "../../../webgl/instanced-attrs";
 import { compileProgram } from "../../../webgl/program-cache";
+import { colorRangePivot } from "../../../theme/gradient";
 import { formatTickValue, formatDateTickValue } from "../../../layout/ticks";
 import lineVert from "../../../shaders/line.vert.glsl";
 import lineFrag from "../../../shaders/line.frag.glsl";
@@ -195,10 +196,13 @@ function bindLineState(
     gl.uniformMatrix4fv(cache.u_projection, false, projection);
     gl.uniform2f(cache.u_resolution, gl.canvas.width, gl.canvas.height);
     gl.uniform1f(cache.u_line_width, chart._pluginConfig.line_width_px * dpr);
-    if (chart._colorMin < chart._colorMax) {
-        gl.uniform2f(cache.u_color_range, chart._colorMin, chart._colorMax);
-    } else {
+    if (chart._colorMin >= chart._colorMax) {
         gl.uniform2f(cache.u_color_range, 0.0, 0.0);
+    } else if (chart._colorName && !chart._colorIsString) {
+        const [lo, hi] = colorRangePivot(chart._colorMin, chart._colorMax);
+        gl.uniform2f(cache.u_color_range, lo, hi);
+    } else {
+        gl.uniform2f(cache.u_color_range, chart._colorMin, chart._colorMax);
     }
 
     bindGradientTexture(

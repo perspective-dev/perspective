@@ -47,13 +47,6 @@ void main() {
 
     v_point_size = gl_PointSize;
 
-    // Color-t mapping. Linear across `[cmin, cmax]` for single-sign
-    // domains (which includes categorical `[0, N-1]` split / string
-    // indices, so the colors match `interpolatePalette`'s even sampling
-    // used by the legend). When the domain actually crosses zero we
-    // switch to sign-aware so the value 0 always lands at the 50% stop
-    // of the diverging gradient — matching heatmap and the Canvas2D
-    // tooltip paths.
     float cmin = u_color_range.x;
     float cmax = u_color_range.y;
     if(cmax <= cmin) {
