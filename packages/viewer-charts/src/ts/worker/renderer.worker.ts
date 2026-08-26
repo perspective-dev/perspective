@@ -18,7 +18,7 @@ import type * as wasm_module_type from "@perspective-dev/viewer/dist/wasm/perspe
 import { WebGLContextManager } from "../webgl/context-manager";
 import { ContextPool } from "../webgl/context-pool";
 import { RENDER_CONTEXT_POOL_SIZE } from "../config";
-import { ChartImplementation } from "../charts/chart";
+import { ChartImplementation, type PluginConfig } from "../charts/chart";
 import { ZoomController } from "../interaction/zoom-controller";
 import {
     applyPan,
@@ -36,6 +36,7 @@ import type {
     WorkerMsg,
 } from "../transport/protocol";
 import { viewToColumnDataMap } from "../data/view-reader";
+import { TILE_SOURCES, type TileSourceSpec } from "../map/tile-source";
 import { loadFontDeduped } from "./font-loader";
 import { dispatch } from "./dispatch";
 import { installSessionHost } from "./session-host";
@@ -166,6 +167,13 @@ export class WorkerRenderer {
 
         this.chartImpl = new ImplClass();
 
+        // Registry write must precede the chart impl's first
+        // `setPluginConfig` — `pluginConfig.map_tile_provider` may
+        // name this runtime-registered source.
+        if (msg.tileSource) {
+            TILE_SOURCES.register(msg.tileSource);
+        }
+
         // Three surfaces, by mode:
         //  - direct: the host's transferred `.webgl-canvas` (1:1 with a
         //    context, permanently).
@@ -251,6 +259,20 @@ export class WorkerRenderer {
     setViewByName(name: string): void {
         this.view = this.client.__unsafe_open_view(name);
         this.chartImpl.setView?.(this.view);
+    }
+
+    /**
+     * Registry write precedes the config apply — `cfg` may name the
+     * spec riding alongside it (see `SetPluginConfigMsg.tileSource`),
+     * and a replaced template must be registered first so the map
+     * chart's rebind sees the new content-derived cache id.
+     */
+    setPluginConfig(cfg: PluginConfig, tileSource?: TileSourceSpec): void {
+        if (tileSource) {
+            TILE_SOURCES.register(tileSource);
+        }
+
+        this.chartImpl.setPluginConfig?.(cfg);
     }
 
     /**

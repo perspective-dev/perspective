@@ -1,0 +1,18 @@
+[
+    {
+        "id": "osm",
+        "label": "OpenStreetMap",
+        "template": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "attribution": "© OpenStreetMap contributors",
+        "tile_size": 256,
+        "max_zoom": 19
+    },
+    {
+        "id": "versatiles-satellite",
+        "label": "Satellite (VersaTiles)",
+        "template": "https://tiles.versatiles.org/tiles/satellite/{z}/{x}/{y}",
+        "attribution": "© VersaTiles (versatiles.org/sources)",
+        "tile_size": 256,
+        "max_zoom": 12
+    }
+]

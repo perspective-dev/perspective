@@ -159,6 +159,7 @@ perspective-dropdown {
     --psp-label--gradient-heat-max--content: "最大热度";
     --psp-label--map-tile-provider--content: "地图提供商";
     --psp-label--map-tile-alpha--content: "地图不透明度";
+    --psp-label--numeric-axes--content: "数值坐标轴";
     --psp-label--legend-mode--content: "图例模式";
     --psp-label--legend-width-px--content: "图例宽度";
     --psp-label--legend-height-px--content: "图例高度";

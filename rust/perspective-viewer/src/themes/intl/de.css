@@ -159,6 +159,7 @@ perspective-dropdown {
     --psp-label--gradient-heat-max--content: "Maximale Hitze";
     --psp-label--map-tile-provider--content: "Kartenanbieter";
     --psp-label--map-tile-alpha--content: "Kartentransparenz";
+    --psp-label--numeric-axes--content: "Numerische Achsen";
     --psp-label--legend-mode--content: "Legendenmodus";
     --psp-label--legend-width-px--content: "Legendenbreite";
     --psp-label--legend-height-px--content: "Legendenhöhe";

@@ -119,7 +119,22 @@ export class TileLoader {
         url: string,
         signal: AbortSignal,
     ): Promise<ImageBitmap | null> {
-        const resp = await fetch(url, { signal });
+        // Explicit same-origin `referrer`: in worker mode this code runs
+        // in a blob-URL worker, whose client URL is unreferable — its
+        // fetches carry NO `Referer` under ANY document Referrer-Policy
+        // (verified empirically, Chromium 139). Tile providers gate on
+        // it: OSM serves "403r — referer is required" blocked TILES
+        // (HTTP 200, error drawn into the image; see the OSM wiki's
+        // Blocked_tiles page) to referer-less requests. An explicit
+        // same-origin referrer serializes to the page origin under the
+        // default policy, which is exactly the identification those
+        // providers ask for. Opaque/non-http origins (`"null"`) are
+        // skipped — the option would throw.
+        const referrer = self.origin?.startsWith("http")
+            ? `${self.origin}/`
+            : undefined;
+
+        const resp = await fetch(url, { signal, referrer });
         if (!resp.ok) {
             return null;
         }

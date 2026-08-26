@@ -95,7 +95,7 @@ const Y_AXIS = ["Y Axis"];
 const SELECT = "select";
 const TOGGLE = "toggle";
 
-const DEFAULT_MAX_CELLS = 2_000_000;
+const DEFAULT_MAX_CELLS = 10_000_000;
 const DEFAULT_MAX_COLUMNS = 10_000;
 
 //  Plugin-config field sets, by chart family.
@@ -182,6 +182,7 @@ const MAP_BASE_FIELDS: readonly PluginConfigField[] = [
     "domain_mode",
     "map_tile_provider",
     "map_tile_alpha",
+    "numeric_axes",
     ...LEGEND_FIELDS,
 ];
 const MAP_SCATTER_FIELDS: readonly PluginConfigField[] = [

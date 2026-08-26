@@ -626,7 +626,6 @@ export const SF_PROJECTS: Project[] = [
             },
             plugin: "Map Density",
             plugin_config: {
-                map_tile_provider: "carto-dark-matter",
                 gradient_radius_px: 15,
                 gradient_intensity: 1,
             },
@@ -658,9 +657,6 @@ export const SF_PROJECTS: Project[] = [
         workspace: singlePanel({
             columns_config: {},
             plugin: "Map Scatter",
-            plugin_config: {
-                map_tile_provider: "carto-dark-matter",
-            },
             table: "evictions",
             theme: null,
             title: null,

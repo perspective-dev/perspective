@@ -159,6 +159,7 @@ perspective-dropdown {
     --psp-label--gradient-heat-max--content: "Calor máximo";
     --psp-label--map-tile-provider--content: "Provedor de mapa";
     --psp-label--map-tile-alpha--content: "Opacidade do mapa";
+    --psp-label--numeric-axes--content: "Eixos numéricos";
     --psp-label--legend-mode--content: "Modo da legenda";
     --psp-label--legend-width-px--content: "Largura da legenda";
     --psp-label--legend-height-px--content: "Altura da legenda";

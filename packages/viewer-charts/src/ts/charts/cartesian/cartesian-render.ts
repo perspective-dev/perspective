@@ -41,6 +41,7 @@ import {
     type AxisDomain,
 } from "../../axis/numeric-axis";
 import { initCanvas, getScaledContext } from "../../axis/canvas";
+import { computeMapDegreeTicks } from "../../axis/map-ticks";
 import {
     type CategoricalDomain,
     type CategoricalLevel,
@@ -383,14 +384,33 @@ function renderSinglePlotFrame(
         ? measureCategoricalAxisHeight(chart._xCategoryDomain, estPlotWidth)
         : undefined;
 
-    const layout = new PlotLayout(cssWidth, cssHeight, {
-        hasXLabel: !!chart._xLabel,
-        hasYLabel: !!chart._yLabel,
-        hasLegend: hasColorCol,
-        leftExtra,
-        bottomExtra,
-        rightExtra: estRight,
-    });
+    const isMap = chart._renderMode === "map";
+    const bareMap = isMap && !chart._pluginConfig.numeric_axes;
+    const layout = new PlotLayout(
+        cssWidth,
+        cssHeight,
+        bareMap
+            ? {
+                  hasXLabel: false,
+                  hasYLabel: false,
+                  hasLegend: hasColorCol,
+                  leftExtra: 0,
+                  bottomExtra: 0,
+                  rightExtra:
+                      hasColorCol &&
+                      chart._pluginConfig.legend_mode === "sidebar"
+                          ? legendSidebarWidth(chart._pluginConfig, 80)
+                          : 0,
+              }
+            : {
+                  hasXLabel: !!chart._xLabel,
+                  hasYLabel: !!chart._yLabel,
+                  hasLegend: hasColorCol,
+                  leftExtra,
+                  bottomExtra,
+                  rightExtra: estRight,
+              },
+    );
     chart._lastLayout = layout;
     if (chart._zoomController) {
         chart._zoomController.updateLayout(layout);
@@ -413,8 +433,6 @@ function renderSinglePlotFrame(
     const numericTicks = computeTicks(xDomain, yDomain, layout);
     const xTicks = chart._xIsString ? [] : numericTicks.xTicks;
     const yTicks = chart._yIsString ? [] : numericTicks.yTicks;
-
-    const isMap = chart._renderMode === "map";
 
     // Defer the gridline draw past the GPU fence (see `_defer2D`) so the
     // gridline canvas doesn't present ahead of the GL glyphs on resize.
@@ -522,15 +540,25 @@ function renderFacetedFrame(
     // charts always have both axes, so the false branch maps to
     // per-cell mode (never to "none", which is reserved for tree
     // charts).
+    const isMap = chart._renderMode === "map";
+    const bareMap = isMap && !chart._pluginConfig.numeric_axes;
     const grid: FacetGrid = buildFacetGrid(labels, {
         cssWidth,
         cssHeight,
-        xAxis: chart._lastEffectiveSharedX ? "outer" : "cell",
-        yAxis: chart._lastEffectiveSharedY ? "outer" : "cell",
+        xAxis: bareMap
+            ? "none"
+            : chart._lastEffectiveSharedX
+              ? "outer"
+              : "cell",
+        yAxis: bareMap
+            ? "none"
+            : chart._lastEffectiveSharedY
+              ? "outer"
+              : "cell",
         hasLegend: hasLegend && chart._pluginConfig.legend_mode === "sidebar",
         legendWidth: legendSidebarWidth(chart._pluginConfig, 96),
-        hasXLabel: !!chart._xLabel,
-        hasYLabel: !!chart._yLabel,
+        hasXLabel: !bareMap && !!chart._xLabel,
+        hasYLabel: !bareMap && !!chart._yLabel,
         gap: chart._facetConfig.facet_padding,
     });
     chart._facetGrid = grid;
@@ -625,7 +653,6 @@ function renderFacetedFrame(
         // own domain). Map mode skips gridlines entirely; the
         // basemap layer is rendered into the GL canvas inside the
         // facet's scissor below.
-        const isMap = chart._renderMode === "map";
         if (gridlineCanvas && !isMap) {
             // Deferred to the post-fence 2D flush. The closure captures
             // this facet's `cell` (whose `cell.layout` already carries
@@ -740,6 +767,30 @@ function renderSinglePlotChromeOverlay(chart: CartesianChart): void {
     const isMap = chart._renderMode === "map";
 
     if (isMap) {
+        if (chart._pluginConfig.numeric_axes) {
+            const mt = computeMapDegreeTicks(layout);
+            renderCellXAxis(
+                chart._chromeCanvas!,
+                chart._lastXDomain!,
+                layout,
+                mt.xTicks,
+                theme,
+                !!chart._xLabel,
+                dpr,
+                mt.formatX,
+            );
+            renderCellYAxis(
+                chart._chromeCanvas!,
+                chart._lastYDomain!,
+                layout,
+                mt.yTicks,
+                theme,
+                !!chart._yLabel,
+                dpr,
+                mt.formatY,
+            );
+        }
+
         chart.renderMapChrome(chart._chromeCanvas!, layout, theme, dpr);
     } else {
         renderCartesianCellAxes(
@@ -877,35 +928,44 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
     // (one pass per leftmost-column cell). Map mode replaces both
     // with `renderMapChrome` (attribution + scale bar), painted once
     // over the whole facet grid.
+    const mapAxes = isMap && chart._pluginConfig.numeric_axes;
+    const sharedMapTicks =
+        mapAxes && grid.cells.length > 0
+            ? computeMapDegreeTicks(grid.cells[0].layout)
+            : null;
     if (isMap) {
         chart.renderMapChrome(canvas, chart._lastLayout!, theme, dpr);
     }
 
-    if (!isMap && sharedX && grid.outerXAxisRect) {
+    if ((!isMap || sharedMapTicks) && sharedX && grid.outerXAxisRect) {
         renderOuterXAxis(
             canvas,
             grid.outerXAxisRect,
             xDomain,
-            sharedXTicks,
+            sharedMapTicks ? sharedMapTicks.xTicks : sharedXTicks,
             bottomRowLayouts(grid),
             theme,
             !!chart._xLabel,
             dpr,
-            chart.getColumnFormatter(chart._xName, "tick"),
+            sharedMapTicks
+                ? sharedMapTicks.formatX
+                : chart.getColumnFormatter(chart._xName, "tick"),
         );
     }
 
-    if (!isMap && sharedY && grid.outerYAxisRect) {
+    if ((!isMap || sharedMapTicks) && sharedY && grid.outerYAxisRect) {
         renderOuterYAxis(
             canvas,
             grid.outerYAxisRect,
             yDomain,
-            sharedYTicks,
+            sharedMapTicks ? sharedMapTicks.yTicks : sharedYTicks,
             leftColumnLayouts(grid),
             theme,
             !!chart._yLabel,
             dpr,
-            chart.getColumnFormatter(chart._yName, "tick"),
+            sharedMapTicks
+                ? sharedMapTicks.formatY
+                : chart.getColumnFormatter(chart._yName, "tick"),
         );
     }
 
@@ -918,11 +978,16 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
         const d = zc ? zc.getVisibleDomain() : null;
         const localX = d ? { ...xDomain, min: d.xMin, max: d.xMax } : xDomain;
         const localY = d ? { ...yDomain, min: d.yMin, max: d.yMax } : yDomain;
-        const ticks = independent
-            ? computeTicks(localX, localY, cell.layout)
-            : { xTicks: sharedXTicks, yTicks: sharedYTicks };
+        const cellMapTicks = mapAxes
+            ? computeMapDegreeTicks(cell.layout)
+            : null;
+        const ticks = cellMapTicks
+            ? cellMapTicks
+            : independent
+              ? computeTicks(localX, localY, cell.layout)
+              : { xTicks: sharedXTicks, yTicks: sharedYTicks };
 
-        if (!isMap && !sharedX) {
+        if ((!isMap || cellMapTicks) && !sharedX) {
             if (chart._xIsString && chart._xCategoryDomain) {
                 const cellCtx = getScaledContext(canvas, dpr);
                 if (cellCtx) {
@@ -942,12 +1007,14 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
                     theme,
                     !!chart._xLabel,
                     dpr,
-                    chart.getColumnFormatter(chart._xName, "tick"),
+                    cellMapTicks
+                        ? cellMapTicks.formatX
+                        : chart.getColumnFormatter(chart._xName, "tick"),
                 );
             }
         }
 
-        if (!isMap && !sharedY) {
+        if ((!isMap || cellMapTicks) && !sharedY) {
             if (chart._yIsString && chart._yCategoryDomain) {
                 const cellCtx = getScaledContext(canvas, dpr);
                 if (cellCtx) {
@@ -967,7 +1034,9 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
                     theme,
                     !!chart._yLabel,
                     dpr,
-                    chart.getColumnFormatter(chart._yName, "tick"),
+                    cellMapTicks
+                        ? cellMapTicks.formatY
+                        : chart.getColumnFormatter(chart._yName, "tick"),
                 );
             }
         }

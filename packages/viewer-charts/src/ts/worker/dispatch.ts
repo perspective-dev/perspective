@@ -28,7 +28,7 @@ export function dispatch(r: WorkerRenderer, msg: ControlMsg): void {
             r.chartImpl.setColumnsConfig?.(msg.cfg);
             break;
         case "setPluginConfig":
-            r.chartImpl.setPluginConfig?.(msg.cfg);
+            r.setPluginConfig(msg.cfg, msg.tileSource);
             r.redraw();
             break;
         case "setBufferMaxCapacity":

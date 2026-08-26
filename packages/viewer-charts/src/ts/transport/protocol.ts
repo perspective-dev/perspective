@@ -13,6 +13,7 @@
 import type { FacetConfig, PluginConfig } from "../charts/chart";
 import type { PerspectiveClickDetail } from "../event-detail";
 import type { ThemeSnapshot } from "../theme/theme";
+import type { TileSourceSpec } from "../map/tile-source";
 import type { ViewConfig } from "@perspective-dev/client";
 
 export type { ThemeSnapshot };
@@ -187,6 +188,17 @@ export interface InitMsg {
     defaultChartType?: string;
 
     /**
+     * Resolved spec for `pluginConfig.map_tile_provider`, when the
+     * plugin realm's registry knows the id — see
+     * {@link SetPluginConfigMsg.tileSource} for the invariant. Applied
+     * to the worker realm's registry before the chart impl is
+     * constructed. Bundled [map/tile-sources.json] entries ship inside
+     * the worker bundle, so this matters only for runtime-registered
+     * providers.
+     */
+    tileSource?: TileSourceSpec;
+
+    /**
      * Pre-resolved CSS-variable theme snapshot from the host.
      */
     themeVars: ThemeSnapshot;
@@ -272,6 +284,18 @@ export interface SetColumnsConfigMsg {
 export interface SetPluginConfigMsg {
     kind: "setPluginConfig";
     cfg: PluginConfig;
+
+    /**
+     * Resolved spec for `cfg.map_tile_provider`, when the plugin
+     * realm's registry knows the id. Riding the config keeps the two
+     * realms' registries convergent with NO eager mirroring: the
+     * worker registers this spec before applying `cfg`, so it can
+     * never hold a config whose provider it cannot resolve —
+     * regardless of when `registerTileSource` ran relative to
+     * renderer construction. Absent for unknown ids (the worker falls
+     * back to the default basemap).
+     */
+    tileSource?: TileSourceSpec;
 }
 
 export interface SetBufferMaxCapacityMsg {

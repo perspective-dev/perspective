@@ -81,12 +81,7 @@ async function countWarmPixels(page: Page): Promise<number> {
         }
 
         ctx.drawImage(canvas, 0, 0);
-        const data = ctx.getImageData(
-            0,
-            0,
-            sampler.width,
-            sampler.height,
-        ).data;
+        const data = ctx.getImageData(0, 0, sampler.width, sampler.height).data;
         let warm = 0;
         for (let i = 0; i < data.length; i += 4) {
             const r = data[i];

@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { View } from "@perspective-dev/client";
+import { TILE_SOURCES } from "../map/tile-source";
 import type { ColumnDataMap } from "../data/view-reader";
 import type { WebGLContextManager } from "../webgl/context-manager";
 import type { ZoomController } from "../interaction/zoom-controller";
@@ -433,13 +434,15 @@ export interface PluginConfig {
     gradient_color_mode: "mean" | "density" | "extreme" | "signed";
 
     /**
-     * Map basemap tile provider. Applies only to map plugin tags
-     * (`map-scatter`, `map-line`, `map-density`). Cartesian charts
-     * ignore the field. Surfaced as an enum on the settings panel so
-     * users can switch light/dark/voyager without writing custom
-     * tile-source code.
+     * Map basemap tile provider — a `TileSourceSpec` id from the
+     * tile-source registry ([map/tile-sources.json] entries plus any
+     * runtime `registerTileSource` additions). Applies only to map
+     * plugin tags (`map-scatter`, `map-line`, `map-density`); other
+     * charts ignore the field. The default is the JSON's FIRST entry
+     * (reordering the file changes the default), and unknown ids fall
+     * back to that same entry rather than blanking the map.
      */
-    map_tile_provider: "carto-positron" | "carto-dark-matter" | "carto-voyager";
+    map_tile_provider: string;
 
     /**
      * Map basemap alpha (0..1). Pre-multiplied into the tile fragment
@@ -448,6 +451,18 @@ export interface PluginConfig {
      * shows the tiles at full opacity.
      */
     map_tile_alpha: number;
+
+    /**
+     * Map plugins only. `true` (default): standard numeric axes in the
+     * usual cartesian gutters, with tick labels in degrees
+     * longitude/latitude (`122.4°W`) rather than Mercator meters.
+     * `false`: no axes, and the plot is full-bleed — the basemap fills
+     * the entire canvas, minus only the sidebar legend gutter when a
+     * legend is actually shown. Gridlines are never drawn in map mode
+     * — the gridline canvas composites BELOW the GL layer, so opaque
+     * basemap tiles would hide them.
+     */
+    numeric_axes: boolean;
 
     /**
      * Legend presentation mode.
@@ -507,8 +522,9 @@ export const DEFAULT_PLUGIN_CONFIG: PluginConfig = {
     gradient_intensity: 0.6,
     gradient_heat_max: 4.0,
     gradient_color_mode: "mean",
-    map_tile_provider: "carto-positron",
+    map_tile_provider: TILE_SOURCES.list()[0].id,
     map_tile_alpha: 1.0,
+    numeric_axes: true,
     legend_mode: "sidebar",
     legend_width_px: 0,
     legend_height_px: 160,

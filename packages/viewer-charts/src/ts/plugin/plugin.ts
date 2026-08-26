@@ -27,6 +27,7 @@ import {
 } from "../charts/chart";
 import { RawEventForwarder } from "../interaction/raw-event-forwarder";
 import { RendererTransport } from "../transport/renderer-transport";
+import { TILE_SOURCES, type TileSourceSpec } from "../map/tile-source";
 import { RENDER_BLIT_MODE } from "../config";
 import { snapshotThemeVars } from "../theme/theme-snapshot";
 import { resolveThemeFromVars, type Theme } from "../theme/theme";
@@ -43,6 +44,26 @@ import { vec3ToHexColor } from "../utils/css";
 const FACET_CONFIG_DEFAULTS: FacetConfig = { ...DEFAULT_FACET_CONFIG };
 
 /**
+ * Register a raster XYZ tile provider at runtime. The provider joins
+ * the bundled [map/tile-sources.json] entries in the settings panel's
+ * `map_tile_provider` enum and resolves on any map chart from its next
+ * config forward onward — the resolved spec rides every outgoing
+ * `setPluginConfig` / `init` message alongside the config that names
+ * it, so no separate registry-sync operation exists. Re-registering an
+ * id replaces it (a changed template drops cached tiles via the
+ * content-derived cache identity); a chart currently displaying that
+ * id picks the replacement up on its next `restore()`. Throws
+ * `TypeError` on a malformed spec. Returns the normalized spec.
+ *
+ * A key-gated provider is registered with the key embedded in its
+ * `template` — keys never enter `plugin_config`, so they never appear
+ * in `save()` output.
+ */
+export function registerTileSource(spec: unknown): TileSourceSpec {
+    return TILE_SOURCES.register(spec);
+}
+
+/**
  * Static UI-control spec per `plugin_config` field. Mirrors the shape
  * `column_config_schema` already returns (datagrid). The runtime default
  * is sourced separately from the chart-type-effective defaults at
@@ -57,94 +78,104 @@ type FieldSpec =
       }
     | { kind: "Number"; min: number; max: number; step?: number };
 
-const FIELD_SCHEMAS: Record<PluginConfigField, FieldSpec> = {
-    auto_alt_y_axis: { kind: "Bool" },
-    include_zero: { kind: "Bool" },
-    domain_mode: {
-        kind: "Enum",
-        variants: [
-            { value: "fit", label: "Fit" },
-            { value: "expand", label: "Expand" },
-        ],
-    },
-    facet_mode: {
-        kind: "Enum",
-        variants: [
-            { value: "grid", label: "Grid" },
-            { value: "overlay", label: "Overlay" },
-        ],
-    },
-    facet_zoom_mode: {
-        kind: "Enum",
-        variants: [
-            { value: "shared", label: "Shared" },
-            { value: "independent", label: "Independent" },
-        ],
-    },
-    series_zoom_mode: {
-        kind: "Enum",
-        variants: [
-            { value: "dynamic", label: "Dynamic" },
-            { value: "fixed", label: "Fixed" },
-        ],
-    },
-    line_width_px: { kind: "Number", min: 0.5, step: 0.5, max: 16 },
-    point_size_px: { kind: "Number", min: 1, max: 32 },
-    band_inner_frac: { kind: "Number", min: 0.1, max: 1, step: 0.01 },
-    bar_inner_pad: { kind: "Number", min: 0, max: 0.9, step: 0.01 },
-    wick_width_px: { kind: "Number", min: 0.5, step: 0.5, max: 8 },
-    ohlc_line_width_px: { kind: "Number", min: 0.5, step: 0.5, max: 8 },
-    gradient_radius_px: { kind: "Number", min: 2, step: 1, max: 256 },
-    gradient_intensity: { kind: "Number", min: 0.05, step: 0.05, max: 4 },
-    gradient_heat_max: { kind: "Number", min: 0.1, step: 0.1, max: 64 },
-    gradient_color_mode: {
-        kind: "Enum",
-        variants: [
-            { value: "mean", label: "Mean (density-weighted)" },
-            { value: "density", label: "Density only" },
-            { value: "extreme", label: "Extremes" },
-            { value: "signed", label: "Signed sum" },
-        ],
-    },
-    map_tile_provider: {
-        kind: "Enum",
-        variants: [
-            { value: "carto-positron", label: "Light (Positron)" },
-            { value: "carto-dark-matter", label: "Dark Matter" },
-            { value: "carto-voyager", label: "Voyager" },
-        ],
-    },
-    map_tile_alpha: { kind: "Number", min: 0, max: 1, step: 0.05 },
-    legend_mode: {
-        kind: "Enum",
-        variants: [
-            { value: "sidebar", label: "Sidebar" },
-            { value: "none", label: "None" },
-            { value: "floating", label: "Floating" },
-        ],
-    },
-    // 0 = auto (the chart family's historical gutter width).
-    legend_width_px: { kind: "Number", min: 0, max: 512, step: 1 },
-    legend_height_px: { kind: "Number", min: 48, max: 1024, step: 1 },
-    legend_anchor: {
-        kind: "Enum",
-        variants: [
-            { value: "top-right", label: "Top Right" },
-            { value: "top-left", label: "Top Left" },
-            { value: "bottom-right", label: "Bottom Right" },
-            { value: "bottom-left", label: "Bottom Left" },
-        ],
-    },
-    legend_x: { kind: "Number", min: 0, max: 1, step: 0.01 },
-    legend_y: { kind: "Number", min: 0, max: 1, step: 0.01 },
-    legend_opacity: { kind: "Number", min: 0, max: 1, step: 0.05 },
-};
+/**
+ * A `FieldSpec` entry may be a thunk when its contents depend on
+ * runtime state — `map_tile_provider`'s variants come from the tile-
+ * source registry, which grows via `registerTileSource`, so the enum
+ * must be resolved per `plugin_config_schema()` call rather than at
+ * module init.
+ */
+const FIELD_SCHEMAS: Record<PluginConfigField, FieldSpec | (() => FieldSpec)> =
+    {
+        auto_alt_y_axis: { kind: "Bool" },
+        include_zero: { kind: "Bool" },
+        domain_mode: {
+            kind: "Enum",
+            variants: [
+                { value: "fit", label: "Fit" },
+                { value: "expand", label: "Expand" },
+            ],
+        },
+        facet_mode: {
+            kind: "Enum",
+            variants: [
+                { value: "grid", label: "Grid" },
+                { value: "overlay", label: "Overlay" },
+            ],
+        },
+        facet_zoom_mode: {
+            kind: "Enum",
+            variants: [
+                { value: "shared", label: "Shared" },
+                { value: "independent", label: "Independent" },
+            ],
+        },
+        series_zoom_mode: {
+            kind: "Enum",
+            variants: [
+                { value: "dynamic", label: "Dynamic" },
+                { value: "fixed", label: "Fixed" },
+            ],
+        },
+        line_width_px: { kind: "Number", min: 0.5, step: 0.5, max: 16 },
+        point_size_px: { kind: "Number", min: 1, max: 32 },
+        band_inner_frac: { kind: "Number", min: 0.1, max: 1, step: 0.01 },
+        bar_inner_pad: { kind: "Number", min: 0, max: 0.9, step: 0.01 },
+        wick_width_px: { kind: "Number", min: 0.5, step: 0.5, max: 8 },
+        ohlc_line_width_px: { kind: "Number", min: 0.5, step: 0.5, max: 8 },
+        gradient_radius_px: { kind: "Number", min: 2, step: 1, max: 256 },
+        gradient_intensity: { kind: "Number", min: 0.05, step: 0.05, max: 4 },
+        gradient_heat_max: { kind: "Number", min: 0.1, step: 0.1, max: 64 },
+        gradient_color_mode: {
+            kind: "Enum",
+            variants: [
+                { value: "mean", label: "Mean (density-weighted)" },
+                { value: "density", label: "Density only" },
+                { value: "extreme", label: "Extremes" },
+                { value: "signed", label: "Signed sum" },
+            ],
+        },
+        map_tile_provider: () => ({
+            kind: "Enum",
+            variants: TILE_SOURCES.list().map((s) => ({
+                value: s.id,
+                label: s.label,
+            })),
+        }),
+        map_tile_alpha: { kind: "Number", min: 0, max: 1, step: 0.05 },
+        numeric_axes: { kind: "Bool" },
+        legend_mode: {
+            kind: "Enum",
+            variants: [
+                { value: "sidebar", label: "Sidebar" },
+                { value: "none", label: "None" },
+                { value: "floating", label: "Floating" },
+            ],
+        },
+        // 0 = auto (the chart family's historical gutter width).
+        legend_width_px: { kind: "Number", min: 0, max: 512, step: 1 },
+        legend_height_px: { kind: "Number", min: 48, max: 1024, step: 1 },
+        legend_anchor: {
+            kind: "Enum",
+            variants: [
+                { value: "top-right", label: "Top Right" },
+                { value: "top-left", label: "Top Left" },
+                { value: "bottom-right", label: "Bottom Right" },
+                { value: "bottom-left", label: "Bottom Left" },
+            ],
+        },
+        legend_x: { kind: "Number", min: 0, max: 1, step: 0.01 },
+        legend_y: { kind: "Number", min: 0, max: 1, step: 0.01 },
+        legend_opacity: { kind: "Number", min: 0, max: 1, step: 0.05 },
+    };
 
 function fieldSpec(
     key: PluginConfigField,
     defaults: PluginConfig,
 ): Record<string, unknown> & { kind: string } {
-    return { ...FIELD_SCHEMAS[key], key, default: defaults[key] };
+    const entry = FIELD_SCHEMAS[key];
+    const spec = typeof entry === "function" ? entry() : entry;
+    return { ...spec, key, default: defaults[key] };
 }
 
 const GLOBAL_STYLES = (() => {
@@ -471,6 +502,14 @@ export class HTMLPerspectiveViewerWebGLPluginElement
      */
     static setBlitMode(mode: "direct" | "blit") {
         BLIT_MODE = mode;
+    }
+
+    static registerTileSource(spec: unknown): TileSourceSpec {
+        return registerTileSource(spec);
+    }
+
+    static tileSources(): readonly TileSourceSpec[] {
+        return TILE_SOURCES.list();
     }
 
     get_static_config(): PluginStaticConfig {

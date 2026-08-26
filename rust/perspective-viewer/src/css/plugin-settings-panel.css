@@ -97,6 +97,10 @@
         content: var(--psp-label--map-tile-alpha--content);
     }
 
+    label#numeric_axes-label:before {
+        content: var(--psp-label--numeric-axes--content);
+    }
+
     label#legend_mode-label:before {
         content: var(--psp-label--legend-mode--content);
     }

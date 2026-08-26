@@ -20,8 +20,7 @@ import {
     waitOneFrame,
 } from "./helpers";
 
-const UPLOAD_CRASH =
-    /loadAndRender failed|reading 'axis'|reading 'chartType'/i;
+const UPLOAD_CRASH = /loadAndRender failed|reading 'axis'|reading 'chartType'/i;
 
 const EMPTY_FILTER: [string, string, number][] = [["Row ID", "<", 0]];
 

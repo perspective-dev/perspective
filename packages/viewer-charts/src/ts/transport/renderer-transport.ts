@@ -26,6 +26,7 @@ import {
 } from "../event-detail";
 import { snapshotThemeVars } from "../theme/theme-snapshot";
 import { snapshotFontFaces } from "../utils/font-snapshot";
+import { TILE_SOURCES } from "../map/tile-source";
 import { DomHostSink } from "../interaction/host-sink-dom";
 import { RUNTIME_MODE } from "../config";
 
@@ -359,6 +360,9 @@ export class RendererTransport {
             pluginConfig: opts.pluginConfig,
             columnsConfig: opts.columnsConfig,
             defaultChartType: opts.defaultChartType,
+            tileSource: TILE_SOURCES.specFor(
+                opts.pluginConfig.map_tile_provider,
+            ),
             themeVars,
             fontFaces,
             cssWidth: rect.width,
@@ -496,7 +500,11 @@ export class RendererTransport {
     }
 
     setPluginConfig(cfg: PluginConfig): void {
-        this._post({ kind: "setPluginConfig", cfg });
+        this._post({
+            kind: "setPluginConfig",
+            cfg,
+            tileSource: TILE_SOURCES.specFor(cfg.map_tile_provider),
+        });
     }
 
     setBufferMaxCapacity(n: number): void {
