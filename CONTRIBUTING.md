@@ -120,10 +120,10 @@ Before opening a Pull Request, be sure:
 
 - Includes a thorough Description which clearly states what problems the PR
   solves.
-- Description contains a link to the Github Issue, and any relevent Discussions,
+- Description contains a link to the Github Issue, and any relevant Discussions,
   this PR applies to.
 - Include new tests that fail without this PR but passes with it.
-- Include any relevent Documentation changes related to this change.
+- Include any relevant Documentation changes related to this change.
 - Verify all commits have been _signed_ in accordance with the DCO policy.
 - Disclosed AI tooling assistance.
 - Reviewed PR commit history to remove unnecessary changes.
