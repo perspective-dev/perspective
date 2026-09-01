@@ -161,6 +161,7 @@ perspective-dropdown {
     --psp-label--map-tile-alpha--content: "Opacité de la carte";
     --psp-label--numeric-axes--content: "Axes numériques";
     --psp-label--legend-mode--content: "Mode légende";
+    --psp-label--legend-size-mode--content: "Taille de légende";
     --psp-label--legend-width-px--content: "Largeur de légende";
     --psp-label--legend-height-px--content: "Hauteur de légende";
     --psp-label--legend-anchor--content: "Ancrage de légende";

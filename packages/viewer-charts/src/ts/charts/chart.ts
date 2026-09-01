@@ -465,9 +465,30 @@ export interface PluginConfig {
     numeric_axes: boolean;
 
     /**
-     * Legend presentation mode.
+     * Legend presentation mode. `"auto"` (default) resolves per frame
+     * to `"floating"` when every entry fits the default floating panel
+     * without scrolling (≤ 7 entries; continuous gradient legends
+     * always qualify) and to `"sidebar"` otherwise — see
+     * `resolveLegendMode`. Treemap overrides the default to
+     * `"sidebar"` (a floating panel over edge-to-edge tiles always
+     * occludes data).
      */
-    legend_mode: "sidebar" | "none" | "floating";
+    legend_mode: "auto" | "sidebar" | "none" | "floating";
+
+    /**
+     * Floating-panel sizing regime. `"auto"` (default) sizes the panel
+     * to its CONTENT every frame — the height hugs the entry rows
+     * exactly, and the width hugs the widest entry label (measured on
+     * the chrome canvas). `"fixed"` uses the saved `legend_width_px` /
+     * `legend_height_px` verbatim.
+     *
+     * Applies to `legend_mode: "floating"` ONLY; the sidebar gutter is
+     * always `legend_width_px` (its height is the plot's). Dragging a
+     * resize handle switches an auto panel to `"fixed"` — otherwise
+     * the gesture would be undone by the next paint — and
+     * double-clicking a resize handle switches it back.
+     */
+    legend_size_mode: LegendSizeMode;
 
     /**
      * Legend width in CSS pixels. `0` (default) = automatic — each
@@ -475,14 +496,16 @@ export interface PluginConfig {
      * `"sidebar"` mode this is the full right-gutter width; in
      * `"floating"` mode it is the panel width. Clamped at paint time
      * to at most half the canvas width so a saved wide legend cannot
-     * crush a small panel.
+     * crush a small panel. Ignored by a floating panel in
+     * `legend_size_mode: "auto"`.
      */
     legend_width_px: number;
 
     /**
      * Floating-legend panel height in CSS pixels. Ignored in
-     * `"sidebar"` mode (the legend spans the plot height). Clamped at
-     * paint time to the canvas height.
+     * `"sidebar"` mode (the legend spans the plot height) and by a
+     * floating panel in `legend_size_mode: "auto"`. Clamped at paint
+     * time to the canvas height.
      */
     legend_height_px: number;
 
@@ -505,6 +528,8 @@ export type LegendAnchor =
     | "bottom-left"
     | "bottom-right";
 
+export type LegendSizeMode = "auto" | "fixed";
+
 export const DEFAULT_PLUGIN_CONFIG: PluginConfig = {
     auto_alt_y_axis: false,
     facet_mode: "grid",
@@ -525,11 +550,12 @@ export const DEFAULT_PLUGIN_CONFIG: PluginConfig = {
     map_tile_provider: TILE_SOURCES.list()[0].id,
     map_tile_alpha: 1.0,
     numeric_axes: true,
-    legend_mode: "sidebar",
+    legend_mode: "auto",
+    legend_size_mode: "auto",
     legend_width_px: 0,
     legend_height_px: 160,
     legend_anchor: "top-right",
     legend_x: 0,
     legend_y: 0,
-    legend_opacity: 1.0,
+    legend_opacity: 0.8,
 };

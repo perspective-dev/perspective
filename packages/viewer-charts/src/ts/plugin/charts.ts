@@ -102,6 +102,7 @@ const DEFAULT_MAX_COLUMNS = 10_000;
 //
 const LEGEND_FIELDS: readonly PluginConfigField[] = [
     "legend_mode",
+    "legend_size_mode",
     "legend_width_px",
     "legend_height_px",
     "legend_anchor",
@@ -333,12 +334,14 @@ const CHARTS: ChartTypeConfig[] = [
     ),
     make("Treemap", "treemap", HIER, TOGGLE, 1, HIER_NAMES, TREE_FIELDS, {
         ...HIER_ROLES,
+        plugin_field_defaults: { legend_mode: "sidebar" },
     }),
     make("Sunburst", "sunburst", HIER, TOGGLE, 1, HIER_NAMES, TREE_FIELDS, {
         ...HIER_ROLES,
     }),
     make("Heatmap", "heatmap", HIER, SELECT, 1, ["Color"], HEATMAP_FIELDS, {
         ...HEATMAP_ROLES,
+        plugin_field_defaults: { legend_mode: "sidebar" },
     }),
     make("Candlestick", "candlestick", FIN, TOGGLE, 1, FIN_NAMES, FIN_FIELDS, {
         ...FIN_ROLES,

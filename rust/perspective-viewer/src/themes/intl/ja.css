@@ -161,6 +161,7 @@ perspective-dropdown {
     --psp-label--map-tile-alpha--content: "地図の不透明度";
     --psp-label--numeric-axes--content: "数値軸";
     --psp-label--legend-mode--content: "凡例モード";
+    --psp-label--legend-size-mode--content: "凡例サイズ";
     --psp-label--legend-width-px--content: "凡例の幅";
     --psp-label--legend-height-px--content: "凡例の高さ";
     --psp-label--legend-anchor--content: "凡例のアンカー";

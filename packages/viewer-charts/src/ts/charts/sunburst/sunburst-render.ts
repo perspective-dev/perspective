@@ -107,7 +107,12 @@ export function renderSunburstFrame(
               chart._colorMin < chart._colorMax;
     const breadcrumbH =
         !hasSplits && chart._breadcrumbIds.length > 1 ? BREADCRUMB_H : 0;
-    const legendW = legendTreeGutter(chart._pluginConfig, hasLegend, LEGEND_W);
+    const legendW = legendTreeGutter(
+        chart._pluginConfig,
+        hasLegend,
+        LEGEND_W,
+        chart._colorMode === "series" ? chart._uniqueColorLabels.size : 0,
+    );
 
     if (hasSplits) {
         layoutFacetedSunburst(chart, cssWidth, cssHeight, legendW);

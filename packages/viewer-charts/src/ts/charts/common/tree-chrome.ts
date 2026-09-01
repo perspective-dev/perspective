@@ -17,13 +17,18 @@ import type { GradientStop } from "../../theme/gradient";
 import type { Vec3 } from "../../theme/palette";
 import type { Theme } from "../../theme/theme";
 import {
+    gradientLegendAutoFit,
+    legendAutoFit,
     renderCategoricalLegend,
     renderCategoricalLegendAt,
     renderLegend,
     renderLegendAt,
     type LegendPaintView,
 } from "../../axis/legend";
-import { legendSidebarWidth } from "../../interaction/legend-controller";
+import {
+    legendSidebarWidth,
+    resolveLegendMode,
+} from "../../interaction/legend-controller";
 import type { TreeChartBase } from "./tree-chart";
 import { drawTooltipBox } from "./draw-tooltip-box";
 
@@ -167,12 +172,16 @@ export function renderTreeColorLegend(
         chart._colorMode === "series" && chart._uniqueColorLabels.size > 1;
     const hasNumeric =
         chart._colorMode === "numeric" && chart._colorMin < chart._colorMax;
-    if (cfg.legend_mode === "none" || (!hasCategorical && !hasNumeric)) {
+    const mode = resolveLegendMode(
+        cfg,
+        hasCategorical ? chart._uniqueColorLabels.size : 0,
+    );
+    if (mode === "none" || (!hasCategorical && !hasNumeric)) {
         chart._legend.clearPainted();
         return;
     }
 
-    const floating = cfg.legend_mode === "floating";
+    const floating = mode === "floating";
     const view: LegendPaintView = {
         mode: floating ? "floating" : "sidebar",
         legend: chart._legend,
@@ -180,7 +189,26 @@ export function renderTreeColorLegend(
         opacity: cfg.legend_opacity,
     };
     const floatBox = floating
-        ? chart._legend.floatingBox(cfg, cssWidth, cssHeight)
+        ? chart._legend.floatingBox(
+              cfg,
+              cssWidth,
+              cssHeight,
+              hasCategorical
+                  ? legendAutoFit(
+                        canvas,
+                        theme,
+                        chart._uniqueColorLabels.size,
+                        () => chart._uniqueColorLabels.keys(),
+                        { title: view.title },
+                    )
+                  : gradientLegendAutoFit(
+                        canvas,
+                        theme,
+                        { min: chart._colorMin, max: chart._colorMax },
+                        undefined,
+                        view.title,
+                    ),
+          )
         : null;
 
     if (hasCategorical) {

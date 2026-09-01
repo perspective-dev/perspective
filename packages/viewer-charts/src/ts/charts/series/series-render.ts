@@ -59,6 +59,7 @@ import { drawGridlinesX, drawGridlinesY } from "../../axis/axis-primitives";
 import { buildBarTooltipLines } from "./series-interact";
 import {
     LEGEND_LINE_HEIGHT,
+    legendAutoFit,
     paintFloatingLegendFrame,
     paintLegendScrollbar,
     truncateText,
@@ -66,6 +67,7 @@ import {
 } from "../../axis/legend";
 import {
     legendRightGutter,
+    resolveLegendMode,
     legendSidebarWidth,
 } from "../../interaction/legend-controller";
 
@@ -540,7 +542,12 @@ export function renderBarFrame(
             ? 55
             : measureCategoricalAxisWidth(provisionalDomain);
         const estLeft = leftExtra + (hasCatLabel ? 16 : 0);
-        const estRight = legendRightGutter(chart._pluginConfig, hasLegend);
+        const estRight = legendRightGutter(
+            chart._pluginConfig,
+            hasLegend,
+            80,
+            chart._series.length,
+        );
         const estPlotWidthH = Math.max(1, cssWidth - estLeft - estRight);
         const bottomExtra = valueCatActive
             ? measureCategoricalAxisHeight(valueCatDomain, estPlotWidthH)
@@ -565,7 +572,12 @@ export function renderBarFrame(
             hasLegend,
             bottomExtra: 24,
             leftExtra,
-            rightExtra: legendRightGutter(chart._pluginConfig, hasLegend),
+            rightExtra: legendRightGutter(
+                chart._pluginConfig,
+                hasLegend,
+                80,
+                chart._series.length,
+            ),
         });
     } else {
         // Y Bar with categorical X. Value axis on the left may be
@@ -574,7 +586,12 @@ export function renderBarFrame(
             ? measureCategoricalAxisWidth(valueCatDomain)
             : 55;
         const estLeft = leftExtraBase + 16;
-        const estRight = legendRightGutter(chart._pluginConfig, hasLegend);
+        const estRight = legendRightGutter(
+            chart._pluginConfig,
+            hasLegend,
+            80,
+            chart._series.length,
+        );
         const estPlotWidth = Math.max(1, cssWidth - estLeft - estRight);
         const bottomExtra = measureCategoricalAxisHeight(
             provisionalDomain,
@@ -912,7 +929,10 @@ function renderFacetedBarFrame(
         cssHeight,
         xAxis: horizontal ? valAxisMode : catAxisMode,
         yAxis: horizontal ? catAxisMode : valAxisMode,
-        hasLegend: hasLegend && chart._pluginConfig.legend_mode === "sidebar",
+        hasLegend:
+            hasLegend &&
+            resolveLegendMode(chart._pluginConfig, chart._aggregates.length) ===
+                "sidebar",
         legendWidth: legendSidebarWidth(chart._pluginConfig, 96),
         hasXLabel: horizontal ? true : hasCatLabel,
         hasYLabel: horizontal ? hasCatLabel : true,
@@ -1504,12 +1524,9 @@ function renderFacetedBarLegend(chart: SeriesChart, grid: FacetGrid): void {
 
     const cfg = chart._pluginConfig;
     const M = chart._aggregates.length;
-    const floating = cfg.legend_mode === "floating";
-    if (
-        M <= 1 ||
-        cfg.legend_mode === "none" ||
-        (!floating && !grid.legendRect)
-    ) {
+    const mode = resolveLegendMode(cfg, M);
+    const floating = mode === "floating";
+    if (M <= 1 || mode === "none" || (!floating && !grid.legendRect)) {
         chart._legend.clearPainted();
         return;
     }
@@ -1531,7 +1548,18 @@ function renderFacetedBarLegend(chart: SeriesChart, grid: FacetGrid): void {
 
     const layout = chart._lastLayout;
     const box = floating
-        ? chart._legend.floatingBox(cfg, layout.cssWidth, layout.cssHeight)
+        ? chart._legend.floatingBox(
+              cfg,
+              layout.cssWidth,
+              layout.cssHeight,
+              legendAutoFit(
+                  chart._chromeCanvas,
+                  chart._resolveTheme(),
+                  M,
+                  () => chart._aggregates.slice(0, M),
+                  { title: "Legend" },
+              ),
+          )
         : {
               x: grid.legendRect!.x + 12,
               y: grid.legendRect!.y + 10,
@@ -1567,15 +1595,32 @@ function renderBarLegend(chart: SeriesChart): void {
 
     const cfg = chart._pluginConfig;
     const series = chart._series;
-    if (series.length <= 1 || cfg.legend_mode === "none") {
+    const mode = resolveLegendMode(cfg, series.length);
+    if (series.length <= 1 || mode === "none") {
         chart._legend.clearPainted();
         return;
     }
 
     const layout = chart._lastLayout;
-    const floating = cfg.legend_mode === "floating";
+    const floating = mode === "floating";
+    const title = chart._splitBy.join(" / ") || "Legend";
     const box = floating
-        ? chart._legend.floatingBox(cfg, layout.cssWidth, layout.cssHeight)
+        ? chart._legend.floatingBox(
+              cfg,
+              layout.cssWidth,
+              layout.cssHeight,
+              legendAutoFit(
+                  chart._chromeCanvas,
+                  chart._resolveTheme(),
+                  series.length,
+                  function* () {
+                      for (const s of series) {
+                          yield s.label;
+                      }
+                  },
+                  { title },
+              ),
+          )
         : {
               x: layout.plotRect.x + layout.plotRect.width + 12,
               y: layout.margins.top + 10,
@@ -1595,7 +1640,7 @@ function renderBarLegend(chart: SeriesChart): void {
         {
             mode: floating ? "floating" : "sidebar",
             legend: chart._legend,
-            title: chart._splitBy.join(" / ") || "Legend",
+            title,
             sidebarGutter: floating ? undefined : layout.margins.right,
             opacity: cfg.legend_opacity,
         },

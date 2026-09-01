@@ -105,6 +105,10 @@
         content: var(--psp-label--legend-mode--content);
     }
 
+    label#legend_size_mode-label:before {
+        content: var(--psp-label--legend-size-mode--content);
+    }
+
     label#legend_width_px-label:before {
         content: var(--psp-label--legend-width-px--content);
     }

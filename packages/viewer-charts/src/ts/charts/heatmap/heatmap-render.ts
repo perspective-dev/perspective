@@ -48,12 +48,14 @@ const HEATMAP_Y_AXIS_OPTS: CategoricalYAxisOptions = {
 };
 
 import {
+    gradientLegendAutoFit,
     renderLegend,
     renderLegendAt,
     type LegendPaintView,
 } from "../../axis/legend";
 import {
     legendRightGutter,
+    resolveLegendMode,
     legendSidebarWidth,
 } from "../../interaction/legend-controller";
 import heatmapVert from "../../shaders/heatmap.vert.glsl";
@@ -118,7 +120,7 @@ export function renderHeatmapFrame(
     // Measure both hierarchical axes *before* building the layout so the
     // plot rect accounts for their footprints. Numeric axes get fixed
     // gutters matching bar's branch (24px bottom, 55px left).
-    const rightExtra = legendRightGutter(chart._pluginConfig, true);
+    const rightExtra = legendRightGutter(chart._pluginConfig, true, 80, 0);
     const estLeft = yNumeric
         ? 55
         : measureCategoricalAxisWidth(yDomain, HEATMAP_Y_AXIS_OPTS);
@@ -492,7 +494,7 @@ function paintHeatmapChromeOverlay(chart: HeatmapChart): void {
         );
     }
 
-    const legendMode = chart._pluginConfig.legend_mode;
+    const legendMode = resolveLegendMode(chart._pluginConfig, 0);
     if (legendMode === "none") {
         chart._legend.clearPainted();
     } else {
@@ -518,6 +520,13 @@ function paintHeatmapChromeOverlay(chart: HeatmapChart): void {
                     chart._pluginConfig,
                     layout.cssWidth,
                     layout.cssHeight,
+                    gradientLegendAutoFit(
+                        chart._chromeCanvas,
+                        theme,
+                        colorDomain,
+                        formatter,
+                        chart._aggName,
+                    ),
                 ),
                 colorDomain,
                 theme.gradientStops,
@@ -569,7 +578,7 @@ function renderFacetedHeatmap(
             cssHeight,
             xAxis: effectiveSharedX ? "outer" : "cell",
             yAxis: effectiveSharedY ? "outer" : "cell",
-            hasLegend: chart._pluginConfig.legend_mode === "sidebar",
+            hasLegend: resolveLegendMode(chart._pluginConfig, 0) === "sidebar",
             legendWidth: legendSidebarWidth(chart._pluginConfig, 96),
             hasXLabel: chart._groupBy.length > 0,
             hasYLabel: false,
@@ -835,7 +844,7 @@ function renderFacetedHeatmapChromeOverlay(chart: HeatmapChart): void {
         );
     }
 
-    const legendMode = chart._pluginConfig.legend_mode;
+    const legendMode = resolveLegendMode(chart._pluginConfig, 0);
     const floating = legendMode === "floating";
     const facetLayout = chart._facets[0].layout;
     const legendAnchor = floating
@@ -843,6 +852,13 @@ function renderFacetedHeatmapChromeOverlay(chart: HeatmapChart): void {
               chart._pluginConfig,
               facetLayout.cssWidth,
               facetLayout.cssHeight,
+              gradientLegendAutoFit(
+                  chart._chromeCanvas,
+                  theme,
+                  { min: chart._colorMin, max: chart._colorMax },
+                  chart.getColumnFormatter(chart._columnSlots[0], "value"),
+                  chart._aggName,
+              ),
           )
         : grid.legendRect;
     if (legendMode !== "none" && legendAnchor) {

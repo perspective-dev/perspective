@@ -13,6 +13,7 @@
 import {
     DEFAULT_PLUGIN_CONFIG,
     type LegendAnchor,
+    type LegendSizeMode,
     type PluginConfig,
 } from "../charts/chart";
 import type { PlotRect } from "../layout/plot-layout";
@@ -27,14 +28,47 @@ export const LEGEND_MAX_WIDTH = 512;
 /** Minimum floating-panel height. */
 export const LEGEND_MIN_HEIGHT = 48;
 
-/** Floating-panel width when `legend_width_px` is 0 (auto). */
+/**
+ * Floating-panel fallbacks: used when `legend_size_mode: "fixed"` has no
+ * saved value (`0`), and when `"auto"` has nothing to size against — an
+ * unmeasurable width, or a gradient legend's row-less height.
+ */
 const FLOATING_AUTO_WIDTH = 160;
-
-/** Floating-panel height when `legend_height_px` is 0. */
 const FLOATING_AUTO_HEIGHT = 160;
 
 /** Floating-panel header strip height (title + move grip). */
 export const LEGEND_HEADER_H = 18;
+
+/** Entry row height shared by every swatch-list legend painter. */
+export const LEGEND_LINE_HEIGHT = 18;
+
+/**
+ * Floating-frame chrome, as consumed from the panel box by
+ * `paintFloatingLegendFrame`: `PAD_L` insets the content from the left
+ * edge, `W` is the total width the frame takes, and `H` the total
+ * height it takes BELOW the header (split evenly above/below). The
+ * auto-size math is the frame's inverse, so both must read the same
+ * constants — a drifted pair sizes a panel that clips its own last row.
+ */
+export const LEGEND_FRAME_PAD_L = 8;
+export const LEGEND_FRAME_W = 12;
+export const LEGEND_FRAME_H = 8;
+
+/** Width the header title is laid out against: `box.width - PAD`. */
+export const LEGEND_TITLE_PAD = 16;
+
+/**
+ * Entry-row chrome left of the label text: swatch (10) + gap (6).
+ * Gradient legends substitute their own (bar 16 + gap 5).
+ */
+export const LEGEND_ENTRY_LEADING = 16;
+
+/**
+ * Width the entry painters give up to the scroll thumb once the content
+ * overflows. The two painters reserve 8 and 10 respectively; auto-width
+ * budgets the larger so neither truncates a label it just sized for.
+ */
+const LEGEND_SCROLLBAR_ALLOWANCE = 10;
 
 /** Edge-proximity in CSS px that reads as a resize handle. */
 const EDGE = 5;
@@ -58,7 +92,20 @@ function clamp01(v: number): number {
 
 /** Normalized-span coordinate: `px` along a free span of `span` px. */
 function norm(px: number, span: number): number {
-    return span > 0 ? clamp01(px / span) : 0;
+    if (span <= 0) {
+        return 0;
+    }
+
+    const whole = Math.round(px);
+    if (whole <= 0) {
+        return 0;
+    }
+
+    if (whole >= Math.round(span)) {
+        return 1;
+    }
+
+    return clamp01(whole / span);
 }
 
 function anchorRight(a: LegendAnchor): boolean {
@@ -81,18 +128,50 @@ export function legendSidebarWidth(cfg: PluginConfig, legacy: number): number {
 }
 
 /**
+ * `legend_mode` with `"auto"` resolved away — the only form the
+ * layout/paint/interaction paths consume. Painters record the resolved
+ * mode in `setPainted`, so the controller's drag semantics follow it
+ * with no separate resolution.
+ */
+export type ResolvedLegendMode = "sidebar" | "none" | "floating";
+
+/**
+ * `"auto"` resolves to `"floating"` when every legend entry fits the
+ * DEFAULT floating panel (160 px ≈ header + 7 rows) without scrolling —
+ * a compact overlay that frees the whole gutter — and to `"sidebar"`
+ * otherwise, where a long list gets dedicated, scrollable space instead
+ * of occluding the plot. Continuous gradient legends have no entry
+ * list; callers pass `entryCount = 0` and they resolve to floating.
+ */
+export const AUTO_FLOATING_MAX_ROWS = 7;
+
+export function resolveLegendMode(
+    cfg: PluginConfig,
+    entryCount: number,
+): ResolvedLegendMode {
+    if (cfg.legend_mode !== "auto") {
+        return cfg.legend_mode;
+    }
+
+    return entryCount <= AUTO_FLOATING_MAX_ROWS ? "floating" : "sidebar";
+}
+
+/**
  * Right-margin width a plot layout should reserve for the legend.
  * `legacy` is the family's historical `hasLegend` gutter (80 for
  * single-plot layouts, 96 for facet grids). Modes `"none"` and
  * `"floating"` collapse the gutter to the no-legend breathing margin —
- * the plot widens and the floating panel overlays it.
+ * the plot widens and the floating panel overlays it. `entryCount`
+ * feeds the `"auto"` resolution ({@link resolveLegendMode}); pass the
+ * same count the legend painter will enumerate.
  */
 export function legendRightGutter(
     cfg: PluginConfig,
     hasLegend: boolean,
     legacy: number = 80,
+    entryCount: number = 0,
 ): number {
-    if (!hasLegend || cfg.legend_mode !== "sidebar") {
+    if (!hasLegend || resolveLegendMode(cfg, entryCount) !== "sidebar") {
         return 16;
     }
 
@@ -108,12 +187,35 @@ export function legendTreeGutter(
     cfg: PluginConfig,
     hasLegend: boolean,
     legacy: number,
+    entryCount: number = 0,
 ): number {
-    if (!hasLegend || cfg.legend_mode !== "sidebar") {
+    if (!hasLegend || resolveLegendMode(cfg, entryCount) !== "sidebar") {
         return 0;
     }
 
     return legendSidebarWidth(cfg, legacy);
+}
+
+/**
+ * Content measurements a floating panel needs to size itself in
+ * `legend_size_mode: "auto"`. Supplied by the call site (which owns the
+ * chrome canvas and the label set) and consumed ONLY by that mode, so a
+ * `"fixed"` panel — and every sidebar legend — pays nothing.
+ */
+export interface LegendAutoFit {
+    /**
+     * Entry rows the painter will enumerate. `0` marks a continuous
+     * gradient legend, which has no row list and keeps the default
+     * panel height.
+     */
+    entryCount: number;
+
+    /**
+     * Panel width in CSS px that fits the widest entry label AND the
+     * header title, frame chrome included. Invoked at most once per
+     * `floatingBox` call; see `legendAutoFit`.
+     */
+    boxWidth?: () => number;
 }
 
 /**
@@ -160,6 +262,7 @@ export interface PaintedLegend {
 /** The `PluginConfig` fields this controller owns. */
 const LEGEND_FIELDS = [
     "legend_mode",
+    "legend_size_mode",
     "legend_width_px",
     "legend_height_px",
     "legend_anchor",
@@ -169,6 +272,7 @@ const LEGEND_FIELDS = [
 ] as const;
 
 type LegendFieldSnapshot = {
+    legend_size_mode: LegendSizeMode;
     legend_width_px: number;
     legend_height_px: number;
     legend_x: number;
@@ -245,8 +349,8 @@ export interface LegendEventCtx {
  * tooltip routing rather than racing them.
  *
  * The scroll offset is transient (never persisted); geometry fields
- * (`legend_width_px`, `legend_height_px`, `legend_x`, `legend_y`)
- * round-trip through `plugin_config`.
+ * (`legend_size_mode`, `legend_width_px`, `legend_height_px`,
+ * `legend_x`, `legend_y`) round-trip through `plugin_config`.
  */
 export class LegendController {
     private _painted: PaintedLegend | null = null;
@@ -291,31 +395,68 @@ export class LegendController {
      * normalized to the free span and measured from the
      * `legend_anchor` corner, so every `legend_x`/`legend_y` in [0, 1]
      * yields a fully on-canvas box at any canvas size.
+     *
+     * `fit` drives `legend_size_mode: "auto"` (see {@link LegendAutoFit});
+     * omitting it in auto mode falls back to the fixed-mode defaults,
+     * so a call site that cannot measure still paints a sane panel. The
+     * canvas clamps apply to BOTH modes — an auto panel never grows
+     * past half the canvas width or its full height, it scrolls
+     * instead.
      */
     floatingBox(
         cfg: PluginConfig,
         cssWidth: number,
         cssHeight: number,
+        fit?: LegendAutoFit,
     ): PlotRect {
-        const width = clamp(
-            cfg.legend_width_px > 0 ? cfg.legend_width_px : FLOATING_AUTO_WIDTH,
-            LEGEND_MIN_WIDTH,
-            Math.max(LEGEND_MIN_WIDTH, Math.floor(cssWidth / 2)),
-        );
+        // Each dimension resolves independently, and each falls back to
+        // the fixed-mode default when auto cannot answer — an
+        // unmeasurable width (no 2D context) or a gradient legend, which
+        // has no rows to hug. `0` from a measurer means "could not
+        // measure", never "zero wide".
+        const auto = cfg.legend_size_mode !== "fixed";
+        const measured = auto ? (fit?.boxWidth?.() ?? 0) : 0;
+
+        // Auto height is the frame's inverse: N rows of content, plus
+        // the header and the frame's vertical padding.
+        const rows = auto ? (fit?.entryCount ?? 0) : 0;
+        const wantWidth =
+            measured > 0
+                ? measured
+                : cfg.legend_width_px > 0 && !auto
+                  ? cfg.legend_width_px
+                  : FLOATING_AUTO_WIDTH;
+        const wantHeight =
+            rows > 0
+                ? LEGEND_HEADER_H + LEGEND_FRAME_H + rows * LEGEND_LINE_HEIGHT
+                : cfg.legend_height_px > 0 && !auto
+                  ? cfg.legend_height_px
+                  : FLOATING_AUTO_HEIGHT;
+
         const height = clamp(
-            cfg.legend_height_px > 0
-                ? cfg.legend_height_px
-                : FLOATING_AUTO_HEIGHT,
+            wantHeight,
             LEGEND_MIN_HEIGHT,
             Math.max(LEGEND_MIN_HEIGHT, cssHeight - 8),
+        );
+
+        // A row list too tall for the canvas keeps its measured width
+        // but now scrolls, and the thumb is drawn INSIDE the content
+        // rect — so budget for it, or the labels auto-width just fit
+        // truncate anyway.
+        const scrolls = height < wantHeight;
+        const width = clamp(
+            wantWidth +
+                (scrolls && measured > 0 ? LEGEND_SCROLLBAR_ALLOWANCE : 0),
+            LEGEND_MIN_WIDTH,
+            Math.max(LEGEND_MIN_WIDTH, Math.floor(cssWidth / 2)),
         );
         const freeW = Math.max(0, cssWidth - width);
         const freeH = Math.max(0, cssHeight - height);
         const rx = clamp01(cfg.legend_x) * freeW;
         const ry = clamp01(cfg.legend_y) * freeH;
         return {
-            x: anchorRight(cfg.legend_anchor) ? freeW - rx : rx,
-            y: anchorBottom(cfg.legend_anchor) ? freeH - ry : ry,
+            x: Math.round(anchorRight(cfg.legend_anchor) ? freeW - rx : rx),
+            y: Math.round(anchorBottom(cfg.legend_anchor) ? freeH - ry : ry),
             width,
             height,
         };
@@ -509,6 +650,7 @@ export class LegendController {
         }
 
         const snapshot: LegendFieldSnapshot = {
+            legend_size_mode: ctx.cfg.legend_size_mode,
             legend_width_px: ctx.cfg.legend_width_px,
             legend_height_px: ctx.cfg.legend_height_px,
             legend_x: ctx.cfg.legend_x,
@@ -607,6 +749,10 @@ export class LegendController {
         this._suppressClick = true;
         const fields: Partial<PluginConfig> = {};
         const cfg = ctx.cfg;
+        if (cfg.legend_size_mode !== d.snapshot.legend_size_mode) {
+            fields.legend_size_mode = cfg.legend_size_mode;
+        }
+
         if (cfg.legend_width_px !== d.snapshot.legend_width_px) {
             fields.legend_width_px = Math.round(cfg.legend_width_px);
         }
@@ -645,6 +791,18 @@ export class LegendController {
 
         const cfg = ctx.cfg;
         const fields: Partial<PluginConfig> = {};
+
+        // A floating panel's reset also returns it to content-sizing —
+        // the inverse of the freeze a resize drag performs, and the only
+        // gesture that restores `"auto"` without the settings form.
+        if (
+            this._painted!.mode === "floating" &&
+            cfg.legend_size_mode !== DEFAULT_PLUGIN_CONFIG.legend_size_mode
+        ) {
+            cfg.legend_size_mode = DEFAULT_PLUGIN_CONFIG.legend_size_mode;
+            fields.legend_size_mode = cfg.legend_size_mode;
+        }
+
         if (
             resetsWidth &&
             cfg.legend_width_px !== DEFAULT_PLUGIN_CONFIG.legend_width_px
@@ -772,6 +930,7 @@ export class LegendController {
 
                 // Floating: keep the RIGHT edge fixed while the left
                 // edge follows the cursor.
+                this._freezeAutoSize(ctx, d.startBox);
                 const right = d.startBox.x + d.startBox.width;
                 const w = clamp(
                     Math.round(d.startBox.width + (d.startMx - mx)),
@@ -792,6 +951,7 @@ export class LegendController {
 
             case "resize-e":
             case "resize-se": {
+                this._freezeAutoSize(ctx, d.startBox);
                 const w = clamp(
                     Math.round(d.startBox.width + (mx - d.startMx)),
                     LEGEND_MIN_WIDTH,
@@ -808,6 +968,7 @@ export class LegendController {
             }
 
             case "resize-s": {
+                this._freezeAutoSize(ctx, d.startBox);
                 const h = this._applySouthResize(
                     d.startBox,
                     d.startMy,
@@ -825,6 +986,26 @@ export class LegendController {
                 return;
             }
         }
+    }
+
+    /**
+     * First write of a resize gesture on an auto-sized floating panel:
+     * switch it to `"fixed"`. Without this the gesture would be inert —
+     * the next paint recomputes the content size and discards it.
+     *
+     * BOTH dimensions are seeded from the box on screen, not just the
+     * dragged one: the saved `legend_width_px` / `legend_height_px` are
+     * whatever the panel had before it went auto, so adopting them
+     * wholesale would jump the edge the user is NOT dragging.
+     */
+    private _freezeAutoSize(ctx: LegendEventCtx, startBox: PlotRect): void {
+        if (ctx.cfg.legend_size_mode === "fixed") {
+            return;
+        }
+
+        ctx.cfg.legend_size_mode = "fixed";
+        ctx.cfg.legend_width_px = Math.round(startBox.width);
+        ctx.cfg.legend_height_px = Math.round(startBox.height);
     }
 
     /** Bottom-edge resize: new height with the top edge held fixed. */

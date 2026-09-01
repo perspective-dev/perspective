@@ -161,6 +161,7 @@ perspective-dropdown {
     --psp-label--map-tile-alpha--content: "Opacidad del mapa";
     --psp-label--numeric-axes--content: "Ejes numéricos";
     --psp-label--legend-mode--content: "Modo de leyenda";
+    --psp-label--legend-size-mode--content: "Tamaño de leyenda";
     --psp-label--legend-width-px--content: "Ancho de leyenda";
     --psp-label--legend-height-px--content: "Altura de leyenda";
     --psp-label--legend-anchor--content: "Anclaje de leyenda";
