@@ -14,7 +14,9 @@ use std::io::Cursor;
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::*;
-use arrow_array::{Array as _, ArrowPrimitiveType, DictionaryArray, PrimitiveArray, StringArray};
+use arrow_array::{
+    Array as _, ArrayRef, ArrowPrimitiveType, DictionaryArray, PrimitiveArray, StringArray,
+};
 use arrow_ipc::reader::StreamReader;
 use arrow_schema::{DataType, TimeUnit};
 use js_sys::{Array, Function, JsString, Uint8Array};
@@ -74,6 +76,33 @@ fn zero_invalid_slots<T: ArrowPrimitiveType>(arr: &PrimitiveArray<T>) {
     }
 }
 
+/// Emit a sub-32-bit integer column as an `Int32Array`. Every Arrow
+/// integer width the engine emits below 32 bits (`i8`/`u8`/`i16`/`u16`)
+/// widens losslessly, so consumers see ONE integer representation
+/// regardless of the column's storage width — and, like `Int32`, one
+/// the `float32` flag never narrows. Needs a copy; `Box<[i32]>` gives
+/// the stable data pointer the zero-copy `view` requires, exactly as
+/// the `f32`/`f64` conversion buffers do.
+fn set_widened_i32<T>(
+    col: &ArrayRef,
+    col_idx: usize,
+    js_values: &Array,
+    js_dicts: &Array,
+    storage: &mut Vec<Box<[i32]>>,
+) where
+    T: ArrowPrimitiveType,
+    T::Native: Into<i32>,
+{
+    let typed = col.as_primitive::<T>();
+    zero_invalid_slots(typed);
+    let vals: Box<[i32]> = typed.values().iter().map(|&v| v.into()).collect();
+
+    let arr = unsafe { js_sys::Int32Array::view(&vals) };
+    storage.push(vals);
+    js_values.set(col_idx as u32, arr.into());
+    js_dicts.set(col_idx as u32, JsValue::NULL);
+}
+
 /// Decode an Arrow IPC batch and call `callback` once with all columns.
 ///
 /// Callback signature:
@@ -108,12 +137,14 @@ pub(crate) async fn decode_and_call(
     let js_validities = Array::new_with_length(num_cols as u32);
     let js_dicts = Array::new_with_length(num_cols as u32);
 
-    // Storage for type-conversion buffers (Int64/Date32/Timestamp and
-    // `float32` narrowing). These MUST outlive the callback because
-    // `js_sys::*Array::view()` creates zero-copy views into their heap
-    // memory. Using `Box<[T]>` (rather than `Vec<T>`) yields a stable
-    // data pointer that won't move when the outer Vec grows, so a view
-    // created before the push stays valid.
+    // Storage for type-conversion buffers (narrow-int/bool widening,
+    // Int64/UInt64/Date32/Timestamp and `float32` narrowing). These
+    // MUST outlive the callback because `js_sys::*Array::view()`
+    // creates zero-copy views into their heap memory. Using `Box<[T]>`
+    // (rather than `Vec<T>`) yields a stable data pointer that won't
+    // move when the outer Vec grows, so a view created before the push
+    // stays valid.
+    let mut i32_storage: Vec<Box<[i32]>> = Vec::new();
     let mut f32_storage: Vec<Box<[f32]>> = Vec::new();
     let mut f64_storage: Vec<Box<[f64]>> = Vec::new();
 
@@ -133,6 +164,24 @@ pub(crate) async fn decode_and_call(
         js_names.set(col_idx as u32, JsString::from(field.name().as_str()).into());
 
         match col.data_type() {
+            DataType::Int8 => {
+                set_widened_i32::<Int8Type>(col, col_idx, &js_values, &js_dicts, &mut i32_storage);
+            },
+            DataType::UInt8 => {
+                set_widened_i32::<UInt8Type>(col, col_idx, &js_values, &js_dicts, &mut i32_storage);
+            },
+            DataType::Int16 => {
+                set_widened_i32::<Int16Type>(col, col_idx, &js_values, &js_dicts, &mut i32_storage);
+            },
+            DataType::UInt16 => {
+                set_widened_i32::<UInt16Type>(
+                    col,
+                    col_idx,
+                    &js_values,
+                    &js_dicts,
+                    &mut i32_storage,
+                );
+            },
             DataType::UInt32 => {
                 let typed = col.as_primitive::<UInt32Type>();
                 zero_invalid_slots(typed);
@@ -218,6 +267,46 @@ pub(crate) async fn decode_and_call(
 
                 js_dicts.set(col_idx as u32, JsValue::NULL);
             },
+            // Neither `u64` nor `i64` fits `Int32Array`, so both widen
+            // to float (narrowed by `float32` like the other float
+            // columns) and lose exactness past 2^53. `UInt64` is not an
+            // exotic case: `get_simple_accumulator_type` promotes EVERY
+            // unsigned width to `DTYPE_UINT64`, so the `sum` of any
+            // unsigned column in a `group_by` view lands here.
+            DataType::UInt64 => {
+                let typed = col.as_primitive::<UInt64Type>();
+                zero_invalid_slots(typed);
+                if float32 {
+                    let vals: Box<[f32]> = typed.values().iter().map(|&v| v as f32).collect();
+
+                    let arr = unsafe { js_sys::Float32Array::view(&vals) };
+                    f32_storage.push(vals);
+                    js_values.set(col_idx as u32, arr.into());
+                } else {
+                    let vals: Box<[f64]> = typed.values().iter().map(|&v| v as f64).collect();
+
+                    let arr = unsafe { js_sys::Float64Array::view(&vals) };
+                    f64_storage.push(vals);
+                    js_values.set(col_idx as u32, arr.into());
+                }
+
+                js_dicts.set(col_idx as u32, JsValue::NULL);
+            },
+            DataType::Boolean => {
+                // Bit-packed, so `zero_invalid_slots` (a `PrimitiveArray`
+                // memory rewrite) cannot apply — the `is_valid` test
+                // below enforces the same "invalid slots read 0"
+                // contract while materializing.
+                let typed = col.as_boolean();
+                let vals: Box<[i32]> = (0..typed.len())
+                    .map(|i| i32::from(typed.is_valid(i) && typed.value(i)))
+                    .collect();
+
+                let arr = unsafe { js_sys::Int32Array::view(&vals) };
+                i32_storage.push(vals);
+                js_values.set(col_idx as u32, arr.into());
+                js_dicts.set(col_idx as u32, JsValue::NULL);
+            },
             DataType::Dictionary(..) => {
                 let dict = col
                     .as_any()
@@ -279,9 +368,9 @@ pub(crate) async fn decode_and_call(
     )?;
 
     // If the callback returned a Promise, await it before releasing the
-    // batch — zero-copy TypedArray views into `batch`/`f32_storage`/
-    // `f64_storage` must remain valid for the full lifetime of the
-    // awaited work.
+    // batch — zero-copy TypedArray views into `batch` and the
+    // `i32`/`f32`/`f64` conversion buffers must remain valid for the
+    // full lifetime of the awaited work.
     if ret.is_instance_of::<js_sys::Promise>() {
         let promise: js_sys::Promise = ret.unchecked_into();
         wasm_bindgen_futures::JsFuture::from(promise).await?;
@@ -289,6 +378,7 @@ pub(crate) async fn decode_and_call(
 
     // Keep storage alive until after the callback (and its awaited
     // promise, if any) returns.
+    drop(i32_storage);
     drop(f32_storage);
     drop(f64_storage);
 
