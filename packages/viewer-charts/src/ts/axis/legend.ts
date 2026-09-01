@@ -14,7 +14,14 @@ import type { Canvas2D, Context2D } from "../charts/canvas-types";
 import type { PlotLayout, PlotRect } from "../layout/plot-layout";
 import { formatTickValue } from "../layout/ticks";
 import {
+    LEGEND_ENTRY_LEADING,
+    LEGEND_FRAME_H,
+    LEGEND_FRAME_PAD_L,
+    LEGEND_FRAME_W,
     LEGEND_HEADER_H,
+    LEGEND_LINE_HEIGHT,
+    LEGEND_TITLE_PAD,
+    type LegendAutoFit,
     type LegendController,
 } from "../interaction/legend-controller";
 import {
@@ -24,11 +31,13 @@ import {
 } from "../theme/gradient";
 import type { Theme } from "../theme/theme";
 
-/** Entry row height shared by every swatch-list legend painter. */
-export const LEGEND_LINE_HEIGHT = 18;
+export { LEGEND_LINE_HEIGHT };
 
 /** Painted scrollbar thumb width (the hit zone is wider). */
 const SCROLLBAR_W = 4;
+
+const LEGEND_BAR_W = 16;
+const LEGEND_BAR_GAP = 5;
 
 function rgbCss(c: [number, number, number, number]): string {
     return `rgb(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)})`;
@@ -53,6 +62,71 @@ export interface LegendPaintView {
      * default 1). Border, header text, and entries stay opaque.
      */
     opacity?: number;
+}
+
+const AUTO_WIDTH_MAX_SAMPLES = 64;
+
+export function legendAutoFit(
+    canvas: Canvas2D | null | undefined,
+    theme: Theme,
+    entryCount: number,
+    labels: () => Iterable<string>,
+    opts: { title?: string; leading?: number; fontPx?: number } = {},
+): LegendAutoFit {
+    return {
+        entryCount,
+        boxWidth: () => {
+            const ctx = canvas?.getContext("2d") as Context2D | null;
+            if (!ctx) {
+                return 0;
+            }
+
+            ctx.save();
+            let text = 0;
+            let n = 0;
+            ctx.font = `${opts.fontPx ?? 11}px ${theme.fontFamily}`;
+            for (const label of labels()) {
+                text = Math.max(text, ctx.measureText(label).width);
+                if (++n >= AUTO_WIDTH_MAX_SAMPLES) {
+                    break;
+                }
+            }
+
+            let title = 0;
+            if (opts.title) {
+                ctx.font = `bold 10px ${theme.fontFamily}`;
+                title = ctx.measureText(opts.title).width + LEGEND_TITLE_PAD;
+            }
+
+            ctx.restore();
+            const leading = opts.leading ?? LEGEND_ENTRY_LEADING;
+            return Math.ceil(Math.max(title, leading + text + LEGEND_FRAME_W));
+        },
+    };
+}
+
+export function gradientLegendAutoFit(
+    canvas: Canvas2D | null | undefined,
+    theme: Theme,
+    colorDomain: { min: number; max: number },
+    formatter: (v: number) => string = formatTickValue,
+    title?: string,
+): LegendAutoFit {
+    return legendAutoFit(
+        canvas,
+        theme,
+        0,
+        () => [
+            formatter(colorDomain.max),
+            formatter((colorDomain.min + colorDomain.max) / 2),
+            formatter(colorDomain.min),
+        ],
+        {
+            title,
+            leading: LEGEND_BAR_W + LEGEND_BAR_GAP,
+            fontPx: 10,
+        },
+    );
 }
 
 /**
@@ -91,7 +165,7 @@ export function paintFloatingLegendFrame(
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
         ctx.fillText(
-            truncateText(ctx, title, Math.max(0, box.width - 16)),
+            truncateText(ctx, title, Math.max(0, box.width - LEGEND_TITLE_PAD)),
             box.x + 8,
             box.y + LEGEND_HEADER_H / 2 + 0.5,
         );
@@ -99,10 +173,10 @@ export function paintFloatingLegendFrame(
 
     ctx.restore();
     return {
-        x: box.x + 8,
-        y: box.y + LEGEND_HEADER_H + 4,
-        width: Math.max(0, box.width - 12),
-        height: Math.max(0, box.height - LEGEND_HEADER_H - 8),
+        x: box.x + LEGEND_FRAME_PAD_L,
+        y: box.y + LEGEND_HEADER_H + LEGEND_FRAME_H / 2,
+        width: Math.max(0, box.width - LEGEND_FRAME_W),
+        height: Math.max(0, box.height - LEGEND_HEADER_H - LEGEND_FRAME_H),
     };
 }
 
@@ -236,7 +310,7 @@ export function renderLegendAt(
     let y: number;
     let barHeight: number;
     let content: PlotRect = rect;
-    const barWidth = 16;
+    const barWidth = LEGEND_BAR_W;
     if (floating) {
         content = paintFloatingLegendFrame(
             ctx,
@@ -286,7 +360,7 @@ export function renderLegendAt(
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
 
-    const labelX = x + barWidth + 5;
+    const labelX = x + barWidth + LEGEND_BAR_GAP;
     const labelW = Math.max(0, content.x + content.width - labelX);
     ctx.fillText(
         truncateText(ctx, formatter(colorDomain.max), labelW),

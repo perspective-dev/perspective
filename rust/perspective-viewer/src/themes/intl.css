@@ -160,6 +160,7 @@ perspective-dropdown {
     --psp-label--numeric-axes--content: "Numeric axes";
     --psp-label--interpolate--content: "Interpolate null";
     --psp-label--legend-mode--content: "Legend mode";
+    --psp-label--legend-size-mode--content: "Legend sizing";
     --psp-label--legend-width-px--content: "Legend width";
     --psp-label--legend-height-px--content: "Legend height";
     --psp-label--legend-anchor--content: "Legend anchor";

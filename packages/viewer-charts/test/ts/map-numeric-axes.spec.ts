@@ -98,12 +98,15 @@ test.describe("map numeric_axes", () => {
     test("full-bleed keeps the sidebar legend gutter when a legend shows", async ({
         page,
     }) => {
+        // The gradient legend resolves "auto" to floating (no entry
+        // list) — pin sidebar; this test asserts the sidebar gutter.
         await restoreChart(page, {
             plugin: "Map Scatter",
             columns: ["Discount", "Quantity", "Profit"],
             plugin_config: {
                 map_tile_provider: "test-red",
                 numeric_axes: false,
+                legend_mode: "sidebar",
             },
         } as any);
 

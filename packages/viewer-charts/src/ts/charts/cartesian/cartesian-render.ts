@@ -55,11 +55,15 @@ import {
     renderLegendAt,
     renderCategoricalLegend,
     renderCategoricalLegendAt,
+    legendAutoFit,
+    gradientLegendAutoFit,
     type LegendPaintView,
 } from "../../axis/legend";
 import {
     legendRightGutter,
     legendSidebarWidth,
+    resolveLegendMode,
+    type LegendAutoFit,
 } from "../../interaction/legend-controller";
 
 /**
@@ -67,6 +71,43 @@ import {
  */
 function rebaseOrigin(o: number): number {
     return isNaN(o) ? 0 : o;
+}
+
+/**
+ * Legend entry count for `legend_mode: "auto"` resolution: the
+ * categorical swatch count when a string color column is wired, `0`
+ * for continuous gradient legends (no entry list — always compact).
+ */
+function legendEntryCount(chart: CartesianChart): number {
+    return chart._colorIsString ? chart._uniqueColorLabels.size : 0;
+}
+
+/**
+ * Content measurements for a `legend_size_mode: "auto"` floating panel.
+ * Categorical legends hug their label list; gradient legends have no
+ * rows and hug their tick labels instead.
+ */
+function legendFit(chart: CartesianChart, theme: Theme): LegendAutoFit {
+    const title = chart._colorName ?? undefined;
+    if (chart._colorIsString) {
+        return legendAutoFit(
+            chart._chromeCanvas,
+            theme,
+            chart._uniqueColorLabels.size,
+            () => chart._uniqueColorLabels.keys(),
+            { title },
+        );
+    }
+
+    return gradientLegendAutoFit(
+        chart._chromeCanvas,
+        theme,
+        { min: chart._colorMin, max: chart._colorMax },
+        chart._colorName
+            ? chart.getColumnFormatter(chart._colorName, "value")
+            : undefined,
+        title,
+    );
 }
 
 /**
@@ -374,7 +415,12 @@ function renderSinglePlotFrame(
 
     // One-pass plot-width / plot-height estimate to size the
     // categorical gutter overrides; same approach as series-render.
-    const estRight = legendRightGutter(chart._pluginConfig, hasColorCol);
+    const estRight = legendRightGutter(
+        chart._pluginConfig,
+        hasColorCol,
+        80,
+        legendEntryCount(chart),
+    );
     const estLeftPlain = 55 + (chart._yLabel ? 16 : 0);
     const estPlotWidth = Math.max(1, cssWidth - estLeftPlain - estRight);
     const leftExtra = chart._yCategoryDomain
@@ -398,7 +444,10 @@ function renderSinglePlotFrame(
                   bottomExtra: 0,
                   rightExtra:
                       hasColorCol &&
-                      chart._pluginConfig.legend_mode === "sidebar"
+                      resolveLegendMode(
+                          chart._pluginConfig,
+                          legendEntryCount(chart),
+                      ) === "sidebar"
                           ? legendSidebarWidth(chart._pluginConfig, 80)
                           : 0,
               }
@@ -555,7 +604,10 @@ function renderFacetedFrame(
             : chart._lastEffectiveSharedY
               ? "outer"
               : "cell",
-        hasLegend: hasLegend && chart._pluginConfig.legend_mode === "sidebar",
+        hasLegend:
+            hasLegend &&
+            resolveLegendMode(chart._pluginConfig, legendEntryCount(chart)) ===
+                "sidebar",
         legendWidth: legendSidebarWidth(chart._pluginConfig, 96),
         hasXLabel: !bareMap && !!chart._xLabel,
         hasYLabel: !bareMap && !!chart._yLabel,
@@ -806,7 +858,10 @@ function renderSinglePlotChromeOverlay(chart: CartesianChart): void {
         );
     }
 
-    const legendMode = chart._pluginConfig.legend_mode;
+    const legendMode = resolveLegendMode(
+        chart._pluginConfig,
+        legendEntryCount(chart),
+    );
     let legendPainted = false;
     if (chart._lastHasColorCol && legendMode !== "none") {
         const stops = chart._lastGradientStops ?? theme.gradientStops;
@@ -822,6 +877,7 @@ function renderSinglePlotChromeOverlay(chart: CartesianChart): void {
                   chart._pluginConfig,
                   layout.cssWidth,
                   layout.cssHeight,
+                  legendFit(chart, theme),
               )
             : null;
         if (chart._colorIsString && chart._uniqueColorLabels.size > 0) {
@@ -1049,13 +1105,17 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
     }
 
     // Shared legend: categorical (string color) or gradient
-    const legendMode = chart._pluginConfig.legend_mode;
+    const legendMode = resolveLegendMode(
+        chart._pluginConfig,
+        legendEntryCount(chart),
+    );
     const floating = legendMode === "floating";
     const legendAnchor = floating
         ? chart._legend.floatingBox(
               chart._pluginConfig,
               chart._lastLayout!.cssWidth,
               chart._lastLayout!.cssHeight,
+              legendFit(chart, theme),
           )
         : grid.legendRect;
     let legendPainted = false;

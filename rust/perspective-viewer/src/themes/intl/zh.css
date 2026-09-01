@@ -161,6 +161,7 @@ perspective-dropdown {
     --psp-label--map-tile-alpha--content: "地图不透明度";
     --psp-label--numeric-axes--content: "数值坐标轴";
     --psp-label--legend-mode--content: "图例模式";
+    --psp-label--legend-size-mode--content: "图例大小";
     --psp-label--legend-width-px--content: "图例宽度";
     --psp-label--legend-height-px--content: "图例高度";
     --psp-label--legend-anchor--content: "图例锚点";

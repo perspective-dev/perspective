@@ -147,9 +147,17 @@ const FIELD_SCHEMAS: Record<PluginConfigField, FieldSpec | (() => FieldSpec)> =
         legend_mode: {
             kind: "Enum",
             variants: [
+                { value: "auto", label: "Auto" },
                 { value: "sidebar", label: "Sidebar" },
                 { value: "none", label: "None" },
                 { value: "floating", label: "Floating" },
+            ],
+        },
+        legend_size_mode: {
+            kind: "Enum",
+            variants: [
+                { value: "auto", label: "Auto" },
+                { value: "fixed", label: "Fixed" },
             ],
         },
         // 0 = auto (the chart family's historical gutter width).

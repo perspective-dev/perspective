@@ -12,6 +12,7 @@
 
 import { test, expect } from "@perspective-dev/test";
 import perspective from "../perspective_client";
+import * as arrows from "../test_arrows.js";
 
 test.describe("with_typed_arrays()", () => {
     test("awaits promise returned by async callback before releasing the batch", async () => {
@@ -818,6 +819,145 @@ test.describe("with_typed_arrays()", () => {
             });
 
             expect(valueType).toEqual("Float64Array");
+            await view.delete();
+            await table.delete();
+        });
+    });
+
+    test.describe("integer widths", () => {
+        test("decodes every column of all_types_small.arrow", async () => {
+            const table = await perspective.table(
+                arrows.all_types_arrow.slice(),
+            );
+            const view = await table.view();
+            const typeMap: Record<string, string> = {};
+            const valueMap: Record<string, number[]> = {};
+            await view.with_typed_arrays(
+                {},
+                (
+                    n: string[],
+                    vals: any[],
+                    _valids: any[],
+                    dicts: (string[] | null)[],
+                ) => {
+                    for (let i = 0; i < n.length; i++) {
+                        typeMap[n[i]] = vals[i].constructor.name;
+                        if (dicts[i] === null) {
+                            valueMap[n[i]] = Array.from(vals[i]);
+                        }
+                    }
+                },
+            );
+
+            expect(typeMap["i8"]).toEqual("Int32Array");
+            expect(typeMap["ui8"]).toEqual("Int32Array");
+            expect(typeMap["i16"]).toEqual("Int32Array");
+            expect(typeMap["ui16"]).toEqual("Int32Array");
+            expect(typeMap["i32"]).toEqual("Int32Array");
+            expect(typeMap["bool"]).toEqual("Int32Array");
+            expect(typeMap["i64"]).toEqual("Float64Array");
+            expect(typeMap["ui64"]).toEqual("Float64Array");
+            const cols = await view.to_columns();
+            for (const name of ["i8", "ui8", "i16", "ui16", "i32", "ui64"]) {
+                expect(valueMap[name]).toEqual(
+                    (cols[name] as (number | null)[]).map((x) => x ?? 0),
+                );
+            }
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("bool column decodes as 0/1", async () => {
+            const table = await perspective.table(
+                arrows.all_types_arrow.slice(),
+            );
+            const view = await table.view({ columns: ["bool"] });
+            let values: number[] = [];
+            await view.with_typed_arrays({}, (n: string[], vals: any[]) => {
+                values = Array.from(vals[n.indexOf("bool")] as Int32Array);
+            });
+
+            const cols = await view.to_columns();
+            expect(values).toEqual(
+                (cols["bool"] as unknown as boolean[]).map((x) => (x ? 1 : 0)),
+            );
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("narrow int widths are NOT affected by float32", async () => {
+            const table = await perspective.table(
+                arrows.all_types_arrow.slice(),
+            );
+            const view = await table.view({
+                columns: ["ui8", "i16", "f64"],
+            });
+
+            const typeMap: Record<string, string> = {};
+            await view.with_typed_arrays(
+                { float32: true },
+                (n: string[], vals: any[]) => {
+                    for (let i = 0; i < n.length; i++) {
+                        typeMap[n[i]] = vals[i].constructor.name;
+                    }
+                },
+            );
+
+            expect(typeMap["ui8"]).toEqual("Int32Array");
+            expect(typeMap["i16"]).toEqual("Int32Array");
+            expect(typeMap["f64"]).toEqual("Float32Array");
+            await view.delete();
+            await table.delete();
+        });
+
+        test("group_by sum of an unsigned column decodes as UInt64", async () => {
+            const table = await perspective.table(
+                arrows.all_types_arrow.slice(),
+            );
+            const view = await table.view({
+                columns: ["ui8"],
+                group_by: ["date"],
+                aggregates: { ui8: "sum" },
+            });
+
+            let valueType = "";
+            let values: number[] = [];
+            await view.with_typed_arrays({}, (n: string[], vals: any[]) => {
+                const idx = n.indexOf("ui8");
+                valueType = vals[idx].constructor.name;
+                values = Array.from(vals[idx] as Float64Array);
+            });
+
+            expect(valueType).toEqual("Float64Array");
+            const cols = await view.to_columns();
+            expect(values).toEqual(
+                (cols["ui8"] as (number | null)[]).map((x) => x ?? 0),
+            );
+            await view.delete();
+            await table.delete();
+        });
+
+        test("float32 narrows the UInt64 accumulator", async () => {
+            const table = await perspective.table(
+                arrows.all_types_arrow.slice(),
+            );
+            const view = await table.view({
+                columns: ["ui8"],
+                group_by: ["date"],
+                aggregates: { ui8: "sum" },
+            });
+
+            let valueType = "";
+            await view.with_typed_arrays(
+                { float32: true },
+                (n: string[], vals: any[]) => {
+                    valueType = vals[n.indexOf("ui8")].constructor.name;
+                },
+            );
+
+            expect(valueType).toEqual("Float32Array");
             await view.delete();
             await table.delete();
         });

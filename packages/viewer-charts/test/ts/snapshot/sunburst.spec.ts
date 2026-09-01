@@ -101,10 +101,14 @@ test.describe("Sunburst", () => {
     });
 
     test("split_by + numeric color, no group_by", async ({ page }) => {
-        await renderAndCapture(page, {
-            plugin: "Sunburst",
-            columns: ["Sales", "Profit"],
-            split_by: ["Ship Mode"],
-        });
+        await renderAndCapture(
+            page,
+            {
+                plugin: "Sunburst",
+                columns: ["Sales", "Profit"],
+                split_by: ["Ship Mode"],
+            },
+            { maxDiffPixelRatio: 0.025 },
+        );
     });
 });

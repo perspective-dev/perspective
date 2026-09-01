@@ -71,7 +71,12 @@ export function renderTreemapFrame(
             ? chart._uniqueColorLabels.size > 1
             : chart._colorMode === "numeric" &&
               chart._colorMin < chart._colorMax;
-    const legendW = legendTreeGutter(chart._pluginConfig, hasLegend, 90);
+    const legendW = legendTreeGutter(
+        chart._pluginConfig,
+        hasLegend,
+        90,
+        chart._colorMode === "series" ? chart._uniqueColorLabels.size : 0,
+    );
 
     // Scratch buffer for the ordered-layout child ids. Worst case:
     // active children at every level = store.count. Reuse the chart's
