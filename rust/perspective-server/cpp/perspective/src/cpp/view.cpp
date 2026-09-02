@@ -1804,9 +1804,6 @@ write_scalar(
         case DTYPE_INT64:
             writer.Int64(scalar.get<std::int64_t>());
             break;
-        // Unsigned dtypes must read the matching union member — get<T> is a
-        // raw union read, so the signed accessor sign-flips values with the
-        // top bit set (#1346).
         case DTYPE_UINT8:
             writer.Uint(scalar.get<std::uint8_t>());
             break;

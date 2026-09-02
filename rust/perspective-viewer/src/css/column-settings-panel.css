@@ -237,6 +237,18 @@
         content: var(--psp-label--bg-gradient--content, "Max Value");
     }
 
+    label#fg-group-label:before {
+        content: var(--psp-label--group-fg--content, "Foreground");
+    }
+
+    label#bg-group-label:before {
+        content: var(--psp-label--group-bg--content, "Background");
+    }
+
+    label#format-group-label:before {
+        content: var(--psp-label--group-format--content, "Format");
+    }
+
     label#rounding-priority-label:before {
         content: var(
             --psp-label--rounding-priority--content,

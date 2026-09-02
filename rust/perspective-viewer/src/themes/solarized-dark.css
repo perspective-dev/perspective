@@ -68,14 +68,6 @@ perspective-viewer [theme="Solarized Dark"] {
     --psp-inactive--border-color: var(--psp-inactive--color);
     --psp--background-color: #073642;
 
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
-
     /* perspective-viewer-solarized-dark--webgl */
     --psp-charts--treemap--labels: white;
     --psp-charts--treemap--hover-highlight: white;
@@ -117,14 +109,6 @@ perspective-string-column-style[theme="Solarized Dark"] {
     --psp-inactive--color: #586e75;
     --psp-inactive--border-color: var(--psp-inactive--color);
     --psp--background-color: #073642;
-
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
 
     background-color: #073642;
 }

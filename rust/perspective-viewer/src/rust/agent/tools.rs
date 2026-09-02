@@ -709,6 +709,9 @@ fn control_schema_entries(spec: &ControlSpec) -> Vec<(String, Value)> {
             "aggregate_depth".to_owned(),
             json!({ "type": "integer", "description": "Group-by rollup depth override" }),
         )],
+        ControlSpec::Group { fields, .. } => {
+            fields.iter().flat_map(control_schema_entries).collect()
+        },
     }
 }
 

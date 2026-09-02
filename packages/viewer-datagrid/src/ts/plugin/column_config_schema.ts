@@ -70,7 +70,8 @@ export default function column_config_schema(
         const pos_bg = this.model!._pos_bg_color[0];
         const neg_bg = this.model!._neg_bg_color[0];
 
-        fields.push({
+        const fg_fields: ControlSpec[] = [];
+        fg_fields.push({
             kind: "Enum",
             key: "number_fg_mode" satisfies keyof ColumnConfig,
             default: "color",
@@ -84,7 +85,7 @@ export default function column_config_schema(
 
         const fg_mode = (current_value?.number_fg_mode as string) ?? "color";
         if (fg_mode !== "disabled") {
-            fields.push({
+            fg_fields.push({
                 kind: "GradientStops",
                 key: "fg_colors" satisfies keyof ColumnConfig,
                 default: stopsToCss([
@@ -96,7 +97,7 @@ export default function column_config_schema(
         }
 
         if (fg_mode === "bar" || fg_mode === "label-bar") {
-            fields.push({
+            fg_fields.push({
                 kind: "Number",
                 key: "fg_gradient" satisfies keyof ColumnConfig,
                 default: column_stats?.abs_max ?? 0,
@@ -104,7 +105,10 @@ export default function column_config_schema(
             });
         }
 
-        fields.push({
+        fields.push({ kind: "Group", key: "fg", fields: fg_fields });
+
+        const bg_fields: ControlSpec[] = [];
+        bg_fields.push({
             kind: "Enum",
             key: "number_bg_mode" satisfies keyof ColumnConfig,
             default: "disabled",
@@ -119,7 +123,7 @@ export default function column_config_schema(
         const bg_mode = (current_value?.number_bg_mode as string) ?? "disabled";
         if (bg_mode !== "disabled") {
             if (bg_mode === "color") {
-                fields.push({
+                bg_fields.push({
                     kind: "GradientStops",
                     key: "bg_colors" satisfies keyof ColumnConfig,
                     default: stopsToCss([
@@ -129,7 +133,7 @@ export default function column_config_schema(
                     discrete: true,
                 });
             } else {
-                fields.push({
+                bg_fields.push({
                     kind: "GradientStops",
                     key: "bg_colors" satisfies keyof ColumnConfig,
                     default: stopsToCss([
@@ -151,13 +155,15 @@ export default function column_config_schema(
         }
 
         if (bg_mode === "gradient") {
-            fields.push({
+            bg_fields.push({
                 kind: "Number",
                 key: "bg_gradient" satisfies keyof ColumnConfig,
                 include: true,
                 default: column_stats?.abs_max ?? 0,
             });
         }
+
+        fields.push({ kind: "Group", key: "bg", fields: bg_fields });
 
         fields.push({ kind: "NumberFormat" });
     } else if (type === "date" || type === "datetime") {

@@ -168,4 +168,17 @@ perspective-dropdown {
     --psp-label--legend-x--content: "Décalage X légende";
     --psp-label--legend-y--content: "Décalage Y légende";
     --psp-label--legend-opacity--content: "Opacité de légende";
+    --psp-label--tooltip-max-column-px--content: "Largeur max. de colonne";
+    --psp-label--tooltip-opacity--content: "Opacité";
+
+    --psp-label--group-axes--content: "Axes";
+    --psp-label--group-facets--content: "Facettes";
+    --psp-label--group-glyph--content: "Glyphes";
+    --psp-label--group-density--content: "Densité";
+    --psp-label--group-basemap--content: "Fond de carte";
+    --psp-label--group-legend--content: "Légende";
+    --psp-label--group-tooltip--content: "Info-bulles";
+    --psp-label--group-fg--content: "Premier plan";
+    --psp-label--group-bg--content: "Arrière-plan";
+    --psp-label--group-format--content: "Format";
 }

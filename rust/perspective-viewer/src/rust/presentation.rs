@@ -104,6 +104,8 @@ pub struct PresentationHandle {
     open_column_settings: RefCell<OpenColumnSettings>,
     is_workspace: RefCell<Option<bool>>,
 
+    collapsed_control_groups: RefCell<HashSet<String>>,
+
     /// Drag/drop in-progress state. Empty (`NoDrag`) when no user drag is
     /// active. Mutated by `notify_drag_*` / `notify_drop`; read by component
     /// CSS-class derivations (`is_dragover`, `get_drag_column`).
@@ -191,6 +193,7 @@ impl Presentation {
             on_is_workspace_changed: Default::default(),
             is_settings_open: Default::default(),
             open_column_settings: Default::default(),
+            collapsed_control_groups: Default::default(),
             theme_config_updated: PubSub::default(),
             on_eject: PubSub::default(),
             statusbar_pointer_event: PubSub::default(),
@@ -355,6 +358,20 @@ impl Presentation {
     /// Gets a clone of the current OpenColumnSettings.
     pub fn get_open_column_settings(&self) -> OpenColumnSettings {
         self.open_column_settings.borrow().deref().clone()
+    }
+
+    pub fn is_control_group_collapsed(&self, key: &str) -> bool {
+        self.collapsed_control_groups.borrow().contains(key)
+    }
+
+    pub fn set_control_group_collapsed(&self, key: &str, collapsed: bool) {
+        if collapsed {
+            self.collapsed_control_groups
+                .borrow_mut()
+                .insert(key.to_owned());
+        } else {
+            self.collapsed_control_groups.borrow_mut().remove(key);
+        }
     }
 
     async fn init(self) -> ApiResult<()> {

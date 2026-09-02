@@ -8,25 +8,13 @@
  * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
  * ┃ This file is part of the Perspective library, distributed under the terms ┃
  * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
- * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ */
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
 
 @import "./icons.css";
 @import "./intl.css";
 
 perspective-viewer,
-/* Per-panel light-DOM descendants (the plugin + `<PanelTab>`, both carrying a
-   `theme` attribute) get the complete base too — so each panel resolves real
-   `color`/`font-family` and every `--psp-*` from its OWN theme instead of
-   inheriting the active panel's. Theme overrides refine this via the matching
-   `perspective-viewer [theme="X"]` rule.
-
-   `:where()` gives this clause ZERO specificity, so the panel's own
-   `[theme="X"]` override (specificity 0,1,1) ALWAYS wins over this default base.
-   Without it the two would tie at (0,1,1) and import order would decide — and
-   because every theme file `@import`s `defaults.css`, the base is inlined after
-   later overrides and the default would leak over the panel's theme. A
-   zero-specificity rule still beats inheritance, so the base values apply where
-   the override is silent. */
 :where(perspective-viewer [theme]),
 perspective-context-menu,
 perspective-copy-menu,
@@ -36,27 +24,6 @@ perspective-date-column-style,
 perspective-datetime-column-style,
 perspective-number-column-style,
 perspective-string-column-style {
-    /* Colors */
-    --psp--color: #161616;
-
-    color: var(--psp--color);
-
-    --psp-inactive--color: #ababab;
-    --psp-inactive--border-color: #dadada;
-    --psp-active--color: #2670a9;
-    --psp-error--color: #ff471e;
-    --psp--background-color: #ffffff;
-    --psp-icon-overflow-hint--color: rgba(0, 0, 0, 0.2);
-    --psp-select--background-color: none;
-    --psp-warning--background: #042121;
-    --psp-warning--color: #fdfffd;
-
-    /* TODO deprecate me */
-    --psp-icon-overflow-hint--color: #fdfffd;
-    /* Colors */
-    --psp-placeholder--background: #8b868045;
-
-    /* Dimensions */
     --psp-button--font-size: 16px;
     --psp-config-button--padding: 15px 8px 6px 8px;
     --psp-column-selector--font-size: 16px;
@@ -65,7 +32,6 @@ perspective-string-column-style {
     --psp-top-panel-row--display: inline-flex;
     --psp-button--min-width: 33px;
 
-    /* Fonts */
     font-family:
         "ui-monospace", "SFMono-Regular", "SF Mono", "Menlo", "Consolas",
         "Liberation Mono", monospace;
@@ -73,92 +39,9 @@ perspective-string-column-style {
         "ui-monospace", "SFMono-Regular", "SF Mono", "Menlo", "Consolas",
         "Liberation Mono", monospace;
 
-    /* Colors (select arrow defaults) */
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-
-    /* webgl */
     --psp-label--webgl-y1--content: "arrow_upward";
     --psp-label--webgl-y2--content: "arrow_downward";
-    --psp-charts--treemap-axis--lines: none;
-    --psp-charts--tooltip--background-color: rgba(155, 155, 155, 0.8);
-    --psp-charts--tooltip--color: #161616;
-    --psp-charts--tooltip--border-color: #fff;
-    --psp-charts--tooltip--box-shadow: 0 2px 4px 0 rgb(0 0 0 / 10%);
-    --psp-charts--gridline--color: #eaedef;
-    --psp-charts--axis-ticks--color: #161616;
-    --psp-charts--axis-lines--color: #c5c9d0;
-    --psp-charts--legend--background: var(--psp--background-color);
-    --psp-charts--series--color: rgba(31, 119, 180, 0.8);
-    --psp-charts--series-1--color: #0366d6;
-    --psp-charts--series-2--color: #ff7f0e;
-    --psp-charts--series-3--color: #2ca02c;
-    --psp-charts--series-4--color: #d62728;
-    --psp-charts--series-5--color: #9467bd;
-    --psp-charts--series-6--color: #8c564b;
-    --psp-charts--series-7--color: #e377c2;
-    --psp-charts--series-8--color: #7f7f7f;
-    --psp-charts--series-9--color: #bcbd22;
-    --psp-charts--series-10--color: #17becf;
-    --psp-datagrid--series-1--color: #0366d6;
-    --psp-datagrid--series-2--color: #ff7f0e;
-    --psp-datagrid--series-3--color: #2ca02c;
-    --psp-datagrid--series-4--color: #d62728;
-    --psp-datagrid--series-5--color: #9467bd;
-    --psp-datagrid--series-6--color: #8c564b;
-    --psp-datagrid--series-7--color: #e377c2;
-    --psp-datagrid--series-8--color: #7f7f7f;
-    --psp-datagrid--series-9--color: #bcbd22;
-    --psp-datagrid--series-10--color: #17becf;
-    --psp-charts--gradient--background: linear-gradient(
-        #4d342f 0%,
-        #e4521b 22.5%,
-        #feeb65 42.5%,
-        #f0f0f0 50%,
-        #dcedc8 57.5%,
-        #42b3d5 67.5%,
-        #1a237e 100%
-    );
 
-    /* Datagrid */
-    --psp-datagrid--pos-cell--color: #338dcd;
-    --psp-datagrid--neg-cell--color: #ff471e;
-
-    /* OpenLayers */
-    --psp-openlayers--tile-url: "http://{a-c}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png";
-    --psp-openlayers--element--background: #fff;
-    --psp-openlayers--category-1--color: #0366d6;
-    --psp-openlayers--category-2--color: #ff7f0e;
-    --psp-openlayers--category-3--color: #2ca02c;
-    --psp-openlayers--category-4--color: #d62728;
-    --psp-openlayers--category-5--color: #9467bd;
-    --psp-openlayers--category-6--color: #8c564b;
-    --psp-openlayers--category-7--color: #e377c2;
-    --psp-openlayers--category-8--color: #7f7f7f;
-    --psp-openlayers--category-9--color: #bcbd22;
-    --psp-openlayers--category-10--color: #17becf;
-    --psp-openlayers--gradient--background: linear-gradient(
-        #4d342f 0%,
-        #e4521b 22.5%,
-        #feeb65 42.5%,
-        #f0f0f0 50%,
-        #dcedc8 57.5%,
-        #42b3d5 67.5%,
-        #1a237e 100%
-    );
-
-    /* Completeness anchors for per-panel theming. These are color/appearance
-       vars that some themes (e.g. Pro Dark) set but the light default does not
-       — so without a base value an unthemed/light panel would *inherit* them
-       from a differently-themed (active) panel, mixing themes. `initial` makes
-       the custom property the guaranteed-invalid value: consumers fall back to
-       their own default (identical to the current unthemed rendering) AND the
-       element no longer inherits a neighboring panel's value. A theme that
-       wants a real value overrides it in its `[theme="X"]` block as usual. */
     --psp-active--background: initial;
     --psp-calendar--filter: initial;
     --psp-charts--legend--color: initial;
@@ -192,7 +75,6 @@ perspective-string-column-style {
     --psp-status-icon--psp-error--color: initial;
 }
 
-/* Modal defaults */
 perspective-context-menu,
 perspective-copy-menu,
 perspective-export-menu,

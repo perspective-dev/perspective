@@ -168,4 +168,17 @@ perspective-dropdown {
     --psp-label--legend-x--content: "Deslocamento X da legenda";
     --psp-label--legend-y--content: "Deslocamento Y da legenda";
     --psp-label--legend-opacity--content: "Opacidade da legenda";
+    --psp-label--tooltip-max-column-px--content: "Largura máxima da coluna";
+    --psp-label--tooltip-opacity--content: "Opacidade";
+
+    --psp-label--group-axes--content: "Eixos";
+    --psp-label--group-facets--content: "Facetas";
+    --psp-label--group-glyph--content: "Glifos";
+    --psp-label--group-density--content: "Densidade";
+    --psp-label--group-basemap--content: "Mapa base";
+    --psp-label--group-legend--content: "Legenda";
+    --psp-label--group-tooltip--content: "Dicas";
+    --psp-label--group-fg--content: "Primeiro plano";
+    --psp-label--group-bg--content: "Fundo";
+    --psp-label--group-format--content: "Formato";
 }

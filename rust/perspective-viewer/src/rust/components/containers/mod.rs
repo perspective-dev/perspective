@@ -13,6 +13,7 @@
 //! `containers` are generic container-like components for collections of other
 //! `Component` types.
 
+pub mod control_group;
 pub mod dragdrop_list;
 pub mod dropdown_menu;
 pub mod scroll_panel;

@@ -43,6 +43,7 @@
 
             .plugin-selector-options {
                 overflow-y: auto;
+                height: 100%;
             }
 
             &.open {

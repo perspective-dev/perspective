@@ -49,14 +49,6 @@ perspective-viewer [theme="Phosphor"] {
     --psp-warning--color: var(--theme-bg0);
     --psp-warning--background: var(--theme-amber);
 
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
-
     /* Syntax */
     --psp-code-editor--symbol--color: var(--theme-green-mid);
     --psp-code-editor--literal--color: var(--theme-green-bright);
@@ -165,12 +157,6 @@ perspective-string-column-style[theme="Phosphor"] {
     --psp-input--filter: invert(1) hue-rotate(70deg);
     --psp-warning--color: var(--theme-bg0);
     --psp-warning--background: var(--theme-amber);
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
     --psp-code-editor--symbol--color: var(--theme-green-mid);
     --psp-code-editor--literal--color: var(--theme-green-bright);
     --psp-code-editor--operator--color: var(--theme-amber);

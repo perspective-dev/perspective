@@ -100,7 +100,9 @@ const DEFAULT_MAX_COLUMNS = 10_000;
 
 //  Plugin-config field sets, by chart family.
 //
-const LEGEND_FIELDS: readonly PluginConfigField[] = [
+//  Exported for `plugin.ts`'s `PLUGIN_FIELD_GROUPS`, which sections the
+//  legend knobs into one collapsible group across every family.
+export const LEGEND_FIELDS: readonly PluginConfigField[] = [
     "legend_mode",
     "legend_size_mode",
     "legend_width_px",

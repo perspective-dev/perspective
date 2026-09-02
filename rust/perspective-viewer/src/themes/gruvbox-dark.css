@@ -38,14 +38,6 @@ perspective-viewer [theme="Gruvbox Dark"] {
     --psp-warning--color: #242526;
     --psp-warning--background: var(--psp--color);
 
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
-
     --psp-code-editor--symbol--color: white;
     --psp-code-editor--literal--color: #7dc3f0;
     --psp-code-editor--operator--color: rgb(23, 166, 123);
@@ -210,12 +202,6 @@ perspective-dropdown[theme="Gruvbox Dark"] {
     --psp-input--filter: invert(1);
     --psp-warning--color: #242526;
     --psp-warning--background: var(--psp--color);
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
     --psp-code-editor--symbol--color: white;
     --psp-code-editor--literal--color: #7dc3f0;
     --psp-code-editor--operator--color: rgb(23, 166, 123);

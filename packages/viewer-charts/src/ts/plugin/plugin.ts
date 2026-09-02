@@ -17,7 +17,7 @@ import type {
     IPerspectiveViewerPlugin,
     PluginStaticConfig,
 } from "@perspective-dev/viewer";
-import { ChartTypeConfig, PluginConfigField } from "./charts";
+import { ChartTypeConfig, LEGEND_FIELDS, PluginConfigField } from "./charts";
 import style from "../../css/perspective-viewer-charts.css";
 import {
     DEFAULT_FACET_CONFIG,
@@ -185,6 +185,59 @@ function fieldSpec(
     const spec = typeof entry === "function" ? entry() : entry;
     return { ...spec, key, default: defaults[key] };
 }
+
+/**
+ * Presentation-only sectioning of the plugin-config controls, applied by
+ * `plugin_config_schema()` over each chart type's flat
+ * `applicable_plugin_fields`. Groups render in the host's Plugin tab as
+ * default-open collapsible sections and never appear in `save()` output —
+ * the host flattens them for all key-level logic. Group `key`s resolve
+ * their visible header via `--psp-label--group-<key>--content`.
+ *
+ * Order is meaningful twice over: groups emit in this array's order
+ * (after any ungrouped fields), and each group's members emit in its
+ * `fields` order.
+ */
+const PLUGIN_FIELD_GROUPS: ReadonlyArray<{
+    key: string;
+    fields: readonly PluginConfigField[];
+}> = [
+    {
+        key: "axes",
+        fields: [
+            "auto_alt_y_axis",
+            "include_zero",
+            "domain_mode",
+            "numeric_axes",
+        ],
+    },
+    {
+        key: "facets",
+        fields: ["facet_mode", "facet_zoom_mode", "series_zoom_mode"],
+    },
+    {
+        key: "glyph",
+        fields: [
+            "line_width_px",
+            "point_size_px",
+            "band_inner_frac",
+            "bar_inner_pad",
+            "wick_width_px",
+            "ohlc_line_width_px",
+        ],
+    },
+    {
+        key: "density",
+        fields: [
+            "gradient_color_mode",
+            "gradient_radius_px",
+            "gradient_intensity",
+            "gradient_heat_max",
+        ],
+    },
+    { key: "basemap", fields: ["map_tile_provider", "map_tile_alpha"] },
+    { key: "legend", fields: LEGEND_FIELDS },
+];
 
 const GLOBAL_STYLES = (() => {
     const sheet = new CSSStyleSheet();
@@ -688,11 +741,34 @@ export class HTMLPerspectiveViewerWebGLPluginElement
         group_rollup_mode?: string;
     }) {
         const defaults = this._effectiveDefaults();
-        const fields = this._chartType.applicable_plugin_fields.map((key) =>
-            fieldSpec(key, defaults),
-        );
+        const applicable = this._chartType.applicable_plugin_fields;
+        const present = new Set(applicable);
 
-        return { fields };
+        // A group needs >= 2 applicable members to earn a section — a
+        // one-item collapsible is noise, so lone members emit flat.
+        const grouped = new Set<PluginConfigField>();
+        const groups: Array<Record<string, unknown> & { kind: string }> = [];
+        for (const group of PLUGIN_FIELD_GROUPS) {
+            const members = group.fields.filter((k) => present.has(k));
+            if (members.length >= 1) {
+                for (const k of members) {
+                    grouped.add(k);
+                }
+
+                groups.push({
+                    kind: "Group",
+                    key: group.key,
+                    fields: members.map((k) => fieldSpec(k, defaults)),
+                });
+            }
+        }
+
+        const fields: Array<Record<string, unknown> & { kind: string }> =
+            applicable
+                .filter((k) => !grouped.has(k))
+                .map((k) => fieldSpec(k, defaults));
+
+        return { fields: [...fields, ...groups] };
     }
 
     private _resolvedTheme(): Theme {

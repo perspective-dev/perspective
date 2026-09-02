@@ -230,9 +230,15 @@ where
                 <label>
                     { ctx.props().label.as_ref().map(|x| x.to_string()).unwrap_or_default() }
                 </label>
-                <div class={wrapper_class} data-value={value}>{ select }</div>
+                <div class={wrapper_class} data-value={value}>
+                    { select }
+                    <span class="select-arrow" />
+                </div>
             } else {
-                <div class={wrapper_class} data-value={value}>{ select }</div>
+                <div class={wrapper_class} data-value={value}>
+                    { select }
+                    <span class="select-arrow" />
+                </div>
             }
         }
     }

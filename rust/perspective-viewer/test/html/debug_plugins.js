@@ -38,6 +38,20 @@ class DebugStyledPlugin extends BasePlugin {
                         { value: "READ_ONLY", label: "Read-only" },
                     ],
                 },
+                {
+                    kind: "Group",
+                    key: "legend",
+                    fields: [
+                        { kind: "Bool", key: "legend_on", default: false },
+                        {
+                            kind: "Number",
+                            key: "legend_width",
+                            default: 120,
+                            min: 0,
+                            max: 512,
+                        },
+                    ],
+                },
             ],
         };
     }
@@ -62,6 +76,21 @@ class DebugStyledPlugin extends BasePlugin {
                 default: "#2771a8",
             });
             fields.push({ kind: "NumberFormat" });
+
+            fields.push({
+                kind: "Group",
+                key: "fg",
+                fields: [
+                    { kind: "Bool", key: "fg_flag", default: false },
+                    { kind: "Color", key: "fg_color", default: "#ff471e" },
+                ],
+            });
+
+            fields.push({
+                kind: "Group",
+                key: "bg",
+                fields: [{ kind: "Bool", key: "bg_flag", default: false }],
+            });
         } else if (type === "date") {
             fields.push({ kind: "DatetimeFormat" });
         } else if (type === "datetime") {

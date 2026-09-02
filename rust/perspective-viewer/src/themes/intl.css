@@ -101,6 +101,17 @@ perspective-dropdown {
     --psp-label--fractional-seconds--content: "Fractional Seconds";
     --psp-label--hours--content: "12/24 Hours";
 
+    --psp-label--group-axes--content: "Axes";
+    --psp-label--group-facets--content: "Facets";
+    --psp-label--group-glyph--content: "Glyphs";
+    --psp-label--group-density--content: "Density";
+    --psp-label--group-basemap--content: "Basemap";
+    --psp-label--group-legend--content: "Legend";
+    --psp-label--group-tooltip--content: "Tooltips";
+    --psp-label--group-fg--content: "Foreground";
+    --psp-label--group-bg--content: "Background";
+    --psp-label--group-format--content: "Format";
+
     /* Tabs */
     --psp-label--style-tab--content: "Style";
     --psp-label--attributes-tab--content: "Expression";
@@ -139,10 +150,10 @@ perspective-dropdown {
     --psp-label--chart-type--content: "Glyph type";
 
     /* Plugin settings — viewer-charts */
-    --psp-label--auto-alt-y-axis--content: "Auto dual Y axis";
-    --psp-label--facet-mode--content: "Facet mode";
-    --psp-label--facet-zoom-mode--content: "Facet zoom";
-    --psp-label--series-zoom-mode--content: "Series zoom";
+    --psp-label--auto-alt-y-axis--content: "Auto Y axis";
+    --psp-label--facet-mode--content: "Split mode";
+    --psp-label--facet-zoom-mode--content: "Zoom mode";
+    --psp-label--series-zoom-mode--content: "Series zoom mode";
     --psp-label--line-width-px--content: "Line width";
     --psp-label--point-size-px--content: "Point size";
     --psp-label--band-inner-frac--content: "Band width";
@@ -159,12 +170,14 @@ perspective-dropdown {
     --psp-label--map-tile-alpha--content: "Map opacity";
     --psp-label--numeric-axes--content: "Numeric axes";
     --psp-label--interpolate--content: "Interpolate null";
-    --psp-label--legend-mode--content: "Legend mode";
-    --psp-label--legend-size-mode--content: "Legend sizing";
-    --psp-label--legend-width-px--content: "Legend width";
-    --psp-label--legend-height-px--content: "Legend height";
-    --psp-label--legend-anchor--content: "Legend anchor";
-    --psp-label--legend-x--content: "Legend X offset";
-    --psp-label--legend-y--content: "Legend Y offset";
-    --psp-label--legend-opacity--content: "Legend opacity";
+    --psp-label--legend-mode--content: "Placement mode";
+    --psp-label--legend-size-mode--content: "Sizing mode";
+    --psp-label--legend-width-px--content: "Width";
+    --psp-label--legend-height-px--content: "Height";
+    --psp-label--legend-anchor--content: "Anchor";
+    --psp-label--legend-x--content: "X offset";
+    --psp-label--legend-y--content: "Y offset";
+    --psp-label--legend-opacity--content: "Opacity";
+    --psp-label--tooltip-max-column-px--content: "Max column width";
+    --psp-label--tooltip-opacity--content: "Opacity";
 }

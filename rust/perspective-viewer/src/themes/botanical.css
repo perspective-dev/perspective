@@ -8,7 +8,8 @@
  * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
  * ┃ This file is part of the Perspective library, distributed under the terms ┃
  * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
- * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ */
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
 
 @import "./defaults.css";
 
@@ -38,14 +39,6 @@ perspective-viewer [theme="Botanical"] {
     --psp-input--filter: invert(1);
     --psp-warning--color: #1a2e1a;
     --psp-warning--background: var(--psp--color);
-
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
 
     /* Syntax */
     --psp-code-editor--symbol--color: #e0ead8;
@@ -127,14 +120,6 @@ perspective-string-column-style[theme="Botanical"] {
     --psp-input--filter: invert(1);
     --psp-warning--color: #1a2e1a;
     --psp-warning--background: var(--psp--color);
-
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
 
     --psp-code-editor--symbol--color: #e0ead8;
     --psp-code-editor--literal--color: #a8d8a0;

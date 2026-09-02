@@ -302,7 +302,7 @@ impl CustomNumberFormatConfig {
             minimum_significant_digits: show_sig
                 .then_some(minimum_significant_digits.unwrap_or(1.)),
             maximum_significant_digits: show_sig
-                .then_some(minimum_significant_digits.unwrap_or(21.)),
+                .then_some(maximum_significant_digits.unwrap_or(21.)),
             rounding_priority: self
                 .rounding_priority
                 .filter(|val| *val != RoundingPriority::default()),

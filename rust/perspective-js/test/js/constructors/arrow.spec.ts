@@ -177,10 +177,12 @@ test.describe("Arrow", function () {
             await table.delete();
         });
 
-        // https://github.com/perspective-dev/perspective/issues/1346
         test("Unsigned and 64-bit integer columns are not sign-flipped by JSON output", async function () {
             const tableData = arrow.tableFromArrays({
-                u8: arrow.vectorFromArray([0, 127, 128, 255], new arrow.Uint8()),
+                u8: arrow.vectorFromArray(
+                    [0, 127, 128, 255],
+                    new arrow.Uint8(),
+                ),
                 u16: arrow.vectorFromArray(
                     [0, 32767, 32768, 65535],
                     new arrow.Uint16(),
@@ -194,7 +196,12 @@ test.describe("Arrow", function () {
                     new arrow.Uint64(),
                 ),
                 i64: arrow.vectorFromArray(
-                    [-9007199254740991n, -2147483649n, 4166343120n, 9007199254740991n],
+                    [
+                        -9007199254740991n,
+                        -2147483649n,
+                        4166343120n,
+                        9007199254740991n,
+                    ],
                     new arrow.Int64(),
                 ),
             });
@@ -216,7 +223,6 @@ test.describe("Arrow", function () {
             await table.delete();
         });
 
-        // https://github.com/perspective-dev/perspective/issues/1346
         test("Unsigned group-by keys are not sign-flipped in __ROW_PATH__", async function () {
             const tableData = arrow.tableFromArrays({
                 u32: arrow.vectorFromArray(

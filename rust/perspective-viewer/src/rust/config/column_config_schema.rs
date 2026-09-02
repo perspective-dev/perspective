@@ -41,6 +41,21 @@ impl ColumnConfigSchema {
         }
         out
     }
+
+    pub fn leaf_fields(&self) -> Vec<&ControlSpec> {
+        fn collect<'a>(fields: &'a [ControlSpec], out: &mut Vec<&'a ControlSpec>) {
+            for spec in fields {
+                match spec {
+                    ControlSpec::Group { fields, .. } => collect(fields, out),
+                    leaf => out.push(leaf),
+                }
+            }
+        }
+
+        let mut out = vec![];
+        collect(&self.fields, &mut out);
+        out
+    }
 }
 
 /// Discriminated union of widget kinds the viewer can render. Composite
@@ -111,6 +126,12 @@ pub enum ControlSpec {
     },
     NumberFormat,
     AggregateDepth,
+
+    Group {
+        key: String,
+        #[serde(default)]
+        fields: Vec<ControlSpec>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -165,37 +186,90 @@ pub fn discrete_pair(stops: Vec<GradientStopSpec>) -> Vec<GradientStopSpec> {
 }
 
 impl ColumnConfigSchema {
+    pub fn canonicalize(self) -> Self {
+        self.canonicalize_defaults().group_format_controls()
+    }
+
+    pub fn group_format_controls(mut self) -> Self {
+        fn is_format(spec: &ControlSpec) -> bool {
+            matches!(
+                spec,
+                ControlSpec::NumberFormat
+                    | ControlSpec::DatetimeFormat
+                    | ControlSpec::StringFormat
+            )
+        }
+
+        fn walk(fields: &mut Vec<ControlSpec>) {
+            for spec in fields.iter_mut() {
+                if let ControlSpec::Group { key, fields } = spec
+                    && key != "format"
+                {
+                    walk(fields);
+                }
+            }
+
+            let first = fields.iter().position(is_format);
+            if let Some(first) = first {
+                let mut formats = vec![];
+                let mut i = first;
+                while i < fields.len() {
+                    if is_format(&fields[i]) {
+                        formats.push(fields.remove(i));
+                    } else {
+                        i += 1;
+                    }
+                }
+
+                fields.insert(first, ControlSpec::Group {
+                    key: "format".to_owned(),
+                    fields: formats,
+                });
+            }
+        }
+
+        walk(&mut self.fields);
+        self
+    }
+
     /// Canonicalize every CSS-valued default at schema ingest, dropping
     /// (and logging) fields whose default fails its kind's reader.
     pub fn canonicalize_defaults(mut self) -> Self {
-        self.fields.retain_mut(|spec| {
-            let (kind, key, default) = match spec {
-                ControlSpec::Color { key, default } => (CssKind::Color, key, default),
-                ControlSpec::Palette { key, default, .. } => (CssKind::Palette, key, default),
-                ControlSpec::GradientStops { key, default, .. } => {
-                    (CssKind::Gradient, key, default)
-                },
-                _ => return true,
-            };
+        fn canonicalize_specs(fields: &mut Vec<ControlSpec>) {
+            fields.retain_mut(|spec| {
+                let (kind, key, default) = match spec {
+                    ControlSpec::Group { fields, .. } => {
+                        canonicalize_specs(fields);
+                        return !fields.is_empty();
+                    },
+                    ControlSpec::Color { key, default } => (CssKind::Color, key, default),
+                    ControlSpec::Palette { key, default, .. } => (CssKind::Palette, key, default),
+                    ControlSpec::GradientStops { key, default, .. } => {
+                        (CssKind::Gradient, key, default)
+                    },
+                    _ => return true,
+                };
 
-            match kind.canonicalize(default) {
-                Ok(canonical) => {
-                    *default = canonical;
-                    true
-                },
-                Err(error) => {
-                    tracing::error!("Dropping `{key}` — invalid schema default: {error}");
-                    false
-                },
-            }
-        });
+                match kind.canonicalize(default) {
+                    Ok(canonical) => {
+                        *default = canonical;
+                        true
+                    },
+                    Err(error) => {
+                        tracing::error!("Dropping `{key}` — invalid schema default: {error}");
+                        false
+                    },
+                }
+            });
+        }
 
+        canonicalize_specs(&mut self.fields);
         self
     }
 
     /// The CSS kind of the control owning `key`, if it is CSS-valued.
     pub fn css_kind_of(&self, key: &str) -> Option<CssKind> {
-        self.fields.iter().find_map(|spec| match spec {
+        self.leaf_fields().into_iter().find_map(|spec| match spec {
             ControlSpec::Color { key: k, .. } if k == key => Some(CssKind::Color),
             ControlSpec::Palette { key: k, .. } if k == key => Some(CssKind::Palette),
             ControlSpec::GradientStops { key: k, .. } if k == key => Some(CssKind::Gradient),
@@ -225,6 +299,9 @@ impl ControlSpec {
             | ControlSpec::Color { key, .. }
             | ControlSpec::Palette { key, .. }
             | ControlSpec::GradientStops { key, .. } => vec![key.as_str()],
+            ControlSpec::Group { fields, .. } => {
+                fields.iter().flat_map(|f| f.serialized_keys()).collect()
+            },
         }
     }
 }
@@ -251,4 +328,164 @@ pub fn filter_to_schema(
         .filter(|(k, _)| active_keys.contains(k.as_str()))
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn color(key: &str, default: &str) -> ControlSpec {
+        ControlSpec::Color {
+            key: key.to_owned(),
+            default: default.to_owned(),
+        }
+    }
+
+    fn flag(key: &str) -> ControlSpec {
+        ControlSpec::Bool {
+            key: key.to_owned(),
+            default: false,
+        }
+    }
+
+    fn group(key: &str, fields: Vec<ControlSpec>) -> ControlSpec {
+        ControlSpec::Group {
+            key: key.to_owned(),
+            fields,
+        }
+    }
+
+    #[test]
+    fn group_deserializes_recursively() {
+        let schema: ColumnConfigSchema = serde_json::from_value(json!({
+            "fields": [{
+                "kind": "Group",
+                "key": "legend",
+                "fields": [
+                    { "kind": "Bool", "key": "legend_on", "default": false },
+                    {
+                        "kind": "Group",
+                        "key": "inner",
+                        "fields": [{ "kind": "Color", "key": "color", "default": "#ff0000" }]
+                    }
+                ]
+            }]
+        }))
+        .unwrap();
+
+        let keys = schema.active_keys();
+        assert_eq!(
+            keys,
+            HashSet::from(["legend_on".to_owned(), "color".to_owned()])
+        );
+
+        let leaves = schema.leaf_fields();
+        assert_eq!(leaves.len(), 2);
+        assert!(
+            leaves
+                .iter()
+                .all(|s| !matches!(s, ControlSpec::Group { .. }))
+        );
+    }
+
+    #[test]
+    fn grouped_schema_is_equivalent_to_flat() {
+        let flat = ColumnConfigSchema {
+            fields: vec![flag("stack"), color("color", "#0366d6")],
+        };
+
+        let grouped = ColumnConfigSchema {
+            fields: vec![group("series", vec![
+                flag("stack"),
+                color("color", "#0366d6"),
+            ])],
+        };
+
+        assert_eq!(flat.active_keys(), grouped.active_keys());
+        assert_eq!(flat.css_kind_of("color"), grouped.css_kind_of("color"));
+        assert_eq!(flat.css_kind_of("stack"), grouped.css_kind_of("stack"));
+    }
+
+    #[test]
+    fn format_controls_group_and_merge() {
+        let schema = ColumnConfigSchema {
+            fields: vec![
+                ControlSpec::NumberFormat,
+                flag("flag"),
+                ControlSpec::StringFormat,
+            ],
+        }
+        .group_format_controls();
+
+        assert_eq!(schema.fields.len(), 2);
+        let ControlSpec::Group { key, fields } = &schema.fields[0] else {
+            panic!("expected format group first");
+        };
+
+        assert_eq!(key, "format");
+        assert!(matches!(fields[0], ControlSpec::NumberFormat));
+        assert!(matches!(fields[1], ControlSpec::StringFormat));
+        assert!(matches!(&schema.fields[1], ControlSpec::Bool { .. }));
+
+        assert_eq!(
+            schema.active_keys(),
+            HashSet::from([
+                "number_format".to_owned(),
+                "format".to_owned(),
+                "flag".to_owned()
+            ])
+        );
+    }
+
+    #[test]
+    fn format_grouping_recurses_but_never_double_wraps() {
+        let schema = ColumnConfigSchema {
+            fields: vec![
+                group("format", vec![ControlSpec::NumberFormat]),
+                group("styling", vec![flag("x"), ControlSpec::DatetimeFormat]),
+            ],
+        }
+        .group_format_controls();
+
+        let ControlSpec::Group { key, fields } = &schema.fields[0] else {
+            panic!("expected group");
+        };
+
+        assert_eq!(key, "format");
+        assert!(matches!(fields[0], ControlSpec::NumberFormat));
+
+        let ControlSpec::Group { fields, .. } = &schema.fields[1] else {
+            panic!("expected group");
+        };
+
+        assert!(matches!(
+            &fields[1],
+            ControlSpec::Group { key, fields }
+                if key == "format" && matches!(fields[0], ControlSpec::DatetimeFormat)
+        ));
+    }
+
+    #[test]
+    fn canonicalize_defaults_recurses_and_drops_empty_groups() {
+        let schema = ColumnConfigSchema {
+            fields: vec![
+                group("ok", vec![color("good", "RGB(255,0,0)"), flag("flag")]),
+                group("doomed", vec![color("bad", "not-a-color")]),
+            ],
+        }
+        .canonicalize_defaults();
+
+        assert_eq!(schema.fields.len(), 1);
+        let ControlSpec::Group { key, fields } = &schema.fields[0] else {
+            panic!("expected group");
+        };
+
+        assert_eq!(key, "ok");
+        assert!(matches!(
+            &fields[0],
+            ControlSpec::Color { default, .. } if default == "#ff0000"
+        ));
+    }
 }
