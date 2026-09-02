@@ -14,7 +14,7 @@
 // OpenAI-compatible engine as `agent.spec.ts`. The chat panel is a pure view
 // over the shared agent slot, so the transcript must survive tab switches.
 
-import { test, expect } from "../helpers.ts";
+import { test, expect, compareInnerHTMLToSnapshot } from "../helpers.ts";
 
 test.beforeEach(async ({ page }) => {
     await page.goto("/rust/perspective-viewer/test/html/superstore.html");
@@ -153,18 +153,11 @@ test.describe("llm-agent chat panel", () => {
         await input.press("Enter");
 
         const log = page.locator("perspective-viewer #chat_log");
-        await expect(log.locator(".chat-user")).toHaveText(
-            "Show me sales by state",
-        );
-
         await expect(
             log.locator(".chat-assistant:not(.chat-pending)"),
         ).toHaveText("Grouped by state.", { timeout: 10000 });
 
-        await expect(log.locator(".chat-tool-chip")).toHaveText([
-            "get_schema",
-            "set_view_config",
-        ]);
+        await compareInnerHTMLToSnapshot(log);
 
         const config = await page.evaluate(async () => {
             return await document.querySelector("perspective-viewer").save();
@@ -185,7 +178,7 @@ test.describe("llm-agent chat panel", () => {
         await expect(log.locator(".chat-pending")).toBeVisible();
         await page.locator("perspective-viewer #chat_stop_button").click();
         await expect(log.locator(".chat-error")).toHaveText("Stopped");
-        await expect(log.locator(".chat-pending")).toHaveCount(0);
+        await compareInnerHTMLToSnapshot(log, ["stopped"]);
         await expect(input).toBeEnabled();
     });
 
@@ -218,8 +211,7 @@ test.describe("llm-agent chat panel", () => {
         );
 
         await expect(message).toHaveText("Streaming done");
-        await expect(message.locator("strong")).toHaveText("Streaming");
-        await expect(log.locator(".chat-streaming")).toHaveCount(0);
+        await compareInnerHTMLToSnapshot(log, ["final"]);
     });
 
     test("reasoning follows its tail until the reader scrolls away", async ({
@@ -301,8 +293,6 @@ test.describe("llm-agent chat panel", () => {
             log.locator(".chat-assistant:not(.chat-pending)"),
         ).toHaveText("That expression is invalid.");
 
-        const chip = log.locator(".chat-tool-chip-error");
-        await expect(chip).toHaveText("set_view_config");
-        await expect(chip).toHaveAttribute("title", /\n\n.*expressions/s);
+        await compareInnerHTMLToSnapshot(log);
     });
 });

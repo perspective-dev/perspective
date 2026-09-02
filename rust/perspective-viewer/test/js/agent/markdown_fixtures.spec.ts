@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { test, expect } from "../helpers.ts";
+import { test, expect, compareInnerHTMLToSnapshot } from "../helpers.ts";
 
 test.beforeEach(async ({ page }) => {
     await page.goto("/rust/perspective-viewer/test/html/superstore.html");
@@ -90,25 +90,6 @@ test.describe("llm-agent markdown fixtures", () => {
                 "3. Rendered the chart",
         );
 
-        await expect(message.locator("h2")).toHaveText("Analysis");
-        const items = message.locator("ol > li");
-        await expect(items).toHaveCount(3);
-        await expect(items.nth(0).locator("code")).toHaveText("get_schema");
-        await expect(items.nth(1).locator("pre code")).toHaveText(
-            '{ "group_by": ["State"] }\n',
-        );
-
-        await expect(items.nth(1).locator("pre code")).toHaveAttribute(
-            "data-lang",
-            "json",
-        );
-
-        // Code blocks scroll horizontally, so they take the viewer's
-        // scrollbar styling rather than the browser default.
-        await expect(items.nth(1).locator("pre")).toHaveClass(/\bscrollable\b/);
-        const inner = items.nth(1).locator("ul > li");
-        await expect(inner).toHaveCount(2);
-        await expect(inner.nth(0).locator("strong")).toHaveText("State");
-        await expect(inner.nth(1).locator("em")).toHaveText("descending");
+        await compareInnerHTMLToSnapshot(message);
     });
 });
