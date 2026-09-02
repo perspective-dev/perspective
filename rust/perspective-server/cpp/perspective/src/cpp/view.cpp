@@ -1792,21 +1792,32 @@ write_scalar(
         case DTYPE_BOOL:
             writer.Bool(scalar.get<bool>());
             break;
-        case DTYPE_UINT8:
         case DTYPE_INT8:
-            writer.Int(scalar.get<int8_t>());
+            writer.Int(scalar.get<std::int8_t>());
+            break;
+        case DTYPE_INT16:
+            writer.Int(scalar.get<std::int16_t>());
+            break;
+        case DTYPE_INT32:
+            writer.Int(scalar.get<std::int32_t>());
+            break;
+        case DTYPE_INT64:
+            writer.Int64(scalar.get<std::int64_t>());
+            break;
+        // Unsigned dtypes must read the matching union member — get<T> is a
+        // raw union read, so the signed accessor sign-flips values with the
+        // top bit set (#1346).
+        case DTYPE_UINT8:
+            writer.Uint(scalar.get<std::uint8_t>());
             break;
         case DTYPE_UINT16:
-        case DTYPE_INT16:
-            writer.Int(scalar.get<int16_t>());
+            writer.Uint(scalar.get<std::uint16_t>());
             break;
         case DTYPE_UINT32:
-        case DTYPE_INT32:
-            writer.Int(scalar.get<int32_t>());
+            writer.Uint(scalar.get<std::uint32_t>());
             break;
         case DTYPE_UINT64:
-        case DTYPE_INT64:
-            writer.Int64(scalar.get<int64_t>());
+            writer.Uint64(scalar.get<std::uint64_t>());
             break;
         case DTYPE_FLOAT32:
             if (scalar.is_nan()) {
