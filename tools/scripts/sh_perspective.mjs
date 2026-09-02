@@ -13,7 +13,8 @@
 import * as dotenv from "dotenv";
 import * as path from "path";
 import * as fs from "fs";
-import { execSync } from "child_process";
+import { spawn } from "child_process";
+import * as os from "os";
 
 import "zx/globals";
 
@@ -105,11 +106,73 @@ export function get_scope() {
     return packages;
 }
 
+const CANCEL_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
+
+const CANCEL_GRACE_MS = 4_000;
+
+function run_cancellable(cmd, args) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(cmd, args, {
+            stdio: ["ignore", "inherit", "inherit"],
+            detached: true,
+        });
+
+        let cancelled;
+        let escalation;
+        const signal_group = (signal) => {
+            try {
+                process.kill(-child.pid, signal);
+            } catch {}
+        };
+
+        const cancel = (signal) => {
+            if (cancelled) {
+                signal_group("SIGKILL");
+                return;
+            }
+
+            cancelled = signal;
+            signal_group("SIGTERM");
+            escalation = setTimeout(
+                () => signal_group("SIGKILL"),
+                CANCEL_GRACE_MS,
+            );
+            escalation.unref();
+        };
+
+        for (const signal of CANCEL_SIGNALS) {
+            process.on(signal, cancel);
+        }
+
+        child.on("error", reject);
+        child.on("exit", (code, signal) => {
+            clearTimeout(escalation);
+            for (const s of CANCEL_SIGNALS) {
+                process.off(s, cancel);
+            }
+
+            if (cancelled) {
+                process.kill(process.pid, cancelled);
+            } else if (signal) {
+                process.exit(128 + (os.constants.signals[signal] ?? 0));
+            } else if (code !== 0) {
+                process.exit(code);
+            } else {
+                resolve();
+            }
+        });
+    });
+}
+
 export const run_with_scope = async function run_recursive(strings, ...args) {
     let scope = get_scope();
     const cmd = strings[0].split(" ")[0];
-    const filters = scope.map((x) => `--filter ${x} --if-present`).join(" ");
-    execSync(`pnpm run --sequential --recursive ${filters} ${cmd}`, {
-        stdio: "inherit",
-    });
+    const filters = scope.flatMap((x) => ["--filter", x, "--if-present"]);
+    await run_cancellable("pnpm", [
+        "run",
+        "--sequential",
+        "--recursive",
+        ...filters,
+        cmd,
+    ]);
 };
