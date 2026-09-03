@@ -193,10 +193,7 @@ fn render_specs(specs: Vec<ControlSpec>, ctx: &FieldRenderCtx) -> Vec<Html> {
             ControlSpec::Group { key, fields } => {
                 let children = render_specs(fields, ctx);
                 (!children.is_empty()).then(|| {
-                    let open = !ctx
-                        .props
-                        .presentation
-                        .is_control_group_collapsed(&key);
+                    let open = !ctx.props.presentation.is_control_group_collapsed(&key);
 
                     html! {
                         <ControlGroup

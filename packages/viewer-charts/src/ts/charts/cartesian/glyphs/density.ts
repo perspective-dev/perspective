@@ -309,12 +309,12 @@ export class DensityGlyph implements Glyph {
     buildTooltipLines(
         chart: CartesianChart,
         flatIdx: number,
-    ): Promise<string[]> {
+    ): Promise<string[][]> {
         return buildPointRowTooltipLines(chart, flatIdx);
     }
 
     tooltipOptions() {
-        return { crosshair: true, highlightRadius: 0 };
+        return { crosshair: true, highlightRadius: 0, axisIndicators: true };
     }
 
     destroy(chart: CartesianChart): void {

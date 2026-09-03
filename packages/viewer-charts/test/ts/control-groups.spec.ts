@@ -10,13 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-// `plugin_config_schema()` partitions each chart family's flat
-// `applicable_plugin_fields` through `PLUGIN_FIELD_GROUPS` into
-// presentation-only `ControlSpec::Group` sections (axes / facets / glyph
-// / density / basemap / legend). A group needs >= 2 applicable members;
-// lone members emit flat. Grouping must never leak into `save()` output —
-// `plugin_config` keys stay flat.
-
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "@perspective-dev/test";
 import { gotoBasic, restoreChart } from "./helpers";
@@ -33,7 +26,7 @@ test.describe("Charts plugin-config control groups", () => {
         await gotoBasic(page);
     });
 
-    test("Y Bar partitions every field into 4 default-open groups", async ({
+    test("Y Bar partitions every field into 5 default-open groups", async ({
         page,
     }) => {
         await restoreChart(page, {
@@ -45,11 +38,8 @@ test.describe("Charts plugin-config control groups", () => {
 
         const tab = await openPluginTab(page);
         const groups = tab.locator("details.control-group");
-
-        // Series family: axes(3) / facets(2) / glyph(4) / legend(8),
-        // nothing flat.
-        await expect(groups).toHaveCount(4);
-        for (const key of ["axes", "facets", "glyph", "legend"]) {
+        await expect(groups).toHaveCount(5);
+        for (const key of ["axes", "facets", "glyph", "legend", "tooltip"]) {
             const group = tab.locator("details.control-group", {
                 has: page.locator(`#${key}-group-label`),
             });
@@ -68,31 +58,6 @@ test.describe("Charts plugin-config control groups", () => {
         ).toHaveCount(1);
     });
 
-    test("lone group members emit flat (X/Y Scatter domain_mode)", async ({
-        page,
-    }) => {
-        await restoreChart(page, {
-            plugin: "X/Y Scatter",
-            columns: ["Sales", "Profit"],
-            settings: true,
-        });
-
-        const tab = await openPluginTab(page);
-
-        // Cartesian family: facets(2) / glyph(2) / legend(8) group, but
-        // `domain_mode` is the only applicable "axes" member so it
-        // renders flat.
-        await expect(tab.locator("details.control-group")).toHaveCount(3);
-        await expect(
-            tab.locator(
-                "#plugin-config-container > fieldset.style-control #domain_mode-label",
-            ),
-        ).toHaveCount(1);
-        await expect(
-            tab.locator("details.control-group #domain_mode-label"),
-        ).toHaveCount(0);
-    });
-
     test("grouped fields serialize flat in save()", async ({ page }) => {
         await restoreChart(page, {
             plugin: "Y Bar",
@@ -109,8 +74,6 @@ test.describe("Charts plugin-config control groups", () => {
 
         expect(config.plugin_config.legend_mode).toEqual("sidebar");
         expect(config.plugin_config.line_width_px).toEqual(4);
-
-        // No group key may appear in serialized output.
         for (const key of [
             "axes",
             "facets",

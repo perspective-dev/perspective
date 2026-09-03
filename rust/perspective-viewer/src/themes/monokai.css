@@ -23,6 +23,7 @@ perspective-viewer [theme="Monokai"] {
     /* perspective-viewer-pro-dark--colors (overrides) */
     background-color: #242526;
     color: white;
+    color-scheme: dark;
     --psp--color: white;
     --psp-active--color: #2770a9;
     --psp-error--color: #ff9485;
@@ -190,6 +191,7 @@ perspective-string-column-style[theme="Monokai"] {
     /* perspective-viewer-pro-dark--colors (overrides) */
     background-color: #242526;
     color: white;
+    color-scheme: dark;
     --psp--color: white;
     --psp-active--color: #2770a9;
     --psp-error--color: #ff9485;

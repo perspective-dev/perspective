@@ -178,7 +178,7 @@ perspective-dropdown {
     --psp-label--group-basemap--content: "ベースマップ";
     --psp-label--group-legend--content: "凡例";
     --psp-label--group-tooltip--content: "ツールチップ";
-    --psp-label--group-fg--content: "前景";
-    --psp-label--group-bg--content: "背景";
+    --psp-label--group-color--content: "色";
     --psp-label--group-format--content: "書式";
+    --psp-label--column-size-override--content: "列の幅";
 }

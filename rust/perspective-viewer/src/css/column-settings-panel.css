@@ -237,16 +237,19 @@
         content: var(--psp-label--bg-gradient--content, "Max Value");
     }
 
-    label#fg-group-label:before {
-        content: var(--psp-label--group-fg--content, "Foreground");
-    }
-
-    label#bg-group-label:before {
-        content: var(--psp-label--group-bg--content, "Background");
+    label#color-group-label:before {
+        content: var(--psp-label--group-color--content, "Color");
     }
 
     label#format-group-label:before {
         content: var(--psp-label--group-format--content, "Format");
+    }
+
+    label#column_size_override-label:before {
+        content: var(
+            --psp-label--column-size-override--content,
+            "Column Width"
+        );
     }
 
     label#rounding-priority-label:before {

@@ -23,6 +23,7 @@ perspective-viewer [theme="Solarized Dark"] {
     /* perspective-viewer-solarized--colors */
     color: #586e75;
     background-color: #eee8d5;
+    color-scheme: dark;
     --psp--color: #586e75;
     --psp-active--color: #268bd2;
     --psp-error--color: #cb4b16;
@@ -93,6 +94,7 @@ perspective-number-column-style[theme="Solarized Dark"],
 perspective-string-column-style[theme="Solarized Dark"] {
     /* perspective-viewer-solarized--colors */
     color: #586e75;
+    color-scheme: dark;
     --psp--color: #586e75;
     --psp-active--color: #268bd2;
     --psp-error--color: #cb4b16;

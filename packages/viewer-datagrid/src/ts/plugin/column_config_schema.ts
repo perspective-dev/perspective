@@ -29,16 +29,6 @@ export interface ColumnConfigSchema {
 /**
  * Plugin schema for the Datagrid column-settings sidebar. Returns the
  * controls the viewer should render in the Style tab for a given column.
- *
- * Each entry in `fields` is a `ControlSpec` discriminated by `kind`.
- * Composite kinds (`NumberStyle`, `DatetimeFormat`, `StringFormat`,
- * `NumberFormat`, `AggregateDepth`) own a fixed key namespace and
- * carry only their `default`. Primitive kinds (`Enum`, `Bool`, `Color`,
- * etc.) carry their own `key` (storage) and `label` (UI) inline.
- *
- * Aggregate Depth is plugin-owned — surfaced only inside the Datagrid
- * because rollup-mode pivots are a Datagrid concern. Emitted only when
- * the active view has a non-empty `group_by` and rollup mode is `Rollup`.
  */
 interface ColumnStats {
     abs_max?: number;
@@ -54,7 +44,6 @@ export default function column_config_schema(
     column_stats?: ColumnStats,
 ): ColumnConfigSchema {
     const fields: ControlSpec[] = [];
-
     if ((viewer_config?.split_by?.length ?? 0) === 0) {
         fields.push({
             kind: "Number",
@@ -64,12 +53,19 @@ export default function column_config_schema(
         });
     }
 
+    const group_by = viewer_config?.group_by ?? [];
+    const is_rollup =
+        (viewer_config?.group_rollup_mode ?? "rollup") === "rollup";
+
+    if (group_by.length > 0 && is_rollup) {
+        fields.push({ kind: "AggregateDepth" });
+    }
+
     if (type === "integer" || type === "float") {
         const pos_fg = this.model!._pos_fg_color[0];
         const neg_fg = this.model!._neg_fg_color[0];
         const pos_bg = this.model!._pos_bg_color[0];
         const neg_bg = this.model!._neg_bg_color[0];
-
         const fg_fields: ControlSpec[] = [];
         fg_fields.push({
             kind: "Enum",
@@ -104,8 +100,6 @@ export default function column_config_schema(
                 include: true,
             });
         }
-
-        fields.push({ kind: "Group", key: "fg", fields: fg_fields });
 
         const bg_fields: ControlSpec[] = [];
         bg_fields.push({
@@ -163,12 +157,14 @@ export default function column_config_schema(
             });
         }
 
-        fields.push({ kind: "Group", key: "bg", fields: bg_fields });
+        fields.push({
+            kind: "Group",
+            key: "color",
+            fields: [...fg_fields, ...bg_fields],
+        });
 
         fields.push({ kind: "NumberFormat" });
     } else if (type === "date" || type === "datetime") {
-        fields.push({ kind: "DatetimeFormat" });
-
         fields.push({
             kind: "Enum",
             key: "datetime_color_mode" satisfies keyof ColumnConfig,
@@ -190,9 +186,9 @@ export default function column_config_schema(
                 default: this.model!._color[0],
             });
         }
-    } else if (type === "string") {
-        fields.push({ kind: "StringFormat" });
 
+        fields.push({ kind: "DatetimeFormat" });
+    } else if (type === "string") {
         fields.push({
             kind: "Enum",
             key: "string_color_mode" satisfies keyof ColumnConfig,
@@ -219,14 +215,8 @@ export default function column_config_schema(
                 default: this.model!._color[0],
             });
         }
-    }
 
-    const group_by = viewer_config?.group_by ?? [];
-    const is_rollup =
-        (viewer_config?.group_rollup_mode ?? "rollup") === "rollup";
-
-    if (group_by.length > 0 && is_rollup) {
-        fields.push({ kind: "AggregateDepth" });
+        fields.push({ kind: "StringFormat" });
     }
 
     return { fields };

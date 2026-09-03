@@ -125,17 +125,17 @@ export class LineGlyph implements Glyph {
     async buildTooltipLines(
         chart: CartesianChart,
         flatIdx: number,
-    ): Promise<string[]> {
-        const lines: string[] = [];
+    ): Promise<string[][]> {
+        const grid: string[][] = [];
         if (!chart._xData || !chart._yData) {
-            return lines;
+            return grid;
         }
 
         if (chart._splitGroups.length > 0 && chart._seriesCapacity > 0) {
             const seriesIdx = Math.floor(flatIdx / chart._seriesCapacity);
             const sg = chart._splitGroups[seriesIdx];
             if (sg) {
-                lines.push(sg.prefix);
+                grid.push([sg.prefix]);
             }
         }
 
@@ -147,20 +147,20 @@ export class LineGlyph implements Glyph {
         const xFormatted = xIsDate
             ? formatDateTickValue(xVal)
             : formatTickValue(xVal);
-        lines.push(`${chart._xLabel || "Row"}: ${xFormatted}`);
+        grid.push([chart._xLabel || "Row", xFormatted]);
 
         const yType = chart._columnTypes[chart._yLabel] || "";
         const yIsDate = yType === "date" || yType === "datetime";
         const yFormatted = yIsDate
             ? formatDateTickValue(yVal)
             : formatTickValue(yVal);
-        lines.push(`${chart._yLabel}: ${yFormatted}`);
+        grid.push([chart._yLabel, yFormatted]);
 
-        return lines;
+        return grid;
     }
 
     tooltipOptions() {
-        return { crosshair: true, highlightRadius: 5 };
+        return { crosshair: true, highlightRadius: 5, axisIndicators: true };
     }
 
     destroy(chart: CartesianChart): void {

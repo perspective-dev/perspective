@@ -17,7 +17,12 @@ import type {
     IPerspectiveViewerPlugin,
     PluginStaticConfig,
 } from "@perspective-dev/viewer";
-import { ChartTypeConfig, LEGEND_FIELDS, PluginConfigField } from "./charts";
+import {
+    ChartTypeConfig,
+    LEGEND_FIELDS,
+    TOOLTIP_FIELDS,
+    PluginConfigField,
+} from "./charts";
 import style from "../../css/perspective-viewer-charts.css";
 import {
     DEFAULT_FACET_CONFIG,
@@ -175,6 +180,8 @@ const FIELD_SCHEMAS: Record<PluginConfigField, FieldSpec | (() => FieldSpec)> =
         legend_x: { kind: "Number", min: 0, max: 1, step: 0.01 },
         legend_y: { kind: "Number", min: 0, max: 1, step: 0.01 },
         legend_opacity: { kind: "Number", min: 0, max: 1, step: 0.05 },
+        tooltip_max_column_px: { kind: "Number", min: 40, max: 512, step: 1 },
+        tooltip_opacity: { kind: "Number", min: 0, max: 1, step: 0.05 },
     };
 
 function fieldSpec(
@@ -186,18 +193,6 @@ function fieldSpec(
     return { ...spec, key, default: defaults[key] };
 }
 
-/**
- * Presentation-only sectioning of the plugin-config controls, applied by
- * `plugin_config_schema()` over each chart type's flat
- * `applicable_plugin_fields`. Groups render in the host's Plugin tab as
- * default-open collapsible sections and never appear in `save()` output —
- * the host flattens them for all key-level logic. Group `key`s resolve
- * their visible header via `--psp-label--group-<key>--content`.
- *
- * Order is meaningful twice over: groups emit in this array's order
- * (after any ungrouped fields), and each group's members emit in its
- * `fields` order.
- */
 const PLUGIN_FIELD_GROUPS: ReadonlyArray<{
     key: string;
     fields: readonly PluginConfigField[];
@@ -237,6 +232,7 @@ const PLUGIN_FIELD_GROUPS: ReadonlyArray<{
     },
     { key: "basemap", fields: ["map_tile_provider", "map_tile_alpha"] },
     { key: "legend", fields: LEGEND_FIELDS },
+    { key: "tooltip", fields: TOOLTIP_FIELDS },
 ];
 
 const GLOBAL_STYLES = (() => {
@@ -744,8 +740,6 @@ export class HTMLPerspectiveViewerWebGLPluginElement
         const applicable = this._chartType.applicable_plugin_fields;
         const present = new Set(applicable);
 
-        // A group needs >= 2 applicable members to earn a section — a
-        // one-item collapsible is noise, so lone members emit flat.
         const grouped = new Set<PluginConfigField>();
         const groups: Array<Record<string, unknown> & { kind: string }> = [];
         for (const group of PLUGIN_FIELD_GROUPS) {

@@ -23,6 +23,7 @@ import {
     rightAxisDataToPixel,
     layoutForRecord,
 } from "./series-render";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid";
 
 const POINT_HIT_RADIUS_PX = 10;
 
@@ -598,26 +599,26 @@ export function handleBarLegendClick(
 export function buildBarTooltipLines(
     chart: SeriesChart,
     b: SeriesChartRecord,
-): string[] {
-    const lines: string[] = [];
+): string[][] {
+    const grid: string[][] = [];
     const s = chart._series[b.seriesId];
     const categoryPath = formatBarCategoryPath(chart, b.catIdx);
     if (categoryPath) {
-        lines.push(categoryPath);
+        grid.push([categoryPath]);
     }
 
     const yFmt = chart.getColumnFormatter(s.aggName, "value");
-    lines.push(`${s.aggName}: ${yFmt(b.value)}`);
+    grid.push([s.aggName, yFmt(b.value)]);
     if (s.splitKey) {
-        lines.push(`Split: ${s.splitKey}`);
+        grid.push(["Split", s.splitKey]);
     }
 
     if (b.y0 !== 0) {
-        lines.push(`Base: ${yFmt(b.y0)}`);
-        lines.push(`Top: ${yFmt(b.y1)}`);
+        grid.push(["Base", yFmt(b.y0)]);
+        grid.push(["Top", yFmt(b.y1)]);
     }
 
-    return lines;
+    return grid;
 }
 
 /**
@@ -705,12 +706,12 @@ function pinTooltip(chart: SeriesChart, b: SeriesChartRecord): void {
                 : layout.dataToPixel(b.xCenter, anchorV)
             : rightAxisDataToPixel(chart, b.xCenter, anchorV, layout);
 
-    const lines = buildBarTooltipLines(chart, b);
-    if (lines.length === 0) {
+    const grid = buildBarTooltipLines(chart, b);
+    if (grid.length === 0) {
         return;
     }
 
-    chart._tooltip.pin(lines, pos, layout);
+    chart._tooltip.pin(grid, pos, layout, tooltipStyleOf(chart._pluginConfig));
 
     chart._hoveredBarIdx = -1;
     chart._hoveredSample = null;

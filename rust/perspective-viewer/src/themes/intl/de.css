@@ -178,7 +178,7 @@ perspective-dropdown {
     --psp-label--group-basemap--content: "Basiskarte";
     --psp-label--group-legend--content: "Legende";
     --psp-label--group-tooltip--content: "Tooltips";
-    --psp-label--group-fg--content: "Vordergrund";
-    --psp-label--group-bg--content: "Hintergrund";
+    --psp-label--group-color--content: "Farbe";
     --psp-label--group-format--content: "Format";
+    --psp-label--column-size-override--content: "Spaltenbreite";
 }

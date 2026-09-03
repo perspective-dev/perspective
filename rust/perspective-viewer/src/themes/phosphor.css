@@ -20,6 +20,7 @@ perspective-viewer [theme="Phosphor"] {
 
 perspective-viewer[theme="Phosphor"],
 perspective-viewer [theme="Phosphor"] {
+    color-scheme: dark;
     /* perspective-viewer-phosphor--colors */
     --theme-bg0: #0a0a0a;
     --theme-bg1: #0d0d0d;
@@ -131,6 +132,7 @@ perspective-date-column-style[theme="Phosphor"],
 perspective-datetime-column-style[theme="Phosphor"],
 perspective-number-column-style[theme="Phosphor"],
 perspective-string-column-style[theme="Phosphor"] {
+    color-scheme: dark;
     /* perspective-viewer-phosphor--colors */
     --theme-bg0: #0a0a0a;
     --theme-bg1: #0d0d0d;

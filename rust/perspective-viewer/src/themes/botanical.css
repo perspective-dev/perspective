@@ -25,6 +25,7 @@ perspective-viewer [theme="Botanical"] {
     /* perspective-viewer-botanical--colors */
     background-color: #1a2e1a;
     color: #e0ead8;
+    color-scheme: dark;
     --psp--color: #e0ead8;
     --psp-active--color: #5a9e4b;
     --psp-error--color: #e8836a;
@@ -106,6 +107,7 @@ perspective-string-column-style[theme="Botanical"] {
     /* perspective-viewer-botanical--colors */
     background-color: #1a2e1a;
     color: #e0ead8;
+    color-scheme: dark;
     --psp--color: #e0ead8;
     --psp-active--color: #5a9e4b;
     --psp-error--color: #e8836a;

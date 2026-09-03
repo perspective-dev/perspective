@@ -24,22 +24,22 @@ import type { CartesianChart } from "./cartesian";
 export async function buildPointRowTooltipLines(
     chart: CartesianChart,
     flatIdx: number,
-): Promise<string[]> {
-    const lines: string[] = [];
+): Promise<string[][]> {
+    const grid: string[][] = [];
     if (!chart._rowIndexData || !chart._lazyRows) {
-        return lines;
+        return grid;
     }
 
     const rowIdx = chart._rowIndexData[flatIdx];
     if (rowIdx < 0) {
-        return lines;
+        return grid;
     }
 
     if (chart._splitGroups.length > 0 && chart._seriesCapacity > 0) {
         const seriesIdx = Math.floor(flatIdx / chart._seriesCapacity);
         const sg = chart._splitGroups[seriesIdx];
         if (sg?.prefix) {
-            lines.push(sg.prefix);
+            grid.push([sg.prefix]);
         }
     }
 
@@ -70,11 +70,11 @@ export async function buildPointRowTooltipLines(
 
         if (typeof value === "number") {
             const formatted = chart.getColumnFormatter(colName, "value")(value);
-            lines.push(`${displayName}: ${formatted}`);
+            grid.push([displayName, formatted]);
         } else {
-            lines.push(`${displayName}: ${value}`);
+            grid.push([displayName, String(value)]);
         }
     }
 
-    return lines;
+    return grid;
 }

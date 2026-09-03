@@ -32,7 +32,7 @@ test.describe("Datagrid column style control groups", function () {
         await view.columnSettingsSidebar.container.waitFor();
     }
 
-    test("numeric column nests fg/bg triples in default-open groups", async function ({
+    test("numeric column nests its color controls in a default-open group", async function ({
         page,
     }) {
         const view = new PspViewer(page);
@@ -41,23 +41,22 @@ test.describe("Datagrid column style control groups", function () {
         const sidebar = view.columnSettingsSidebar.container;
         const groups = sidebar.locator("details.control-group");
 
-        await expect(groups).toHaveCount(3);
+        await expect(groups).toHaveCount(2);
         await expect(
             groups.last().locator("summary #format-group-label"),
         ).toHaveCount(1);
 
-        const fg = groups.first();
-        const bg = groups.nth(1);
-        await expect(fg).toHaveJSProperty("open", true);
-        await expect(bg).toHaveJSProperty("open", true);
-        await expect(fg.locator("summary #fg-group-label")).toHaveCount(1);
-        await expect(bg.locator("summary #bg-group-label")).toHaveCount(1);
+        const color = groups.first();
+        await expect(color).toHaveJSProperty("open", true);
+        await expect(color.locator("summary #color-group-label")).toHaveCount(
+            1,
+        );
 
-        await expect(fg.locator("#number_fg_mode-label")).toHaveCount(1);
-        await expect(fg.locator("#fg_colors-label")).toHaveCount(1);
-        await expect(fg.locator("#fg_gradient-label")).toHaveCount(0);
-        await expect(bg.locator("#number_bg_mode-label")).toHaveCount(1);
-        await expect(bg.locator("#bg_colors-label")).toHaveCount(0);
+        await expect(color.locator("#number_fg_mode-label")).toHaveCount(1);
+        await expect(color.locator("#fg_colors-label")).toHaveCount(1);
+        await expect(color.locator("#fg_gradient-label")).toHaveCount(0);
+        await expect(color.locator("#number_bg_mode-label")).toHaveCount(1);
+        await expect(color.locator("#bg_colors-label")).toHaveCount(0);
 
         await expect(
             sidebar.locator(
@@ -73,23 +72,35 @@ test.describe("Datagrid column style control groups", function () {
         await openNumericStyleTab(page, view);
 
         const sidebar = view.columnSettingsSidebar.container;
-        const fg = sidebar.locator("details.control-group").first();
-        await fg
+        const color = sidebar.locator("details.control-group").first();
+        await color
             .locator("div.row", {
                 has: page.locator("label#number_fg_mode-label"),
             })
             .locator("select")
             .selectOption("label-bar");
 
-        await expect(fg.locator("#fg_gradient-label")).toHaveCount(1);
-        await expect(fg).toHaveJSProperty("open", true);
+        await expect(color.locator("#fg_gradient-label")).toHaveCount(1);
+        await expect(color).toHaveJSProperty("open", true);
 
         const token = (await view.save()) as any;
         const config = token.columns_config["Row ID"];
 
         expect(config.number_fg_mode).toEqual("label-bar");
-        expect(config.fg_gradient).not.toBeUndefined();
-        expect(config.fg).toBeUndefined();
-        expect(token.plugin_config.fg).toBeUndefined();
+        expect(config.fg_gradient).toBeUndefined();
+        expect(config.color).toBeUndefined();
+        expect(token.plugin_config.color).toBeUndefined();
+
+        const received = await page.evaluate(() => {
+            const rt = (
+                document.querySelector("perspective-viewer-datagrid") as any
+            ).shadowRoot.querySelector("regular-table");
+            const sym = Object.getOwnPropertySymbols(rt).find((s) =>
+                String(s).includes("Perspective Column Config"),
+            );
+            return sym ? rt[sym] : undefined;
+        });
+
+        expect(received?.["Row ID"]?.fg_gradient).not.toBeUndefined();
     });
 });

@@ -12,6 +12,7 @@
 
 import type { CandlestickChart } from "./candlestick";
 import { renderCandlestickChromeOverlay } from "./candlestick-render";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid";
 
 /**
  * Pixels of horizontal slack around the wick centerline so narrow
@@ -163,24 +164,24 @@ export function showCandlestickPinnedTooltip(
         return;
     }
 
-    const lines = buildCandlestickTooltipLines(chart, idx);
-    if (lines.length === 0) {
+    const grid = buildCandlestickTooltipLines(chart, idx);
+    if (grid.length === 0) {
         return;
     }
 
     const xCenter = candles.xCenter[idx];
     const yMid = (candles.high[idx] + candles.low[idx]) / 2;
     const pos = chart._lastLayout.dataToPixel(xCenter, yMid);
-
-    // CSS bounds come from the chart's own layout, which is populated
-    // by the render path regardless of where the chart runs.
     const cssWidth = chart._lastLayout.cssWidth;
     const cssHeight = chart._lastLayout.cssHeight;
 
-    chart._tooltip.pin(lines, pos, { cssWidth, cssHeight });
+    chart._tooltip.pin(
+        grid,
+        pos,
+        { cssWidth, cssHeight },
+        tooltipStyleOf(chart._pluginConfig),
+    );
 
-    // Pinning hides the inline hover tooltip but does not change the
-    // WebGL pass — only the chrome overlay needs to redraw.
     chart._hoveredIdx = -1;
     renderCandlestickChromeOverlay(chart);
 }
@@ -190,19 +191,14 @@ export function dismissCandlestickPinnedTooltip(chart: CandlestickChart): void {
     chart._pinnedIdx = -1;
 }
 
-/**
- * Build tooltip lines for candle at index `idx` in the columnar
- * storage. Indexed access avoids materializing a `CandleRecord` POJO
- * on the hot tooltip path.
- */
 export function buildCandlestickTooltipLines(
     chart: CandlestickChart,
     idx: number,
-): string[] {
-    const lines: string[] = [];
+): string[][] {
+    const grid: string[][] = [];
     const candles = chart._candles;
     if (idx < 0 || idx >= candles.count) {
-        return lines;
+        return grid;
     }
 
     const catIdx = candles.catIdx[idx];
@@ -212,6 +208,34 @@ export function buildCandlestickTooltipLines(
     const high = candles.high[idx];
     const low = candles.low[idx];
 
+    const categoryText = candleCategoryText(chart, catIdx);
+    if (categoryText !== "") {
+        grid.push([categoryText]);
+    }
+
+    if (splitIdx >= 0 && chart._splitPrefixes.length > 1) {
+        const prefix = chart._splitPrefixes[splitIdx];
+        if (prefix) {
+            grid.push([prefix]);
+        }
+    }
+
+    const openFmt = chart.getColumnFormatter(chart._columnSlots[0], "value");
+    const closeFmt = chart.getColumnFormatter(chart._columnSlots[1], "value");
+    const highFmt = chart.getColumnFormatter(chart._columnSlots[2], "value");
+    const lowFmt = chart.getColumnFormatter(chart._columnSlots[3], "value");
+    grid.push(["Open", openFmt(open)]);
+    grid.push(["Close", closeFmt(close)]);
+    grid.push(["High", highFmt(high)]);
+    grid.push(["Low", lowFmt(low)]);
+
+    return grid;
+}
+
+export function candleCategoryText(
+    chart: CandlestickChart,
+    catIdx: number,
+): string {
     if (
         chart._categoryAxisMode === "numeric" &&
         chart._numericCategoryDomain &&
@@ -219,8 +243,10 @@ export function buildCandlestickTooltipLines(
     ) {
         const v = chart._categoryPositions[catIdx];
         const xColumn = chart._groupBy[0];
-        lines.push(chart.getColumnFormatter(xColumn, "value")(v));
-    } else if (chart._rowPaths.length > 0) {
+        return chart.getColumnFormatter(xColumn, "value")(v);
+    }
+
+    if (chart._rowPaths.length > 0) {
         const parts: string[] = [];
         for (const rp of chart._rowPaths) {
             const s = rp.labels[catIdx] ?? "";
@@ -229,28 +255,8 @@ export function buildCandlestickTooltipLines(
             }
         }
 
-        if (parts.length > 0) {
-            lines.push(parts.join(" › "));
-        }
-    } else {
-        lines.push(`Row ${catIdx + chart._rowOffset}`);
+        return parts.join(" › ");
     }
 
-    if (splitIdx >= 0 && chart._splitPrefixes.length > 1) {
-        const prefix = chart._splitPrefixes[splitIdx];
-        if (prefix) {
-            lines.push(prefix);
-        }
-    }
-
-    const openFmt = chart.getColumnFormatter(chart._columnSlots[0], "value");
-    const closeFmt = chart.getColumnFormatter(chart._columnSlots[1], "value");
-    const highFmt = chart.getColumnFormatter(chart._columnSlots[2], "value");
-    const lowFmt = chart.getColumnFormatter(chart._columnSlots[3], "value");
-    lines.push(`Open: ${openFmt(open)}`);
-    lines.push(`Close: ${closeFmt(close)}`);
-    lines.push(`High: ${highFmt(high)}`);
-    lines.push(`Low: ${lowFmt(low)}`);
-
-    return lines;
+    return `Row ${catIdx + chart._rowOffset}`;
 }

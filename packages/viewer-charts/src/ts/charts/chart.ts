@@ -520,6 +520,22 @@ export interface PluginConfig {
     legend_x: number;
     legend_y: number;
     legend_opacity: number;
+
+    /**
+     * Per-column width cap for tooltip grid cells, in CSS pixels.
+     * Cells wider than this ellipsize; spanning (single-cell) rows cap
+     * at the full two-column budget. The default keeps a two-column
+     * name/value tooltip comfortably inside a small panel.
+     */
+    tooltip_max_column_px: number;
+
+    /**
+     * Tooltip background/border alpha (0..1). Applies to hover boxes,
+     * pinned tooltips, and the axis hover-indicator badges; text
+     * always paints at full alpha so a translucent tooltip stays
+     * readable.
+     */
+    tooltip_opacity: number;
 }
 
 export type LegendAnchor =
@@ -558,4 +574,6 @@ export const DEFAULT_PLUGIN_CONFIG: PluginConfig = {
     legend_x: 0,
     legend_y: 0,
     legend_opacity: 0.8,
+    tooltip_max_column_px: 160,
+    tooltip_opacity: 0.8,
 };

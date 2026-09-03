@@ -16,7 +16,6 @@ perspective-viewer,
 perspective-viewer[theme="Pro Light"],
 perspective-viewer [theme="Pro Light"] {
     --psp-theme-name: "Pro Light";
-
     --psp--color: #161616;
     color: var(--psp--color);
     --psp-inactive--color: #ababab;
@@ -112,4 +111,27 @@ perspective-viewer [theme="Pro Light"] {
         #42b3d5 67.5%,
         #1a237e 100%
     );
+}
+
+perspective-context-menu[theme="Pro Light"],
+perspective-copy-menu[theme="Pro Light"],
+perspective-export-menu[theme="Pro Light"],
+perspective-dropdown[theme="Pro Light"],
+perspective-date-column-style[theme="Pro Light"],
+perspective-datetime-column-style[theme="Pro Light"],
+perspective-number-column-style[theme="Pro Light"],
+perspective-string-column-style[theme="Pro Light"] {
+    --psp--color: #161616;
+    --psp-inactive--color: #ababab;
+    --psp-inactive--border-color: #dadada;
+    --psp-active--color: #2670a9;
+    --psp-error--color: #ff471e;
+    --psp--background-color: #ffffff;
+    --psp-icon-overflow-hint--color: rgba(0, 0, 0, 0.2);
+    --psp-select--background-color: none;
+    --psp-warning--background: #042121;
+    --psp-warning--color: #fdfffd;
+    color: var(--psp--color);
+    background-color: #ffffff;
+    border: 1px solid #ababab;
 }

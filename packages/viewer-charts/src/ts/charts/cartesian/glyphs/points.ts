@@ -131,12 +131,12 @@ export class PointGlyph implements Glyph {
     buildTooltipLines(
         chart: CartesianChart,
         flatIdx: number,
-    ): Promise<string[]> {
+    ): Promise<string[][]> {
         return buildPointRowTooltipLines(chart, flatIdx);
     }
 
     tooltipOptions() {
-        return { crosshair: true, highlightRadius: 6 };
+        return { crosshair: true, highlightRadius: 6, axisIndicators: true };
     }
 
     destroy(_chart: CartesianChart): void {

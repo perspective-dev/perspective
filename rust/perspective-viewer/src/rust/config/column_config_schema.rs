@@ -194,9 +194,7 @@ impl ColumnConfigSchema {
         fn is_format(spec: &ControlSpec) -> bool {
             matches!(
                 spec,
-                ControlSpec::NumberFormat
-                    | ControlSpec::DatetimeFormat
-                    | ControlSpec::StringFormat
+                ControlSpec::NumberFormat | ControlSpec::DatetimeFormat | ControlSpec::StringFormat
             )
         }
 

@@ -26,9 +26,14 @@ import {
     withScissor,
 } from "../../webgl/plot-frame";
 import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid";
+import {
+    renderAxisHoverIndicators,
+    type AxisIndicator,
+} from "../../interaction/axis-indicators";
 import { drawBars, BAR_TYPE_BAR_VAL as BAR_TYPE_BAR } from "./glyphs/draw-bars";
-import { getHoveredBar } from "./series-interact";
-import { computeNiceTicks } from "../../layout/ticks";
+import { getHoveredBar, formatBarCategoryPath } from "./series-interact";
+import { computeNiceTicks, stepTickFormatter } from "../../layout/ticks";
 import {
     renderOuterXAxis,
     renderOuterYAxis,
@@ -1690,13 +1695,71 @@ function renderBarTooltipCanvas(chart: SeriesChart): void {
 
     const lines = buildBarTooltipLines(chart, b);
     const theme = chart._resolveTheme();
+    const dpr = chart._glManager?.dpr ?? 1;
+
+    const datumPos =
+        b.axis === 0
+            ? chart._isHorizontal
+                ? layout.dataToPixel(b.y1, b.xCenter)
+                : layout.dataToPixel(b.xCenter, b.y1)
+            : rightAxisDataToPixel(chart, b.xCenter, b.y1, layout);
+    const indicators: AxisIndicator[] = [];
+
+    let categoryText: string;
+    if (
+        chart._categoryAxisMode === "numeric" &&
+        chart._categoryPositions &&
+        chart._categoryPositions[b.catIdx] != null
+    ) {
+        const catFmt =
+            chart.getColumnFormatter(chart._groupBy[0], "tick") ??
+            stepTickFormatter(
+                chart._numericCategoryDomain?.isDate,
+                chart._lastCatTicks,
+            );
+        categoryText = catFmt(chart._categoryPositions[b.catIdx]);
+    } else {
+        categoryText = formatBarCategoryPath(chart, b.catIdx);
+    }
+
+    if (categoryText !== "") {
+        indicators.push({
+            side: chart._isHorizontal ? "left" : "bottom",
+            px: datumPos.px,
+            py: datumPos.py,
+            text: categoryText,
+        });
+    }
+
+    const valueDomain =
+        b.axis === 1 ? chart._lastAltYDomain : chart._lastYDomain;
+    const valueTicks = b.axis === 1 ? chart._lastAltYTicks : chart._lastYTicks;
+    const valueFmt =
+        chart.getColumnFormatter(chart._series[b.seriesId]?.aggName, "tick") ??
+        stepTickFormatter(valueDomain?.isDate, valueTicks);
+    indicators.push({
+        side: chart._isHorizontal ? "bottom" : b.axis === 1 ? "right" : "left",
+        px: datumPos.px,
+        py: datumPos.py,
+        text: valueFmt(b.y1),
+    });
+    renderAxisHoverIndicators(
+        chart._chromeCanvas,
+        layout,
+        theme,
+        dpr,
+        indicators,
+        chart._pluginConfig.tooltip_opacity,
+    );
+
     renderCanvasTooltip(
         chart._chromeCanvas,
         pos,
         lines,
         layout,
         theme,
-        chart._glManager?.dpr ?? 1,
+        dpr,
+        tooltipStyleOf(chart._pluginConfig),
     );
 }
 

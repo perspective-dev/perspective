@@ -67,12 +67,16 @@ export interface Glyph {
     buildTooltipLines(
         chart: CartesianChart,
         flatIdx: number,
-    ): Promise<string[]>;
+    ): Promise<string[][]>;
 
     /**
      * Hover-overlay options (crosshair, highlight radius).
      */
-    tooltipOptions(): { crosshair: boolean; highlightRadius: number };
+    tooltipOptions(): {
+        crosshair: boolean;
+        highlightRadius: number;
+        axisIndicators: boolean;
+    };
 
     /**
      * Release GL resources created by `ensureProgram`.

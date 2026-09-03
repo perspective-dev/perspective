@@ -12,6 +12,13 @@
 
 import type { Context2D } from "../canvas-types";
 import type { Theme } from "../../theme/theme";
+import {
+    measureTooltipGrid,
+    paintTooltipGrid,
+    DEFAULT_TOOLTIP_STYLE,
+    type TooltipContent,
+    type TooltipStyle,
+} from "../../interaction/tooltip-grid";
 
 /**
  * Draw a freestanding tooltip box anchored near (cx, cy), measuring
@@ -22,32 +29,21 @@ import type { Theme } from "../../theme/theme";
 export function drawTooltipBox(
     ctx: Context2D,
     theme: Theme,
-    lines: string[],
+    grid: TooltipContent,
     cx: number,
     cy: number,
     cssWidth: number,
     cssHeight: number,
     fontFamily: string,
+    style: TooltipStyle = DEFAULT_TOOLTIP_STYLE,
 ): void {
-    if (lines.length === 0) {
+    if (grid.length === 0) {
         return;
     }
 
-    const { tooltipBg, tooltipText, tooltipBorder } = theme;
-
     ctx.font = `11px ${fontFamily}`;
-    const lineHeight = 16;
-    const padding = 8;
-    let maxWidth = 0;
-    for (const line of lines) {
-        const w = ctx.measureText(line).width;
-        if (w > maxWidth) {
-            maxWidth = w;
-        }
-    }
-
-    const boxW = maxWidth + padding * 2;
-    const boxH = lines.length * lineHeight + padding * 2 - 4;
+    const measured = measureTooltipGrid(ctx, grid, style.maxColumnPx);
+    const { boxW, boxH } = measured;
 
     let tx = cx + 12;
     let ty = cy - boxH - 8;
@@ -67,18 +63,5 @@ export function drawTooltipBox(
         ty = cssHeight - boxH - 4;
     }
 
-    ctx.fillStyle = tooltipBg;
-    ctx.strokeStyle = tooltipBorder;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(tx, ty, boxW, boxH, 4);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = tooltipText;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    for (let i = 0; i < lines.length; i++) {
-        ctx.fillText(lines[i], tx + padding, ty + padding + i * lineHeight);
-    }
+    paintTooltipGrid(ctx, measured, tx, ty, theme, style.opacity);
 }

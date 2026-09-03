@@ -23,6 +23,7 @@ perspective-viewer [theme="Dracula"] {
     /* perspective-viewer-pro-dark--colors (overrides) */
     background-color: #242526;
     color: white;
+    color-scheme: dark;
     --psp--color: white;
     --psp-active--color: #2770a9;
     --psp-error--color: #ff9485;
@@ -172,6 +173,7 @@ perspective-dropdown[theme="Dracula"] {
     /* perspective-viewer-pro-dark--colors (overrides) */
     background-color: #242526;
     color: white;
+    color-scheme: dark;
     --psp--color: white;
     --psp-active--color: #2770a9;
     --psp-error--color: #ff9485;

@@ -16,7 +16,12 @@ import { PlotLayout } from "../../layout/plot-layout";
 import { sampleGradient } from "../../theme/gradient";
 import { renderInPlotFrame } from "../../webgl/plot-frame";
 import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
-import { computeNiceTicks } from "../../layout/ticks";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid";
+import {
+    renderAxisHoverIndicators,
+    type AxisIndicator,
+} from "../../interaction/axis-indicators";
+import { computeNiceTicks, stepTickFormatter } from "../../layout/ticks";
 import { type AxisDomain } from "../../axis/numeric-axis";
 import {
     renderBarAxesChrome,
@@ -27,7 +32,10 @@ import {
     measureCategoricalAxisHeight,
     type CategoricalDomain,
 } from "../../axis/categorical-axis";
-import { buildCandlestickTooltipLines } from "./candlestick-interact";
+import {
+    buildCandlestickTooltipLines,
+    candleCategoryText,
+} from "./candlestick-interact";
 import {
     computeVisibleExtent,
     type VisibleExtent,
@@ -321,18 +329,73 @@ function renderCandlestickTooltip(chart: CandlestickChart): void {
     const pos = layout.dataToPixel(xCenter, yMid);
     const lines = buildCandlestickTooltipLines(chart, i);
     const theme = chart._resolveTheme();
-    renderCanvasTooltip(
+    const dpr = chart._glManager?.dpr ?? 1;
+
+    let valueColumn = chart._columnSlots[1];
+    let value = candles.close[i];
+    if (valueColumn == null || !Number.isFinite(value)) {
+        valueColumn =
+            chart._columnSlots[0] ??
+            chart._columnSlots[2] ??
+            chart._columnSlots[3];
+        value = candles.open[i];
+    }
+
+    const datumPos = layout.dataToPixel(xCenter, value);
+    const indicators: AxisIndicator[] = [];
+
+    let categoryText: string;
+    if (
+        chart._categoryAxisMode === "numeric" &&
+        chart._numericCategoryDomain &&
+        chart._categoryPositions
+    ) {
+        const catFmt =
+            chart.getColumnFormatter(chart._groupBy[0], "tick") ??
+            stepTickFormatter(
+                chart._numericCategoryDomain.isDate,
+                chart._lastCatTicks,
+            );
+        categoryText = catFmt(chart._categoryPositions[candles.catIdx[i]]);
+    } else {
+        categoryText = candleCategoryText(chart, candles.catIdx[i]);
+    }
+
+    if (categoryText !== "") {
+        indicators.push({
+            side: "bottom",
+            px: datumPos.px,
+            py: datumPos.py,
+            text: categoryText,
+        });
+    }
+
+    if (Number.isFinite(value)) {
+        const valueFmt =
+            chart.getColumnFormatter(valueColumn, "tick") ??
+            stepTickFormatter(chart._lastYDomain?.isDate, chart._lastYTicks);
+        indicators.push({
+            side: "left",
+            px: datumPos.px,
+            py: datumPos.py,
+            text: valueFmt(value),
+        });
+    }
+
+    renderAxisHoverIndicators(
         chart._chromeCanvas,
-        pos,
-        lines,
         layout,
         theme,
-        chart._glManager?.dpr ?? 1,
-        {
-            crosshair: false,
-            highlightRadius: 0,
-        },
+        dpr,
+        indicators,
+        chart._pluginConfig.tooltip_opacity,
     );
+
+    renderCanvasTooltip(chart._chromeCanvas, pos, lines, layout, theme, dpr, {
+        ...tooltipStyleOf(chart._pluginConfig),
+        crosshair: false,
+        highlightRadius: 0,
+    });
 }
 
 /**

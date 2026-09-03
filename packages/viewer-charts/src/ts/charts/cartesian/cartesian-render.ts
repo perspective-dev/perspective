@@ -31,6 +31,11 @@ import {
 } from "../../webgl/plot-frame";
 import { ensureGradientTexture } from "../../webgl/gradient-texture";
 import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid";
+import {
+    renderAxisHoverIndicators,
+    type AxisIndicator,
+} from "../../interaction/axis-indicators";
 import {
     computeTicks,
     renderGridlines,
@@ -42,6 +47,8 @@ import {
 } from "../../axis/numeric-axis";
 import { initCanvas, getScaledContext } from "../../axis/canvas";
 import { computeMapDegreeTicks } from "../../axis/map-ticks";
+import { mercatorToLonLat } from "../../map/mercator";
+import { stepTickFormatter } from "../../layout/ticks";
 import {
     type CategoricalDomain,
     type CategoricalLevel,
@@ -1190,7 +1197,9 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
         const dataY = chart._yData[chart._hoveredIndex] + yOrigin;
         const sourceFacet = seriesFromIndex(chart, chart._hoveredIndex);
         const opts = chart.glyph.tooltipOptions();
-        const tooltipLines = chart._lazyTooltip.lines ?? [];
+        const axisInd = axisIndicatorsEnabled(chart, opts);
+        const style = tooltipStyleOf(chart._pluginConfig);
+        const tooltipGrid = chart._lazyTooltip.grid ?? [];
 
         for (let i = 0; i < grid.cells.length; i++) {
             const cell = grid.cells[i];
@@ -1209,10 +1218,28 @@ function renderFacetedChromeOverlay(chart: CartesianChart): void {
                 continue;
             }
 
+            if (isSource && axisInd) {
+                renderAxisHoverIndicators(
+                    canvas,
+                    cell.layout,
+                    theme,
+                    dpr,
+                    cartesianAxisIndicators(
+                        chart,
+                        cell.layout,
+                        pos,
+                        dataX,
+                        dataY,
+                    ),
+                    style.opacity,
+                );
+            }
+
             const coordinated = chart._facetConfig.coordinated_tooltip;
-            const lines = isSource || coordinated ? tooltipLines : [];
-            renderCanvasTooltip(canvas, pos, lines, cell.layout, theme, dpr, {
-                crosshair: opts.crosshair,
+            const content = isSource || coordinated ? tooltipGrid : [];
+            renderCanvasTooltip(canvas, pos, content, cell.layout, theme, dpr, {
+                ...style,
+                crosshair: opts.crosshair && (!isSource || !axisInd),
                 highlightRadius: isSource ? opts.highlightRadius : 0,
             });
         }
@@ -1337,24 +1364,76 @@ function renderTooltip(
 
     const xOrigin = isNaN(chart._xOrigin) ? 0 : chart._xOrigin;
     const yOrigin = isNaN(chart._yOrigin) ? 0 : chart._yOrigin;
-    const pos = layout.dataToPixel(
-        chart._xData[idx] + xOrigin,
-        chart._yData[idx] + yOrigin,
-    );
+    const dataX = chart._xData[idx] + xOrigin;
+    const dataY = chart._yData[idx] + yOrigin;
+    const pos = layout.dataToPixel(dataX, dataY);
 
     // Lines come from the async lazy tooltip fetch kicked off in
     // `handleCartesianHover`. While a fetch is in flight this is
     // `null`; the canvas tooltip helper still paints the crosshair /
     // highlight ring but skips the text box.
-    const lines = chart._lazyTooltip.lines ?? [];
+    const grid = chart._lazyTooltip.grid ?? [];
     const theme = chart._resolveTheme();
-    renderCanvasTooltip(
-        canvas,
-        pos,
-        lines,
-        layout,
-        theme,
-        chart._glManager?.dpr ?? 1,
-        chart.glyph.tooltipOptions(),
+    const dpr = chart._glManager?.dpr ?? 1;
+    const opts = chart.glyph.tooltipOptions();
+    const axisInd = axisIndicatorsEnabled(chart, opts);
+    if (axisInd) {
+        renderAxisHoverIndicators(
+            canvas,
+            layout,
+            theme,
+            dpr,
+            cartesianAxisIndicators(chart, layout, pos, dataX, dataY),
+            chart._pluginConfig.tooltip_opacity,
+        );
+    }
+
+    renderCanvasTooltip(canvas, pos, grid, layout, theme, dpr, {
+        ...tooltipStyleOf(chart._pluginConfig),
+        crosshair: opts.crosshair && !axisInd,
+        highlightRadius: opts.highlightRadius,
+    });
+}
+
+function axisIndicatorsEnabled(
+    chart: CartesianChart,
+    opts: { axisIndicators: boolean },
+): boolean {
+    return (
+        opts.axisIndicators &&
+        (chart._renderMode !== "map" || !!chart._pluginConfig.numeric_axes)
     );
+}
+
+function cartesianAxisIndicators(
+    chart: CartesianChart,
+    layout: PlotLayout,
+    pos: { px: number; py: number },
+    dataX: number,
+    dataY: number,
+): AxisIndicator[] {
+    let xText: string;
+    let yText: string;
+    const xOverride = chart.getColumnFormatter(chart._xName, "tick");
+    const yOverride = chart.getColumnFormatter(chart._yName, "tick");
+    if (chart._renderMode === "map") {
+        const mt = computeMapDegreeTicks(layout);
+        const [lon, lat] = mercatorToLonLat(dataX, dataY);
+        xText = xOverride ? xOverride(lon) : mt.formatX(dataX);
+        yText = yOverride ? yOverride(lat) : mt.formatY(dataY);
+    } else {
+        const xFmt =
+            xOverride ??
+            stepTickFormatter(chart._lastXDomain?.isDate, chart._lastXTicks);
+        const yFmt =
+            yOverride ??
+            stepTickFormatter(chart._lastYDomain?.isDate, chart._lastYTicks);
+        xText = xFmt(dataX);
+        yText = yFmt(dataY);
+    }
+
+    return [
+        { side: "bottom", px: pos.px, py: pos.py, text: xText },
+        { side: "left", px: pos.px, py: pos.py, text: yText },
+    ];
 }

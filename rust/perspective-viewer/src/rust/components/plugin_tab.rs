@@ -140,7 +140,8 @@ fn render_specs(
                             key={format!("group::{key}")}
                             group_key={key.clone()}
                             open={!presentation.is_control_group_collapsed(key)}
-                            on_toggle={on_group_toggle.clone()}>
+                            on_toggle={on_group_toggle.clone()}
+                        >
                             { children }
                         </ControlGroup>
                     }

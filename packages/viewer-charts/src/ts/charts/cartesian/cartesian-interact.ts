@@ -12,6 +12,7 @@
 
 import type { CartesianChart } from "./cartesian";
 import { renderCartesianChromeOverlay } from "./cartesian-render";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid";
 
 const TOOLTIP_RADIUS_PX = 24;
 
@@ -311,7 +312,7 @@ export function showCartesianPinnedTooltip(
     );
 
     const serial = chart._lazyTooltip.beginPin();
-    chart.glyph.buildTooltipLines(chart, pointIdx).then((lines) => {
+    chart.glyph.buildTooltipLines(chart, pointIdx).then((grid) => {
         // Abandon the pin if the user moved on (another pin/dismiss
         // between click and resolve) or the underlying view changed.
         if (!chart._lazyTooltip.isPinFresh(serial)) {
@@ -322,11 +323,16 @@ export function showCartesianPinnedTooltip(
             return;
         }
 
-        if (lines.length === 0) {
+        if (grid.length === 0) {
             return;
         }
 
-        chart._tooltip.pin(lines, pos, layout);
+        chart._tooltip.pin(
+            grid,
+            pos,
+            layout,
+            tooltipStyleOf(chart._pluginConfig),
+        );
     });
 
     chart._hoveredIndex = -1;

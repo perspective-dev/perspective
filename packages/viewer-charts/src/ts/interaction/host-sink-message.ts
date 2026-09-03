@@ -23,6 +23,11 @@ import type {
     UserClickPayload,
     UserSelectPayload,
 } from "./tooltip-controller";
+import {
+    DEFAULT_TOOLTIP_STYLE,
+    type TooltipContent,
+    type TooltipStyle,
+} from "./tooltip-grid";
 
 /**
  * The subset of `WorkerMsg`s that flow chart → host through a
@@ -52,11 +57,12 @@ export class MessageHostSink implements HostSink {
     }
 
     pin(
-        lines: string[],
+        grid: TooltipContent,
         pos: { px: number; py: number },
         bounds: CssBounds,
+        style: TooltipStyle = DEFAULT_TOOLTIP_STYLE,
     ): void {
-        this._send({ kind: "pinTooltip", lines, pos, bounds });
+        this._send({ kind: "pinTooltip", grid, style, pos, bounds });
     }
 
     dismiss(): void {

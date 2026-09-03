@@ -108,9 +108,9 @@ perspective-dropdown {
     --psp-label--group-basemap--content: "Basemap";
     --psp-label--group-legend--content: "Legend";
     --psp-label--group-tooltip--content: "Tooltips";
-    --psp-label--group-fg--content: "Foreground";
-    --psp-label--group-bg--content: "Background";
+    --psp-label--group-color--content: "Color";
     --psp-label--group-format--content: "Format";
+    --psp-label--column-size-override--content: "Column Width";
 
     /* Tabs */
     --psp-label--style-tab--content: "Style";
