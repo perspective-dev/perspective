@@ -13,7 +13,7 @@
 import * as dotenv from "dotenv";
 import * as path from "path";
 import * as fs from "fs";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import * as os from "os";
 
 import "zx/globals";
@@ -110,18 +110,35 @@ const CANCEL_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
 
 const CANCEL_GRACE_MS = 4_000;
 
+const IS_WINDOWS = process.platform === "win32";
+
 function run_cancellable(cmd, args) {
     return new Promise((resolve, reject) => {
-        const child = spawn(cmd, args, {
-            stdio: ["ignore", "inherit", "inherit"],
-            detached: true,
-        });
+        const child = IS_WINDOWS
+            ? spawn(cmd, args, {
+                  stdio: ["ignore", "inherit", "inherit"],
+                  shell: true,
+              })
+            : spawn(cmd, args, {
+                  stdio: ["ignore", "inherit", "inherit"],
+                  detached: true,
+              });
 
         let cancelled;
         let escalation;
         const signal_group = (signal) => {
             try {
-                process.kill(-child.pid, signal);
+                if (IS_WINDOWS) {
+                    spawnSync(
+                        "taskkill",
+                        ["/pid", `${child.pid}`, "/T", "/F"],
+                        {
+                            stdio: "ignore",
+                        },
+                    );
+                } else {
+                    process.kill(-child.pid, signal);
+                }
             } catch {}
         };
 
@@ -151,8 +168,10 @@ function run_cancellable(cmd, args) {
                 process.off(s, cancel);
             }
 
-            if (cancelled) {
+            if (cancelled && !IS_WINDOWS) {
                 process.kill(process.pid, cancelled);
+            } else if (cancelled) {
+                process.exit(128 + (os.constants.signals[cancelled] ?? 0));
             } else if (signal) {
                 process.exit(128 + (os.constants.signals[signal] ?? 0));
             } else if (code !== 0) {

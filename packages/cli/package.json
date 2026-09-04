@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/cli",
-    "version": "5.3.0",
+    "version": "5.3.1",
     "description": "Perspective.js CLI",
     "main": "src/js/index.js",
     "publishConfig": {

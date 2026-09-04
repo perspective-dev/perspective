@@ -1,3 +1,14 @@
+# [v5.3.1](https://github.com/perspective-dev/perspective/releases/tag/v5.3.1)
+
+_4 September 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.3.1...v5.3.1))
+
+Features
+
+- Better tooltips and configuration groups [#3226](https://github.com/finos/perspective/pull/3226)
+- Auto legend [#3225](https://github.com/finos/perspective/pull/3225)
+- Configurable legends for `viewer-charts` [#3221](https://github.com/finos/perspective/pull/3221)
+- PostgreSQL Virtual Server [#3219](https://github.com/finos/perspective/pull/3219)
+
 # [v5.3.0](https://github.com/perspective-dev/perspective/releases/tag/v5.3.0)
 
 _25 August 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.2.0...v5.3.0))
