@@ -1,0 +1,190 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ */
+
+@import "./defaults.css";
+
+perspective-viewer,
+perspective-viewer[theme="Blueprint"],
+perspective-viewer [theme="Blueprint"] {
+    --psp-theme-name: "Blueprint";
+}
+
+perspective-viewer[theme="Blueprint"],
+perspective-viewer [theme="Blueprint"] {
+    --theme-bg0: #0c2f6b;
+    --theme-bg1: #103a80;
+    --theme-bg2: #1b478f;
+    --theme-bg3: #2a58a8;
+
+    --theme-fg0: #e6f0ff;
+    --theme-fg1: #a9c4ee;
+    --theme-fg2: #5b84c6;
+
+    --theme-line: #3b6fc4;
+    --theme-cyan: #7fd3ff;
+    --theme-yellow: #ffd166;
+    --theme-orange: #ff8a65;
+    --theme-green: #b8e986;
+    --theme-pink: #ff9ecf;
+    --theme-white: #ffffff;
+    --theme-lavender: #c3b1ff;
+    --theme-mint: #5ee7c7;
+    --theme-magenta: #f6a6ff;
+    --theme-sky: #9cc3ff;
+
+    background-color: var(--theme-bg0);
+    color: var(--theme-fg0);
+    color-scheme: dark;
+    --psp--color: var(--theme-fg0);
+    --psp-active--color: var(--theme-cyan);
+    --psp-error--color: var(--theme-orange);
+    --psp-inactive--color: var(--theme-fg2);
+    --psp-inactive--border-color: var(--theme-bg3);
+    --psp--background-color: var(--theme-bg0);
+    --psp-active--background: rgba(127, 211, 255, 0.3);
+    --psp-expression--operator--color: var(--theme-fg1);
+    --psp-expression--function--color: var(--theme-cyan);
+    --psp-expression--psp-error--color: var(--theme-orange);
+    --psp-calendar--filter: invert(1);
+    --psp-input--filter: invert(1);
+    --psp-warning--color: var(--theme-bg0);
+    --psp-warning--background: var(--theme-yellow);
+
+    --psp-status-icon--connected--color: var(--theme-green);
+    --psp-status-icon--initializing--color: var(--theme-yellow);
+    --psp-status-icon--psp-error--color: var(--theme-orange);
+
+    --psp-code-editor--symbol--color: var(--theme-fg0);
+    --psp-code-editor--literal--color: var(--theme-cyan);
+    --psp-code-editor--operator--color: var(--theme-yellow);
+    --psp-code-editor--comment--color: var(--theme-fg2);
+    --psp-code-editor--column--color: var(--theme-green);
+
+    --psp-datagrid--pos-cell--color: var(--theme-cyan);
+    --psp-datagrid--neg-cell--color: var(--theme-orange);
+    --psp-datagrid--hover--border-color: var(--theme-line);
+
+    --psp-charts--legend--color: var(--theme-fg1);
+    --psp-charts--treemap--labels: var(--theme-fg0);
+    --psp-charts--treemap--hover-highlight: var(--theme-white);
+    --psp-charts--tooltip--color: var(--theme-fg0);
+    --psp-charts--axis-ticks--color: var(--theme-fg0);
+    --psp-charts--axis-lines--color: var(--theme-fg2);
+    --psp-charts--gridline--color: var(--theme-bg2);
+    --psp-charts--tooltip--background: var(--theme-bg1);
+    --psp-charts--tooltip--border-color: var(--theme-line);
+    --psp-charts--legend--background: var(--psp--background-color);
+
+    --psp-charts--series--color: var(--theme-cyan);
+    --psp-charts--series-1--color: var(--theme-cyan);
+    --psp-charts--series-2--color: var(--theme-yellow);
+    --psp-charts--series-3--color: var(--theme-orange);
+    --psp-charts--series-4--color: var(--theme-green);
+    --psp-charts--series-5--color: var(--theme-pink);
+    --psp-charts--series-6--color: var(--theme-white);
+    --psp-charts--series-7--color: var(--theme-lavender);
+    --psp-charts--series-8--color: var(--theme-mint);
+    --psp-charts--series-9--color: var(--theme-magenta);
+    --psp-charts--series-10--color: var(--theme-sky);
+    --psp-datagrid--series-1--color: var(--theme-cyan);
+    --psp-datagrid--series-2--color: var(--theme-yellow);
+    --psp-datagrid--series-3--color: var(--theme-orange);
+    --psp-datagrid--series-4--color: var(--theme-green);
+    --psp-datagrid--series-5--color: var(--theme-pink);
+    --psp-datagrid--series-6--color: var(--theme-white);
+    --psp-datagrid--series-7--color: var(--theme-lavender);
+    --psp-datagrid--series-8--color: var(--theme-mint);
+    --psp-datagrid--series-9--color: var(--theme-magenta);
+    --psp-datagrid--series-10--color: var(--theme-sky);
+
+    --psp-charts--gradient--background: linear-gradient(
+        var(--theme-orange) 0%,
+        var(--theme-bg0) 50%,
+        var(--theme-cyan) 100%
+    );
+
+    --psp-openlayers--tile-url: "http://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
+    --psp-openlayers--attribution--filter: invert(1) hue-rotate(180deg);
+    --psp-openlayers--element--background: var(--theme-bg1);
+    --psp-openlayers--category-1--color: var(--theme-cyan);
+    --psp-openlayers--category-2--color: var(--theme-yellow);
+    --psp-openlayers--category-3--color: var(--theme-orange);
+    --psp-openlayers--category-4--color: var(--theme-green);
+    --psp-openlayers--category-5--color: var(--theme-pink);
+    --psp-openlayers--category-6--color: var(--theme-white);
+    --psp-openlayers--category-7--color: var(--theme-lavender);
+    --psp-openlayers--category-8--color: var(--theme-mint);
+    --psp-openlayers--category-9--color: var(--theme-magenta);
+    --psp-openlayers--category-10--color: var(--theme-sky);
+    --psp-openlayers--gradient--background: linear-gradient(
+        var(--theme-orange) 0%,
+        var(--theme-bg0) 50%,
+        var(--theme-cyan) 100%
+    );
+}
+
+perspective-context-menu[theme="Blueprint"],
+perspective-copy-menu[theme="Blueprint"],
+perspective-export-menu[theme="Blueprint"],
+perspective-dropdown[theme="Blueprint"],
+perspective-date-column-style[theme="Blueprint"],
+perspective-datetime-column-style[theme="Blueprint"],
+perspective-number-column-style[theme="Blueprint"],
+perspective-string-column-style[theme="Blueprint"] {
+    --theme-bg0: #0c2f6b;
+    --theme-bg1: #103a80;
+    --theme-bg2: #1b478f;
+    --theme-bg3: #2a58a8;
+    --theme-fg0: #e6f0ff;
+    --theme-fg1: #a9c4ee;
+    --theme-fg2: #5b84c6;
+    --theme-line: #3b6fc4;
+    --theme-cyan: #7fd3ff;
+    --theme-yellow: #ffd166;
+    --theme-orange: #ff8a65;
+    --theme-green: #b8e986;
+    --theme-pink: #ff9ecf;
+    --theme-white: #ffffff;
+    --theme-lavender: #c3b1ff;
+    --theme-mint: #5ee7c7;
+    --theme-magenta: #f6a6ff;
+    --theme-sky: #9cc3ff;
+
+    background-color: var(--theme-bg0);
+    color: var(--theme-fg0);
+    color-scheme: dark;
+    --psp--color: var(--theme-fg0);
+    --psp-active--color: var(--theme-cyan);
+    --psp-error--color: var(--theme-orange);
+    --psp-inactive--color: var(--theme-fg2);
+    --psp-inactive--border-color: var(--theme-bg3);
+    --psp--background-color: var(--theme-bg0);
+    --psp-active--background: rgba(127, 211, 255, 0.3);
+    --psp-expression--operator--color: var(--theme-fg1);
+    --psp-expression--function--color: var(--theme-cyan);
+    --psp-expression--psp-error--color: var(--theme-orange);
+    --psp-calendar--filter: invert(1);
+    --psp-input--filter: invert(1);
+    --psp-warning--color: var(--theme-bg0);
+    --psp-warning--background: var(--theme-yellow);
+    --psp-status-icon--connected--color: var(--theme-green);
+    --psp-status-icon--initializing--color: var(--theme-yellow);
+    --psp-status-icon--psp-error--color: var(--theme-orange);
+
+    --psp-code-editor--symbol--color: var(--theme-fg0);
+    --psp-code-editor--literal--color: var(--theme-cyan);
+    --psp-code-editor--operator--color: var(--theme-yellow);
+    --psp-code-editor--comment--color: var(--theme-fg2);
+    --psp-code-editor--column--color: var(--theme-green);
+
+    border: 1px solid #2a58a8;
+}

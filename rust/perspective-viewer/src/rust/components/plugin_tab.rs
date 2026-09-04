@@ -219,10 +219,10 @@ fn render_leaf(
         ControlSpec::Group { .. }
         | ControlSpec::AggregateDepth
         | ControlSpec::NumberSeriesStyle { .. }
-        | ControlSpec::DatetimeFormat
+        | ControlSpec::DatetimeFormat { .. }
         | ControlSpec::StringFormat
         | ControlSpec::Symbols { .. }
-        | ControlSpec::NumberFormat
+        | ControlSpec::NumberFormat { .. }
         | ControlSpec::String { .. }
         | ControlSpec::Palette { .. }
         | ControlSpec::GradientStops { .. } => None,

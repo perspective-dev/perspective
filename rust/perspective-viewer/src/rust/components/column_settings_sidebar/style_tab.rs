@@ -33,7 +33,8 @@ use crate::components::string_column_style::StringColumnStyle;
 use crate::components::style_controls::CustomNumberFormat;
 use crate::config::{
     ColumnConfigFieldUpdate, ControlSpec, CssKind, CustomNumberFormatConfig,
-    DatetimeColumnStyleConfig, NamedValue, NumberSeriesStyleConfig, StringColumnStyleConfig,
+    DatetimeColumnStyleConfig, NamedValue, NumberFormatDefaults, NumberSeriesStyleConfig,
+    StringColumnStyleConfig,
 };
 use crate::presentation::Presentation;
 use crate::queries::{fetch_column_abs_max, get_column_config_schema, named_values};
@@ -256,13 +257,15 @@ fn render_leaf(spec: ControlSpec, keys: &[String], ctx: &FieldRenderCtx) -> Opti
                 />
             }
         },
-        ControlSpec::DatetimeFormat => {
+        ControlSpec::DatetimeFormat { default } => {
             let config: Option<DatetimeColumnStyleConfig> = deser_sub(raw_config);
             let enable_time_config = props.ty.unwrap() == ColumnType::Datetime;
+            let default_format = Rc::new(default.unwrap_or_default());
             html! {
                 <DatetimeColumnStyle
                     {enable_time_config}
                     {config}
+                    {default_format}
                     on_change={on_change.clone()}
                     keys={keys.to_vec()}
                 />
@@ -295,18 +298,25 @@ fn render_leaf(spec: ControlSpec, keys: &[String], ctx: &FieldRenderCtx) -> Opti
                 />
             }
         },
-        ControlSpec::NumberFormat => {
+        ControlSpec::NumberFormat { default } => {
             let restored_config: CustomNumberFormatConfig = raw_config
                 .as_ref()
                 .and_then(|m| m.get("number_format"))
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
                 .unwrap_or_default();
 
+            let view_type = props.ty.unwrap();
+            let defaults = Rc::new(NumberFormatDefaults::resolve(
+                default.as_ref(),
+                view_type == ColumnType::Float,
+            ));
+
             html! {
                 <CustomNumberFormat
                     {restored_config}
+                    {defaults}
                     on_change={on_change.clone()}
-                    view_type={props.ty.unwrap()}
+                    {view_type}
                     column_name={props.column_name.clone()}
                     keys={keys.to_vec()}
                 />

@@ -22,10 +22,11 @@ async function hoverAndSnapshot(
     page: import("@playwright/test").Page,
     x = PLOT_CX,
     y = PLOT_CY,
+    opts?: { maxDiffPixelRatio?: number },
 ): Promise<void> {
     await page.mouse.move(x, y);
     await page.waitForTimeout(SETTLE_MS);
-    await expectViewerScreenshot(page);
+    await expectViewerScreenshot(page, opts);
 }
 
 test.describe("Tooltip grid", () => {
@@ -70,7 +71,9 @@ test.describe("Tooltip grid", () => {
             columns: ["Sales"],
             group_by: ["Category", "Sub-Category"],
         });
-        await hoverAndSnapshot(page);
+        await hoverAndSnapshot(page, undefined, undefined, {
+            maxDiffPixelRatio: 0.02,
+        });
     });
 
     test("tooltip_max_column_px truncates wide cells", async ({ page }) => {

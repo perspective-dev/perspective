@@ -12,12 +12,17 @@
 
 @import "./pro.css";
 @import "./pro-dark.css";
+@import "./blueprint.css";
+@import "./botanical.css";
+@import "./dracula.css";
+@import "./eggplant.css";
+@import "./gruvbox.css";
+@import "./gruvbox-dark.css";
+@import "./ledger.css";
 @import "./monokai.css";
+@import "./nord.css";
+@import "./phosphor.css";
 @import "./solarized.css";
 @import "./solarized-dark.css";
 @import "./vaporwave.css";
-@import "./gruvbox.css";
-@import "./gruvbox-dark.css";
-@import "./dracula.css";
-@import "./botanical.css";
-@import "./phosphor.css";
+@import "./velvet.css";

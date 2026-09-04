@@ -174,12 +174,52 @@ class DebugAltPlugin extends DebugStyledPlugin {
     }
 }
 
+class DebugFormatPlugin extends DebugStyledPlugin {
+    get_static_config() {
+        return {
+            name: "Debug Format",
+            select_mode: "toggle",
+            config_column_names: ["Columns"],
+            priority: 0,
+            can_render_column_styles: true,
+        };
+    }
+
+    plugin_config_schema() {
+        return { fields: [] };
+    }
+
+    column_config_schema(type) {
+        const fields = [];
+        if (type === "integer" || type === "float") {
+            fields.push({
+                kind: "NumberFormat",
+                default: {
+                    notation: "compact",
+                    compactDisplay: "short",
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 1,
+                },
+            });
+        } else if (type === "date" || type === "datetime") {
+            fields.push({
+                kind: "DatetimeFormat",
+                default: { dateStyle: "medium", timeStyle: "disabled" },
+            });
+        }
+
+        return { fields };
+    }
+}
+
 customElements.define("perspective-viewer-debug-styled", DebugStyledPlugin);
 customElements.define("perspective-viewer-debug-alt", DebugAltPlugin);
+customElements.define("perspective-viewer-debug-format", DebugFormatPlugin);
 
 const Viewer = customElements.get("perspective-viewer");
 Viewer.registerPlugin("perspective-viewer-debug-styled");
 Viewer.registerPlugin("perspective-viewer-debug-alt");
+Viewer.registerPlugin("perspective-viewer-debug-format");
 
 async function load() {
     const resp = await fetch(

@@ -10,46 +10,28 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use strum::{Display, EnumIter};
+import type {
+    DateFormatConfig,
+    NumberFormatConfig,
+} from "@perspective-dev/viewer/src/ts/column-format.js";
 
-use crate::config::{Notation, NumberFormatStyle};
+/**
+ * The chart plugin's default per-column formats, declared to the viewer in
+ * `column_config_schema()` and applied by the render path under sparse or
+ * absent configs.
+ */
+export const CHART_NUMBER_DEFAULTS: NumberFormatConfig = {
+    notation: "compact",
+    compactDisplay: "short",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+};
 
-#[derive(Clone, PartialEq, Debug, Copy, Default, EnumIter, Display)]
-pub enum NumberStyle {
-    #[default]
-    Decimal,
-    Percent,
-    Currency,
-    Unit,
-}
+export const CHART_DATETIME_DEFAULTS: DateFormatConfig = {
+    dateStyle: "medium",
+    timeStyle: "disabled",
+};
 
-impl From<&NumberFormatStyle> for NumberStyle {
-    fn from(style: &NumberFormatStyle) -> Self {
-        match style {
-            NumberFormatStyle::Decimal => Self::Decimal,
-            NumberFormatStyle::Currency(_) => Self::Currency,
-            NumberFormatStyle::Percent => Self::Percent,
-            NumberFormatStyle::Unit(_) => Self::Unit,
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Debug, Copy, Default, Display, EnumIter)]
-pub enum NotationName {
-    #[default]
-    Standard,
-    Scientific,
-    Engineering,
-    Compact,
-}
-
-impl From<&Notation> for NotationName {
-    fn from(notation: &Notation) -> Self {
-        match notation {
-            Notation::Standard => Self::Standard,
-            Notation::Scientific => Self::Scientific,
-            Notation::Engineering => Self::Engineering,
-            Notation::Compact(_) => Self::Compact,
-        }
-    }
-}
+export const CHART_DATE_DEFAULTS: DateFormatConfig = {
+    dateStyle: "medium",
+};

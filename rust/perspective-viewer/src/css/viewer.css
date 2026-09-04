@@ -125,7 +125,6 @@
         0 12.5px 0 -11.5px var(--psp-inactive--border-color);
 }
 
-
 :host .sidebar_close_button {
     position: absolute;
     top: 0;

@@ -1,0 +1,186 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ */
+
+@import "./defaults.css";
+
+perspective-viewer,
+perspective-viewer[theme="Nord"],
+perspective-viewer [theme="Nord"] {
+    --psp-theme-name: "Nord";
+}
+
+perspective-viewer[theme="Nord"],
+perspective-viewer [theme="Nord"] {
+    --theme-bg0: #2e3440;
+    --theme-bg1: #3b4252;
+    --theme-bg2: #434c5e;
+    --theme-bg3: #4c566a;
+
+    --theme-fg0: #eceff4;
+    --theme-fg1: #d8dee9;
+    --theme-fg2: #616e88;
+
+    --theme-frost-0: #8fbcbb;
+    --theme-frost-1: #88c0d0;
+    --theme-frost-2: #81a1c1;
+    --theme-frost-3: #5e81ac;
+
+    --theme-red: #bf616a;
+    --theme-orange: #d08770;
+    --theme-yellow: #ebcb8b;
+    --theme-green: #a3be8c;
+    --theme-purple: #b48ead;
+
+    background-color: var(--theme-bg0);
+    color: var(--theme-fg0);
+    color-scheme: dark;
+    --psp--color: var(--theme-fg1);
+    --psp-active--color: var(--theme-frost-1);
+    --psp-error--color: var(--theme-red);
+    --psp-inactive--color: var(--theme-bg3);
+    --psp-inactive--border-color: var(--theme-bg2);
+    --psp--background-color: var(--theme-bg0);
+    --psp-active--background: rgba(136, 192, 208, 0.35);
+    --psp-expression--operator--color: var(--theme-frost-2);
+    --psp-expression--function--color: var(--theme-frost-1);
+    --psp-expression--psp-error--color: var(--theme-red);
+    --psp-calendar--filter: invert(1);
+    --psp-input--filter: invert(1);
+    --psp-warning--color: var(--theme-bg0);
+    --psp-warning--background: var(--theme-yellow);
+
+    --psp-status-icon--connected--color: var(--theme-green);
+    --psp-status-icon--initializing--color: var(--theme-yellow);
+    --psp-status-icon--psp-error--color: var(--theme-red);
+
+    --psp-code-editor--symbol--color: var(--theme-fg0);
+    --psp-code-editor--literal--color: var(--theme-purple);
+    --psp-code-editor--operator--color: var(--theme-frost-2);
+    --psp-code-editor--comment--color: var(--theme-fg2);
+    --psp-code-editor--column--color: var(--theme-green);
+
+    --psp-datagrid--pos-cell--color: var(--theme-frost-1);
+    --psp-datagrid--neg-cell--color: var(--theme-red);
+
+    --psp-charts--legend--color: var(--theme-fg1);
+    --psp-charts--treemap--labels: var(--theme-fg0);
+    --psp-charts--treemap--hover-highlight: var(--theme-fg0);
+    --psp-charts--tooltip--color: var(--theme-fg0);
+    --psp-charts--axis-ticks--color: var(--theme-fg1);
+    --psp-charts--axis-lines--color: var(--theme-bg3);
+    --psp-charts--gridline--color: var(--theme-bg1);
+    --psp-charts--tooltip--background: var(--theme-bg1);
+    --psp-charts--tooltip--border-color: var(--theme-bg3);
+    --psp-charts--legend--background: var(--psp--background-color);
+
+    --psp-charts--series--color: var(--theme-frost-1);
+    --psp-charts--series-1--color: var(--theme-frost-1);
+    --psp-charts--series-2--color: var(--theme-red);
+    --psp-charts--series-3--color: var(--theme-green);
+    --psp-charts--series-4--color: var(--theme-yellow);
+    --psp-charts--series-5--color: var(--theme-purple);
+    --psp-charts--series-6--color: var(--theme-orange);
+    --psp-charts--series-7--color: var(--theme-frost-3);
+    --psp-charts--series-8--color: var(--theme-frost-0);
+    --psp-charts--series-9--color: var(--theme-frost-2);
+    --psp-charts--series-10--color: var(--theme-fg1);
+    --psp-datagrid--series-1--color: var(--theme-frost-1);
+    --psp-datagrid--series-2--color: var(--theme-red);
+    --psp-datagrid--series-3--color: var(--theme-green);
+    --psp-datagrid--series-4--color: var(--theme-yellow);
+    --psp-datagrid--series-5--color: var(--theme-purple);
+    --psp-datagrid--series-6--color: var(--theme-orange);
+    --psp-datagrid--series-7--color: var(--theme-frost-3);
+    --psp-datagrid--series-8--color: var(--theme-frost-0);
+    --psp-datagrid--series-9--color: var(--theme-frost-2);
+    --psp-datagrid--series-10--color: var(--theme-fg1);
+
+    --psp-charts--gradient--background: linear-gradient(
+        var(--theme-red) 0%,
+        var(--theme-bg0) 50%,
+        var(--theme-frost-1) 100%
+    );
+
+    --psp-openlayers--tile-url: "http://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
+    --psp-openlayers--attribution--filter: invert(1) hue-rotate(180deg);
+    --psp-openlayers--element--background: var(--theme-bg1);
+    --psp-openlayers--category-1--color: var(--theme-frost-1);
+    --psp-openlayers--category-2--color: var(--theme-red);
+    --psp-openlayers--category-3--color: var(--theme-green);
+    --psp-openlayers--category-4--color: var(--theme-yellow);
+    --psp-openlayers--category-5--color: var(--theme-purple);
+    --psp-openlayers--category-6--color: var(--theme-orange);
+    --psp-openlayers--category-7--color: var(--theme-frost-3);
+    --psp-openlayers--category-8--color: var(--theme-frost-0);
+    --psp-openlayers--category-9--color: var(--theme-frost-2);
+    --psp-openlayers--category-10--color: var(--theme-fg1);
+    --psp-openlayers--gradient--background: linear-gradient(
+        var(--theme-red) 0%,
+        var(--theme-bg0) 50%,
+        var(--theme-frost-1) 100%
+    );
+}
+
+perspective-context-menu[theme="Nord"],
+perspective-copy-menu[theme="Nord"],
+perspective-export-menu[theme="Nord"],
+perspective-dropdown[theme="Nord"],
+perspective-date-column-style[theme="Nord"],
+perspective-datetime-column-style[theme="Nord"],
+perspective-number-column-style[theme="Nord"],
+perspective-string-column-style[theme="Nord"] {
+    --theme-bg0: #2e3440;
+    --theme-bg1: #3b4252;
+    --theme-bg2: #434c5e;
+    --theme-bg3: #4c566a;
+    --theme-fg0: #eceff4;
+    --theme-fg1: #d8dee9;
+    --theme-fg2: #616e88;
+    --theme-frost-0: #8fbcbb;
+    --theme-frost-1: #88c0d0;
+    --theme-frost-2: #81a1c1;
+    --theme-frost-3: #5e81ac;
+    --theme-red: #bf616a;
+    --theme-orange: #d08770;
+    --theme-yellow: #ebcb8b;
+    --theme-green: #a3be8c;
+    --theme-purple: #b48ead;
+
+    background-color: var(--theme-bg0);
+    color: var(--theme-fg0);
+    color-scheme: dark;
+    --psp--color: var(--theme-fg1);
+    --psp-active--color: var(--theme-frost-1);
+    --psp-error--color: var(--theme-red);
+    --psp-inactive--color: var(--theme-bg3);
+    --psp-inactive--border-color: var(--theme-bg2);
+    --psp--background-color: var(--theme-bg0);
+    --psp-active--background: rgba(136, 192, 208, 0.35);
+    --psp-expression--operator--color: var(--theme-frost-2);
+    --psp-expression--function--color: var(--theme-frost-1);
+    --psp-expression--psp-error--color: var(--theme-red);
+    --psp-calendar--filter: invert(1);
+    --psp-input--filter: invert(1);
+    --psp-warning--color: var(--theme-bg0);
+    --psp-warning--background: var(--theme-yellow);
+    --psp-status-icon--connected--color: var(--theme-green);
+    --psp-status-icon--initializing--color: var(--theme-yellow);
+    --psp-status-icon--psp-error--color: var(--theme-red);
+
+    --psp-code-editor--symbol--color: var(--theme-fg0);
+    --psp-code-editor--literal--color: var(--theme-purple);
+    --psp-code-editor--operator--color: var(--theme-frost-2);
+    --psp-code-editor--comment--color: var(--theme-fg2);
+    --psp-code-editor--column--color: var(--theme-green);
+
+    border: 1px solid #434c5e;
+}

@@ -22,6 +22,13 @@ pub struct DatetimeStyleSimpleProps {
     pub enable_time_config: bool,
     pub config: SimpleDatetimeStyleConfig,
 
+    /// The plugin-declared default preset for each style select.
+    #[prop_or(SimpleDatetimeFormat::Short)]
+    pub date_style_default: SimpleDatetimeFormat,
+
+    #[prop_or(SimpleDatetimeFormat::Medium)]
+    pub time_style_default: SimpleDatetimeFormat,
+
     #[prop_or_default]
     pub on_change: Callback<SimpleDatetimeStyleConfig>,
 
@@ -37,7 +44,10 @@ impl ModalLink<DatetimeStyleSimple> for DatetimeStyleSimpleProps {
 
 impl PartialEq for DatetimeStyleSimpleProps {
     fn eq(&self, other: &Self) -> bool {
-        self.enable_time_config == other.enable_time_config && self.config == other.config
+        self.enable_time_config == other.enable_time_config
+            && self.config == other.config
+            && self.date_style_default == other.date_style_default
+            && self.time_style_default == other.time_style_default
     }
 }
 
@@ -69,12 +79,12 @@ impl Component for DatetimeStyleSimple {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             DatetimeStyleSimpleMsg::DateStyleChanged(format) => {
-                self.config.date_style = format.unwrap_or_default();
+                self.config.date_style = format.unwrap_or(ctx.props().date_style_default);
                 self.dispatch_config(ctx);
                 true
             },
             DatetimeStyleSimpleMsg::TimeStyleChanged(format) => {
-                self.config.time_style = format.unwrap_or_default();
+                self.config.time_style = format.unwrap_or(ctx.props().time_style_default);
                 self.dispatch_config(ctx);
                 true
             },
@@ -99,13 +109,14 @@ impl Component for DatetimeStyleSimple {
                     label="date-style"
                     on_change={ctx.link().callback(DatetimeStyleSimpleMsg::DateStyleChanged)}
                     current_value={self.config.date_style}
+                    default_value={ctx.props().date_style_default}
                 />
                 if ctx.props().enable_time_config {
                     <SelectEnumField<SimpleDatetimeFormat>
                         label="time-style"
                         on_change={ctx.link().callback(DatetimeStyleSimpleMsg::TimeStyleChanged)}
                         current_value={self.config.time_style}
-                        default_value={SimpleDatetimeFormat::Medium}
+                        default_value={ctx.props().time_style_default}
                     />
                 }
             </>

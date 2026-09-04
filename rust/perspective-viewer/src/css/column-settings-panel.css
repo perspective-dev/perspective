@@ -217,6 +217,10 @@
         content: var(--psp-label--notation--content, "Notation");
     }
 
+    label#compact-display-label:before {
+        content: var(--psp-label--compact-display--content, "Compact Display");
+    }
+
     label#use-grouping-label:before {
         content: var(--psp-label--use-grouping--content, "Use Grouping");
     }

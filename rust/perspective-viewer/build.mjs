@@ -176,6 +176,11 @@ export async function build_all() {
         "gruvbox",
         "gruvbox-dark",
         "dracula",
+        "nord",
+        "ledger",
+        "blueprint",
+        "eggplant",
+        "velvet",
         "themes",
     ];
 

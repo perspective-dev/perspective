@@ -32,23 +32,27 @@ impl CustomNumberFormat {
             None
         };
 
+        let defaults = &ctx.props().defaults;
         html! {
             <>
                 <SelectEnumField<NotationName>
                     label="notation"
                     on_change={ctx.link().callback(CustomNumberFormatMsg::NotationChanged)}
                     current_value={self.notation.unwrap_or_default()}
+                    default_value={NotationName::from(&defaults.notation)}
                 />
                 { compact_display_checkbox }
                 <SelectEnumField<UseGrouping>
                     label="use-grouping"
                     on_change={ctx.link().callback(CustomNumberFormatMsg::UseGrouping)}
-                    current_value={self.config.use_grouping.unwrap_or_default()}
+                    current_value={self.config.use_grouping.unwrap_or(defaults.use_grouping)}
+                    default_value={defaults.use_grouping}
                 />
                 <SelectEnumField<SignDisplay>
                     label="sign-display"
                     on_change={ctx.link().callback(CustomNumberFormatMsg::SignDisplay)}
-                    current_value={self.config.sign_display.unwrap_or_default()}
+                    current_value={self.config.sign_display.unwrap_or(defaults.sign_display)}
+                    default_value={defaults.sign_display}
                 />
             </>
         }

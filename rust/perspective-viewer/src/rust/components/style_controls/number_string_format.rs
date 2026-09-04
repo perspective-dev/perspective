@@ -15,6 +15,8 @@ mod misc_section;
 mod style_section;
 mod types;
 
+use std::rc::Rc;
+
 use perspective_client::config::ColumnType;
 pub use types::*;
 use yew::{Callback, Component, Properties, html};
@@ -27,6 +29,10 @@ pub struct CustomNumberFormatProps {
     pub on_change: Callback<ColumnConfigFieldUpdate>,
     pub view_type: ColumnType,
     pub column_name: String,
+
+    /// Resolved default values for this column under the active plugin.
+    pub defaults: Rc<NumberFormatDefaults>,
+
     #[prop_or_default]
     pub keys: Vec<String>,
 }
@@ -147,25 +153,39 @@ impl Component for CustomNumberFormat {
                 self.config.minimum_integer_digits = val;
             },
             CustomNumberFormatMsg::FracChange(val) => {
+                let defaults = &ctx.props().defaults;
                 self.config.rounding_increment = None;
                 self.config.maximum_fraction_digits = val.map(|(_, val)| {
-                    let min = self.config.minimum_fraction_digits.unwrap_or(2.);
+                    let min = self
+                        .config
+                        .minimum_fraction_digits
+                        .unwrap_or(defaults.fraction.0);
                     val.max(min)
                 });
 
                 self.config.minimum_fraction_digits = val.map(|(val, _)| {
-                    let max = self.config.maximum_fraction_digits.unwrap_or(2.);
+                    let max = self
+                        .config
+                        .maximum_fraction_digits
+                        .unwrap_or(defaults.fraction.1);
                     val.min(max)
                 });
             },
             CustomNumberFormatMsg::SigChange(val) => {
+                let defaults = &ctx.props().defaults;
                 self.config.maximum_significant_digits = val.map(|(_, val)| {
-                    let min = self.config.minimum_significant_digits.unwrap_or(1.);
+                    let min = self
+                        .config
+                        .minimum_significant_digits
+                        .unwrap_or(defaults.significant.0);
                     val.max(min)
                 });
 
                 self.config.minimum_significant_digits = val.map(|(val, _)| {
-                    let max = self.config.maximum_significant_digits.unwrap_or(21.);
+                    let max = self
+                        .config
+                        .maximum_significant_digits
+                        .unwrap_or(defaults.significant.1);
                     val.min(max)
                 });
             },
@@ -191,8 +211,7 @@ impl Component for CustomNumberFormat {
             },
         };
 
-        let is_float = ctx.props().view_type == ColumnType::Float;
-        let filtered_config = self.config.clone().filter_default(is_float);
+        let filtered_config = self.config.clone().filter_default(&ctx.props().defaults);
         let mut value = serde_json::Map::new();
         if filtered_config != CustomNumberFormatConfig::default() {
             value.insert(
@@ -216,20 +235,24 @@ impl Component for CustomNumberFormat {
 
 impl CustomNumberFormat {
     fn initialize(ctx: &yew::prelude::Context<Self>) -> Self {
-        let config = ctx.props().restored_config.clone();
+        let defaults = &ctx.props().defaults;
+        let mut config = ctx.props().restored_config.clone();
+        if config._style.is_none() && defaults.style != NumberFormatStyle::Decimal {
+            config._style = Some(defaults.style.clone());
+        }
+
+        if config._notation.is_none() && defaults.notation != Notation::Standard {
+            config._notation = Some(defaults.notation.clone());
+        }
+
         Self {
             style: config
                 ._style
                 .as_ref()
-                .map(|style| match style {
-                    NumberFormatStyle::Decimal => NumberStyle::Decimal,
-                    NumberFormatStyle::Currency(_) => NumberStyle::Currency,
-                    NumberFormatStyle::Percent => NumberStyle::Percent,
-                    NumberFormatStyle::Unit(_) => NumberStyle::Unit,
-                })
+                .map(NumberStyle::from)
                 .unwrap_or_default(),
+            notation: config._notation.as_ref().map(NotationName::from),
             config,
-            notation: None,
         }
     }
 }

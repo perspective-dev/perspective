@@ -63,7 +63,7 @@ perspective-viewer [theme="Gruvbox Light"] {
 
     /* perspective-viewer-gruvbox-light--webgl */
     --psp-charts--axis-ticks--color: var(--theme-fg1);
-    --psp-charts--gridline--color: var(--theme-bg2);
+    --psp-charts--gridline--color: var(--theme-bg1);
     --psp-charts--series--color: var(--theme-blue);
     --psp-charts--series-1--color: var(--theme-blue);
     --psp-charts--series-2--color: var(--theme-red);

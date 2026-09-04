@@ -1,0 +1,189 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+@import "./defaults.css";
+
+perspective-viewer,
+perspective-viewer[theme="Eggplant"],
+perspective-viewer [theme="Eggplant"] {
+    --psp-theme-name: "Eggplant";
+}
+
+perspective-viewer[theme="Eggplant"],
+perspective-viewer [theme="Eggplant"] {
+    --theme-bg0: #1e1230;
+    --theme-bg1: #2a1a42;
+    --theme-bg2: #3a2758;
+    --theme-bg3: #4d3670;
+    --theme-fg0: #f1eaff;
+    --theme-fg1: #cbbde8;
+    --theme-fg2: #7d6a9e;
+    --theme-green: #7ee787;
+    --theme-yellow: #ffd75e;
+    --theme-lime: #c8f060;
+    --theme-mint: #6ee7c8;
+    --theme-amber: #f0b86e;
+    --theme-lavender: #b8a1ff;
+    --theme-sky: #9be3ff;
+    --theme-rose: #ff7b8a;
+    --theme-pink: #ff8fd6;
+    --theme-coral: #ff8a80;
+    --theme-periwinkle: #7fa8ff;
+
+    background-color: var(--theme-bg0);
+    color: var(--theme-fg0);
+    color-scheme: dark;
+    --psp--color: var(--theme-fg1);
+    --psp-active--color: var(--theme-green);
+    --psp-error--color: var(--theme-rose);
+    --psp-inactive--color: var(--theme-fg2);
+    --psp-inactive--border-color: var(--theme-bg3);
+    --psp--background-color: var(--theme-bg0);
+    --psp-active--background: rgba(126, 231, 135, 0.3);
+    --psp-expression--operator--color: var(--theme-yellow);
+    --psp-expression--function--color: var(--theme-green);
+    --psp-expression--psp-error--color: var(--theme-rose);
+    --psp-calendar--filter: invert(1);
+    --psp-input--filter: invert(1);
+    --psp-warning--color: var(--theme-bg0);
+    --psp-warning--background: var(--theme-yellow);
+
+    --psp-status-icon--connected--color: var(--theme-green);
+    --psp-status-icon--initializing--color: var(--theme-yellow);
+    --psp-status-icon--psp-error--color: var(--theme-rose);
+
+    --psp-code-editor--symbol--color: var(--theme-fg0);
+    --psp-code-editor--literal--color: var(--theme-yellow);
+    --psp-code-editor--operator--color: var(--theme-yellow);
+    --psp-code-editor--comment--color: var(--theme-fg2);
+    --psp-code-editor--column--color: var(--theme-lime);
+
+    --psp-datagrid--pos-cell--color: var(--theme-green);
+    --psp-datagrid--neg-cell--color: var(--theme-yellow);
+
+    --psp-charts--legend--color: var(--theme-fg1);
+    --psp-charts--treemap--labels: var(--theme-fg0);
+    --psp-charts--treemap--hover-highlight: var(--theme-fg0);
+    --psp-charts--tooltip--color: var(--theme-fg0);
+    --psp-charts--axis-ticks--color: var(--theme-fg1);
+    --psp-charts--axis-lines--color: var(--theme-bg3);
+    --psp-charts--gridline--color: var(--theme-bg2);
+    --psp-charts--tooltip--background: var(--theme-bg1);
+    --psp-charts--tooltip--border-color: var(--theme-bg3);
+    --psp-charts--legend--background: var(--psp--background-color);
+
+    --psp-charts--series--color: var(--theme-green);
+    --psp-charts--series-1--color: var(--theme-green);
+    --psp-charts--series-2--color: var(--theme-yellow);
+    --psp-charts--series-3--color: var(--theme-sky);
+    --psp-charts--series-4--color: var(--theme-pink);
+    --psp-charts--series-5--color: var(--theme-amber);
+    --psp-charts--series-6--color: var(--theme-lavender);
+    --psp-charts--series-7--color: var(--theme-mint);
+    --psp-charts--series-8--color: var(--theme-coral);
+    --psp-charts--series-9--color: var(--theme-lime);
+    --psp-charts--series-10--color: var(--theme-periwinkle);
+    --psp-datagrid--series-1--color: var(--theme-green);
+    --psp-datagrid--series-2--color: var(--theme-yellow);
+    --psp-datagrid--series-3--color: var(--theme-sky);
+    --psp-datagrid--series-4--color: var(--theme-pink);
+    --psp-datagrid--series-5--color: var(--theme-amber);
+    --psp-datagrid--series-6--color: var(--theme-lavender);
+    --psp-datagrid--series-7--color: var(--theme-mint);
+    --psp-datagrid--series-8--color: var(--theme-coral);
+    --psp-datagrid--series-9--color: var(--theme-lime);
+    --psp-datagrid--series-10--color: var(--theme-periwinkle);
+
+    --psp-charts--gradient--background: linear-gradient(
+        var(--theme-yellow) 0%,
+        var(--theme-bg0) 50%,
+        var(--theme-green) 100%
+    );
+
+    --psp-openlayers--tile-url: "http://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
+    --psp-openlayers--attribution--filter: invert(1) hue-rotate(180deg);
+    --psp-openlayers--element--background: var(--theme-bg1);
+    --psp-openlayers--category-1--color: var(--theme-green);
+    --psp-openlayers--category-2--color: var(--theme-yellow);
+    --psp-openlayers--category-3--color: var(--theme-sky);
+    --psp-openlayers--category-4--color: var(--theme-pink);
+    --psp-openlayers--category-5--color: var(--theme-amber);
+    --psp-openlayers--category-6--color: var(--theme-lavender);
+    --psp-openlayers--category-7--color: var(--theme-mint);
+    --psp-openlayers--category-8--color: var(--theme-coral);
+    --psp-openlayers--category-9--color: var(--theme-lime);
+    --psp-openlayers--category-10--color: var(--theme-periwinkle);
+    --psp-openlayers--gradient--background: linear-gradient(
+        var(--theme-yellow) 0%,
+        var(--theme-bg0) 50%,
+        var(--theme-green) 100%
+    );
+}
+
+perspective-context-menu[theme="Eggplant"],
+perspective-copy-menu[theme="Eggplant"],
+perspective-export-menu[theme="Eggplant"],
+perspective-dropdown[theme="Eggplant"],
+perspective-date-column-style[theme="Eggplant"],
+perspective-datetime-column-style[theme="Eggplant"],
+perspective-number-column-style[theme="Eggplant"],
+perspective-string-column-style[theme="Eggplant"] {
+    --theme-bg0: #1e1230;
+    --theme-bg1: #2a1a42;
+    --theme-bg2: #3a2758;
+    --theme-bg3: #4d3670;
+    --theme-fg0: #f1eaff;
+    --theme-fg1: #cbbde8;
+    --theme-fg2: #7d6a9e;
+    --theme-green: #7ee787;
+    --theme-yellow: #ffd75e;
+    --theme-lime: #c8f060;
+    --theme-mint: #6ee7c8;
+    --theme-amber: #f0b86e;
+    --theme-lavender: #b8a1ff;
+    --theme-sky: #9be3ff;
+    --theme-rose: #ff7b8a;
+    --theme-pink: #ff8fd6;
+    --theme-coral: #ff8a80;
+    --theme-periwinkle: #7fa8ff;
+
+    background-color: var(--theme-bg0);
+    color: var(--theme-fg0);
+    color-scheme: dark;
+    --psp--color: var(--theme-fg1);
+    --psp-active--color: var(--theme-green);
+    --psp-error--color: var(--theme-rose);
+    --psp-inactive--color: var(--theme-fg2);
+    --psp-inactive--border-color: var(--theme-bg3);
+    --psp--background-color: var(--theme-bg0);
+    --psp-active--background: rgba(126, 231, 135, 0.3);
+    --psp-expression--operator--color: var(--theme-yellow);
+    --psp-expression--function--color: var(--theme-green);
+    --psp-expression--psp-error--color: var(--theme-rose);
+    --psp-calendar--filter: invert(1);
+    --psp-input--filter: invert(1);
+    --psp-warning--color: var(--theme-bg0);
+    --psp-warning--background: var(--theme-yellow);
+
+    --psp-status-icon--connected--color: var(--theme-green);
+    --psp-status-icon--initializing--color: var(--theme-yellow);
+    --psp-status-icon--psp-error--color: var(--theme-rose);
+
+    --psp-code-editor--symbol--color: var(--theme-fg0);
+    --psp-code-editor--literal--color: var(--theme-yellow);
+    --psp-code-editor--operator--color: var(--theme-yellow);
+    --psp-code-editor--comment--color: var(--theme-fg2);
+    --psp-code-editor--column--color: var(--theme-lime);
+
+    border: 1px solid #4d3670;
+}

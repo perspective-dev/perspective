@@ -30,6 +30,11 @@ import {
     type FacetConfig,
     type PluginConfig,
 } from "../charts/chart";
+import {
+    CHART_DATE_DEFAULTS,
+    CHART_DATETIME_DEFAULTS,
+    CHART_NUMBER_DEFAULTS,
+} from "./format-defaults";
 import { RawEventForwarder } from "../interaction/raw-event-forwarder";
 import { RendererTransport } from "../transport/renderer-transport";
 import { TILE_SOURCES, type TileSourceSpec } from "../map/tile-source";
@@ -724,9 +729,20 @@ export class HTMLPerspectiveViewerWebGLPluginElement
         // Per-column formatter widgets. Surfaced for every chart type so
         // axes / tooltips / legends honor the user's format choice.
         if (column_type === "integer" || column_type === "float") {
-            fields.push({ kind: "NumberFormat" });
-        } else if (column_type === "date" || column_type === "datetime") {
-            fields.push({ kind: "DatetimeFormat" });
+            fields.push({
+                kind: "NumberFormat",
+                default: CHART_NUMBER_DEFAULTS,
+            });
+        } else if (column_type === "datetime") {
+            fields.push({
+                kind: "DatetimeFormat",
+                default: CHART_DATETIME_DEFAULTS,
+            });
+        } else if (column_type === "date") {
+            fields.push({
+                kind: "DatetimeFormat",
+                default: CHART_DATE_DEFAULTS,
+            });
         }
 
         return { fields };

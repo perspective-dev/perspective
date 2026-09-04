@@ -60,6 +60,7 @@ impl CustomNumberFormat {
                 <SelectEnumField<NumberStyle>
                     label="style"
                     current_value={self.style}
+                    default_value={NumberStyle::from(&ctx.props().defaults.style)}
                     on_change={ctx.link().callback(CustomNumberFormatMsg::StyleChanged)}
                 />
                 { section }

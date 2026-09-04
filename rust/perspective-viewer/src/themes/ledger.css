@@ -1,0 +1,195 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ */
+
+@import "./defaults.css";
+
+perspective-viewer,
+perspective-viewer[theme="Ledger"],
+perspective-viewer [theme="Ledger"] {
+    --psp-theme-name: "Ledger";
+}
+
+perspective-viewer[theme="Ledger"],
+perspective-viewer [theme="Ledger"] {
+    --theme-paper-0: #fbf7ec;
+    --theme-paper-1: #f4eedd;
+    --theme-paper-2: #e6ddc4;
+    --theme-rule-0: #dfe7d9;
+    --theme-rule-1: #b9cbb3;
+
+    --theme-ink-0: #2b2a26;
+    --theme-ink-1: #5d574b;
+    --theme-ink-2: #a29c8e;
+
+    --theme-blue: #1f4e8c;
+    --theme-red: #b3261e;
+    --theme-green: #2e6b3a;
+    --theme-ochre: #b7791f;
+    --theme-violet: #5b3a8c;
+    --theme-sepia: #8a5a2b;
+    --theme-teal: #1d7a7a;
+    --theme-magenta: #a03a6a;
+    --theme-olive: #4a6b1f;
+
+    background-color: var(--theme-paper-1);
+    color: var(--theme-ink-0);
+    --psp--color: var(--theme-ink-0);
+    --psp-active--color: var(--theme-blue);
+    --psp-error--color: var(--theme-red);
+    --psp-inactive--color: var(--theme-ink-2);
+    --psp-inactive--border-color: var(--theme-paper-2);
+    --psp--background-color: var(--theme-paper-0);
+    --psp-active--background: rgba(31, 78, 140, 0.15);
+    --psp-expression--operator--color: var(--theme-ink-1);
+    --psp-expression--function--color: var(--theme-blue);
+    --psp-expression--psp-error--color: var(--theme-red);
+    --psp-warning--color: var(--theme-paper-0);
+    --psp-warning--background: var(--theme-ink-0);
+    --psp-icon-overflow-hint--color: rgba(43, 42, 38, 0.2);
+    --psp-placeholder--background: rgba(162, 156, 142, 0.3);
+
+    --psp-status-icon--connected--color: var(--theme-green);
+    --psp-status-icon--initializing--color: var(--theme-ochre);
+    --psp-status-icon--psp-error--color: var(--theme-red);
+
+    --psp-column-type--float--color: var(--theme-blue);
+    --psp-column-type--string--color: var(--theme-red);
+    --psp-column-type--date--color: var(--theme-teal);
+    --psp-column-type--boolean--color: var(--theme-ochre);
+
+    --psp-code-editor--symbol--color: var(--theme-ink-0);
+    --psp-code-editor--literal--color: var(--theme-blue);
+    --psp-code-editor--operator--color: var(--theme-sepia);
+    --psp-code-editor--comment--color: var(--theme-ink-2);
+    --psp-code-editor--column--color: var(--theme-violet);
+
+    --psp-datagrid--pos-cell--color: var(--theme-green);
+    --psp-datagrid--neg-cell--color: var(--theme-red);
+    --psp-datagrid--hover--border-color: var(--theme-rule-1);
+    --psp-datagrid--border-color: var(--theme-rule-1);
+
+    --psp-charts--legend--color: var(--theme-ink-1);
+    --psp-charts--treemap--labels: var(--theme-ink-0);
+    --psp-charts--treemap--hover-highlight: var(--theme-ink-0);
+    --psp-charts--tooltip--color: var(--theme-ink-0);
+    --psp-charts--axis-ticks--color: var(--theme-ink-0);
+    --psp-charts--axis-lines--color: var(--theme-rule-1);
+    --psp-charts--gridline--color: var(--theme-rule-0);
+    --psp-charts--tooltip--background: var(--theme-paper-0);
+    --psp-charts--tooltip--border-color: var(--theme-paper-2);
+    --psp-charts--legend--background: var(--psp--background-color);
+
+    --psp-charts--series--color: var(--theme-blue);
+    --psp-charts--series-1--color: var(--theme-blue);
+    --psp-charts--series-2--color: var(--theme-red);
+    --psp-charts--series-3--color: var(--theme-green);
+    --psp-charts--series-4--color: var(--theme-ochre);
+    --psp-charts--series-5--color: var(--theme-violet);
+    --psp-charts--series-6--color: var(--theme-sepia);
+    --psp-charts--series-7--color: var(--theme-teal);
+    --psp-charts--series-8--color: var(--theme-ink-1);
+    --psp-charts--series-9--color: var(--theme-magenta);
+    --psp-charts--series-10--color: var(--theme-olive);
+    --psp-datagrid--series-1--color: var(--theme-blue);
+    --psp-datagrid--series-2--color: var(--theme-red);
+    --psp-datagrid--series-3--color: var(--theme-green);
+    --psp-datagrid--series-4--color: var(--theme-ochre);
+    --psp-datagrid--series-5--color: var(--theme-violet);
+    --psp-datagrid--series-6--color: var(--theme-sepia);
+    --psp-datagrid--series-7--color: var(--theme-teal);
+    --psp-datagrid--series-8--color: var(--theme-ink-1);
+    --psp-datagrid--series-9--color: var(--theme-magenta);
+    --psp-datagrid--series-10--color: var(--theme-olive);
+
+    --psp-charts--gradient--background: linear-gradient(
+        var(--theme-red) 0%,
+        var(--theme-paper-1) 50%,
+        var(--theme-green) 100%
+    );
+
+    --psp-openlayers--tile-url: "http://{a-c}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png";
+    --psp-openlayers--element--background: var(--theme-paper-0);
+    --psp-openlayers--category-1--color: var(--theme-blue);
+    --psp-openlayers--category-2--color: var(--theme-red);
+    --psp-openlayers--category-3--color: var(--theme-green);
+    --psp-openlayers--category-4--color: var(--theme-ochre);
+    --psp-openlayers--category-5--color: var(--theme-violet);
+    --psp-openlayers--category-6--color: var(--theme-sepia);
+    --psp-openlayers--category-7--color: var(--theme-teal);
+    --psp-openlayers--category-8--color: var(--theme-ink-1);
+    --psp-openlayers--category-9--color: var(--theme-magenta);
+    --psp-openlayers--category-10--color: var(--theme-olive);
+    --psp-openlayers--gradient--background: linear-gradient(
+        var(--theme-red) 0%,
+        var(--theme-paper-1) 50%,
+        var(--theme-green) 100%
+    );
+}
+
+perspective-context-menu[theme="Ledger"],
+perspective-copy-menu[theme="Ledger"],
+perspective-export-menu[theme="Ledger"],
+perspective-dropdown[theme="Ledger"],
+perspective-date-column-style[theme="Ledger"],
+perspective-datetime-column-style[theme="Ledger"],
+perspective-number-column-style[theme="Ledger"],
+perspective-string-column-style[theme="Ledger"] {
+    --theme-paper-0: #fbf7ec;
+    --theme-paper-1: #f4eedd;
+    --theme-paper-2: #e6ddc4;
+    --theme-rule-0: #dfe7d9;
+    --theme-rule-1: #b9cbb3;
+    --theme-ink-0: #2b2a26;
+    --theme-ink-1: #5d574b;
+    --theme-ink-2: #a29c8e;
+    --theme-blue: #1f4e8c;
+    --theme-red: #b3261e;
+    --theme-green: #2e6b3a;
+    --theme-ochre: #b7791f;
+    --theme-violet: #5b3a8c;
+    --theme-sepia: #8a5a2b;
+    --theme-teal: #1d7a7a;
+    --theme-magenta: #a03a6a;
+    --theme-olive: #4a6b1f;
+
+    color: var(--theme-ink-0);
+    --psp--color: var(--theme-ink-0);
+    --psp-active--color: var(--theme-blue);
+    --psp-error--color: var(--theme-red);
+    --psp-inactive--color: var(--theme-ink-2);
+    --psp-inactive--border-color: var(--theme-paper-2);
+    --psp--background-color: var(--theme-paper-0);
+    --psp-active--background: rgba(31, 78, 140, 0.15);
+    --psp-expression--operator--color: var(--theme-ink-1);
+    --psp-expression--function--color: var(--theme-blue);
+    --psp-expression--psp-error--color: var(--theme-red);
+    --psp-warning--color: var(--theme-paper-0);
+    --psp-warning--background: var(--theme-ink-0);
+    --psp-icon-overflow-hint--color: rgba(43, 42, 38, 0.2);
+    --psp-placeholder--background: rgba(162, 156, 142, 0.3);
+    --psp-status-icon--connected--color: var(--theme-green);
+    --psp-status-icon--initializing--color: var(--theme-ochre);
+    --psp-status-icon--psp-error--color: var(--theme-red);
+    --psp-column-type--float--color: var(--theme-blue);
+    --psp-column-type--string--color: var(--theme-red);
+    --psp-column-type--date--color: var(--theme-teal);
+    --psp-column-type--boolean--color: var(--theme-ochre);
+
+    --psp-code-editor--symbol--color: var(--theme-ink-0);
+    --psp-code-editor--literal--color: var(--theme-blue);
+    --psp-code-editor--operator--color: var(--theme-sepia);
+    --psp-code-editor--comment--color: var(--theme-ink-2);
+    --psp-code-editor--column--color: var(--theme-violet);
+
+    background-color: #fbf7ec;
+    border: 1px solid #e6ddc4;
+}

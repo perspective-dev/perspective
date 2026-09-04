@@ -15,7 +15,10 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{CssKind, KeyValueOpts, NumberSeriesStyleDefaultConfig};
+use super::{
+    CssKind, CustomNumberFormatConfig, DatetimeFormatType, KeyValueOpts,
+    NumberSeriesStyleDefaultConfig,
+};
 
 /// The full schema for one column at one point in time. Plugins may return
 /// different schemas for the same column based on the column's current
@@ -116,7 +119,12 @@ pub enum ControlSpec {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         discrete: bool,
     },
-    DatetimeFormat,
+    DatetimeFormat {
+        /// Plugin-declared default `date_format`, shown by the editor in
+        /// unedited fields and elided from serialized configs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default: Option<DatetimeFormatType>,
+    },
     StringFormat,
     NumberSeriesStyle {
         default: NumberSeriesStyleDefaultConfig,
@@ -124,7 +132,12 @@ pub enum ControlSpec {
     Symbols {
         default: KeyValueOpts,
     },
-    NumberFormat,
+    NumberFormat {
+        /// Plugin-declared default format, keyed like `number_format`
+        /// itself.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default: Option<CustomNumberFormatConfig>,
+    },
     AggregateDepth,
 
     Group {
@@ -194,7 +207,9 @@ impl ColumnConfigSchema {
         fn is_format(spec: &ControlSpec) -> bool {
             matches!(
                 spec,
-                ControlSpec::NumberFormat | ControlSpec::DatetimeFormat | ControlSpec::StringFormat
+                ControlSpec::NumberFormat { .. }
+                    | ControlSpec::DatetimeFormat { .. }
+                    | ControlSpec::StringFormat
             )
         }
 
@@ -284,11 +299,11 @@ impl ControlSpec {
     /// `columns_config` blob passed to `plugin.restore()`.
     pub fn serialized_keys(&self) -> Vec<&str> {
         match self {
-            ControlSpec::DatetimeFormat => vec!["date_format"],
+            ControlSpec::DatetimeFormat { .. } => vec!["date_format"],
             ControlSpec::StringFormat => vec!["format"],
             ControlSpec::NumberSeriesStyle { .. } => vec!["chart_type", "stack"],
             ControlSpec::Symbols { .. } => vec!["symbols"],
-            ControlSpec::NumberFormat => vec!["number_format"],
+            ControlSpec::NumberFormat { .. } => vec!["number_format"],
             ControlSpec::AggregateDepth => vec!["aggregate_depth"],
             ControlSpec::Enum { key, .. }
             | ControlSpec::Bool { key, .. }
@@ -410,7 +425,7 @@ mod tests {
     fn format_controls_group_and_merge() {
         let schema = ColumnConfigSchema {
             fields: vec![
-                ControlSpec::NumberFormat,
+                ControlSpec::NumberFormat { default: None },
                 flag("flag"),
                 ControlSpec::StringFormat,
             ],
@@ -423,7 +438,7 @@ mod tests {
         };
 
         assert_eq!(key, "format");
-        assert!(matches!(fields[0], ControlSpec::NumberFormat));
+        assert!(matches!(fields[0], ControlSpec::NumberFormat { .. }));
         assert!(matches!(fields[1], ControlSpec::StringFormat));
         assert!(matches!(&schema.fields[1], ControlSpec::Bool { .. }));
 
@@ -441,8 +456,10 @@ mod tests {
     fn format_grouping_recurses_but_never_double_wraps() {
         let schema = ColumnConfigSchema {
             fields: vec![
-                group("format", vec![ControlSpec::NumberFormat]),
-                group("styling", vec![flag("x"), ControlSpec::DatetimeFormat]),
+                group("format", vec![ControlSpec::NumberFormat { default: None }]),
+                group("styling", vec![flag("x"), ControlSpec::DatetimeFormat {
+                    default: None,
+                }]),
             ],
         }
         .group_format_controls();
@@ -452,7 +469,7 @@ mod tests {
         };
 
         assert_eq!(key, "format");
-        assert!(matches!(fields[0], ControlSpec::NumberFormat));
+        assert!(matches!(fields[0], ControlSpec::NumberFormat { .. }));
 
         let ControlSpec::Group { fields, .. } = &schema.fields[1] else {
             panic!("expected group");
@@ -461,8 +478,87 @@ mod tests {
         assert!(matches!(
             &fields[1],
             ControlSpec::Group { key, fields }
-                if key == "format" && matches!(fields[0], ControlSpec::DatetimeFormat)
+                if key == "format" && matches!(fields[0], ControlSpec::DatetimeFormat { .. })
         ));
+    }
+
+    #[test]
+    fn format_controls_deserialize_without_default_payload() {
+        let schema: ColumnConfigSchema = serde_json::from_value(json!({
+            "fields": [{ "kind": "NumberFormat" }, { "kind": "DatetimeFormat" }]
+        }))
+        .unwrap();
+
+        assert!(matches!(&schema.fields[0], ControlSpec::NumberFormat {
+            default: None
+        }));
+        assert!(matches!(&schema.fields[1], ControlSpec::DatetimeFormat {
+            default: None
+        }));
+    }
+
+    #[test]
+    fn number_format_default_payload_deserializes_flattened_families() {
+        let schema: ColumnConfigSchema = serde_json::from_value(json!({
+            "fields": [{
+                "kind": "NumberFormat",
+                "default": {
+                    "notation": "compact",
+                    "compactDisplay": "short",
+                    "minimumFractionDigits": 0,
+                    "maximumFractionDigits": 1
+                }
+            }]
+        }))
+        .unwrap();
+
+        let ControlSpec::NumberFormat {
+            default: Some(default),
+        } = &schema.fields[0]
+        else {
+            panic!("expected NumberFormat with default");
+        };
+
+        assert_eq!(
+            default._notation,
+            Some(crate::config::Notation::Compact(
+                crate::config::CompactDisplay::Short
+            ))
+        );
+        assert_eq!(default._style, None);
+        assert_eq!(default.minimum_fraction_digits, Some(0.));
+        assert_eq!(default.maximum_fraction_digits, Some(1.));
+        assert_eq!(
+            schema.active_keys(),
+            HashSet::from(["number_format".to_owned()])
+        );
+    }
+
+    #[test]
+    fn datetime_format_default_payload_deserializes_simple_arm() {
+        let schema: ColumnConfigSchema = serde_json::from_value(json!({
+            "fields": [{
+                "kind": "DatetimeFormat",
+                "default": { "dateStyle": "medium", "timeStyle": "disabled" }
+            }]
+        }))
+        .unwrap();
+
+        let ControlSpec::DatetimeFormat {
+            default: Some(DatetimeFormatType::Simple(simple)),
+        } = &schema.fields[0]
+        else {
+            panic!("expected DatetimeFormat with Simple default");
+        };
+
+        assert_eq!(
+            simple.date_style,
+            crate::config::SimpleDatetimeFormat::Medium
+        );
+        assert_eq!(
+            simple.time_style,
+            crate::config::SimpleDatetimeFormat::Disabled
+        );
     }
 
     #[test]
