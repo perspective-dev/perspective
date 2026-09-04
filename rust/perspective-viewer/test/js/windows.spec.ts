@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { test, expect } from "./helpers.ts";
+import { test, expect, compareInnerHTMLToSnapshot } from "./helpers.ts";
 
 test.describe("Window columns", () => {
     test.beforeEach(async function init({ page }) {
@@ -428,9 +428,7 @@ test.describe("Window columns", () => {
         await expect(
             page.locator("#window-source .column-empty-input"),
         ).toBeVisible();
-        await expect(page.locator(".window-editor-error")).toContainText(
-            "Missing Column",
-        );
+        await compareInnerHTMLToSnapshot(page.locator("#window-tab"));
     });
 
     test("partition pill moved to a slot does not duplicate", async ({
@@ -514,7 +512,7 @@ test.describe("Window columns", () => {
         await expect(
             page.locator("#window-source .column-selector-draggable"),
         ).toContainText("Sales");
-        await expect(page.locator(".window-editor-error")).toHaveCount(0);
+        await compareInnerHTMLToSnapshot(page.locator("#window-tab"));
 
         // A no-op drop leaves the draft equal to the saved spec, so the
         // change-gated Save stays disabled and the saved config is intact.
@@ -607,16 +605,15 @@ test.describe("Window columns", () => {
             "#window-source .aggregate-selector-wrapper select",
         );
         await expect(select).toHaveValue("count");
-        expect(await select.locator("option").allTextContents()).toEqual([
-            "count",
-            "min",
-            "max",
-            "lag",
-            "lead",
-        ]);
+        await select
+            .locator("option", { hasText: "lead" })
+            .waitFor({ state: "attached" });
+
         // No error at all: the coerced op is valid for the string source,
         // and the empty order slot is a valid natural-order draft.
-        await expect(page.locator(".window-editor-error")).toHaveCount(0);
+        await compareInnerHTMLToSnapshot(page.locator("#window-tab"), [
+            "string-source",
+        ]);
 
         // A numeric source restores the full op list; the user's (still
         // valid) op choice is preserved.
@@ -626,19 +623,12 @@ test.describe("Window columns", () => {
         );
 
         await expect(select).toHaveValue("count");
-        expect(await select.locator("option").allTextContents()).toEqual([
-            "sum",
-            "avg",
-            "count",
-            "min",
-            "max",
-            "stddev",
-            "var",
-            "lag",
-            "lead",
-            "diff",
-            "rate",
-            "ema",
+        await select
+            .locator("option", { hasText: "stddev" })
+            .waitFor({ state: "attached" });
+
+        await compareInnerHTMLToSnapshot(page.locator("#window-tab"), [
+            "numeric-source",
         ]);
     });
 

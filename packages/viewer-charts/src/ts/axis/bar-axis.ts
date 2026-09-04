@@ -12,7 +12,7 @@
 
 import type { Canvas2D, Context2D } from "../charts/canvas-types";
 import { PlotLayout } from "../layout/plot-layout";
-import { formatTickValue, formatDateTickValue } from "../layout/ticks";
+import { stepTickFormatter } from "../layout/ticks";
 import { initCanvas } from "./canvas";
 import {
     renderCategoricalXTicks,
@@ -37,12 +37,7 @@ function tickFormatter(
         return override;
     }
 
-    if (!domain.isDate) {
-        return formatTickValue;
-    }
-
-    const step = ticks.length > 1 ? ticks[1] - ticks[0] : 0;
-    return (v: number) => formatDateTickValue(v, step);
+    return stepTickFormatter(domain.isDate, ticks);
 }
 
 /**

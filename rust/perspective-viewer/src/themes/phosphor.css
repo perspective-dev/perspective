@@ -20,6 +20,7 @@ perspective-viewer [theme="Phosphor"] {
 
 perspective-viewer[theme="Phosphor"],
 perspective-viewer [theme="Phosphor"] {
+    color-scheme: dark;
     /* perspective-viewer-phosphor--colors */
     --theme-bg0: #0a0a0a;
     --theme-bg1: #0d0d0d;
@@ -48,14 +49,6 @@ perspective-viewer [theme="Phosphor"] {
     --psp-input--filter: invert(1) hue-rotate(70deg);
     --psp-warning--color: var(--theme-bg0);
     --psp-warning--background: var(--theme-amber);
-
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
 
     /* Syntax */
     --psp-code-editor--symbol--color: var(--theme-green-mid);
@@ -139,6 +132,7 @@ perspective-date-column-style[theme="Phosphor"],
 perspective-datetime-column-style[theme="Phosphor"],
 perspective-number-column-style[theme="Phosphor"],
 perspective-string-column-style[theme="Phosphor"] {
+    color-scheme: dark;
     /* perspective-viewer-phosphor--colors */
     --theme-bg0: #0a0a0a;
     --theme-bg1: #0d0d0d;
@@ -165,12 +159,6 @@ perspective-string-column-style[theme="Phosphor"] {
     --psp-input--filter: invert(1) hue-rotate(70deg);
     --psp-warning--color: var(--theme-bg0);
     --psp-warning--background: var(--theme-amber);
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
     --psp-code-editor--symbol--color: var(--theme-green-mid);
     --psp-code-editor--literal--color: var(--theme-green-bright);
     --psp-code-editor--operator--color: var(--theme-amber);

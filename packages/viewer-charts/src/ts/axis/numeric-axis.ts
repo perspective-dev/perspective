@@ -12,11 +12,7 @@
 
 import type { Canvas2D, Context2D } from "../charts/canvas-types";
 import { PlotLayout, type PlotRect } from "../layout/plot-layout";
-import {
-    computeNiceTicks,
-    formatTickValue,
-    formatDateTickValue,
-} from "../layout/ticks";
+import { computeNiceTicks, stepTickFormatter } from "../layout/ticks";
 import { getScaledContext } from "./canvas";
 import {
     drawGridlinesX,
@@ -81,10 +77,7 @@ function tickFmt(
         return override;
     }
 
-    const step = ticks.length > 1 ? ticks[1] - ticks[0] : 0;
-    return domain.isDate
-        ? (v: number) => formatDateTickValue(v, step)
-        : formatTickValue;
+    return stepTickFormatter(domain.isDate, ticks);
 }
 
 /**

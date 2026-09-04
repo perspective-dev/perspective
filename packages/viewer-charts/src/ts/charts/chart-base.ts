@@ -21,7 +21,11 @@ import {
 } from "@perspective-dev/viewer/src/ts/column-format.js";
 import type { ColumnDataMap } from "../data/view-reader";
 import { LazyRowFetcher } from "../data/lazy-row";
-import { formatTickValue, formatDateTickValue } from "../layout/ticks";
+import {
+    CHART_DATE_DEFAULTS,
+    CHART_DATETIME_DEFAULTS,
+    CHART_NUMBER_DEFAULTS,
+} from "../plugin/format-defaults";
 import type { WebGLContextManager } from "../webgl/context-manager";
 import {
     ZoomController,
@@ -48,46 +52,30 @@ import { resolveThemeFromVars, type Theme } from "../theme/theme";
 import { applyColumnColorOverrides } from "../theme/overrides";
 import { requestRender as scheduleRender } from "../render/scheduler";
 
-// TODO I don't know if this is the behavior we want. On the plus side, this
-// ad-hoc formatter scales well to small and large data ranges, making a good
-// guess at the right format without user input. On the minus side, this
-// behavior is inconsistent with datagrid and the rest of the app, and the ad-hoc
-// surprising behavior when overriding one field in `number_format` and suddenly
-// the entire formatter is replaced.
-const REGRESSION_BEHAVIOR = true;
-
 /**
- * Locale-aware fallback formatter applied to numeric tooltip / legend
- * values when the column has no `number_format` configured. Two
- * fractional digits matches the legacy datagrid default and gives
- * tooltips a stable display width.
+ * Fallback formatter applied to numeric tooltip / legend values when the
+ * column has no `number_format` configured.
  */
 const DEFAULT_VALUE_FORMATTER: (v: number) => string = ((): ((
     v: number,
 ) => string) => {
-    if (REGRESSION_BEHAVIOR) {
-        return formatTickValue;
-    } else {
-        const intl = createNumberFormatter("float");
-        return (v) => intl.format(v);
-    }
+    const intl = createNumberFormatter(
+        "float",
+        undefined,
+        CHART_NUMBER_DEFAULTS,
+    );
+    return (v) => intl.format(v);
 })();
 
 /**
- * Locale-aware fallback formatter for datetime tooltip / legend values
- * when the column has no `date_format` configured. Uses the locale
- * default (no `dateStyle` / `timeStyle`) to match what most users
- * expect from an `Intl.DateTimeFormat()` constructed with no options.
+ * Fallback formatter for datetime tooltip / legend values when the
+ * column has no `date_format` configured.
  */
 const DEFAULT_DATETIME_FORMATTER: (v: number) => string = ((): ((
     v: number,
 ) => string) => {
-    if (REGRESSION_BEHAVIOR) {
-        return formatDateTickValue;
-    } else {
-        const intl = createDatetimeFormatter();
-        return (v) => intl.format(v);
-    }
+    const intl = createDatetimeFormatter(undefined, CHART_DATETIME_DEFAULTS);
+    return (v) => intl.format(v);
 })();
 
 /**
@@ -497,7 +485,11 @@ export abstract class AbstractChart implements ChartImplementation {
                 return undefined;
             }
 
-            const intl = createNumberFormatter(type, numberFormat);
+            const intl = createNumberFormatter(
+                type,
+                numberFormat,
+                CHART_NUMBER_DEFAULTS,
+            );
             return (v) => intl.format(v);
         }
 
@@ -507,7 +499,10 @@ export abstract class AbstractChart implements ChartImplementation {
                 return undefined;
             }
 
-            const intl = createDatetimeFormatter(dateFormat);
+            const intl = createDatetimeFormatter(
+                dateFormat,
+                CHART_DATETIME_DEFAULTS,
+            );
             return (v) => intl.format(v);
         }
 
@@ -517,7 +512,7 @@ export abstract class AbstractChart implements ChartImplementation {
                 return undefined;
             }
 
-            const intl = createDateFormatter(dateFormat);
+            const intl = createDateFormatter(dateFormat, CHART_DATE_DEFAULTS);
             return (v) => intl.format(v);
         }
 

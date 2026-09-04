@@ -10,7 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { test, expect, PageView } from "../helpers.ts";
+import {
+    test,
+    expect,
+    PageView,
+    compareInnerHTMLToSnapshot,
+} from "../helpers.ts";
 
 test.beforeEach(async ({ page }) => {
     await page.goto("/rust/perspective-viewer/test/html/superstore-debug.html");
@@ -38,9 +43,15 @@ test.describe("Attributes Tab", () => {
         await expr.editBtn.click();
         let input = view.columnSettingsSidebar.nameInput;
         await view.columnSettingsSidebar.openTab("Style");
-        await expect(input).toBeDisabled();
+        await compareInnerHTMLToSnapshot(
+            view.columnSettingsSidebar.nameInputWrapper,
+            ["style-tab"],
+        );
         await view.columnSettingsSidebar.openTab("Attributes");
-        await expect(input).toBeEnabled();
+        await compareInnerHTMLToSnapshot(
+            view.columnSettingsSidebar.nameInputWrapper,
+            ["attributes-tab"],
+        );
     });
 
     test("Empty expression names", async ({ page }) => {
@@ -51,9 +62,9 @@ test.describe("Attributes Tab", () => {
         await view.settingsPanel.createNewExpression("", expr_value);
         // Empty text matches expression
         let input = view.columnSettingsSidebar.nameInput;
-        expect(await input.evaluate((input) => input!.value)).toBe("");
-        expect(await input.evaluate((input) => input!.placeholder)).toBe(
-            expr_value,
+        await compareInnerHTMLToSnapshot(
+            view.columnSettingsSidebar.nameInputWrapper,
+            ["header"],
         );
         // Reopening the column shows an empty header with placeholder text that matches
         await view.columnSettingsSidebar.closeBtn.click();
@@ -62,9 +73,10 @@ test.describe("Attributes Tab", () => {
                 expr_value,
             );
         await expr.editBtn.click();
-        expect(await input.evaluate((input) => input!.value)).toBe("");
-        expect(await input.evaluate((input) => input!.placeholder)).toBe(
-            expr_value,
+        await input.waitFor();
+        await compareInnerHTMLToSnapshot(
+            view.columnSettingsSidebar.nameInputWrapper,
+            ["header"],
         );
         // Expression alias is the expression on serialization
         let config = await view.save();
@@ -262,10 +274,7 @@ test.describe("Column settings header drafts", () => {
         await sidebar.attributesTab.saveBtn.click();
 
         await expect(sidebar.nameInput).toHaveValue("renamed");
-        await expect(sidebar.nameInput).toBeEnabled();
-        await expect(sidebar.attributesTab.saveBtn).toBeDisabled();
-        await expect(sidebar.nameInputWrapper).not.toHaveClass(/edited/);
-        expect(await sidebar.getTabs()).toEqual(["Style", "Attributes"]);
+        await compareInnerHTMLToSnapshot(sidebar.container, ["retargeted"]);
 
         const config = await view.save();
         expect(Object.keys(config.expressions ?? {})).toEqual(["renamed"]);

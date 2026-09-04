@@ -33,6 +33,25 @@
             bottom: 0px;
             cursor: pointer;
         }
+
+        .select-arrow {
+            position: absolute;
+            pointer-events: none;
+            top: 50%;
+            right: 6px;
+            width: 6px;
+            height: 4px;
+            transform: translateY(-50%);
+            background-color: currentColor;
+            -webkit-mask-image: var(--psp-icon--select-arrow--mask-image);
+            mask-image: var(--psp-icon--select-arrow--mask-image);
+            -webkit-mask-repeat: no-repeat;
+            mask-repeat: no-repeat;
+            -webkit-mask-position: center;
+            mask-position: center;
+            -webkit-mask-size: contain;
+            mask-size: contain;
+        }
     }
 
     select {
@@ -46,14 +65,6 @@
         /* font-size: 10px; */
         font-family: inherit;
         background-color: transparent;
-        background-image: var(--psp-icon--select-arrow--mask-image);
-        background-position: right 2px center;
-        background-repeat: no-repeat;
-
-        &.invert:focus-within,
-        &.invert:hover {
-            background-image: var(--psp-icon--select-arrow-hover--mask-image);
-        }
 
         option {
             color: var(--psp--color, inherit);

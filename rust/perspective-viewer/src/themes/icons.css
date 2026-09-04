@@ -55,8 +55,7 @@ perspective-viewer-tab {
     --psp-icon--pin--mask-image: url("../svg/pin-icon.svg");
     --psp-label--inactive-column-selector--content: url("../svg/checkbox-unchecked-icon.svg");
     --psp-label--active-column-selector--content: url("../svg/checkbox-checked-icon.svg");
-    --psp-icon--select-arrow-light--mask-image: url("../svg/dropdown-selector-light.svg");
-    --psp-icon--select-arrow-dark--mask-image: url("../svg/dropdown-selector.svg");
+    --psp-icon--select-arrow--mask-image: url("../svg/dropdown-selector.svg");
     --psp-icon--active-indicator--mask-image: url("../svg/active-indicator.svg");
     --psp-icon-overflow-hint--content: "!";
     --psp-label--reset-button-icon--content: "refresh";

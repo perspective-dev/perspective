@@ -69,6 +69,18 @@ export function computeNiceTicks(
     return ticks;
 }
 
+export function stepTickFormatter(
+    isDate: boolean | undefined,
+    ticks: number[] | null | undefined,
+): (v: number) => string {
+    if (!isDate) {
+        return formatTickValue;
+    }
+
+    const step = ticks && ticks.length > 1 ? ticks[1] - ticks[0] : 0;
+    return (v: number) => formatDateTickValue(v, step);
+}
+
 /**
  * Format a numeric tick value for display.
  * Uses K/M/B suffixes for large numbers, fixed decimals for small.

@@ -168,4 +168,17 @@ perspective-dropdown {
     --psp-label--legend-x--content: "Legenden-X-Versatz";
     --psp-label--legend-y--content: "Legenden-Y-Versatz";
     --psp-label--legend-opacity--content: "Legendentransparenz";
+    --psp-label--tooltip-max-column-px--content: "Maximale Spaltenbreite";
+    --psp-label--tooltip-opacity--content: "Deckkraft";
+
+    --psp-label--group-axes--content: "Achsen";
+    --psp-label--group-facets--content: "Facetten";
+    --psp-label--group-glyph--content: "Glyphen";
+    --psp-label--group-density--content: "Dichte";
+    --psp-label--group-basemap--content: "Basiskarte";
+    --psp-label--group-legend--content: "Legende";
+    --psp-label--group-tooltip--content: "Tooltips";
+    --psp-label--group-color--content: "Farbe";
+    --psp-label--group-format--content: "Format";
+    --psp-label--column-size-override--content: "Spaltenbreite";
 }

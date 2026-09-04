@@ -10,7 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { test, expect, PageView } from "../helpers.ts";
+import {
+    test,
+    expect,
+    PageView,
+    compareInnerHTMLToSnapshot,
+} from "../helpers.ts";
 
 test.describe("Column settings target", () => {
     test.beforeEach(async ({ page }) => {
@@ -46,10 +51,12 @@ test.describe("Column settings target", () => {
 
         const sidebar = new PageView(page).columnSettingsSidebar;
         await expect(sidebar.container).toBeVisible();
-        expect(await sidebar.getTabs()).toContain("Window");
+        await compareInnerHTMLToSnapshot(
+            sidebar.container.locator("#settings_tab_bar"),
+            ["tabs"],
+        );
         await sidebar.openTab("Window");
-        await expect(sidebar.nameInput).toBeEnabled();
-        await expect(sidebar.nameInput).toHaveValue("w1");
+        await compareInnerHTMLToSnapshot(sidebar.nameInputWrapper, ["header"]);
     });
 
     test("toggleColumnSettings on an unknown column closes the drawer", async ({

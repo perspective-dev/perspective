@@ -193,9 +193,13 @@ test.describe("legend_mode", () => {
         const defaults = await page.evaluate(() => {
             const modeDefault = (tag: string) => {
                 const el = document.createElement(tag) as any;
-                return el
-                    .plugin_config_schema()
-                    .fields.find((f: any) => f.key === "legend_mode")?.default;
+                const flat: any[] = [];
+                const walk = (fields: any[]) =>
+                    fields.forEach((f) =>
+                        f.kind === "Group" ? walk(f.fields) : flat.push(f),
+                    );
+                walk(el.plugin_config_schema().fields);
+                return flat.find((f) => f.key === "legend_mode")?.default;
             };
 
             return {
@@ -533,9 +537,13 @@ test.describe("legend_size_mode", () => {
             const el = document.createElement(
                 "perspective-viewer-charts-y-line",
             ) as any;
-            return el
-                .plugin_config_schema()
-                .fields.find((f: any) => f.key === "legend_size_mode")?.default;
+            const flat: any[] = [];
+            const walk = (fields: any[]) =>
+                fields.forEach((f) =>
+                    f.kind === "Group" ? walk(f.fields) : flat.push(f),
+                );
+            walk(el.plugin_config_schema().fields);
+            return flat.find((f) => f.key === "legend_size_mode")?.default;
         });
         expect(schemaDefault).toBe("auto");
 

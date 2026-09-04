@@ -31,6 +31,7 @@ import {
 } from "../../interaction/legend-controller";
 import type { TreeChartBase } from "./tree-chart";
 import { drawTooltipBox } from "./draw-tooltip-box";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid";
 
 /**
  * Click target for one breadcrumb segment. Tree-chart hit-testing
@@ -120,23 +121,24 @@ export function renderTreeTooltip(
     cssHeight: number,
     fontFamily: string,
 ): void {
-    const lines =
+    const grid =
         chart._lazyTooltip.hoveredTarget === nodeId
-            ? (chart._lazyTooltip.lines ?? [])
+            ? (chart._lazyTooltip.grid ?? [])
             : [];
-    if (lines.length === 0) {
+    if (grid.length === 0) {
         return;
     }
 
     drawTooltipBox(
         ctx,
         chart._resolveTheme(),
-        lines,
+        grid,
         cx,
         cy,
         cssWidth,
         cssHeight,
         fontFamily,
+        tooltipStyleOf(chart._pluginConfig),
     );
 }
 

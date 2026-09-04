@@ -83,23 +83,67 @@ const DATE_LEGACY_DEFAULTS: Intl.DateTimeFormatOptions = {
     dateStyle: "short",
 };
 
+function mergeNumberOptions(
+    base: Intl.NumberFormatOptions,
+    cfg?: NumberFormatConfig,
+): Intl.NumberFormatOptions {
+    const explicit: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(cfg ?? {})) {
+        if (v !== undefined && v !== null) {
+            explicit[k] = v;
+        }
+    }
+
+    const merged: Record<string, unknown> = { ...base };
+    if (
+        "minimumFractionDigits" in explicit ||
+        "maximumFractionDigits" in explicit
+    ) {
+        delete merged.minimumFractionDigits;
+        delete merged.maximumFractionDigits;
+    }
+
+    if (
+        "minimumSignificantDigits" in explicit ||
+        "maximumSignificantDigits" in explicit
+    ) {
+        delete merged.minimumSignificantDigits;
+        delete merged.maximumSignificantDigits;
+    }
+
+    return Object.assign(merged, explicit) as Intl.NumberFormatOptions;
+}
+
+/**
+ * `defaults` is the calling plugin's declared default format, filling in
+ * the fields `cfg` leaves unset.
+ */
 export function createNumberFormatter(
     type: string,
     cfg?: NumberFormatConfig,
+    defaults?: NumberFormatConfig,
 ): Intl.NumberFormat {
     // ts-rs renders serde-absent keys as `T | null`; the wire never
     // carries an explicit `null` (`skip_serializing_if`), and
     // `Intl.NumberFormat` treats both absent and `undefined` the same, so
     // the cast is presentation-only.
-    const opts = (cfg ??
+    const base = ((defaults as Intl.NumberFormatOptions | undefined) ??
         NUMERIC_LEGACY_DEFAULTS[type] ??
         {}) as Intl.NumberFormatOptions;
+
+    const opts = cfg ? mergeNumberOptions(base, cfg) : base;
     return new Intl.NumberFormat(navigator.languages as string[], opts);
 }
 
+/**
+ * `defaults` is the calling plugin's declared default `date_format`,
+ * applied only when `cfg` is wholly absent.
+ */
 export function createDatetimeFormatter(
     cfg?: DateFormatConfig,
+    defaults?: DateFormatConfig,
 ): Intl.DateTimeFormat {
+    cfg = cfg ?? defaults;
     if (!cfg || !("format" in cfg)) {
         const preset = simple_config(cfg);
         const opts: Intl.DateTimeFormatOptions = {
@@ -158,10 +202,16 @@ export function createDatetimeFormatter(
     return new Intl.DateTimeFormat(navigator.languages as string[], opts);
 }
 
+/**
+ * `defaults` follows the same contract as
+ * [`createDatetimeFormatter`]: the plugin's declared default
+ * `date_format`, applied only when `cfg` is wholly absent.
+ */
 export function createDateFormatter(
     cfg?: DateFormatConfig,
+    defaults?: DateFormatConfig,
 ): Intl.DateTimeFormat {
-    const preset = simple_config(cfg);
+    const preset = simple_config(cfg ?? defaults);
     const opts: Intl.DateTimeFormatOptions = {
         timeZone: "utc",
         dateStyle:

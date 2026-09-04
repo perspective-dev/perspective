@@ -32,7 +32,7 @@ export class LazyTooltip<Target> {
     /**
      * Cached lines for the latest committed hover, or `null`.
      */
-    lines: string[] | null = null;
+    grid: string[][] | null = null;
 
     /**
      * Identity of the entity `lines` describe. `null` when cleared.
@@ -50,7 +50,7 @@ export class LazyTooltip<Target> {
      * the write.
      */
     beginHover(target: Target): number {
-        this.lines = null;
+        this.grid = null;
         this.hoveredTarget = target;
         return ++this._hoverSerial;
     }
@@ -60,12 +60,12 @@ export class LazyTooltip<Target> {
      * when the write happened (caller should repaint), false when the
      * serial was stale.
      */
-    commitHover(serial: number, lines: string[]): boolean {
+    commitHover(serial: number, grid: string[][]): boolean {
         if (serial !== this._hoverSerial) {
             return false;
         }
 
-        this.lines = lines;
+        this.grid = grid;
         return true;
     }
 
@@ -73,7 +73,7 @@ export class LazyTooltip<Target> {
      * Clear hover state (mouse left, view changed, etc.).
      */
     clearHover(): void {
-        this.lines = null;
+        this.grid = null;
         this.hoveredTarget = null;
         this._hoverSerial++;
     }

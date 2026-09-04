@@ -679,7 +679,7 @@ fn control_schema_entries(spec: &ControlSpec) -> Vec<(String, Value)> {
                 }),
             )]
         },
-        ControlSpec::DatetimeFormat => vec![(
+        ControlSpec::DatetimeFormat { .. } => vec![(
             "date_format".to_owned(),
             json!({ "description": "Datetime display format: a style preset or custom format fields" }),
         )],
@@ -701,7 +701,7 @@ fn control_schema_entries(spec: &ControlSpec) -> Vec<(String, Value)> {
             "symbols".to_owned(),
             json!({ "type": "object", "description": "Map of column values to symbol names" }),
         )],
-        ControlSpec::NumberFormat => vec![(
+        ControlSpec::NumberFormat { .. } => vec![(
             "number_format".to_owned(),
             json!({ "type": "object", "description": "Intl.NumberFormat-style options" }),
         )],
@@ -709,6 +709,9 @@ fn control_schema_entries(spec: &ControlSpec) -> Vec<(String, Value)> {
             "aggregate_depth".to_owned(),
             json!({ "type": "integer", "description": "Group-by rollup depth override" }),
         )],
+        ControlSpec::Group { fields, .. } => {
+            fields.iter().flat_map(control_schema_entries).collect()
+        },
     }
 }
 

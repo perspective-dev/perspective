@@ -429,7 +429,6 @@ fn ThemeSelector(props: &ThemeSelectorProps) -> Html {
                             <span class="icon" />
                             <Select<String>
                                 id="theme_selector"
-                                class="invert"
                                 {values}
                                 selected={selected.to_owned()}
                                 on_select={props.on_change.clone()}

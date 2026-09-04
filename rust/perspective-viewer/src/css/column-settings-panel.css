@@ -217,6 +217,10 @@
         content: var(--psp-label--notation--content, "Notation");
     }
 
+    label#compact-display-label:before {
+        content: var(--psp-label--compact-display--content, "Compact Display");
+    }
+
     label#use-grouping-label:before {
         content: var(--psp-label--use-grouping--content, "Use Grouping");
     }
@@ -235,6 +239,21 @@
 
     label#bg_gradient-label:before {
         content: var(--psp-label--bg-gradient--content, "Max Value");
+    }
+
+    label#color-group-label:before {
+        content: var(--psp-label--group-color--content, "Color");
+    }
+
+    label#format-group-label:before {
+        content: var(--psp-label--group-format--content, "Format");
+    }
+
+    label#column_size_override-label:before {
+        content: var(
+            --psp-label--column-size-override--content,
+            "Column Width"
+        );
     }
 
     label#rounding-priority-label:before {

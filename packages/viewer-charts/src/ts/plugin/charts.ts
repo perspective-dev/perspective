@@ -100,7 +100,7 @@ const DEFAULT_MAX_COLUMNS = 10_000;
 
 //  Plugin-config field sets, by chart family.
 //
-const LEGEND_FIELDS: readonly PluginConfigField[] = [
+export const LEGEND_FIELDS: readonly PluginConfigField[] = [
     "legend_mode",
     "legend_size_mode",
     "legend_width_px",
@@ -109,6 +109,11 @@ const LEGEND_FIELDS: readonly PluginConfigField[] = [
     "legend_x",
     "legend_y",
     "legend_opacity",
+];
+
+export const TOOLTIP_FIELDS: readonly PluginConfigField[] = [
+    "tooltip_max_column_px",
+    "tooltip_opacity",
 ];
 
 // Series charts paint bars / lines / scatter / area glyphs (selected
@@ -125,6 +130,7 @@ const SERIES_FIELDS: readonly PluginConfigField[] = [
     "band_inner_frac",
     "bar_inner_pad",
     ...LEGEND_FIELDS,
+    ...TOOLTIP_FIELDS,
 ];
 
 // The band pipeline's historical split_by rendering is a single plot
@@ -150,6 +156,7 @@ const CARTESIAN_FIELDS: readonly PluginConfigField[] = [
     "line_width_px",
     "point_size_px",
     ...LEGEND_FIELDS,
+    ...TOOLTIP_FIELDS,
 ];
 
 // Candlestick/OHLC share the categorical-X build pipeline (band slots)
@@ -162,14 +169,19 @@ const FIN_FIELDS: readonly PluginConfigField[] = [
     "bar_inner_pad",
     "wick_width_px",
     "ohlc_line_width_px",
+    ...TOOLTIP_FIELDS,
 ];
 
-const TREE_FIELDS: readonly PluginConfigField[] = [...LEGEND_FIELDS];
+const TREE_FIELDS: readonly PluginConfigField[] = [
+    ...LEGEND_FIELDS,
+    ...TOOLTIP_FIELDS,
+];
 
 // Heatmap
 const HEATMAP_FIELDS: readonly PluginConfigField[] = [
     "facet_zoom_mode",
     ...LEGEND_FIELDS,
+    ...TOOLTIP_FIELDS,
 ];
 
 // Map — reuses the cartesian build pipeline with a Mercator
@@ -185,6 +197,7 @@ const MAP_BASE_FIELDS: readonly PluginConfigField[] = [
     "map_tile_alpha",
     "numeric_axes",
     ...LEGEND_FIELDS,
+    ...TOOLTIP_FIELDS,
 ];
 const MAP_SCATTER_FIELDS: readonly PluginConfigField[] = [
     ...MAP_BASE_FIELDS,
@@ -215,6 +228,7 @@ const DENSITY_FIELDS: readonly PluginConfigField[] = [
     "gradient_intensity",
     "gradient_heat_max",
     ...LEGEND_FIELDS,
+    ...TOOLTIP_FIELDS,
 ];
 
 function make(

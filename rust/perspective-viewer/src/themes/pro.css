@@ -16,4 +16,122 @@ perspective-viewer,
 perspective-viewer[theme="Pro Light"],
 perspective-viewer [theme="Pro Light"] {
     --psp-theme-name: "Pro Light";
+    --psp--color: #161616;
+    color: var(--psp--color);
+    --psp-inactive--color: #ababab;
+    --psp-inactive--border-color: #dadada;
+    --psp-active--color: #2670a9;
+    --psp-error--color: #ff471e;
+    --psp--background-color: #ffffff;
+    --psp-icon-overflow-hint--color: rgba(0, 0, 0, 0.2);
+    --psp-select--background-color: none;
+    --psp-warning--background: #042121;
+    --psp-warning--color: #fdfffd;
+
+    --psp-icon-overflow-hint--color: #fdfffd;
+    --psp-placeholder--background: #8b868045;
+
+    --psp-button--font-size: 16px;
+    --psp-config-button--padding: 15px 8px 6px 8px;
+    --psp-column-selector--font-size: 16px;
+    --psp-column-type--width: 25px;
+    --psp-select--padding: 0px;
+    --psp-top-panel-row--display: inline-flex;
+    --psp-button--min-width: 33px;
+
+    font-family:
+        "ui-monospace", "SFMono-Regular", "SF Mono", "Menlo", "Consolas",
+        "Liberation Mono", monospace;
+    --psp-interface-monospace--font-family:
+        "ui-monospace", "SFMono-Regular", "SF Mono", "Menlo", "Consolas",
+        "Liberation Mono", monospace;
+
+    --psp-label--webgl-y1--content: "arrow_upward";
+    --psp-label--webgl-y2--content: "arrow_downward";
+    --psp-charts--treemap-axis--lines: none;
+    --psp-charts--tooltip--background: #ffffff;
+    --psp-charts--tooltip--color: #161616;
+    --psp-charts--tooltip--border-color: #ababab;
+    --psp-charts--gridline--color: #eaedef;
+    --psp-charts--axis-ticks--color: #161616;
+    --psp-charts--axis-lines--color: #c5c9d0;
+    --psp-charts--legend--background: var(--psp--background-color);
+    --psp-charts--series--color: rgba(31, 119, 180, 0.8);
+    --psp-charts--series-1--color: #0366d6;
+    --psp-charts--series-2--color: #ff7f0e;
+    --psp-charts--series-3--color: #2ca02c;
+    --psp-charts--series-4--color: #d62728;
+    --psp-charts--series-5--color: #9467bd;
+    --psp-charts--series-6--color: #8c564b;
+    --psp-charts--series-7--color: #e377c2;
+    --psp-charts--series-8--color: #7f7f7f;
+    --psp-charts--series-9--color: #bcbd22;
+    --psp-charts--series-10--color: #17becf;
+    --psp-datagrid--series-1--color: #0366d6;
+    --psp-datagrid--series-2--color: #ff7f0e;
+    --psp-datagrid--series-3--color: #2ca02c;
+    --psp-datagrid--series-4--color: #d62728;
+    --psp-datagrid--series-5--color: #9467bd;
+    --psp-datagrid--series-6--color: #8c564b;
+    --psp-datagrid--series-7--color: #e377c2;
+    --psp-datagrid--series-8--color: #7f7f7f;
+    --psp-datagrid--series-9--color: #bcbd22;
+    --psp-datagrid--series-10--color: #17becf;
+    --psp-charts--gradient--background: linear-gradient(
+        #4d342f 0%,
+        #e4521b 22.5%,
+        #feeb65 42.5%,
+        #f0f0f0 50%,
+        #dcedc8 57.5%,
+        #42b3d5 67.5%,
+        #1a237e 100%
+    );
+
+    --psp-datagrid--pos-cell--color: #338dcd;
+    --psp-datagrid--neg-cell--color: #ff471e;
+
+    --psp-openlayers--tile-url: "http://{a-c}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png";
+    --psp-openlayers--element--background: #fff;
+    --psp-openlayers--category-1--color: #0366d6;
+    --psp-openlayers--category-2--color: #ff7f0e;
+    --psp-openlayers--category-3--color: #2ca02c;
+    --psp-openlayers--category-4--color: #d62728;
+    --psp-openlayers--category-5--color: #9467bd;
+    --psp-openlayers--category-6--color: #8c564b;
+    --psp-openlayers--category-7--color: #e377c2;
+    --psp-openlayers--category-8--color: #7f7f7f;
+    --psp-openlayers--category-9--color: #bcbd22;
+    --psp-openlayers--category-10--color: #17becf;
+    --psp-openlayers--gradient--background: linear-gradient(
+        #4d342f 0%,
+        #e4521b 22.5%,
+        #feeb65 42.5%,
+        #f0f0f0 50%,
+        #dcedc8 57.5%,
+        #42b3d5 67.5%,
+        #1a237e 100%
+    );
+}
+
+perspective-context-menu[theme="Pro Light"],
+perspective-copy-menu[theme="Pro Light"],
+perspective-export-menu[theme="Pro Light"],
+perspective-dropdown[theme="Pro Light"],
+perspective-date-column-style[theme="Pro Light"],
+perspective-datetime-column-style[theme="Pro Light"],
+perspective-number-column-style[theme="Pro Light"],
+perspective-string-column-style[theme="Pro Light"] {
+    --psp--color: #161616;
+    --psp-inactive--color: #ababab;
+    --psp-inactive--border-color: #dadada;
+    --psp-active--color: #2670a9;
+    --psp-error--color: #ff471e;
+    --psp--background-color: #ffffff;
+    --psp-icon-overflow-hint--color: rgba(0, 0, 0, 0.2);
+    --psp-select--background-color: none;
+    --psp-warning--background: #042121;
+    --psp-warning--color: #fdfffd;
+    color: var(--psp--color);
+    background-color: #ffffff;
+    border: 1px solid #ababab;
 }

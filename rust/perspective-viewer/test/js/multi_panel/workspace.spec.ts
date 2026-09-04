@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { test, expect } from "../helpers.ts";
+import { test, expect, compareInnerHTMLToSnapshot } from "../helpers.ts";
 import { armInvariants } from "./harness.ts";
 
 const TABLE = "load-viewer-csv";
@@ -328,16 +328,7 @@ test.describe("Panel context menu", () => {
         // (like the Copy/Export menus), NOT a viewer descendant.
         const menu = page.locator("perspective-context-menu");
         await menu.waitFor();
-        await expect(menu.locator(".context-menu-item")).toContainText([
-            "New",
-            "Duplicate",
-            "Reset",
-            "Export",
-            "Copy",
-            "Maximize",
-            "Master",
-            "Close",
-        ]);
+        await compareInnerHTMLToSnapshot(menu);
 
         await menu
             .locator(".context-menu-item", { hasText: "Duplicate" })
@@ -377,12 +368,8 @@ test.describe("Panel context menu", () => {
         await new_item.hover();
         const submenu = new_item.locator(".context-menu-submenu");
         // Single client — a flat list of its hosted table names, no headers.
-        await expect(submenu.locator(".context-menu-item")).toContainText([
-            TABLE,
-            "second-table",
-        ]);
-
-        await expect(submenu.locator(".context-menu-header")).toHaveCount(0);
+        await submenu.waitFor();
+        await compareInnerHTMLToSnapshot(submenu);
         const prev_active = await page.evaluate(() =>
             // @ts-ignore
             document.querySelector("perspective-viewer")!.getActivePanel(),
@@ -450,11 +437,8 @@ test.describe("Panel context menu", () => {
         await new_item.hover();
         const submenu = new_item.locator(".context-menu-submenu");
         // Two clients — a header row per client, tables grouped beneath.
-        await expect(submenu.locator(".context-menu-header")).toHaveCount(2);
-        await expect(submenu.locator(".context-menu-item")).toContainText([
-            TABLE,
-            "other-client-table",
-        ]);
+        await submenu.waitFor();
+        await compareInnerHTMLToSnapshot(submenu);
 
         // "other-client-table" exists ONLY on the second client, so a
         // successful bind proves the sub-menu targeted the right client.

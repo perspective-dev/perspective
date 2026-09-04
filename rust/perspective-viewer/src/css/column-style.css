@@ -17,6 +17,8 @@
     #window-editor-container {
         outline: none;
         user-select: none;
+        margin-right: -6px;
+        padding-right: 6px;
 
         .bool-field-desc {
             font-size: 10px;
@@ -214,6 +216,86 @@
         fieldset.style-control {
             border: none;
             padding: 0px 0;
+        }
+
+        details.control-group {
+            margin: 0 -8px 0 -8px;
+            padding: 0 8px 0 8px;
+
+            &:not([open]):hover {
+                color: var(--psp--background-color);
+                background-color: var(--psp--color);
+                border-color: var(--psp--color) !important;
+            }
+
+            &[open] summary:hover {
+                color: var(--psp--color);
+            }
+
+            &:not(:first-child) {
+                border-top: 1px solid var(--psp-inactive--color);
+            }
+
+            &:last-of-type {
+                border-bottom: 1px solid var(--psp-inactive--color);
+            }
+
+            &:first-child {
+                margin-top: -12px;
+            }
+
+            > summary {
+                display: flex;
+                align-items: center;
+                cursor: pointer;
+                list-style: none;
+                margin: 0;
+                padding-right: 6px;
+                outline: none;
+
+                &::-webkit-details-marker {
+                    display: none;
+                }
+
+                > span.control-group-chevron {
+                    flex: 0 0 8px;
+                    height: 4px;
+                    background-color: currentColor;
+                    mask-image: var(--psp-icon--select-arrow--mask-image);
+                    -webkit-mask-image: var(
+                        --psp-icon--select-arrow--mask-image
+                    );
+                    -webkit-mask-repeat: no-repeat;
+                    mask-repeat: no-repeat;
+                    mask-size: cover;
+                    -webkit-mask-position: center;
+                    mask-position: center;
+                    transform: rotate(-90deg);
+                    margin-right: 2px;
+                }
+
+                label {
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+                    pointer-events: none;
+                    flex: 1 1 auto;
+                    width: auto;
+                    margin: 0 0 0 6px;
+                }
+            }
+
+            &[open] > summary label {
+                padding-bottom: 8px;
+            }
+
+            &[open] > summary {
+                color: var(--psp-inactive--color);
+                margin-bottom: 2px;
+            }
+
+            &[open] > summary > span.control-group-chevron {
+                transform: none;
+            }
         }
 
         .color-gradient-container {

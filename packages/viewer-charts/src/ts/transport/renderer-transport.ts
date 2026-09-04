@@ -14,6 +14,7 @@ import type { Client, View, ViewConfig } from "@perspective-dev/client";
 import type { FacetConfig, PluginConfig } from "../charts/chart";
 import type {
     ControlMsg,
+    ErrorMsg,
     InitMsg,
     InteractionEvent,
     LoadAndRenderMsg,
@@ -73,6 +74,24 @@ async function getSharedWorker(): Promise<Worker> {
             const env = e.data as WorkerEnvelope;
             HOST_LISTENERS.get(env.sessionId)?.(env.msg);
         });
+
+        let poisoned = false;
+        w.addEventListener("error", (event: ErrorEvent) => {
+            if (poisoned) {
+                return;
+            }
+
+            poisoned = true;
+            SHARED_WORKER = null;
+            const detail = event.message || `failed to load ${url}`;
+            const message = `perspective-viewer-charts renderer worker error: ${detail}`;
+            console.error(message, event.error ?? "");
+            const errorMsg: ErrorMsg = { kind: "error", message };
+            for (const listener of HOST_LISTENERS.values()) {
+                listener(errorMsg);
+            }
+        });
+
         return w;
     })();
 
@@ -823,7 +842,12 @@ export class RendererTransport {
                 this._resolvePending(msg.requestId, "saveZoom", msg.state);
                 break;
             case "pinTooltip":
-                this._ensureHostSink()?.pin(msg.lines, msg.pos, msg.bounds);
+                this._ensureHostSink()?.pin(
+                    msg.grid,
+                    msg.pos,
+                    msg.bounds,
+                    msg.style,
+                );
                 break;
             case "dismissTooltip":
                 this._hostSink?.dismiss();

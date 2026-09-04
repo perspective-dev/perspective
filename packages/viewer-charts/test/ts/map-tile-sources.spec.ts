@@ -68,9 +68,13 @@ test.describe("map tile sources", () => {
                 "perspective-viewer-charts-map-scatter",
             ) as any;
             const schema = el.plugin_config_schema();
-            const field = schema.fields.find(
-                (f: any) => f.key === "map_tile_provider",
-            );
+            const flat: any[] = [];
+            const walk = (fields: any[]) =>
+                fields.forEach((f) =>
+                    f.kind === "Group" ? walk(f.fields) : flat.push(f),
+                );
+            walk(schema.fields);
+            const field = flat.find((f) => f.key === "map_tile_provider");
             return {
                 ids: cls.tileSources().map((s: any) => s.id),
                 variants: field?.variants ?? [],
@@ -121,9 +125,13 @@ test.describe("map tile sources", () => {
             const el = document.createElement(
                 "perspective-viewer-charts-map-scatter",
             ) as any;
-            const field = el
-                .plugin_config_schema()
-                .fields.find((f: any) => f.key === "map_tile_provider");
+            const flat: any[] = [];
+            const walk = (fields: any[]) =>
+                fields.forEach((f) =>
+                    f.kind === "Group" ? walk(f.fields) : flat.push(f),
+                );
+            walk(el.plugin_config_schema().fields);
+            const field = flat.find((f) => f.key === "map_tile_provider");
             return field.variants.map((v: any) => v.value);
         });
         expect(variants).toContain("test-red");

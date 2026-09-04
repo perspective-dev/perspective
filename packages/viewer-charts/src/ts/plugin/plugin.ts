@@ -17,7 +17,12 @@ import type {
     IPerspectiveViewerPlugin,
     PluginStaticConfig,
 } from "@perspective-dev/viewer";
-import { ChartTypeConfig, PluginConfigField } from "./charts";
+import {
+    ChartTypeConfig,
+    LEGEND_FIELDS,
+    TOOLTIP_FIELDS,
+    PluginConfigField,
+} from "./charts";
 import style from "../../css/perspective-viewer-charts.css";
 import {
     DEFAULT_FACET_CONFIG,
@@ -25,6 +30,11 @@ import {
     type FacetConfig,
     type PluginConfig,
 } from "../charts/chart";
+import {
+    CHART_DATE_DEFAULTS,
+    CHART_DATETIME_DEFAULTS,
+    CHART_NUMBER_DEFAULTS,
+} from "./format-defaults";
 import { RawEventForwarder } from "../interaction/raw-event-forwarder";
 import { RendererTransport } from "../transport/renderer-transport";
 import { TILE_SOURCES, type TileSourceSpec } from "../map/tile-source";
@@ -175,6 +185,8 @@ const FIELD_SCHEMAS: Record<PluginConfigField, FieldSpec | (() => FieldSpec)> =
         legend_x: { kind: "Number", min: 0, max: 1, step: 0.01 },
         legend_y: { kind: "Number", min: 0, max: 1, step: 0.01 },
         legend_opacity: { kind: "Number", min: 0, max: 1, step: 0.05 },
+        tooltip_max_column_px: { kind: "Number", min: 40, max: 512, step: 1 },
+        tooltip_opacity: { kind: "Number", min: 0, max: 1, step: 0.05 },
     };
 
 function fieldSpec(
@@ -185,6 +197,48 @@ function fieldSpec(
     const spec = typeof entry === "function" ? entry() : entry;
     return { ...spec, key, default: defaults[key] };
 }
+
+const PLUGIN_FIELD_GROUPS: ReadonlyArray<{
+    key: string;
+    fields: readonly PluginConfigField[];
+}> = [
+    {
+        key: "axes",
+        fields: [
+            "auto_alt_y_axis",
+            "include_zero",
+            "domain_mode",
+            "numeric_axes",
+        ],
+    },
+    {
+        key: "facets",
+        fields: ["facet_mode", "facet_zoom_mode", "series_zoom_mode"],
+    },
+    {
+        key: "glyph",
+        fields: [
+            "line_width_px",
+            "point_size_px",
+            "band_inner_frac",
+            "bar_inner_pad",
+            "wick_width_px",
+            "ohlc_line_width_px",
+        ],
+    },
+    {
+        key: "density",
+        fields: [
+            "gradient_color_mode",
+            "gradient_radius_px",
+            "gradient_intensity",
+            "gradient_heat_max",
+        ],
+    },
+    { key: "basemap", fields: ["map_tile_provider", "map_tile_alpha"] },
+    { key: "legend", fields: LEGEND_FIELDS },
+    { key: "tooltip", fields: TOOLTIP_FIELDS },
+];
 
 const GLOBAL_STYLES = (() => {
     const sheet = new CSSStyleSheet();
@@ -675,9 +729,20 @@ export class HTMLPerspectiveViewerWebGLPluginElement
         // Per-column formatter widgets. Surfaced for every chart type so
         // axes / tooltips / legends honor the user's format choice.
         if (column_type === "integer" || column_type === "float") {
-            fields.push({ kind: "NumberFormat" });
-        } else if (column_type === "date" || column_type === "datetime") {
-            fields.push({ kind: "DatetimeFormat" });
+            fields.push({
+                kind: "NumberFormat",
+                default: CHART_NUMBER_DEFAULTS,
+            });
+        } else if (column_type === "datetime") {
+            fields.push({
+                kind: "DatetimeFormat",
+                default: CHART_DATETIME_DEFAULTS,
+            });
+        } else if (column_type === "date") {
+            fields.push({
+                kind: "DatetimeFormat",
+                default: CHART_DATE_DEFAULTS,
+            });
         }
 
         return { fields };
@@ -688,11 +753,32 @@ export class HTMLPerspectiveViewerWebGLPluginElement
         group_rollup_mode?: string;
     }) {
         const defaults = this._effectiveDefaults();
-        const fields = this._chartType.applicable_plugin_fields.map((key) =>
-            fieldSpec(key, defaults),
-        );
+        const applicable = this._chartType.applicable_plugin_fields;
+        const present = new Set(applicable);
 
-        return { fields };
+        const grouped = new Set<PluginConfigField>();
+        const groups: Array<Record<string, unknown> & { kind: string }> = [];
+        for (const group of PLUGIN_FIELD_GROUPS) {
+            const members = group.fields.filter((k) => present.has(k));
+            if (members.length >= 1) {
+                for (const k of members) {
+                    grouped.add(k);
+                }
+
+                groups.push({
+                    kind: "Group",
+                    key: group.key,
+                    fields: members.map((k) => fieldSpec(k, defaults)),
+                });
+            }
+        }
+
+        const fields: Array<Record<string, unknown> & { kind: string }> =
+            applicable
+                .filter((k) => !grouped.has(k))
+                .map((k) => fieldSpec(k, defaults));
+
+        return { fields: [...fields, ...groups] };
     }
 
     private _resolvedTheme(): Theme {

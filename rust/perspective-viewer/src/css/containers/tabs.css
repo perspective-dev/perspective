@@ -13,13 +13,23 @@
 
 :host {
     #format-tab {
-        overflow: scroll;
+        overflow: auto;
+        scrollbar-gutter: stable;
+    }
+
+    #style-tab {
+        margin-right: -6px;
+        #column-style-container {
+            margin-right: 6px;
+        }
     }
 
     #plugin-tab {
         overflow-x: hidden;
-        overflow-y: scroll;
-        padding: 12px 0 0 0;
+        overflow-y: auto;
+        scrollbar-gutter: stable;
+        padding: 12px 0 0 8px;
+        margin-left: -8px;
     }
 
     .tab-content {

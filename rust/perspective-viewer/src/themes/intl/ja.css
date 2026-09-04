@@ -168,4 +168,17 @@ perspective-dropdown {
     --psp-label--legend-x--content: "凡例Xオフセット";
     --psp-label--legend-y--content: "凡例Yオフセット";
     --psp-label--legend-opacity--content: "凡例の不透明度";
+    --psp-label--tooltip-max-column-px--content: "最大列幅";
+    --psp-label--tooltip-opacity--content: "不透明度";
+
+    --psp-label--group-axes--content: "軸";
+    --psp-label--group-facets--content: "ファセット";
+    --psp-label--group-glyph--content: "グリフ";
+    --psp-label--group-density--content: "密度";
+    --psp-label--group-basemap--content: "ベースマップ";
+    --psp-label--group-legend--content: "凡例";
+    --psp-label--group-tooltip--content: "ツールチップ";
+    --psp-label--group-color--content: "色";
+    --psp-label--group-format--content: "書式";
+    --psp-label--column-size-override--content: "列の幅";
 }

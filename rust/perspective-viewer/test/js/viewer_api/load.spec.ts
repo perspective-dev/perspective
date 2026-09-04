@@ -14,6 +14,7 @@ import {
     test,
     expect,
     compareContentsToSnapshot,
+    getLightContents,
     getShadowContents,
 } from "../helpers.ts";
 
@@ -29,7 +30,8 @@ test.describe("Viewer Load", () => {
             const goodTable = (await window.WORKER).table("a,b,c\n1,2,3");
             return viewer.load(goodTable);
         });
-        await expect(viewer).toHaveText(/"a","b","c"/); // column titles
+        await expect(viewer).toHaveText(/"a","b","c"/);
+        await compareContentsToSnapshot(await getLightContents(page));
     });
 
     test("load(client) > the first restore applies element-level settings", async ({

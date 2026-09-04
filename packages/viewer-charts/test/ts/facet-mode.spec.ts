@@ -46,10 +46,19 @@ async function schemaFields(
         const viewer = document.querySelector("perspective-viewer")!;
         const plugin = await (viewer as any).getPlugin();
         const schema = plugin.plugin_config_schema?.() ?? { fields: [] };
-        return schema.fields.map((f: { key: string; default?: unknown }) => ({
-            key: f.key,
-            default: f.default,
-        }));
+        const flat: { key: string; default?: unknown }[] = [];
+        const walk = (fields: any[]) => {
+            for (const f of fields) {
+                if (f.kind === "Group") {
+                    walk(f.fields);
+                } else {
+                    flat.push({ key: f.key, default: f.default });
+                }
+            }
+        };
+
+        walk(schema.fields);
+        return flat;
     });
 }
 

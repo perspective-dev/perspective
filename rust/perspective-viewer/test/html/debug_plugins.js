@@ -38,6 +38,20 @@ class DebugStyledPlugin extends BasePlugin {
                         { value: "READ_ONLY", label: "Read-only" },
                     ],
                 },
+                {
+                    kind: "Group",
+                    key: "legend",
+                    fields: [
+                        { kind: "Bool", key: "legend_on", default: false },
+                        {
+                            kind: "Number",
+                            key: "legend_width",
+                            default: 120,
+                            min: 0,
+                            max: 512,
+                        },
+                    ],
+                },
             ],
         };
     }
@@ -62,6 +76,21 @@ class DebugStyledPlugin extends BasePlugin {
                 default: "#2771a8",
             });
             fields.push({ kind: "NumberFormat" });
+
+            fields.push({
+                kind: "Group",
+                key: "fg",
+                fields: [
+                    { kind: "Bool", key: "fg_flag", default: false },
+                    { kind: "Color", key: "fg_color", default: "#ff471e" },
+                ],
+            });
+
+            fields.push({
+                kind: "Group",
+                key: "bg",
+                fields: [{ kind: "Bool", key: "bg_flag", default: false }],
+            });
         } else if (type === "date") {
             fields.push({ kind: "DatetimeFormat" });
         } else if (type === "datetime") {
@@ -145,12 +174,52 @@ class DebugAltPlugin extends DebugStyledPlugin {
     }
 }
 
+class DebugFormatPlugin extends DebugStyledPlugin {
+    get_static_config() {
+        return {
+            name: "Debug Format",
+            select_mode: "toggle",
+            config_column_names: ["Columns"],
+            priority: 0,
+            can_render_column_styles: true,
+        };
+    }
+
+    plugin_config_schema() {
+        return { fields: [] };
+    }
+
+    column_config_schema(type) {
+        const fields = [];
+        if (type === "integer" || type === "float") {
+            fields.push({
+                kind: "NumberFormat",
+                default: {
+                    notation: "compact",
+                    compactDisplay: "short",
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 1,
+                },
+            });
+        } else if (type === "date" || type === "datetime") {
+            fields.push({
+                kind: "DatetimeFormat",
+                default: { dateStyle: "medium", timeStyle: "disabled" },
+            });
+        }
+
+        return { fields };
+    }
+}
+
 customElements.define("perspective-viewer-debug-styled", DebugStyledPlugin);
 customElements.define("perspective-viewer-debug-alt", DebugAltPlugin);
+customElements.define("perspective-viewer-debug-format", DebugFormatPlugin);
 
 const Viewer = customElements.get("perspective-viewer");
 Viewer.registerPlugin("perspective-viewer-debug-styled");
 Viewer.registerPlugin("perspective-viewer-debug-alt");
+Viewer.registerPlugin("perspective-viewer-debug-format");
 
 async function load() {
     const resp = await fetch(

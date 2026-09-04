@@ -176,6 +176,76 @@ test.describe("Arrow", function () {
             await view.delete();
             await table.delete();
         });
+
+        test("Unsigned and 64-bit integer columns are not sign-flipped by JSON output", async function () {
+            const tableData = arrow.tableFromArrays({
+                u8: arrow.vectorFromArray(
+                    [0, 127, 128, 255],
+                    new arrow.Uint8(),
+                ),
+                u16: arrow.vectorFromArray(
+                    [0, 32767, 32768, 65535],
+                    new arrow.Uint16(),
+                ),
+                u32: arrow.vectorFromArray(
+                    [0, 2147483647, 2147483648, 4166343120],
+                    new arrow.Uint32(),
+                ),
+                u64: arrow.vectorFromArray(
+                    [0n, 4166343120n, 9007199254740991n, 9223372036854775808n],
+                    new arrow.Uint64(),
+                ),
+                i64: arrow.vectorFromArray(
+                    [
+                        -9007199254740991n,
+                        -2147483649n,
+                        4166343120n,
+                        9007199254740991n,
+                    ],
+                    new arrow.Int64(),
+                ),
+            });
+
+            const table = await perspective.table(arrow.tableToIPC(tableData));
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                u8: [0, 127, 128, 255],
+                u16: [0, 32767, 32768, 65535],
+                u32: [0, 2147483647, 2147483648, 4166343120],
+                u64: [0, 4166343120, 9007199254740991, 9223372036854775808],
+                i64: [
+                    -9007199254740991, -2147483649, 4166343120,
+                    9007199254740991,
+                ],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Unsigned group-by keys are not sign-flipped in __ROW_PATH__", async function () {
+            const tableData = arrow.tableFromArrays({
+                u32: arrow.vectorFromArray(
+                    [4166343120, 4166343120, 5],
+                    new arrow.Uint32(),
+                ),
+            });
+
+            const table = await perspective.table(arrow.tableToIPC(tableData));
+            const view = await table.view({
+                group_by: ["u32"],
+                columns: ["u32"],
+                aggregates: { u32: "count" },
+            });
+
+            expect(await view.to_columns()).toEqual({
+                __ROW_PATH__: [[], [5], [4166343120]],
+                u32: [3, 1, 2],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
     });
 
     test.describe("Malformed input", function () {

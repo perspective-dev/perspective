@@ -16,7 +16,7 @@
 // with no live LLM. The offline `agent.spec.ts` covers the same tool loop
 // over the in-page engine transport; this suite covers what only HTTP has.
 
-import { test, expect } from "../helpers.ts";
+import { test, expect, compareInnerHTMLToSnapshot } from "../helpers.ts";
 
 const BASE_URL = "https://fake-llm.example/v1";
 
@@ -238,7 +238,7 @@ test.describe("llm-agent http transport", () => {
         await expect(log.locator(".chat-pending")).toBeVisible();
         await page.locator("perspective-viewer #chat_stop_button").click();
         await expect(log.locator(".chat-error")).toHaveText("Stopped");
-        await expect(log.locator(".chat-pending")).toHaveCount(0);
+        await compareInnerHTMLToSnapshot(log, ["stopped"]);
         await expect(input).toBeEnabled();
     });
 });

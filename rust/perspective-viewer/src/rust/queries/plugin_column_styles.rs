@@ -42,7 +42,7 @@ pub fn get_plugin_config_schema(
         wasm_bindgen::JsValue::from_serde_ext(view_config).unwrap_or(wasm_bindgen::JsValue::NULL);
     let raw = plugin._plugin_config_schema(&view_config_js)?;
     serde_wasm_bindgen::from_value::<ColumnConfigSchema>(raw)
-        .map(|schema| schema.canonicalize_defaults())
+        .map(|schema| schema.canonicalize())
         .map_err(|e| e.into())
 }
 
@@ -100,6 +100,6 @@ pub fn get_column_config_schema(
     )?;
 
     serde_wasm_bindgen::from_value::<ColumnConfigSchema>(raw)
-        .map(|schema| schema.canonicalize_defaults())
+        .map(|schema| schema.canonicalize())
         .map_err(|e| e.into())
 }

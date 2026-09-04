@@ -13,6 +13,12 @@
 import type { HeatmapChart } from "./heatmap";
 import type { HeatmapCell } from "./heatmap-build";
 import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
+import {
+    renderAxisHoverIndicators,
+    type AxisIndicator,
+} from "../../interaction/axis-indicators";
+import { computeNiceTicks, stepTickFormatter } from "../../layout/ticks";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid";
 import type { CategoricalLevel } from "../../axis/categorical-axis";
 
 /**
@@ -216,6 +222,8 @@ export function renderHeatmapTooltip(chart: HeatmapChart): void {
     let xLevels: CategoricalLevel[];
     let yLevels: CategoricalLevel[];
     let xPositions: Float64Array | null;
+    let yPositions: Float64Array | null;
+    let xNumericDomain: { isDate?: boolean } | null;
     let facetLabel: string | null = null;
 
     if (chart._hoveredFacetIdx >= 0) {
@@ -228,6 +236,8 @@ export function renderHeatmapTooltip(chart: HeatmapChart): void {
         xLevels = facet.pipeline.xLevels;
         yLevels = facet.pipeline.yLevels;
         xPositions = facet.pipeline.xPositions;
+        yPositions = facet.pipeline.yPositions;
+        xNumericDomain = facet.pipeline.xNumericDomain;
         facetLabel = facet.label;
     } else {
         if (!chart._lastLayout) {
@@ -238,6 +248,8 @@ export function renderHeatmapTooltip(chart: HeatmapChart): void {
         xLevels = chart._xLevels;
         yLevels = chart._yLevels;
         xPositions = chart._xPositions;
+        yPositions = chart._yPositions;
+        xNumericDomain = chart._xNumericDomain;
     }
 
     const cell = chart._hoveredCell;
@@ -247,9 +259,9 @@ export function renderHeatmapTooltip(chart: HeatmapChart): void {
     // many pixels.
     const pos = { px: chart._hoveredMouseX, py: chart._hoveredMouseY };
 
-    const lines: string[] = [];
+    const grid: string[][] = [];
     if (facetLabel) {
-        lines.push(facetLabel);
+        grid.push([facetLabel]);
     }
 
     const xPath =
@@ -261,23 +273,69 @@ export function renderHeatmapTooltip(chart: HeatmapChart): void {
             : formatHierarchicalPath(xLevels, cell.xIdx);
     const yPath = formatHierarchicalPath(yLevels, cell.yIdx);
     if (xPath) {
-        lines.push(xPath);
+        grid.push([xPath]);
     }
 
     if (yPath) {
-        lines.push(yPath);
+        grid.push([yPath]);
     }
 
     const valueFmt = chart.getColumnFormatter(chart._columnSlots[0], "value");
-    lines.push(`Value: ${valueFmt(cell.value)}`);
+    grid.push(["Value", valueFmt(cell.value)]);
 
     const theme = chart._resolveTheme();
+    const dpr = chart._glManager?.dpr ?? 1;
+
+    const cellPos = layout.dataToPixel(
+        xPositions ? xPositions[cell.xIdx] : cell.xIdx,
+        yPositions ? yPositions[cell.yIdx] : cell.yIdx,
+    );
+    const badgeX =
+        chart._xAxisMode.mode === "numeric" && xPositions
+            ? (
+                  chart.getColumnFormatter(chart._groupBy[0], "tick") ??
+                  stepTickFormatter(
+                      xNumericDomain?.isDate,
+                      computeNiceTicks(layout.paddedXMin, layout.paddedXMax, 6),
+                  )
+              )(xPositions[cell.xIdx])
+            : xPath;
+
+    const indicators: AxisIndicator[] = [];
+    if (badgeX) {
+        indicators.push({
+            side: "bottom",
+            px: cellPos.px,
+            py: cellPos.py,
+            text: badgeX,
+        });
+    }
+
+    if (yPath) {
+        indicators.push({
+            side: "left",
+            px: cellPos.px,
+            py: cellPos.py,
+            text: yPath,
+        });
+    }
+
+    renderAxisHoverIndicators(
+        chart._chromeCanvas,
+        layout,
+        theme,
+        dpr,
+        indicators,
+        chart._pluginConfig.tooltip_opacity,
+    );
+
     renderCanvasTooltip(
         chart._chromeCanvas,
         pos,
-        lines,
+        grid,
         layout,
         theme,
-        chart._glManager?.dpr ?? 1,
+        dpr,
+        tooltipStyleOf(chart._pluginConfig),
     );
 }

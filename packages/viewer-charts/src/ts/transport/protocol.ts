@@ -508,7 +508,9 @@ export interface ErrorMsg {
  */
 export interface PinTooltipMsg {
     kind: "pinTooltip";
-    lines: string[];
+
+    grid: string[][];
+    style: { opacity: number; maxColumnPx: number };
     pos: { px: number; py: number };
     bounds: { cssWidth: number; cssHeight: number };
 }

@@ -271,6 +271,27 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  examples/cdn:
+    dependencies:
+      '@perspective-dev/client':
+        specifier: 'workspace:'
+        version: link:../../rust/perspective-js
+      '@perspective-dev/server':
+        specifier: 'workspace:'
+        version: link:../../rust/perspective-server
+      '@perspective-dev/viewer':
+        specifier: 'workspace:'
+        version: link:../../rust/perspective-viewer
+      '@perspective-dev/viewer-charts':
+        specifier: 'workspace:'
+        version: link:../../packages/viewer-charts
+      '@perspective-dev/viewer-datagrid':
+        specifier: 'workspace:'
+        version: link:../../packages/viewer-datagrid
+      superstore-arrow:
+        specifier: 'catalog:'
+        version: 3.2.0
+
   examples/esbuild-clickhouse-virtual:
     dependencies:
       '@clickhouse/client-web':

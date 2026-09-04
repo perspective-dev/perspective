@@ -93,6 +93,22 @@ export async function compareContentsToSnapshot(
     await expect(formatted).toMatchSnapshot(pathArray);
 }
 
+export async function compareInnerHTMLToSnapshot(
+    locator: Locator,
+    extraSnapshotPath?: string[],
+): Promise<void> {
+    const contents = await locator.evaluate((el) => el.innerHTML);
+    await compareContentsToSnapshot(contents, extraSnapshotPath);
+}
+
+export async function compareOuterHTMLToSnapshot(
+    locator: Locator,
+    extraSnapshotPath?: string[],
+): Promise<void> {
+    const contents = await locator.evaluate((el) => el.outerHTML);
+    await compareContentsToSnapshot(contents, extraSnapshotPath);
+}
+
 export async function compareNodes(
     left: Locator,
     right: Locator,

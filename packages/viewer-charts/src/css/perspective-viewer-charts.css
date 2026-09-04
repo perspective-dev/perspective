@@ -89,7 +89,6 @@
     border-radius: 3px;
     padding: 3px;
     overflow-y: auto;
-    white-space: pre;
     z-index: 10;
     line-height: 16px;
 }

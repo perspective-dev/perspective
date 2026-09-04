@@ -370,6 +370,7 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                 <PluginTab
                     view_config={props.view_config.clone()}
                     plugin_config={props.plugin_config.clone()}
+                    presentation={presentation.clone()}
                     renderer={renderer.clone()}
                     session={session.clone()}
                 // initial_width={width}

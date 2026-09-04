@@ -13,6 +13,7 @@
 import type { TreeChartBase } from "./tree-chart";
 import { NULL_NODE, ancestorNames } from "./node-store";
 import { rebuildBreadcrumbs } from "./tree-data";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid";
 
 /**
  * Common subset of `TreemapChart` / `SunburstChart` reached by the
@@ -73,9 +74,9 @@ export async function emitTreeNodeEvent(
 export async function buildTreeTooltipLines(
     chart: TreeInteractChart,
     nodeId: number,
-): Promise<string[]> {
+): Promise<string[][]> {
     const store = chart._nodeStore;
-    const lines: string[] = [];
+    const grid: string[][] = [];
 
     const pathNames: string[] = [];
     let p = nodeId;
@@ -86,19 +87,17 @@ export async function buildTreeTooltipLines(
 
     pathNames.reverse();
     if (pathNames.length > 0) {
-        lines.push(pathNames.join(" › "));
+        grid.push([pathNames.join(" › ")]);
     } else {
-        lines.push(store.name[nodeId]);
+        grid.push([store.name[nodeId]]);
     }
 
     const sizeFmt = chart.getColumnFormatter(chart._sizeName, "value");
-    lines.push(`Value: ${sizeFmt(store.value[nodeId])}`);
+    grid.push(["Value", sizeFmt(store.value[nodeId])]);
 
     if (chart._colorName && !isNaN(store.colorValue[nodeId])) {
         const colorFmt = chart.getColumnFormatter(chart._colorName, "value");
-        lines.push(
-            `${chart._colorName}: ${colorFmt(store.colorValue[nodeId])}`,
-        );
+        grid.push([chart._colorName, colorFmt(store.colorValue[nodeId])]);
     }
 
     const rowIdx = store.leafRowIdx[nodeId];
@@ -117,20 +116,21 @@ export async function buildTreeTooltipLines(
             }
 
             if (typeof value === "number") {
-                lines.push(
-                    `${name}: ${chart.getColumnFormatter(name, "value")(value)}`,
-                );
+                grid.push([
+                    name,
+                    chart.getColumnFormatter(name, "value")(value),
+                ]);
             } else {
-                lines.push(`${name}: ${value}`);
+                grid.push([name, String(value)]);
             }
         }
     }
 
     if (store.firstChild[nodeId] !== NULL_NODE) {
-        lines.push(`Children: ${store.childCount[nodeId]}`);
+        grid.push(["Children", String(store.childCount[nodeId])]);
     }
 
-    return lines;
+    return grid;
 }
 
 /**
@@ -150,19 +150,20 @@ export function showTreePinnedTooltip(
     const cssWidth = chart._glManager?.cssWidth ?? 0;
     const cssHeight = chart._glManager?.cssHeight ?? 0;
 
-    buildTreeTooltipLines(chart, nodeId).then((lines) => {
+    buildTreeTooltipLines(chart, nodeId).then((grid) => {
         if (chart._pinnedNodeId !== nodeId) {
             return;
         }
 
-        if (lines.length === 0) {
+        if (grid.length === 0) {
             return;
         }
 
         chart._tooltip.pin(
-            lines,
+            grid,
             { px: anchor.cx, py: anchor.cy },
             { cssWidth, cssHeight },
+            tooltipStyleOf(chart._pluginConfig),
         );
     });
 

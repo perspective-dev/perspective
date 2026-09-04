@@ -5,9 +5,16 @@ project(Boost-download NONE)
 # Makes GIT_SUBMODULES "" in ExternalProject_Add skip initializing submodules
 cmake_policy(SET CMP0097 NEW)
 
+if(NOT CMAKE_VERSION VERSION_LESS "3.19")
+  set(PSP_BOOST_DOWNLOAD_ARGS INACTIVITY_TIMEOUT 30)
+endif()
+
 include(ExternalProject)
 ExternalProject_Add(Boost
-  URL               "https://sourceforge.net/projects/boost/files/boost/1.82.0/boost_1_82_0.tar.gz"
+  URL               "https://archives.boost.io/release/1.82.0/source/boost_1_82_0.tar.gz"
+                    "https://sourceforge.net/projects/boost/files/boost/1.82.0/boost_1_82_0.tar.gz"
+  URL_HASH          SHA256=66a469b6e608a51f8347236f4912e27dc5c60c60d7d53ae9bfe4683316c6f04c
+  ${D}{PSP_BOOST_DOWNLOAD_ARGS}
   SOURCE_DIR        "${CMAKE_BINARY_DIR}/Boost-src"
   BINARY_DIR        "${CMAKE_BINARY_DIR}/Boost-build"
   SOURCE_SUBDIR     ""

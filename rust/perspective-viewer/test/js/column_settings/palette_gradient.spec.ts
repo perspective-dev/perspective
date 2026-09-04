@@ -10,7 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { test, expect, PageView } from "../helpers.ts";
+import {
+    test,
+    expect,
+    PageView,
+    compareInnerHTMLToSnapshot,
+} from "../helpers.ts";
 
 test.beforeEach(async ({ page }) => {
     await page.goto("/rust/perspective-viewer/test/html/superstore-debug.html");
@@ -84,7 +89,7 @@ test.describe("GradientStops control", () => {
         const selector = stopsField(view, "gradient");
 
         await expect(selector).toBeVisible();
-        await expect(selector.locator(".gradient-stop-handle")).toHaveCount(2);
+        await compareInnerHTMLToSnapshot(selector);
         expect((await columnsConfig(view))["Sales"]?.gradient).toBeUndefined();
     });
 
@@ -211,9 +216,7 @@ test.describe("GradientStops control", () => {
         const selector = stopsField(view, "gradient");
 
         await expect(selector.locator(".gradient-stop-handle")).toHaveCount(3);
-        await expect(
-            selector.locator(".gradient-stop-handle input[type=color]").nth(1),
-        ).toHaveValue("#222222");
+        await compareInnerHTMLToSnapshot(selector);
 
         expect((await columnsConfig(view))["Sales"]?.gradient).toBe(
             "linear-gradient(to right, #111111 0%, #222222 50%, #333333 100%)",
@@ -257,18 +260,12 @@ test.describe("Restricted GradientStops (sign-split)", () => {
         const selector = stopsField(view, "fg_colors");
         await expect(selector).toBeVisible();
         await expect(selector.locator(".gradient-stop-handle")).toHaveCount(2);
+        await compareInnerHTMLToSnapshot(selector, ["initial"]);
 
         const grips = selector.locator(".gradient-stop-grip");
-        await expect(grips).toHaveCount(2);
-        await expect(grips.first()).toHaveClass(/disabled/);
-        await expect(grips.nth(1)).toHaveClass(/disabled/);
         const locks = selector.locator(".gradient-stop-lock");
-        await expect(locks).toHaveCount(2);
-        await expect(selector.locator(".gradient-stop-remove")).toHaveCount(0);
-        await expect(selector.locator(".color-label")).toHaveCount(0);
-
         await locks.first().click();
-        await expect(selector.locator(".gradient-stop-handle")).toHaveCount(2);
+        await compareInnerHTMLToSnapshot(selector, ["initial"]);
 
         const bar = selector.locator(".gradient-stops-bar");
         const box = (await bar.boundingBox())!;
@@ -284,7 +281,7 @@ test.describe("Restricted GradientStops (sign-split)", () => {
         expect((await columnsConfig(view))["Sales"]?.fg_colors).toBeUndefined();
 
         await bar.dblclick({ position: { x: box.width / 2, y: 4 } });
-        await expect(selector.locator(".gradient-stop-handle")).toHaveCount(2);
+        await compareInnerHTMLToSnapshot(selector, ["initial"]);
         expect((await columnsConfig(view))["Sales"]?.fg_colors).toBeUndefined();
     });
 
@@ -330,7 +327,7 @@ test.describe("Restricted GradientStops (sign-split)", () => {
 
         const selector = stopsField(view, "fg_colors");
         await expect(selector.locator(".gradient-stop-handle")).toHaveCount(2);
-        await expect(selector.locator(".gradient-stop-lock")).toHaveCount(2);
+        await compareInnerHTMLToSnapshot(selector);
     });
 
     test("an over-length restored value renders fully and is prunable", async ({
@@ -350,19 +347,12 @@ test.describe("Restricted GradientStops (sign-split)", () => {
         const selector = stopsField(view, "fg_colors");
         const handles = selector.locator(".gradient-stop-handle");
         await expect(handles).toHaveCount(3);
-        await expect(
-            selector.locator(".gradient-stop-grip.disabled"),
-        ).toHaveCount(3);
+        await compareInnerHTMLToSnapshot(selector, ["restored"]);
 
         const middle = handles.nth(1);
-        await expect(middle.locator(".gradient-stop-remove")).not.toHaveClass(
-            /disabled/,
-        );
         await middle.locator(".gradient-stop-remove").click();
         await expect(handles).toHaveCount(2);
-
-        await expect(selector.locator(".gradient-stop-remove")).toHaveCount(0);
-        await expect(selector.locator(".gradient-stop-lock")).toHaveCount(2);
+        await compareInnerHTMLToSnapshot(selector, ["pruned"]);
     });
 });
 
@@ -386,7 +376,7 @@ test.describe("Palette control", () => {
         const sidebar = view.columnSettingsSidebar.container;
         await expect(sidebar.locator(".palette-selector")).toHaveCount(0);
         await enableSeriesMode(view);
-        await expect(sidebar.locator(".palette-swatch")).toHaveCount(3);
+        await compareInnerHTMLToSnapshot(sidebar.locator(".palette-selector"));
 
         const config = (await columnsConfig(view))["State"];
         expect(config.string_color_mode).toBe("series");
@@ -476,9 +466,7 @@ test.describe("Palette control", () => {
         expect((await columnsConfig(view))["State"]).toEqual({
             string_color_mode: "background",
         });
-        await expect(colorField.locator("input[type=color]")).toHaveValue(
-            "#2771a8",
-        );
+        await compareInnerHTMLToSnapshot(colorField, ["background-default"]);
     });
 
     test("the add tile respects the schema's max", async ({ page }) => {
@@ -497,7 +485,9 @@ test.describe("Palette control", () => {
         }
 
         await expect(swatches).toHaveCount(6);
-        await expect(add).toHaveCount(0);
+        await compareInnerHTMLToSnapshot(sidebar.locator(".palette-selector"), [
+            "maxed",
+        ]);
     });
 
     test("dragging a swatch previews the order and commits on release; a press is a click", async ({
@@ -580,12 +570,9 @@ test.describe("Palette control", () => {
         const sidebar = view.columnSettingsSidebar.container;
         const swatches = sidebar.locator(".palette-swatch");
         await expect(swatches).toHaveCount(2);
-        await expect(swatches.nth(0).locator("input[type=color]")).toHaveValue(
-            "#123456",
-        );
-        await expect(swatches.nth(1).locator("input[type=color]")).toHaveValue(
-            "#654321",
-        );
+        await compareInnerHTMLToSnapshot(sidebar.locator(".palette-selector"), [
+            "restored",
+        ]);
 
         expect((await columnsConfig(view))["State"]?.palette).toBe(
             "linear-gradient(to right, #123456, #654321)",
@@ -696,19 +683,7 @@ test.describe("Named values (var() references + the workspace palette)", () => {
 
         const selector = stopsField(view, "gradient");
         await expect(selector.locator(".gradient-stop-handle")).toHaveCount(2);
-        await expect(selector.locator(".gradient-stop-grip")).toHaveCount(2);
-        await expect(
-            selector.locator(".gradient-stop-handle input[type=color]").first(),
-        ).toBeEnabled();
-
-        const controls = field(view, "gradient").locator(
-            ".named-value-controls",
-        );
-        await expect(controls.locator("select option")).toHaveText([
-            "Load",
-            "1",
-        ]);
-        await expect(controls.locator(".named-value-pin")).toBeVisible();
+        await compareInnerHTMLToSnapshot(field(view, "gradient"), ["widget"]);
     });
 
     test("a reference of the wrong kind rejects restore(); an unresolvable one renders the default", async ({
@@ -747,9 +722,13 @@ test.describe("Named values (var() references + the workspace palette)", () => {
         ).toBeUndefined();
         expect((await columnsConfig(view))["Sales"]?.gradient).toBeUndefined();
         expect((await saveWorkspace(view)).palette).toBeUndefined();
-        await expect(
-            stopsField(view, "gradient").locator(".gradient-stop-handle"),
-        ).toHaveCount(2);
+        await stopsField(view, "gradient")
+            .locator(".gradient-stop-handle")
+            .first()
+            .waitFor();
+        await compareInnerHTMLToSnapshot(stopsField(view, "gradient"), [
+            "default",
+        ]);
     });
 
     test("restoreWorkspace({palette}) defines, resolves and round-trips named values", async ({
@@ -905,10 +884,8 @@ test.describe("Named values (var() references + the workspace palette)", () => {
         const controls = field(view, "gradient").locator(
             ".named-value-controls",
         );
-        await expect(controls.locator("select option")).toHaveText([
-            "Load",
-            "1",
-        ]);
+        await controls.waitFor({ state: "attached" });
+        await compareInnerHTMLToSnapshot(controls, ["gradient-1"]);
 
         await input.fill("#0000ff");
         expect((await saveWorkspace(view)).palette).toEqual({
@@ -948,18 +925,13 @@ test.describe("Named values (var() references + the workspace palette)", () => {
         const profitControls = field(view, "gradient").locator(
             ".named-value-controls",
         );
-        await expect(profitControls.locator("select option")).toHaveText([
-            "Load",
-            "1",
-            "2",
-        ]);
+        await profitControls.waitFor({ state: "attached" });
+        await compareInnerHTMLToSnapshot(profitControls, ["profit-options"]);
         await profitControls.locator("select").selectOption("2");
         await expect(profitControls.locator("select")).toHaveValue("");
-        await expect(
-            stopsField(view, "gradient")
-                .locator(".gradient-stop-handle input[type=color]")
-                .first(),
-        ).toBeEnabled();
+        await compareInnerHTMLToSnapshot(stopsField(view, "gradient"), [
+            "profit-loaded",
+        ]);
         expect((await columnsConfig(view))["Profit"]?.gradient).toBe(
             "linear-gradient(to right, #0000ff 0%, #ff471e 100%)",
         );
@@ -1014,20 +986,13 @@ test.describe("Named values (var() references + the workspace palette)", () => {
         const controls = field(view, "palette").locator(
             ".named-value-controls",
         );
-        await expect(controls.locator("select option")).toHaveText([
-            "Load",
-            "1",
-        ]);
-        await expect(controls.locator(".named-value-pin")).toHaveCount(0);
+        await controls.waitFor({ state: "attached" });
+        await compareInnerHTMLToSnapshot(field(view, "palette"), ["initial"]);
 
         await controls.locator("select").selectOption("1");
         const swatches = sidebar.locator(".palette-swatch");
         await expect(swatches).toHaveCount(6);
-        await expect(
-            swatches.first().locator("input[type=color]"),
-        ).toBeEnabled();
-        await expect(sidebar.locator(".palette-add")).toHaveCount(0);
-        await expect(controls.locator("select")).toHaveValue("");
+        await compareInnerHTMLToSnapshot(field(view, "palette"), ["loaded"]);
 
         const SIX =
             "linear-gradient(to right, #111111, #222222, #333333, #444444, #555555, #666666)";
@@ -1039,11 +1004,10 @@ test.describe("Named values (var() references + the workspace palette)", () => {
         );
 
         await swatches.first().locator("input[type=color]").fill("#00ff00");
-        await expect(controls.locator("select option")).toHaveText([
-            "Load",
-            "2",
-            "1",
-        ]);
+        await controls
+            .locator("option", { hasText: "2" })
+            .waitFor({ state: "attached" });
+        await compareInnerHTMLToSnapshot(controls, ["renamed"]);
         workspace = await saveWorkspace(view);
         expect(Object.keys(workspace.palette)).toEqual([
             "--psp-user--palette-2",

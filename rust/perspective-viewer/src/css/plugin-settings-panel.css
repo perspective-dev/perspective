@@ -132,4 +132,40 @@
     label#legend_opacity-label:before {
         content: var(--psp-label--legend-opacity--content);
     }
+
+    label#tooltip_max_column_px-label:before {
+        content: var(--psp-label--tooltip-max-column-px--content);
+    }
+
+    label#tooltip_opacity-label:before {
+        content: var(--psp-label--tooltip-opacity--content);
+    }
+
+    label#axes-group-label:before {
+        content: var(--psp-label--group-axes--content, "Axes");
+    }
+
+    label#facets-group-label:before {
+        content: var(--psp-label--group-facets--content, "Facets");
+    }
+
+    label#glyph-group-label:before {
+        content: var(--psp-label--group-glyph--content, "Glyphs");
+    }
+
+    label#density-group-label:before {
+        content: var(--psp-label--group-density--content, "Density");
+    }
+
+    label#basemap-group-label:before {
+        content: var(--psp-label--group-basemap--content, "Basemap");
+    }
+
+    label#legend-group-label:before {
+        content: var(--psp-label--group-legend--content, "Legend");
+    }
+
+    label#tooltip-group-label:before {
+        content: var(--psp-label--group-tooltip--content, "Tooltips");
+    }
 }

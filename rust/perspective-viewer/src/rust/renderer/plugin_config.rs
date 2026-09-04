@@ -133,7 +133,7 @@ impl Renderer {
             else {
                 continue;
             };
-            let needs_warm = schema.fields.iter().any(|f| {
+            let needs_warm = schema.leaf_fields().into_iter().any(|f| {
                 matches!(
                     f,
                     ControlSpec::Number {
@@ -164,7 +164,7 @@ impl Renderer {
                 continue;
             };
 
-            for field in &schema.fields {
+            for field in schema.leaf_fields() {
                 let ControlSpec::Number {
                     key,
                     default,
@@ -380,7 +380,7 @@ impl Renderer {
         let view_config_js = JsValue::from_serde_ext(view_config).unwrap_or(JsValue::NULL);
         let raw = plugin._plugin_config_schema(&view_config_js)?;
         serde_wasm_bindgen::from_value::<ColumnConfigSchema>(raw)
-            .map(|schema| schema.canonicalize_defaults())
+            .map(|schema| schema.canonicalize())
             .map_err(|e| e.into())
     }
 
@@ -429,7 +429,7 @@ impl Renderer {
         )?;
 
         serde_wasm_bindgen::from_value::<ColumnConfigSchema>(raw)
-            .map(|schema| schema.canonicalize_defaults())
+            .map(|schema| schema.canonicalize())
             .map_err(|e| e.into())
     }
 
@@ -470,9 +470,9 @@ impl Renderer {
                         ))));
                     }
 
+                    let leaves = s.leaf_fields();
                     map.retain(|key, value| {
-                        let is_default = s
-                            .fields
+                        let is_default = leaves
                             .iter()
                             .any(|spec| matches_declared_default(spec, key, value));
                         if is_default {
@@ -567,9 +567,9 @@ fn strip_default_values(
     schema: &ColumnConfigSchema,
     map: &mut serde_json::Map<String, serde_json::Value>,
 ) {
+    let leaves = schema.leaf_fields();
     map.retain(|key, value| {
-        !schema
-            .fields
+        !leaves
             .iter()
             .any(|spec| matches_declared_default(spec, key, value))
     });
@@ -700,6 +700,53 @@ mod tests {
             "color",
             &json!("var(--psp-user--color-1)")
         ));
+    }
+
+    #[test]
+    fn strip_default_values_sees_through_groups() {
+        let leaves = vec![
+            ControlSpec::Bool {
+                key: "flag".to_owned(),
+                default: false,
+            },
+            ControlSpec::Number {
+                key: "size".to_owned(),
+                default: 3.0,
+                include: None,
+                min: None,
+                max: None,
+                step: None,
+            },
+        ];
+
+        let flat = ColumnConfigSchema {
+            fields: leaves.clone(),
+        };
+
+        let grouped = ColumnConfigSchema {
+            fields: vec![ControlSpec::Group {
+                key: "section".to_owned(),
+                fields: leaves,
+            }],
+        };
+
+        let src = json!({ "flag": false, "size": 4.0, "foreign": 1 })
+            .as_object()
+            .unwrap()
+            .clone();
+
+        let mut a = src.clone();
+        let mut b = src;
+        strip_default_values(&flat, &mut a);
+        strip_default_values(&grouped, &mut b);
+        assert_eq!(a, b);
+        assert_eq!(
+            a,
+            json!({ "size": 4.0, "foreign": 1 })
+                .as_object()
+                .unwrap()
+                .clone()
+        );
     }
 
     #[test]

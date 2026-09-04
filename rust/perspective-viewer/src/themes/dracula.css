@@ -23,6 +23,7 @@ perspective-viewer [theme="Dracula"] {
     /* perspective-viewer-pro-dark--colors (overrides) */
     background-color: #242526;
     color: white;
+    color-scheme: dark;
     --psp--color: white;
     --psp-active--color: #2770a9;
     --psp-error--color: #ff9485;
@@ -37,14 +38,6 @@ perspective-viewer [theme="Dracula"] {
     --psp-input--filter: invert(1);
     --psp-warning--color: #242526;
     --psp-warning--background: var(--psp--color);
-
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
 
     --psp-code-editor--symbol--color: white;
     --psp-code-editor--literal--color: #7dc3f0;
@@ -180,6 +173,7 @@ perspective-dropdown[theme="Dracula"] {
     /* perspective-viewer-pro-dark--colors (overrides) */
     background-color: #242526;
     color: white;
+    color-scheme: dark;
     --psp--color: white;
     --psp-active--color: #2770a9;
     --psp-error--color: #ff9485;
@@ -194,12 +188,6 @@ perspective-dropdown[theme="Dracula"] {
     --psp-input--filter: invert(1);
     --psp-warning--color: #242526;
     --psp-warning--background: var(--psp--color);
-    --psp-icon--select-arrow--mask-image: var(
-        --psp-icon--select-arrow-light--mask-image
-    );
-    --psp-icon--select-arrow-hover--mask-image: var(
-        --psp-icon--select-arrow-dark--mask-image
-    );
     --psp-code-editor--symbol--color: white;
     --psp-code-editor--literal--color: #7dc3f0;
     --psp-code-editor--operator--color: rgb(23, 166, 123);
