@@ -142,6 +142,12 @@ public:
     // constants for True and False as DTYPE_BOOL scalars
     static t_tscalar TRUE_SCALAR;
     static t_tscalar FALSE_SCALAR;
+
+    /**
+     * @brief The `null` literal, bound to the `None` symbol that
+     * `re_null_literal` substitutes for ExprTK's `null` keyword.
+     */
+    static t_tscalar NONE_SCALAR;
 };
 
 /**

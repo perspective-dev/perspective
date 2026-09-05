@@ -37,6 +37,9 @@ operator>(const std::size_t& lhs, const t_tscalar& rhs) {
     t_tscalar rval;                                                            \
     rval.clear();                                                              \
     rval.m_type = DTYPE_FLOAT64;                                               \
+    if (is_none() || other.is_none()) {                                        \
+        return rval;                                                           \
+    }                                                                          \
     if (!is_numeric() || !other.is_numeric()) {                                \
         rval.m_status = STATUS_CLEAR;                                          \
     }                                                                          \
@@ -146,6 +149,10 @@ t_tscalar::operator+() const {
     rval.clear();
     rval.m_type = m_type;
 
+    if (is_none()) {
+        return rval;
+    }
+
     if (!is_numeric()) {
         rval.m_status = STATUS_CLEAR;
     }
@@ -197,6 +204,10 @@ t_tscalar::operator-() const {
     t_tscalar rval;
     rval.clear();
     rval.m_type = m_type;
+
+    if (is_none()) {
+        return rval;
+    }
 
     if (!is_numeric()) {
         rval.m_status = STATUS_CLEAR;
@@ -258,6 +269,10 @@ t_tscalar t_tscalar::operator/(const t_tscalar& other) const {
     rval.clear();
     rval.m_type = DTYPE_FLOAT64;
 
+    if (is_none() || other.is_none()) {
+        return rval;
+    }
+
     if (!is_numeric() || !other.is_numeric()) {
         rval.m_status = STATUS_CLEAR;
     }
@@ -280,6 +295,10 @@ t_tscalar::operator%(const t_tscalar& other) const {
     t_tscalar rval;
     rval.clear();
     rval.m_type = DTYPE_FLOAT64;
+
+    if (is_none() || other.is_none()) {
+        return rval;
+    }
 
     if (!is_numeric() || !other.is_numeric()) {
         rval.m_status = STATUS_CLEAR;

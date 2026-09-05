@@ -13,6 +13,7 @@
 #include <perspective/computed_expression.h>
 
 #include <cstdint>
+#include <functional>
 #include <utility>
 
 namespace perspective {
@@ -104,6 +105,98 @@ struct t_validation_check_guard {
     exprtk::parser<t_tscalar>& m_parser;
 };
 
+/**
+ * @brief Best-effort line/column of a recorded type error within the parsed
+ * expression, from the first operator token whose operands carry the
+ * offending dtypes.
+ */
+bool
+locate_type_error(
+    const expr::t_expression_type_error& type_error,
+    const std::string& parsed_expression_string,
+    const std::function<t_dtype(const std::string&)>& symbol_dtype,
+    t_expression_error& error
+) {
+    exprtk::lexer::generator lexer;
+    if (!lexer.process(parsed_expression_string)) {
+        return false;
+    }
+
+    const std::size_t npos = std::numeric_limits<std::size_t>::max();
+    const std::size_t num_tokens = lexer.size();
+    std::size_t fallback = npos;
+    std::size_t position = npos;
+
+    auto token_dtype = [&](const exprtk::lexer::token& tok) -> t_dtype {
+        if (tok.type == exprtk::lexer::token::e_number) {
+            return DTYPE_FLOAT64;
+        }
+        if (tok.type == exprtk::lexer::token::e_symbol) {
+            return symbol_dtype(tok.value);
+        }
+        return DTYPE_NONE;
+    };
+
+    auto prev_operand = [&](std::size_t idx) -> t_dtype {
+        while (idx > 0) {
+            const exprtk::lexer::token& tok = lexer[idx - 1];
+            if (tok.type != exprtk::lexer::token::e_rbracket) {
+                return token_dtype(tok);
+            }
+            --idx;
+        }
+        return DTYPE_NONE;
+    };
+
+    auto next_operand = [&](std::size_t idx) -> t_dtype {
+        while (idx + 1 < num_tokens) {
+            const exprtk::lexer::token& tok = lexer[idx + 1];
+            if (tok.type != exprtk::lexer::token::e_lbracket) {
+                return token_dtype(tok);
+            }
+            ++idx;
+        }
+        return DTYPE_NONE;
+    };
+
+    for (std::size_t i = 0; i < num_tokens; ++i) {
+        const exprtk::lexer::token& tok = lexer[i];
+        if (tok.value != type_error.m_op) {
+            continue;
+        }
+
+        if (fallback == npos) {
+            fallback = tok.position;
+        }
+
+        if (prev_operand(i) == type_error.m_lhs
+            && next_operand(i) == type_error.m_rhs) {
+            position = tok.position;
+            break;
+        }
+    }
+
+    if (position == npos) {
+        position = fallback;
+    }
+
+    if (position == npos) {
+        return false;
+    }
+
+    exprtk::parser_error::type parser_error;
+    parser_error.token.position = position;
+    if (!exprtk::parser_error::update_error(
+            parser_error, parsed_expression_string
+        )) {
+        return false;
+    }
+
+    error.m_line = parser_error.line_no;
+    error.m_column = parser_error.column_no;
+    return true;
+}
+
 } // namespace
 
 computed_function::bucket t_computed_expression_parser::BUCKET_FN =
@@ -173,6 +266,8 @@ computed_function::random t_computed_expression_parser::RANDOM_FN =
 t_tscalar t_computed_expression_parser::TRUE_SCALAR = mktscalar(true);
 
 t_tscalar t_computed_expression_parser::FALSE_SCALAR = mktscalar(false);
+
+t_tscalar t_computed_expression_parser::NONE_SCALAR = mknone();
 
 /******************************************************************************
  *
@@ -467,7 +562,12 @@ t_computed_expression_parser::precompute(
         PSP_COMPLAIN_AND_ABORT(ss.str());
     }
 
-    t_tscalar v = expr_definition.value();
+    expr::t_expression_type_check_sink type_errors;
+    t_tscalar v;
+    {
+        const expr::t_expression_type_check_scope type_check_scope(type_errors);
+        v = expr_definition.value();
+    }
     function_store.clear_computed_function_state();
 
     if (vector_check.m_violation || loop_check.m_violation) {
@@ -479,6 +579,14 @@ t_computed_expression_parser::precompute(
                    ? "vector index out of bounds"
                    : "exceeded maximum loop iterations")
            << '\n';
+        PSP_COMPLAIN_AND_ABORT(ss.str());
+    }
+
+    if (!type_errors.m_errors.empty()) {
+        std::stringstream ss;
+        ss << "[t_computed_expression_parser::precompute] "
+           << expr::describe_type_error(type_errors.m_errors.front())
+           << " in expression: `" << parsed_expression_string << "`\n";
         PSP_COMPLAIN_AND_ABORT(ss.str());
     }
 
@@ -596,7 +704,12 @@ t_computed_expression_parser::get_dtype(
         return DTYPE_NONE;
     }
 
-    t_tscalar v = expr_definition.value();
+    expr::t_expression_type_check_sink type_errors;
+    t_tscalar v;
+    {
+        const expr::t_expression_type_check_scope type_check_scope(type_errors);
+        v = expr_definition.value();
+    }
     t_dtype dtype = v.get_dtype();
 
     function_store.clear_computed_function_state();
@@ -613,6 +726,31 @@ t_computed_expression_parser::get_dtype(
             "Runtime Error - Exceeded maximum loop iterations.";
         error.m_line = 0;
         error.m_column = 0;
+        return DTYPE_NONE;
+    }
+
+    if (!type_errors.m_errors.empty()) {
+        const expr::t_expression_type_error& type_error =
+            type_errors.m_errors.front();
+        error.m_error_message = expr::describe_type_error(type_error);
+        error.m_line = 0;
+        error.m_column = 0;
+
+        auto symbol_dtype = [&](const std::string& symbol) -> t_dtype {
+            if (symbol == "True" || symbol == "False") {
+                return DTYPE_BOOL;
+            }
+            for (const auto& column_id : column_ids) {
+                if (column_id.first == symbol) {
+                    return schema.get_dtype(column_id.second);
+                }
+            }
+            return DTYPE_NONE;
+        };
+
+        locate_type_error(
+            type_error, parsed_expression_string, symbol_dtype, error
+        );
         return DTYPE_NONE;
     }
 
@@ -802,6 +940,7 @@ t_computed_function_store::register_computed_functions(
     // And scalar constants
     sym_table.add_constant("True", t_computed_expression_parser::TRUE_SCALAR);
     sym_table.add_constant("False", t_computed_expression_parser::FALSE_SCALAR);
+    sym_table.add_constant("None", t_computed_expression_parser::NONE_SCALAR);
 }
 
 void

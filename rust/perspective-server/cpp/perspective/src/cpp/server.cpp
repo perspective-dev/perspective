@@ -25,6 +25,7 @@
 #include "perspective/view.h"
 #include "perspective/view_config.h"
 #include "re2/re2.h"
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -345,6 +346,66 @@ re_column_name_to_id(std::string&& expression, ValidatedExpr& validated_expr) {
     return std::tuple(parsed_expression_string, column_id_map);
 }
 
+/**
+ * @brief Rewrite the bare `null` keyword (outside string literals) to the
+ * `None` symbol-table constant, so ExprTK never applies its own `null` rules.
+ */
+static std::string
+re_null_literal(std::string&& expression) {
+    static const std::string keyword = "null";
+    static const std::string replacement = "None";
+    std::string out;
+    out.reserve(expression.size());
+    bool in_string = false;
+    std::size_t i = 0;
+
+    auto is_word = [](char c) {
+        return (std::isalnum(static_cast<unsigned char>(c)) != 0) || c == '_';
+    };
+
+    while (i < expression.size()) {
+        const char c = expression[i];
+
+        if (in_string) {
+            out += c;
+            if (c == '\\' && i + 1 < expression.size()) {
+                out += expression[i + 1];
+                i += 2;
+                continue;
+            }
+            if (c == '\'') {
+                in_string = false;
+            }
+            ++i;
+            continue;
+        }
+
+        if (c == '\'') {
+            in_string = true;
+            out += c;
+            ++i;
+            continue;
+        }
+
+        const bool at_word_start = i == 0 || !is_word(expression[i - 1]);
+        const bool matches =
+            at_word_start && expression.compare(i, keyword.size(), keyword) == 0
+            && (i + keyword.size() == expression.size()
+                || !is_word(expression[i + keyword.size()]));
+
+        if (matches) {
+            out += replacement;
+            i += keyword.size();
+            continue;
+        }
+
+        out += c;
+        ++i;
+    }
+
+    return out;
+}
+
 static auto
 re_intern_strings(std::string&& expression) {
     static const RE2 intern_string("('.*?[^\\\\]')");
@@ -403,6 +464,10 @@ parse_expression_strings(const F& column_expr) {
                 std::move(validated_expr.parse_expression_string),
                 validated_expr
             );
+
+        validated_expr.parse_expression_string = re_null_literal(
+            std::move(validated_expr.parse_expression_string)
+        );
 
         validated_expr.parse_expression_string =
             re_intern_strings(std::move(validated_expr.parse_expression_string)

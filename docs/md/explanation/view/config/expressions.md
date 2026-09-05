@@ -42,9 +42,10 @@ let view = table.view(Some(ViewConfigUpdate {
 
 ## Type Conversion and Coercion
 
-Perspective expressions are strongly typed — each column and literal has a fixed
-type, and most operators require matching types on both sides. To work across
-types, use the conversion functions:
+Perspective expressions are typed: every column, literal and function result has
+a fixed type, and the validator reports an error before the expression is ever
+computed if the types do not fit the operator. To move between types explicitly,
+use the conversion functions:
 
 | Function        | Description                                                  |
 | --------------- | ------------------------------------------------------------ |
@@ -59,10 +60,29 @@ types, use the conversion functions:
 
 ### How coercion works
 
-Perspective does not implicitly coerce types. For example, you cannot directly
-add an `integer` to a `float` — you must cast one side explicitly. Similarly,
-`datetime` and `date` values are not numeric: to perform arithmetic on them, you
-must first convert to a numeric representation, do the math, then convert back.
+Numeric types promote to each other. Arithmetic on any mix of `integer` and
+`float` operands is computed in floating point and produces a `float`. The
+comparison operators compare values across every numeric type: integers are
+compared exactly (including signed against unsigned), and as soon as one side is
+a `float` both sides are compared as doubles. Numeric literals are `float`, so
+`"Quantity" > 3` works on an `integer` column without a cast.
+
+No other implicit coercion exists. `boolean`, `string`, `date` and `datetime`
+values can only be compared with values of the same type; comparing a `string`
+column to a number, a `boolean` to `1`, or a `date` to a `datetime` is a
+validation error that names the operator and both types, for example
+`Type Error - cannot compare string and float with '=='`. Similarly, `datetime`
+and `date` values are not numeric: to perform arithmetic on them, you must first
+convert to a numeric representation, do the math, then convert back.
+
+Boolean contexts cast instead. The condition of `if` and `? :`, and the operands
+of `and`, `or`, `not`, `xor`, `nand`, `nor` and `xnor`, accept any type: `null`
+is `false`, a `boolean` is its own value, a number is `true` when non-zero, and
+a `string` is `true` when non-null. `x == null` and `x != null` test `x` for
+null and return `boolean`, the same as `is_null(x)` and `is_not_null(x)`; the
+`null` literal is otherwise a value like any null cell: `"x" > 2 ? null : "x"`
+yields null in the first case, and `"x" + null` or `"x" < null` are null, exactly
+as they would be for a column with a null value.
 
 Internally, `datetime` values are stored as milliseconds since the Unix epoch
 (1970-01-01T00:00:00Z). Converting a `datetime` to a `float` yields this

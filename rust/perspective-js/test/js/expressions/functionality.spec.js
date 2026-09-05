@@ -124,7 +124,7 @@ import perspective from "../perspective_client";
                 table.delete();
             });
 
-            test.skip("functional if bool", async function () {
+            test("functional if bool", async function () {
                 const table = await perspective.table(
                     expressions_common.int_float_data,
                 );
@@ -136,7 +136,7 @@ import perspective from "../perspective_client";
                 });
 
                 const results = await view.to_columns();
-                expect(results['if ("z" == 1, 5, 10);']).toEqual([
+                expect(results['if ("z" == true, 5, 10);']).toEqual([
                     5, 10, 5, 10,
                 ]);
                 expect(results['if ("z" != true, 5, 10)']).toEqual([
