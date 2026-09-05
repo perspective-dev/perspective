@@ -22,6 +22,34 @@ use yew::prelude::*;
 use crate::js::{IntersectionObserver, IntersectionObserverEntry};
 
 pub type DragEndCallback = Closure<dyn FnMut(DragEvent)>;
+pub type PointerDownCallback = Closure<dyn FnMut(PointerEvent)>;
+
+/// The `draggable="true"` row enclosing `event`'s composed-path target, if
+/// any.
+pub fn closest_draggable(event: &Event) -> Option<HtmlElement> {
+    event
+        .composed_path()
+        .get(0)
+        .dyn_into::<Element>()
+        .ok()?
+        .closest("[draggable=\"true\"]")
+        .ok()
+        .flatten()?
+        .dyn_into::<HtmlElement>()
+        .ok()
+}
+
+/// Collapse the page's text selection so a `draggable="true"` row cannot lose
+/// to a browser selection drag.
+pub fn clear_document_selection() -> ApiResult<()> {
+    if let Some(selection) = global::window().get_selection()?
+        && !selection.is_collapsed()
+    {
+        selection.remove_all_ranges()?;
+    }
+
+    Ok(())
+}
 
 /// Safari does not set `relatedTarget` on `"dragleave"`, which makes it
 /// impossible to determine whether a logical drag leave has happened with just
