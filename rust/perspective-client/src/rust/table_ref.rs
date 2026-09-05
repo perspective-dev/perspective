@@ -15,7 +15,7 @@ use crate::Table;
 /// A reference to a table, either by handle or by name.
 #[derive(Clone)]
 pub enum TableRef {
-    Table(Table),
+    Table(Box<Table>),
     Name(String),
 }
 
@@ -30,13 +30,13 @@ impl TableRef {
 
 impl From<&Table> for TableRef {
     fn from(table: &Table) -> Self {
-        TableRef::Table(table.clone())
+        TableRef::Table(table.clone().into())
     }
 }
 
 impl From<Table> for TableRef {
     fn from(table: Table) -> Self {
-        TableRef::Table(table)
+        TableRef::Table(table.into())
     }
 }
 

@@ -106,6 +106,19 @@ t_pool::unregister_gnode(t_uindex idx) {
 }
 
 void
+t_pool::reset_gnode(t_uindex gnode_id) {
+    {
+#ifdef PSP_PARALLEL_FOR
+        PSP_WRITE_LOCK(*m_lock);
+#endif
+        m_data_remaining.store(true);
+        if (m_gnodes[gnode_id] != nullptr) {
+            m_gnodes[gnode_id]->reset();
+        }
+    }
+}
+
+void
 t_pool::send(t_uindex gnode_id, t_uindex port_id, const t_data_table& table) {
     {
 #ifdef PSP_PARALLEL_FOR

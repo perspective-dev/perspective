@@ -234,6 +234,54 @@ function copyDocsBundle() {
     }
 }
 
+/**
+ * Stub the optional Memory64 engine binary when `@perspective-dev/server`
+ * was built without `PSP_WASM64`, so the docs bundle without that compile.
+ * The stub throws when imported, which rejects `engines.ts`'s `wasm64`
+ * thunk and lets `init_server` fall back to the wasm32 binary at runtime.
+ */
+function optionalWasm64Plugin() {
+    const NAMESPACE = "optional-wasm64";
+    return {
+        name: NAMESPACE,
+        setup(build) {
+            build.onResolve(
+                { filter: /perspective-server\.memory64\.wasm$/ },
+                async (args) => {
+                    if (args.pluginData === NAMESPACE) {
+                        return;
+                    }
+
+                    const resolved = await build.resolve(args.path, {
+                        kind: args.kind,
+                        importer: args.importer,
+                        resolveDir: args.resolveDir,
+                        pluginData: NAMESPACE,
+                    });
+
+                    if (resolved.errors.length === 0) {
+                        return resolved;
+                    }
+
+                    console.warn(
+                        `No ${path.basename(args.path)} (PSP_WASM64 unset); ` +
+                            "perspective-server will run as wasm32.",
+                    );
+
+                    return { path: args.path, namespace: NAMESPACE };
+                },
+            );
+
+            build.onLoad({ filter: /.*/, namespace: NAMESPACE }, (args) => ({
+                loader: "js",
+                contents: `throw new Error(${JSON.stringify(
+                    `${args.path} was not built (set PSP_WASM64=1)`,
+                )});`,
+            }));
+        },
+    };
+}
+
 function esbuildOptions() {
     return {
         entryPoints: [path.join(__dirname, "src/index.ts")],
@@ -251,6 +299,7 @@ function esbuildOptions() {
             ".wasm": "file",
             ".arrow": "file",
         },
+        plugins: [optionalWasm64Plugin()],
     };
 }
 
@@ -301,9 +350,11 @@ async function watch() {
     copyStatic();
     copyDocsBundle();
 
+    const options = esbuildOptions();
     const ctx = await esbuild.context({
-        ...esbuildOptions(),
+        ...options,
         plugins: [
+            ...options.plugins,
             {
                 name: "livereload",
                 setup(build) {

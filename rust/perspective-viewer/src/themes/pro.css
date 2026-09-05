@@ -55,6 +55,7 @@ perspective-viewer [theme="Pro Light"] {
     --psp-charts--gridline--color: #eaedef;
     --psp-charts--axis-ticks--color: #161616;
     --psp-charts--axis-lines--color: #c5c9d0;
+    --psp-charts--legend--color: #161616;
     --psp-charts--legend--background: var(--psp--background-color);
     --psp-charts--series--color: rgba(31, 119, 180, 0.8);
     --psp-charts--series-1--color: #0366d6;

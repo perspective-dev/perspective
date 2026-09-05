@@ -42,7 +42,9 @@ loop.start()
 ## Javascript client
 
 Perspective's websocket client interfaces with the Python server, then
-_replicates_ the server-side Table.
+_replicates_ the server-side Table. When the server-side `Table` has an `index`,
+the replica inherits it, and both `update()` and `remove()` on the server are
+mirrored in the browser.
 
 ```javascript
 const websocket = await perspective.websocket("ws://localhost:8080");

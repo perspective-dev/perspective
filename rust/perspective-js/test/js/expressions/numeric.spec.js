@@ -112,6 +112,43 @@ function validate_unary_operations(output, expressions, operator) {
     }
 }
 
+function calc_comparison(operator, left, right) {
+    switch (operator) {
+        case "==":
+            return left == right;
+        case "!=":
+            return left != right;
+        case ">":
+            return left > right;
+        case "<":
+            return left < right;
+        case ">=":
+            return left >= right;
+        case "<=":
+            return left <= right;
+        default:
+            throw new Error("Unknown operator");
+    }
+}
+
+function validate_comparison_operations(output, expressions, operator) {
+    for (const expr of expressions) {
+        const output_col = output[expr];
+        const inputs = expr.split(` ${operator} `);
+        const left = inputs[0].substr(1, inputs[0].length - 2);
+        const right = inputs[1].substr(1, inputs[1].length - 2);
+        expect({
+            expr,
+            result: output_col,
+        }).toEqual({
+            expr,
+            result: output[left].map((v, idx) =>
+                calc_comparison(operator, v, output[right][idx]),
+            ),
+        });
+    }
+}
+
 /**
  * Validate the results of operations against all numeric types.
  *
@@ -344,223 +381,61 @@ function validate_binary_operations(output, expressions, operator) {
                     validate_binary_operations(result, expressions, "^");
                 });
 
-                test("==", async function () {
-                    const table = await perspective.table(
-                        common.all_types_multi_arrow.slice(),
-                    );
-                    const expressions = [];
-
-                    // comparisons only work when the two types are the same
-                    for (const expr of NUMERIC_TYPES) {
-                        expressions.push(`"${expr}" == "${expr} 2"`);
-                    }
-
-                    const view = await table.view({
-                        expressions,
-                    });
-
-                    const col_names = await view.column_paths();
-
-                    for (const expr of expressions) {
-                        expect(col_names.includes(expr)).toBe(true);
-                    }
-
-                    const result = await view.to_columns();
-
-                    for (const expr of expressions) {
-                        const output_col = result[expr];
-                        const inputs = expr.split(` == `);
-                        const left = inputs[0].substr(1, inputs[0].length - 2);
-                        const right = inputs[1].substr(1, inputs[1].length - 2);
-                        expect(output_col).toEqual(
-                            result[left].map(
-                                (v, idx) => v == result[right][idx],
-                            ),
+                for (const operator of ["==", "!=", ">", "<", ">=", "<="]) {
+                    test(operator, async function () {
+                        const table = await perspective.table(
+                            common.arrow.slice(),
                         );
-                    }
+                        const expressions =
+                            generate_binary_operations(operator);
+                        const view = await table.view({
+                            expressions,
+                        });
+
+                        const col_names = await view.column_paths();
+
+                        for (const expr of expressions) {
+                            expect(col_names.includes(expr)).toBe(true);
+                        }
+
+                        const result = await view.to_columns();
+                        validate_comparison_operations(
+                            result,
+                            expressions,
+                            operator,
+                        );
+                        await view.delete();
+                        await table.delete();
+                    });
+                }
+
+                test("Unsigned columns compare against negative literals", async function () {
+                    const table = await perspective.table(common.arrow.slice());
+                    const expressions = {
+                        gt: '"ui64" > -1',
+                        lt: '"ui32" < -1',
+                        same: '"i64" >= "ui64"',
+                        float: '"f32" == "i32"',
+                        literal: '"ui8" <= 13',
+                    };
+                    const view = await table.view({ expressions });
+                    const result = await view.to_columns();
+                    expect(result.gt).toEqual(result.ui64.map(() => true));
+                    expect(result.lt).toEqual(result.ui32.map(() => false));
+                    expect(result.same).toEqual(
+                        result.i64.map((v, idx) => v >= result.ui64[idx]),
+                    );
+                    expect(result.float).toEqual(
+                        result.f32.map((v, idx) => v == result.i32[idx]),
+                    );
+                    expect(result.literal).toEqual(
+                        result.ui8.map((v) => v <= 13),
+                    );
+                    await view.delete();
+                    await table.delete();
                 });
 
-                test("!=", async function () {
-                    const table = await perspective.table(
-                        common.all_types_multi_arrow.slice(),
-                    );
-                    const expressions = [];
-
-                    // comparisons only work when the two types are the same
-                    for (const expr of NUMERIC_TYPES) {
-                        expressions.push(`"${expr}" != "${expr} 2"`);
-                    }
-
-                    const view = await table.view({
-                        expressions,
-                    });
-
-                    const col_names = await view.column_paths();
-
-                    for (const expr of expressions) {
-                        expect(col_names.includes(expr)).toBe(true);
-                    }
-
-                    const result = await view.to_columns();
-
-                    for (const expr of expressions) {
-                        const output_col = result[expr];
-                        const inputs = expr.split(` != `);
-                        const left = inputs[0].substr(1, inputs[0].length - 2);
-                        const right = inputs[1].substr(1, inputs[1].length - 2);
-                        expect(output_col).toEqual(
-                            result[left].map(
-                                (v, idx) => v != result[right][idx],
-                            ),
-                        );
-                    }
-                });
-
-                test(">", async function () {
-                    const table = await perspective.table(
-                        common.all_types_multi_arrow.slice(),
-                    );
-                    const expressions = [];
-
-                    // comparisons only work when the two types are the same
-                    for (const expr of NUMERIC_TYPES) {
-                        expressions.push(`"${expr}" > "${expr} 2"`);
-                    }
-
-                    const view = await table.view({
-                        expressions,
-                    });
-
-                    const col_names = await view.column_paths();
-
-                    for (const expr of expressions) {
-                        expect(col_names.includes(expr)).toBe(true);
-                    }
-
-                    const result = await view.to_columns();
-
-                    for (const expr of expressions) {
-                        const output_col = result[expr];
-                        const inputs = expr.split(` > `);
-                        const left = inputs[0].substr(1, inputs[0].length - 2);
-                        const right = inputs[1].substr(1, inputs[1].length - 2);
-                        expect(output_col).toEqual(
-                            result[left].map(
-                                (v, idx) => v > result[right][idx],
-                            ),
-                        );
-                    }
-                });
-
-                test("<", async function () {
-                    const table = await perspective.table(
-                        common.all_types_multi_arrow.slice(),
-                    );
-                    const expressions = [];
-
-                    // comparisons only work when the two types are the same
-                    for (const expr of NUMERIC_TYPES) {
-                        expressions.push(`"${expr}" < "${expr} 2"`);
-                    }
-
-                    const view = await table.view({
-                        expressions,
-                    });
-
-                    const col_names = await view.column_paths();
-
-                    for (const expr of expressions) {
-                        expect(col_names.includes(expr)).toBe(true);
-                    }
-
-                    const result = await view.to_columns();
-
-                    for (const expr of expressions) {
-                        const output_col = result[expr];
-                        const inputs = expr.split(` < `);
-                        const left = inputs[0].substr(1, inputs[0].length - 2);
-                        const right = inputs[1].substr(1, inputs[1].length - 2);
-                        expect(output_col).toEqual(
-                            result[left].map(
-                                (v, idx) => v < result[right][idx],
-                            ),
-                        );
-                    }
-                });
-
-                test(">=", async function () {
-                    const table = await perspective.table(
-                        common.all_types_multi_arrow.slice(),
-                    );
-                    const expressions = [];
-
-                    // comparisons only work when the two types are the same
-                    for (const expr of NUMERIC_TYPES) {
-                        expressions.push(`"${expr}" >= "${expr} 2"`);
-                    }
-
-                    const view = await table.view({
-                        expressions,
-                    });
-
-                    const col_names = await view.column_paths();
-
-                    for (const expr of expressions) {
-                        expect(col_names.includes(expr)).toBe(true);
-                    }
-
-                    const result = await view.to_columns();
-
-                    for (const expr of expressions) {
-                        const output_col = result[expr];
-                        const inputs = expr.split(` >= `);
-                        const left = inputs[0].substr(1, inputs[0].length - 2);
-                        const right = inputs[1].substr(1, inputs[1].length - 2);
-                        expect(output_col).toEqual(
-                            result[left].map(
-                                (v, idx) => v >= result[right][idx],
-                            ),
-                        );
-                    }
-                });
-
-                test("<=", async function () {
-                    const table = await perspective.table(
-                        common.all_types_multi_arrow.slice(),
-                    );
-                    const expressions = [];
-
-                    // comparisons only work when the two types are the same
-                    for (const expr of NUMERIC_TYPES) {
-                        expressions.push(`"${expr}" <= "${expr} 2"`);
-                    }
-
-                    const view = await table.view({
-                        expressions,
-                    });
-
-                    const col_names = await view.column_paths();
-
-                    for (const expr of expressions) {
-                        expect(col_names.includes(expr)).toBe(true);
-                    }
-
-                    const result = await view.to_columns();
-
-                    for (const expr of expressions) {
-                        const output_col = result[expr];
-                        const inputs = expr.split(` <= `);
-                        const left = inputs[0].substr(1, inputs[0].length - 2);
-                        const right = inputs[1].substr(1, inputs[1].length - 2);
-                        expect(output_col).toEqual(
-                            result[left].map(
-                                (v, idx) => v <= result[right][idx],
-                            ),
-                        );
-                    }
-                });
-
-                test("Numeric comparisons should be false for different types", async function () {
+                test("Numeric comparisons promote across types", async function () {
                     const table = await perspective.table({
                         a: "integer",
                         b: "float",
@@ -571,26 +446,33 @@ function validate_binary_operations(output, expressions, operator) {
                         expressions: {
                             '"a" == "b"': '"a" == "b"',
                             '"a" != "b"': '"a" != "b"',
+                            '"c" < "d"': '"c" < "d"',
                         },
                     });
                     await table.update({
                         a: [1, 2, 3, 4],
-                        b: [1.0, 2.0, 3.0, 4.0],
+                        b: [1.0, 2.0, 3.5, 4.0],
                         c: [1, 0, 1, 0],
                         d: [1.0, 0, 3.0, 0.0],
                     });
                     const result = await view.to_columns();
                     expect(result['"a" == "b"']).toEqual([
+                        true,
+                        true,
                         false,
-                        false,
-                        false,
-                        false,
+                        true,
                     ]);
                     expect(result['"a" != "b"']).toEqual([
+                        false,
+                        false,
                         true,
+                        false,
+                    ]);
+                    expect(result['"c" < "d"']).toEqual([
+                        false,
+                        false,
                         true,
-                        true,
-                        true,
+                        false,
                     ]);
                     await view.delete();
                     await table.delete();
@@ -1615,6 +1497,7 @@ function validate_binary_operations(output, expressions, operator) {
                     e: [false, false, false, false],
                     f: [true, true, true, true],
                 });
+
                 const view = await table.view({
                     expressions: {
                         '"a" or "b"': '"a" or "b"',
@@ -1626,6 +1509,7 @@ function validate_binary_operations(output, expressions, operator) {
                         filtered: '"a" > 0.5 or "d" < 0.5',
                     },
                 });
+
                 const result = await view.to_columns();
                 expect(result['"a" or "b"']).toEqual([
                     false,
@@ -1633,6 +1517,7 @@ function validate_binary_operations(output, expressions, operator) {
                     false,
                     true,
                 ]);
+
                 expect(result['"c" or "d"']).toEqual([true, true, true, true]);
                 expect(result['"e" or "f"']).toEqual([true, true, true, true]);
                 expect(result["0 or 1"]).toEqual([true, true, true, true]);
@@ -1642,13 +1527,16 @@ function validate_binary_operations(output, expressions, operator) {
                     true,
                     true,
                 ]);
+
                 expect(result["false or false"]).toEqual([
                     false,
                     false,
                     false,
                     false,
                 ]);
-                expect(result["filtered"]).toEqual([true, true, true, true]);
+
+                expect(result["filtered"]).toEqual([false, true, false, true]);
+
                 await view.delete();
                 await table.delete();
             });

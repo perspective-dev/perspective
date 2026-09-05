@@ -71,19 +71,21 @@ use crate::utils::define_web_component;
 const TS_APPEND_CONTENT: &'static str = r#"
 import type {
     ColumnType,
-    TableInitOptions,
     ColumnWindow,
-    ViewWindow,
-    TypedArrayWindow,
-    OnUpdateOptions,
-    JoinOptions,
-    UpdateOptions,
     DeleteOptions,
+    Features,
+    JoinOptions,
+    OnRemoveData,
+    OnUpdateData,
+    OnUpdateOptions,
+    Scalar,
+    SystemInfo,
+    TableInitOptions,
+    TypedArrayWindow,
+    UpdateOptions,
     ViewConfig,
     ViewConfigUpdate,
-    SystemInfo,
-    Scalar,
-    Features,
+    ViewWindow,
 } from "@perspective-dev/client";
 
 export type * from "../../src/ts/ts-rs/ViewerConfig.d.ts";
@@ -107,6 +109,7 @@ export type * from "../../src/ts/ts-rs/DatetimeFormatType.d.ts";
 export type * from "../../src/ts/ts-rs/StringColorMode.d.ts";
 export type * from "../../src/ts/ts-rs/DatetimeColorMode.d.ts";
 export type * from "../../src/ts/ts-rs/FormatMode.d.ts";
+
 import type {GetTableOptions} from "../../src/ts/ts-rs/GetTableOptions.d.ts";
 import type {PanelOptions} from "../../src/ts/ts-rs/PanelOptions.d.ts";
 import type {RestoreOptions} from "../../src/ts/ts-rs/RestoreOptions.d.ts";

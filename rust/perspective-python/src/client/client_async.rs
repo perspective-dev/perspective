@@ -18,8 +18,8 @@ use std::sync::Arc;
 use futures::FutureExt;
 use perspective_client::proto::ListFlatten;
 use perspective_client::{
-    Client, ColumnWindow, DeleteOptions, OnUpdateData, OnUpdateMode, OnUpdateOptions, Table,
-    TableData, TableInitOptions, TableReadFormat, TableRef, UpdateData, UpdateOptions, View,
+    Client, ColumnWindow, DeleteOptions, OnRemoveData, OnUpdateData, OnUpdateMode, OnUpdateOptions,
+    Table, TableData, TableInitOptions, TableReadFormat, TableRef, UpdateData, UpdateOptions, View,
     ViewWindow, assert_table_api, assert_view_api, asyncfn,
 };
 use pyo3::exceptions::PyValueError;
@@ -918,6 +918,59 @@ impl AsyncView {
     ///   [`View::on_update`].
     pub async fn remove_update(&self, callback_id: u32) -> PyResult<()> {
         self.view.remove_update(callback_id).await.into_pyerr()
+    }
+
+    /// Register a callback which is invoked whenever rows are removed from
+    /// this [`View`]'s [`Table`] by [`Table::remove`], with two arguments:
+    /// `port_id`,
+    /// and `indices`, the removed `index` column values as an Apache Arrow
+    /// (`bytes`) of one column named after the index.
+    ///
+    /// [`Table::replace`] reports the keys it does not re-supply and
+    /// [`Table::clear`] reports every key. It never fires for a
+    /// [`Table`] without an `index`.
+    ///
+    /// # Python Examples
+    ///
+    /// ```python
+    /// def on_remove(port_id, indices):
+    ///     replica.remove(indices)
+    ///
+    /// callback_id = await view.on_remove(on_remove)
+    /// ```
+    pub async fn on_remove(&self, callback: Py<PyAny>) -> PyResult<u32> {
+        let callback = move |x: OnRemoveData| {
+            let callback = Python::with_gil(|py| Py::clone_ref(&callback, py));
+            async move {
+                let aggregate_errors: PyResult<()> = Python::with_gil(|py| {
+                    match &x.indices {
+                        None => callback.call1(py, (x.port_id,))?,
+                        Some(indices) => {
+                            callback.call1(py, (x.port_id, PyBytes::new(py, indices)))?
+                        },
+                    };
+
+                    Ok(())
+                });
+
+                if let Err(err) = aggregate_errors {
+                    tracing::warn!("Error in on_remove callback: {:?}", err);
+                }
+            }
+            .boxed()
+        };
+
+        self.view.on_remove(Box::new(callback)).await.into_pyerr()
+    }
+
+    /// Unregister a previously registered [`View::on_remove`] callback.
+    ///
+    /// # Arguments
+    ///
+    /// - `id` - A callback `id` as returned by a reciprocal call to
+    ///   [`View::on_remove`].
+    pub async fn remove_remove(&self, callback_id: u32) -> PyResult<()> {
+        self.view.remove_remove(callback_id).await.into_pyerr()
     }
 
     #[pyo3(signature=(**window))]

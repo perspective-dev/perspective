@@ -17,6 +17,7 @@ __pycache__/
 .vscode/*
 *.so
 *~
+/.claude
 /.emacs.desktop
 /.emacs.desktop.lock
 /.idea

@@ -723,6 +723,88 @@ assert w2.group_by == ["bool"]
             },
         );
 
+        test_jupyter(
+            "Table.remove propagates to widget",
+            [
+                [
+                    "server = perspective.Server()",
+                    "client = server.new_local_client()",
+                    "table = client.table({'key': 'string', 'value': 'integer'}, index='key')",
+                    "table.update([{'key': 'What is the answer?', 'value': 42}])",
+                    "w = perspective.widget.PerspectiveWidget(table)",
+                ].join("\n"),
+                "w",
+            ],
+            async ({ page }) => {
+                await default_body(page);
+                const rows = page.locator("regular-table tbody tr");
+                await expect(rows).toHaveCount(1);
+
+                await add_and_execute_cell(
+                    page,
+                    "table.update([{'key': 'Hej', 'value': 74}])",
+                );
+                await expect(rows).toHaveCount(2);
+
+                await add_and_execute_cell(
+                    page,
+                    "table.update([{'key': 'Hej', 'value': 75}])",
+                );
+                await expect(rows).toHaveCount(2);
+
+                await add_and_execute_cell(page, "table.remove(['Hej'])");
+                await expect(rows).toHaveCount(1);
+                await expect(rows.first()).toContainText("What is the answer?");
+
+                await add_and_execute_cell(page, "w");
+                const viewers = page.locator(
+                    ".jp-OutputArea-output perspective-viewer",
+                );
+                await expect(viewers).toHaveCount(2);
+                for (const v of await viewers.all()) {
+                    await v.evaluate(async (viewer) => await viewer.flush());
+                    await expect(
+                        v.locator("regular-table tbody tr"),
+                    ).toHaveCount(1);
+                }
+            },
+        );
+
+        test_jupyter(
+            "Table.remove propagates to widget in client-server binding mode",
+            [
+                [
+                    "server = perspective.Server()",
+                    "client = server.new_local_client()",
+                    "table = client.table({'key': 'string', 'value': 'integer'}, index='key')",
+                    "table.update([{'key': 'What is the answer?', 'value': 42}])",
+                    "w = perspective.widget.PerspectiveWidget(table, binding_mode='client-server')",
+                ].join("\n"),
+                "w",
+            ],
+            async ({ page }) => {
+                await default_body(page);
+                const rows = page.locator("regular-table tbody tr");
+                await expect(rows).toHaveCount(1);
+
+                await add_and_execute_cell(
+                    page,
+                    "table.update([{'key': 'Hej', 'value': 74}])",
+                );
+                await expect(rows).toHaveCount(2);
+
+                await add_and_execute_cell(
+                    page,
+                    "table.update([{'key': 'Hej', 'value': 75}])",
+                );
+                await expect(rows).toHaveCount(2);
+
+                await add_and_execute_cell(page, "table.remove(['Hej'])");
+                await expect(rows).toHaveCount(1);
+                await expect(rows.first()).toContainText("What is the answer?");
+            },
+        );
+
         // Traits mutated after construction but before the widget is displayed
         // must be applied by the initial `restore()` (the restore-before-
         // load-complete path).

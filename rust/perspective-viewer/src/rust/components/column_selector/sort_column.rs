@@ -104,9 +104,12 @@ impl Component for SortColumn {
             let event_name = ctx.props().sort.0.to_owned();
             let presentation = ctx.props().presentation.clone();
             move |event: DragEvent| {
-                presentation.set_drag_image(&event).unwrap();
-                presentation
-                    .notify_drag_start(event_name.to_string(), DragEffect::Move(DragTarget::Sort))
+                if presentation.set_drag_image(&event) {
+                    presentation.notify_drag_start(
+                        event_name.to_string(),
+                        DragEffect::Move(DragTarget::Sort),
+                    )
+                }
             }
         });
 

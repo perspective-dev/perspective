@@ -479,8 +479,9 @@ impl Component for WindowSlotColumn {
             let presentation = ctx.props().presentation.clone();
             let action = ctx.props().action;
             move |event: DragEvent| {
-                presentation.set_drag_image(&event).unwrap();
-                presentation.notify_drag_start(column.clone(), DragEffect::Move(action))
+                if presentation.set_drag_image(&event) {
+                    presentation.notify_drag_start(column.clone(), DragEffect::Move(action))
+                }
             }
         });
 

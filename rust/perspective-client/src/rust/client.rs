@@ -29,11 +29,11 @@ use crate::proto::{
     HostedTable, JoinType, MakeJoinTableReq, MakeTableReq, RemoveHostedTablesUpdateReq, Request,
     Response, ServerError, ServerSystemInfoReq,
 };
-use crate::table::{JoinOptions, Table, TableInitOptions, TableOptions};
+use crate::table::{JoinOptions, Table, TableInitOptions, TableOptions, ViewBinding};
 use crate::table_data::{TableData, UpdateData};
 use crate::table_ref::TableRef;
 use crate::utils::*;
-use crate::view::{OnUpdateData, ViewWindow};
+use crate::view::{OnRemoveData, OnUpdateData, ViewWindow};
 use crate::{OnUpdateMode, OnUpdateOptions, asyncfn, clone};
 
 /// Metadata about the engine runtime (such as total heap utilization).
@@ -571,6 +571,21 @@ impl Client {
         };
 
         if let TableData::View(view) = &input {
+            let mut options = options;
+            let source_index = view.source.as_ref().and_then(|x| x.options.index.clone());
+            if let (None, Some(index)) = (&options.index, &source_index) {
+                let config = view.get_config().await?;
+                let is_flat = config.group_by.is_empty() && config.split_by.is_empty();
+                let has_index = config.columns.iter().flatten().any(|x| x == index);
+                if is_flat && has_index {
+                    options.index = Some(index.clone());
+                }
+            }
+
+            if options.index.is_none() && options.limit.is_none() {
+                options.limit = view.source.as_ref().and_then(|x| x.options.limit);
+            }
+
             let window = ViewWindow::default();
             let arrow = view.to_arrow(window).await?;
             let mut table = self
@@ -588,8 +603,27 @@ impl Client {
                 mode: Some(OnUpdateMode::Row),
             };
 
-            let on_update_token = view.on_update(callback, options).await?;
-            table.view_update_token = Some(on_update_token);
+            let update_token = view.on_update(callback, options).await?;
+            let remove_token = if source_index.is_some() && source_index == table.get_index() {
+                let table_ = table.clone();
+                let callback = asyncfn!(table_, async move |removed: OnRemoveData| {
+                    if let Some(indices) = removed.indices.as_ref().filter(|x| !x.is_empty()) {
+                        let indices = UpdateData::Arrow(indices.clone().into());
+                        table_.remove(indices).await.unwrap_or_log();
+                    }
+                });
+
+                Some(view.on_remove(callback).await?)
+            } else {
+                None
+            };
+
+            table.view_binding = Some(ViewBinding {
+                view: view.clone(),
+                update_token,
+                remove_token,
+            });
+
             Ok(table)
         } else {
             self.crate_table_inner(input, options.into(), entity_id)

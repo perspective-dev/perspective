@@ -232,8 +232,7 @@ Table::unregister_gnode(t_uindex id) const {
 void
 Table::reset_gnode(t_uindex id) const {
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
-    t_gnode* gnode = m_pool->get_gnode(id);
-    gnode->reset();
+    m_pool->reset_gnode(id);
 }
 
 t_uindex
@@ -575,6 +574,37 @@ Table::remove_cols(const std::string_view& data) {
 
     // calculate_offset(nrows);
     calculate_offset(data_table.size());
+    process_op_column(data_table, OP_DELETE);
+    m_pool->send(get_gnode()->get_id(), 0, data_table);
+}
+
+void
+Table::remove_arrow(const std::string_view& data) {
+    if (m_index.empty()) {
+        PSP_COMPLAIN_AND_ABORT("Cannot remove from unindexed Table\n")
+    }
+
+    apachearrow::ArrowLoader arrow_loader;
+    arrow_loader.initialize(
+        reinterpret_cast<const std::uint8_t*>(data.data()),
+        data.size(),
+        m_list_flatten
+    );
+
+    const auto names = arrow_loader.names();
+    if (std::find(names.begin(), names.end(), m_index) == names.end()) {
+        std::stringstream ss;
+        ss << "Cannot remove: Arrow is missing index column `" << m_index
+           << "`\n";
+        PSP_COMPLAIN_AND_ABORT(ss.str());
+    }
+
+    const t_schema& output_schema = get_gnode()->get_output_schema();
+    t_schema schema({m_index}, {output_schema.get_dtype(m_index)});
+    t_data_table data_table(schema);
+    data_table.init();
+    data_table.extend(arrow_loader.row_count());
+    arrow_loader.fill_table(data_table, schema, m_index, m_offset, true);
     process_op_column(data_table, OP_DELETE);
     m_pool->send(get_gnode()->get_id(), 0, data_table);
 }

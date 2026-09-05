@@ -1589,34 +1589,10 @@ inrange_fn::~inrange_fn() = default;
 
 t_tscalar
 inrange_fn::operator()(t_parameter_list parameters) {
-    t_tscalar rval;
-    rval.clear();
-    rval.m_type = DTYPE_BOOL;
-
     t_scalar_view _low(parameters[0]);
     t_scalar_view _val(parameters[1]);
     t_scalar_view _high(parameters[2]);
-
-    t_tscalar low = _low();
-    t_tscalar val = _val();
-    t_tscalar high = _high();
-
-    // make sure we are comparing items of the same type, otherwise
-    // comparisons will fail.
-    t_dtype val_dtype = val.get_dtype();
-
-    if (low.get_dtype() != val_dtype || val_dtype != high.get_dtype()) {
-        rval.m_status = STATUS_CLEAR;
-        return rval;
-    }
-
-    // no need to type check - just check validity
-    if (!low.is_valid() || !val.is_valid() || !high.is_valid()) {
-        return rval;
-    }
-
-    rval.set((low <= val) && (val <= high));
-    return rval;
+    return expr::inrange(_low(), _val(), _high());
 }
 
 min_fn::min_fn() = default;

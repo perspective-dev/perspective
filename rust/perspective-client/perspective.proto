@@ -159,6 +159,8 @@ message Request {
         ViewOnDeleteReq view_on_delete_req = 34;
         ViewRemoveDeleteReq view_remove_delete_req = 35;
         MakeJoinTableReq make_join_table_req = 38;
+        ViewOnRemoveReq view_on_remove_req = 39;
+        ViewRemoveOnRemoveReq view_remove_on_remove_req = 40;
     }
 }
 
@@ -202,6 +204,8 @@ message Response {
         ViewOnDeleteResp view_on_delete_resp = 34;
         ViewRemoveDeleteResp view_remove_delete_resp = 35;
         MakeJoinTableResp make_join_table_resp = 38;
+        ViewOnRemoveResp view_on_remove_resp = 39;
+        ViewRemoveOnRemoveResp view_remove_on_remove_resp = 40;
         ServerError server_error = 50;
     }
 }
@@ -415,6 +419,19 @@ message TableRemoveDeleteReq {
     uint32 id = 1;
 }
 message TableRemoveDeleteResp {}
+
+// `View::on_remove`
+message ViewOnRemoveReq {}
+message ViewOnRemoveResp {
+    optional bytes indices = 1;
+    uint32 port_id = 2;
+}
+
+// `View::remove_remove`
+message ViewRemoveOnRemoveReq {
+    uint32 id = 1;
+}
+message ViewRemoveOnRemoveResp {}
 
 // `Table::update`
 message TableUpdateReq {

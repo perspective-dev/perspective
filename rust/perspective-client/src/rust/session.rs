@@ -85,7 +85,7 @@ impl Session<ClientError> for ProxySession {
         let req = Request::decode(request)?;
         let callback = self.callback.clone();
         match req.client_req.as_ref() {
-            Some(ClientReq::ViewOnUpdateReq(_)) => {
+            Some(ClientReq::ViewOnUpdateReq(_)) | Some(ClientReq::ViewOnRemoveReq(_)) => {
                 let on_update =
                     asyncfn!(callback, async move |response| encode(response, callback));
                 self.parent.subscribe(&req, on_update).await?

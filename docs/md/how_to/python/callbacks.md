@@ -32,3 +32,15 @@ view.remove_delete(on_delete_id)
 
 Callbacks defined with a lambda function cannot be removed, as lambda functions
 have no identifier.
+
+`on_remove` fires when rows are removed from a `View`'s `Table` with an `index`,
+and receives the port ID and the removed index values as an Apache Arrow
+(`bytes`) of one column named after the index:
+
+```python
+def remove_callback(port_id, indices):
+    print("Removed", client.table(indices).view().to_records())
+
+on_remove_id = view.on_remove(remove_callback)
+view.remove_remove(on_remove_id)
+```

@@ -330,11 +330,12 @@ impl Component for ActiveColumn {
                     let event_name = name.to_owned();
                     let presentation = ctx.props().presentation.clone();
                     move |event: DragEvent| {
-                        presentation.set_drag_image(&event).unwrap();
-                        presentation.notify_drag_start(
-                            event_name.to_string(),
-                            DragEffect::Move(DragTarget::Active),
-                        );
+                        if presentation.set_drag_image(&event) {
+                            presentation.notify_drag_start(
+                                event_name.to_string(),
+                                DragEffect::Move(DragTarget::Active),
+                            );
+                        }
 
                         MouseLeave(false)
                     }

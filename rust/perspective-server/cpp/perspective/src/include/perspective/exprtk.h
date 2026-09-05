@@ -13,6 +13,7 @@
 #pragma once
 
 #include <perspective/scalar.h>
+#include <perspective/expression_compare.h>
 
 namespace exprtk {
 
@@ -193,6 +194,9 @@ namespace details {
     t_tscalar rval;                                                            \
     rval.clear();                                                              \
     rval.m_type = perspective::t_dtype::DTYPE_FLOAT64;                         \
+    if (v.is_none()) {                                                         \
+        return rval;                                                           \
+    }                                                                          \
     if (!v.is_numeric()) {                                                     \
         rval.m_status = perspective::t_status::STATUS_CLEAR;                   \
     }                                                                          \
@@ -209,6 +213,9 @@ namespace details {
     t_tscalar rval;                                                            \
     rval.clear();                                                              \
     rval.m_type = perspective::t_dtype::DTYPE_FLOAT64;                         \
+    if (v.is_none()) {                                                         \
+        return rval;                                                           \
+    }                                                                          \
     if (!v.is_numeric()) {                                                     \
         rval.m_status = perspective::t_status::STATUS_CLEAR;                   \
     }                                                                          \
@@ -487,6 +494,10 @@ namespace details {
                 rval.clear();
                 rval.m_type = perspective::t_dtype::DTYPE_INT32;
 
+                if (v.is_none()) {
+                    return rval;
+                }
+
                 if (!v.is_numeric()) {
                     rval.m_status = perspective::t_status::STATUS_CLEAR;
                 }
@@ -614,6 +625,10 @@ namespace details {
                 rval.clear();
                 rval.m_type = perspective::t_dtype::DTYPE_FLOAT64;
 
+                if (v.is_none()) {
+                    return rval;
+                }
+
                 if (!v.is_numeric()) {
                     rval.m_status = perspective::t_status::STATUS_CLEAR;
                 }
@@ -660,6 +675,10 @@ namespace details {
                 rval.clear();
                 rval.m_type = perspective::t_dtype::DTYPE_FLOAT64;
 
+                if (v.is_none()) {
+                    return rval;
+                }
+
                 if (!v.is_numeric()) {
                     rval.m_status = perspective::t_status::STATUS_CLEAR;
                 }
@@ -691,6 +710,10 @@ namespace details {
                 rval.clear();
                 rval.m_type = perspective::t_dtype::DTYPE_FLOAT64;
 
+                if (v.is_none()) {
+                    return rval;
+                }
+
                 if (!v.is_numeric()) {
                     rval.m_status = perspective::t_status::STATUS_CLEAR;
                 }
@@ -713,6 +736,10 @@ namespace details {
                 t_tscalar rval;
                 rval.clear();
                 rval.m_type = perspective::t_dtype::DTYPE_FLOAT64;
+
+                if (v.is_none()) {
+                    return rval;
+                }
 
                 if (!v.is_numeric()) {
                     rval.m_status = perspective::t_status::STATUS_CLEAR;
@@ -737,6 +764,10 @@ namespace details {
                 rval.clear();
                 rval.m_type = perspective::t_dtype::DTYPE_FLOAT64;
 
+                if (v.is_none()) {
+                    return rval;
+                }
+
                 if (!v.is_numeric()) {
                     rval.m_status = perspective::t_status::STATUS_CLEAR;
                 }
@@ -757,6 +788,10 @@ namespace details {
                 rval.clear();
                 rval.m_type = perspective::t_dtype::DTYPE_FLOAT64;
 
+                if (v.is_none()) {
+                    return rval;
+                }
+
                 if (!v.is_numeric()) {
                     rval.m_status = perspective::t_status::STATUS_CLEAR;
                 }
@@ -772,7 +807,7 @@ namespace details {
             template <>
             inline t_tscalar
             notl_impl(const t_tscalar v, t_tscalar_type_tag) {
-                return mknone();
+                return perspective::expr::logical_not(v);
             }
 
             template <>
@@ -781,6 +816,10 @@ namespace details {
                 t_tscalar rval;
                 rval.clear();
                 rval.m_type = perspective::t_dtype::DTYPE_FLOAT64;
+
+                if (v.is_none()) {
+                    return rval;
+                }
 
                 if (!v.is_numeric()) {
                     rval.m_status = perspective::t_status::STATUS_CLEAR;
@@ -820,6 +859,10 @@ namespace details {
                 t_tscalar rval;
                 rval.clear();
                 rval.m_type = perspective::t_dtype::DTYPE_INT64;
+
+                if (v.is_none()) {
+                    return rval;
+                }
 
                 if (!v.is_numeric()) {
                     rval.m_status = perspective::t_status::STATUS_CLEAR;
@@ -901,34 +944,18 @@ namespace details {
             equal_impl(
                 const t_tscalar v0, const t_tscalar v1, t_tscalar_type_tag
             ) {
-                t_tscalar rval;
-                rval.m_type = perspective::t_dtype::DTYPE_BOOL;
-
-                if (!v0.is_valid() || !v1.is_valid() || v0.is_none()
-                    || v1.is_none()) {
-                    rval.m_status = perspective::t_status::STATUS_INVALID;
-                    return rval;
-                }
-
-                rval.set(v0 == v1);
-                return rval;
+                return perspective::expr::compare(
+                    v0, v1, perspective::expr::t_cmp_op::EQ
+                );
             }
             template <>
             inline t_tscalar
             nequal_impl(
                 const t_tscalar v0, const t_tscalar v1, t_tscalar_type_tag
             ) {
-                t_tscalar rval;
-                rval.m_type = perspective::t_dtype::DTYPE_BOOL;
-
-                if (!v0.is_valid() || !v1.is_valid() || v0.is_none()
-                    || v1.is_none()) {
-                    rval.m_status = perspective::t_status::STATUS_INVALID;
-                    return rval;
-                }
-
-                rval.set(v0 != v1);
-                return rval;
+                return perspective::expr::compare(
+                    v0, v1, perspective::expr::t_cmp_op::NE
+                );
             }
 
             template <>
@@ -948,7 +975,11 @@ namespace details {
                 rval.clear();
                 rval.m_type = perspective::t_dtype::DTYPE_FLOAT64;
 
-                if (!v1.is_numeric() || !v1.is_numeric()) {
+                if (v0.is_none() || v1.is_none()) {
+                    return rval;
+                }
+
+                if (!v0.is_numeric() || !v1.is_numeric()) {
                     rval.m_status = perspective::t_status::STATUS_CLEAR;
                 }
 
@@ -970,7 +1001,11 @@ namespace details {
                 rval.clear();
                 rval.m_type = perspective::t_dtype::DTYPE_FLOAT64;
 
-                if (!v1.is_numeric() || !v1.is_numeric()) {
+                if (v0.is_none() || v1.is_none()) {
+                    return rval;
+                }
+
+                if (!v0.is_numeric() || !v1.is_numeric()) {
                     rval.m_status = perspective::t_status::STATUS_CLEAR;
                 }
 
@@ -999,7 +1034,11 @@ namespace details {
                 rval.clear();
                 rval.m_type = perspective::t_dtype::DTYPE_FLOAT64;
 
-                if (!v1.is_numeric() || !v1.is_numeric()) {
+                if (v0.is_none() || v1.is_none()) {
+                    return rval;
+                }
+
+                if (!v0.is_numeric() || !v1.is_numeric()) {
                     rval.m_status = perspective::t_status::STATUS_CLEAR;
                 }
 
@@ -1062,9 +1101,7 @@ namespace details {
             and_impl(
                 const t_tscalar v0, const t_tscalar v1, t_tscalar_type_tag
             ) {
-                t_tscalar rval;
-                rval.set(v0.as_bool() && v1.as_bool());
-                return rval;
+                return perspective::expr::logical_and(v0, v1);
             }
 
             template <>
@@ -1072,9 +1109,7 @@ namespace details {
             or_impl(
                 const t_tscalar v0, const t_tscalar v1, t_tscalar_type_tag
             ) {
-                t_tscalar rval;
-                rval.set(v0.as_bool() || v1.as_bool());
-                return rval;
+                return perspective::expr::logical_or(v0, v1);
             }
 
             template <>
@@ -1082,9 +1117,7 @@ namespace details {
             xor_impl(
                 const t_tscalar v0, const t_tscalar v1, t_tscalar_type_tag
             ) {
-                t_tscalar rval;
-                rval.set(!v0.as_bool() != !v1.as_bool());
-                return rval;
+                return perspective::expr::logical_xor(v0, v1);
             }
 
             template <>
@@ -1092,9 +1125,7 @@ namespace details {
             nand_impl(
                 const t_tscalar v0, const t_tscalar v1, t_tscalar_type_tag
             ) {
-                t_tscalar rval;
-                rval.set(!(v0.as_bool() && v1.as_bool()));
-                return rval;
+                return perspective::expr::logical_nand(v0, v1);
             }
 
             template <>
@@ -1102,9 +1133,7 @@ namespace details {
             nor_impl(
                 const t_tscalar v0, const t_tscalar v1, t_tscalar_type_tag
             ) {
-                t_tscalar rval;
-                rval.set(!(v0.as_bool() || v1.as_bool()));
-                return rval;
+                return perspective::expr::logical_nor(v0, v1);
             }
 
             template <>
@@ -1112,9 +1141,7 @@ namespace details {
             xnor_impl(
                 const t_tscalar v0, const t_tscalar v1, t_tscalar_type_tag
             ) {
-                t_tscalar rval;
-                rval.set(v0.as_bool() == v1.as_bool());
-                return rval;
+                return perspective::expr::logical_xnor(v0, v1);
             }
 
             template <>
@@ -1190,36 +1217,30 @@ namespace details {
                         return logn_impl<t_tscalar>(
                             arg0, arg1, scalar_type_tag
                         );
-                    case e_lt: {
-                        perspective::t_tscalar rval;
-                        rval.set(arg0 < arg1);
-                        return rval;
-                    };
-                    case e_lte: {
-                        perspective::t_tscalar rval;
-                        rval.set(arg0 <= arg1);
-                        return rval;
-                    };
-                    case e_eq: {
-                        perspective::t_tscalar rval;
-                        rval.set(std::equal_to<t_tscalar>()(arg0, arg1));
-                        return rval;
-                    };
-                    case e_ne: {
-                        perspective::t_tscalar rval;
-                        rval.set(std::not_equal_to<t_tscalar>()(arg0, arg1));
-                        return rval;
-                    };
-                    case e_gte: {
-                        perspective::t_tscalar rval;
-                        rval.set(arg0 >= arg1);
-                        return rval;
-                    };
-                    case e_gt: {
-                        perspective::t_tscalar rval;
-                        rval.set(arg0 > arg1);
-                        return rval;
-                    };
+                    case e_lt:
+                        return perspective::expr::compare(
+                            arg0, arg1, perspective::expr::t_cmp_op::LT
+                        );
+                    case e_lte:
+                        return perspective::expr::compare(
+                            arg0, arg1, perspective::expr::t_cmp_op::LTE
+                        );
+                    case e_eq:
+                        return perspective::expr::compare(
+                            arg0, arg1, perspective::expr::t_cmp_op::EQ
+                        );
+                    case e_ne:
+                        return perspective::expr::compare(
+                            arg0, arg1, perspective::expr::t_cmp_op::NE
+                        );
+                    case e_gte:
+                        return perspective::expr::compare(
+                            arg0, arg1, perspective::expr::t_cmp_op::GTE
+                        );
+                    case e_gt:
+                        return perspective::expr::compare(
+                            arg0, arg1, perspective::expr::t_cmp_op::GT
+                        );
                     case e_and:
                         return and_impl<t_tscalar>(arg0, arg1, scalar_type_tag);
                     case e_nand:
@@ -1275,9 +1296,9 @@ namespace details {
 
         static inline t_tscalar
         process(Type t1, Type t2) {
-            t_tscalar rval;
-            rval.set(t1 < t2);
-            return rval;
+            return perspective::expr::compare(
+                t1, t2, perspective::expr::t_cmp_op::LT
+            );
         }
 
         static inline t_tscalar
@@ -1303,9 +1324,9 @@ namespace details {
 
         static inline t_tscalar
         process(Type t1, Type t2) {
-            t_tscalar rval;
-            rval.set(t1 <= t2);
-            return rval;
+            return perspective::expr::compare(
+                t1, t2, perspective::expr::t_cmp_op::LTE
+            );
         }
         static inline t_tscalar
         process(const std::string& t1, const std::string& t2) {
@@ -1329,9 +1350,9 @@ namespace details {
 
         static inline t_tscalar
         process(Type t1, Type t2) {
-            t_tscalar rval;
-            rval.set(t1 > t2);
-            return rval;
+            return perspective::expr::compare(
+                t1, t2, perspective::expr::t_cmp_op::GT
+            );
         }
 
         static inline t_tscalar
@@ -1357,9 +1378,9 @@ namespace details {
 
         static inline t_tscalar
         process(Type t1, Type t2) {
-            t_tscalar rval;
-            rval.set(t1 >= t2);
-            return rval;
+            return perspective::expr::compare(
+                t1, t2, perspective::expr::t_cmp_op::GTE
+            );
         }
 
         static inline t_tscalar
@@ -1384,9 +1405,9 @@ namespace details {
         typedef typename opr_base<t_tscalar>::Type Type;
         static inline t_tscalar
         process(Type t1, Type t2) {
-            t_tscalar rval;
-            rval.set(std::equal_to<t_tscalar>()(t1, t2));
-            return rval;
+            return perspective::expr::compare(
+                t1, t2, perspective::expr::t_cmp_op::EQ
+            );
         }
         static inline t_tscalar
         process(const std::string& t1, const std::string& t2) {
@@ -1410,9 +1431,9 @@ namespace details {
 
         static inline t_tscalar
         process(Type t1, Type t2) {
-            t_tscalar rval;
-            rval.set(std::equal_to<t_tscalar>()(t1, t2));
-            return rval;
+            return perspective::expr::compare(
+                t1, t2, perspective::expr::t_cmp_op::EQ
+            );
         }
         static inline t_tscalar
         process(const std::string& t1, const std::string& t2) {
@@ -1436,9 +1457,9 @@ namespace details {
 
         static inline t_tscalar
         process(Type t1, Type t2) {
-            t_tscalar rval;
-            rval.set(std::not_equal_to<t_tscalar>()(t1, t2));
-            return rval;
+            return perspective::expr::compare(
+                t1, t2, perspective::expr::t_cmp_op::NE
+            );
         }
         static inline t_tscalar
         process(const std::string& t1, const std::string& t2) {
@@ -1462,9 +1483,7 @@ namespace details {
 
         static inline t_tscalar
         process(Type t1, Type t2) {
-            t_tscalar rval;
-            rval.set(is_true(t1) && is_true(t2));
-            return rval;
+            return perspective::expr::logical_and(t1, t2);
         }
         static inline typename expression_node<t_tscalar>::node_type
         type() {
@@ -1482,9 +1501,7 @@ namespace details {
 
         static inline t_tscalar
         process(Type t1, Type t2) {
-            t_tscalar rval;
-            rval.set(!(is_true(t1) && is_true(t2)));
-            return rval;
+            return perspective::expr::logical_nand(t1, t2);
         }
         static inline typename expression_node<t_tscalar>::node_type
         type() {
@@ -1502,9 +1519,7 @@ namespace details {
 
         static inline t_tscalar
         process(Type t1, Type t2) {
-            t_tscalar rval;
-            rval.set(is_true(t1) || is_true(t2));
-            return rval;
+            return perspective::expr::logical_or(t1, t2);
         }
         static inline typename expression_node<t_tscalar>::node_type
         type() {
@@ -1522,9 +1537,7 @@ namespace details {
 
         static inline t_tscalar
         process(Type t1, Type t2) {
-            t_tscalar rval;
-            rval.set(!(is_true(t1) || is_true(t2)));
-            return rval;
+            return perspective::expr::logical_nor(t1, t2);
         }
         static inline typename expression_node<t_tscalar>::node_type
         type() {
@@ -1542,7 +1555,7 @@ namespace details {
 
         static inline t_tscalar
         process(Type t1, Type t2) {
-            return numeric::xor_opr<t_tscalar>(t1, t2);
+            return perspective::expr::logical_xor(t1, t2);
         }
 
         static inline typename expression_node<t_tscalar>::node_type
@@ -1561,7 +1574,7 @@ namespace details {
 
         static inline t_tscalar
         process(Type t1, Type t2) {
-            return numeric::xnor_opr<t_tscalar>(t1, t2);
+            return perspective::expr::logical_xnor(t1, t2);
         }
         static inline typename expression_node<t_tscalar>::node_type
         type() {
@@ -1652,9 +1665,7 @@ namespace details {
 
         static inline t_tscalar
         process(const t_tscalar& t0, const t_tscalar& t1, const t_tscalar& t2) {
-            t_tscalar rval;
-            rval.set((t0 <= t1) && (t1 <= t2));
-            return rval;
+            return perspective::expr::inrange(t0, t1, t2);
         }
         static inline t_tscalar
         process(
@@ -1777,29 +1788,25 @@ namespace details {
     template <>
     inline bool
     is_true(const expression_node<t_tscalar>* node) {
-        return std::not_equal_to<t_tscalar>()(mktscalar(false), node->value());
+        return perspective::expr::truthy(node->value());
     }
 
     template <>
     inline bool
     is_true(const std::pair<expression_node<t_tscalar>*, bool>& node) {
-        return std::not_equal_to<t_tscalar>()(
-            mktscalar(false), node.first->value()
-        );
+        return perspective::expr::truthy(node.first->value());
     }
 
     template <>
     inline bool
     is_false(const expression_node<t_tscalar>* node) {
-        return std::equal_to<t_tscalar>()(mktscalar(false), node->value());
+        return !perspective::expr::truthy(node->value());
     }
 
     template <>
     inline bool
     is_false(const std::pair<expression_node<t_tscalar>*, bool>& node) {
-        return std::equal_to<t_tscalar>()(
-            mktscalar(false), node.first->value()
-        );
+        return !perspective::expr::truthy(node.first->value());
     }
 
     /**
@@ -1811,7 +1818,7 @@ namespace details {
      */
     inline bool
     is_true(const t_tscalar& v) {
-        return v.as_bool();
+        return perspective::expr::truthy(v);
     }
 
     inline bool

@@ -25,6 +25,7 @@
 #include "perspective/view.h"
 #include "perspective/view_config.h"
 #include "re2/re2.h"
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -32,6 +33,7 @@
 #include <memory>
 #include <optional>
 #include <perspective/server.h>
+#include <perspective/arrow_writer.h>
 #include <perspective/residency.h>
 #include <perspective/opfs.h>
 #include <re2/stringpiece.h>
@@ -345,6 +347,66 @@ re_column_name_to_id(std::string&& expression, ValidatedExpr& validated_expr) {
     return std::tuple(parsed_expression_string, column_id_map);
 }
 
+/**
+ * @brief Rewrite the bare `null` keyword (outside string literals) to the
+ * `None` symbol-table constant, so ExprTK never applies its own `null` rules.
+ */
+static std::string
+re_null_literal(std::string&& expression) {
+    static const std::string keyword = "null";
+    static const std::string replacement = "None";
+    std::string out;
+    out.reserve(expression.size());
+    bool in_string = false;
+    std::size_t i = 0;
+
+    auto is_word = [](char c) {
+        return (std::isalnum(static_cast<unsigned char>(c)) != 0) || c == '_';
+    };
+
+    while (i < expression.size()) {
+        const char c = expression[i];
+
+        if (in_string) {
+            out += c;
+            if (c == '\\' && i + 1 < expression.size()) {
+                out += expression[i + 1];
+                i += 2;
+                continue;
+            }
+            if (c == '\'') {
+                in_string = false;
+            }
+            ++i;
+            continue;
+        }
+
+        if (c == '\'') {
+            in_string = true;
+            out += c;
+            ++i;
+            continue;
+        }
+
+        const bool at_word_start = i == 0 || !is_word(expression[i - 1]);
+        const bool matches =
+            at_word_start && expression.compare(i, keyword.size(), keyword) == 0
+            && (i + keyword.size() == expression.size()
+                || !is_word(expression[i + keyword.size()]));
+
+        if (matches) {
+            out += replacement;
+            i += keyword.size();
+            continue;
+        }
+
+        out += c;
+        ++i;
+    }
+
+    return out;
+}
+
 static auto
 re_intern_strings(std::string&& expression) {
     static const RE2 intern_string("('.*?[^\\\\]')");
@@ -403,6 +465,10 @@ parse_expression_strings(const F& column_expr) {
                 std::move(validated_expr.parse_expression_string),
                 validated_expr
             );
+
+        validated_expr.parse_expression_string = re_null_literal(
+            std::move(validated_expr.parse_expression_string)
+        );
 
         validated_expr.parse_expression_string =
             re_intern_strings(std::move(validated_expr.parse_expression_string)
@@ -523,9 +589,10 @@ ServerResources::delete_view(const std::uint32_t& client_id, const t_id& id) {
         throw PerspectiveViewNotFoundException();
     }
 
+    t_id table_id;
     {
         PSP_WRITE_LOCK(m_write_lock);
-        auto table_id = m_view_to_table.at(id);
+        table_id = m_view_to_table.at(id);
         if (m_views.find(id) != m_views.end()) {
             m_views.erase(id);
         }
@@ -548,6 +615,12 @@ ServerResources::delete_view(const std::uint32_t& client_id, const t_id& id) {
 
     drop_view_on_update_sub(id);
     drop_view_on_delete_sub(id);
+    drop_view_on_remove_sub(id);
+    if (m_tables.contains(table_id)) {
+        m_tables.at(table_id)->get_gnode()->set_removes_enabled(
+            table_has_on_remove_subs(table_id)
+        );
+    }
 }
 
 void
@@ -626,6 +699,69 @@ ServerResources::remove_table_on_delete_sub(
 
         ++sub;
     }
+}
+
+void
+ServerResources::create_view_on_remove_sub(
+    const t_id& view_id, Subscription sub
+) {
+    PSP_WRITE_LOCK(m_write_lock);
+    if (!m_view_on_remove_subs.contains(view_id)) {
+        m_view_on_remove_subs[view_id] = {sub};
+    } else {
+        m_view_on_remove_subs[view_id].push_back(sub);
+    }
+}
+
+std::vector<Subscription>
+ServerResources::get_view_on_remove_sub(const t_id& view_id) {
+    PSP_READ_LOCK(m_write_lock);
+    if (!m_view_on_remove_subs.contains(view_id)) {
+        return {};
+    }
+    return m_view_on_remove_subs.at(view_id);
+}
+
+void
+ServerResources::remove_view_on_remove_sub(
+    const t_id& view_id,
+    const std::uint32_t sub_id,
+    const std::uint32_t client_id
+) {
+    PSP_WRITE_LOCK(m_write_lock);
+    if (!m_view_on_remove_subs.contains(view_id)) {
+        return;
+    }
+
+    auto& subs = m_view_on_remove_subs.at(view_id);
+    for (auto sub = subs.begin(); sub != subs.end();) {
+        if (sub->id == sub_id && sub->client_id == client_id) {
+            subs.erase(sub);
+            break;
+        }
+
+        ++sub;
+    }
+}
+
+void
+ServerResources::drop_view_on_remove_sub(const t_id& view_id) {
+    PSP_WRITE_LOCK(m_write_lock);
+    m_view_on_remove_subs.erase(view_id);
+}
+
+bool
+ServerResources::table_has_on_remove_subs(const t_id& table_id) {
+    PSP_READ_LOCK(m_write_lock);
+    auto range = m_table_to_view.equal_range(table_id);
+    for (auto it = range.first; it != range.second; ++it) {
+        auto subs = m_view_on_remove_subs.find(it->second);
+        if (subs != m_view_on_remove_subs.end() && !subs->second.empty()) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void
@@ -1115,6 +1251,8 @@ needs_poll(const proto::Request::ClientReqCase proto_case) {
             return true;
         case ReqCase::kTableOnDeleteReq:
         case ReqCase::kViewOnDeleteReq:
+        case ReqCase::kViewOnRemoveReq:
+        case ReqCase::kViewRemoveOnRemoveReq:
         case ReqCase::kViewRemoveDeleteReq:
         case ReqCase::kTableUpdateReq:
         case ReqCase::kTableRemoveDeleteReq:
@@ -1160,6 +1298,8 @@ entity_type_is_table(const proto::Request::ClientReqCase proto_case) {
         case ReqCase::kMakeJoinTableReq:
             return true;
         case ReqCase::kViewOnDeleteReq:
+        case ReqCase::kViewOnRemoveReq:
+        case ReqCase::kViewRemoveOnRemoveReq:
         case ReqCase::kViewRemoveDeleteReq:
         case ReqCase::kViewDimensionsReq:
         case ReqCase::kViewToColumnsStringReq:
@@ -2132,7 +2272,10 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     table->remove_rows(r.data().from_rows());
                     break;
                 }
-                case proto::MakeTableData::kFromArrow:
+                case proto::MakeTableData::kFromArrow: {
+                    table->remove_arrow(r.data().from_arrow());
+                    break;
+                }
                 case proto::MakeTableData::kFromCsv:
                 case proto::MakeTableData::kFromSchema:
                 case proto::MakeTableData::DATA_NOT_SET:
@@ -2774,6 +2917,31 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             sub_info.id = req.msg_id();
             sub_info.client_id = client_id;
             m_resources.create_table_on_delete_sub(req.entity_id(), sub_info);
+            break;
+        }
+        case proto::Request::kViewOnRemoveReq: {
+            Subscription sub_info;
+            sub_info.id = req.msg_id();
+            sub_info.client_id = client_id;
+            m_resources.create_view_on_remove_sub(req.entity_id(), sub_info);
+            auto table_id = m_resources.get_table_id_for_view(req.entity_id());
+            m_resources.get_table(table_id)->get_gnode()->set_removes_enabled(
+                true
+            );
+            break;
+        }
+        case proto::Request::kViewRemoveOnRemoveReq: {
+            auto sub_id = req.view_remove_on_remove_req().id();
+            m_resources.remove_view_on_remove_sub(
+                req.entity_id(), sub_id, client_id
+            );
+            auto table_id = m_resources.get_table_id_for_view(req.entity_id());
+            m_resources.get_table(table_id)->get_gnode()->set_removes_enabled(
+                m_resources.table_has_on_remove_subs(table_id)
+            );
+            proto::Response resp;
+            resp.mutable_view_remove_on_remove_resp();
+            push_resp(std::move(resp));
             break;
         }
         case proto::Request::kTableRemoveDeleteReq: {
@@ -3616,7 +3784,12 @@ ProtoServer::_process_table_unchecked(
     const ServerResources::t_id& table_id,
     std::vector<ProtoServerResp<ProtoServer::Response>>& outs
 ) {
-    table->get_pool()->_process([this, table_id, &outs](auto port_id) {
+    table->get_pool()->_process([this, table, table_id, &outs](auto port_id) {
+        const auto removed = table->get_gnode()->get_removed_pkeys();
+        const bool has_removes =
+            !table->get_index().empty() && removed && removed->size() > 0;
+        std::shared_ptr<std::string> removed_indices;
+
         // record changes per port.
         auto view_ids = m_resources.get_view_ids(table_id);
         for (const auto& view_id : view_ids) {
@@ -3625,6 +3798,30 @@ ProtoServer::_process_table_unchecked(
             }
 
             auto view = m_resources.get_view(view_id);
+            if (has_removes) {
+                auto remove_subs = m_resources.get_view_on_remove_sub(view_id);
+                if (!remove_subs.empty() && !removed_indices) {
+                    removed_indices = apachearrow::column_to_arrow_ipc(
+                        *removed->get_const_column("psp_pkey"),
+                        table->get_index(),
+                        removed->size()
+                    );
+                }
+
+                for (auto& subscription : remove_subs) {
+                    Response out;
+                    out.set_msg_id(subscription.id);
+                    out.set_entity_id(view_id);
+                    auto* r = out.mutable_view_on_remove_resp();
+                    r->set_port_id(port_id);
+                    *r->mutable_indices() = *removed_indices;
+                    ProtoServerResp<proto::Response> resp2;
+                    resp2.data = std::move(out);
+                    resp2.client_id = subscription.client_id;
+                    outs.emplace_back(std::move(resp2));
+                }
+            }
+
             auto subscriptions = m_resources.get_view_on_update_sub(view_id);
             for (auto& subscription : subscriptions) {
                 Response out;

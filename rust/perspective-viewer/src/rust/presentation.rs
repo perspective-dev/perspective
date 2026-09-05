@@ -30,8 +30,10 @@ use yew::prelude::*;
 pub use self::column_locator::{
     ColumnLocator, ColumnSettingsTab, ColumnSettingsTarget, ColumnTab, OpenColumnSettings,
 };
-use self::drag_helpers::DragTargetState;
 pub use self::drag_helpers::{DragDropContainer, DragEndCallback};
+use self::drag_helpers::{
+    DragTargetState, PointerDownCallback, clear_document_selection, closest_draggable,
+};
 pub use self::props::{DragDropProps, PresentationProps};
 use crate::config::{CssKind, NamedValue, assign_palette_names};
 use crate::utils::*;
@@ -126,6 +128,10 @@ pub struct PresentationHandle {
     /// dragged element from the shadow tree.
     host_dragend: RefCell<Option<DragEndCallback>>,
 
+    /// Host-level `pointerdown` listener that clears a stale page selection
+    /// before it can turn a row drag into a browser selection drag.
+    host_pointerdown: RefCell<Option<PointerDownCallback>>,
+
     source_dragend: RefCell<Option<(web_sys::EventTarget, DragEndCallback)>>,
 
     /// IntersectionObserver-based fallback for the drag image, kept alive for
@@ -202,10 +208,12 @@ impl Presentation {
             on_dragstart: Default::default(),
             on_dragend: Default::default(),
             host_dragend: Default::default(),
+            host_pointerdown: Default::default(),
             source_dragend: Default::default(),
             drag_target: Default::default(),
         }));
 
+        theme.register_host_pointerdown();
         ApiFuture::spawn(theme.clone().init());
         theme
     }
@@ -577,18 +585,53 @@ impl Presentation {
         }
     }
 
-    pub fn set_drag_image(&self, event: &DragEvent) -> ApiResult<()> {
+    /// Claim a `dragstart` for the column drag machinery, returning `false`
+    /// (cancelling the native drag) when it did not originate on a
+    /// `draggable="true"` row or installation failed.
+    pub fn set_drag_image(&self, event: &DragEvent) -> bool {
+        match self.try_set_drag_image(event) {
+            Ok(true) => true,
+            Ok(false) => {
+                event.prevent_default();
+                if let Err(e) = clear_document_selection() {
+                    web_sys::console::warn_1(&e.into());
+                }
+
+                false
+            },
+            Err(e) => {
+                event.prevent_default();
+                web_sys::console::warn_1(&e.into());
+                false
+            },
+        }
+    }
+
+    fn try_set_drag_image(&self, event: &DragEvent) -> ApiResult<bool> {
         event.stop_propagation();
+        let Some(original) = closest_draggable(event) else {
+            return Ok(false);
+        };
+
+        let is_row_drag = event
+            .target()
+            .and_then(|target| target.dyn_into::<Node>().ok())
+            .map(|target| original.is_same_node(Some(&target)))
+            .unwrap_or(false);
+
+        if !is_row_drag {
+            return Ok(false);
+        }
+
         self.register_source_dragend(event)?;
         if let Some(dt) = event.data_transfer() {
             dt.set_drop_effect("move");
         }
 
-        let original: HtmlElement = event.target().into_apierror()?.unchecked_into();
         let elem: HtmlElement = original
             .children()
             .get_with_index(0)
-            .unwrap()
+            .into_apierror()?
             .clone_node_with_deep(true)?
             .unchecked_into();
 
@@ -612,7 +655,7 @@ impl Presentation {
             Ok(())
         });
 
-        Ok(())
+        Ok(true)
     }
 
     /// Is the drag/drop state currently in `action`?
@@ -693,6 +736,22 @@ impl Presentation {
         target.add_event_listener_with_callback("dragend", closure.as_ref().unchecked_ref())?;
         *self.source_dragend.borrow_mut() = Some((target, closure));
         Ok(())
+    }
+
+    fn register_host_pointerdown(&self) {
+        let closure = Closure::wrap(Box::new(move |event: PointerEvent| {
+            if closest_draggable(&event).is_some()
+                && let Err(e) = clear_document_selection()
+            {
+                web_sys::console::warn_1(&e.into());
+            }
+        }) as Box<dyn FnMut(PointerEvent)>);
+
+        self.viewer_elem
+            .add_event_listener_with_callback("pointerdown", closure.as_ref().unchecked_ref())
+            .unwrap();
+
+        *self.host_pointerdown.borrow_mut() = Some(closure);
     }
 
     fn register_host_dragend(&self) {

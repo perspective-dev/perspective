@@ -678,6 +678,152 @@ function validate_typed_array(typed_array, column_data) {
             view.delete();
             table.delete();
         });
+
+        test("Construct a table from an indexed view inherits the index", async function () {
+            const table = await perspective.table(
+                [
+                    { x: 1, y: "a" },
+                    { x: 2, y: "b" },
+                    { x: 3, y: "c" },
+                ],
+                { index: "x" },
+            );
+
+            const view = await table.view();
+            const table2 = await perspective.table(view);
+            expect(await table2.get_index()).toEqual("x");
+            const view2 = await table2.view();
+            let resolve;
+            const next = () =>
+                new Promise((x) => {
+                    resolve = x;
+                });
+
+            await view2.on_update(() => resolve());
+            let promise = next();
+            await table.update([{ x: 2, y: "bb" }]);
+            await promise;
+            expect(await view2.to_json()).toEqual(await view.to_json());
+            expect(await view2.to_json()).toEqual([
+                { x: 1, y: "a" },
+                { x: 2, y: "bb" },
+                { x: 3, y: "c" },
+            ]);
+
+            promise = next();
+            await table.remove([1]);
+            await promise;
+            expect(await view2.to_json()).toEqual(await view.to_json());
+            expect(await view2.to_json()).toEqual([
+                { x: 2, y: "bb" },
+                { x: 3, y: "c" },
+            ]);
+
+            await view2.delete();
+            await table2.delete();
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Construct a table from an indexed view mirrors replace and clear", async function () {
+            const table = await perspective.table(
+                [
+                    { x: 1, y: "a" },
+                    { x: 2, y: "b" },
+                    { x: 3, y: "c" },
+                ],
+                { index: "x" },
+            );
+
+            const view = await table.view();
+            const table2 = await perspective.table(view);
+            const view2 = await table2.view();
+            await table.replace([
+                { x: 2, y: "bb" },
+                { x: 4, y: "d" },
+            ]);
+
+            await expect
+                .poll(() => view2.to_json())
+                .toEqual([
+                    { x: 2, y: "bb" },
+                    { x: 4, y: "d" },
+                ]);
+
+            await table.clear();
+            await expect.poll(() => view2.to_json()).toEqual([]);
+            await table.update([{ x: 5, y: "e" }]);
+            await expect
+                .poll(() => view2.to_json())
+                .toEqual([{ x: 5, y: "e" }]);
+            await view2.delete();
+            await table2.delete();
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Construct a table from a pivoted view stays unindexed", async function () {
+            const table = await perspective.table(
+                [
+                    { x: 1, y: "a" },
+                    { x: 2, y: "b" },
+                ],
+                { index: "x" },
+            );
+
+            const view = await table.view({ group_by: ["y"] });
+            const table2 = await perspective.table(view);
+            expect(await table2.get_index()).toBeUndefined();
+            await table2.delete();
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Construct a table from a view without the index column stays unindexed", async function () {
+            const table = await perspective.table(
+                [
+                    { x: 1, y: "a" },
+                    { x: 2, y: "b" },
+                ],
+                { index: "x" },
+            );
+
+            const view = await table.view({ columns: ["y"] });
+            const table2 = await perspective.table(view);
+            expect(await table2.get_index()).toBeUndefined();
+            await table2.delete();
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Construct a table from a limit table's view inherits the limit", async function () {
+            const table = await perspective.table(
+                [
+                    { x: 1, y: "a" },
+                    { x: 2, y: "b" },
+                ],
+                { limit: 2 },
+            );
+
+            const view = await table.view();
+            const table2 = await perspective.table(view);
+            expect(await table2.get_limit()).toEqual(2);
+            const view2 = await table2.view();
+            let resolve;
+            const promise = new Promise((x) => {
+                resolve = x;
+            });
+
+            await view2.on_update(() => resolve());
+            await table.update([{ x: 3, y: "c" }]);
+            await promise;
+            expect(await view2.to_json()).toEqual(await view.to_json());
+            expect(await table2.size()).toEqual(2);
+            await view2.delete();
+            await table2.delete();
+            await view.delete();
+            await table.delete();
+        });
     });
 
     test.describe("Errors", function () {
