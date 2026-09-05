@@ -138,6 +138,17 @@ public:
     bool process(t_uindex port_id);
 
     /**
+     * @brief The primary keys of rows that existed before the most recent
+     * `process` and were removed by it, as a one-column `psp_pkey`
+     * `t_data_table`, or `nullptr` when that step removed nothing or removes
+     * are not enabled.
+     */
+    std::shared_ptr<t_data_table> get_removed_pkeys() const;
+
+    void set_removes_enabled(bool enabled);
+    bool get_removes_enabled() const;
+
+    /**
      * @brief Create a new input port, store it in `m_input_ports`, and
      * return the integer ID that references the new port.
      *
@@ -434,6 +445,10 @@ private:
     std::chrono::high_resolution_clock::time_point m_epoch;
     std::function<void()> m_pool_cleanup;
     bool m_was_updated;
+    bool m_removes_enabled = false;
+    bool m_reset_pending = false;
+    std::shared_ptr<t_data_table> m_removed_pkeys;
+    std::shared_ptr<t_data_table> m_reset_pkeys;
 
     std::shared_ptr<t_expression_vocab> m_expression_vocab;
     std::shared_ptr<t_regex_mapping> m_expression_regex_mapping;

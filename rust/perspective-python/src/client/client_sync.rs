@@ -825,4 +825,36 @@ impl View {
     pub fn remove_update(&self, py: Python<'_>, callback_id: u32) -> PyResult<()> {
         self.0.remove_update(callback_id).py_block_on(py)
     }
+
+    /// Register a callback which is invoked whenever rows are removed from
+    /// this [`View`]'s [`Table`] by [`Table::remove`], with two arguments:
+    /// `port_id`,
+    /// and `indices`, the removed `index` column values as an Apache Arrow
+    /// (`bytes`) of one column named after the index.
+    ///
+    /// [`Table::replace`] reports the keys it does not re-supply and
+    /// [`Table::clear`] reports every key. It never fires for a
+    /// [`Table`] without an `index`.
+    ///
+    /// # Python Examples
+    ///
+    /// ```python
+    /// def on_remove(port_id, indices):
+    ///     replica.remove(indices)
+    ///
+    /// callback_id = view.on_remove(on_remove)
+    /// ```
+    pub fn on_remove(&self, py: Python<'_>, callback: Py<PyAny>) -> PyResult<u32> {
+        self.0.on_remove(callback).py_block_on(py)
+    }
+
+    /// Unregister a previously registered [`View::on_remove`] callback.
+    ///
+    /// # Arguments
+    ///
+    /// - `id` - A callback `id` as returned by a reciprocal call to
+    ///   [`View::on_remove`].
+    pub fn remove_remove(&self, py: Python<'_>, callback_id: u32) -> PyResult<()> {
+        self.0.remove_remove(callback_id).py_block_on(py)
+    }
 }

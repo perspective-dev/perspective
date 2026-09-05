@@ -33,8 +33,8 @@ use std::fs;
 use perspective_client::config::*;
 use perspective_client::virtual_server::Features;
 use perspective_client::{
-    ColumnWindow, DeleteOptions, JoinOptions, OnUpdateData, OnUpdateOptions, SystemInfo,
-    TableInitOptions, UpdateOptions, ViewWindow,
+    ColumnWindow, DeleteOptions, JoinOptions, OnRemoveData, OnUpdateData, OnUpdateOptions,
+    SystemInfo, TableInitOptions, UpdateOptions, ViewWindow,
 };
 use perspective_js::TypedArrayWindow;
 use perspective_viewer::config::{
@@ -109,6 +109,7 @@ pub fn generate_type_bindings_js() -> Result<(), Box<dyn Error>> {
     DeleteOptions::export_all_to(&path)?;
     Features::export_all_to(&path)?;
     JoinOptions::export_all_to(&path)?;
+    OnRemoveData::export_all_to(&path)?;
     OnUpdateData::export_all_to(&path)?;
     OnUpdateOptions::export_all_to(&path)?;
     SystemInfo::<f64>::export_all_to(&path)?;

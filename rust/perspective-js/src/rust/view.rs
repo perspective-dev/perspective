@@ -12,7 +12,7 @@
 
 use js_sys::{Array, ArrayBuffer, Function, Object};
 use perspective_client::{
-    ColumnWindow, OnUpdateData, OnUpdateOptions, ViewWindow, assert_view_api,
+    ColumnWindow, OnRemoveData, OnUpdateData, OnUpdateOptions, ViewWindow, assert_view_api,
 };
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -289,7 +289,7 @@ impl View {
     /// table emits an update, this callback will be invoked with an object
     /// containing `port_id`, indicating which port the update fired on, and
     /// optionally `delta`, which is the new data that was updated for each
-    /// cell or each row.
+    /// cell or each row (as an Arrow).
     ///
     /// # Arguments
     ///
@@ -297,24 +297,22 @@ impl View {
     ///   object with two keys: `port_id`, indicating which port the update was
     ///   triggered on, and `delta`, whose value is dependent on the mode
     ///   parameter.
-    /// - `options` - If this is provided as `OnUpdateOptions { mode:
-    ///   Some(OnUpdateMode::Row) }`, then `delta` is an Arrow of the updated
-    ///   rows. Otherwise `delta` will be [`Option::None`].
+    /// - `options` - If this is provided as `{mode: "row"}`, then `delta` is an
+    ///   Arrow of the updated rows. Otherwise `delta` will be `null`.
     ///
     /// # JavaScript Examples
     ///
     /// ```javascript
-    /// // Attach an `on_update` callback
     /// view.on_update((updated) => console.log(updated.port_id));
     /// ```
     ///
     /// ```javascript
-    /// // `on_update` with row deltas
     /// view.on_update((updated) => console.log(updated.delta), { mode: "row" });
     /// ```
     #[wasm_bindgen]
     pub fn on_update(
         &self,
+        #[wasm_bindgen(unchecked_param_type = "(data: OnUpdateData) => void")]
         on_update_js: Function,
         options: Option<JsOnUpdateOptions>,
     ) -> ApiFuture<u32> {
@@ -344,6 +342,49 @@ impl View {
     #[wasm_bindgen]
     pub async fn remove_update(&self, callback_id: u32) -> ApiResult<()> {
         Ok(self.0.remove_update(callback_id).await?)
+    }
+
+    /// Register a callback which is invoked whenever rows are removed from
+    /// this [`View`]'s [`Table`] by [`Table::remove`], with an object
+    /// containing `port_id` and `indices`, the removed `index` column
+    /// values as an Arrow of one column named after the index.
+    ///
+    /// [`Table::replace`] reports the keys it does not re-supply and
+    /// [`Table::clear`] reports every key. `on_remove` never fires for a
+    /// [`Table`] without an `index`.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// const id = await view.on_remove(({ indices, port_id }) => {
+    ///     replica.remove(indices);
+    /// });
+    /// ```
+    #[wasm_bindgen]
+    pub fn on_remove(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "(data: OnRemoveData) => void")]
+        on_remove_js: Function,
+    ) -> ApiFuture<u32> {
+        let poll_loop = LocalPollLoop::new(move |args: OnRemoveData| {
+            let js_obj = JsValue::from_serde_ext(&*args)?;
+            on_remove_js.call1(&JsValue::UNDEFINED, &js_obj)
+        });
+
+        let on_remove = Box::new(move |msg| poll_loop.poll(msg));
+        let view = self.0.clone();
+        ApiFuture::new(async move { Ok(view.on_remove(on_remove).await?) })
+    }
+
+    /// Unregister a previously registered [`View::on_remove`] callback.
+    ///
+    /// # Arguments
+    ///
+    /// - `id` - A callback `id` as returned by a reciprocal call to
+    ///   [`View::on_remove`].
+    #[wasm_bindgen]
+    pub async fn remove_remove(&self, callback_id: u32) -> ApiResult<()> {
+        Ok(self.0.remove_remove(callback_id).await?)
     }
 
     /// Register a callback with this [`View`]. Whenever the [`View`] is

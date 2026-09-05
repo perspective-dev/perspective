@@ -30,9 +30,10 @@ use yew::prelude::*;
 pub use self::column_locator::{
     ColumnLocator, ColumnSettingsTab, ColumnSettingsTarget, ColumnTab, OpenColumnSettings,
 };
-use self::drag_helpers::DragTargetState;
 pub use self::drag_helpers::{DragDropContainer, DragEndCallback};
-use self::drag_helpers::{PointerDownCallback, clear_document_selection, closest_draggable};
+use self::drag_helpers::{
+    DragTargetState, PointerDownCallback, clear_document_selection, closest_draggable,
+};
 pub use self::props::{DragDropProps, PresentationProps};
 use crate::config::{CssKind, NamedValue, assign_palette_names};
 use crate::utils::*;

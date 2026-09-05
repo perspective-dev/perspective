@@ -156,6 +156,18 @@ impl Deref for OnUpdateData {
     }
 }
 
+/// Removed index values and port ID corresponding to a remove batch, provided
+/// to the callback argument to [`View::on_remove`].
+#[derive(TS)]
+pub struct OnRemoveData(crate::proto::ViewOnRemoveResp);
+
+impl Deref for OnRemoveData {
+    type Target = crate::proto::ViewOnRemoveResp;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 /// The [`View`] struct is Perspective's query and serialization interface. It
 /// represents a query on the `Table`'s dataset and is always created from an
 /// existing `Table` instance via the [`Table::view`] method.
@@ -268,13 +280,33 @@ impl Deref for OnUpdateData {
 pub struct View {
     pub name: String,
     client: Client,
+    pub(crate) source: Option<ViewSource>,
+}
+
+/// The options of the [`Table`] a [`View`] was created from, as known to the
+/// [`Client`] which created it; a [`View`] opened by name alone has no source.
+#[derive(Clone, Debug)]
+pub(crate) struct ViewSource {
+    pub options: crate::table::TableOptions,
 }
 
 assert_view_api!(View);
 
 impl View {
     pub fn new(name: String, client: Client) -> Self {
-        View { name, client }
+        View {
+            name,
+            client,
+            source: None,
+        }
+    }
+
+    pub(crate) fn new_with_source(name: String, client: Client, source: ViewSource) -> Self {
+        View {
+            name,
+            client,
+            source: Some(source),
+        }
     }
 
     fn client_message(&self, req: ClientReq) -> Request {
@@ -574,6 +606,67 @@ impl View {
         self.client.unsubscribe(update_id).await?;
         match self.client.oneshot(&msg).await? {
             ClientResp::ViewRemoveOnUpdateResp(_) => Ok(()),
+            resp => Err(resp.into()),
+        }
+    }
+
+    /// Register a callback which is invoked whenever rows are removed from
+    /// this [`View`]'s [`Table`] by [`Table::remove`], with the removed `index`
+    /// column values as an Apache Arrow of one column named after the index.
+    ///
+    /// [`Table::replace`] reports the keys it does not re-supply and
+    /// [`Table::clear`] reports every key. It never fires for a
+    /// [`Table`] without an `index`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use perspective_client::{View, OnRemoveData};
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let view: View = todo!();
+    /// let callback = |removed: OnRemoveData| async move { println!("{:?}", removed.port_id) };
+    /// let cid = view.on_remove(callback).await?;
+    /// view.remove_remove(cid).await?;
+    /// # Ok(()) }
+    /// ```
+    pub async fn on_remove<T, U>(&self, on_remove: T) -> ClientResult<u32>
+    where
+        T: Fn(OnRemoveData) -> U + Send + Sync + 'static,
+        U: Future<Output = ()> + Send + 'static,
+    {
+        let on_remove = Arc::new(on_remove);
+        let callback = move |resp: Response| {
+            let on_remove = on_remove.clone();
+            async move {
+                match resp.client_resp {
+                    Some(ClientResp::ViewOnRemoveResp(resp)) => {
+                        on_remove(OnRemoveData(resp)).await;
+                        Ok(())
+                    },
+                    resp => Err(resp.into()),
+                }
+            }
+        };
+
+        let msg = self.client_message(ClientReq::ViewOnRemoveReq(ViewOnRemoveReq {}));
+        self.client.subscribe(&msg, callback).await?;
+        Ok(msg.msg_id)
+    }
+
+    /// Unregister a previously registered [`View::on_remove`] callback.
+    ///
+    /// # Arguments
+    ///
+    /// - `callback_id` - A callback `id` as returned by a reciprocal call to
+    ///   [`View::on_remove`].
+    pub async fn remove_remove(&self, callback_id: u32) -> ClientResult<()> {
+        let msg = self.client_message(ClientReq::ViewRemoveOnRemoveReq(ViewRemoveOnRemoveReq {
+            id: callback_id,
+        }));
+
+        self.client.unsubscribe(callback_id).await?;
+        match self.client.oneshot(&msg).await? {
+            ClientResp::ViewRemoveOnRemoveResp(_) => Ok(()),
             resp => Err(resp.into()),
         }
     }

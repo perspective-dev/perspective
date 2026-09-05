@@ -17,6 +17,7 @@
 #include <perspective/context_two.h>
 #include <perspective/context_grouped_pkey.h>
 #include <perspective/gnode.h>
+#include <tsl/hopscotch_set.h>
 #include <perspective/gnode_state.h>
 #include <perspective/mask.h>
 #include <perspective/tracing.h>
@@ -223,6 +224,30 @@ t_gnode::calc_transition(
     return trans;
 }
 
+static t_column*
+append_removed_pkey(
+    std::shared_ptr<t_data_table>& removed,
+    t_column* removed_col,
+    t_dtype dtype,
+    t_uindex reserve,
+    const t_tscalar& pkey
+) {
+    if (removed_col == nullptr) {
+        if (!removed) {
+            t_schema removed_schema({"psp_pkey"}, {dtype});
+            removed = std::make_shared<t_data_table>(removed_schema);
+            removed->init();
+            removed->reserve(reserve);
+        }
+        removed_col = removed->_get_column("psp_pkey");
+    }
+
+    const t_uindex idx = removed->size();
+    removed->extend(idx + 1);
+    removed_col->set_scalar(idx, pkey);
+    return removed_col;
+}
+
 t_mask
 t_gnode::_process_mask_existed_rows(t_process_state& process_state) {
     // Make sure `existed_data_table` has enough space to write without resizing
@@ -242,6 +267,8 @@ t_gnode::_process_mask_existed_rows(t_process_state& process_state) {
     t_uindex added_count = 0;
     t_tscalar prev_pkey;
     prev_pkey.clear();
+
+    t_column* removed_col = nullptr;
 
     t_column* existed_column =
         process_state.m_existed_data_table->_get_column("psp_existed");
@@ -284,6 +311,15 @@ t_gnode::_process_mask_existed_rows(t_process_state& process_state) {
                     existed_column->set_nth(added_count, row_pre_existed);
                     widened_column->set_nth(added_count, false);
                     ++added_count;
+                    if (m_removes_enabled) {
+                        removed_col = append_removed_pkey(
+                            m_removed_pkeys,
+                            removed_col,
+                            pkey_col->get_dtype(),
+                            flattened_num_rows,
+                            pkey
+                        );
+                    }
                 } else {
                     mask.set(idx, false);
                 }
@@ -303,6 +339,7 @@ t_gnode::_process_mask_existed_rows(t_process_state& process_state) {
 t_process_table_result
 t_gnode::_process_table(t_uindex port_id) {
     m_was_updated = false;
+    m_removed_pkeys = nullptr;
 
     t_process_table_result result;
     result.m_flattened_data_table = nullptr;
@@ -318,7 +355,18 @@ t_gnode::_process_table(t_uindex port_id) {
 
     std::shared_ptr<t_port>& input_port = m_input_ports[port_id];
 
+    // A `reset` with no rows queued behind it (a bare `clear`) still
+    // produces one step, so listeners see the table empty and its keys gone.
     if (input_port->get_table()->size() == 0) {
+        if (!m_reset_pending) {
+            return result;
+        }
+
+        m_reset_pending = false;
+        m_removed_pkeys = std::move(m_reset_pkeys);
+        m_reset_pkeys = nullptr;
+        m_was_updated = true;
+        result.m_should_notify_userspace = true;
         return result;
     }
 
@@ -337,6 +385,36 @@ t_gnode::_process_table(t_uindex port_id) {
         // See if each primary key in flattened already exist in the dataset
         t_tscalar pkey = pkey_col->get_scalar(idx);
         row_lookup[idx] = m_gstate->lookup(pkey);
+    }
+
+    if (m_reset_pending) {
+        m_reset_pending = false;
+        if (m_reset_pkeys) {
+            tsl::hopscotch_set<t_tscalar> incoming;
+            incoming.reserve(flattened_num_rows);
+            for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
+                incoming.insert(pkey_col->get_scalar(idx));
+            }
+
+            const t_column* stash_col =
+                m_reset_pkeys->_get_column("psp_pkey");
+            const t_uindex stash_size = m_reset_pkeys->size();
+            t_column* removed_col = nullptr;
+            for (t_uindex idx = 0; idx < stash_size; ++idx) {
+                t_tscalar pkey = stash_col->get_scalar(idx);
+                if (!incoming.contains(pkey)) {
+                    removed_col = append_removed_pkey(
+                        m_removed_pkeys,
+                        removed_col,
+                        stash_col->get_dtype(),
+                        stash_size,
+                        pkey
+                    );
+                }
+            }
+
+            m_reset_pkeys = nullptr;
+        }
     }
 
     // first update - master table is empty
@@ -1894,6 +1972,32 @@ void
 t_gnode::reset() {
     std::vector<std::string> rval;
 
+    m_reset_pending = true;
+    if (m_removes_enabled && m_gstate->mapping_size() > 0) {
+        const auto& mapping = m_gstate->get_pkey_map();
+        const auto master = m_gstate->get_table();
+        t_mask live(master->size());
+        for (const auto& kv : mapping) {
+            live.set(kv.second, true);
+        }
+
+        const auto pkey_col = master->get_const_column("psp_pkey");
+        t_column* stash_col = nullptr;
+        for (t_uindex idx = 0; idx < master->size(); ++idx) {
+            if (!live.get(idx)) {
+                continue;
+            }
+
+            stash_col = append_removed_pkey(
+                m_reset_pkeys,
+                stash_col,
+                pkey_col->get_dtype(),
+                mapping.size(),
+                pkey_col->get_scalar(idx)
+            );
+        }
+    }
+
     for (const auto& kv : m_contexts) {
         auto ctxh = kv.second;
         switch (ctxh.m_ctx_type) {
@@ -1945,6 +2049,25 @@ t_gnode::clear_output_ports() {
     for (const auto& m_oport : m_oports) {
         m_oport->get_table()->clear();
     }
+    m_removed_pkeys = nullptr;
+}
+
+std::shared_ptr<t_data_table>
+t_gnode::get_removed_pkeys() const {
+    return m_removed_pkeys;
+}
+
+void
+t_gnode::set_removes_enabled(bool enabled) {
+    m_removes_enabled = enabled;
+    if (!enabled) {
+        m_reset_pkeys = nullptr;
+    }
+}
+
+bool
+t_gnode::get_removes_enabled() const {
+    return m_removes_enabled;
 }
 
 void

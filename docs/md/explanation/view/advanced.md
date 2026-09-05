@@ -182,6 +182,39 @@ When `mode` is set to `"row"`, the callback receives a delta of only the rows
 that changed (as Apache Arrow), which is useful for efficiently synchronizing
 tables across clients.
 
+## Remove Callbacks
+
+Register a callback to be notified whenever rows are removed from the underlying
+`Table` by `remove()`, which requires an `index`. The callback receives the
+`port_id` and the removed `index` column values as an Apache Arrow of a single
+column named after the index. It fires once per update step, only for rows which
+existed before that step; `replace()` reports the keys it does not re-supply,
+and `clear()` reports every key:
+
+<div class="javascript">
+
+```javascript
+const callback = await view.on_remove(({ indices, port_id }) => {
+    replica.remove(indices);
+});
+
+// Later, remove the callback
+await view.remove_remove(callback);
+```
+
+</div>
+<div class="python">
+
+```python
+def on_remove(port_id, indices):
+    replica.remove(indices)
+
+callback = view.on_remove(on_remove)
+view.remove_remove(callback)
+```
+
+</div>
+
 ## Flattening a View into a Table
 
 A [`Table`] can be constructed on a [`Table::view`] instance, which will return
@@ -191,6 +224,13 @@ particularly useful for implementing a
 [Client/Server Replicated](../architecture/client_server.md) design, as it
 handles the `View` serialization and `on_update` forwarding for you. This
 pattern is available in JavaScript, Python and Rust.
+
+When the source `Table` has an `index`, and the `View` is unpivoted and includes
+the index column, the new `Table` inherits that `index` and subscribes to the
+source's `on_remove()`, so in-place updates and `remove()` calls on the source
+are mirrored rather than appended. A pivoted `View`, or one which omits the
+index column, produces an unindexed, append-only `Table`. A `limit` is inherited
+the same way. `replace()` and `clear()` on the source are mirrored too.
 
 <div class="javascript">
 

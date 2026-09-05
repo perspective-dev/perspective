@@ -26,7 +26,7 @@ use crate::proto::response::ClientResp;
 use crate::proto::*;
 use crate::table_data::UpdateData;
 use crate::utils::*;
-use crate::view::View;
+use crate::view::{View, ViewSource};
 
 pub type Schema = HashMap<String, ColumnType>;
 
@@ -151,6 +151,15 @@ pub(crate) struct TableOptions {
     pub list_flatten: Option<crate::proto::ListFlatten>,
 }
 
+/// The source [`View`] of a replica [`Table`] built by [`Client::table`],
+/// with the subscription tokens to release when the replica is deleted.
+#[derive(Clone)]
+pub(crate) struct ViewBinding {
+    pub view: View,
+    pub update_token: u32,
+    pub remove_token: Option<u32>,
+}
+
 impl From<TableInitOptions> for TableOptions {
     fn from(value: TableInitOptions) -> Self {
         TableOptions {
@@ -218,11 +227,7 @@ pub struct Table {
     name: String,
     client: Client,
     options: TableOptions,
-
-    /// If this table is constructed from a View, the view's on_update callback
-    /// is wired into this table. So, we store the token to clean it up properly
-    /// on destruction.
-    pub(crate) view_update_token: Option<u32>,
+    pub(crate) view_binding: Option<ViewBinding>,
 }
 
 assert_table_api!(Table);
@@ -239,7 +244,7 @@ impl Table {
             name,
             client,
             options,
-            view_update_token: None,
+            view_binding: None,
         }
     }
 
@@ -338,6 +343,13 @@ impl Table {
     /// # Ok(()) }
     /// ```
     pub async fn delete(&self, options: DeleteOptions) -> ClientResult<()> {
+        if let Some(binding) = &self.view_binding {
+            binding.view.remove_update(binding.update_token).await?;
+            if let Some(token) = binding.remove_token {
+                binding.view.remove_remove(token).await?;
+            }
+        }
+
         let msg = self.client_message(ClientReq::TableDeleteReq(TableDeleteReq {
             is_immediate: !options.lazy,
         }));
@@ -625,7 +637,13 @@ impl Table {
             ClientResp::TableMakeViewResp(TableMakeViewResp { view_id })
                 if view_id == view_name =>
             {
-                Ok(View::new(view_name, self.client.clone()))
+                Ok(View::new_with_source(
+                    view_name,
+                    self.client.clone(),
+                    ViewSource {
+                        options: self.options.clone(),
+                    },
+                ))
             },
             resp => Err(resp.into()),
         }

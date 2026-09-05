@@ -581,6 +581,15 @@ namespace server {
             const t_id& table_id, std::uint32_t sub_id, std::uint32_t client_id
         );
 
+        // `View::on_remove()`
+        void create_view_on_remove_sub(const t_id& view_id, Subscription sub);
+        std::vector<Subscription> get_view_on_remove_sub(const t_id& view_id);
+        void remove_view_on_remove_sub(
+            const t_id& view_id, std::uint32_t sub_id, std::uint32_t client_id
+        );
+        void drop_view_on_remove_sub(const t_id& view_id);
+        bool table_has_on_remove_subs(const t_id& table_id);
+
         // `View::on_delete()`
         void create_view_on_delete_sub(const t_id& view_id, Subscription sub);
         std::vector<Subscription> get_view_on_delete_sub(const t_id& view_id);
@@ -627,6 +636,9 @@ namespace server {
 
         tsl::hopscotch_map<t_id, std::vector<Subscription>>
             m_table_on_delete_subs;
+
+        tsl::hopscotch_map<t_id, std::vector<Subscription>>
+            m_view_on_remove_subs;
 
         std::vector<Subscription> m_on_hosted_tables_update_subs;
 

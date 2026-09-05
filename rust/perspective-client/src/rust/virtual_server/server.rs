@@ -28,9 +28,9 @@ use crate::proto::{
     ServerError, TableMakePortResp, TableMakeViewResp, TableOnDeleteResp, TableRemoveDeleteResp,
     TableSchemaResp, TableSizeResp, TableValidateExprResp, ViewColumnPathsResp, ViewDeleteResp,
     ViewDimensionsResp, ViewExpressionSchemaResp, ViewGetConfigResp, ViewGetMinMaxResp,
-    ViewOnDeleteResp, ViewOnUpdateResp, ViewRemoveDeleteResp, ViewRemoveOnUpdateResp,
-    ViewSchemaResp, ViewToArrowResp, ViewToColumnsStringResp, ViewToCsvResp,
-    ViewToNdjsonStringResp, ViewToRowsStringResp,
+    ViewOnDeleteResp, ViewOnRemoveResp, ViewOnUpdateResp, ViewRemoveDeleteResp,
+    ViewRemoveOnRemoveResp, ViewRemoveOnUpdateResp, ViewSchemaResp, ViewToArrowResp,
+    ViewToColumnsStringResp, ViewToCsvResp, ViewToNdjsonStringResp, ViewToRowsStringResp,
 };
 
 macro_rules! respond {
@@ -449,6 +449,15 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             // Stub implementations for callback/update requests that VirtualServer doesn't support
             TableOnDeleteReq(_) => {
                 respond!(msg, TableOnDeleteResp {})
+            },
+            ViewOnRemoveReq(_) => {
+                respond!(msg, ViewOnRemoveResp {
+                    indices: None,
+                    port_id: 0
+                })
+            },
+            ViewRemoveOnRemoveReq(_) => {
+                respond!(msg, ViewRemoveOnRemoveResp {})
             },
             ViewOnUpdateReq(_) => {
                 respond!(msg, ViewOnUpdateResp {

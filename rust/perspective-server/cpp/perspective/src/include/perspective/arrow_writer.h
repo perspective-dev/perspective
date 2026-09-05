@@ -62,6 +62,10 @@ namespace apachearrow {
         t_get_data_extents extents
     );
 
+    std::shared_ptr<std::string> column_to_arrow_ipc(
+        const t_column& col, const std::string& name, t_uindex nrows
+    );
+
     /**
      * @brief Build an `arrow::Array` from a column typed as `DTYPE_BOOL.`
      *
