@@ -19,12 +19,14 @@ import type {
     ViewWindow,
     ViewConfigUpdate,
 } from "@perspective-dev/client";
+
 import type {
     DateFormatConfig,
     HTMLPerspectiveViewerElement,
     NumberFormatConfig,
     ViewerConfig,
 } from "@perspective-dev/viewer";
+
 import type { RegularTableElement } from "regular-table";
 import type { CellMetadata, DataResponse } from "regular-table/dist/esm/types";
 import type { GradientStopRgb } from "./color_utils.js";
@@ -48,6 +50,7 @@ export function get_psp_type(
 }
 
 // Edit mode for the datagrid
+
 /**
  * Datagrid cell interaction mode (`plugin_config.edit_mode`):
  * `"READ_ONLY"` (default), `"EDIT"` (cells editable, writing back to the
@@ -99,6 +102,21 @@ export interface SelectedPosition {
 }
 
 /**
+ * A cell of the 3×3 alignment grid: corners `"top-left"` etc., edges
+ * `"top"`/`"left"`/`"right"`/`"bottom"`, or `"center"`.
+ */
+export type Align =
+    | "top-left"
+    | "top"
+    | "top-right"
+    | "left"
+    | "center"
+    | "right"
+    | "bottom-left"
+    | "bottom"
+    | "bottom-right";
+
+/**
  * Datagrid per-column style configuration - one value of the
  * `columns_config` map of a `ViewerConfigUpdate` when the Datagrid plugin
  * is active. Valid keys depend on the column's type; the authoritative,
@@ -106,8 +124,17 @@ export interface SelectedPosition {
  * runtime via the agent's `get_style_schema` tool and the Style tab).
  */
 export interface ColumnConfig {
-    /** String / datetime columns: the applied color (CSS color). */
-    color?: string;
+    /**
+     * String / datetime columns: the text color (CSS color) when the
+     * column's foreground mode is `"color"`.
+     */
+    fg_color?: string;
+
+    /**
+     * String / datetime columns: the cell background (CSS color) when the
+     * column's background mode is `"color"`.
+     */
+    bg_color?: string;
 
     /**
      * Numeric columns: foreground sign-split colors — a CSS
@@ -149,23 +176,39 @@ export interface ColumnConfig {
     number_bg_mode?: string;
 
     /**
-     * String columns: color mode (`"foreground"`, `"background"` or
-     * `"series"`). `"foreground"` / `"background"` pair with `color`;
-     * `"series"` pairs with `palette`.
+     * String columns: `"disabled"` (default), `"color"` (paired with
+     * `fg_color`) or `"series"` (one `fg_palette` color per distinct value).
      */
-    string_color_mode?: string;
+    string_fg_mode?: string;
 
     /**
-     * String columns, `"series"` mode: explicit palette assigned to
-     * distinct values in encounter order.
+     * String columns: background treatment - `"disabled"` (default),
+     * `"color"` (paired with `bg_color`) or `"series"` (paired with
+     * `bg_palette`).
      */
-    palette?: string;
+    string_bg_mode?: string;
 
     /**
-     * Datetime columns: color mode (`"foreground"` or `"background"`),
-     * paired with `color`.
+     * String columns, `"series"` foreground: explicit palette assigned to
+     * distinct values in encounter order (a CSS `linear-gradient(to right,
+     * …)` color list).
      */
-    datetime_color_mode?: string;
+    fg_palette?: string;
+
+    /** String columns, `"series"` background: the palette, as `fg_palette`. */
+    bg_palette?: string;
+
+    /**
+     * Datetime columns: `"disabled"` (default) or `"color"` (paired with
+     * `fg_color`).
+     */
+    datetime_fg_mode?: string;
+
+    /**
+     * Datetime columns: background treatment - `"disabled"` (default) or
+     * `"color"` (paired with `bg_color`).
+     */
+    datetime_bg_mode?: string;
 
     fixed?: number;
 
@@ -178,8 +221,41 @@ export interface ColumnConfig {
     /** Pixel width override, written when a user drag-resizes a column. */
     column_size_override?: number;
 
-    /** String columns: display format, e.g. `"link"`, `"image"`, `"bold"`. */
-    format?: string;
+    /**
+     * Font family for this column's body cells, overriding
+     * `plugin_config.font_family`.
+     */
+    font_family?: string;
+
+    /**
+     * Font size in CSS pixels for this column's body cells, overriding
+     * `plugin_config.font_size`.
+     */
+    font_size?: number;
+
+    /**
+     * Wrap this column's clipped text (`true`) or clip it with an ellipsis
+     * (`false`), overriding `plugin_config.word_wrap`.
+     */
+    word_wrap?: boolean;
+
+    /**
+     * Alignment of this column's body cells, overriding
+     * `plugin_config.align`.
+     */
+    align?: Align;
+
+    /**
+     * String columns: render each value as a hyperlink to itself, which is
+     * then not text-editable.
+     */
+    link?: boolean;
+
+    /** Bold body text for this column, overriding `plugin_config.bold`. */
+    bold?: boolean;
+
+    /** Italic body text for this column, overriding `plugin_config.italic`. */
+    italic?: boolean;
 
     /** Datetime columns: display format preset or custom fields. */
     date_format?: DateFormatConfig;
@@ -216,8 +292,58 @@ export interface DatagridPluginConfig {
      */
     scroll_lock?: boolean;
 
+    /**
+     * Whether the header shows the per-column edit-button row while the
+     * settings panel is open (default `true`).
+     */
+    column_menus?: boolean;
+
     /** Cell interaction mode - see {@link EditMode}. */
     edit_mode?: EditMode;
+
+    /**
+     * Font family for every cell: `"inherit"` (the default, and the
+     * meaning of an omitted key), a CSS generic family, or a local font
+     * family name as listed by the browser's Local Font Access API.
+     */
+    font_family?: string;
+
+    /** Cell font size in CSS pixels, defaulting to the theme's. */
+    font_size?: number;
+
+    /** Bold text in every cell unless a column's own `bold` overrides it. */
+    bold?: boolean;
+
+    /** Italic text in every cell unless a column's own `italic` overrides it. */
+    italic?: boolean;
+
+    /**
+     * When `true`, text in a column narrower than its content wraps onto
+     * further lines instead of being clipped with an ellipsis.
+     */
+    word_wrap?: boolean;
+
+    /**
+     * Alignment of every body cell, defaulting to the column type's (numbers
+     * right, others left, vertically centered).
+     */
+    align?: Align;
+
+    /** Row height in CSS pixels, defaulting to the theme's. */
+    row_height?: number;
+
+    /**
+     * Zebra striping period: every `zebra_rows` rows alternate between the
+     * plain background and `zebra_color`, with `0` (default) disabling
+     * striping.
+     */
+    zebra_rows?: number;
+
+    /**
+     * Stripe color for zebra rows as `#rrggbb`, present only while
+     * `zebra_rows >= 1`.
+     */
+    zebra_color?: string;
 
     column_size_override?: Record<string, number>;
 }
@@ -260,6 +386,43 @@ export interface DatagridModel {
     _column_types: ColumnType[];
     _is_editable: boolean[];
     _edit_mode: EditMode;
+
+    /**
+     * `plugin_config.row_height`, reported on every `DataResponse` so
+     * `regular-table` sizes its viewport with it.
+     */
+    _row_height?: number;
+
+    /**
+     * Column width overrides keyed by column path, the plugin's single
+     * source of truth shared by reference with the element.
+     */
+    _column_overrides: Map<string, number>;
+
+    /**
+     * What the plugin last wrote into `regular-table`'s override map at each
+     * size key, the base of the three-way reconcile.
+     */
+    _projected: Map<number, ProjectedWidth>;
+
+    /**
+     * Row-header count reported on the last `DataResponse`, the offset of a
+     * data column's `regular-table` size key.
+     */
+    _num_row_headers: number;
+
+    /**
+     * Paths whose override changed by user gesture and has not yet been
+     * echoed to the host.
+     */
+    _unpersisted_widths: Set<string>;
+
+    /** `plugin_config.word_wrap`, mirrored from the plugin element. */
+    _word_wrap: boolean;
+    _column_menus: boolean;
+
+    /** `plugin_config.align`, mirrored from the plugin element. */
+    _align?: Align;
     _tree_selection_id?: unknown[];
     _last_insert_configs?: ViewConfigUpdate[];
     _selection_state: SelectionState;
@@ -302,8 +465,11 @@ export interface DatagridToolbarElement extends HTMLElement {
     setScrollLockButton(button: HTMLElement): void;
 }
 
-// Column override for persisting column sizes
-export type ColumnOverrides = Record<string, number | undefined>;
+/** One `regular-table` override entry as the plugin last wrote it. */
+export interface ProjectedWidth {
+    path: string;
+    px: number | undefined;
+}
 
 // Formatter cache types
 export interface FormatterCacheEntry {
@@ -348,6 +514,17 @@ export interface DatagridPluginElement extends HTMLElement {
     _scroll_lock?: HTMLElement;
     _is_scroll_lock: boolean;
     _edit_mode: EditMode;
+    _font_family?: string;
+    _font_size?: number;
+    _bold: boolean;
+    _italic: boolean;
+    _word_wrap: boolean;
+    _column_menus: boolean;
+    _align?: Align;
+    _row_height?: number;
+    _zebra_rows: number;
+    _zebra_color?: string;
+    _column_overrides: Map<string, number>;
     _initialized?: boolean;
     _reset_scroll_top?: boolean;
     _reset_scroll_left?: boolean;

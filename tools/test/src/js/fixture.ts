@@ -21,9 +21,34 @@ type ExpectedLogs = {
 } & {
     push: (type: string, filter: LogFilter) => void;
 };
+function stub_local_fonts() {
+    const FAMILIES = ["Test Mono", "Test Sans", "Test Serif"];
+    const permissions = navigator.permissions;
+    const query = permissions.query.bind(permissions);
+    const status = { state: "granted", onchange: null };
+    Object.defineProperty(navigator, "permissions", {
+        configurable: true,
+        value: {
+            query: (desc: PermissionDescriptor) =>
+                desc?.name === ("local-fonts" as PermissionName)
+                    ? Promise.resolve(status)
+                    : query(desc),
+        },
+    });
+
+    Object.defineProperty(window, "queryLocalFonts", {
+        configurable: true,
+        value: async () => FAMILIES.map((family) => ({ family })),
+    });
+}
+
 export const test = base.extend<{
     consoleLogs: { logs: Logs; expectedLogs: ExpectedLogs };
 }>({
+    context: async ({ context }, use) => {
+        await context.addInitScript(stub_local_fonts);
+        await use(context);
+    },
     consoleLogs: [
         async ({ page }, use) => {
             const logs: Logs = {};

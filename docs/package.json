@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "npm run mdbook && node build.config.mjs && node build.projects.mjs",
+        "build": "pnpm run mdbook && node build.config.mjs && node build.projects.mjs",
         "watch": "node build.config.mjs --watch",
         "dev": "docker compose up -d minio minio-init && node server.mjs",
         "start": "node server.mjs",

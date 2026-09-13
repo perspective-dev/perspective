@@ -16,9 +16,15 @@ import {
     type DatagridModel,
     type ColumnsConfig,
     type ColumnConfig,
+    type Align,
     get_psp_type,
 } from "../types.js";
 import type { ColumnType } from "@perspective-dev/client";
+import {
+    css_font_family,
+    measure_px,
+    wrap_lines,
+} from "../plugin/plugin_config_schema.js";
 
 import { cell_style_numeric } from "./table_cell/numeric.js";
 import { cell_style_string } from "./table_cell/string.js";
@@ -51,6 +57,40 @@ interface ColState {
     value_styled: boolean;
     text_editable: boolean;
     boolean_editable: boolean;
+
+    /** The column's own font as inline CSS values, `undefined` following the grid. */
+    font_family: string | undefined;
+    font_size: string | undefined;
+    wrap_lines: string | undefined;
+
+    /** Explicit `bold` / `italic` as CSS values, `undefined` following the grid. */
+    font_weight: string | undefined;
+    font_style: string | undefined;
+    align: Align | undefined;
+}
+
+const HEADER_ALIGNMENT: ColumnAlignment = { text: "left", vertical: "middle" };
+
+function resolve_alignment(
+    align: Align | undefined,
+    is_numeric: boolean,
+): ColumnAlignment {
+    if (align === undefined) {
+        return { text: is_numeric ? "right" : "left", vertical: "middle" };
+    }
+
+    return {
+        text: align.endsWith("left")
+            ? "left"
+            : align.endsWith("right")
+              ? "right"
+              : "center",
+        vertical: align.startsWith("top")
+            ? "top"
+            : align.startsWith("bottom")
+              ? "bottom"
+              : "middle",
+    };
 }
 
 interface StyleMemo {
@@ -105,6 +145,7 @@ export function applyBodyCellStyles(
             ? model._column_settings_selected_column
             : undefined;
     const col_states: Map<number, ColState> = new Map();
+    let row_height: number | undefined;
     const col_state = (
         key: number,
         meta_x: number | undefined,
@@ -138,10 +179,22 @@ export function applyBodyCellStyles(
                     plugin?.number_fg_mode === "bar" ||
                     plugin?.number_fg_mode === "label-bar")) ||
             (type === "string" &&
-                (plugin?.string_color_mode === "series" ||
-                    plugin?.format === "link"));
+                (plugin?.string_fg_mode === "series" ||
+                    plugin?.string_bg_mode === "series" ||
+                    plugin?.link === true));
 
         const editable_col = isEditable && !!model._is_editable[meta_x ?? -1];
+        const font_size =
+            typeof plugin?.font_size === "number" && plugin.font_size > 0
+                ? plugin.font_size
+                : undefined;
+
+        if (font_size !== undefined) {
+            row_height ??=
+                model._row_height ??
+                measure_px(regularTable, "--psp-datagrid--row--height", 23);
+        }
+
         state = {
             plugin,
             type,
@@ -162,8 +215,31 @@ export function applyBodyCellStyles(
                 (plugin?.number_fg_mode === "label-bar" ? 512 : 0),
             value_styled,
             text_editable:
-                editable_col && is_type_text_editable(type, plugin?.format),
+                editable_col && is_type_text_editable(type, plugin?.link),
             boolean_editable: editable_col && type === "boolean",
+            font_family:
+                plugin?.font_family !== undefined &&
+                plugin.font_family !== "inherit"
+                    ? css_font_family(plugin.font_family)
+                    : undefined,
+            font_size: font_size !== undefined ? `${font_size}px` : undefined,
+            font_weight:
+                plugin?.bold === undefined
+                    ? undefined
+                    : plugin.bold
+                      ? "bold"
+                      : "normal",
+            font_style:
+                plugin?.italic === undefined
+                    ? undefined
+                    : plugin.italic
+                      ? "italic"
+                      : "normal",
+            wrap_lines:
+                font_size !== undefined
+                    ? String(wrap_lines(row_height!, font_size))
+                    : undefined,
+            align: plugin?.align,
         };
 
         col_states.set(key, state);
@@ -188,7 +264,9 @@ export function applyBodyCellStyles(
         if (size_key !== undefined && !alignments.has(size_key)) {
             alignments.set(
                 size_key,
-                !isHeader && c.is_numeric ? "right" : "left",
+                isHeader
+                    ? HEADER_ALIGNMENT
+                    : resolve_alignment(c.align ?? model._align, c.is_numeric),
             );
         }
 
@@ -351,6 +429,19 @@ export function applyBodyCellStyles(
         }
 
         if (!isHeader && metadata.type === "body") {
+            td.style.fontFamily = c.font_family ?? "";
+            td.style.fontSize = c.font_size ?? "";
+            td.style.fontWeight = c.font_weight ?? "";
+            td.style.fontStyle = c.font_style ?? "";
+            if (c.wrap_lines !== undefined) {
+                td.style.setProperty(
+                    "--psp-datagrid--wrap-lines",
+                    c.wrap_lines,
+                );
+            } else {
+                td.style.removeProperty("--psp-datagrid--wrap-lines");
+            }
+
             td.classList.toggle("psp-editable", c.text_editable);
             if (c.text_editable) {
                 td.setAttribute("tabindex", "-1");

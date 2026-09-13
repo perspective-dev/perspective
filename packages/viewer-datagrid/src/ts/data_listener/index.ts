@@ -12,13 +12,19 @@
 
 import { PRIVATE_PLUGIN_SYMBOL } from "../types.js";
 import { isMetaColumn } from "../model/meta_columns.js";
+import { reconcile_column_widths } from "../model/column_overrides.js";
 import { format_cell } from "./format_cell.js";
 import {
     format_flat_header_row_path,
     format_tree_header,
     format_tree_header_row_path,
 } from "./format_tree_header.js";
-import type { DatagridModel, RegularTable, Schema } from "../types.js";
+import type {
+    ColumnsConfig,
+    DatagridModel,
+    RegularTable,
+    Schema,
+} from "../types.js";
 import type { CellScalar, DataResponse } from "regular-table/dist/esm/types.js";
 import type { ViewConfig, ViewWindow } from "@perspective-dev/client";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
@@ -163,9 +169,41 @@ export function createDataListener(
         const column_paths: string[] = [];
 
         const is_settings_open =
+            this._column_menus &&
             viewer.hasAttribute("settings") &&
             (this._panel === undefined ||
                 viewer.getActivePanel() === this._panel);
+
+        const is_dim_call = x1 - x0 > 0 && y1 - y0 > 0;
+        const is_row_path = columns.__ROW_PATH__ !== undefined;
+        const is_flat = this._config.group_rollup_mode === "flat";
+        const row_headers = Array.from(
+            (is_row_path
+                ? is_flat
+                    ? format_flat_header_row_path
+                    : format_tree_header_row_path
+                : format_tree_header
+            ).call(
+                this,
+                columns.__ROW_PATH__,
+                this._config.group_by,
+                regularTable,
+            ),
+        ) as (string | HTMLElement)[][];
+
+        const num_row_headers = !is_dim_call
+            ? row_header_depth(this._config)
+            : row_headers[0]?.length;
+
+        this._num_row_headers = num_row_headers ?? 0;
+
+        const live_overrides = is_dim_call
+            ? reconcile_column_widths(this, regularTable, x0, x1)
+            : {};
+
+        const columns_config: ColumnsConfig =
+            (regularTable as any)[PRIVATE_PLUGIN_SYMBOL] || {};
+
         for (
             let ipath = x0;
             ipath < Math.min(x1, this._column_paths.length);
@@ -202,10 +240,15 @@ export function createDataListener(
             }
 
             const column = columns[path] || new Array(y1 - y0).fill(null);
+            const column_config =
+                columns_config[path_parts[this._config.split_by.length]];
+
+            const wrap =
+                (column_config?.word_wrap ?? this._word_wrap) &&
+                live_overrides[ipath + this._num_row_headers] !== undefined;
+
             const agg_depth = Math.min(
-                (regularTable as any)[PRIVATE_PLUGIN_SYMBOL]?.[
-                    path_parts[this._config.split_by.length]
-                ]?.aggregate_depth || 0,
+                column_config?.aggregate_depth || 0,
                 this._config.group_by.length,
             );
 
@@ -213,14 +256,16 @@ export function createDataListener(
                 column.map((x, i) => {
                     if ((columns?.__ROW_PATH__?.[i]?.length ?? 0) < agg_depth) {
                         return "";
-                    } else {
-                        return format_cell.call(
-                            this,
-                            path_parts[this._config.split_by.length],
-                            x,
-                            (regularTable as any)[PRIVATE_PLUGIN_SYMBOL] || {},
-                        ) as string | HTMLElement;
                     }
+
+                    const cell = format_cell.call(
+                        this,
+                        path_parts[this._config.split_by.length],
+                        x,
+                        columns_config,
+                    ) as string | HTMLElement;
+
+                    return wrap ? wrap_cell(cell) : cell;
                 }),
             );
 
@@ -232,8 +277,6 @@ export function createDataListener(
             column_headers.push(path_parts);
             column_paths.push(path);
         }
-
-        const is_dim_call = x1 - x0 > 0 && y1 - y0 > 0;
 
         // Only update the last state if this is not a "phantom" call.
         if (is_dim_call) {
@@ -249,26 +292,6 @@ export function createDataListener(
             last_reverse_ids = this._reverse_ids;
             last_reverse_columns = this._reverse_columns;
         }
-
-        const is_row_path = columns.__ROW_PATH__ !== undefined;
-        const is_flat = this._config.group_rollup_mode === "flat";
-        const row_headers = Array.from(
-            (is_row_path
-                ? is_flat
-                    ? format_flat_header_row_path
-                    : format_tree_header_row_path
-                : format_tree_header
-            ).call(
-                this,
-                columns.__ROW_PATH__,
-                this._config.group_by,
-                regularTable,
-            ),
-        ) as (string | HTMLElement)[][];
-
-        const num_row_headers = !is_dim_call
-            ? row_header_depth(this._config)
-            : row_headers[0]?.length;
 
         const result: DataResponse = {
             num_column_headers:
@@ -286,8 +309,32 @@ export function createDataListener(
             ),
         };
 
+        if (this._row_height !== undefined) {
+            result.row_height = this._row_height;
+        }
+
         return result;
     };
+}
+
+/**
+ * Box a cell's content in the block `word_wrap` clamps to the row, leaving
+ * null and blank cells bare.
+ */
+function wrap_cell(content: string | HTMLElement): string | HTMLElement {
+    if (!content) {
+        return content;
+    }
+
+    const block = document.createElement("div");
+    block.className = "psp-wrap";
+    if (content instanceof HTMLElement) {
+        block.appendChild(content);
+    } else {
+        block.textContent = content;
+    }
+
+    return block;
 }
 
 function row_header_depth(config: ViewConfig) {

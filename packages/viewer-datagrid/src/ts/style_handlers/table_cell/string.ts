@@ -14,6 +14,7 @@ import {
     infer_foreground_from_background,
     parseColor,
     rgbaToRgb,
+    type RGB,
 } from "../../color_utils.js";
 import type { DatagridModel, ColumnConfig, ColorRecord } from "../../types.js";
 
@@ -23,87 +24,101 @@ interface CellMetaWithExtras {
     column_header?: string[];
 }
 
-interface PluginWithColor extends Omit<ColumnConfig, "color"> {
-    color?: ColorRecord;
+interface PluginWithColor extends Omit<ColumnConfig, "fg_color" | "bg_color"> {
+    fg_color?: ColorRecord;
+    bg_color?: ColorRecord;
 
-    /** `palette` parsed once at restore (`#rrggbb` entries). */
-    palette_colors?: string[];
+    /** `fg_palette` / `bg_palette` parsed once at restore (`#rrggbb`). */
+    fg_palette_colors?: string[];
+    bg_palette_colors?: string[];
 }
 
+/**
+ * The palette index of `value` within `column_name`'s series, numbering
+ * distinct values in encounter order.
+ */
+function series_seed(
+    model: DatagridModel,
+    column_name: string,
+    value: string,
+): number {
+    if (!model._series_color_map.has(column_name)) {
+        model._series_color_map.set(column_name, new Map());
+        model._series_color_seed.set(column_name, 0);
+    }
+
+    const series_map = model._series_color_map.get(column_name)!;
+    if (!series_map.has(value)) {
+        const seed = model._series_color_seed.get(column_name) ?? 0;
+        series_map.set(value, seed);
+        model._series_color_seed.set(column_name, seed + 1);
+    }
+
+    return series_map.get(value) ?? 0;
+}
+
+function series_color(
+    model: DatagridModel,
+    palette_colors: string[] | undefined,
+    seed: number,
+): string {
+    const palette =
+        palette_colors && palette_colors.length > 0
+            ? palette_colors
+            : model._series_palette;
+
+    return palette[seed % palette.length];
+}
+
+/** Apply a string column's foreground and background modes independently. */
 export function cell_style_string(
     model: DatagridModel,
     plugin: PluginWithColor | undefined,
     td: HTMLElement,
     metadata: CellMetaWithExtras,
 ): void {
+    const fg_mode = plugin?.string_fg_mode;
+    const bg_mode = plugin?.string_bg_mode;
     const column_name = metadata.column_header?.[model._config.split_by.length];
-    const colorRecord: ColorRecord = (() => {
-        if (plugin?.color !== undefined) {
-            return plugin.color;
-        } else {
-            return model._color;
-        }
-    })();
-
-    const [hex, r, g, b] = colorRecord;
-
-    if (metadata._is_hidden_by_aggregate_depth) {
-        td.style.backgroundColor = "";
-        td.style.color = "";
-    } else if (
-        plugin?.string_color_mode === "foreground" &&
-        metadata.user !== null
-    ) {
-        td.style.color = hex;
-        td.style.backgroundColor = "";
-        if (plugin?.format === "link" && td.children[0]) {
-            (td.children[0] as HTMLElement).style.color = hex;
-        }
-    } else if (
-        plugin?.string_color_mode === "background" &&
-        metadata.user !== null
-    ) {
-        const source = model._plugin_background as [number, number, number];
-        const foreground = infer_foreground_from_background(
-            rgbaToRgb([r, g, b, 1], source),
-        );
-        td.style.color = foreground;
-        td.style.backgroundColor = hex;
-    } else if (
-        plugin?.string_color_mode === "series" &&
-        metadata.user !== null &&
+    const value = metadata.user;
+    let color = "";
+    let background = "";
+    if (
+        !metadata._is_hidden_by_aggregate_depth &&
+        value !== null &&
+        value !== undefined &&
         column_name
     ) {
-        if (!model._series_color_map.has(column_name)) {
-            model._series_color_map.set(column_name, new Map());
-            model._series_color_seed.set(column_name, 0);
+        const seed =
+            fg_mode === "series" || bg_mode === "series"
+                ? series_seed(model, column_name, value)
+                : 0;
+
+        let background_rgb: RGB | undefined;
+        if (bg_mode === "color") {
+            const [hex, r, g, b] = plugin?.bg_color ?? model._color;
+            background = hex;
+            background_rgb = [r, g, b];
+        } else if (bg_mode === "series") {
+            background = series_color(model, plugin?.bg_palette_colors, seed);
+            background_rgb = parseColor(background);
         }
 
-        const series_map = model._series_color_map.get(column_name)!;
-        if (metadata.user && !series_map.has(metadata.user)) {
-            const seed = model._series_color_seed.get(column_name) ?? 0;
-            series_map.set(metadata.user, seed);
-            model._series_color_seed.set(column_name, seed + 1);
+        if (fg_mode === "color") {
+            color = (plugin?.fg_color ?? model._color)[0];
+        } else if (fg_mode === "series") {
+            color = series_color(model, plugin?.fg_palette_colors, seed);
+        } else if (background_rgb !== undefined) {
+            const source = model._plugin_background as RGB;
+            color = infer_foreground_from_background(
+                rgbaToRgb([...background_rgb, 1], source),
+            );
         }
+    }
 
-        const color_seed = series_map.get(metadata.user!) ?? 0;
-
-        const palette_colors = plugin?.palette_colors;
-        const palette =
-            palette_colors && palette_colors.length > 0
-                ? palette_colors
-                : model._series_palette;
-
-        const hex2 = palette[color_seed % palette.length];
-        const [r2, g2, b2] = parseColor(hex2);
-        const source = model._plugin_background as [number, number, number];
-        const foreground = infer_foreground_from_background(
-            rgbaToRgb([r2, g2, b2, 1], source),
-        );
-        td.style.color = foreground;
-        td.style.backgroundColor = hex2;
-    } else {
-        td.style.backgroundColor = "";
-        td.style.color = "";
+    td.style.color = color;
+    td.style.backgroundColor = background;
+    if (plugin?.link === true && td.children[0]) {
+        (td.children[0] as HTMLElement).style.color = color;
     }
 }

@@ -41,12 +41,18 @@ test.describe("Datagrid column style control groups", function () {
         const sidebar = view.columnSettingsSidebar.container;
         const groups = sidebar.locator("details.control-group");
 
-        await expect(groups).toHaveCount(2);
+        await expect(groups).toHaveCount(4);
+        await expect(
+            groups.first().locator("summary #column-group-label"),
+        ).toHaveCount(1);
+        await expect(
+            groups.nth(1).locator("summary #font-group-label"),
+        ).toHaveCount(1);
         await expect(
             groups.last().locator("summary #format-group-label"),
         ).toHaveCount(1);
 
-        const color = groups.first();
+        const color = groups.nth(2);
         await expect(color).toHaveJSProperty("open", true);
         await expect(color.locator("summary #color-group-label")).toHaveCount(
             1,
@@ -59,10 +65,8 @@ test.describe("Datagrid column style control groups", function () {
         await expect(color.locator("#bg_colors-label")).toHaveCount(0);
 
         await expect(
-            sidebar.locator(
-                "details.control-group #column_size_override-label",
-            ),
-        ).toHaveCount(0);
+            groups.first().locator("#column_size_override-label"),
+        ).toHaveCount(1);
     });
 
     test("dynamic gating works inside a group and serializes flat", async function ({
@@ -72,7 +76,7 @@ test.describe("Datagrid column style control groups", function () {
         await openNumericStyleTab(page, view);
 
         const sidebar = view.columnSettingsSidebar.container;
-        const color = sidebar.locator("details.control-group").first();
+        const color = sidebar.locator("details.control-group").nth(2);
         await color
             .locator("div.row", {
                 has: page.locator("label#number_fg_mode-label"),

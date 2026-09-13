@@ -86,7 +86,8 @@ type FieldSpec =
           kind: "Enum";
           variants: ReadonlyArray<{ value: string; label: string }>;
       }
-    | { kind: "Number"; min: number; max: number; step?: number };
+    | { kind: "Number"; min: number; max: number; step?: number }
+    | { kind: "Alignment"; corners?: boolean };
 
 /**
  * A `FieldSpec` entry may be a thunk when its contents depend on
@@ -173,15 +174,7 @@ const FIELD_SCHEMAS: Record<PluginConfigField, FieldSpec | (() => FieldSpec)> =
         // 0 = auto (the chart family's historical gutter width).
         legend_width_px: { kind: "Number", min: 0, max: 512, step: 1 },
         legend_height_px: { kind: "Number", min: 48, max: 1024, step: 1 },
-        legend_anchor: {
-            kind: "Enum",
-            variants: [
-                { value: "top-right", label: "Top Right" },
-                { value: "top-left", label: "Top Left" },
-                { value: "bottom-right", label: "Bottom Right" },
-                { value: "bottom-left", label: "Bottom Left" },
-            ],
-        },
+        legend_anchor: { kind: "Alignment", corners: true },
         legend_x: { kind: "Number", min: 0, max: 1, step: 0.01 },
         legend_y: { kind: "Number", min: 0, max: 1, step: 0.01 },
         legend_opacity: { kind: "Number", min: 0, max: 1, step: 0.05 },

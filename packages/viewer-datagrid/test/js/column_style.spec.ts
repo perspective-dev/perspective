@@ -306,7 +306,7 @@ test.describe("Column Style Tests", () => {
         const contents = await test_column(
             page,
             ":nth-child(2)",
-            "string-column-style-container",
+            "tab-section",
         );
 
         await compareContentsToSnapshot(contents);
@@ -541,7 +541,7 @@ test.describe("Column Style Tests", () => {
                 plugin: "Datagrid",
                 columns: ["Row ID", "State"],
                 columns_config: {
-                    State: { format: "bold" },
+                    State: { bold: true },
                 },
             });
         });
@@ -716,6 +716,70 @@ test.describe("Column Style Tests", () => {
         }, columns_config);
     }
 
+    test("string and datetime foreground and background apply independently", async ({
+        page,
+    }) => {
+        await page.goto("/tools/test/src/html/basic-test.html");
+        await page.evaluate(async () => {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
+                await new Promise((x) => setTimeout(x, 10));
+            }
+        });
+
+        const cells = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            await viewer.restore({
+                plugin: "Datagrid",
+                columns: ["Category", "Region", "Order Date"],
+                columns_config: {
+                    Category: {
+                        string_fg_mode: "color",
+                        fg_color: "#ff0000",
+                        string_bg_mode: "series",
+                    },
+                    Region: { string_bg_mode: "color", bg_color: "#000000" },
+                    "Order Date": {
+                        datetime_fg_mode: "color",
+                        fg_color: "#00ff00",
+                        datetime_bg_mode: "color",
+                        bg_color: "#0000ff",
+                    },
+                },
+            } as any);
+
+            await viewer.flush();
+            const tr = (
+                viewer.querySelector("perspective-viewer-datagrid") as any
+            ).shadowRoot.querySelector("regular-table tbody tr");
+
+            return [...tr.querySelectorAll("td")].map((td: HTMLElement) => ({
+                color: td.style.color,
+                bg: td.style.backgroundColor,
+            }));
+        });
+
+        expect(cells[0].color).toBe("rgb(255, 0, 0)");
+        expect(cells[0].bg).not.toBe("");
+        expect(cells[1].bg).toBe("rgb(0, 0, 0)");
+        expect(cells[1].color).not.toBe("");
+        expect(cells[1].color).not.toBe("rgb(0, 0, 0)");
+        expect(cells[2]).toEqual({
+            color: "rgb(0, 255, 0)",
+            bg: "rgb(0, 0, 255)",
+        });
+
+        const saved = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            return (await viewer.save()).columns_config;
+        });
+
+        expect(saved.Category).toEqual({
+            string_fg_mode: "color",
+            fg_color: "#ff0000",
+            string_bg_mode: "series",
+        });
+    });
+
     test("string series mode cycles the theme's --psp-datagrid--series-N--color palette", async ({
         page,
     }) => {
@@ -731,7 +795,7 @@ test.describe("Column Style Tests", () => {
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Category"],
-                columns_config: { Category: { string_color_mode: "series" } },
+                columns_config: { Category: { string_bg_mode: "series" } },
             } as any);
 
             await viewer.flush();
