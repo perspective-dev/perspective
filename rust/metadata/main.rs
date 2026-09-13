@@ -38,10 +38,11 @@ use perspective_client::{
 };
 use perspective_js::TypedArrayWindow;
 use perspective_viewer::config::{
-    ClientOptions, CustomNumberFormatConfig, DatetimeColorMode, DatetimeFormatType, ExportMethod,
-    ExportOptions, FormatMode, GetClientOptions, GetTableOptions, Notation, NumberFormatStyle,
-    PanelOptions, PluginStaticConfig, RestoreOptions, SaveWorkspaceOptions, StringColorMode,
-    ViewerConfig, ViewerConfigInitial, ViewerConfigUpdate, WorkspaceConfig, WorkspaceConfigUpdate,
+    AddPanelOptions, ClientOptions, CustomNumberFormatConfig, DatetimeColorMode,
+    DatetimeFormatType, ExportMethod, ExportOptions, FormatMode, GetClientOptions, GetTableOptions,
+    Notation, NumberFormatStyle, PanelOptions, PluginStaticConfig, RestoreOptions,
+    RestoreWorkspaceOptions, SaveWorkspaceOptions, StringColorMode, ViewerConfig,
+    ViewerConfigInitial, ViewerConfigUpdate, WorkspaceConfig, WorkspaceConfigUpdate,
 };
 use ts_rs::TS;
 
@@ -64,6 +65,8 @@ pub fn generate_type_bindings_viewer() -> Result<(), Box<dyn Error>> {
     ExportMethod::export_all_to(&path)?;
     PanelOptions::export_all_to(&path)?;
     RestoreOptions::export_all_to(&path)?;
+    RestoreWorkspaceOptions::export_all_to(&path)?;
+    AddPanelOptions::export_all_to(&path)?;
     ClientOptions::export_all_to(&path)?;
     ExportOptions::export_all_to(&path)?;
     GetTableOptions::export_all_to(&path)?;

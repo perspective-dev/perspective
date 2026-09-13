@@ -29,18 +29,19 @@ struct ColumnStats {
     abs_max: Option<f64>,
 }
 
-/// Queries the active plugin for its plugin-scoped
-/// [`ColumnConfigSchema`]. Mirrors [`get_column_config_schema`] but
-/// drops the column-specific args — the schema describes the shape
-/// of the plugin's own config bucket on the renderer.
+/// Queries the active plugin for its plugin-scoped [`ColumnConfigSchema`] as
+/// it applies to `current_value`.
 pub fn get_plugin_config_schema(
     renderer: &Renderer,
     view_config: &ViewConfig,
+    current_value: Option<&serde_json::Map<String, serde_json::Value>>,
 ) -> ApiResult<ColumnConfigSchema> {
     let plugin = renderer.ensure_plugin_selected()?;
     let view_config_js =
         wasm_bindgen::JsValue::from_serde_ext(view_config).unwrap_or(wasm_bindgen::JsValue::NULL);
-    let raw = plugin._plugin_config_schema(&view_config_js)?;
+    let current_js = wasm_bindgen::JsValue::from_serde_ext(&current_value)
+        .unwrap_or(wasm_bindgen::JsValue::NULL);
+    let raw = plugin._plugin_config_schema(&view_config_js, &current_js)?;
     serde_wasm_bindgen::from_value::<ColumnConfigSchema>(raw)
         .map(|schema| schema.canonicalize())
         .map_err(|e| e.into())

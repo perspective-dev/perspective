@@ -10,6 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use std::cell::Cell;
 use std::rc::Rc;
 
 use perspective_client::ExprValidationError;
@@ -18,8 +19,10 @@ use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
 use crate::components::code_editor::CodeEditor;
+use crate::config::*;
 use crate::js::{MimeType, copy_to_clipboard, paste_from_clipboard};
 use crate::presentation::*;
+use crate::queries::fetch_hosted_tables;
 use crate::renderer::*;
 use crate::session::*;
 use crate::utils::*;
@@ -44,12 +47,18 @@ pub struct DebugPanelProps {
     pub on_auto_width: Callback<f64>,
 }
 
+/// Whether the editor holds text the panel has not successfully applied, read
+/// synchronously by the config-change listeners so a failed apply's own
+/// `view_config_changed` never discards it.
+type Dirty = Rc<Cell<bool>>;
+
 #[function_component(DebugPanel)]
 pub fn debug_panel(props: &DebugPanelProps) -> Html {
     let expr = use_state_eq(|| Rc::new("".to_string()));
     let error = use_state_eq(|| Option::<ExprValidationError>::None);
     let select_all = use_memo((), |()| PubSub::default());
     let modified = use_state_eq(|| false);
+    let dirty: Dirty = use_memo((), |()| Cell::new(false));
 
     // Measure natural width on mount and route up to `SettingsPanel`.
     let sizer = use_node_ref();
@@ -64,7 +73,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
     });
 
     use_effect_with((expr.setter(), props.clone()), {
-        clone!(error, modified);
+        clone!(error, modified, dirty);
         move |(text, state)| {
             state.set_text(text.clone());
             error.set(None);
@@ -75,6 +84,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                     text.clone(),
                     error.setter(),
                     modified.setter(),
+                    dirty.clone(),
                 ));
 
             let sub2 = state
@@ -84,6 +94,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                     text.clone(),
                     error.setter(),
                     modified.setter(),
+                    dirty.clone(),
                 ));
 
             let sub3 = state
@@ -93,6 +104,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                     text.clone(),
                     error.setter(),
                     modified.setter(),
+                    dirty.clone(),
                 ));
 
             || {
@@ -104,16 +116,17 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
     });
 
     let oninput = use_callback(expr.setter(), {
-        clone!(modified);
+        clone!(modified, dirty);
         move |x, expr| {
+            dirty.set(true);
             modified.set(true);
             expr.set(x)
         }
     });
 
     let onsave = use_callback((expr.clone(), error.clone(), props.clone()), {
-        clone!(modified);
-        move |_, (text, error, props)| props.on_save(text, error, &modified)
+        clone!(modified, dirty);
+        move |_, (text, error, props)| props.on_save(text, text.setter(), error, &modified, &dirty)
     });
 
     let oncopy = use_callback(
@@ -133,13 +146,14 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
     );
 
     let onapply = use_callback((expr.clone(), error.clone(), props.clone()), {
-        clone!(modified);
-        move |_, (text, error, props)| props.on_save(text, error, &modified)
+        clone!(modified, dirty);
+        move |_, (text, error, props)| props.on_save(text, text.setter(), error, &modified, &dirty)
     });
 
     let onreset = use_callback((expr.setter(), error.clone(), props.clone()), {
-        clone!(modified);
+        clone!(modified, dirty);
         move |_, (text, error, props)| {
+            dirty.set(false);
             props.set_text(text.clone());
             error.set(None);
             modified.set(false);
@@ -147,16 +161,17 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
     });
 
     let onpaste = use_callback((expr.clone(), error.clone(), props.clone()), {
-        clone!(modified);
+        clone!(modified, dirty);
         move |_, (text, error, props)| {
-            clone!(text, error, props, modified);
+            clone!(text, error, props, modified, dirty);
             ApiFuture::spawn(async move {
                 if let Some(x) = paste_from_clipboard().await {
                     let x = Rc::new(x);
+                    dirty.set(true);
                     modified.set(true);
                     error.set(None);
                     text.set(x.clone());
-                    props.on_save(&x, &error, &modified);
+                    props.on_save(&x, text.setter(), &error, &modified, &dirty);
                 }
 
                 Ok(())
@@ -184,6 +199,9 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
                             select_all={select_all.subscriber()}
                             error={(*error).clone()}
                         />
+                        if let Some(err) = &*error {
+                            <div id="debug-panel-error" class="error">{ &err.error_message }</div>
+                        }
                     </div>
                     <div
                         class="scroll-panel-auto-width"
@@ -219,66 +237,105 @@ impl DebugPanelProps {
         text: UseStateSetter<Rc<String>>,
         error: UseStateSetter<Option<ExprValidationError>>,
         modified: UseStateSetter<bool>,
+        dirty: Dirty,
     ) -> impl Fn(()) + use<> {
         let props = self.clone();
         move |_| {
+            if dirty.get() {
+                return;
+            }
+
             error.set(None);
             props.set_text(text.clone());
             modified.set(false);
         }
     }
 
+    /// Validate and apply the editor's text as this panel's config, treating
+    /// an un-hosted `table` as a validation error rather than a pending bind.
     fn on_save(
         &self,
-        text: &Rc<String>,
+        source: &Rc<String>,
+        text: UseStateSetter<Rc<String>>,
         error: &UseStateHandle<Option<ExprValidationError>>,
         modified: &UseStateHandle<bool>,
+        dirty: &Dirty,
     ) {
         let props = self.clone();
-        clone!(text, error, modified);
+        clone!(source, error, modified, dirty);
         ApiFuture::spawn(async move {
-            match serde_json::from_str(&text) {
-                Ok(config) => {
-                    let active =
-                        props.workspace.active_renderer().as_ref() == Some(&props.renderer);
-                    match crate::tasks::restore_panel(
-                        &props.session,
-                        &props.renderer,
-                        &props.presentation,
-                        &props.workspace,
-                        crate::tasks::RestoreMode::Existing { active },
-                        config,
-                        crate::tasks::RestoreErrors::Suppress,
-                    )
-                    .await
-                    {
-                        Ok(_) => {
-                            modified.set(false);
-                        },
-                        Err(e) => {
-                            modified.set(true);
-                            error.set(Some(ExprValidationError {
-                                error_message: JsValue::from(e).as_string().unwrap_or_else(|| {
-                                    "Failed to validate viewer config".to_owned()
-                                }),
-                                line: 0_u32,
-                                column: 0,
-                            }));
-                        },
-                    }
-                    Ok(())
-                },
-                Err(err) => {
-                    modified.set(true);
-                    error.set(Some(ExprValidationError {
-                        error_message: err.to_string(),
-                        line: err.line() as u32 - 1,
-                        column: err.column() as u32 - 1,
-                    }));
+            let fail = |message: String, (line, column): (u32, u32)| {
+                dirty.set(true);
+                modified.set(true);
+                error.set(Some(ExprValidationError {
+                    error_message: message,
+                    line,
+                    column,
+                }));
+            };
 
-                    Ok(())
+            let config: ViewerConfigUpdate = match serde_json::from_str(&source) {
+                Ok(config) => config,
+                Err(err) => {
+                    let position = (err.line() as u32 - 1, err.column() as u32 - 1);
+                    fail(err.to_string(), position);
+                    return Ok(());
                 },
+            };
+
+            if let OptionalUpdate::Update(name) = &config.table {
+                let hosted = fetch_hosted_tables(&props.workspace).await;
+                if !hosted
+                    .iter()
+                    .any(|(_, names)| names.iter().any(|n| n == name))
+                {
+                    fail(
+                        format!("Unknown table \"{name}\""),
+                        locate_key(&source, "table"),
+                    );
+
+                    return Ok(());
+                }
             }
+
+            let active = props.workspace.active_renderer().as_ref() == Some(&props.renderer);
+            let result = crate::tasks::restore_panel(
+                &props.session,
+                &props.renderer,
+                &props.presentation,
+                &props.workspace,
+                crate::tasks::RestoreMode::Existing { active },
+                config,
+                crate::tasks::RestoreErrors::Suppress,
+                MissingTable::Error,
+            )
+            .await;
+
+            match result {
+                Ok(_) => {
+                    dirty.set(false);
+                    error.set(None);
+                    modified.set(false);
+                    props.set_text(text);
+                },
+                Err(e) => fail(format!("{e}"), (0, 0)),
+            }
+
+            Ok(())
         });
     }
+}
+
+/// The 0-based `(line, column)` of the first `"key"` in `text`, or `(0, 0)`
+/// when absent.
+fn locate_key(text: &str, key: &str) -> (u32, u32) {
+    let needle = format!("\"{key}\"");
+    text.lines()
+        .enumerate()
+        .find_map(|(line, content)| {
+            content
+                .find(&needle)
+                .map(|column| (line as u32, column as u32))
+        })
+        .unwrap_or((0, 0))
 }

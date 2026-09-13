@@ -43,7 +43,6 @@ pub mod rows_counter;
 pub mod settings_panel;
 pub mod status_bar;
 pub mod status_indicator;
-pub mod string_column_style;
 pub mod style;
 pub mod style_controls;
 pub mod type_icon;

@@ -19,10 +19,12 @@ use itertools::Itertools;
 use perspective_client::config::ViewConfig;
 use yew::prelude::*;
 
+use crate::components::column_settings_sidebar::style_tab::alignment_field::AlignmentField;
+use crate::components::column_settings_sidebar::style_tab::font_field::FontField;
 use crate::components::column_settings_sidebar::style_tab::primitive_field::{
     BoolField, ColorField, EnumField, NumberFieldPrimitive,
 };
-use crate::config::ControlSpec;
+use crate::config::{Alignment, ControlSpec, FontToggle};
 use crate::presentation::Presentation;
 use crate::queries::get_plugin_config_schema;
 use crate::renderer::Renderer;
@@ -72,9 +74,10 @@ pub fn PluginTab(props: &PluginTabProps) -> Html {
     let schema = {
         let renderer = props.renderer.clone();
         let view_config = props.view_config.clone();
+        let plugin_config = props.plugin_config.clone();
         use_memo(
             (props.plugin_config.clone(), props.view_config.clone()),
-            move |_| match get_plugin_config_schema(&renderer, &view_config) {
+            move |_| match get_plugin_config_schema(&renderer, &view_config, Some(&plugin_config)) {
                 Ok(schema) => schema.fields,
                 Err(error) => {
                     tracing::error!("{}", error);
@@ -180,6 +183,58 @@ fn render_leaf(
                 />
             })
         },
+        ControlSpec::Font {
+            key,
+            default,
+            size,
+            bold,
+            italic,
+        } => {
+            let current = raw_config
+                .get(&key)
+                .and_then(|v| v.as_str().map(|s| s.to_string()));
+            let toggle = |t: &FontToggle| raw_config.get(&t.key).and_then(|v| v.as_bool());
+            let size_current = size
+                .as_ref()
+                .and_then(|s| raw_config.get(&s.key))
+                .and_then(|v| v.as_f64());
+            let bold_current = bold.as_ref().and_then(toggle);
+            let italic_current = italic.as_ref().and_then(toggle);
+            Some(html! {
+                <FontField
+                    field_key={key}
+                    {default}
+                    {current}
+                    {size}
+                    {size_current}
+                    {bold}
+                    {bold_current}
+                    {italic}
+                    {italic_current}
+                    on_change={on_change.clone()}
+                />
+            })
+        },
+        ControlSpec::Alignment {
+            key,
+            default,
+            corners,
+        } => {
+            let current = raw_config
+                .get(&key)
+                .and_then(|v| v.as_str())
+                .and_then(Alignment::parse);
+
+            Some(html! {
+                <AlignmentField
+                    field_key={key}
+                    {default}
+                    {corners}
+                    {current}
+                    on_change={on_change.clone()}
+                />
+            })
+        },
         ControlSpec::Bool { key, default } => {
             let current = raw_config.get(&key).and_then(|v| v.as_bool());
             Some(html! {
@@ -220,7 +275,6 @@ fn render_leaf(
         | ControlSpec::AggregateDepth
         | ControlSpec::NumberSeriesStyle { .. }
         | ControlSpec::DatetimeFormat { .. }
-        | ControlSpec::StringFormat
         | ControlSpec::Symbols { .. }
         | ControlSpec::NumberFormat { .. }
         | ControlSpec::String { .. }

@@ -93,6 +93,15 @@
             flex: 0 1 auto;
             overflow: hidden;
             padding: 8px 8px 8px 0;
+
+            #debug-panel-error {
+                flex: 0 0 auto;
+                padding-top: 6px;
+                font-size: 10px;
+                color: var(--psp-error--color);
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+            }
         }
 
         #editor {

@@ -60,6 +60,10 @@ pub struct SettingsPanelProps {
     /// prop-driven instead of reading `Renderer` directly.
     pub plugin_config: PtrEqRc<serde_json::Map<String, serde_json::Value>>,
 
+    /// Snapshot of the active plugin's `columns_config` bucket, threaded
+    /// from `RendererProps` into `ColumnSelector`.
+    pub columns_config: PtrEqRc<ColumnConfigMap>,
+
     /// Column currently being dragged (if any) — threaded to show drag
     /// highlights without per-component `DragDrop` PubSub subscriptions.
     pub drag_column: Option<String>,
@@ -114,6 +118,7 @@ impl PartialEq for SettingsPanelProps {
             && self.plugin_static_config == rhs.plugin_static_config
             && self.view_config == rhs.view_config
             && self.plugin_config == rhs.plugin_config
+            && self.columns_config == rhs.columns_config
             && self.drag_column == rhs.drag_column
             && self.metadata == rhs.metadata
             && self.open_column_settings == rhs.open_column_settings
@@ -356,6 +361,7 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                     named_column_count={props.named_column_count}
                     plugin_static_config={props.plugin_static_config.clone()}
                     view_config={props.view_config.clone()}
+                    columns_config={props.columns_config.clone()}
                     drag_column={props.drag_column.clone()}
                     metadata={props.metadata.clone()}
                     selected_theme={props.selected_theme.clone()}

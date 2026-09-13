@@ -75,7 +75,6 @@ perspective-viewer {
 
     /* Column Settings */
     --psp-label--color--content: "色";
-    --psp-label--format--content: "フォーマット";
     --psp-label--timezone--content: "タイムゾーン";
     --psp-label--date-style--content: "日付スタイル";
     --psp-label--time-style--content: "時間スタイル";
@@ -83,8 +82,14 @@ perspective-viewer {
     --psp-label--number-bg-mode--content: "背景";
     --psp-label--fg-colors--content: "前景";
     --psp-label--bg-colors--content: "背景";
-    --psp-label--datetime-color-mode--content: "色";
-    --psp-label--string-color-mode--content: "色";
+    --psp-label--string-fg-mode--content: "前景";
+    --psp-label--string-bg-mode--content: "背景";
+    --psp-label--datetime-fg-mode--content: "前景";
+    --psp-label--datetime-bg-mode--content: "背景";
+    --psp-label--fg-color--content: "前景";
+    --psp-label--bg-color--content: "背景";
+    --psp-label--fg-palette--content: "前景";
+    --psp-label--bg-palette--content: "背景";
     --psp-label--series--content: "シリーズ";
     --psp-label--color-range--content: "色の範囲";
     --psp-label--style--content: "スタイル";
@@ -148,6 +153,21 @@ perspective-viewer {
     /* Plugin settings */
     --psp-label--edit-mode--content: "編集モード";
     --psp-label--scroll-lock--content: "スクロールロック";
+    --psp-label--column-menus--content: "列メニュー";
+    --psp-label--group-font--content: "フォント";
+    --psp-label--group-rows--content: "行";
+    --psp-label--link--content: "リンク";
+    --psp-label--font-family--content: "フォントファミリー";
+    --psp-label--font-size--content: "フォントサイズ";
+    --psp-label--request-local-fonts--content: "ローカルフォント";
+    --psp-label--local-fonts-blocked--content: "ローカルフォントはブロック済み";
+    --psp-label--request-local-fonts-title--content: "このデバイスにインストールされているフォントへのアクセスを許可";
+    --psp-label--local-fonts-blocked-title--content: "このサイトではローカルフォントへのアクセスがブロックされています。ブラウザーのサイト設定で許可すると、ここに一覧表示されます。";
+    --psp-label--word-wrap--content: "折り返し";
+    --psp-label--align--content: "配置";
+    --psp-label--row-height--content: "行の高さ";
+    --psp-label--zebra-rows--content: "縞模様の行数";
+    --psp-label--zebra-color--content: "縞模様の色";
     --psp-label--chart-type--content: "グリフの種類";
 
     /* Plugin settings — viewer-charts */
@@ -189,6 +209,7 @@ perspective-viewer {
     --psp-label--group-legend--content: "凡例";
     --psp-label--group-tooltip--content: "ツールチップ";
     --psp-label--group-color--content: "色";
+    --psp-label--group-column--content: "列";
     --psp-label--group-format--content: "書式";
     --psp-label--column-size-override--content: "列の幅";
 }

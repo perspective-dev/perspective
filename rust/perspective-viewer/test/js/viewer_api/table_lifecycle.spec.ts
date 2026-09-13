@@ -10,12 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-// Reactive named-table binding: a panel's `table` config is a live function
-// of the client's hosted-tables set. A name that isn't hosted yet PENDS
-// (no error) and binds when the table is created; a bound table deleted
-// under the viewer is released (its `View` closed, so a lazy delete can
-// complete and the name recreated) and rebinds when the name reappears.
-
 import { test, expect } from "../helpers.ts";
 
 test.beforeEach(async ({ page }) => {
@@ -38,11 +32,14 @@ test.describe("Reactive table lifecycle", () => {
             await v.load(worker);
             let restoreError: string | null = null;
             try {
-                await v.restore({
-                    table: "lifecycle-t1",
-                    columns: ["a"],
-                    group_by: ["b"],
-                });
+                await v.restore(
+                    {
+                        table: "lifecycle-t1",
+                        columns: ["a"],
+                        group_by: ["b"],
+                    },
+                    { wait_for_table: true },
+                );
             } catch (e) {
                 restoreError = String(e);
             }
@@ -157,5 +154,162 @@ test.describe("Reactive table lifecycle", () => {
         });
 
         expect(deleteError).toBeNull();
+    });
+
+    test("restore({table}) on a bound panel to an un-hosted name unbinds it, then binds the new table with the new config", async ({
+        page,
+    }) => {
+        const pending = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            const before = await viewer.save();
+            let restoreError: string | null = null;
+            try {
+                await viewer.restore(
+                    {
+                        table: "lifecycle-t4",
+                        columns: ["x"],
+                        group_by: ["y"],
+                    },
+                    { wait_for_table: true },
+                );
+            } catch (e) {
+                restoreError = String(e);
+            }
+
+            const pendingSave = await viewer.save();
+            const pendingTable = await viewer.getTable().catch(() => null);
+            return {
+                beforeTable: before.table,
+                restoreError,
+                pendingTable: pendingSave.table,
+                pendingColumns: pendingSave.columns,
+                unbound: pendingTable === null,
+            };
+        });
+
+        await expect(
+            page.locator("perspective-viewer span#status"),
+        ).toHaveClass(/pending/);
+
+        const result = await page.evaluate(async () => {
+            const worker = (window as any).__TEST_WORKER__;
+            const viewer = document.querySelector("perspective-viewer") as any;
+            await worker.table("x,y\n1,a\n2,b", { name: "lifecycle-t4" });
+            let bound = null;
+            for (let i = 0; i < 100 && !bound; i++) {
+                bound = await viewer.getTable().catch(() => null);
+                if (!bound) {
+                    await new Promise((x) => setTimeout(x, 50));
+                }
+            }
+
+            await viewer.flush();
+            const boundSave = await viewer.save();
+            return {
+                boundTable: boundSave.table,
+                columns: boundSave.columns,
+                groupBy: boundSave.group_by,
+            };
+        });
+
+        expect(pending.beforeTable).toBe("load-viewer-csv");
+        expect(pending.restoreError).toBeNull();
+        expect(pending.pendingTable).toBe("lifecycle-t4");
+        expect(pending.pendingColumns).toEqual(["x"]);
+        expect(pending.unbound).toBe(true);
+        await expect(
+            page.locator("perspective-viewer span#status.pending"),
+        ).toHaveCount(0);
+        expect(result.boundTable).toBe("lifecycle-t4");
+        expect(result.columns).toEqual(["x"]);
+        expect(result.groupBy).toEqual(["y"]);
+    });
+
+    test("restore({table}) on a bound panel to a hosted table with a different schema applies the config to the new table only", async ({
+        page,
+    }) => {
+        const result = await page.evaluate(async () => {
+            const worker = (window as any).__TEST_WORKER__;
+            await worker.table("x,y\n1,a\n2,b", { name: "lifecycle-t5" });
+            const viewer = document.querySelector("perspective-viewer") as any;
+            let restoreError: string | null = null;
+            try {
+                await viewer.restore({
+                    table: "lifecycle-t5",
+                    columns: ["x"],
+                    group_by: ["y"],
+                });
+            } catch (e) {
+                restoreError = String(e);
+            }
+
+            await viewer.flush();
+            const save = await viewer.save();
+            const table = await viewer.getTable();
+            return {
+                restoreError,
+                table: save.table,
+                columns: save.columns,
+                groupBy: save.group_by,
+                boundName: await table.get_name(),
+            };
+        });
+
+        expect(result.restoreError).toBeNull();
+        expect(result.table).toBe("lifecycle-t5");
+        expect(result.columns).toEqual(["x"]);
+        expect(result.groupBy).toEqual(["y"]);
+        expect(result.boundName).toBe("lifecycle-t5");
+    });
+
+    test("restore({table}) to an un-hosted name rejects by default and leaves the panel bound", async ({
+        page,
+    }) => {
+        const result = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            let restoreError: string | null = null;
+            try {
+                await viewer.restore({
+                    table: "lifecycle-t6",
+                    columns: ["x"],
+                });
+            } catch (e) {
+                restoreError = String(e);
+            }
+
+            const table = await viewer.getTable().catch(() => null);
+            return {
+                restoreError,
+                table: (await viewer.save()).table,
+                bound: table ? await table.get_name() : null,
+            };
+        });
+
+        expect(result.restoreError).toContain('Unknown table "lifecycle-t6"');
+        expect(result.table).toBe("load-viewer-csv");
+        expect(result.bound).toBe("load-viewer-csv");
+        await expect(
+            page.locator("perspective-viewer span#status"),
+        ).toHaveClass(/errored/);
+    });
+
+    test("addPanel({table}) with an un-hosted name rejects by default", async ({
+        page,
+    }) => {
+        const result = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            const before = viewer.getPanelNames().length;
+            let addError: string | null = null;
+            try {
+                await viewer.addPanel({ table: "lifecycle-t7" });
+            } catch (e) {
+                addError = String(e);
+            }
+
+            return { addError, before, after: viewer.getPanelNames().length };
+        });
+
+        expect(result.addError).toContain('Unknown table "lifecycle-t7"');
+        expect(result.after).toBe(result.before + 1);
     });
 });

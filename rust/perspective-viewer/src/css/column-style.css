@@ -61,6 +61,68 @@
             }
         }
 
+        .alignment-grid {
+            display: grid;
+            flex: 0 1 100%;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0px;
+            padding: 1px;
+            border: 1px solid var(--psp-inactive--color);
+            border-radius: 5px;
+        }
+
+        .alignment-cell {
+            display: grid;
+            place-items: center;
+            width: 100%;
+            height: 16px;
+            padding: 0;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            background: none;
+            cursor: pointer;
+
+            &::before {
+                content: "";
+                width: 100%;
+                height: 100%;
+                border-radius: 3px;
+                background: #00000020;
+            }
+
+            &[aria-checked="true"]::before {
+                background: var(--psp-inactive--color);
+            }
+
+            &:hover:not(:disabled) {
+                border-color: var(--psp--color);
+            }
+
+            &:disabled {
+                cursor: default;
+
+                &::before {
+                    opacity: 0.25;
+                }
+            }
+
+            &[data-align^="top"] {
+                align-items: start;
+            }
+
+            &[data-align^="bottom"] {
+                align-items: end;
+            }
+
+            &[data-align$="left"] {
+                justify-items: start;
+            }
+
+            &[data-align$="right"] {
+                justify-items: end;
+            }
+        }
+
         &.no-style {
             font-style: italic;
             background-color: var(--psp-placeholder--background);
@@ -211,6 +273,7 @@
 
         div.section {
             display: flex;
+            justify-content: space-between;
             align-items: center;
             flex: 1 1 100%;
         }
@@ -533,6 +596,105 @@
 
                 &:hover:before {
                     color: var(--psp--color, inherit);
+                }
+            }
+        }
+
+        .font-style-toggle {
+            flex: 0 0 24px;
+            height: 24px;
+            margin-left: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--psp-inactive--color, #666);
+            border-radius: 2px;
+            cursor: pointer;
+            user-select: none;
+            font-size: 12px;
+            color: var(--psp-inactive--color, #666);
+
+            &.bold:before {
+                content: "B";
+                font-weight: bold;
+            }
+
+            &.italic:before {
+                content: "I";
+                font-style: italic;
+                font-family: serif;
+            }
+
+            &:hover {
+                color: var(--psp--color, inherit);
+                border-color: var(--psp--color, inherit);
+            }
+
+            &[aria-pressed="true"] {
+                color: var(--psp--background-color);
+                background-color: var(--psp--color);
+                border-color: var(--psp--color);
+            }
+        }
+
+        .font-group {
+            display: flex;
+            flex: 1 1 100%;
+            flex-wrap: wrap;
+            contain: inline-size;
+            & > input {
+                flex: 1 1 auto;
+            }
+
+            .font-group-family {
+                flex: 1 1 100%;
+                margin-bottom: 3px;
+            }
+        }
+
+        .local-fonts-controls {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            flex: 1 1 100%;
+            height: 0;
+            margin-top: 10px;
+            margin-bottom: -10px;
+            margin-right: 24px;
+            position: relative;
+            z-index: 1;
+            font-size: var(--label--font-size, 0.75em);
+            color: var(--psp-inactive--color);
+
+            .local-fonts-request {
+                cursor: pointer;
+                user-select: none;
+                line-height: 15px;
+
+                &:before {
+                    font-family: var(--psp-button--font-family, inherit);
+                    color: var(--psp-inactive--color, #666);
+                    content: var(
+                        --psp-label--request-local-fonts--content,
+                        "Local Fonts"
+                    );
+                }
+
+                &:hover:before {
+                    color: var(--psp--color, inherit);
+                }
+
+                &.blocked {
+                    cursor: help;
+
+                    &:before,
+                    &:hover:before {
+                        color: var(--psp-inactive--color, #666);
+                        content: var(
+                            --psp-label--local-fonts-blocked--content,
+                            "No Access"
+                        );
+                    }
                 }
             }
         }

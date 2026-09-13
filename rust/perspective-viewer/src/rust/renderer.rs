@@ -112,6 +112,11 @@ pub struct RendererData {
     /// plugin's bucket.
     pub plugin_config_changed: PubSub<serde_json::Map<String, serde_json::Value>>,
 
+    /// Fires after the active plugin's per-column bucket changes by any path
+    /// (edit, restore or reset), unlike `column_style_changed` which covers
+    /// edits only.
+    pub columns_config_changed: PubSub<ColumnConfigMap>,
+
     /// `true` while the active plugin's "rendering N of M" warning is
     /// dismissable.
     pub render_warning: Cell<bool>,
@@ -263,6 +268,7 @@ impl Renderer {
             selection_changed: Default::default(),
             column_style_changed: Default::default(),
             plugin_config_changed: Default::default(),
+            columns_config_changed: Default::default(),
             render_warning: Cell::new(true),
             presize_pending: Cell::new(0),
             presized_box: Cell::new(None),
@@ -695,6 +701,7 @@ impl Renderer {
                 .into();
 
             let plugin_config = PtrEqRc::new(self.get_plugin_config());
+            let columns_config = PtrEqRc::new(self.all_columns_configs());
             RendererProps {
                 plugin_name,
                 config,
@@ -702,6 +709,7 @@ impl Renderer {
                 available_plugins,
                 is_chart,
                 plugin_config,
+                columns_config,
             }
         } else {
             RendererProps {
@@ -711,6 +719,7 @@ impl Renderer {
                 available_plugins: PtrEqRc::new(vec![]),
                 is_chart: false,
                 plugin_config: PtrEqRc::default(),
+                columns_config: PtrEqRc::default(),
             }
         }
     }

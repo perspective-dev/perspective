@@ -51,6 +51,8 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
         && matches!(props.session_props.has_table, Some(TableLoadState::Loading))
     {
         StatusIconState::Loading
+    } else if matches!(props.session_props.has_table, Some(TableLoadState::Pending)) {
+        StatusIconState::Pending
     } else if props.update_count > 0 {
         StatusIconState::Updating
     } else if has_table_cells {
@@ -65,6 +67,7 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
         StatusIconState::Normal => "connected",
         StatusIconState::Updating => "updating",
         StatusIconState::Loading => "loading",
+        StatusIconState::Pending => "pending",
         StatusIconState::Uninitialized => "uninitialized",
     };
 
@@ -107,6 +110,7 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
 #[derive(Clone, Debug, PartialEq)]
 enum StatusIconState {
     Loading,
+    Pending,
     Updating,
     Errored(String, String, &'static str, bool),
     Normal,

@@ -22,11 +22,15 @@ use crate::session::replace_expression_update::ViewConfigExt as ReplaceExprExt;
 use crate::session::{ColumnStats, TableErrorState};
 use crate::utils::*;
 
+/// The panel's table binding as the status indicator and chrome see it:
+/// bound, a `load()` in flight, or a named table awaiting its host (see
+/// `Session::pending_table`).
 #[derive(Clone, Debug, PartialEq, Default)]
 pub enum TableLoadState {
     #[default]
     Loaded,
     Loading,
+    Pending,
 }
 
 /// Value-semantic snapshot of the session state read by the root component.

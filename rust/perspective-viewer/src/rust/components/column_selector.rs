@@ -67,6 +67,10 @@ pub struct ColumnSelectorProps {
     /// prop on `SettingsPanelProps`.
     pub plugin_static_config: Rc<PluginStaticConfig>,
     pub view_config: PtrEqRc<ViewConfig>,
+
+    /// Snapshot of the active plugin's `columns_config` bucket, whose
+    /// non-empty entries mark their active columns as modified.
+    pub columns_config: PtrEqRc<ColumnConfigMap>,
     pub drag_column: Option<String>,
 
     /// Cloned session metadata snapshot — threaded from `SessionProps`
@@ -110,6 +114,7 @@ impl PartialEq for ColumnSelectorProps {
             && self.named_column_count == rhs.named_column_count
             && self.plugin_static_config == rhs.plugin_static_config
             && self.view_config == rhs.view_config
+            && self.columns_config == rhs.columns_config
             && self.drag_column == rhs.drag_column
             && self.metadata == rhs.metadata
             && self.selected_theme == rhs.selected_theme
@@ -455,6 +460,11 @@ impl Component for ColumnSelector {
                     name.get_name().is_some() && renderer.can_render_column_styles();
 
                 let show_edit_btn = is_expression || is_window || can_render_styles;
+                let is_modified = name
+                    .get_name()
+                    .and_then(|n| ctx.props().columns_config.get(n))
+                    .is_some_and(|entry| !entry.is_empty());
+
                 let on_open_expr_panel = &ctx.props().on_open_expr_panel;
                 html_nested! {
                     <ScrollPanelItem {key} {size_hint}>
@@ -465,6 +475,7 @@ impl Component for ColumnSelector {
                             {is_editing}
                             {is_expression}
                             {is_window}
+                            {is_modified}
                             {show_edit_btn}
                             {col_type}
                             {is_last_column}

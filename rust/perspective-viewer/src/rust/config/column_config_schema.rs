@@ -74,6 +74,38 @@ pub enum ControlSpec {
         variants: Vec<EnumVariant>,
         default: String,
     },
+
+    /// A CSS `font-family` picked from the generic keywords plus the families
+    /// the host can enumerate, with optional size, bold and italic inputs
+    /// each bound to its own key.
+    Font {
+        key: String,
+        default: String,
+
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        size: Option<FontSize>,
+
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bold: Option<FontToggle>,
+
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        italic: Option<FontToggle>,
+    },
+    /// A 3×3 anchor picker whose value is one of the nine [`Alignment`]
+    /// tokens.
+    Alignment {
+        key: String,
+
+        /// The cell shown as the unmodified value and elided from serialized
+        /// configs, or `None` when an unset key stands for something no cell
+        /// can show.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default: Option<Alignment>,
+
+        /// Only the four corner cells are selectable.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        corners: bool,
+    },
     Bool {
         key: String,
         default: bool,
@@ -125,7 +157,6 @@ pub enum ControlSpec {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         default: Option<DatetimeFormatType>,
     },
-    StringFormat,
     NumberSeriesStyle {
         default: NumberSeriesStyleDefaultConfig,
     },
@@ -145,6 +176,108 @@ pub enum ControlSpec {
         #[serde(default)]
         fields: Vec<ControlSpec>,
     },
+}
+
+/// One cell of a 3×3 anchor grid: a corner `top-left`/`top-right`/
+/// `bottom-left`/`bottom-right`, an edge `top`/`left`/`right`/`bottom`, or
+/// `center`.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Alignment {
+    TopLeft,
+    Top,
+    TopRight,
+    Left,
+    Center,
+    Right,
+    BottomLeft,
+    Bottom,
+    BottomRight,
+}
+
+impl Alignment {
+    /// Every cell in row-major order.
+    pub const ALL: [Alignment; 9] = [
+        Alignment::TopLeft,
+        Alignment::Top,
+        Alignment::TopRight,
+        Alignment::Left,
+        Alignment::Center,
+        Alignment::Right,
+        Alignment::BottomLeft,
+        Alignment::Bottom,
+        Alignment::BottomRight,
+    ];
+    pub const CORNERS: [Alignment; 4] = [
+        Alignment::TopLeft,
+        Alignment::TopRight,
+        Alignment::BottomLeft,
+        Alignment::BottomRight,
+    ];
+
+    pub fn is_corner(self) -> bool {
+        Self::CORNERS.contains(&self)
+    }
+
+    /// The serialized token.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Alignment::TopLeft => "top-left",
+            Alignment::Top => "top",
+            Alignment::TopRight => "top-right",
+            Alignment::Left => "left",
+            Alignment::Center => "center",
+            Alignment::Right => "right",
+            Alignment::BottomLeft => "bottom-left",
+            Alignment::Bottom => "bottom",
+            Alignment::BottomRight => "bottom-right",
+        }
+    }
+
+    pub fn parse(src: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|x| x.as_str() == src)
+    }
+
+    /// `Top Left`-style text for accessible names.
+    pub fn humanized(self) -> String {
+        self.as_str()
+            .split('-')
+            .map(|word| {
+                let mut chars = word.chars();
+                match chars.next() {
+                    Some(first) => first.to_uppercase().chain(chars).collect::<String>(),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
+/// One boolean style toggle of a [`ControlSpec::Font`] control: the
+/// config key it writes and the value that counts as "not set".
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct FontToggle {
+    pub key: String,
+    #[serde(default)]
+    pub default: bool,
+}
+
+/// The size input of a [`ControlSpec::Font`] control: a number (CSS px)
+/// under its own key, elided from serialized configs at `default`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct FontSize {
+    pub key: String,
+    pub default: f64,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<f64>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<f64>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step: Option<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -182,9 +315,7 @@ impl ColumnConfigSchema {
         fn is_format(spec: &ControlSpec) -> bool {
             matches!(
                 spec,
-                ControlSpec::NumberFormat { .. }
-                    | ControlSpec::DatetimeFormat { .. }
-                    | ControlSpec::StringFormat
+                ControlSpec::NumberFormat { .. } | ControlSpec::DatetimeFormat { .. }
             )
         }
 
@@ -229,6 +360,18 @@ impl ColumnConfigSchema {
                     ControlSpec::Group { fields, .. } => {
                         canonicalize_specs(fields);
                         return !fields.is_empty();
+                    },
+                    ControlSpec::Alignment {
+                        key,
+                        default: Some(default),
+                        corners: true,
+                    } if !default.is_corner() => {
+                        tracing::error!(
+                            "Dropping `{key}` — default `{}` is not a corner",
+                            default.as_str()
+                        );
+
+                        return false;
                     },
                     ControlSpec::Color { key, default } => (CssKind::Color, key, default),
                     ControlSpec::Palette { key, default, .. } => (CssKind::Palette, key, default),
@@ -275,12 +418,27 @@ impl ControlSpec {
     pub fn serialized_keys(&self) -> Vec<&str> {
         match self {
             ControlSpec::DatetimeFormat { .. } => vec!["date_format"],
-            ControlSpec::StringFormat => vec!["format"],
+            ControlSpec::Font {
+                key,
+                size,
+                bold,
+                italic,
+                ..
+            } => [
+                Some(key.as_str()),
+                size.as_ref().map(|s| s.key.as_str()),
+                bold.as_ref().map(|t| t.key.as_str()),
+                italic.as_ref().map(|t| t.key.as_str()),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
             ControlSpec::NumberSeriesStyle { .. } => vec!["chart_type", "stack"],
             ControlSpec::Symbols { .. } => vec!["symbols"],
             ControlSpec::NumberFormat { .. } => vec!["number_format"],
             ControlSpec::AggregateDepth => vec!["aggregate_depth"],
             ControlSpec::Enum { key, .. }
+            | ControlSpec::Alignment { key, .. }
             | ControlSpec::Bool { key, .. }
             | ControlSpec::Number { key, .. }
             | ControlSpec::String { key, .. }
@@ -402,7 +560,7 @@ mod tests {
             fields: vec![
                 ControlSpec::NumberFormat { default: None },
                 flag("flag"),
-                ControlSpec::StringFormat,
+                ControlSpec::DatetimeFormat { default: None },
             ],
         }
         .group_format_controls();
@@ -414,17 +572,43 @@ mod tests {
 
         assert_eq!(key, "format");
         assert!(matches!(fields[0], ControlSpec::NumberFormat { .. }));
-        assert!(matches!(fields[1], ControlSpec::StringFormat));
+        assert!(matches!(fields[1], ControlSpec::DatetimeFormat { .. }));
         assert!(matches!(&schema.fields[1], ControlSpec::Bool { .. }));
 
         assert_eq!(
             schema.active_keys(),
             HashSet::from([
                 "number_format".to_owned(),
-                "format".to_owned(),
+                "date_format".to_owned(),
                 "flag".to_owned()
             ])
         );
+    }
+
+    #[test]
+    fn font_owns_its_size_and_toggle_keys() {
+        let spec = ControlSpec::Font {
+            key: "font_family".to_owned(),
+            default: "inherit".to_owned(),
+            size: Some(FontSize {
+                key: "font_size".to_owned(),
+                default: 12.0,
+                min: None,
+                max: None,
+                step: None,
+            }),
+            bold: Some(FontToggle {
+                key: "bold".to_owned(),
+                default: false,
+            }),
+            italic: None,
+        };
+
+        assert_eq!(spec.serialized_keys(), vec![
+            "font_family",
+            "font_size",
+            "bold"
+        ]);
     }
 
     #[test]
@@ -533,6 +717,83 @@ mod tests {
         assert_eq!(
             simple.time_style,
             crate::config::SimpleDatetimeFormat::Disabled
+        );
+    }
+
+    #[test]
+    fn alignment_tokens_round_trip() {
+        for align in Alignment::ALL {
+            assert_eq!(Alignment::parse(align.as_str()), Some(align));
+            assert_eq!(serde_json::to_value(align).unwrap(), json!(align.as_str()));
+        }
+
+        for bad in ["middle", "left-top", "top-center", "middle-left", ""] {
+            assert_eq!(Alignment::parse(bad), None, "{bad}");
+        }
+
+        assert_eq!(Alignment::ALL.iter().filter(|x| x.is_corner()).count(), 4);
+        assert_eq!(Alignment::TopLeft.humanized(), "Top Left");
+        assert_eq!(Alignment::Center.humanized(), "Center");
+    }
+
+    #[test]
+    fn alignment_deserializes_with_optional_default_and_corners() {
+        let schema: ColumnConfigSchema = serde_json::from_value(json!({
+            "fields": [
+                { "kind": "Alignment", "key": "align" },
+                { "kind": "Alignment", "key": "legend_anchor", "default": "top-right", "corners": true }
+            ]
+        }))
+        .unwrap();
+
+        assert!(matches!(&schema.fields[0], ControlSpec::Alignment {
+            default: None,
+            corners: false,
+            ..
+        }));
+        assert!(matches!(&schema.fields[1], ControlSpec::Alignment {
+            default: Some(Alignment::TopRight),
+            corners: true,
+            ..
+        }));
+        assert_eq!(
+            schema.active_keys(),
+            HashSet::from(["align".to_owned(), "legend_anchor".to_owned()])
+        );
+        assert!(
+            serde_json::from_value::<ColumnConfigSchema>(json!({
+                "fields": [{ "kind": "Alignment", "key": "x", "default": "middle" }]
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn canonicalize_defaults_drops_non_corner_default_of_corners_field() {
+        let schema = ColumnConfigSchema {
+            fields: vec![
+                ControlSpec::Alignment {
+                    key: "bad".to_owned(),
+                    default: Some(Alignment::Top),
+                    corners: true,
+                },
+                ControlSpec::Alignment {
+                    key: "ok".to_owned(),
+                    default: Some(Alignment::Top),
+                    corners: false,
+                },
+                ControlSpec::Alignment {
+                    key: "unset".to_owned(),
+                    default: None,
+                    corners: true,
+                },
+            ],
+        }
+        .canonicalize_defaults();
+
+        assert_eq!(
+            schema.active_keys(),
+            HashSet::from(["ok".to_owned(), "unset".to_owned()])
         );
     }
 

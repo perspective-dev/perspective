@@ -70,6 +70,10 @@ pub struct ActiveColumnProps {
     #[prop_or_default]
     pub is_window: bool,
 
+    /// Whether this column's `columns_config` entry holds overridden keys.
+    #[prop_or_default]
+    pub is_modified: bool,
+
     #[prop_or_default]
     pub is_last_column: bool,
 
@@ -103,6 +107,7 @@ impl PartialEq for ActiveColumnProps {
             && self.is_editing == rhs.is_editing
             && self.is_expression == rhs.is_expression
             && self.is_window == rhs.is_window
+            && self.is_modified == rhs.is_modified
             && self.show_edit_btn == rhs.show_edit_btn
             && self.col_type == rhs.col_type
             && self.metadata == rhs.metadata
@@ -217,6 +222,10 @@ impl Component for ActiveColumn {
         let mut outer_classes = classes!["column-selector-column"];
         if self.mouseover {
             outer_classes.push("dragdrop-hover");
+        }
+
+        if ctx.props().is_modified {
+            outer_classes.push("is-modified");
         }
 
         let name = match &ctx.props().name {

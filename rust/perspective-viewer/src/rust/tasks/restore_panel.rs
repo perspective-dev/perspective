@@ -16,7 +16,7 @@ use perspective_client::utils::PerspectiveResultExt;
 use crate::config::*;
 use crate::presentation::Presentation;
 use crate::renderer::Renderer;
-use crate::session::{ResetOptions, Session};
+use crate::session::{MissingTable, ResetOptions, Session, TableIntermediateState, probe_table};
 use crate::tasks::*;
 use crate::workspace::Workspace;
 use crate::*;
@@ -38,27 +38,107 @@ pub(crate) enum RestoreErrors {
     Suppress,
 }
 
+/// The client to bind and the opened `Table`, or `None` when pending.
+type Probed = (
+    perspective_client::Client,
+    Option<perspective_client::Table>,
+);
+
+/// Resolve and probe the client hosting `name` without touching the
+/// session's own binding.
+async fn probe(
+    session: &Session,
+    workspace: &Workspace,
+    name: &str,
+    missing: MissingTable,
+) -> ApiResult<Probed> {
+    let current = session.get_client();
+    let resolved = workspace
+        .resolve_client_for_table(name, current.as_ref())
+        .await;
+
+    let client = resolved.or(current).into_apierror()?;
+    let table = probe_table(&client, name, missing).await?;
+    Ok((client, table))
+}
+
+/// Bind an unbound or same-named session to `name`.
 pub(crate) async fn bind_table_task(
     session: &Session,
     workspace: &Workspace,
     name: String,
+    missing: MissingTable,
 ) -> ApiResult<()> {
-    let current = session.get_client();
-    if let Some(client) = workspace
-        .resolve_client_for_table(&name, current.as_ref())
-        .await
+    if session
+        .get_table()
+        .is_some_and(|t| t.get_name() == name.as_str())
     {
-        session.set_client(client);
+        return Ok(());
     }
 
-    session.set_table(name).await?;
+    let (client, table) = probe(session, workspace, &name, missing).await?;
+    session.set_client(client);
+    match table {
+        Some(table) => session.bind_table(table).await?,
+        None => session.pend_table(name).await?,
+    }
+
     session.commit_table_defaults();
+    Ok(())
+}
+
+/// Rebind a session to `name`, probing the incoming table before the
+/// outgoing binding is dropped and replaying the journal opened as
+/// `generation` over the incoming table's defaults.
+async fn rebind_table_task(
+    session: &Session,
+    renderer: &Renderer,
+    workspace: &Workspace,
+    name: String,
+    missing: MissingTable,
+    generation: u32,
+) -> ApiResult<()> {
+    let probed = probe(session, workspace, &name, missing).await;
+    let journal = session.take_pending_load(generation);
+    let (client, table) = probed?;
+    let Some(journal) = journal else {
+        return Ok(());
+    };
+
+    session
+        .reset(ResetOptions {
+            config: true,
+            expressions: true,
+            stats: true,
+            table: Some(TableIntermediateState::Reloaded),
+        })
+        .await?;
+
+    session.set_client(client);
+    match table {
+        Some(table) => session.bind_table(table).await?,
+        None => session.pend_table(name).await?,
+    }
+
+    session.commit_table_defaults();
+    for delta in journal {
+        session.commit_view_config(delta)?;
+    }
+
+    session.commit_table_defaults();
+    if session.get_table().is_none()
+        && let Some(plugin) = renderer.active_plugin()
+    {
+        plugin.clear().await?;
+    }
+
     Ok(())
 }
 
 /// Apply a [`ViewerConfigUpdate`] to a single panel and re-draw — the one
 /// pipeline shared by `restorePanel` (an existing panel), `restoreWorkspace`,
 /// and `addPanel` (both fresh panels).
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn restore_panel(
     session: &Session,
     renderer: &Renderer,
@@ -67,6 +147,7 @@ pub(crate) async fn restore_panel(
     mode: RestoreMode,
     mut update: ViewerConfigUpdate,
     errors: RestoreErrors,
+    missing: MissingTable,
 ) -> ApiResult<()> {
     let active = matches!(mode, RestoreMode::Existing { active: true });
     let fresh = matches!(mode, RestoreMode::Fresh);
@@ -100,21 +181,24 @@ pub(crate) async fn restore_panel(
     let rollback =
         matches!(errors, RestoreErrors::Suppress).then(|| session.get_view_config().clone());
 
-    let table_changed = !fresh
-        && matches!(&update.table, OptionalUpdate::Update(name)
-            if session.get_table().map(|t| t.get_name() != name.as_str()).unwrap_or(true));
+    let binding_before = (
+        session.get_table().map(|t| t.get_name().to_owned()),
+        session.pending_table(),
+    );
 
-    let errored_recovery =
-        session.is_errored() && matches!(&update.table, OptionalUpdate::Update(_));
-
-    let reset = (table_changed || errored_recovery).then(|| {
-        session.reset(ResetOptions {
-            config: true,
-            expressions: true,
-            stats: true,
-            ..ResetOptions::default()
-        })
-    });
+    let generation = match &update.table {
+        OptionalUpdate::Update(name)
+            if session.is_errored()
+                || (!fresh
+                    && session
+                        .get_table()
+                        .map(|t| t.get_name() != name.as_str())
+                        .unwrap_or(true)) =>
+        {
+            Some(session.begin_pending_load())
+        },
+        _ => None,
+    };
 
     let result = restore_and_render(
         session,
@@ -123,27 +207,42 @@ pub(crate) async fn restore_panel(
         RunOrigin::Public,
         update.clone(),
         {
-            clone!(session, update.table, workspace);
+            clone!(session, renderer, update.table, workspace);
             async move {
-                if let OptionalUpdate::Update(name) = table {
-                    if let Some(reset) = reset {
-                        reset.await?;
-                    }
+                let OptionalUpdate::Update(name) = table else {
+                    return Ok(());
+                };
 
-                    bind_table_task(&session, &workspace, name).await?;
+                match generation {
+                    Some(generation) => {
+                        rebind_table_task(
+                            &session, &renderer, &workspace, name, missing, generation,
+                        )
+                        .await
+                    },
+                    None => bind_table_task(&session, &workspace, name, missing).await,
                 }
-
-                Ok(())
             }
         },
     )
     .await;
 
+    if let Some(generation) = generation {
+        session.take_pending_load(generation);
+    }
+
     if let Err(e) = &result {
         match errors {
             RestoreErrors::Publish => session.set_error(false, e.clone()).await?,
             RestoreErrors::Suppress => {
-                if let Some(config) = rollback {
+                let binding_after = (
+                    session.get_table().map(|t| t.get_name().to_owned()),
+                    session.pending_table(),
+                );
+
+                if let Some(config) = rollback
+                    && binding_after == binding_before
+                {
                     session.commit_view_config(config.into()).unwrap_or_log();
                 }
             },

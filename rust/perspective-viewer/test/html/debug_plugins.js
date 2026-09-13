@@ -132,7 +132,7 @@ class DebugStyledPlugin extends BasePlugin {
                 });
             }
 
-            fields.push({ kind: "StringFormat" });
+            fields.push({ kind: "Bool", key: "link", default: false });
         }
 
         return { fields };

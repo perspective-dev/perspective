@@ -26,7 +26,8 @@ pub struct PluginStore {
 
 impl PluginStore {
     fn init_lazy(&mut self) {
-        self.plugins = Some(PLUGIN_REGISTRY.create_plugins());
+        let plugins = PLUGIN_REGISTRY.create_plugins();
+        self.plugins = Some(plugins);
         self.plugin_configs = Some(PLUGIN_REGISTRY.plugin_configs());
         self.plugin_records = Some(PLUGIN_REGISTRY.available_plugin_names_by_category());
     }

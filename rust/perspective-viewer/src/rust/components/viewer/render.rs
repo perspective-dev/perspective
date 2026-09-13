@@ -95,6 +95,7 @@ impl PerspectiveViewer {
                     plugin_static_config={self.renderer_props.config.clone()}
                     {view_config}
                     plugin_config={self.renderer_props.plugin_config.clone()}
+                    columns_config={self.renderer_props.columns_config.clone()}
                     {drag_column}
                     metadata={metadata.clone()}
                     open_column_settings={self.presentation_props.open_column_settings.clone()}

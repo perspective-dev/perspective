@@ -152,6 +152,51 @@ impl Deref for SessionHandle {
     }
 }
 
+/// What an un-hosted `table` name means to a bind, per the `wait_for_table`
+/// option.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MissingTable {
+    /// A hard error that leaves the panel as it was.
+    Error,
+
+    /// The panel waits unbound and binds when the name is hosted.
+    Pend,
+}
+
+impl MissingTable {
+    /// Decode the `wait_for_table` option (absent = `false` = `Error`).
+    pub fn from_wait(wait_for_table: Option<bool>) -> Self {
+        if wait_for_table.unwrap_or_default() {
+            Self::Pend
+        } else {
+            Self::Error
+        }
+    }
+}
+
+/// Open `name` on `client`, returning `Ok(None)` when the name is not hosted
+/// and `missing` is [`MissingTable::Pend`].
+pub(crate) async fn probe_table(
+    client: &Client,
+    name: &str,
+    missing: MissingTable,
+) -> ApiResult<Option<perspective_client::Table>> {
+    match client.open_table(name.to_owned()).await {
+        Ok(table) => Ok(Some(table)),
+        Err(e) => {
+            let hosted = client.get_hosted_table_names().await.unwrap_or_default();
+            if hosted.iter().any(|n| n == name) {
+                return Err(e.into());
+            }
+
+            match missing {
+                MissingTable::Pend => Ok(None),
+                MissingTable::Error => Err(ApiError::new(format!("Unknown table \"{name}\""))),
+            }
+        },
+    }
+}
+
 /// Mutable state for `Session`.
 #[derive(Default)]
 pub struct SessionData {
@@ -309,6 +354,7 @@ impl Session {
     /// `Session`.
     pub fn reset(&self, options: ResetOptions) -> impl Future<Output = ApiResult<()>> + use<> {
         let view = self.0.borrow_mut().view_sub.take();
+        let had_table = self.borrow().table.is_some();
         let err = self.get_error();
         self.borrow_mut().error = None;
         if options.stats {
@@ -328,11 +374,13 @@ impl Session {
                 self.borrow_mut().is_loading = false;
                 self.borrow_mut().table = None;
                 self.borrow_mut().pending_table = None;
+                self.borrow_mut().metadata = SessionMetadata::default();
             },
             Some(TableIntermediateState::Reloaded) => {
                 self.borrow_mut().is_loading = true;
                 self.borrow_mut().table = None;
                 self.borrow_mut().pending_table = None;
+                self.borrow_mut().metadata = SessionMetadata::default();
             },
             _ => {
                 self.borrow_mut().is_loading = false;
@@ -353,7 +401,7 @@ impl Session {
         let session = self.clone();
         async move {
             let res = view.delete().await;
-            if options.table.is_some() {
+            if options.table.is_some() && had_table {
                 session.table_unloaded.emit(true)
             }
 
@@ -410,6 +458,8 @@ impl Session {
             Some(TableLoadState::Loaded)
         } else if data.is_loading {
             Some(TableLoadState::Loading)
+        } else if data.pending_table.is_some() {
+            Some(TableLoadState::Pending)
         } else {
             None
         }
@@ -470,10 +520,8 @@ impl Session {
     /// `table_name` is unique per `Client`, so if this value has not changed,
     /// `Session::set_table` does nothing and returns `Ok(false)`.
     ///
-    /// A name NO loaded client hosts (yet) is not an error: the session
-    /// records it PENDING ([`SessionData::pending_table`]) and returns
-    /// `Ok(false)`; the element's hosted-tables subscription
-    /// (`tasks::table_lifecycle`) re-runs the bind when the table is created.
+    /// A name no loaded client hosts pends ([`MissingTable::Pend`]) and
+    /// returns `Ok(false)` until the table lifecycle re-runs the bind.
     pub async fn set_table(&self, table_name: String) -> ApiResult<bool> {
         if Some(table_name.as_str()) == self.0.borrow().table.as_ref().map(|x| x.get_name()) {
             self.0.borrow_mut().pending_table = None;
@@ -481,60 +529,68 @@ impl Session {
         }
 
         let client = self.0.borrow().client.clone().into_apierror()?;
-        let table = match client.open_table(table_name.clone()).await {
-            Ok(table) => table,
-            Err(e) => {
-                // Distinguish "not hosted (yet)" — which PENDS — from a real
-                // open failure by the hosted set, not the error's text.
-                let hosted = client.get_hosted_table_names().await.unwrap_or_default();
-                if hosted.iter().any(|n| n == &table_name) {
-                    return Err(e.into());
-                }
-
-                self.0.borrow_mut().pending_table = Some(table_name);
-                return Ok(false);
+        match probe_table(&client, &table_name, MissingTable::Pend).await? {
+            Some(table) => match self.bind_table(table).await {
+                Ok(()) => Ok(true),
+                Err(err) => self.set_error(false, err).await.map(|_| false),
             },
-        };
-
-        match SessionMetadata::from_table(&table).await {
-            Ok(metadata) => {
-                let client = table.get_client();
-                let on_error = self.on_table_errored.borrow().clone();
-                let session = self.clone();
-                let poll_loop = LocalPollLoop::new(move |(message, reconnect): (ApiError, _)| {
-                    session.borrow_mut().error = Some(TableErrorState(message, reconnect));
-                    if let Some(cb) = &on_error {
-                        cb.emit(());
-                    }
-                    if let Some(sub) = session.borrow_mut().view_sub.take() {
-                        sub.dismiss();
-                    }
-
-                    Ok(JsValue::UNDEFINED)
-                });
-
-                let _callback_id = client
-                    .on_error(Box::new(move |message: ClientError, reconnect| {
-                        let poll_loop = poll_loop.clone();
-                        async move {
-                            poll_loop.poll((message.into(), reconnect)).await;
-                            Ok(())
-                        }
-                    }))
-                    .await?;
-
-                let sub = self.borrow_mut().view_sub.take();
-                self.borrow_mut().metadata = metadata;
-                self.borrow_mut().table = Some(table);
-                self.borrow_mut().pending_table = None;
-                self.borrow_mut().is_loading = false;
-                self.borrow_mut().last_validated_expressions = None;
-                sub.delete().await?;
-                self.table_loaded.emit(());
-                Ok(true)
+            None => {
+                self.pend_table(table_name).await?;
+                Ok(false)
             },
-            Err(err) => self.set_error(false, err).await.map(|_| false),
         }
+    }
+
+    /// Bind an opened `Table`, replacing any previous binding and announcing
+    /// `table_loaded`.
+    pub(crate) async fn bind_table(&self, table: perspective_client::Table) -> ApiResult<()> {
+        let metadata = SessionMetadata::from_table(&table).await?;
+        let client = table.get_client();
+        let on_error = self.on_table_errored.borrow().clone();
+        let session = self.clone();
+        let poll_loop = LocalPollLoop::new(move |(message, reconnect): (ApiError, _)| {
+            session.borrow_mut().error = Some(TableErrorState(message, reconnect));
+            if let Some(cb) = &on_error {
+                cb.emit(());
+            }
+            if let Some(sub) = session.borrow_mut().view_sub.take() {
+                sub.dismiss();
+            }
+
+            Ok(JsValue::UNDEFINED)
+        });
+
+        let _callback_id = client
+            .on_error(Box::new(move |message: ClientError, reconnect| {
+                let poll_loop = poll_loop.clone();
+                async move {
+                    poll_loop.poll((message.into(), reconnect)).await;
+                    Ok(())
+                }
+            }))
+            .await?;
+
+        let sub = self.borrow_mut().view_sub.take();
+        self.borrow_mut().metadata = metadata;
+        self.borrow_mut().table = Some(table);
+        self.borrow_mut().pending_table = None;
+        self.borrow_mut().is_loading = false;
+        self.borrow_mut().last_validated_expressions = None;
+        sub.delete().await?;
+        self.table_loaded.emit(());
+        Ok(())
+    }
+
+    /// Record `name` as pending, dropping any bound `Table` so nothing binds
+    /// against the outgoing table while the name waits for a host.
+    pub(crate) async fn pend_table(&self, name: String) -> ApiResult<()> {
+        let sub = self.borrow_mut().view_sub.take();
+        self.borrow_mut().table = None;
+        self.borrow_mut().metadata = SessionMetadata::default();
+        self.borrow_mut().pending_table = Some(name);
+        self.borrow_mut().is_loading = false;
+        self.borrow_mut().last_validated_expressions = None;
+        sub.delete().await
     }
 
     pub async fn set_error(&self, reset_table: bool, err: ApiError) -> ApiResult<()> {
@@ -1239,6 +1295,8 @@ impl Session {
                 Some(TableLoadState::Loaded)
             } else if data.is_loading {
                 Some(TableLoadState::Loading)
+            } else if data.pending_table.is_some() {
+                Some(TableLoadState::Pending)
             } else {
                 None
             },

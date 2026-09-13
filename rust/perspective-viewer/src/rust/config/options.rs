@@ -44,6 +44,28 @@ pub struct RestoreOptions {
     /// known-good config to recover exactly.
     #[ts(optional)]
     pub suppress_errors: Option<bool>,
+
+    /// When `true`, a `table` no loaded client hosts yet leaves the panel
+    /// empty and pending until the table is created, instead of the default
+    /// error.
+    #[ts(optional)]
+    pub wait_for_table: Option<bool>,
+}
+
+/// Options for the `restoreWorkspace()` method.
+#[derive(Deserialize, Default, TS)]
+pub struct RestoreWorkspaceOptions {
+    /// As `RestoreOptions::wait_for_table`, applied to every panel entry.
+    #[ts(optional)]
+    pub wait_for_table: Option<bool>,
+}
+
+/// Options for the `addPanel()` method.
+#[derive(Deserialize, Default, TS)]
+pub struct AddPanelOptions {
+    /// As `RestoreOptions::wait_for_table`.
+    #[ts(optional)]
+    pub wait_for_table: Option<bool>,
 }
 
 /// The `eject` argument: the loaded client to remove by name; the active

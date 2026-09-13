@@ -201,13 +201,15 @@
         /* Expression column toolbar buttons */
         span.expression-edit-button,
         span.expression-delete-button {
-            padding-top: 1px;
+            height: 19px;
+            width: 21px;
             font-family: var(--psp-button--font-family, inherit);
             cursor: pointer;
-            padding: 2px 4px 0 4px;
-            margin-right: 1px;
+            padding: 1.5px 2.5px 0;
+            margin-right: 2px;
             margin-left: auto;
             border-radius: 3px;
+            border: 1px solid transparent;
             &:hover,
             &.is-editing {
                 background-color: var(--psp--color);
@@ -504,6 +506,12 @@
             background-color: var(--psp-placeholder--background);
             border: 1px solid transparent;
             align-items: center;
+        }
+    }
+
+    .column-selector-column.is-modified {
+        .expression-edit-button:not(.is-editing) {
+            border: 1px dashed var(--psp--color);
         }
     }
 
