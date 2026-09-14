@@ -24,3 +24,16 @@ pub fn read_custom_property(elem: &Element, name: &str) -> Option<String> {
     let value = value.trim();
     (!value.is_empty()).then(|| value.to_owned())
 }
+
+/// The intl string `--psp-label--{slug}--content` as inherited by `elem`,
+/// unquoted, or `None` when no theme defines it.
+pub fn read_intl_string(elem: &Element, slug: &str) -> Option<String> {
+    let raw = read_custom_property(elem, &format!("--psp-label--{slug}--content"))?;
+    let unquoted = raw
+        .strip_prefix('"')
+        .and_then(|x| x.strip_suffix('"'))
+        .or_else(|| raw.strip_prefix('\'').and_then(|x| x.strip_suffix('\'')))
+        .unwrap_or(&raw);
+
+    Some(unquoted.replace("\\\"", "\""))
+}

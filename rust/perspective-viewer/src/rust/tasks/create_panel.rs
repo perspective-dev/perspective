@@ -17,7 +17,7 @@ use crate::config::*;
 use crate::custom_events::wire_panel_events;
 use crate::presentation::*;
 use crate::renderer::*;
-use crate::session::{ResetOptions, Session};
+use crate::session::{MissingTable, ResetOptions, Session};
 use crate::tasks::*;
 use crate::utils::*;
 use crate::workspace::{Panel, PanelId, PanelPhase, Workspace};
@@ -76,6 +76,7 @@ fn wire_panel_render_sub(session: &Session, renderer: &Renderer) -> Subscription
 /// one. `theme` is stripped (element-level, not per-panel) and `client` —
 /// or the element's default client when `None` — is bound so the config's
 /// `table` resolves against it.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn create_panel(
     elem: &HtmlElement,
     presentation: &Presentation,
@@ -84,6 +85,7 @@ pub(crate) async fn create_panel(
     id: Option<PanelId>,
     config: ViewerConfigInitial,
     client: Option<perspective_client::Client>,
+    missing: MissingTable,
 ) -> ApiResult<PanelId> {
     let (id, session, renderer, update) = create_panel_model(
         elem,
@@ -120,6 +122,7 @@ pub(crate) async fn create_panel(
         RestoreMode::Fresh,
         update,
         crate::tasks::RestoreErrors::Publish,
+        missing,
     )
     .await;
 

@@ -235,6 +235,7 @@ impl PerspectiveViewer {
                     None,
                     update,
                     client,
+                    crate::session::MissingTable::Error,
                 )
                 .await?;
 
@@ -269,6 +270,7 @@ impl PerspectiveViewer {
                     None,
                     ViewerConfigInitial::new(table_name),
                     client,
+                    crate::session::MissingTable::Error,
                 )
                 .await?;
 
@@ -313,6 +315,7 @@ impl PerspectiveViewer {
                 None,
                 ViewerConfigInitial::new(table),
                 Some(client),
+                crate::session::MissingTable::Error,
             )
             .await?;
 

@@ -827,8 +827,8 @@ copy_array_impl(
             }
         } break;
         case arrow::NullType::type_id: {
-            for (uint32_t i = 0; i < len; ++i) {
-                dest->set_valid(i, false);
+            for (int64_t i = 0; i < len; ++i) {
+                dest->set_valid(offset + i, false);
             }
         } break;
         case arrow::Time32Type::type_id: {
@@ -1045,6 +1045,13 @@ fill_column_chunk(
     const GATHER& gather
 ) {
     {
+        // A null-typed array carries no values and no validity bitmap: every
+        // slot is null whatever the target column's dtype, so skip the value
+        // copy and the dtype reconciliation below (which has no case for it).
+        if (array->type_id() == arrow::NullType::type_id) {
+            fill_validity(col, array, offset, len, is_update, gather);
+            return;
+        }
 
         // If the Arrow array schema is different from the data
         // table schema, iteratively fill.

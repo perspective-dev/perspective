@@ -38,7 +38,7 @@ use crate::js::*;
 use crate::presentation::*;
 use crate::queries::*;
 use crate::root::Root;
-use crate::session::{ResetOptions, TableLoadState};
+use crate::session::{MissingTable, ResetOptions, TableLoadState};
 use crate::tasks::*;
 use crate::utils::*;
 use crate::workspace::{Panel, PanelId, Workspace};
@@ -61,10 +61,17 @@ extern "C" {
     #[wasm_bindgen(typescript_type = "PanelOptions")]
     pub type JsPanelOptions;
 
-    /// `restore()` options dict
-    /// (`{ panel?: string, suppress_errors?: boolean }`).
+    /// The `restore()` options dict.
     #[wasm_bindgen(typescript_type = "RestoreOptions")]
     pub type JsRestoreOptions;
+
+    /// The `restoreWorkspace()` options dict.
+    #[wasm_bindgen(typescript_type = "RestoreWorkspaceOptions")]
+    pub type JsRestoreWorkspaceOptions;
+
+    /// The `addPanel()` options dict.
+    #[wasm_bindgen(typescript_type = "AddPanelOptions")]
+    pub type JsAddPanelOptions;
 
     /// `addPanel()` argument: a new panel's initial config — `table`
     /// REQUIRED.
@@ -121,14 +128,15 @@ struct ResizeDimensions {
 /// falling back to `Default` on absence or a malformed argument (matching the
 /// `ResizeOptions` precedent — an options bag is a best-effort convenience,
 /// not a hard-validated payload).
-fn parse_options<T, U>(options: Option<T>) -> U
+fn parse_options<T, U>(options: Option<T>) -> ApiResult<U>
 where
     T: Into<JsValue>,
     U: Default + for<'a> serde::Deserialize<'a>,
 {
-    options
-        .and_then(|o| o.into_serde_ext().ok())
-        .unwrap_or_default()
+    match options {
+        None => Ok(U::default()),
+        Some(x) => Ok(x.into_serde_ext()?),
+    }
 }
 
 /// The `<perspective-viewer>` custom element.
@@ -716,7 +724,11 @@ impl PerspectiveViewerElement {
     /// await viewer.eject({client: "remote"});
     /// ```
     pub fn eject(&mut self, options: Option<JsClientOptions>) -> ApiFuture<()> {
-        let ClientOptions { client } = parse_options(options);
+        let ClientOptions { client } = match parse_options(options) {
+            Ok(x) => x,
+            Err(x) => return ApiFuture::new_err(x),
+        };
+
         // Default target: the active panel's client, or — when the active panel
         // is unbound (`load(Client)` is now inert) — the default client.
         let Some(target) = client
@@ -773,9 +785,9 @@ impl PerspectiveViewerElement {
     /// ```
     #[wasm_bindgen]
     pub fn getView(&self, options: Option<JsPanelOptions>) -> ApiFuture<View> {
-        let PanelOptions { panel: name } = parse_options(options);
         let this = self.clone();
         ApiFuture::new(async move {
+            let PanelOptions { panel: name } = parse_options(options)?;
             let panel = this.resolve_panel(name)?;
             Ok(panel.session.get_view().ok_or("No table set")?.into())
         })
@@ -788,9 +800,9 @@ impl PerspectiveViewerElement {
     /// [`View::get_config`])
     #[wasm_bindgen]
     pub fn getViewConfig(&self, options: Option<JsPanelOptions>) -> ApiFuture<JsViewConfig> {
-        let PanelOptions { panel: name } = parse_options(options);
         let this = self.clone();
         ApiFuture::new(async move {
+            let PanelOptions { panel: name } = parse_options(options)?;
             let panel = this.resolve_panel(name)?;
             let config = if let Some(ctx) = panel.renderer.render_context() {
                 (*ctx.view_config).clone()
@@ -821,12 +833,12 @@ impl PerspectiveViewerElement {
     /// ```
     #[wasm_bindgen]
     pub fn getTable(&self, options: Option<JsGetTableOptions>) -> ApiFuture<Table> {
-        let GetTableOptions {
-            wait: wait_for_table,
-            panel: name,
-        } = parse_options(options);
         let this = self.clone();
         ApiFuture::new(async move {
+            let GetTableOptions {
+                wait: wait_for_table,
+                panel: name,
+            } = parse_options(options)?;
             let panel = this.resolve_panel(name)?;
             if !wait_for_table.unwrap_or_default()
                 && let Some(ctx) = panel.renderer.render_context()
@@ -866,12 +878,12 @@ impl PerspectiveViewerElement {
         &self,
         options: Option<JsGetClientOptions>,
     ) -> ApiFuture<perspective_js::Client> {
-        let GetClientOptions {
-            wait: wait_for_client,
-            panel: name,
-        } = parse_options(options);
         let this = self.clone();
         ApiFuture::new(async move {
+            let GetClientOptions {
+                wait: wait_for_client,
+                panel: name,
+            } = parse_options(options)?;
             let panel = this.resolve_panel(name)?;
             if !wait_for_client.unwrap_or_default()
                 && let Some(ctx) = panel.renderer.render_context()
@@ -902,7 +914,7 @@ impl PerspectiveViewerElement {
     /// ```
     #[wasm_bindgen]
     pub fn getRenderStats(&self, options: Option<JsPanelOptions>) -> ApiResult<JsValue> {
-        let PanelOptions { panel: name } = parse_options(options);
+        let PanelOptions { panel: name } = parse_options(options)?;
         let panel = self.resolve_panel(name)?;
         Ok(JsValue::from_serde_ext(
             &panel.renderer.render_timer().get_stats(),
@@ -1000,12 +1012,13 @@ impl PerspectiveViewerElement {
     /// - `options.panel` - The panel to target, or the active panel when
     ///   omitted.
     /// - `options.suppress_errors` - when `true`, a failed restore only rejects
-    ///   the returned `Promise`; the error is NOT committed to the viewer's
-    ///   visible error state and the session remains usable. The view config is
-    ///   rolled back to its pre-call value, so a rejected patch cannot re-merge
-    ///   into a later restore. Element-level state the call already applied
-    ///   (theme, title, a plugin swap) is NOT undone — restore a known-good
-    ///   config to recover those exactly.
+    ///   the returned `Promise` and rolls the view config back, leaving the
+    ///   viewer's visible error state and any element-level state the call
+    ///   already applied (theme, title, plugin, a successful `table` change)
+    ///   untouched.
+    /// - `options.wait_for_table` - when `true`, a `table` no loaded client
+    ///   hosts yet leaves the panel empty and pending until the table is
+    ///   created, instead of the default error.
     ///
     /// # JavaScript Examples
     ///
@@ -1027,20 +1040,23 @@ impl PerspectiveViewerElement {
         update: JsViewerConfigUpdate,
         options: Option<JsRestoreOptions>,
     ) -> JsVoidPromise {
-        let RestoreOptions {
-            panel: name,
-            suppress_errors,
-        } = parse_options(options);
-
-        let errors = if suppress_errors.unwrap_or_default() {
-            RestoreErrors::Suppress
-        } else {
-            RestoreErrors::Publish
-        };
-
         let effect = self.workspace.effects().guard();
         let this = self.clone();
         let fut = ApiFuture::new_throttled(async move {
+            let RestoreOptions {
+                panel: name,
+                suppress_errors,
+                wait_for_table,
+            } = parse_options(options)?;
+
+            let errors = if suppress_errors.unwrap_or_default() {
+                RestoreErrors::Suppress
+            } else {
+                RestoreErrors::Publish
+            };
+
+            let missing = MissingTable::from_wait(wait_for_table);
+
             let _effect = effect;
             let id = name.map(PanelId::from);
             let mut update = ViewerConfigUpdate::decode(&update)?;
@@ -1105,6 +1121,7 @@ impl PerspectiveViewerElement {
                         RestoreMode::Existing { active },
                         update,
                         errors,
+                        missing,
                     )
                     .await
                 },
@@ -1117,6 +1134,7 @@ impl PerspectiveViewerElement {
                         RestoreMode::Existing { active: true },
                         update,
                         errors,
+                        missing,
                     )
                     .await
                 },
@@ -1129,6 +1147,7 @@ impl PerspectiveViewerElement {
                         id,
                         *config,
                         None,
+                        missing,
                     )
                     .await?;
                     Ok(())
@@ -1146,17 +1165,31 @@ impl PerspectiveViewerElement {
     /// cross-filter state re-applied. Unlike [`Self::restore`], this never
     /// falls back to the single-panel path.
     ///
+    /// # Arguments
+    ///
+    /// - `update` - The workspace config to restore, as returned by
+    ///   [`Self::saveWorkspace`].
+    /// - `options.wait_for_table` - when `true`, a panel whose `table` no
+    ///   loaded client hosts yet is created empty and pending until the table
+    ///   is created, instead of the default error.
+    ///
     /// # JavaScript Examples
     ///
     /// ```javascript
     /// await viewer.restoreWorkspace(await otherViewer.saveWorkspace());
     /// ```
-    pub fn restoreWorkspace(&self, update: JsWorkspaceConfigUpdate) -> JsVoidPromise {
+    pub fn restoreWorkspace(
+        &self,
+        update: JsWorkspaceConfigUpdate,
+        options: Option<JsRestoreWorkspaceOptions>,
+    ) -> JsVoidPromise {
         let update: JsViewerConfigUpdate = update.unchecked_into();
         let effect = self.workspace.effects().guard();
         let this = self.clone();
         let fut = ApiFuture::new(async move {
             let _effect = effect;
+            let RestoreWorkspaceOptions { wait_for_table } = parse_options(options)?;
+            let missing = MissingTable::from_wait(wait_for_table);
             let (contents, eject_tasks) = sync_update_panels(&this, update)?;
             let results = join_all(contents.into_iter().map(|(id, session, renderer, config)| {
                 let presentation = this.presentation.clone();
@@ -1171,6 +1204,7 @@ impl PerspectiveViewerElement {
                         RestoreMode::Fresh,
                         config,
                         crate::tasks::RestoreErrors::Publish,
+                        missing,
                     )
                     .await?;
                     if workspace.is_master(&id) {
@@ -1246,9 +1280,9 @@ impl PerspectiveViewerElement {
     /// });
     /// ```
     pub fn save(&self, options: Option<JsPanelOptions>) -> JsViewerConfigPromise {
-        let PanelOptions { panel: name } = parse_options(options);
         let this = self.clone();
         let fut = ApiFuture::new(async move {
+            let PanelOptions { panel: name } = parse_options(options)?;
             this.workspace.effects().settle().await;
             let panel = this.resolve_panel(name)?;
             let viewer_config = panel
@@ -1282,9 +1316,12 @@ impl PerspectiveViewerElement {
         &self,
         options: Option<JsSaveWorkspaceOptions>,
     ) -> JsWorkspaceConfigPromise {
-        let SaveWorkspaceOptions { full_palette } = parse_options(options);
         let this = self.clone();
-        let fut = ApiFuture::new(Self::workspace_config(this, full_palette.unwrap_or(false)));
+        let fut = ApiFuture::new(async move {
+            let SaveWorkspaceOptions { full_palette } = parse_options(options)?;
+            Self::workspace_config(this, full_palette.unwrap_or(false)).await
+        });
+
         js_sys::Promise::from(fut).unchecked_into()
     }
 
@@ -1303,13 +1340,13 @@ impl PerspectiveViewerElement {
     /// })
     /// ```
     pub fn download(&self, options: Option<JsExportOptions>) -> ApiFuture<()> {
-        let ExportOptions {
-            method,
-            panel: name,
-        } = parse_options(options);
-        let method = method.map(|m| JsString::from(m.as_str()));
         let this = self.clone();
         ApiFuture::new_throttled(async move {
+            let ExportOptions {
+                method,
+                panel: name,
+            } = parse_options(options)?;
+            let method = method.map(|m| JsString::from(m.as_str()));
             let method = if let Some(method) = method
                 .map(|x| x.unchecked_into())
                 .map(serde_wasm_bindgen::from_value)
@@ -1350,13 +1387,14 @@ impl PerspectiveViewerElement {
     /// const data = await viewer.export("plugin");
     /// ```
     pub fn export(&self, options: Option<JsExportOptions>) -> ApiFuture<JsValue> {
-        let ExportOptions {
-            method,
-            panel: name,
-        } = parse_options(options);
-        let method = method.map(|m| JsString::from(m.as_str()));
         let this = self.clone();
         ApiFuture::new(async move {
+            let ExportOptions {
+                method,
+                panel: name,
+            } = parse_options(options)?;
+
+            let method = method.map(|m| JsString::from(m.as_str()));
             let method = if let Some(method) = method
                 .map(|x| x.unchecked_into())
                 .map(serde_wasm_bindgen::from_value)
@@ -1388,13 +1426,14 @@ impl PerspectiveViewerElement {
     /// })
     /// ```
     pub fn copy(&self, options: Option<JsExportOptions>) -> ApiFuture<()> {
-        let ExportOptions {
-            method,
-            panel: name,
-        } = parse_options(options);
-        let method = method.map(|m| JsString::from(m.as_str()));
         let this = self.clone();
         ApiFuture::new_throttled(async move {
+            let ExportOptions {
+                method,
+                panel: name,
+            } = parse_options(options)?;
+
+            let method = method.map(|m| JsString::from(m.as_str()));
             let method = if let Some(method) = method
                 .map(|x| x.unchecked_into())
                 .map(serde_wasm_bindgen::from_value)
@@ -1433,11 +1472,11 @@ impl PerspectiveViewerElement {
     /// await viewer.reset(true, {panel: "p1"});  // just "p1", + expressions
     /// ```
     pub fn reset(&self, reset_all: Option<bool>, options: Option<JsPanelOptions>) -> ApiFuture<()> {
-        let PanelOptions { panel: name } = parse_options(options);
         let effect = self.workspace.effects().guard();
         let this = self.clone();
         let all = reset_all.unwrap_or_default();
         ApiFuture::new_throttled(async move {
+            let PanelOptions { panel: name } = parse_options(options)?;
             let _effect = effect;
             let (completion, receiver) = Completion::new();
             {
@@ -1615,7 +1654,7 @@ impl PerspectiveViewerElement {
     /// region of the named panel, or the active panel when `panel` is omitted.
     #[wasm_bindgen]
     pub fn getSelection(&self, options: Option<JsPanelOptions>) -> ApiResult<Option<JsViewWindow>> {
-        let PanelOptions { panel: name } = parse_options(options);
+        let PanelOptions { panel: name } = parse_options(options)?;
         let panel = self.resolve_panel(name)?;
         Ok(panel.renderer.get_selection().map(|x| x.into()))
     }
@@ -1628,7 +1667,7 @@ impl PerspectiveViewerElement {
         window: Option<JsViewWindow>,
         options: Option<JsPanelOptions>,
     ) -> ApiResult<()> {
-        let PanelOptions { panel: name } = parse_options(options);
+        let PanelOptions { panel: name } = parse_options(options)?;
         let window = window.map(|x| x.into_serde_ext()).transpose()?;
         self.resolve_panel(name)?.renderer.set_selection(window);
         Ok(())
@@ -1639,7 +1678,7 @@ impl PerspectiveViewerElement {
     /// `panel` is omitted.
     #[wasm_bindgen]
     pub fn getEditPort(&self, options: Option<JsPanelOptions>) -> ApiResult<f64> {
-        let PanelOptions { panel: name } = parse_options(options);
+        let PanelOptions { panel: name } = parse_options(options)?;
         let panel = self.resolve_panel(name)?;
         let edit_port = if let Some(ctx) = panel.renderer.render_context() {
             ctx.edit_port
@@ -1855,13 +1894,25 @@ impl PerspectiveViewerElement {
     ///
     /// The element-level `settings` field does not exist on the argument
     /// type (it is shared across the element, not per-panel).
+    ///
+    /// # Arguments
+    ///
+    /// - `config` - The new panel's initial config, whose `table` is required.
+    /// - `options.wait_for_table` - when `true`, a `table` no loaded client
+    ///   hosts yet creates the panel empty and pending until the table is
+    ///   created, instead of the default rejection.
     #[wasm_bindgen]
-    pub fn addPanel(&self, config: JsViewerConfigInitial) -> ApiFuture<JsValue> {
+    pub fn addPanel(
+        &self,
+        config: JsViewerConfigInitial,
+        options: Option<JsAddPanelOptions>,
+    ) -> ApiFuture<JsValue> {
         clone!(self.elem, self.presentation, self.workspace);
         let effect = workspace.effects().guard();
         let notify = self.layout_changed_notify();
         ApiFuture::new(async move {
             let _effect = effect;
+            let AddPanelOptions { wait_for_table } = parse_options(options)?;
             let config = ViewerConfigInitial::decode(&config)?;
             let id = create_panel(
                 &elem,
@@ -1871,6 +1922,7 @@ impl PerspectiveViewerElement {
                 None,
                 config,
                 None,
+                MissingTable::from_wait(wait_for_table),
             )
             .await?;
             Ok(JsValue::from_str(id.as_str()))
@@ -1960,10 +2012,10 @@ impl PerspectiveViewerElement {
         column_name: String,
         options: Option<JsPanelOptions>,
     ) -> ApiFuture<()> {
-        let PanelOptions { panel: name } = parse_options(options);
         let effect = self.workspace.effects().guard();
         let this = self.clone();
         ApiFuture::new_throttled(async move {
+            let PanelOptions { panel: name } = parse_options(options)?;
             let _effect = effect;
             let panel = this.resolve_panel(name)?;
             let was_active = this.workspace.active_id().as_ref() == Some(&panel.id);

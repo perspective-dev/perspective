@@ -108,6 +108,15 @@ export interface IPerspectiveViewerPlugin {
     ): { fields: Array<Record<string, unknown> & { kind: string }> };
 
     /**
+     * The plugin-level settings schema as it applies to `current_value`, the
+     * `plugin_config` state the schema should describe.
+     */
+    plugin_config_schema?(
+        view_config?: Record<string, unknown>,
+        current_value?: Record<string, unknown> | null,
+    ): { fields: Array<Record<string, unknown> & { kind: string }> };
+
+    /**
      * Render this plugin using the provided `View`.  While there is no
      * provision to cancel a render in progress per se, calling a method on
      * a `View` which has been deleted will throw an exception.

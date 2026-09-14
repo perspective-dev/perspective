@@ -11,6 +11,8 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 mod agg_depth_selector;
+pub(crate) mod alignment_field;
+pub(crate) mod font_field;
 pub(crate) mod primitive_field;
 mod symbol;
 
@@ -22,17 +24,18 @@ use perspective_client::config::ColumnType;
 use yew::{Callback, Html, Properties, function_component, html};
 
 use self::agg_depth_selector::*;
+use self::alignment_field::AlignmentField;
+use self::font_field::FontField;
 use self::primitive_field::{
     BoolField, ColorField, EnumField, GradientStopsField, NumberFieldPrimitive, PaletteField,
 };
 use crate::components::column_settings_sidebar::style_tab::symbol::SymbolStyle;
 use crate::components::datetime_column_style::DatetimeColumnStyle;
 use crate::components::number_series_style::NumberSeriesStyle;
-use crate::components::string_column_style::StringColumnStyle;
 use crate::components::style_controls::CustomNumberFormat;
 use crate::config::{
-    ColumnConfigFieldUpdate, ControlSpec, CustomNumberFormatConfig, DatetimeColumnStyleConfig,
-    NumberFormatDefaults, NumberSeriesStyleConfig, StringColumnStyleConfig,
+    Alignment, ColumnConfigFieldUpdate, ControlSpec, CustomNumberFormatConfig,
+    DatetimeColumnStyleConfig, FontToggle, NumberFormatDefaults, NumberSeriesStyleConfig,
 };
 use crate::presentation::Presentation;
 use crate::queries::{fetch_column_abs_max, get_column_config_schema, named_values};
@@ -270,12 +273,6 @@ fn render_leaf(spec: ControlSpec, keys: &[String], ctx: &FieldRenderCtx) -> Opti
                 />
             }
         },
-        ControlSpec::StringFormat => {
-            let config: Option<StringColumnStyleConfig> = deser_sub(raw_config);
-            html! {
-                <StringColumnStyle {config} on_change={on_change.clone()} keys={keys.to_vec()} />
-            }
-        },
         ControlSpec::Symbols {
             default: default_config,
         } => {
@@ -336,6 +333,68 @@ fn render_leaf(spec: ControlSpec, keys: &[String], ctx: &FieldRenderCtx) -> Opti
                     field_key={key}
                     {variants}
                     {default}
+                    {current}
+                    on_change={on_change.clone()}
+                />
+            }
+        },
+        ControlSpec::Font {
+            key,
+            default,
+            size,
+            bold,
+            italic,
+        } => {
+            let current = raw_config
+                .as_ref()
+                .and_then(|m| m.get(&key))
+                .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+            let toggle = |t: &FontToggle| {
+                raw_config
+                    .as_ref()
+                    .and_then(|m| m.get(&t.key))
+                    .and_then(|v| v.as_bool())
+            };
+
+            let size_current = size
+                .as_ref()
+                .and_then(|s| raw_config.as_ref().and_then(|m| m.get(&s.key)))
+                .and_then(|v| v.as_f64());
+
+            let bold_current = bold.as_ref().and_then(toggle);
+            let italic_current = italic.as_ref().and_then(toggle);
+            html! {
+                <FontField
+                    field_key={key}
+                    {default}
+                    {current}
+                    {size}
+                    {size_current}
+                    {bold}
+                    {bold_current}
+                    {italic}
+                    {italic_current}
+                    on_change={on_change.clone()}
+                />
+            }
+        },
+        ControlSpec::Alignment {
+            key,
+            default,
+            corners,
+        } => {
+            let current = raw_config
+                .as_ref()
+                .and_then(|m| m.get(&key))
+                .and_then(|v| v.as_str())
+                .and_then(Alignment::parse);
+
+            html! {
+                <AlignmentField
+                    field_key={key}
+                    {default}
+                    {corners}
                     {current}
                     on_change={on_change.clone()}
                 />

@@ -192,6 +192,5 @@ regular-table {
         content: var(--psp-label--null--content, "-");
         color: var(--psp-label--null--color, inherit);
         font-size: var(--psp-label--null--font-size, inherit);
-        vertical-align: middle;
     }
 }

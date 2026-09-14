@@ -74,7 +74,6 @@ perspective-viewer {
 
     /* Column Settings */
     --psp-label--color--content: "Couleur";
-    --psp-label--format--content: "Format";
     --psp-label--timezone--content: "Fuseau horaire";
     --psp-label--date-style--content: "Style de date";
     --psp-label--time-style--content: "Style d'heure";
@@ -82,8 +81,14 @@ perspective-viewer {
     --psp-label--number-bg-mode--content: "Arrière-plan";
     --psp-label--fg-colors--content: "Premier plan";
     --psp-label--bg-colors--content: "Arrière-plan";
-    --psp-label--datetime-color-mode--content: "Couleur";
-    --psp-label--string-color-mode--content: "Couleur";
+    --psp-label--string-fg-mode--content: "Premier plan";
+    --psp-label--string-bg-mode--content: "Arrière-plan";
+    --psp-label--datetime-fg-mode--content: "Premier plan";
+    --psp-label--datetime-bg-mode--content: "Arrière-plan";
+    --psp-label--fg-color--content: "Premier plan";
+    --psp-label--bg-color--content: "Arrière-plan";
+    --psp-label--fg-palette--content: "Premier plan";
+    --psp-label--bg-palette--content: "Arrière-plan";
     --psp-label--series--content: "Série";
     --psp-label--color-range--content: "Gamme de couleurs";
     --psp-label--style--content: "Style";
@@ -148,6 +153,21 @@ perspective-viewer {
     /* Plugin settings */
     --psp-label--edit-mode--content: "Mode édition";
     --psp-label--scroll-lock--content: "Verrouillage du défilement";
+    --psp-label--column-menus--content: "Menus de colonne";
+    --psp-label--group-font--content: "Police";
+    --psp-label--group-rows--content: "Lignes";
+    --psp-label--link--content: "Lien";
+    --psp-label--font-family--content: "Famille de police";
+    --psp-label--font-size--content: "Taille de police";
+    --psp-label--request-local-fonts--content: "Polices locales";
+    --psp-label--local-fonts-blocked--content: "Polices locales bloquées";
+    --psp-label--request-local-fonts-title--content: "Autoriser l'accès aux polices installées sur cet appareil";
+    --psp-label--local-fonts-blocked-title--content: "L'accès aux polices locales est bloqué pour ce site. Autorisez-le dans les paramètres du site du navigateur pour les afficher ici.";
+    --psp-label--word-wrap--content: "Retour à la ligne";
+    --psp-label--align--content: "Alignement";
+    --psp-label--row-height--content: "Hauteur de ligne";
+    --psp-label--zebra-rows--content: "Lignes zébrées";
+    --psp-label--zebra-color--content: "Couleur zébrée";
     --psp-label--chart-type--content: "Type de glyphe";
 
     /* Plugin settings — viewer-charts */
@@ -189,6 +209,7 @@ perspective-viewer {
     --psp-label--group-legend--content: "Légende";
     --psp-label--group-tooltip--content: "Info-bulles";
     --psp-label--group-color--content: "Couleur";
+    --psp-label--group-column--content: "Colonne";
     --psp-label--group-format--content: "Format";
     --psp-label--column-size-override--content: "Largeur de colonne";
 }

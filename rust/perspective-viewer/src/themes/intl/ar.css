@@ -69,7 +69,6 @@ perspective-viewer {
     --psp-label--scroll-lock-alt-toggle--content: "تمرير محاذى";
 
     --psp-label--color--content: "اللون";
-    --psp-label--format--content: "التنسيق";
     --psp-label--timezone--content: "المنطقة الزمنية";
     --psp-label--date-style--content: "نمط التاريخ";
     --psp-label--time-style--content: "نمط الوقت";
@@ -77,8 +76,14 @@ perspective-viewer {
     --psp-label--number-bg-mode--content: "الخلفية";
     --psp-label--fg-colors--content: "المقدمة";
     --psp-label--bg-colors--content: "الخلفية";
-    --psp-label--datetime-color-mode--content: "اللون";
-    --psp-label--string-color-mode--content: "اللون";
+    --psp-label--string-fg-mode--content: "المقدمة";
+    --psp-label--string-bg-mode--content: "الخلفية";
+    --psp-label--datetime-fg-mode--content: "المقدمة";
+    --psp-label--datetime-bg-mode--content: "الخلفية";
+    --psp-label--fg-color--content: "المقدمة";
+    --psp-label--bg-color--content: "الخلفية";
+    --psp-label--fg-palette--content: "المقدمة";
+    --psp-label--bg-palette--content: "الخلفية";
     --psp-label--series--content: "السلسلة";
     --psp-label--color-range--content: "نطاق الألوان";
     --psp-label--style--content: "النمط";
@@ -117,6 +122,7 @@ perspective-viewer {
     --psp-label--group-legend--content: "مفتاح الرسم";
     --psp-label--group-tooltip--content: "التلميحات";
     --psp-label--group-color--content: "اللون";
+    --psp-label--group-column--content: "العمود";
     --psp-label--group-format--content: "التنسيق";
     --psp-label--column-size-override--content: "عرض العمود";
 
@@ -150,6 +156,21 @@ perspective-viewer {
 
     --psp-label--edit-mode--content: "وضع التحرير";
     --psp-label--scroll-lock--content: "قفل التمرير";
+    --psp-label--column-menus--content: "قوائم الأعمدة";
+    --psp-label--group-font--content: "الخط";
+    --psp-label--group-rows--content: "الصفوف";
+    --psp-label--link--content: "رابط";
+    --psp-label--font-family--content: "عائلة الخط";
+    --psp-label--font-size--content: "حجم الخط";
+    --psp-label--request-local-fonts--content: "الخطوط المحلية";
+    --psp-label--local-fonts-blocked--content: "الخطوط المحلية محظورة";
+    --psp-label--request-local-fonts-title--content: "السماح بالوصول إلى الخطوط المثبتة على هذا الجهاز";
+    --psp-label--local-fonts-blocked-title--content: "الوصول إلى الخطوط المحلية محظور لهذا الموقع. اسمح به في إعدادات الموقع بالمتصفح لعرضها هنا.";
+    --psp-label--word-wrap--content: "التفاف النص";
+    --psp-label--align--content: "المحاذاة";
+    --psp-label--row-height--content: "ارتفاع الصف";
+    --psp-label--zebra-rows--content: "صفوف متناوبة";
+    --psp-label--zebra-color--content: "لون التناوب";
     --psp-label--chart-type--content: "نوع الشكل";
 
     --psp-label--auto-alt-y-axis--content: "محور Y تلقائي";

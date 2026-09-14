@@ -53,8 +53,10 @@ extern "C" {
     #[wasm_bindgen(method, catch, js_name = column_config_schema)]
     pub fn _column_config_schema(this: &JsPerspectiveViewerPlugin, view_type: &str, group: Option<&str>, column_name: &str, current_value: &JsValue, view_config: &JsValue, column_stats: &JsValue) -> ApiResult<JsValue>;
 
+    /// The plugin-level settings schema as it applies to `current_value`, the
+    /// `plugin_config` state the schema should describe.
     #[wasm_bindgen(method, catch, js_name = plugin_config_schema)]
-    pub fn _plugin_config_schema(this: &JsPerspectiveViewerPlugin, view_config: &JsValue) -> ApiResult<JsValue>;
+    pub fn _plugin_config_schema(this: &JsPerspectiveViewerPlugin, view_config: &JsValue, current_value: &JsValue) -> ApiResult<JsValue>;
 
     /// STATE TRANSFER, not rendering (dispatch semantics, rule for
     /// `restore`/`save`): deliver a `plugin_config` + `columns_config`

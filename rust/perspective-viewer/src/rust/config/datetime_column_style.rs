@@ -10,13 +10,11 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-mod color_mode;
 mod custom;
 mod custom_format;
 mod simple;
 mod simple_format;
 
-pub use color_mode::*;
 pub use custom::*;
 pub use custom_format::*;
 use serde::{Deserialize, Serialize};
@@ -65,13 +63,4 @@ pub struct DatetimeColumnStyleConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional, as = "Option<_>")]
     pub date_format: Option<DatetimeFormatType>,
-
-    #[serde(default)]
-    #[serde(skip_serializing_if = "DatetimeColorMode::is_none")]
-    pub datetime_color_mode: DatetimeColorMode,
-
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(skip)]
-    pub color: Option<String>,
 }

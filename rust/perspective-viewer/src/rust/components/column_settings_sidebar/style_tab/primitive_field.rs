@@ -36,7 +36,7 @@ use crate::utils::{
     canonicalize_css_color, gradient_to_css, palette_name_for,
 };
 
-fn emit(on_change: &Callback<ColumnConfigFieldUpdate>, key: &str, value: Option<Value>) {
+pub(super) fn emit(on_change: &Callback<ColumnConfigFieldUpdate>, key: &str, value: Option<Value>) {
     let mut map = serde_json::Map::new();
     if let Some(v) = value {
         map.insert(key.to_owned(), v);

@@ -210,6 +210,17 @@
             background-color: transparent;
         }
 
+        span#status.pending {
+            background-color: var(--psp-inactive--color);
+            mask-image: var(--psp-icon--status-pending--mask-image);
+            -webkit-mask-image: var(--psp-icon--status-pending--mask-image);
+            &:before {
+                visibility: hidden;
+                content: var(--psp-icon--status-pending--mask-image);
+                line-height: 0;
+            }
+        }
+
         span#status.connected,
         span#status.updating {
             mask-image: var(--psp-icon--status-ok--mask-image);

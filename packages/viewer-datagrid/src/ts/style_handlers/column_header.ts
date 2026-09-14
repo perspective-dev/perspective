@@ -34,15 +34,17 @@ export function style_selected_column(
 
     const len = group_header_trs.length;
     const settings_open = viewer.hasAttribute("settings");
+
+    const name_row = model._config.split_by.length;
+    const has_menu_row = len === name_row + 2;
     if (len <= 1) {
         group_header_trs[0]?.removeAttribute("id");
     } else {
         group_header_trs.forEach((tr, i) => {
-            const offset = settings_open ? 1 : 0;
             const id =
-                i === len - (offset + 1)
+                i === name_row
                     ? "psp-column-titles"
-                    : i === len - offset
+                    : has_menu_row && i === name_row + 1
                       ? "psp-column-edit-buttons"
                       : null;
             id ? tr.setAttribute("id", id) : tr.removeAttribute("id");
@@ -50,41 +52,37 @@ export function style_selected_column(
     }
 
     viewer.classList.toggle("psp-menu-open", !!selectedColumn);
-    if (settings_open && len >= 2) {
+    if (settings_open && name_row < len) {
         const titles = Array.from(
-            group_header_trs[len - 2].children,
+            group_header_trs[name_row].children,
         ) as HTMLElement[];
-        const editBtns = Array.from(
-            group_header_trs[len - 1].children,
-        ) as HTMLElement[];
-        if (titles && editBtns) {
-            group_header_trs.slice(0, len - 2).forEach((tr) => {
-                Array.from(tr.children).forEach((th) => {
-                    th.classList.toggle("psp-menu-open", false);
-                });
+        const editBtns = has_menu_row
+            ? (Array.from(
+                  group_header_trs[name_row + 1].children,
+              ) as HTMLElement[])
+            : [];
+
+        group_header_trs.slice(0, name_row).forEach((tr) => {
+            Array.from(tr.children).forEach((th) => {
+                th.classList.toggle("psp-menu-open", false);
             });
+        });
 
-            for (let i = 0; i < titles.length; i++) {
-                const title = titles[i];
-                const editBtn = editBtns[i];
+        for (let i = 0; i < titles.length; i++) {
+            const open = titles[i].textContent === selectedColumn;
+            titles[i].classList.toggle("psp-menu-open", open);
+            editBtns[i]?.classList.toggle("psp-menu-open", open);
+        }
 
-                const open = title.textContent === selectedColumn;
-                title.classList.toggle("psp-menu-open", open);
-                editBtn.classList.toggle("psp-menu-open", open);
-                if (model._config.columns.length > 1) {
-                    for (const r of regularTable.querySelectorAll("td")) {
-                        const meta = regularTable.getMeta(r);
-                        if (!meta?.column_header) {
-                            continue;
-                        }
-
-                        const isOpen =
-                            meta.column_header[
-                                meta.column_header.length - 2
-                            ] === selectedColumn;
-                        r.classList.toggle("psp-menu-open", isOpen);
-                    }
+        if (model._config.columns.length > 1) {
+            for (const r of regularTable.querySelectorAll("td")) {
+                const meta = regularTable.getMeta(r);
+                if (!meta?.column_header) {
+                    continue;
                 }
+
+                const isOpen = meta.column_header[name_row] === selectedColumn;
+                r.classList.toggle("psp-menu-open", isOpen);
             }
         }
     }
@@ -218,8 +216,7 @@ export function styleColumnHeaderRow(
         // Apply menu-open for selected column
         if (model._config.columns.length > 1 && selectedColumn) {
             const isOpen =
-                metadata.column_header?.[metadata.column_header.length - 2] ===
-                selectedColumn;
+                metadata.column_header?.[split_by_len] === selectedColumn;
             td.classList.toggle("psp-menu-open", isOpen);
         }
     }

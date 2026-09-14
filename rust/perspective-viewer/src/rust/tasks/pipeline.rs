@@ -251,6 +251,18 @@ pub(crate) async fn locked_run(
             let view_config_snapshot = session.get_view_config().clone();
             let plugin_config_changed =
                 renderer.update_plugin_config(&view_config_snapshot, spec.plugin_config)?;
+            let plugin_config_snapshot = renderer.get_plugin_config();
+            let plugin_update =
+                JsValue::from_serde_ext(&plugin_config_snapshot).unwrap_or(JsValue::NULL);
+
+            let plugin_restored = plugin_config_changed || plugin_swapped;
+            if plugin_restored {
+                let columns_config = renderer
+                    .all_columns_configs_materialized(&view_config_snapshot, &session)
+                    .await;
+                plugin.restore(&plugin_update, Some(&columns_config))?;
+            }
+
             let columns_config_changed = renderer.update_columns_configs(
                 &view_config_snapshot,
                 &session,
@@ -258,17 +270,16 @@ pub(crate) async fn locked_run(
             )?;
 
             let changed = plugin_config_changed || columns_config_changed;
-            if changed || plugin_swapped {
-                let plugin_config_snapshot = renderer.get_plugin_config();
-                let plugin_update =
-                    JsValue::from_serde_ext(&plugin_config_snapshot).unwrap_or(JsValue::NULL);
+            if columns_config_changed {
                 let columns_config = renderer
                     .all_columns_configs_materialized(&view_config_snapshot, &session)
                     .await;
                 plugin.restore(&plugin_update, Some(&columns_config))?;
-                if plugin_config_changed {
-                    renderer.plugin_config_changed.emit(plugin_config_snapshot);
-                }
+                renderer.columns_config_changed.emit(columns_config);
+            }
+
+            if plugin_config_changed {
+                renderer.plugin_config_changed.emit(plugin_config_snapshot);
             }
 
             if spec

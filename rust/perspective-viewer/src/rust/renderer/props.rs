@@ -14,6 +14,7 @@ use std::rc::Rc;
 
 use crate::config::PluginStaticConfig;
 use crate::renderer::limits::RenderLimits;
+use crate::renderer::plugin_config::ColumnConfigMap;
 use crate::utils::PtrEqRc;
 
 /// Value-semantic snapshot of the renderer state read by components.
@@ -50,6 +51,10 @@ pub struct RendererProps {
     /// the interior-mutable handle, no manual PubSub subscription, no
     /// race window between `plugins_idx` swap and the schema query.
     pub plugin_config: PtrEqRc<serde_json::Map<String, serde_json::Value>>,
+
+    /// Snapshot of the active plugin's `columns_config` bucket, re-read by
+    /// `Renderer::to_props` on `columns_config_changed` and `plugin_changed`.
+    pub columns_config: PtrEqRc<ColumnConfigMap>,
 }
 
 impl RendererProps {

@@ -108,6 +108,14 @@ where
     pub fn new_throttled<U: Future<Output = ApiResult<T>> + 'static>(x: U) -> ApiFuture<()> {
         ApiFuture::<()>::new(async move { x.await.ignore_view_delete().map(|_| ()) })
     }
+
+    pub fn new_pure(t: T) -> ApiFuture<T> {
+        ApiFuture::<T>::new(async move { Ok(t) })
+    }
+
+    pub fn new_err<E: Into<ApiError> + 'static>(err: E) -> ApiFuture<T> {
+        ApiFuture::<T>::new(async move { Err(err.into()) })
+    }
 }
 
 impl<T> ApiFuture<T>

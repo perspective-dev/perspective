@@ -150,7 +150,13 @@ async fn bind_pending(
                     return Ok(());
                 };
 
-                super::restore_panel::bind_table_task(&session, &workspace, name).await
+                super::restore_panel::bind_table_task(
+                    &session,
+                    &workspace,
+                    name,
+                    crate::session::MissingTable::Pend,
+                )
+                .await
             }
         },
     )

@@ -43,9 +43,11 @@ function PerspectiveViewerImpl(props: PerspectiveViewerProps) {
             }
 
             if ("panels" in props.config) {
-                await viewer.restoreWorkspace(props.config);
+                await viewer.restoreWorkspace(props.config, {
+                    wait_for_table: true,
+                });
             } else {
-                await viewer.restore(props.config);
+                await viewer.restore(props.config, { wait_for_table: true });
             }
         })();
 

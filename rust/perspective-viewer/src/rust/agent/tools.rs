@@ -22,7 +22,7 @@ use wasm_bindgen::prelude::*;
 
 use super::client::protocol::{FunctionDef, ToolDef};
 use super::docs::{DocsBundle, DocsCell};
-use crate::config::{ColumnConfigSchema, ControlSpec};
+use crate::config::{Alignment, ColumnConfigSchema, ControlSpec};
 use crate::custom_elements::viewer::PerspectiveViewerElement;
 use crate::queries::{
     get_column_config_schema, get_plugin_config_schema, get_viewer_config, validate_expr,
@@ -628,6 +628,78 @@ fn control_schema_entries(spec: &ControlSpec) -> Vec<(String, Value)> {
         ControlSpec::String { key, default, .. } => {
             vec![(key.clone(), json!({ "type": "string", "default": default }))]
         },
+        ControlSpec::Font {
+            key,
+            default,
+            size,
+            bold,
+            italic,
+        } => {
+            let mut out = vec![(
+                key.clone(),
+                json!({
+                    "type": "string",
+                    "description": "A CSS font family: a generic keyword (`inherit`, `monospace`, `sans-serif`, `serif`, `system-ui`) or an installed font name",
+                    "default": default,
+                }),
+            )];
+
+            if let Some(size) = size {
+                let mut node = json!({
+                    "type": "number",
+                    "description": "Font size in CSS pixels",
+                    "default": size.default,
+                });
+
+                if let Some(min) = size.min {
+                    node["minimum"] = json!(min);
+                }
+
+                if let Some(max) = size.max {
+                    node["maximum"] = json!(max);
+                }
+
+                out.push((size.key.clone(), node));
+            }
+
+            for (toggle, description) in [(bold, "Bold text"), (italic, "Italic text")] {
+                if let Some(toggle) = toggle {
+                    out.push((
+                        toggle.key.clone(),
+                        json!({ "type": "boolean", "description": description, "default": toggle.default }),
+                    ));
+                }
+            }
+
+            out
+        },
+        ControlSpec::Alignment {
+            key,
+            default,
+            corners,
+        } => {
+            let cells: &[Alignment] = if *corners {
+                &Alignment::CORNERS
+            } else {
+                &Alignment::ALL
+            };
+
+            let mut node = json!({
+                "type": "string",
+                "enum": cells.iter().map(|x| x.as_str()).collect::<Vec<_>>(),
+                "description": if *corners {
+                    "Anchor corner of a 3×3 grid: `top-left`, `top-right`, `bottom-left` or `bottom-right`"
+                } else {
+                    "Anchor cell of a 3×3 grid: a corner `top-left|top-right|bottom-left|bottom-right`, an edge `top|left|right|bottom`, or `center`"
+                },
+            });
+
+            if let Some(default) = default {
+                node["default"] = json!(default.as_str());
+            }
+
+            vec![(key.clone(), node)]
+        },
         ControlSpec::Color { key, default } => vec![(
             key.clone(),
             json!({
@@ -682,10 +754,6 @@ fn control_schema_entries(spec: &ControlSpec) -> Vec<(String, Value)> {
         ControlSpec::DatetimeFormat { .. } => vec![(
             "date_format".to_owned(),
             json!({ "description": "Datetime display format: a style preset or custom format fields" }),
-        )],
-        ControlSpec::StringFormat => vec![(
-            "format".to_owned(),
-            json!({ "description": "String display format" }),
         )],
         ControlSpec::NumberSeriesStyle { .. } => vec![
             (
@@ -977,7 +1045,7 @@ impl PerspectiveViewerElement {
 
         let before = self.agent_panel_names();
         let js_config = js_sys::JSON::parse(&args.config.to_string())?;
-        let added = self.addPanel(js_config.unchecked_into());
+        let added = self.addPanel(js_config.unchecked_into(), None);
         let result = wasm_bindgen_futures::JsFuture::from(js_sys::Promise::from(added)).await;
         let id = match result {
             Ok(id) => id
@@ -1048,7 +1116,12 @@ impl PerspectiveViewerElement {
         let columns_config = serde_json::to_value(&viewer_config.columns_config)?;
         let plugin_schema = {
             let view_config = panel.session.get_view_config();
-            get_plugin_config_schema(&panel.renderer, &view_config).ok()
+            get_plugin_config_schema(
+                &panel.renderer,
+                &view_config,
+                Some(&viewer_config.panel.plugin_config),
+            )
+            .ok()
         };
 
         let column_schema = match &args.column {

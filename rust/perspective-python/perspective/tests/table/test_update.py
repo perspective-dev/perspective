@@ -22,19 +22,44 @@ Table = client.table
 
 
 class TestUpdate(object):
-    @mark.skip(reason="Fix for null values update yet to be implemented")
     def test_update_with_missing_or_null_values(self):
-        tbl = Table([{"a": "1", "b": "2"}, {"a": "3", "b": "4"}], index="a")
+        tbl = Table({"a": "string", "b": "string"}, index="a")
+        tbl.update([{"a": "1", "b": "2"}, {"a": "3", "b": "4"}])
         tbl.update([{"a": "1", "b": None}])
         assert tbl.view().to_records() == [{"a": "1", "b": None}, {"a": "3", "b": "4"}]
 
-        data = pd.DataFrame({"a": ["1"], "b": [None]})
+        tbl.update([{"a": "1", "b": "2"}])
+        assert tbl.view().to_records() == [{"a": "1", "b": "2"}, {"a": "3", "b": "4"}]
 
-        arrow_table = pa.Table.from_pandas(data, preserve_index=False)
-
-        tbl.update(arrow_table)
+        tbl.update(pd.DataFrame({"a": ["1"], "b": [None]}))
         assert tbl.size() == 2
-        assert tbl.view().to_records() == [{"a": "1", "b": ""}, {"a": "3", "b": "4"}]
+        assert tbl.view().to_records() == [{"a": "1", "b": None}, {"a": "3", "b": "4"}]
+
+    def test_update_arrow_null_type_column_over_numeric(self):
+        tbl = Table({"a": "string", "b": "float"}, index="a")
+        tbl.update([{"a": "1", "b": 2.5}, {"a": "3", "b": 4.5}])
+        tbl.update(pd.DataFrame({"a": ["1"], "b": [None]}))
+        assert tbl.view().to_records() == [{"a": "1", "b": None}, {"a": "3", "b": 4.5}]
+
+    def test_update_arrow_null_type_column_multi_batch(self):
+        tbl = Table({"a": "string", "b": "string"}, index="a")
+        tbl.update([{"a": str(i), "b": "v{}".format(i)} for i in range(4)])
+        batches = [
+            pa.record_batch({"a": pa.array(["0", "1"]), "b": pa.nulls(2)}),
+            pa.record_batch({"a": pa.array(["2", "3"]), "b": pa.nulls(2)}),
+        ]
+        stream = pa.BufferOutputStream()
+        writer = pa.RecordBatchStreamWriter(stream, batches[0].schema)
+        for batch in batches:
+            writer.write_batch(batch)
+        writer.close()
+        tbl.update(stream.getvalue().to_pybytes())
+        assert tbl.view().to_records() == [
+            {"a": "0", "b": None},
+            {"a": "1", "b": None},
+            {"a": "2", "b": None},
+            {"a": "3", "b": None},
+        ]
 
     def test_update_from_schema(self):
         tbl = Table({"a": "string", "b": "integer"})

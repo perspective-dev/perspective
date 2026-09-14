@@ -56,6 +56,16 @@ function bindPortSharedWorker(msg: MessageEvent) {
     port.start();
 }
 
+/**
+ * Provided by `@perspective-dev/esbuild-plugin/worker`, which replaces this
+ * module with a stub when it is imported (rather than built as an entry
+ * point). Constructs a `Worker` from the bundled source, or falls back to
+ * running it on the main thread and returns a `MessagePort` to it.
+ */
+export declare function initialize(
+    opts?: WorkerOptions,
+): Promise<Worker | MessagePort>;
+
 // @ts-expect-error wrong scope
 self.addEventListener("connect", bindPortSharedWorker);
 self.addEventListener(

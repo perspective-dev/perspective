@@ -108,11 +108,10 @@
                 "aggregate_depth": 1
             },
             "status": {
-                "string_color_mode": "series",
-                "color": "#94aa27"
+                "string_bg_mode": "series"
             },
             "side": {
-                "string_color_mode": "series"
+                "string_bg_mode": "series"
             }
         },
         "plugin": "Datagrid",

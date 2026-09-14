@@ -13,7 +13,8 @@
 
 :host {
     #format-tab {
-        overflow: auto;
+        overflow-y: auto;
+        overflow-x: hidden;
         scrollbar-gutter: stable;
     }
 

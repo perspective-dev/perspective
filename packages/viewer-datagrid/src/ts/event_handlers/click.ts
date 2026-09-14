@@ -37,10 +37,6 @@ export function createKeydownListener(
                 selected_position_map,
                 keyEvent,
             );
-        } else {
-            console.debug(
-                `Mode ${model._edit_mode} for "keydown" event not yet implemented`,
-            );
         }
     };
 }

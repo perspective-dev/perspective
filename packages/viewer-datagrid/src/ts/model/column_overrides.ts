@@ -10,110 +10,103 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColumnOverrides, DatagridPluginElement } from "../types.js";
+import type { RegularTableElement } from "regular-table";
+import type {
+    ColumnConfig,
+    ColumnsConfig,
+    DatagridModel,
+    DatagridPluginElement,
+} from "../types.js";
 
-interface RegularTableWithOverrides {
-    restoreColumnSizes(overrides: Record<number, number | undefined>): void;
-    saveColumnSizes(): Record<number, number | undefined>;
-}
-
-interface DatagridPluginWithCache extends DatagridPluginElement {
-    _cached_column_sizes?: ColumnOverrides;
-}
+type LiveOverrides = Record<number, number | undefined>;
 
 /**
- * Restore a saved column width override token.
- *
- * @param old_sizes An object previously returned by a call to
- * `save_column_size_overrides()`
- * @param cache A flag indicating whether this value should
- * be cached so a future `resetAutoSize()` call does not clear it.
+ * Reconcile `regular-table`'s override entries for columns `[x0, x1)` with
+ * the path-keyed truth and return the live map.
  */
-export function restore_column_size_overrides(
-    this: DatagridPluginWithCache,
-    old_sizes: ColumnOverrides,
-    cache = false,
-): void {
-    if (cache) {
-        this._cached_column_sizes = old_sizes;
+export function reconcile_column_widths(
+    model: DatagridModel,
+    regular_table: RegularTableElement,
+    x0: number,
+    x1: number,
+): LiveOverrides {
+    const live: LiveOverrides = regular_table.saveColumnSizes();
+    if (model._config.split_by.length > 0) {
+        return live;
     }
 
-    if (!this._initialized) {
-        return;
-    }
-
-    const regular_table = this.regular_table as RegularTableWithOverrides;
-    const overrides: Record<number, number | undefined> = {
-        ...regular_table.saveColumnSizes(),
-    };
-    const { group_by } = this.model!._config;
-    const tree_header_offset = group_by?.length > 0 ? group_by.length + 1 : 0;
-
-    for (const key of Object.keys(old_sizes)) {
-        if (key === "__ROW_PATH__") {
-            overrides[tree_header_offset - 1] = old_sizes[key] as
-                | number
-                | undefined;
+    const truth = model._column_overrides;
+    const projected = model._projected;
+    const offset = model._num_row_headers;
+    const end = Math.min(x1, model._column_paths.length);
+    let dirty = false;
+    const write = (size_key: number, px: number | undefined) => {
+        if (px === undefined) {
+            delete live[size_key];
         } else {
-            const index = this.model!._column_paths.indexOf(key);
+            live[size_key] = px;
+        }
 
-            // Skip keys that don't resolve to a known column — e.g. on the
-            // first draw after `activate`, `_column_paths` has not yet been
-            // populated by the data listener, so we leave any existing
-            // `regular-table` widths untouched rather than clobbering them
-            // with garbage indices.
-            if (index === -1) {
-                continue;
+        dirty = true;
+    };
+
+    for (let index = x0; index < end; index++) {
+        const path = model._column_paths[index];
+        if (path === undefined) {
+            continue;
+        }
+
+        const size_key = offset + index;
+        const live_px = live[size_key];
+        const base = projected.get(size_key);
+        const want = truth.get(path);
+        if (base !== undefined && base.path === path && live_px !== base.px) {
+            if (live_px === undefined) {
+                truth.delete(path);
+            } else {
+                truth.set(path, live_px);
             }
 
-            overrides[index + tree_header_offset] = old_sizes[key] as
-                | number
-                | undefined;
+            model._unpersisted_widths.add(path);
+            projected.set(size_key, { path, px: live_px });
+        } else {
+            if (want !== live_px) {
+                write(size_key, want);
+            }
+
+            projected.set(size_key, { path, px: want });
         }
     }
 
-    regular_table.restoreColumnSizes(overrides);
+    if (dirty) {
+        regular_table.restoreColumnSizes(live as Record<number, number>);
+    }
+
+    return live;
 }
 
 /**
- * Extract the current user-overriden column widths from
- * `regular-table`. This function depends on the internal
- * implementation of `regular-table` and may break!
- *
- * @returns An Object-as-dictionary keyed by column_path string, and
- * valued by the column's user-overridden pixel width.
+ * The `columns_config` delta echoed to the host after a gesture: each of
+ * `paths` with its full config and current override.
  */
-export function save_column_size_overrides(
-    this: DatagridPluginWithCache,
-): ColumnOverrides {
-    if (!this._initialized) {
-        return {};
-    }
+export function width_config_delta(
+    elem: DatagridPluginElement,
+    paths: Iterable<string>,
+): ColumnsConfig {
+    const out: ColumnsConfig = {};
+    for (const path of paths) {
+        const config: ColumnConfig = structuredClone(
+            elem._columns_config[path] ?? {},
+        );
 
-    if (this._cached_column_sizes) {
-        const x = this._cached_column_sizes;
-        this._cached_column_sizes = undefined;
-        return x;
-    }
-
-    const overrides = (
-        this.regular_table as RegularTableWithOverrides
-    ).saveColumnSizes();
-    const { group_by } = this.model!._config;
-    const tree_header_offset = group_by?.length > 0 ? group_by.length + 1 : 0;
-
-    const old_sizes: ColumnOverrides = {};
-    for (const key of Object.keys(overrides)) {
-        const numKey = Number(key);
-        if (overrides[numKey] !== undefined) {
-            const index = numKey - tree_header_offset;
-            if (index > -1) {
-                old_sizes[this.model!._column_paths[index]] = overrides[numKey];
-            } else if (index === -1) {
-                old_sizes["__ROW_PATH__"] = overrides[numKey];
-            }
+        delete config.column_size_override;
+        const px = elem._column_overrides.get(path);
+        if (px !== undefined) {
+            config.column_size_override = px;
         }
+
+        out[path] = config;
     }
 
-    return old_sizes;
+    return out;
 }

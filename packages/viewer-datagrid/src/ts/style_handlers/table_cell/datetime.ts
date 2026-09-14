@@ -14,51 +14,45 @@ import { CellMetadata } from "regular-table/dist/esm/types.js";
 import {
     rgbaToRgb,
     infer_foreground_from_background,
+    type RGB,
 } from "../../color_utils.js";
 import type { DatagridModel, ColumnConfig, ColorRecord } from "../../types.js";
 
-interface PluginWithColor extends Omit<ColumnConfig, "color"> {
-    color?: ColorRecord;
+interface PluginWithColor extends Omit<ColumnConfig, "fg_color" | "bg_color"> {
+    fg_color?: ColorRecord;
+    bg_color?: ColorRecord;
 }
 
+/** Apply a datetime column's foreground and background modes independently. */
 export function cell_style_datetime(
     model: DatagridModel,
-    plugin: PluginWithColor,
+    plugin: PluginWithColor | undefined,
     td: HTMLElement,
     metadata: CellMetadata,
 ): void {
-    const colorRecord: ColorRecord = (() => {
-        if (plugin?.color !== undefined) {
-            return plugin.color;
-        } else {
-            return model._color;
+    let color = "";
+    let background = "";
+    if (
+        // @ts-ignore
+        !metadata._is_hidden_by_aggregate_depth &&
+        metadata.user !== null
+    ) {
+        if (plugin?.datetime_bg_mode === "color") {
+            const [hex, r, g, b] = plugin.bg_color ?? model._color;
+            background = hex;
+            if (plugin.datetime_fg_mode !== "color") {
+                const source = model._plugin_background as RGB;
+                color = infer_foreground_from_background(
+                    rgbaToRgb([r, g, b, 1], source),
+                );
+            }
         }
-    })();
 
-    const [hex, r, g, b] = colorRecord;
-
-    // @ts-ignore
-    if (metadata._is_hidden_by_aggregate_depth) {
-        td.style.backgroundColor = "";
-        td.style.color = "";
-    } else if (
-        plugin?.datetime_color_mode === "foreground" &&
-        metadata.user !== null
-    ) {
-        td.style.color = hex;
-        td.style.backgroundColor = "";
-    } else if (
-        plugin?.datetime_color_mode === "background" &&
-        metadata.user !== null
-    ) {
-        const source = model._plugin_background as [number, number, number];
-        const foreground = infer_foreground_from_background(
-            rgbaToRgb([r, g, b, 1], source),
-        );
-        td.style.color = foreground;
-        td.style.backgroundColor = hex;
-    } else {
-        td.style.backgroundColor = "";
-        td.style.color = "";
+        if (plugin?.datetime_fg_mode === "color") {
+            color = (plugin.fg_color ?? model._color)[0];
+        }
     }
+
+    td.style.color = color;
+    td.style.backgroundColor = background;
 }

@@ -56,6 +56,7 @@ perspective-viewer-tab {
     --psp-icon--updating--mask-image: url("../svg/updating.gif");
     --psp-icon--downloading--mask-image: url("../svg/downloading.gif");
     --psp-icon--status-ok--mask-image: url(../svg/status_ok.svg);
+    --psp-icon--status-pending--mask-image: url(../svg/status_pending.svg);
     --psp-icon--export--mask-image: url("../svg/export-icon.svg");
     --psp-icon--free-scroll--mask-image: url("../svg/free-scroll-icon.svg");
     --psp-icon--lock--mask-image: url("../svg/lock.svg");

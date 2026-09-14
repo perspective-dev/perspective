@@ -351,6 +351,7 @@ impl Component for PortalModal {
                 if ctx.props().own_focus {
                     self.host.set_attribute("tabindex", "0").unwrap();
                     self.setup_dismiss_handlers(ctx);
+                    let _ = self.host.focus();
                 }
 
                 let link = ctx.link().clone();

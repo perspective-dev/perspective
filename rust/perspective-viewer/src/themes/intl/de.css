@@ -74,7 +74,6 @@ perspective-viewer {
 
     /* Column Settings */
     --psp-label--color--content: "Farbe";
-    --psp-label--format--content: "Format";
     --psp-label--timezone--content: "Zeitzone";
     --psp-label--date-style--content: "Datumsstil";
     --psp-label--time-style--content: "Zeitstil";
@@ -82,8 +81,14 @@ perspective-viewer {
     --psp-label--number-bg-mode--content: "Hintergrund";
     --psp-label--fg-colors--content: "Vordergrund";
     --psp-label--bg-colors--content: "Hintergrund";
-    --psp-label--datetime-color-mode--content: "Farbe";
-    --psp-label--string-color-mode--content: "Farbe";
+    --psp-label--string-fg-mode--content: "Vordergrund";
+    --psp-label--string-bg-mode--content: "Hintergrund";
+    --psp-label--datetime-fg-mode--content: "Vordergrund";
+    --psp-label--datetime-bg-mode--content: "Hintergrund";
+    --psp-label--fg-color--content: "Vordergrund";
+    --psp-label--bg-color--content: "Hintergrund";
+    --psp-label--fg-palette--content: "Vordergrund";
+    --psp-label--bg-palette--content: "Hintergrund";
     --psp-label--series--content: "Serie";
     --psp-label--color-range--content: "Farbspektrum";
     --psp-label--style--content: "Stil";
@@ -148,6 +153,21 @@ perspective-viewer {
     /* Plugin settings */
     --psp-label--edit-mode--content: "Bearbeitungsmodus";
     --psp-label--scroll-lock--content: "Bildlaufsperre";
+    --psp-label--column-menus--content: "Spaltenmenüs";
+    --psp-label--group-font--content: "Schrift";
+    --psp-label--group-rows--content: "Zeilen";
+    --psp-label--link--content: "Link";
+    --psp-label--font-family--content: "Schriftfamilie";
+    --psp-label--font-size--content: "Schriftgröße";
+    --psp-label--request-local-fonts--content: "Lokale Schriften";
+    --psp-label--local-fonts-blocked--content: "Lokale Schriften blockiert";
+    --psp-label--request-local-fonts-title--content: "Zugriff auf die auf diesem Gerät installierten Schriften erlauben";
+    --psp-label--local-fonts-blocked-title--content: "Der Zugriff auf lokale Schriften ist für diese Website blockiert. Erlauben Sie ihn in den Website-Einstellungen des Browsers, um sie hier aufzulisten.";
+    --psp-label--word-wrap--content: "Zeilenumbruch";
+    --psp-label--align--content: "Ausrichtung";
+    --psp-label--row-height--content: "Zeilenhöhe";
+    --psp-label--zebra-rows--content: "Zebra-Zeilen";
+    --psp-label--zebra-color--content: "Zebra-Farbe";
     --psp-label--chart-type--content: "Glyphentyp";
 
     /* Plugin settings — viewer-charts */
@@ -189,6 +209,7 @@ perspective-viewer {
     --psp-label--group-legend--content: "Legende";
     --psp-label--group-tooltip--content: "Tooltips";
     --psp-label--group-color--content: "Farbe";
+    --psp-label--group-column--content: "Spalte";
     --psp-label--group-format--content: "Format";
     --psp-label--column-size-override--content: "Spaltenbreite";
 }

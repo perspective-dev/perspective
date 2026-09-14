@@ -51,6 +51,9 @@ pub fn send_column_config(
         renderer
             .update_lazy(async move { Ok(session.get_view_with_dimensions()) })
             .await?;
+        renderer
+            .columns_config_changed
+            .emit(columns_configs.clone());
         renderer.column_style_changed.emit(columns_configs);
         Ok(())
     })

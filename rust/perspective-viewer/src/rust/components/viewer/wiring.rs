@@ -304,12 +304,21 @@ pub(super) fn create_active_subscriptions(
             }
         });
 
+        let cb_columns_config = ctx.link().callback({
+            let renderer = renderer.clone();
+            move |_: ColumnConfigMap| UpdateRenderer(Box::new(renderer.to_props(None)))
+        });
+
         let sub1 = renderer.plugin_changed.add_listener(cb_plugin);
         let sub2 = renderer
             .plugin_config_changed
             .add_listener(cb_plugin_config);
 
-        vec![sub1, sub2]
+        let sub3 = renderer
+            .columns_config_changed
+            .add_listener(cb_columns_config);
+
+        vec![sub1, sub2, sub3]
     };
 
     let mut subscriptions = Vec::new();

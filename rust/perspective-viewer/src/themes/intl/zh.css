@@ -74,7 +74,6 @@ perspective-viewer {
 
     /* Column Settings */
     --psp-label--color--content: "颜色";
-    --psp-label--format--content: "格式";
     --psp-label--timezone--content: "时区";
     --psp-label--date-style--content: "日期样式";
     --psp-label--time-style--content: "时间风格";
@@ -82,8 +81,14 @@ perspective-viewer {
     --psp-label--number-bg-mode--content: "背景";
     --psp-label--fg-colors--content: "前景";
     --psp-label--bg-colors--content: "背景";
-    --psp-label--datetime-color-mode--content: "颜色";
-    --psp-label--string-color-mode--content: "颜色";
+    --psp-label--string-fg-mode--content: "前景";
+    --psp-label--string-bg-mode--content: "背景";
+    --psp-label--datetime-fg-mode--content: "前景";
+    --psp-label--datetime-bg-mode--content: "背景";
+    --psp-label--fg-color--content: "前景";
+    --psp-label--bg-color--content: "背景";
+    --psp-label--fg-palette--content: "前景";
+    --psp-label--bg-palette--content: "背景";
     --psp-label--series--content: "系列";
     --psp-label--color-range--content: "颜色范围";
     --psp-label--style--content: "样式";
@@ -148,6 +153,21 @@ perspective-viewer {
     /* Plugin settings */
     --psp-label--edit-mode--content: "编辑模式";
     --psp-label--scroll-lock--content: "滚动锁定";
+    --psp-label--column-menus--content: "列菜单";
+    --psp-label--group-font--content: "字体";
+    --psp-label--group-rows--content: "行";
+    --psp-label--link--content: "链接";
+    --psp-label--font-family--content: "字体系列";
+    --psp-label--font-size--content: "字号";
+    --psp-label--request-local-fonts--content: "本地字体";
+    --psp-label--local-fonts-blocked--content: "本地字体已被阻止";
+    --psp-label--request-local-fonts-title--content: "允许访问此设备上安装的字体";
+    --psp-label--local-fonts-blocked-title--content: "此站点已阻止访问本地字体。请在浏览器的站点设置中允许访问，以便在此列出。";
+    --psp-label--word-wrap--content: "自动换行";
+    --psp-label--align--content: "对齐";
+    --psp-label--row-height--content: "行高";
+    --psp-label--zebra-rows--content: "斑马行";
+    --psp-label--zebra-color--content: "斑马色";
     --psp-label--chart-type--content: "图元类型";
 
     /* Plugin settings — viewer-charts */
@@ -189,6 +209,7 @@ perspective-viewer {
     --psp-label--group-legend--content: "图例";
     --psp-label--group-tooltip--content: "工具提示";
     --psp-label--group-color--content: "颜色";
+    --psp-label--group-column--content: "列";
     --psp-label--group-format--content: "格式";
     --psp-label--column-size-override--content: "列宽";
 }

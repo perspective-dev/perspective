@@ -12,16 +12,49 @@
 
 import { RegularTableElement } from "regular-table";
 
-export type ColumnAlignment = "left" | "right";
+export type TextAlignment = "left" | "right" | "center";
+export type VerticalAlignment = "top" | "middle" | "bottom";
+
+/** The resolved alignment of one column's cells. */
+export interface ColumnAlignment {
+    text: TextAlignment;
+    vertical: VerticalAlignment;
+}
+
+interface AlignmentRules {
+    /** `text-align`, on the column's header and body cells alike. */
+    text: CSSStyleRule;
+
+    /** `vertical-align`, on the column's `tbody` cells only. */
+    vertical: CSSStyleRule;
+    last: ColumnAlignment;
+}
 
 interface AlignmentSheetState {
     table: Element | undefined;
     scope: string | undefined;
     sheet: CSSStyleSheet;
-    rules: Map<number, { rule: CSSStyleRule; last: ColumnAlignment }>;
+    rules: Map<number, AlignmentRules>;
 }
 
 const STATE: WeakMap<RegularTableElement, AlignmentSheetState> = new WeakMap();
+
+const FLEX_PLACEMENT: Record<TextAlignment | VerticalAlignment, string> = {
+    left: "flex-start",
+    top: "flex-start",
+    center: "center",
+    middle: "center",
+    right: "flex-end",
+    bottom: "flex-end",
+};
+
+function text_declarations(align: ColumnAlignment): string {
+    return (
+        `text-align:${align.text};` +
+        `--psp-label-justify:${FLEX_PLACEMENT[align.text]};` +
+        `--psp-label-align:${FLEX_PLACEMENT[align.vertical]}`
+    );
+}
 
 /**
  * Column alignment via `regular-table`'s dedicated column classes
@@ -79,20 +112,42 @@ export function sync_column_alignment(
     for (const [size_key, align] of wanted) {
         let entry = state.rules.get(size_key);
         if (entry === undefined) {
+            const scope = state.scope;
             const index = state.sheet.cssRules.length;
             state.sheet.insertRule(
-                `.${state.scope} td.rt-col-${size_key}, .${state.scope} th.rt-col-${size_key}{text-align:${align}}`,
+                `.${scope} td.rt-col-${size_key}, .${scope} th.rt-col-${size_key}{${text_declarations(align)}}`,
                 index,
             );
 
+            state.sheet.insertRule(
+                `.${scope} tbody td.rt-col-${size_key}, .${scope} tbody th.rt-col-${size_key}{vertical-align:${align.vertical}}`,
+                index + 1,
+            );
+
             entry = {
-                rule: state.sheet.cssRules[index] as CSSStyleRule,
+                text: state.sheet.cssRules[index] as CSSStyleRule,
+                vertical: state.sheet.cssRules[index + 1] as CSSStyleRule,
                 last: align,
             };
 
             state.rules.set(size_key, entry);
-        } else if (entry.last !== align) {
-            entry.rule.style.textAlign = align;
+        } else {
+            if (entry.last.text !== align.text) {
+                entry.text.style.textAlign = align.text;
+                entry.text.style.setProperty(
+                    "--psp-label-justify",
+                    FLEX_PLACEMENT[align.text],
+                );
+            }
+
+            if (entry.last.vertical !== align.vertical) {
+                entry.vertical.style.verticalAlign = align.vertical;
+                entry.text.style.setProperty(
+                    "--psp-label-align",
+                    FLEX_PLACEMENT[align.vertical],
+                );
+            }
+
             entry.last = align;
         }
     }

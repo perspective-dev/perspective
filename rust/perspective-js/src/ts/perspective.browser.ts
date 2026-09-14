@@ -235,10 +235,6 @@ async function compilerize(
     disable_stage_0: boolean = false,
 ) {
     const wasm_buff = disable_stage_0 ? wasm : await load_wasm_stage_0(wasm);
-    // Compile to a `WebAssembly.Module` once so it can be both instantiated
-    // locally and forwarded to other workers via `getCompiledClientWasm()`.
-    // `WebAssembly.Module` is structured-cloneable across workers, so the
-    // recipient can instantiate without re-fetching or re-compiling.
     const compiled = await compile_module(wasm_buff);
     GLOBAL_CLIENT_MODULE = Promise.resolve(compiled);
     await wasm_module.default({ module_or_path: compiled });
@@ -342,24 +338,10 @@ function get_server() {
 let GLOBAL_WORKER: undefined | (() => Promise<Worker>) = undefined;
 
 // `WorkerPlugin` resolves this import to a stub that exports
-// `getPerspectiveWorkerURL(): Promise<string>`. The URL is either a
-// Blob URL (inline mode — production builds) or a real file path
-// resolved against `import.meta.url` (file mode — debug builds).
-// Constructing the `Worker` lives here in the consumer rather than
-// inside the plugin so the same module text can also be loaded
-// in-process via dynamic `import(url)` when a future caller wants
-// it; the plugin no longer owns Worker lifecycle.
-//
-// `initialize()` constructs `new Worker(blobUrl)` and falls back to
-// running the worker source on the main thread via `new Function(...)`
-// when Worker construction is unavailable (e.g. `file://` origins where
-// module-Worker support is gated). The shim it returns is
-// MessagePort-shaped so downstream code can treat it like a real
-// Worker.
-// @ts-ignore — resolved at build time by `@perspective-dev/esbuild-plugin/worker`
+// `getPerspectiveWorkerURL(): Promise<string>`.
 import { initialize as initializePerspectiveWorker } from "../../src/ts/perspective-server.worker.js";
 
-async function get_worker(): Promise<Worker> {
+async function get_worker(): Promise<Worker | MessagePort> {
     if (GLOBAL_WORKER === undefined) {
         return await initializePerspectiveWorker({
             type: "module",
@@ -375,7 +357,7 @@ export async function websocket(url: string | URL) {
 }
 
 export async function worker(
-    worker?: Promise<SharedWorker | ServiceWorker | Worker | MessagePort>,
+    worker?: Promise<SharedWorker | Worker | MessagePort>,
 ) {
     if (typeof worker === "undefined") {
         worker = get_worker();

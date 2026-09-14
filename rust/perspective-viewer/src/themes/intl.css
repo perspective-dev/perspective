@@ -74,7 +74,6 @@ perspective-viewer {
 
     /* Column Settings */
     --psp-label--color--content: "Color";
-    --psp-label--format--content: "Format";
     --psp-label--timezone--content: "Timezone";
     --psp-label--date-style--content: "Date Style";
     --psp-label--time-style--content: "Time Style";
@@ -82,8 +81,14 @@ perspective-viewer {
     --psp-label--number-bg-mode--content: "Background";
     --psp-label--fg-colors--content: "Foreground";
     --psp-label--bg-colors--content: "Background";
-    --psp-label--datetime-color-mode--content: "Color";
-    --psp-label--string-color-mode--content: "Color";
+    --psp-label--string-fg-mode--content: "Foreground";
+    --psp-label--string-bg-mode--content: "Background";
+    --psp-label--datetime-fg-mode--content: "Foreground";
+    --psp-label--datetime-bg-mode--content: "Background";
+    --psp-label--fg-color--content: "Foreground";
+    --psp-label--bg-color--content: "Background";
+    --psp-label--fg-palette--content: "Foreground";
+    --psp-label--bg-palette--content: "Background";
     --psp-label--series--content: "Series";
     --psp-label--color-range--content: "Color Range";
     --psp-label--style--content: "Style";
@@ -122,6 +127,7 @@ perspective-viewer {
     --psp-label--group-legend--content: "Legend";
     --psp-label--group-tooltip--content: "Tooltips";
     --psp-label--group-color--content: "Color";
+    --psp-label--group-column--content: "Column";
     --psp-label--group-format--content: "Format";
     --psp-label--column-size-override--content: "Column Width";
 
@@ -160,6 +166,21 @@ perspective-viewer {
     /* Plugin settings */
     --psp-label--edit-mode--content: "Edit mode";
     --psp-label--scroll-lock--content: "Scroll lock";
+    --psp-label--column-menus--content: "Column menus";
+    --psp-label--group-font--content: "Font";
+    --psp-label--group-rows--content: "Rows";
+    --psp-label--link--content: "Link";
+    --psp-label--font-family--content: "Font family";
+    --psp-label--font-size--content: "Font size";
+    --psp-label--request-local-fonts--content: "Local Fonts";
+    --psp-label--local-fonts-blocked--content: "No Access";
+    --psp-label--request-local-fonts-title--content: "Allow access to the fonts installed on this device";
+    --psp-label--local-fonts-blocked-title--content: "Access to local fonts is blocked for this site. Allow it in the browser's site settings to list them here.";
+    --psp-label--word-wrap--content: "Word wrap";
+    --psp-label--align--content: "Alignment";
+    --psp-label--row-height--content: "Row height";
+    --psp-label--zebra-rows--content: "Zebra rows";
+    --psp-label--zebra-color--content: "Zebra color";
     --psp-label--chart-type--content: "Glyph type";
 
     /* Plugin settings — viewer-charts */

@@ -371,15 +371,18 @@ impl Renderer {
         }
     }
 
-    /// Synchronously query the active plugin's
-    /// [`ColumnConfigSchema`] used to gate plugin-config strip logic.
+    /// Synchronously query the active plugin's [`ColumnConfigSchema`] as it
+    /// applies to `current_value`, the plugin-config state the schema should
+    /// describe.
     fn query_plugin_config_schema(
         &self,
         view_config: &ViewConfig,
+        current_value: Option<&serde_json::Map<String, serde_json::Value>>,
     ) -> ApiResult<ColumnConfigSchema> {
         let plugin = self.ensure_plugin_selected()?;
         let view_config_js = JsValue::from_serde_ext(view_config).unwrap_or(JsValue::NULL);
-        let raw = plugin._plugin_config_schema(&view_config_js)?;
+        let current_js = JsValue::from_serde_ext(&current_value).unwrap_or(JsValue::NULL);
+        let raw = plugin._plugin_config_schema(&view_config_js, &current_js)?;
         serde_wasm_bindgen::from_value::<ColumnConfigSchema>(raw)
             .map(|schema| schema.canonicalize())
             .map_err(|e| e.into())
@@ -434,12 +437,9 @@ impl Renderer {
             .map_err(|e| e.into())
     }
 
-    /// Wholesale update the active plugin's plugin-level config map.
-    /// Entries whose value equals the schema-declared default are
-    /// treated as "reset this key" — the corresponding bucket entry
-    /// is cleared rather than the default being stored literally.
-    /// Keys absent from the incoming map are left alone (merge
-    /// semantics for the non-default subset).
+    /// Merge an update into the active plugin's plugin-level config map,
+    /// clearing entries equal to the schema default and dropping keys the
+    /// resulting schema no longer advertises.
     pub fn update_plugin_config(
         &self,
         view_config: &ViewConfig,
@@ -449,28 +449,42 @@ impl Renderer {
             return Ok(false);
         };
 
-        let schema = self.query_plugin_config_schema(view_config).ok();
-        let mut st = self.borrow_mut();
-        let bucket = st.plugin_states.entry(n).or_default();
         match update {
             OptionalUpdate::SetDefault => {
+                let mut st = self.borrow_mut();
+                let bucket = st.plugin_states.entry(n).or_default();
                 let changed = !bucket.plugin.is_empty();
                 bucket.plugin.clear();
                 Ok(changed)
             },
             OptionalUpdate::Missing => Ok(false),
             OptionalUpdate::Update(mut map) => {
-                let mut changed = false;
+                let mut merged = self.get_plugin_config();
+                for (k, v) in &map {
+                    merged.insert(k.clone(), v.clone());
+                }
+
+                let schema = self
+                    .query_plugin_config_schema(view_config, Some(&merged))
+                    .ok();
+
+                let mut active = None;
                 if let Some(s) = &schema {
-                    let active = s.active_keys();
-                    map.retain(|k, _| active.contains(k));
+                    let keys = s.active_keys();
+                    map.retain(|k, _| keys.contains(k));
+                    active = Some(keys);
                     let errors = normalize_css_values(s, &mut map);
                     if let Some((key, error)) = errors.first() {
                         return Err(ApiError::from(JsValue::from_str(&format!(
                             "Invalid `plugin_config.{key}`: {error}"
                         ))));
                     }
+                }
 
+                let mut st = self.borrow_mut();
+                let bucket = st.plugin_states.entry(n).or_default();
+                let mut changed = false;
+                if let Some(s) = &schema {
                     let leaves = s.leaf_fields();
                     map.retain(|key, value| {
                         let is_default = leaves
@@ -494,12 +508,19 @@ impl Renderer {
                     }
                 }
 
+                if let Some(active) = active {
+                    let before = bucket.plugin.len();
+                    bucket.plugin.retain(|k, _| active.contains(k));
+                    changed |= bucket.plugin.len() != before;
+                }
+
                 Ok(changed)
             },
         }
     }
 
-    /// Apply a single schema-field update from the plugin-settings UI
+    /// Apply a single schema-field update from the plugin-settings UI,
+    /// dropping keys the resulting schema no longer advertises.
     pub fn update_plugin_config_field(
         &self,
         view_config: &ViewConfig,
@@ -509,12 +530,28 @@ impl Renderer {
             return false;
         };
 
-        if let Ok(schema) = self.query_plugin_config_schema(view_config) {
-            for (key, error) in normalize_css_values(&schema, &mut update.value) {
+        let mut next = self.get_plugin_config();
+        for k in &update.keys {
+            match update.value.get(k) {
+                Some(v) => {
+                    next.insert(k.clone(), v.clone());
+                },
+                None => {
+                    next.remove(k);
+                },
+            }
+        }
+
+        let schema = self
+            .query_plugin_config_schema(view_config, Some(&next))
+            .ok();
+
+        if let Some(schema) = &schema {
+            for (key, error) in normalize_css_values(schema, &mut update.value) {
                 tracing::error!("Dropping `plugin_config`.`{key}`: {error}");
             }
 
-            strip_default_values(&schema, &mut update.value);
+            strip_default_values(schema, &mut update.value);
         }
 
         let mut st = self.borrow_mut();
@@ -530,6 +567,13 @@ impl Renderer {
             } else if bucket.plugin.remove(k).is_some() {
                 changed = true;
             }
+        }
+
+        if let Some(schema) = &schema {
+            let active = schema.active_keys();
+            let before = bucket.plugin.len();
+            bucket.plugin.retain(|k, _| active.contains(k));
+            changed |= bucket.plugin.len() != before;
         }
 
         changed
@@ -580,6 +624,21 @@ fn matches_declared_default(spec: &ControlSpec, key: &str, value: &Value) -> boo
     match spec {
         ControlSpec::Enum {
             key: k, default, ..
+        }
+        | ControlSpec::Font {
+            key: k, default, ..
+        } if k == key => value.as_str() == Some(default.as_str()),
+        ControlSpec::Font {
+            size: Some(size), ..
+        } if size.key == key => value.as_f64() == Some(size.default),
+        ControlSpec::Font { bold, italic, .. } => [bold, italic]
+            .into_iter()
+            .flatten()
+            .any(|toggle| toggle.key == key && value.as_bool() == Some(toggle.default)),
+        ControlSpec::Alignment {
+            key: k,
+            default: Some(default),
+            ..
         } if k == key => value.as_str() == Some(default.as_str()),
         ControlSpec::Bool {
             key: k, default, ..
@@ -701,6 +760,35 @@ mod tests {
             "color",
             &json!("var(--psp-user--color-1)")
         ));
+    }
+
+    #[test]
+    fn alignment_strips_only_a_declared_default() {
+        let schema = ColumnConfigSchema {
+            fields: vec![
+                ControlSpec::Alignment {
+                    key: "align".to_owned(),
+                    default: None,
+                    corners: false,
+                },
+                ControlSpec::Alignment {
+                    key: "legend_anchor".to_owned(),
+                    default: Some(Alignment::TopRight),
+                    corners: true,
+                },
+            ],
+        };
+
+        let mut map = json!({ "align": "center", "legend_anchor": "top-right" })
+            .as_object()
+            .unwrap()
+            .clone();
+
+        strip_default_values(&schema, &mut map);
+        assert_eq!(
+            map,
+            json!({ "align": "center" }).as_object().unwrap().clone()
+        );
     }
 
     #[test]

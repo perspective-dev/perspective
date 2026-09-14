@@ -10,10 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import {
-    restore_column_size_overrides,
-    save_column_size_overrides,
-} from "../model/column_overrides.js";
 import type { View } from "@perspective-dev/client";
 import type { DatagridPluginElement } from "../types.js";
 
@@ -33,7 +29,6 @@ export async function draw(
         return;
     }
 
-    const old_sizes = save_column_size_overrides.call(this);
     const drawPromise = this.regular_table.draw({
         invalid_columns: true,
     } as any);
@@ -57,14 +52,11 @@ export async function draw(
 
     if (this._reset_column_size) {
         this.regular_table.resetAutoSize();
+        this.model._projected.clear();
         this._reset_column_size = false;
     }
 
-    restore_column_size_overrides.call(this, old_sizes);
     await drawPromise;
-    if (Object.keys(old_sizes).length > 0) {
-        restore_column_size_overrides.call(this, old_sizes);
-    }
 
     this._toolbar?.classList.toggle(
         "aggregated",

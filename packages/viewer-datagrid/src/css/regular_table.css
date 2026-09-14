@@ -83,6 +83,20 @@ perspective-viewer,
             inset 2px 0px 0px var(--psp--color),
             inset 0px -2px 0px var(--psp--color);
     }
+
+    regular-table table tbody td,
+    regular-table table tbody th,
+    regular-table table thead th {
+        line-height: min(
+            1.2em,
+            calc(var(--psp-datagrid--row--height, 23px) - 5px)
+        );
+        overflow: hidden;
+    }
+
+    regular-table table tbody td {
+        padding: 2px 5px;
+    }
 }
 
 perspective-viewer,
@@ -348,7 +362,7 @@ regular-table:not(.flat-group-rollup-mode) {
     padding: 0 2px;
     background-image: var(--psp-label-bar-color);
     background-repeat: no-repeat;
-    background-origin: content-box;
+    background-origin: padding-box;
     background-size: var(--psp-bar-size, 0%) 80%;
     background-position-x: var(--psp-bar-anchor, 0%);
     background-position-y: center;
@@ -365,7 +379,7 @@ regular-table:not(.flat-group-rollup-mode) {
     display: block;
     height: 0;
     white-space: nowrap;
-    padding: 0 3px;
+    padding: 0 5px;
 }
 
 .psp-color-mode-label-bar:after {
@@ -378,8 +392,8 @@ regular-table:not(.flat-group-rollup-mode) {
     left: 0;
     right: 0;
     display: inline-flex;
-    justify-content: flex-end;
-    align-items: center;
+    justify-content: var(--psp-label-justify, flex-end);
+    align-items: var(--psp-label-align, center);
     padding: 0 5px;
 }
 
@@ -395,13 +409,22 @@ regular-table:not(.flat-group-rollup-mode) {
     color: var(--psp-datagrid--neg-cell--color);
 }
 
-regular-table table tbody td {
-    min-width: 52px !important;
+:host-context(perspective-viewer.shift-active)
+    .psp-is-width-override
+    .rt-column-resize {
+    border: 1px dashed
+        var(
+            --shift-active--color,
+            var(--psp-datagrid--pos-cell--color, #1078d1)
+        );
+
+    border-bottom-width: 0px;
+    border-left-width: 0px;
 }
 
 .psp-is-width-override .rt-column-resize,
 .rt-column-resize:hover {
-    border: 1px dashed #999;
+    border: 1px dashed var(--psp--color);
     border-bottom-width: 0px;
     border-left-width: 0px;
 }
@@ -540,6 +563,26 @@ regular-table table tbody tr:after {
 
 regular-table table tbody tr:not(:first-child):after {
     border-top: 1px solid var(--psp-inactive--border-color);
+}
+
+regular-table table tbody td .psp-wrap {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--psp-datagrid--wrap-lines, 1);
+    line-height: 1.2;
+    max-height: calc(var(--psp-datagrid--row--height, 23px) - 5px);
+    overflow: hidden;
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+
+regular-table table tbody tr.psp-zebra td,
+regular-table table tbody tr.psp-zebra th:not(:empty),
+regular-table table tbody tr.psp-zebra:after {
+    background-color: var(
+        --psp-datagrid--zebra--color,
+        color-mix(in srgb, var(--psp--color, #000000) 6%, transparent)
+    );
 }
 
 regular-table table tbody tr:hover:not(:first-child):after {

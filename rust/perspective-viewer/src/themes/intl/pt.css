@@ -74,7 +74,6 @@ perspective-viewer {
 
     /* Column Settings */
     --psp-label--color--content: "Cor";
-    --psp-label--format--content: "Formato";
     --psp-label--timezone--content: "Fuso horário";
     --psp-label--date-style--content: "Estilo de data";
     --psp-label--time-style--content: "Estilo de tempo";
@@ -82,8 +81,14 @@ perspective-viewer {
     --psp-label--number-bg-mode--content: "Fundo";
     --psp-label--fg-colors--content: "Primeiro plano";
     --psp-label--bg-colors--content: "Fundo";
-    --psp-label--datetime-color-mode--content: "Cor";
-    --psp-label--string-color-mode--content: "Cor";
+    --psp-label--string-fg-mode--content: "Primeiro plano";
+    --psp-label--string-bg-mode--content: "Fundo";
+    --psp-label--datetime-fg-mode--content: "Primeiro plano";
+    --psp-label--datetime-bg-mode--content: "Fundo";
+    --psp-label--fg-color--content: "Primeiro plano";
+    --psp-label--bg-color--content: "Fundo";
+    --psp-label--fg-palette--content: "Primeiro plano";
+    --psp-label--bg-palette--content: "Fundo";
     --psp-label--series--content: "Série";
     --psp-label--color-range--content: "Gama de cores";
     --psp-label--style--content: "Estilo";
@@ -148,6 +153,21 @@ perspective-viewer {
     /* Plugin settings */
     --psp-label--edit-mode--content: "Modo de edição";
     --psp-label--scroll-lock--content: "Bloqueio de rolagem";
+    --psp-label--column-menus--content: "Menus de coluna";
+    --psp-label--group-font--content: "Fonte";
+    --psp-label--group-rows--content: "Linhas";
+    --psp-label--link--content: "Link";
+    --psp-label--font-family--content: "Família da fonte";
+    --psp-label--font-size--content: "Tamanho da fonte";
+    --psp-label--request-local-fonts--content: "Fontes locais";
+    --psp-label--local-fonts-blocked--content: "Fontes locais bloqueadas";
+    --psp-label--request-local-fonts-title--content: "Permitir acesso às fontes instaladas neste dispositivo";
+    --psp-label--local-fonts-blocked-title--content: "O acesso às fontes locais está bloqueado para este site. Permita-o nas configurações do site do navegador para listá-las aqui.";
+    --psp-label--word-wrap--content: "Quebra de linha";
+    --psp-label--align--content: "Alinhamento";
+    --psp-label--row-height--content: "Altura da linha";
+    --psp-label--zebra-rows--content: "Linhas zebradas";
+    --psp-label--zebra-color--content: "Cor zebrada";
     --psp-label--chart-type--content: "Tipo de glifo";
 
     /* Plugin settings — viewer-charts */
@@ -189,6 +209,7 @@ perspective-viewer {
     --psp-label--group-legend--content: "Legenda";
     --psp-label--group-tooltip--content: "Dicas";
     --psp-label--group-color--content: "Cor";
+    --psp-label--group-column--content: "Coluna";
     --psp-label--group-format--content: "Formato";
     --psp-label--column-size-override--content: "Largura da coluna";
 }

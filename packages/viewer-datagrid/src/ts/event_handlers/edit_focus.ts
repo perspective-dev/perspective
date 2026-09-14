@@ -25,13 +25,13 @@ const LAST_EDITABLE: WeakMap<RegularTable, HTMLElement> = new WeakMap();
 
 /**
  * Whether a column of `type` holds text-editable cells (booleans toggle by
- * click and "link"-formatted strings navigate, so neither takes a caret).
+ * click and `link` strings navigate, so neither takes a caret).
  */
 export function is_type_text_editable(
     type: ColumnType | undefined,
-    format?: string,
+    link?: boolean,
 ): boolean {
-    return type !== "boolean" && !(type === "string" && format === "link");
+    return type !== "boolean" && !(type === "string" && link === true);
 }
 
 function is_cell_text_editable(
@@ -57,11 +57,11 @@ function is_cell_text_editable(
     const type = get_psp_type(model, meta);
     const plugins: ColumnsConfig = (table as any)[PRIVATE_PLUGIN_SYMBOL] || {};
     const column_name = meta.column_header?.[model._config.split_by.length];
-    const format = column_name
-        ? plugins[column_name.toString()]?.format
+    const link = column_name
+        ? plugins[column_name.toString()]?.link
         : undefined;
 
-    return is_type_text_editable(type, format);
+    return is_type_text_editable(type, link);
 }
 
 export function ensure_cell_editable(

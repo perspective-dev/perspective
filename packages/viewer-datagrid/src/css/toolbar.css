@@ -56,10 +56,12 @@
 
 #scroll_lock.lock-scroll:before {
     -webkit-mask-image: var(--psp-toolbar-scroll-lock-active--content);
+    mask-image: var(--psp-toolbar-scroll-lock-active--content);
 }
 
 #scroll_lock:before {
     -webkit-mask-image: var(--psp-toolbar-scroll-lock--content);
+    mask-image: var(--psp-toolbar-scroll-lock--content);
 }
 
 #select_mode:before {
@@ -68,39 +70,43 @@
 
 #edit_mode:before {
     -webkit-mask-image: "";
+    mask-image: "";
 }
 
 #edit_mode[data-edit-mode="READ_ONLY"]:before {
     -webkit-mask-image: var(--psp-toolbar-edit-mode-read-only--content);
+    mask-image: var(--psp-toolbar-edit-mode-read-only--content);
 }
 
 #edit_mode[data-edit-mode="EDIT"]:before {
     -webkit-mask-image: var(--psp-toolbar-edit-mode-edit--content);
+    mask-image: var(--psp-toolbar-edit-mode-edit--content);
 }
 
 :host(.aggregated) #toolbar #edit_mode[data-edit-mode="EDIT"]:before {
     -webkit-mask-image: var(--psp-toolbar-edit-mode-read-only--content);
+    mask-image: var(--psp-toolbar-edit-mode-read-only--content);
 }
 
 #edit_mode[data-edit-mode="SELECT_ROW"]:before {
     -webkit-mask-image: var(--psp-toolbar-edit-mode-select-row--content);
+    mask-image: var(--psp-toolbar-edit-mode-select-row--content);
 }
 
 #edit_mode[data-edit-mode="SELECT_COLUMN"]:before {
     -webkit-mask-image: var(--psp-toolbar-edit-mode-select-column--content);
+    mask-image: var(--psp-toolbar-edit-mode-select-column--content);
 }
 
 #edit_mode[data-edit-mode="SELECT_REGION"]:before {
     -webkit-mask-image: var(--psp-toolbar-edit-mode-select-region--content);
+    mask-image: var(--psp-toolbar-edit-mode-select-region--content);
 }
 
 #edit_mode[data-edit-mode="SELECT_ROW_TREE"]:before {
     -webkit-mask-image: var(--psp-toolbar-edit-mode-select-row-tree--content);
+    mask-image: var(--psp-toolbar-edit-mode-select-row-tree--content);
 }
-
-/* #edit_mode span:before { */
-/*     content: var(--edit-mode-toggle--content, "N/A"); */
-/* } */
 
 #edit_mode[data-edit-mode="READ_ONLY"] span:before {
     content: var(--psp-label--edit-mode-read-only--content, "Read Only");

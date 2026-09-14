@@ -196,12 +196,8 @@ const runTests = (title: string, beforeEachAndLocalTests: () => void) => {
             await thirdEditBtn.click();
             await selectedEditBtn.waitFor();
             await selectedTitle.waitFor();
-            expect(
-                await compareNodes(thirdEditBtn, selectedEditBtn, page),
-            ).toBe(true);
-            expect(await compareNodes(thirdTitle, selectedTitle, page)).toBe(
-                true,
-            );
+            await expect(thirdEditBtn).toHaveClass(/psp-menu-open/);
+            await expect(thirdTitle).toHaveClass(/psp-menu-open/);
 
             await table.element.evaluate((node) => (node.scrollLeft = 1000));
             await table.element.evaluate((node) => (node.scrollLeft = 0));
@@ -210,12 +206,8 @@ const runTests = (title: string, beforeEachAndLocalTests: () => void) => {
             );
             await selectedEditBtn.waitFor();
             await selectedTitle.waitFor();
-            expect(
-                await compareNodes(thirdEditBtn, selectedEditBtn, page),
-            ).toBe(true);
-            expect(await compareNodes(thirdTitle, selectedTitle, page)).toBe(
-                true,
-            );
+            await expect(thirdEditBtn).toHaveClass(/psp-menu-open/);
+            await expect(thirdTitle).toHaveClass(/psp-menu-open/);
         });
     });
 };

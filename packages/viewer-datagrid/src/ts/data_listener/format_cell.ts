@@ -51,20 +51,12 @@ export function format_cell(
             plugin?.number_fg_mode === "label-bar")
     ) {
         return "";
-    } else if (plugin?.format === "link" && type === "string") {
+    } else if (plugin?.link === true && type === "string") {
         const anchor = document.createElement("a");
         anchor.setAttribute("href", val as string);
         anchor.setAttribute("target", "_blank");
         anchor.textContent = val as string;
         return anchor;
-    } else if (plugin?.format === "bold" && type === "string") {
-        const bold = document.createElement("b");
-        bold.textContent = val as string;
-        return bold;
-    } else if (plugin?.format === "italics" && type === "string") {
-        const italic = document.createElement("i");
-        italic.textContent = val as string;
-        return italic;
     } else {
         // `String(val)`, not a cast: with no formatter (e.g. an unknown
         // column type falling back to `"string"`), a raw non-string value

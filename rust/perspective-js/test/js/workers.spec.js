@@ -71,6 +71,36 @@ test.describe("worker types", () => {
         test.expect(s).toEqual(99);
     });
 
+    test("Worker terminate", async ({ page }) => {
+        await page.goto(
+            "http://localhost:6598/node_modules/@perspective-dev/client/test/html/test.html",
+        );
+
+        const result = await page.evaluate(async () => {
+            const perspective = await import(
+                "http://localhost:6598/node_modules/@perspective-dev/client/dist/esm/perspective.js"
+            );
+
+            const wasm = fetch(
+                "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
+            );
+
+            const wasm2 = fetch(
+                "http://localhost:6598/node_modules/@perspective-dev/server/dist/wasm/perspective-server.wasm",
+            );
+
+            perspective.init_client(wasm);
+            perspective.init_server(wasm2);
+            const client = await perspective.worker();
+            const table = await client.table({ x: "integer" });
+            await table.update([{ x: 1 }]);
+            await client.terminate();
+            return "terminated";
+        });
+
+        test.expect(result).toEqual("terminated");
+    });
+
     test("No SharedWorker or ServiceWorker (embedded)", async ({ page }) => {
         await page.goto(
             "http://localhost:6598/node_modules/@perspective-dev/client/test/html/test.html",
