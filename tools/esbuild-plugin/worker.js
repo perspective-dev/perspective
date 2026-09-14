@@ -32,6 +32,49 @@ const esbuild = require("esbuild");
  *     maps. `getWorkerURL()` resolves `import.meta.url` to that file,
  *     so DevTools can show real source paths and breakpoints work.
  */
+
+/**
+ * Runtime source shared by both stub modes.
+ */
+const INITIALIZE_RUNTIME = `
+    function run_single_threaded(workerSource) {
+        console.warn("Running perspective in single-threaded mode");
+        const channel = new MessageChannel();
+        const f = Function("const self = arguments[0];" + workerSource);
+        f(channel.port2);
+        channel.port2.start();
+        return channel.port1;
+    }
+
+    export async function initialize(opts) {
+        const workerOpts = opts || { type: "module" };
+        try {
+            if (
+                typeof window !== "undefined" &&
+                window.location &&
+                window.location.protocol &&
+                window.location.protocol.startsWith("file")
+            ) {
+                console.warn(
+                    "file:// protocol does not reliably support Web Workers"
+                );
+
+                return run_single_threaded(await getWorkerSource());
+            }
+
+            const url = await getWorkerURL();
+            return new Worker(url, workerOpts);
+        } catch (e) {
+            console.error(
+                "Error instantiating worker; falling back to single-threaded mode",
+                e
+            );
+
+            return run_single_threaded(await getWorkerSource());
+        }
+    }
+`;
+
 exports.WorkerPlugin = function WorkerPlugin(options = {}) {
     /**
      * Optional esbuild plugins to apply to the worker sub-build (e.g.
@@ -128,17 +171,13 @@ exports.WorkerPlugin = function WorkerPlugin(options = {}) {
                         // `new Worker(url)` and `await import(url)` so
                         // module dedup keeps a single instance.
                         //
-                        // `initialize()` adds a Worker-or-shim path:
-                        // attempts `new Worker(blobUrl)` first; falls
+                        // `initialize()` (shared with file mode below)
+                        // attempts `new Worker(blobUrl)` first and falls
                         // back to running the worker source text on the
-                        // main thread via `new Function(...)` when
-                        // Worker construction is unavailable (e.g.
-                        // `file://` origins where module-Worker support
-                        // is gated, or environments without the Worker
-                        // constructor at all). The shim returned by
-                        // \`make_host\` is MessagePort-shaped so
-                        // downstream consumers can treat it like a real
-                        // Worker.
+                        // main thread when Worker construction is
+                        // unavailable (e.g. `file://` origins where
+                        // module-Worker support is gated, or environments
+                        // without the Worker constructor at all).
                         contents: `
                             import workerSource from ${JSON.stringify(args.path)};
                             let cached = null;
@@ -147,80 +186,15 @@ exports.WorkerPlugin = function WorkerPlugin(options = {}) {
                                 const blob = new Blob([workerSource], {
                                     type: "application/javascript",
                                 });
-
                                 cached = URL.createObjectURL(blob);
                                 return cached;
                             }
 
-                            function make_host(a, b) {
-                                return {
-                                    addEventListener(type, callback) {
-                                        if (type === "message") {
-                                            a.push(callback);
-                                        }
-                                    },
-                                    removeEventListener(type, callback) {
-                                        const idx = a.indexOf(callback);
-                                        if (idx > -1) {
-                                            a.splice(idx, 1);
-                                        }
-                                    },
-                                    postMessage(msg, ports) {
-                                        for (const listener of b) {
-                                            listener({
-                                                data: msg,
-                                                ports: ports,
-                                            });
-                                        }
-                                    },
-                                    terminate() {},
-                                    location: { href: "" },
-                                };
+                            async function getWorkerSource() {
+                                return workerSource;
                             }
 
-                            function run_single_threaded() {
-                                console.warn(
-                                    "Running perspective in single-threaded mode"
-                                );
-                                const f = Function(
-                                    "const self = arguments[0];" + workerSource
-                                );
-                                const workers = [];
-                                const mains = [];
-                                f(make_host(workers, mains));
-                                return make_host(mains, workers);
-                            }
-
-                            export async function initialize(opts) {
-                                const workerOpts = opts || {
-                                    type: "module",
-                                };
-                                try {
-                                    if (
-                                        typeof window !== "undefined" &&
-                                        window.location &&
-                                        window.location.protocol &&
-                                        window.location.protocol.startsWith(
-                                            "file"
-                                        )
-                                    ) {
-                                        console.warn(
-                                            "file:// protocol does not reliably support Web Workers"
-                                        );
-                                        return run_single_threaded();
-                                    }
-
-                                    const url = await getWorkerURL();
-                                    const worker = new Worker(url, workerOpts);
-                                    return worker;
-                                } catch (e) {
-                                    console.error(
-                                        "Error instantiating worker; falling back to single-threaded mode",
-                                        e
-                                    );
-                                    return run_single_threaded();
-                                }
-                            }
+                            ${INITIALIZE_RUNTIME}
 
                             export default getWorkerURL;
                         `,
@@ -246,6 +220,13 @@ exports.WorkerPlugin = function WorkerPlugin(options = {}) {
                         export async function getWorkerURL() {
                             return workerURL;
                         }
+
+                        async function getWorkerSource() {
+                            const resp = await fetch(workerURL);
+                            return await resp.text();
+                        }
+
+                        ${INITIALIZE_RUNTIME}
 
                         export default getWorkerURL;
                     `,

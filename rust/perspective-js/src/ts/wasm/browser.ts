@@ -70,25 +70,31 @@ async function _init(
 export async function worker(
     module: Promise<typeof psp>,
     server_wasm: Promise<WebAssembly.Module> | undefined,
-    perspective_wasm_worker: Promise<
-        SharedWorker | ServiceWorker | Worker | MessagePort
-    >,
+    perspective_wasm_worker: Promise<SharedWorker | Worker | MessagePort>,
 ) {
-    let [wasm, webworker]: [
+    const [wasm, webworker]: [
         WebAssembly.Module | undefined,
-        SharedWorker | ServiceWorker | Worker | MessagePort,
+        SharedWorker | Worker | MessagePort,
     ] = await Promise.all([server_wasm, perspective_wasm_worker]);
 
     const { Client } = await module;
-    let port: MessagePort;
+    let port: MessagePort | Worker;
+    let close: () => void;
     if (
         typeof SharedWorker !== "undefined" &&
         webworker instanceof SharedWorker
     ) {
-        port = webworker.port;
+        const shared_port = webworker.port;
+        port = shared_port;
+        close = () => shared_port.close();
+    } else if (typeof Worker !== "undefined" && webworker instanceof Worker) {
+        port = webworker;
+        close = () => webworker.terminate();
+    } else if (webworker instanceof MessagePort) {
+        port = webworker;
+        close = () => webworker.close();
     } else {
-        // Assume `MessagePort`
-        port = webworker as MessagePort;
+        throw new Error("Unsupported worker type");
     }
 
     const client = new Client(
@@ -98,17 +104,14 @@ export async function worker(
         },
         async () => {
             console.debug("Closing WebWorker");
-            port.close();
-            if (webworker instanceof Worker) {
-                webworker.terminate();
-            }
+            close();
         },
     );
 
     await _init(port, wasm);
-    port.addEventListener("message", (json: MessageEvent<Uint8Array>) => {
+    port.onmessage = (json: MessageEvent<Uint8Array>) => {
         client.handle_response(json.data);
-    });
+    };
 
     return client;
 }
