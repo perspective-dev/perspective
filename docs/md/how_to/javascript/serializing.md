@@ -19,3 +19,12 @@ console.log(await view.to_ndjson());
 // ArrayBuffer
 console.log(await view.to_arrow());
 ```
+
+`to_arrow()` writes an uncompressed Arrow IPC stream by default; pass
+`compression` to apply LZ4 or ZSTD body compression, which `Client::table` reads
+back transparently:
+
+```javascript
+const compressed = await view.to_arrow({ compression: "zstd" });
+const table2 = await client.table(compressed);
+```

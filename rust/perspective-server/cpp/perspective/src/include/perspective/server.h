@@ -159,7 +159,7 @@ namespace server {
             t_uindex start_col,
             t_uindex end_col,
             bool emit_group_by = true,
-            bool compress = true,
+            t_arrow_compression compression = t_arrow_compression::LZ4,
             bool emit_legacy_row_path_names = true
         ) const = 0;
 
@@ -292,11 +292,17 @@ namespace server {
             t_uindex start_col,
             t_uindex end_col,
             bool emit_group_by = true,
-            bool compress = true,
+            t_arrow_compression compression = t_arrow_compression::LZ4,
             bool emit_legacy_row_path_names = true
         ) const override {
             return m_view->to_arrow(
-                start_row, end_row, start_col, end_col, emit_group_by, compress, emit_legacy_row_path_names
+                start_row,
+                end_row,
+                start_col,
+                end_col,
+                emit_group_by,
+                compression,
+                emit_legacy_row_path_names
             );
         }
 
@@ -474,7 +480,9 @@ namespace server {
         std::shared_ptr<std::string>
         get_row_delta_as_arrow() const override {
             auto delta = m_view->get_row_delta();
-            return m_view->data_slice_to_arrow(delta, false, false);
+            return m_view->data_slice_to_arrow(
+                delta, false, t_arrow_compression::NONE
+            );
         }
 
         void

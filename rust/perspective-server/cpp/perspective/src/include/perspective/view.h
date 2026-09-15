@@ -34,6 +34,11 @@
 
 namespace perspective {
 
+/**
+ * @brief Arrow IPC body compression applied by `View::to_arrow`.
+ */
+enum class t_arrow_compression : std::uint8_t { NONE, LZ4, ZSTD };
+
 void write_scalar(
     t_tscalar scalar,
     bool is_formatted,
@@ -277,7 +282,7 @@ public:
         std::int32_t start_col,
         std::int32_t end_col,
         bool emit_group_by,
-        bool compress,
+        t_arrow_compression compression,
         bool emit_legacy_row_path_names = true
     ) const;
 
@@ -313,7 +318,7 @@ public:
     std::shared_ptr<std::string> data_slice_to_arrow(
         std::shared_ptr<t_data_slice<CTX_T>> data_slice,
         bool emit_group_b,
-        bool compress,
+        t_arrow_compression compression,
         bool emit_legacy_row_path_names = true
     ) const;
 
