@@ -92,7 +92,7 @@ impl SessionMetadata {
         &mut self,
         view_schema: &HashMap<String, ColumnType>,
     ) -> ApiResult<()> {
-        self.as_mut().unwrap().view_schema = Some(view_schema.clone());
+        self.as_mut().ok_or("No `Table` set")?.view_schema = Some(view_schema.clone());
         Ok(())
     }
 
@@ -115,7 +115,7 @@ impl SessionMetadata {
                 Some((name.clone(), dtype))
             })
             .collect();
-        self.as_mut().unwrap().window_schema = window_schema;
+        self.as_mut().ok_or("No `Table` set")?.window_schema = window_schema;
         Ok(())
     }
 
@@ -151,16 +151,11 @@ impl SessionMetadata {
             )));
         }
 
-        let mut edited = self
-            .as_mut()
-            .unwrap()
-            .expr_meta
-            .take()
-            .map(|x| x.edited)
-            .unwrap_or_default();
+        let state = self.as_mut().ok_or("No `Table` set")?;
+        let mut edited = state.expr_meta.take().map(|x| x.edited).unwrap_or_default();
 
         edited.retain(|k, _| valid_recs.expression_alias.contains_key(k));
-        self.as_mut().unwrap().expr_meta = Some(SessionViewExpressionMetadata {
+        state.expr_meta = Some(SessionViewExpressionMetadata {
             expressions: valid_recs.clone(),
             edited,
         });

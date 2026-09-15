@@ -223,18 +223,18 @@ pub(crate) fn place_reserved(
 /// Shared by the root's `ClosePanel` handler and `restoreWorkspace`'s
 /// batch replacement of the pre-existing panel set.
 pub(crate) fn eject_panel(panel: Panel) -> ApiFuture<()> {
-    let was_errored = panel.session.is_errored();
-    let dispose_task = panel.renderer.dispose();
-    let reset_task = panel.session.reset(ResetOptions {
-        config: true,
-        expressions: true,
-        table: Some(session::TableIntermediateState::Ejected),
-        ..ResetOptions::default()
-    });
-
+    panel.session.mark_disposed();
     ApiFuture::new(async move {
-        dispose_task.await?;
-        match reset_task.await.ignore_view_delete() {
+        panel.renderer.dispose().await?;
+        let was_errored = panel.session.is_errored();
+        let reset = panel.session.reset(ResetOptions {
+            config: true,
+            expressions: true,
+            table: Some(session::TableIntermediateState::Ejected),
+            ..ResetOptions::default()
+        });
+
+        match reset.await.ignore_view_delete() {
             Err(_) if was_errored => Ok(()),
             Err(e) => Err(e),
             Ok(_) => Ok(()),

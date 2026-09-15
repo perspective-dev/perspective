@@ -107,6 +107,13 @@ pub async fn txt_as_jsvalue(
 }
 
 /// Generate a result `Blob` for all types of [`ExportMethod`].
+/// The `window` (or a default one) with Arrow IPC body compression `codec`.
+fn compressed(window: Option<ViewWindow>, codec: &str) -> Option<ViewWindow> {
+    let mut window = window.unwrap_or_default();
+    window.compression = Some(codec.to_owned());
+    Some(window)
+}
+
 pub async fn export_method_to_blob(
     session: &Session,
     renderer: &Renderer,
@@ -152,6 +159,36 @@ pub async fn export_method_to_blob(
         ExportMethod::ArrowAll => crate::queries::arrow_as_jsvalue(session, true, None)
             .await?
             .as_blob(),
+        ExportMethod::ArrowLz4 => {
+            crate::queries::arrow_as_jsvalue(session, false, compressed(None, "lz4"))
+                .await?
+                .as_blob()
+        },
+        ExportMethod::ArrowLz4Selected => {
+            crate::queries::arrow_as_jsvalue(session, false, compressed(viewport, "lz4"))
+                .await?
+                .as_blob()
+        },
+        ExportMethod::ArrowLz4All => {
+            crate::queries::arrow_as_jsvalue(session, true, compressed(None, "lz4"))
+                .await?
+                .as_blob()
+        },
+        ExportMethod::ArrowZstd => {
+            crate::queries::arrow_as_jsvalue(session, false, compressed(None, "zstd"))
+                .await?
+                .as_blob()
+        },
+        ExportMethod::ArrowZstdSelected => {
+            crate::queries::arrow_as_jsvalue(session, false, compressed(viewport, "zstd"))
+                .await?
+                .as_blob()
+        },
+        ExportMethod::ArrowZstdAll => {
+            crate::queries::arrow_as_jsvalue(session, true, compressed(None, "zstd"))
+                .await?
+                .as_blob()
+        },
         ExportMethod::Html => html_as_jsvalue(session, renderer, presentation)
             .await?
             .as_blob(),
@@ -212,6 +249,36 @@ pub async fn export_method_to_jsvalue(
         ExportMethod::ArrowAll => crate::queries::arrow_as_jsvalue(session, true, None)
             .await?
             .into(),
+        ExportMethod::ArrowLz4 => {
+            crate::queries::arrow_as_jsvalue(session, false, compressed(None, "lz4"))
+                .await?
+                .into()
+        },
+        ExportMethod::ArrowLz4Selected => {
+            crate::queries::arrow_as_jsvalue(session, false, compressed(viewport, "lz4"))
+                .await?
+                .into()
+        },
+        ExportMethod::ArrowLz4All => {
+            crate::queries::arrow_as_jsvalue(session, true, compressed(None, "lz4"))
+                .await?
+                .into()
+        },
+        ExportMethod::ArrowZstd => {
+            crate::queries::arrow_as_jsvalue(session, false, compressed(None, "zstd"))
+                .await?
+                .into()
+        },
+        ExportMethod::ArrowZstdSelected => {
+            crate::queries::arrow_as_jsvalue(session, false, compressed(viewport, "zstd"))
+                .await?
+                .into()
+        },
+        ExportMethod::ArrowZstdAll => {
+            crate::queries::arrow_as_jsvalue(session, true, compressed(None, "zstd"))
+                .await?
+                .into()
+        },
         ExportMethod::Html => html_as_jsvalue(session, renderer, presentation).await?,
         ExportMethod::Plugin if renderer.is_chart() => {
             png_as_jsvalue(session, renderer).await?.into()

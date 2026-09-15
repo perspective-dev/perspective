@@ -227,6 +227,13 @@ pub(crate) async fn locked_run(
     renderer
         .clone()
         .render_task(|guard| async move {
+            if session.is_disposed() {
+                return match spec.origin {
+                    RunOrigin::Public => Err(ApiError::new("Panel disposed")),
+                    RunOrigin::Internal => Ok(()),
+                };
+            }
+
             renderer.mount_active_plugin()?;
             if let Some(task) = spec.task {
                 task.await?;

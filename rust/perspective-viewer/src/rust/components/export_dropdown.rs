@@ -100,6 +100,8 @@ fn get_menu_items(name: &str, is_chart: bool) -> Vec<ExportDropDownMenuItem> {
                     ExportMethod::Json.new_file(name, is_chart),
                     ExportMethod::Ndjson.new_file(name, is_chart),
                     ExportMethod::Arrow.new_file(name, is_chart),
+                    ExportMethod::ArrowLz4.new_file(name, is_chart),
+                    ExportMethod::ArrowZstd.new_file(name, is_chart),
                     ExportMethod::Html.new_file(name, is_chart),
                     ExportMethod::Plugin.new_file(name, is_chart),
                 ]
@@ -109,6 +111,8 @@ fn get_menu_items(name: &str, is_chart: bool) -> Vec<ExportDropDownMenuItem> {
                     ExportMethod::Json.new_file(name, is_chart),
                     ExportMethod::Ndjson.new_file(name, is_chart),
                     ExportMethod::Arrow.new_file(name, is_chart),
+                    ExportMethod::ArrowLz4.new_file(name, is_chart),
+                    ExportMethod::ArrowZstd.new_file(name, is_chart),
                     ExportMethod::Html.new_file(name, is_chart),
                 ]
             },
@@ -118,6 +122,8 @@ fn get_menu_items(name: &str, is_chart: bool) -> Vec<ExportDropDownMenuItem> {
             ExportMethod::JsonAll.new_file(name, is_chart),
             ExportMethod::NdjsonAll.new_file(name, is_chart),
             ExportMethod::ArrowAll.new_file(name, is_chart),
+            ExportMethod::ArrowLz4All.new_file(name, is_chart),
+            ExportMethod::ArrowZstdAll.new_file(name, is_chart),
         ]),
         ExportDropDownMenuItem::OptGroup("Config".into(), vec![
             ExportMethod::JsonConfig.new_file(name, is_chart),

@@ -211,6 +211,11 @@ pub struct SessionData {
     is_loading: bool,
     is_paused: bool,
 
+    /// Terminal: set by [`Session::mark_disposed`] when the owning panel is
+    /// ejected, never cleared. Distinct from an `Ejected` reset, which a
+    /// suspended or element-ejected session may legitimately rebind after.
+    disposed: bool,
+
     /// Memo for [`Session::validate_snapshot`]: the expression set validated
     /// by the last successful server round trip; an equal snapshot skips the
     /// round trip. Written only under the draw lock; cleared on table
@@ -434,6 +439,17 @@ impl Session {
         self.0.pending_load.borrow().is_some()
     }
 
+    /// Mark this session disposed (its panel was ejected): every later
+    /// table bind and locked run refuses, so nothing can rebind or draw a
+    /// panel that no longer exists.
+    pub(crate) fn mark_disposed(&self) {
+        self.borrow_mut().disposed = true;
+    }
+
+    pub(crate) fn is_disposed(&self) -> bool {
+        self.borrow().disposed
+    }
+
     /// Close the pending-load window for `generation`, returning its journal
     /// (the raw deltas committed while it was open, in order) for replay.
     /// Returns `None` when a later `load()` already superseded this one (or it
@@ -544,6 +560,10 @@ impl Session {
     /// Bind an opened `Table`, replacing any previous binding and announcing
     /// `table_loaded`.
     pub(crate) async fn bind_table(&self, table: perspective_client::Table) -> ApiResult<()> {
+        if self.is_disposed() {
+            return Err(ApiError::new("Panel disposed"));
+        }
+
         let metadata = SessionMetadata::from_table(&table).await?;
         let client = table.get_client();
         let on_error = self.on_table_errored.borrow().clone();
@@ -584,6 +604,10 @@ impl Session {
     /// Record `name` as pending, dropping any bound `Table` so nothing binds
     /// against the outgoing table while the name waits for a host.
     pub(crate) async fn pend_table(&self, name: String) -> ApiResult<()> {
+        if self.is_disposed() {
+            return Err(ApiError::new("Panel disposed"));
+        }
+
         let sub = self.borrow_mut().view_sub.take();
         self.borrow_mut().table = None;
         self.borrow_mut().metadata = SessionMetadata::default();

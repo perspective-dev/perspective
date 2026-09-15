@@ -276,10 +276,19 @@ impl Component for StatusBar {
         // TODO Memoizing these would reduce some vdom diffing later on
         let onclose = ctx.link().callback(|_| StatusBarMsg::Eject);
         let onpointerdown = ctx.link().callback(StatusBarMsg::PointerEvent);
-        let onexport = ctx.link().callback(|_: MouseEvent| StatusBarMsg::Export);
-        let oncopy = ctx.link().callback(|_: MouseEvent| StatusBarMsg::Copy);
+        let onexport = ctx.link().callback(|event: MouseEvent| {
+            event.prevent_default();
+            StatusBarMsg::Export
+        });
+        let oncopy = ctx.link().callback(|event: MouseEvent| {
+            event.prevent_default();
+            StatusBarMsg::Copy
+        });
         let onreset = ctx.link().callback(StatusBarMsg::Reset);
-        let onnew = ctx.link().callback(|_: MouseEvent| StatusBarMsg::NewPanel);
+        let onnew = ctx.link().callback(|event: MouseEvent| {
+            event.prevent_default();
+            StatusBarMsg::NewPanel
+        });
         let on_new_select = ctx.link().callback(StatusBarMsg::NewPanelPick);
         let on_close_new = ctx.link().callback(|_| StatusBarMsg::CloseNewPanel);
 
