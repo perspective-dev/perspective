@@ -14,8 +14,8 @@ import { RegularTableElement } from "regular-table";
 
 import {
     type DatagridModel,
-    type ColumnsConfig,
-    type ColumnConfig,
+    type ResolvedColumnsConfig,
+    type ResolvedColumnStyle,
     type Align,
     get_psp_type,
 } from "../types.js";
@@ -47,7 +47,7 @@ const B_SEL_EXACT = 32;
 const B_SEL_SUB = 64;
 
 interface ColState {
-    plugin: ColumnConfig | undefined;
+    plugin: ResolvedColumnStyle | undefined;
     type: ColumnType | undefined;
     is_numeric: boolean;
     is_rollup_col: boolean;
@@ -94,7 +94,7 @@ function resolve_alignment(
 }
 
 interface StyleMemo {
-    plugin: ColumnConfig | undefined;
+    plugin: ResolvedColumnStyle | undefined;
     type: string | undefined;
     mods: number;
     theme: unknown;
@@ -123,7 +123,7 @@ function row_header_depth(row_header: unknown[] | undefined): number {
 export function applyBodyCellStyles(
     model: DatagridModel,
     cells: CollectedCell[],
-    plugins: ColumnsConfig,
+    plugins: ResolvedColumnsConfig,
     isSettingsOpen: boolean,
     isSelectable: boolean,
     isEditable: boolean,
@@ -174,13 +174,13 @@ export function applyBodyCellStyles(
         const is_numeric = type === "integer" || type === "float";
         const value_styled =
             (is_numeric &&
-                (plugin?.number_bg_mode === "gradient" ||
-                    plugin?.number_bg_mode === "pulse" ||
-                    plugin?.number_fg_mode === "bar" ||
-                    plugin?.number_fg_mode === "label-bar")) ||
+                (plugin?.bg_mode === "gradient" ||
+                    plugin?.bg_mode === "pulse" ||
+                    plugin?.fg_mode === "bar" ||
+                    plugin?.fg_mode === "label-bar")) ||
             (type === "string" &&
-                (plugin?.string_fg_mode === "series" ||
-                    plugin?.string_bg_mode === "series" ||
+                (plugin?.fg_mode === "series" ||
+                    plugin?.bg_mode === "series" ||
                     plugin?.link === true));
 
         const editable_col = isEditable && !!model._is_editable[meta_x ?? -1];
@@ -211,8 +211,8 @@ export function applyBodyCellStyles(
                 (column_name === menu_col ? 32 : 0) |
                 (menu_col ? 64 : 0) |
                 (is_rollup_mode ? 128 : 0) |
-                (plugin?.number_fg_mode === "bar" ? 256 : 0) |
-                (plugin?.number_fg_mode === "label-bar" ? 512 : 0),
+                (is_numeric && plugin?.fg_mode === "bar" ? 256 : 0) |
+                (is_numeric && plugin?.fg_mode === "label-bar" ? 512 : 0),
             value_styled,
             text_editable:
                 editable_col && is_type_text_editable(type, plugin?.link),
@@ -361,7 +361,7 @@ export function applyBodyCellStyles(
         if (c.is_numeric) {
             cell_style_numeric(
                 model,
-                c.plugin as any,
+                c.plugin,
                 c.type,
                 td,
                 metadata as any,
@@ -370,9 +370,9 @@ export function applyBodyCellStyles(
         } else if (c.type === "boolean") {
             cell_style_boolean(model, c.plugin, td, metadata as any);
         } else if (c.type === "string") {
-            cell_style_string(model, c.plugin as any, td, metadata as any);
+            cell_style_string(model, c.plugin, td, metadata as any);
         } else if (c.type === "date" || c.type === "datetime") {
-            cell_style_datetime(model, c.plugin as any, td, metadata);
+            cell_style_datetime(model, c.plugin, td, metadata);
         } else {
             td.style.backgroundColor = "";
             td.style.color = "";
@@ -392,12 +392,12 @@ export function applyBodyCellStyles(
 
         td.classList.toggle(
             "psp-color-mode-bar",
-            c.plugin?.number_fg_mode === "bar" && c.is_numeric,
+            c.plugin?.fg_mode === "bar" && c.is_numeric,
         );
 
         td.classList.toggle(
             "psp-color-mode-label-bar",
-            c.plugin?.number_fg_mode === "label-bar" && c.is_numeric,
+            c.plugin?.fg_mode === "label-bar" && c.is_numeric,
         );
 
         // Apply row header styling

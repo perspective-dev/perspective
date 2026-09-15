@@ -184,6 +184,12 @@ let PROJECTS = (() => {
                             ...DEVICE_OPTIONS[device],
                             baseURL: `http://localhost:${TEST_SERVER_PORT}`,
                             timezoneId: "UTC",
+                            trace: process.env.CI
+                                ? "retain-on-failure"
+                                : "off",
+                            screenshot: process.env.CI
+                                ? "only-on-failure"
+                                : "off",
                         },
                     });
                 }

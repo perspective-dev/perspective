@@ -13,7 +13,18 @@
 import type { ColumnType } from "@perspective-dev/client";
 import { colorsToCss, rgbToHex, stopsToCss } from "../color_utils.js";
 import { measure_px } from "./plugin_config_schema.js";
-import type { ColumnConfig, DatagridPluginElement } from "../types.js";
+import {
+    bg_modes_for,
+    default_bg_mode,
+    default_fg_mode,
+    fg_modes_for,
+    parse_bg_mode,
+    parse_fg_mode,
+    type BgMode,
+    type ColumnConfig,
+    type DatagridPluginElement,
+    type FgMode,
+} from "../types.js";
 
 interface ViewerConfigLike {
     group_by?: string[];
@@ -108,196 +119,32 @@ export default function column_config_schema(
         ],
     });
 
-    if (type === "integer" || type === "float") {
-        const pos_fg = this.model!._pos_fg_color[0];
-        const neg_fg = this.model!._neg_fg_color[0];
-        const pos_bg = this.model!._pos_bg_color[0];
-        const neg_bg = this.model!._neg_bg_color[0];
-        const fg_fields: ControlSpec[] = [];
-        fg_fields.push({
-            kind: "Enum",
-            key: "number_fg_mode" satisfies keyof ColumnConfig,
-            default: "color",
-            variants: [
-                { value: "disabled", label: "Disabled" },
-                { value: "color", label: "Color" },
-                { value: "bar", label: "Bar" },
-                { value: "label-bar", label: "Gradient" },
-            ],
-        });
-
-        const fg_mode = (current_value?.number_fg_mode as string) ?? "color";
-        if (fg_mode !== "disabled") {
-            fg_fields.push({
-                kind: "GradientStops",
-                key: "fg_colors" satisfies keyof ColumnConfig,
-                default: stopsToCss([
-                    { color: neg_fg, offset: 0 },
-                    { color: pos_fg, offset: 1 },
-                ]),
-                discrete: true,
-            });
-        }
-
-        if (fg_mode === "bar" || fg_mode === "label-bar") {
-            fg_fields.push({
-                kind: "Number",
-                key: "fg_gradient" satisfies keyof ColumnConfig,
-                default: column_stats?.abs_max ?? 0,
-                include: true,
-            });
-        }
-
-        const bg_fields: ControlSpec[] = [];
-        bg_fields.push({
-            kind: "Enum",
-            key: "number_bg_mode" satisfies keyof ColumnConfig,
-            default: "disabled",
-            variants: [
-                { value: "disabled", label: "Disabled" },
-                { value: "color", label: "Color" },
-                { value: "gradient", label: "Gradient" },
-                { value: "pulse", label: "Pulse" },
-            ],
-        });
-
-        const bg_mode = (current_value?.number_bg_mode as string) ?? "disabled";
-        if (bg_mode !== "disabled") {
-            if (bg_mode === "color") {
-                bg_fields.push({
-                    kind: "GradientStops",
-                    key: "bg_colors" satisfies keyof ColumnConfig,
-                    default: stopsToCss([
-                        { color: neg_bg, offset: 0 },
-                        { color: pos_bg, offset: 1 },
-                    ]),
-                    discrete: true,
-                });
-            } else {
-                bg_fields.push({
-                    kind: "GradientStops",
-                    key: "bg_colors" satisfies keyof ColumnConfig,
-                    default: stopsToCss([
-                        { color: neg_bg, offset: 0 },
-                        {
-                            color: rgbToHex(
-                                this.model!._plugin_background as [
-                                    number,
-                                    number,
-                                    number,
-                                ],
-                            ),
-                            offset: 0.5,
-                        },
-                        { color: pos_bg, offset: 1 },
-                    ]),
-                });
-            }
-        }
-
-        if (bg_mode === "gradient") {
-            bg_fields.push({
-                kind: "Number",
-                key: "bg_gradient" satisfies keyof ColumnConfig,
-                include: true,
-                default: column_stats?.abs_max ?? 0,
-            });
-        }
-
-        fields.push({
-            kind: "Group",
-            key: "color",
-            fields: [...fg_fields, ...bg_fields],
-        });
-
-        fields.push({ kind: "NumberFormat" });
-    } else if (type === "date" || type === "datetime") {
+    const fg_modes = fg_modes_for(type);
+    const bg_modes = bg_modes_for(type);
+    if (fg_modes.length > 0 || bg_modes.length > 0) {
         const fg_mode =
-            (current_value?.datetime_fg_mode as string) ?? "disabled";
-        const bg_mode =
-            (current_value?.datetime_bg_mode as string) ?? "disabled";
-        fields.push({
-            kind: "Group",
-            key: "color",
-            fields: [
-                {
-                    kind: "Enum",
-                    key: "datetime_fg_mode" satisfies keyof ColumnConfig,
-                    default: "disabled",
-                    variants: [
-                        { value: "disabled", label: "Disabled" },
-                        { value: "color", label: "Color" },
-                    ],
-                },
-                ...(fg_mode === "color"
-                    ? [
-                          color_spec.call(
-                              this,
-                              "fg_color" satisfies keyof ColumnConfig,
-                          ),
-                      ]
-                    : []),
-                {
-                    kind: "Enum",
-                    key: "datetime_bg_mode" satisfies keyof ColumnConfig,
-                    default: "disabled",
-                    variants: [
-                        { value: "disabled", label: "Disabled" },
-                        { value: "color", label: "Color" },
-                    ],
-                },
-                ...(bg_mode === "color"
-                    ? [
-                          color_spec.call(
-                              this,
-                              "bg_color" satisfies keyof ColumnConfig,
-                          ),
-                      ]
-                    : []),
-            ],
-        });
+            parse_fg_mode(type, current_value?.fg_mode) ??
+            default_fg_mode(type);
 
-        fields.push({ kind: "DatetimeFormat" });
-    } else if (type === "string") {
-        const variants = [
-            { value: "disabled", label: "Disabled" },
-            { value: "color", label: "Color" },
-            { value: "series", label: "Series" },
+        const bg_mode =
+            parse_bg_mode(type, current_value?.bg_mode) ??
+            default_bg_mode(type);
+
+        const color_fields: ControlSpec[] = [
+            mode_spec("fg_mode", fg_modes, default_fg_mode(type)),
+            ...value_specs.call(this, type, "fg", fg_mode, column_stats),
+            mode_spec("bg_mode", bg_modes, default_bg_mode(type)),
+            ...value_specs.call(this, type, "bg", bg_mode, column_stats),
         ];
 
-        const fg_mode = (current_value?.string_fg_mode as string) ?? "disabled";
-        const bg_mode = (current_value?.string_bg_mode as string) ?? "disabled";
-        fields.push({
-            kind: "Group",
-            key: "color",
-            fields: [
-                {
-                    kind: "Enum",
-                    key: "string_fg_mode" satisfies keyof ColumnConfig,
-                    default: "disabled",
-                    variants,
-                },
-                ...string_color_specs.call(
-                    this,
-                    fg_mode,
-                    "fg_color" satisfies keyof ColumnConfig,
-                    "fg_palette" satisfies keyof ColumnConfig,
-                ),
-                {
-                    kind: "Enum",
-                    key: "string_bg_mode" satisfies keyof ColumnConfig,
-                    default: "disabled",
-                    variants,
-                },
-                ...string_color_specs.call(
-                    this,
-                    bg_mode,
-                    "bg_color" satisfies keyof ColumnConfig,
-                    "bg_palette" satisfies keyof ColumnConfig,
-                ),
-            ],
-        });
+        fields.push({ kind: "Group", key: "color", fields: color_fields });
+    }
 
+    if (type === "integer" || type === "float") {
+        fields.push({ kind: "NumberFormat" });
+    } else if (type === "date" || type === "datetime") {
+        fields.push({ kind: "DatetimeFormat" });
+    } else if (type === "string") {
         fields.push({
             kind: "Bool",
             key: "link" satisfies keyof ColumnConfig,
@@ -308,33 +155,105 @@ export default function column_config_schema(
     return { fields };
 }
 
-/** The `Color` control for a string / datetime foreground or background. */
-function color_spec(this: DatagridPluginElement, key: string): ControlSpec {
-    return { kind: "Color", key, default: this.model!._color[0] };
+const MODE_LABELS: Record<FgMode | BgMode, string> = {
+    disabled: "Disabled",
+    color: "Color",
+    bar: "Bar",
+    "label-bar": "Gradient",
+    gradient: "Gradient",
+    pulse: "Pulse",
+    series: "Series",
+};
+
+/** The `Enum` control for `fg_mode` / `bg_mode` over a type's modes. */
+function mode_spec(
+    key: "fg_mode" | "bg_mode",
+    modes: readonly (FgMode | BgMode)[],
+    default_mode: FgMode | BgMode,
+): ControlSpec {
+    return {
+        kind: "Enum",
+        key: key satisfies keyof ColumnConfig,
+        default: default_mode,
+        variants: modes.map((value) => ({ value, label: MODE_LABELS[value] })),
+    };
 }
 
 /**
- * The value control a string column's foreground or background mode
- * gates in: a `Color` for `"color"`, a `Palette` for `"series"`, nothing
- * for `"disabled"`.
+ * The controls a foreground or background `mode` gates in for a column of
+ * `type`: the `fg_color` / `bg_color` value control in the grammar the
+ * (type, mode) pair reads - gradient stops for numbers, a color for
+ * string / datetime `"color"`, a palette for string `"series"` - plus the
+ * numeric scale extent. Nothing for `"disabled"`.
  */
-function string_color_specs(
+function value_specs(
     this: DatagridPluginElement,
-    mode: string,
-    color_key: string,
-    palette_key: string,
+    type: ColumnType,
+    side: "fg" | "bg",
+    mode: FgMode | BgMode,
+    column_stats: ColumnStats | undefined,
 ): ControlSpec[] {
-    if (mode === "color") {
-        return [color_spec.call(this, color_key)];
+    if (mode === "disabled") {
+        return [];
+    }
+
+    const key = `${side}_color` satisfies keyof ColumnConfig;
+    if (type === "integer" || type === "float") {
+        const pos = this.model![`_pos_${side}_color`][0];
+        const neg = this.model![`_neg_${side}_color`][0];
+        const stops: ControlSpec =
+            mode === "gradient" || mode === "pulse"
+                ? {
+                      kind: "GradientStops",
+                      key,
+                      default: stopsToCss([
+                          { color: neg, offset: 0 },
+                          {
+                              color: rgbToHex(
+                                  this.model!._plugin_background as [
+                                      number,
+                                      number,
+                                      number,
+                                  ],
+                              ),
+                              offset: 0.5,
+                          },
+                          { color: pos, offset: 1 },
+                      ]),
+                  }
+                : {
+                      kind: "GradientStops",
+                      key,
+                      default: stopsToCss([
+                          { color: neg, offset: 0 },
+                          { color: pos, offset: 1 },
+                      ]),
+                      discrete: true,
+                  };
+
+        const scaled =
+            mode === "bar" || mode === "label-bar" || mode === "gradient";
+
+        return scaled
+            ? [
+                  stops,
+                  {
+                      kind: "Number",
+                      key: `${side}_gradient` satisfies keyof ColumnConfig,
+                      include: true,
+                      default: column_stats?.abs_max ?? 0,
+                  },
+              ]
+            : [stops];
     } else if (mode === "series") {
         return [
             {
                 kind: "Palette",
-                key: palette_key,
+                key,
                 default: colorsToCss(this.model!._series_palette),
             },
         ];
+    } else {
+        return [{ kind: "Color", key, default: this.model!._color[0] }];
     }
-
-    return [];
 }

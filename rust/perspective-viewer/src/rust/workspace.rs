@@ -327,6 +327,11 @@ struct WorkspaceData {
     /// Fires on every [`PanelPhase`] transition.
     staged_changed: Rc<PubSub<()>>,
 
+    /// Fires when a layout tree is staged for a RETAINED panel set (a
+    /// `panels`-less `restoreWorkspace`), whose props-driven render would
+    /// otherwise never consume it.
+    layout_staged: Rc<PubSub<()>>,
+
     /// Panels removed from `panels` whose layout cell has not yet been
     /// reclaimed, so their engines and plugin pixels stay alive until the
     /// commit.
@@ -357,6 +362,7 @@ impl Workspace {
             pending_layout: None,
             effects: EffectLedger::default(),
             staged_changed: Rc::new(PubSub::default()),
+            layout_staged: Rc::new(PubSub::default()),
             closing: Vec::new(),
             emitter: LayoutEmitter::default(),
         })))
@@ -418,6 +424,12 @@ impl Workspace {
     /// [`WorkspaceData::staged_changed`]).
     pub fn staged_changed(&self) -> Rc<PubSub<()>> {
         self.0.borrow().staged_changed.clone()
+    }
+
+    /// A handle to the `layout_staged` PubSub (see
+    /// [`WorkspaceData::layout_staged`]).
+    pub fn layout_staged(&self) -> Rc<PubSub<()>> {
+        self.0.borrow().layout_staged.clone()
     }
 
     /// Promote a staged panel toward layout insertion, returning whether it

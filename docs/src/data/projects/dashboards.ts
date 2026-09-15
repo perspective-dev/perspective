@@ -111,7 +111,7 @@ export const DASHBOARD_PROJECTS: Project[] = [
                 PERSPECTIVE_GENERATED_ID_0: {
                     columns_config: {
                         price: {
-                            number_fg_mode: "label-bar",
+                            fg_mode: "label-bar",
                             fg_gradient: 20,
                         },
                     },
@@ -205,7 +205,7 @@ export const DASHBOARD_PROJECTS: Project[] = [
                 PERSPECTIVE_GENERATED_ID_0: {
                     columns_config: {
                         price: {
-                            number_fg_mode: "label-bar",
+                            fg_mode: "label-bar",
                             fg_gradient: 20,
                         },
                     },

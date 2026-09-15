@@ -99,19 +99,19 @@
     {
         "columns_config": {
             "Diff from market open": {
-                "number_fg_mode": "bar",
+                "fg_mode": "bar",
                 "fg_gradient": 12.9
             },
             "if(\"side\"=='buy'){-1}else{1}": {
-                "number_fg_mode": "bar",
+                "fg_mode": "bar",
                 "fg_gradient": 8,
                 "aggregate_depth": 1
             },
             "status": {
-                "string_bg_mode": "series"
+                "bg_mode": "series"
             },
             "side": {
-                "string_bg_mode": "series"
+                "bg_mode": "series"
             }
         },
         "plugin": "Datagrid",
@@ -141,7 +141,7 @@
         "columns_config": {
             "if(\"side\"=='buy'){-1}else{1}": {
                 "aggregate_depth": 1,
-                "number_fg_mode": "bar",
+                "fg_mode": "bar",
                 "fg_gradient": 8
             }
         },

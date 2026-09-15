@@ -157,7 +157,7 @@ test.describe("Column Style Tests", () => {
                 columns: ["Row ID", "Sales"],
                 columns_config: {
                     Sales: {
-                        datagrid_number_style: { number_bg_mode: "pulse" },
+                        bg_mode: "pulse",
                     },
                 },
             });
@@ -193,7 +193,7 @@ test.describe("Column Style Tests", () => {
                 settings: true,
                 columns_config: {
                     Sales: {
-                        datagrid_number_style: { number_bg_mode: "pulse" },
+                        bg_mode: "pulse",
                     },
                 },
             });
@@ -241,7 +241,7 @@ test.describe("Column Style Tests", () => {
             await document.querySelector("perspective-viewer")!.restore({
                 columns_config: {
                     "Row ID": {
-                        number_fg_mode: "label-bar",
+                        fg_mode: "label-bar",
                     },
                 },
                 plugin: "Datagrid",
@@ -270,7 +270,7 @@ test.describe("Column Style Tests", () => {
             await document.querySelector("perspective-viewer")!.restore({
                 columns_config: {
                     test: {
-                        number_fg_mode: "label-bar",
+                        fg_mode: "label-bar",
                     },
                 },
                 plugin: "Datagrid",
@@ -331,7 +331,7 @@ test.describe("Column Style Tests", () => {
                 plugin: "Datagrid",
                 columns: ["Row ID", "Profit"],
                 columns_config: {
-                    Profit: { number_fg_mode: "bar" },
+                    Profit: { fg_mode: "bar" },
                 },
             });
         });
@@ -359,7 +359,7 @@ test.describe("Column Style Tests", () => {
                 plugin: "Datagrid",
                 columns: ["Row ID", "Profit"],
                 columns_config: {
-                    Profit: { number_fg_mode: "label-bar" },
+                    Profit: { fg_mode: "label-bar" },
                 },
             });
         });
@@ -388,8 +388,8 @@ test.describe("Column Style Tests", () => {
                 columns: ["Row ID", "Profit"],
                 columns_config: {
                     Profit: {
-                        number_fg_mode: "label-bar",
-                        number_bg_mode: "gradient",
+                        fg_mode: "label-bar",
+                        bg_mode: "gradient",
                     },
                 },
             });
@@ -404,7 +404,7 @@ test.describe("Column Style Tests", () => {
 
     // ──────────────────────────────────────────────────────────────────
     // Sidebar should re-query schema and surface extra controls (the
-    // `number_bg_mode` is set to `gradient`.
+    // `bg_mode` is set to `gradient`.
     // ──────────────────────────────────────────────────────────────────
     test("Sidebar surfaces gradient controls when bg_mode = gradient", async ({
         page,
@@ -423,7 +423,7 @@ test.describe("Column Style Tests", () => {
                 columns: ["Row ID", "Profit"],
                 settings: true,
                 columns_config: {
-                    Profit: { number_bg_mode: "gradient" },
+                    Profit: { bg_mode: "gradient" },
                 },
             });
         });
@@ -454,7 +454,7 @@ test.describe("Column Style Tests", () => {
         );
 
         const bg_field = sidebar_locator.locator("fieldset.style-control", {
-            has: page.locator("#bg_colors-label"),
+            has: page.locator("#bg_color-label"),
         });
 
         await bg_field.locator(".gradient-stops-selector").waitFor();
@@ -638,7 +638,7 @@ test.describe("Column Style Tests", () => {
                 columns: ["Row ID", "Sales"],
                 plugin_config: { edit_mode: "EDIT" },
                 columns_config: {
-                    Sales: { number_bg_mode: "pulse" },
+                    Sales: { bg_mode: "pulse" },
                 },
             });
             return await viewer.save();
@@ -646,7 +646,7 @@ test.describe("Column Style Tests", () => {
 
         expect(saved.plugin_config).toEqual({ edit_mode: "EDIT" });
         expect(saved.columns_config).toEqual({
-            Sales: { number_bg_mode: "pulse" },
+            Sales: { bg_mode: "pulse" },
         });
     });
 
@@ -666,7 +666,7 @@ test.describe("Column Style Tests", () => {
                 columns: ["Row ID", "Sales"],
                 plugin_config: { edit_mode: "EDIT" },
                 columns_config: {
-                    Sales: { number_bg_mode: "pulse" },
+                    Sales: { bg_mode: "pulse" },
                 },
             });
             return await viewer.save();
@@ -674,7 +674,7 @@ test.describe("Column Style Tests", () => {
 
         expect(saved.plugin_config).toEqual({ edit_mode: "EDIT" });
         expect(saved.columns_config).toEqual({
-            Sales: { number_bg_mode: "pulse" },
+            Sales: { bg_mode: "pulse" },
         });
     });
 
@@ -733,15 +733,15 @@ test.describe("Column Style Tests", () => {
                 columns: ["Category", "Region", "Order Date"],
                 columns_config: {
                     Category: {
-                        string_fg_mode: "color",
+                        fg_mode: "color",
                         fg_color: "#ff0000",
-                        string_bg_mode: "series",
+                        bg_mode: "series",
                     },
-                    Region: { string_bg_mode: "color", bg_color: "#000000" },
+                    Region: { bg_mode: "color", bg_color: "#000000" },
                     "Order Date": {
-                        datetime_fg_mode: "color",
+                        fg_mode: "color",
                         fg_color: "#00ff00",
-                        datetime_bg_mode: "color",
+                        bg_mode: "color",
                         bg_color: "#0000ff",
                     },
                 },
@@ -774,9 +774,9 @@ test.describe("Column Style Tests", () => {
         });
 
         expect(saved.Category).toEqual({
-            string_fg_mode: "color",
+            fg_mode: "color",
             fg_color: "#ff0000",
-            string_bg_mode: "series",
+            bg_mode: "series",
         });
     });
 
@@ -795,7 +795,7 @@ test.describe("Column Style Tests", () => {
             await viewer.restore({
                 plugin: "Datagrid",
                 columns: ["Category"],
-                columns_config: { Category: { string_bg_mode: "series" } },
+                columns_config: { Category: { bg_mode: "series" } },
             } as any);
 
             await viewer.flush();
@@ -853,9 +853,9 @@ test.describe("Column Style Tests", () => {
     }) => {
         const cells = await gradient_cells(page, {
             Profit: {
-                number_bg_mode: "gradient",
+                bg_mode: "gradient",
                 bg_gradient: 100,
-                bg_colors:
+                bg_color:
                     "linear-gradient(to right, #ff0000 0%, #ffffff 50%, #0000ff 100%)",
             },
         });
@@ -876,9 +876,9 @@ test.describe("Column Style Tests", () => {
     test("bg gradient samples interior stops", async ({ page }) => {
         const cells = await gradient_cells(page, {
             Profit: {
-                number_bg_mode: "gradient",
+                bg_mode: "gradient",
                 bg_gradient: 1e12,
-                bg_colors:
+                bg_color:
                     "linear-gradient(to right, #ff0000 0%, #123456 50%, #0000ff 100%)",
             },
         });
@@ -890,13 +890,13 @@ test.describe("Column Style Tests", () => {
         }
     });
 
-    test("bg_colors under color mode renders the END colors by sign", async ({
+    test("bg_color under color mode renders the END colors by sign", async ({
         page,
     }) => {
         const cells = await gradient_cells(page, {
             Profit: {
-                number_bg_mode: "color",
-                bg_colors: "linear-gradient(#ff0000, #123456, #0000ff)",
+                bg_mode: "color",
+                bg_color: "linear-gradient(#ff0000, #123456, #0000ff)",
             },
         });
 
@@ -1027,7 +1027,7 @@ test.describe("Column Style Tests", () => {
             return (await viewer.save()).columns_config ?? {};
         });
 
-        expect(saved2[col_b]?.fg_colors).toMatch(
+        expect(saved2[col_b]?.fg_color).toMatch(
             /^linear-gradient\(to right, #00ff00 0%, #[0-9a-f]{6} 100%\)$/,
         );
         expect(saved2[col_a]).toBeUndefined();
@@ -1050,7 +1050,7 @@ test.describe("Column Style Tests", () => {
                 columns: ["Row ID", "Sales"],
                 plugin_config: { edit_mode: "EDIT" },
                 columns_config: {
-                    Sales: { number_bg_mode: "pulse" },
+                    Sales: { bg_mode: "pulse" },
                 },
             };
             await viewer.restore(payload);
@@ -1062,7 +1062,7 @@ test.describe("Column Style Tests", () => {
 
         expect(first.plugin_config).toEqual({ edit_mode: "EDIT" });
         expect(first.columns_config).toEqual({
-            Sales: { number_bg_mode: "pulse" },
+            Sales: { bg_mode: "pulse" },
         });
         expect(second.plugin_config).toEqual(first.plugin_config);
         expect(second.columns_config).toEqual(first.columns_config);

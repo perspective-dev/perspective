@@ -91,9 +91,9 @@ extern "C" {
     #[wasm_bindgen(typescript_type = "GetClientOptions")]
     pub type JsGetClientOptions;
 
-    /// `restoreWorkspace()` argument: a workspace config update.
-    #[wasm_bindgen(typescript_type = "WorkspaceConfigUpdate")]
-    pub type JsWorkspaceConfigUpdate;
+    /// `getView` options dict (`{ mode?: GetViewMode, panel?: string }`).
+    #[wasm_bindgen(typescript_type = "GetViewOptions")]
+    pub type JsGetViewOptions;
 
     /// `saveWorkspace()` options dict (`{ full_palette?: boolean }`).
     #[wasm_bindgen(typescript_type = "SaveWorkspaceOptions")]
@@ -202,6 +202,28 @@ impl PerspectiveViewerElement {
             )
             .into()
         })
+    }
+
+    /// Re-stamp the global-filter overlay on every panel not in `fresh` and
+    /// re-render those whose overlay changed.
+    async fn rerender_retained_overlays(&self, fresh: &[PanelId]) -> ApiResult<()> {
+        let retained = self
+            .workspace
+            .panels()
+            .into_iter()
+            .filter(|panel| !fresh.contains(&panel.id))
+            .filter(|panel| stamp_global_overlay(&self.workspace, &panel.id, &panel.session))
+            .collect::<Vec<_>>();
+
+        join_all(retained.iter().map(|panel| async move {
+            apply_and_render(&panel.session, &panel.renderer, ViewConfigUpdate::default())?.await?;
+            Ok(())
+        }))
+        .await
+        .into_iter()
+        .collect::<ApiResult<Vec<_>>>()?;
+
+        Ok(())
     }
 
     fn layout_element(&self) -> Option<RegularLayout> {
@@ -764,32 +786,59 @@ impl PerspectiveViewerElement {
         eject_client_panels(&self.workspace, &self.root, target, ids)
     }
 
-    /// Get the underlying [`View`] for this viewer.
+    /// Get a [`View`] for a panel of this viewer, as currently configured by
+    /// the user.
     ///
-    /// Use this method to get promgrammatic access to the [`View`] as currently
-    /// configured by the user, for e.g. serializing as an
-    /// [Apache Arrow](https://arrow.apache.org/) before passing to another
-    /// library.
+    /// # Arguments
     ///
-    /// The [`View`] returned by this method is owned by the
-    /// [`PerspectiveViewerElement`] and may be _invalidated_ by
-    /// [`View::delete`] at any time. Plugins which rely on this [`View`] for
-    /// their [`HTMLPerspectiveViewerPluginElement::draw`] implementations
-    /// should treat this condition as a _cancellation_ by silently aborting on
-    /// "View already deleted" errors from method calls.
+    /// - `mode` - which [`View`] to return:
+    ///   - `"live"` (default) - the panel's own [`View`], which the viewer
+    ///     replaces on every config change and deletes when auto-paused or
+    ///     [`PerspectiveViewerElement::delete`]d, so calls on it may fail with
+    ///     "View already deleted", it must never be deleted by the caller, and
+    ///     it rejects with `No View for panel "<name>"` while none is bound
+    ///     (auto-paused or not yet rendered).
+    ///   - `"clone"` - a new [`View`] built from the panel's effective config
+    ///     (global filter included), independent of the render lifecycle, which
+    ///     the caller owns and must [`View::delete`].
+    ///   - `"auto"` - `"live"` when the panel has a bound [`View`], else
+    ///     `"clone"`.
+    /// - `panel` - the target panel, or the active panel when omitted.
+    ///
+    /// Plugins which rely on the live [`View`] for their
+    /// [`HTMLPerspectiveViewerPluginElement::draw`] implementations should
+    /// treat "View already deleted" as a _cancellation_ by silently aborting.
     ///
     /// # JavaScript Examples
     ///
     /// ```javascript
     /// const view = await viewer.getView();
     /// ```
+    ///
+    /// Export every panel without borrowing the viewer's own [`View`]:
+    ///
+    /// ```javascript
+    /// for (const panel of viewer.getPanelNames()) {
+    ///     const view = await viewer.getView({ panel, mode: "clone" });
+    ///     const arrow = await view.to_arrow();
+    ///     await view.delete();
+    /// }
+    /// ```
     #[wasm_bindgen]
-    pub fn getView(&self, options: Option<JsPanelOptions>) -> ApiFuture<View> {
+    pub fn getView(&self, options: Option<JsGetViewOptions>) -> ApiFuture<View> {
         let this = self.clone();
         ApiFuture::new(async move {
-            let PanelOptions { panel: name } = parse_options(options)?;
+            let GetViewOptions { mode, panel: name } = parse_options(options)?;
             let panel = this.resolve_panel(name)?;
-            Ok(panel.session.get_view().ok_or("No table set")?.into())
+            match (mode.unwrap_or_default(), panel.session.get_view()) {
+                (GetViewMode::Live | GetViewMode::Auto, Some(view)) => Ok(view.into()),
+                (GetViewMode::Live, None) => {
+                    Err(format!("No View for panel \"{}\"", panel.id.as_str()).into())
+                },
+                (GetViewMode::Clone, _) | (GetViewMode::Auto, None) => {
+                    Ok(panel.session.create_detached_view().await?.into())
+                },
+            }
         })
     }
 
@@ -1090,19 +1139,6 @@ impl PerspectiveViewerElement {
             };
 
             if !matches!(settings, OptionalUpdate::Missing) {
-                // Through `ToggleSettingsInit` — the SAME full choreography
-                // the toolbar toggle drives (presize every visible plugin
-                // to its post-toggle box, then the exactness-finalizer
-                // resize) — NOT the bare `ToggleSettingsComplete` leaf,
-                // which only re-renders the pane. The pane is the outer
-                // `SplitPanel` (no `before-resize` event) and the host box
-                // is unchanged, so a leaf-only toggle left every canvas
-                // plugin CSS-stretched at its old backing size.
-                //
-                // No `set_settings_before_open` here: `is_settings_open` is
-                // Init's toggle-vs-no-op DISPATCH state, so pre-writing the
-                // target makes every call resolve as a no-op. Init owns the
-                // write, as it does for the toolbar and `toggleConfig`.
                 let (sender, receiver) = channel::<ApiResult<JsValue>>();
                 this.root.borrow().as_ref().into_apierror()?.send_message(
                     PerspectiveViewerMsg::ToggleSettingsInit(Some(settings), false, Some(sender)),
@@ -1158,17 +1194,16 @@ impl PerspectiveViewerElement {
         js_sys::Promise::from(fut).unchecked_into()
     }
 
-    /// Restore the ENTIRE element from a [`WorkspaceConfigUpdate`]
-    /// (`{version, active?, layout, panels, ...}`) —
-    /// the multi-panel counterpart of [`Self::restore`]. Every existing panel
-    /// is replaced by the `panels` entries, and the layout tree + master/detail
-    /// cross-filter state re-applied. Unlike [`Self::restore`], this never
-    /// falls back to the single-panel path.
+    /// Apply a [`WorkspaceConfigUpdate`] to the element — the multi-panel
+    /// counterpart of [`Self::restore`] and like it a field-wise update, where
+    /// an absent field is unchanged, `null` resets and a value replaces.
     ///
     /// # Arguments
     ///
-    /// - `update` - The workspace config to restore, as returned by
-    ///   [`Self::saveWorkspace`].
+    /// - `update` - The workspace config update: a [`Self::saveWorkspace`]
+    ///   token replaces every panel (`panels` is the whole set), while a token
+    ///   without `panels` keeps them and `layout`, `active` and `masters` name
+    ///   them by their existing ids.
     /// - `options.wait_for_table` - when `true`, a panel whose `table` no
     ///   loaded client hosts yet is created empty and pending until the table
     ///   is created, instead of the default error.
@@ -1178,12 +1213,17 @@ impl PerspectiveViewerElement {
     /// ```javascript
     /// await viewer.restoreWorkspace(await otherViewer.saveWorkspace());
     /// ```
+    ///
+    /// Cross-filter the current panels without re-creating them:
+    ///
+    /// ```javascript
+    /// await viewer.restoreWorkspace({ global_filters: [["Region", "==", "West"]] });
+    /// ```
     pub fn restoreWorkspace(
         &self,
         update: JsWorkspaceConfigUpdate,
         options: Option<JsRestoreWorkspaceOptions>,
     ) -> JsVoidPromise {
-        let update: JsViewerConfigUpdate = update.unchecked_into();
         let effect = self.workspace.effects().guard();
         let this = self.clone();
         let fut = ApiFuture::new(async move {
@@ -1191,6 +1231,10 @@ impl PerspectiveViewerElement {
             let RestoreWorkspaceOptions { wait_for_table } = parse_options(options)?;
             let missing = MissingTable::from_wait(wait_for_table);
             let (contents, eject_tasks) = sync_update_panels(&this, update)?;
+            let fresh = contents
+                .iter()
+                .map(|(id, ..)| id.clone())
+                .collect::<Vec<_>>();
             let results = join_all(contents.into_iter().map(|(id, session, renderer, config)| {
                 let presentation = this.presentation.clone();
                 let workspace = this.workspace.clone();
@@ -1217,6 +1261,7 @@ impl PerspectiveViewerElement {
             .await;
 
             results.into_iter().collect::<ApiResult<Vec<_>>>()?;
+            this.rerender_retained_overlays(&fresh).await?;
             join_all(eject_tasks)
                 .await
                 .into_iter()

@@ -116,6 +116,105 @@ export type Align =
     | "bottom"
     | "bottom-right";
 
+/** Foreground treatments of an integer / float column. */
+export const NUMBER_FG_MODES = [
+    "disabled",
+    "color",
+    "bar",
+    "label-bar",
+] as const;
+
+/** Background treatments of an integer / float column. */
+export const NUMBER_BG_MODES = [
+    "disabled",
+    "color",
+    "gradient",
+    "pulse",
+] as const;
+
+/** Foreground and background treatments of a string column. */
+export const STRING_MODES = ["disabled", "color", "series"] as const;
+
+/** Foreground and background treatments of a date / datetime column. */
+export const DATETIME_MODES = ["disabled", "color"] as const;
+
+export type NumberFgMode = (typeof NUMBER_FG_MODES)[number];
+export type NumberBgMode = (typeof NUMBER_BG_MODES)[number];
+export type StringMode = (typeof STRING_MODES)[number];
+export type DatetimeMode = (typeof DATETIME_MODES)[number];
+
+/**
+ * Every foreground treatment some column type accepts. The subset a given
+ * column accepts is `fg_modes_for(type)`; `column_config_schema()`
+ * advertises exactly that subset, and the viewer rejects any other value.
+ */
+export type FgMode = NumberFgMode | StringMode | DatetimeMode;
+
+/** Every background treatment some column type accepts, as {@link FgMode}. */
+export type BgMode = NumberBgMode | StringMode | DatetimeMode;
+
+/** The `fg_mode` values a column of `type` accepts, empty for boolean. */
+export function fg_modes_for(type: ColumnType): readonly FgMode[] {
+    switch (type) {
+        case "integer":
+        case "float":
+            return NUMBER_FG_MODES;
+        case "string":
+            return STRING_MODES;
+        case "date":
+        case "datetime":
+            return DATETIME_MODES;
+        default:
+            return [];
+    }
+}
+
+/** The `bg_mode` values a column of `type` accepts, empty for boolean. */
+export function bg_modes_for(type: ColumnType): readonly BgMode[] {
+    switch (type) {
+        case "integer":
+        case "float":
+            return NUMBER_BG_MODES;
+        case "string":
+            return STRING_MODES;
+        case "date":
+        case "datetime":
+            return DATETIME_MODES;
+        default:
+            return [];
+    }
+}
+
+/** The `fg_mode` an omitted key stands for: colored text for numbers. */
+export function default_fg_mode(type: ColumnType): FgMode {
+    return type === "integer" || type === "float" ? "color" : "disabled";
+}
+
+/** The `bg_mode` an omitted key stands for. */
+export function default_bg_mode(_type: ColumnType): BgMode {
+    return "disabled";
+}
+
+/** `raw` as an `fg_mode` a column of `type` accepts, else `undefined`. */
+export function parse_fg_mode(
+    type: ColumnType,
+    raw: unknown,
+): FgMode | undefined {
+    return (fg_modes_for(type) as readonly unknown[]).includes(raw)
+        ? (raw as FgMode)
+        : undefined;
+}
+
+/** `raw` as a `bg_mode` a column of `type` accepts, else `undefined`. */
+export function parse_bg_mode(
+    type: ColumnType,
+    raw: unknown,
+): BgMode | undefined {
+    return (bg_modes_for(type) as readonly unknown[]).includes(raw)
+        ? (raw as BgMode)
+        : undefined;
+}
+
 /**
  * Datagrid per-column style configuration - one value of the
  * `columns_config` map of a `ViewerConfigUpdate` when the Datagrid plugin
@@ -125,29 +224,46 @@ export type Align =
  */
 export interface ColumnConfig {
     /**
-     * String / datetime columns: the text color (CSS color) when the
-     * column's foreground mode is `"color"`.
+     * Foreground treatment. Numeric columns: `"color"` (default, text
+     * colored by sign), `"bar"` (proportional bar), `"label-bar"` (bar
+     * with label) or `"disabled"`. String columns: `"disabled"` (default),
+     * `"color"` or `"series"` (one `fg_color` palette entry per distinct
+     * value). Date / datetime columns: `"disabled"` (default) or
+     * `"color"`. A mode the column's type does not accept is rejected on
+     * input.
+     */
+    fg_mode?: FgMode;
+
+    /**
+     * Background treatment. Numeric columns: `"disabled"` (default),
+     * `"color"` (solid fill by sign), `"gradient"` (fill intensity scaled
+     * to the value) or `"pulse"` (flash on change). String columns:
+     * `"disabled"`, `"color"` or `"series"`. Date / datetime columns:
+     * `"disabled"` or `"color"`.
+     */
+    bg_mode?: BgMode;
+
+    /**
+     * The foreground color value, a CSS string whose grammar follows the
+     * column's type and `fg_mode` - not advertised while the mode is
+     * `"disabled"`:
+     *
+     * - numeric columns: sign-split stops, `linear-gradient(to right,
+     *   #rrggbb 0%, #rrggbb 100%)`, t-ordered (the first stop is the
+     *   negative color, the last the positive);
+     * - string / datetime columns in `"color"` mode: one color, `#rrggbb`;
+     * - string columns in `"series"` mode: a palette assigned to distinct
+     *   values in encounter order, `linear-gradient(to right, #rrggbb, …)`
+     *   with no positions.
      */
     fg_color?: string;
 
     /**
-     * String / datetime columns: the cell background (CSS color) when the
-     * column's background mode is `"color"`.
-     */
-    bg_color?: string;
-
-    /**
-     * Numeric columns: foreground sign-split colors — a CSS
-     * `linear-gradient(to right, #rrggbb 0%, #rrggbb 100%)`, t-ordered
-     * (the first stop is the negative color, the last the positive).
-     */
-    fg_colors?: string;
-
-    /**
-     * Numeric columns: background color scale, t-ordered with the
+     * The background color value, as `fg_color` but keyed by `bg_mode`.
+     * Numeric `"gradient"` and `"pulse"` modes take a color scale with the
      * sign pivot at offset 0.5.
      */
-    bg_colors?: string;
+    bg_color?: string;
 
     /**
      * Numeric columns: the absolute value at which bar/gradient
@@ -160,55 +276,6 @@ export interface ColumnConfig {
      * mode reaches full scale.
      */
     bg_gradient?: number;
-
-    /**
-     * Numeric columns: foreground treatment - `"color"` (default,
-     * colored text), `"bar"` (proportional bar), `"label-bar"` (bar with
-     * label) or `"disabled"`.
-     */
-    number_fg_mode?: string;
-
-    /**
-     * Numeric columns: background treatment - `"disabled"` (default),
-     * `"color"` (solid fill) or `"gradient"` (fill intensity scaled to
-     * the value).
-     */
-    number_bg_mode?: string;
-
-    /**
-     * String columns: `"disabled"` (default), `"color"` (paired with
-     * `fg_color`) or `"series"` (one `fg_palette` color per distinct value).
-     */
-    string_fg_mode?: string;
-
-    /**
-     * String columns: background treatment - `"disabled"` (default),
-     * `"color"` (paired with `bg_color`) or `"series"` (paired with
-     * `bg_palette`).
-     */
-    string_bg_mode?: string;
-
-    /**
-     * String columns, `"series"` foreground: explicit palette assigned to
-     * distinct values in encounter order (a CSS `linear-gradient(to right,
-     * …)` color list).
-     */
-    fg_palette?: string;
-
-    /** String columns, `"series"` background: the palette, as `fg_palette`. */
-    bg_palette?: string;
-
-    /**
-     * Datetime columns: `"disabled"` (default) or `"color"` (paired with
-     * `fg_color`).
-     */
-    datetime_fg_mode?: string;
-
-    /**
-     * Datetime columns: background treatment - `"disabled"` (default) or
-     * `"color"` (paired with `bg_color`).
-     */
-    datetime_bg_mode?: string;
 
     fixed?: number;
 
@@ -276,6 +343,37 @@ export type {
 } from "@perspective-dev/viewer";
 
 export type ColumnsConfig = Record<string, ColumnConfig>;
+
+/**
+ * A column's {@link ColumnConfig} with its `fg_color` / `bg_color` strings
+ * parsed once at `restore()`. Column types are not known at restore time,
+ * so every reader runs and each parsed form is present when its grammar
+ * matched; the per-type cell style handlers pick the form their mode
+ * needs.
+ */
+export interface ResolvedColumnStyle
+    extends Omit<ColumnConfig, "fg_color" | "bg_color"> {
+    /** `fg_color` as a single color (string / datetime `"color"` mode). */
+    fg_color?: ColorRecord;
+    bg_color?: ColorRecord;
+
+    /** `fg_color` as gradient stops (numeric columns), t-ordered. */
+    fg_stops?: GradientStopRgb[];
+    bg_stops?: GradientStopRgb[];
+
+    /** End colors of `fg_stops` / `bg_stops`: the last stop is positive. */
+    pos_fg_color?: ColorRecord;
+    neg_fg_color?: ColorRecord;
+    pos_bg_color?: ColorRecord;
+    neg_bg_color?: ColorRecord;
+
+    /** `fg_color` as a palette (string `"series"` mode), `#rrggbb` each. */
+    fg_palette?: string[];
+    bg_palette?: string[];
+}
+
+/** What `restore()` stores under {@link PRIVATE_PLUGIN_SYMBOL}. */
+export type ResolvedColumnsConfig = Record<string, ResolvedColumnStyle>;
 
 /**
  * Datagrid plugin-level configuration - the `plugin_config` slot of a

@@ -25,7 +25,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { expect, test } from "@perspective-dev/test";
-import { calibratePlotBaseline, gotoBasic, restoreChart } from "./helpers";
+import { gotoBasic, restoreChart } from "./helpers";
 import {
     CENTER,
     MAP_CONFIG,
@@ -179,27 +179,26 @@ test.describe("map tile sources", () => {
         expect(isBlue(blue)).toBe(true);
     });
 
-    test("unknown provider id degrades to the default basemap without blanking", async ({
+    test("unknown provider id is rejected and leaves the config untouched", async ({
         page,
     }) => {
-        await restoreChart(page, {
-            ...MAP_CONFIG,
-            plugin_config: { map_tile_provider: "no-such-provider" },
-        } as any);
-
-        // The chart still renders its glyph layer (the fallback
-        // basemap may or may not resolve tiles in a sandboxed test
-        // environment — only the id resolution must not throw)…
-        const baseline = await calibratePlotBaseline(page, {
-            plotRegionFrac: CENTER,
+        await restoreChart(page, MAP_CONFIG as any);
+        const before = await savedPluginConfig(page);
+        const error = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")!;
+            try {
+                await viewer.restore({
+                    plugin_config: { map_tile_provider: "no-such-provider" },
+                } as any);
+                return null;
+            } catch (e) {
+                return String(e);
+            }
         });
-        expect(baseline).toBeGreaterThan(0);
 
-        // …and the unrecognized id is persisted verbatim, so a config
-        // restored before its `registerTileSource` call self-heals
-        // once registration arrives.
-        const cfg = await savedPluginConfig(page);
-        expect(cfg.map_tile_provider).toBe("no-such-provider");
+        expect(error).toContain("map_tile_provider");
+        expect(error).toContain("no-such-provider");
+        expect(await savedPluginConfig(page)).toEqual(before);
     });
 
     test("malformed specs are rejected with TypeError", async ({ page }) => {

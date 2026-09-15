@@ -372,7 +372,7 @@ export function tokenizeLinearGradient(
 }
 
 /**
- * Strict gradient reader (`fg_colors`/`bg_colors`): ≥ 2 stops, positions
+ * Strict gradient reader (numeric `fg_color`/`bg_color`): ≥ 2 stops, positions
  * optional, clamped to `[0, 1]` and sorted, or `null` on malformed
  * input.
  */
@@ -422,7 +422,8 @@ export function parseCssGradientStops(src: string): GradientStopRgb[] | null {
 }
 
 /**
- * Strict palette reader (`palette`): ≥ 1 colors with no positions, or
+ * Strict palette reader (string `series` `fg_color`/`bg_color`): ≥ 1 colors
+ * with no positions, or
  * `null` on malformed input.
  */
 export function parseCssColorList(src: string): RGB[] | null {

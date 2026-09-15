@@ -25,6 +25,10 @@ pub enum MainPanelMsg {
     /// deliver in every observed context.
     StagedChanged,
 
+    /// A layout tree was staged for the retained panel set
+    /// (`layout_staged` PubSub): re-render so `reconcile` applies it.
+    LayoutStaged,
+
     /// The `<regular-layout>` tree changed (fired by its
     /// `regular-layout-update` event). Used to detect panels removed from
     /// the layout (e.g. a frame's close button) so they can be disposed.

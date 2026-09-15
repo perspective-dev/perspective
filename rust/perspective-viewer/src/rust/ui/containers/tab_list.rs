@@ -80,7 +80,7 @@ impl<T: TabItem> Component for TabList<T> {
 
             let onclick = ctx.link().callback(move |_| TabListMsg::SetSelected(idx));
             let title = tab.to_string();
-            let style = intl_content_style(&format!("{}-tab", intl_slug(&title)), &title);
+            let style = intl_content_style(&format!("{}-tab", intl_slug(&title)));
             html! {
                 <span {class} {onclick}>
                     <div class="tab-title" id={title} {style} />

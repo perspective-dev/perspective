@@ -43,7 +43,7 @@ function copyRecursive(src, dest) {
 }
 
 if (!fs.existsSync(DIST)) {
-    console.error(`Missing ${DIST} — run \`npm run build\` first.`);
+    console.error(`Missing ${DIST} — run \`pnpm run build\` first.`);
     process.exit(1);
 }
 

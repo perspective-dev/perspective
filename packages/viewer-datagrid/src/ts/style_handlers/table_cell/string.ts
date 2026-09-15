@@ -9,28 +9,23 @@
 // ┃ This file is part of the Perspective library, distributed under the terms ┃
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
 import {
     infer_foreground_from_background,
     parseColor,
     rgbaToRgb,
     type RGB,
 } from "../../color_utils.js";
-import type { DatagridModel, ColumnConfig, ColorRecord } from "../../types.js";
+import {
+    parse_bg_mode,
+    parse_fg_mode,
+    type DatagridModel,
+    type ResolvedColumnStyle,
+} from "../../types.js";
 
 interface CellMetaWithExtras {
     _is_hidden_by_aggregate_depth?: boolean;
     user?: string | null;
     column_header?: string[];
-}
-
-interface PluginWithColor extends Omit<ColumnConfig, "fg_color" | "bg_color"> {
-    fg_color?: ColorRecord;
-    bg_color?: ColorRecord;
-
-    /** `fg_palette` / `bg_palette` parsed once at restore (`#rrggbb`). */
-    fg_palette_colors?: string[];
-    bg_palette_colors?: string[];
 }
 
 /**
@@ -73,12 +68,12 @@ function series_color(
 /** Apply a string column's foreground and background modes independently. */
 export function cell_style_string(
     model: DatagridModel,
-    plugin: PluginWithColor | undefined,
+    plugin: ResolvedColumnStyle | undefined,
     td: HTMLElement,
     metadata: CellMetaWithExtras,
 ): void {
-    const fg_mode = plugin?.string_fg_mode;
-    const bg_mode = plugin?.string_bg_mode;
+    const fg_mode = parse_fg_mode("string", plugin?.fg_mode) ?? "disabled";
+    const bg_mode = parse_bg_mode("string", plugin?.bg_mode) ?? "disabled";
     const column_name = metadata.column_header?.[model._config.split_by.length];
     const value = metadata.user;
     let color = "";
@@ -100,14 +95,14 @@ export function cell_style_string(
             background = hex;
             background_rgb = [r, g, b];
         } else if (bg_mode === "series") {
-            background = series_color(model, plugin?.bg_palette_colors, seed);
+            background = series_color(model, plugin?.bg_palette, seed);
             background_rgb = parseColor(background);
         }
 
         if (fg_mode === "color") {
             color = (plugin?.fg_color ?? model._color)[0];
         } else if (fg_mode === "series") {
-            color = series_color(model, plugin?.fg_palette_colors, seed);
+            color = series_color(model, plugin?.fg_palette, seed);
         } else if (background_rgb !== undefined) {
             const source = model._plugin_background as RGB;
             color = infer_foreground_from_background(

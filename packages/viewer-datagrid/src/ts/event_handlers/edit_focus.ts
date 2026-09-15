@@ -14,7 +14,7 @@ import { PRIVATE_PLUGIN_SYMBOL } from "../model/index.js";
 import {
     type RegularTable,
     type DatagridModel,
-    type ColumnsConfig,
+    type ResolvedColumnsConfig,
     get_psp_type,
     isEditableMode,
 } from "../types.js";
@@ -55,7 +55,8 @@ function is_cell_text_editable(
     }
 
     const type = get_psp_type(model, meta);
-    const plugins: ColumnsConfig = (table as any)[PRIVATE_PLUGIN_SYMBOL] || {};
+    const plugins: ResolvedColumnsConfig =
+        (table as any)[PRIVATE_PLUGIN_SYMBOL] || {};
     const column_name = meta.column_header?.[model._config.split_by.length];
     const link = column_name
         ? plugins[column_name.toString()]?.link

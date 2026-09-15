@@ -247,10 +247,16 @@ impl Renderer {
                     {
                         let active = schema.active_keys();
                         cfg.retain(|k, _| active.contains(k));
-                        let errors = normalize_css_values(&schema, &mut cfg);
+                        let errors = normalize_values(&schema, &mut cfg);
                         if let Some((key, error)) = errors.first() {
+                            let ty = session
+                                .metadata()
+                                .get_column_view_type(&col)
+                                .map(|t| format!(" for a {t} column"))
+                                .unwrap_or_default();
+
                             return Err(ApiError::from(JsValue::from_str(&format!(
-                                "Invalid `columns_config[\"{col}\"].{key}`: {error}"
+                                "Invalid `columns_config[\"{col}\"].{key}`{ty}: {error}"
                             ))));
                         }
 
@@ -305,7 +311,7 @@ impl Renderer {
             &column_name,
             current_value.as_ref(),
         ) {
-            for (key, error) in normalize_css_values(&schema, &mut update.value) {
+            for (key, error) in normalize_values(&schema, &mut update.value) {
                 tracing::error!("Dropping `{column_name}`.`{key}`: {error}");
             }
 
@@ -329,16 +335,25 @@ impl Renderer {
             entry.clone()
         };
 
-        let active = self
+        // The schema AFTER the update decides which keys survive and, for a
+        // key whose control kind follows another key (`fg_color` reads as a
+        // color, gradient or palette depending on `fg_mode`), whether the
+        // value still parses under its new kind. A value that no longer
+        // does is dropped here, so `save()` never emits a config that
+        // `restore()` would reject.
+        let after = self
             .query_column_config_schema(view_config, session, &column_name, Some(&next))
-            .ok()
-            .map(|schema| schema.active_keys());
+            .ok();
 
         let mut st = self.borrow_mut();
         let bucket = st.plugin_states.entry(n).or_default();
         if let Some(entry) = bucket.columns.get_mut(&column_name) {
-            if let Some(active) = &active {
+            if let Some(schema) = &after {
+                let active = schema.active_keys();
                 entry.retain(|k, _| active.contains(k));
+                for (key, error) in normalize_values(schema, entry) {
+                    tracing::warn!("Dropping `{column_name}`.`{key}` after a mode change: {error}");
+                }
             }
 
             if entry.is_empty() {
@@ -473,7 +488,7 @@ impl Renderer {
                     let keys = s.active_keys();
                     map.retain(|k, _| keys.contains(k));
                     active = Some(keys);
-                    let errors = normalize_css_values(s, &mut map);
+                    let errors = normalize_values(s, &mut map);
                     if let Some((key, error)) = errors.first() {
                         return Err(ApiError::from(JsValue::from_str(&format!(
                             "Invalid `plugin_config.{key}`: {error}"
@@ -547,7 +562,7 @@ impl Renderer {
             .ok();
 
         if let Some(schema) = &schema {
-            for (key, error) in normalize_css_values(schema, &mut update.value) {
+            for (key, error) in normalize_values(schema, &mut update.value) {
                 tracing::error!("Dropping `plugin_config`.`{key}`: {error}");
             }
 
@@ -580,24 +595,37 @@ impl Renderer {
     }
 }
 
-fn normalize_css_values(
+/// Canonicalize every CSS-valued key of `map` and check every `Enum`-valued
+/// key against its variants, removing and reporting the keys that fail.
+/// The schema is the one queried for `map`'s own values, so an `Enum`'s
+/// variants are exactly the values the column's type accepts.
+fn normalize_values(
     schema: &ColumnConfigSchema,
     map: &mut serde_json::Map<String, serde_json::Value>,
 ) -> Vec<(String, String)> {
     let mut errors = vec![];
     for (key, value) in map.iter_mut() {
-        let Some(kind) = schema.css_kind_of(key) else {
-            continue;
-        };
+        if let Some(kind) = schema.css_kind_of(key) {
+            let canonical = match value.as_str() {
+                Some(src) => kind.canonicalize(src),
+                None => Err(format!("expected a CSS string, got `{value}`")),
+            };
 
-        let canonical = match value.as_str() {
-            Some(src) => kind.canonicalize(src),
-            None => Err(format!("expected a CSS string, got `{value}`")),
-        };
+            match canonical {
+                Ok(canonical) => *value = Value::String(canonical),
+                Err(error) => errors.push((key.clone(), error)),
+            }
+        } else if let Some(variants) = schema.enum_variants_of(key) {
+            let accepted = variants.iter().any(|v| value.as_str() == Some(&v.value));
+            if !accepted {
+                let expected = variants
+                    .iter()
+                    .map(|v| format!("`{}`", v.value))
+                    .collect::<Vec<_>>()
+                    .join(", ");
 
-        match canonical {
-            Ok(canonical) => *value = Value::String(canonical),
-            Err(error) => errors.push((key.clone(), error)),
+                errors.push((key.clone(), format!("{value} is not one of {expected}")));
+            }
         }
     }
 
@@ -839,7 +867,50 @@ mod tests {
     }
 
     #[test]
-    fn normalize_css_values_canonicalizes_and_reports() {
+    fn normalize_values_rejects_enum_values_outside_the_variants() {
+        let schema = ColumnConfigSchema {
+            fields: vec![ControlSpec::Group {
+                key: "color".to_owned(),
+                fields: vec![ControlSpec::Enum {
+                    key: "fg_mode".to_owned(),
+                    default: "color".to_owned(),
+                    variants: vec![
+                        EnumVariant {
+                            value: "disabled".to_owned(),
+                            label: None,
+                        },
+                        EnumVariant {
+                            value: "color".to_owned(),
+                            label: None,
+                        },
+                    ],
+                }],
+            }],
+        };
+
+        let mut map = json!({ "fg_mode": "color", "other": "series" })
+            .as_object()
+            .unwrap()
+            .clone();
+
+        assert!(normalize_values(&schema, &mut map).is_empty());
+        assert_eq!(map.len(), 2);
+
+        let mut map = json!({ "fg_mode": "series" }).as_object().unwrap().clone();
+        let errors = normalize_values(&schema, &mut map);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].0, "fg_mode");
+        assert_eq!(errors[0].1, "\"series\" is not one of `disabled`, `color`");
+        assert!(map.is_empty());
+
+        let mut map = json!({ "fg_mode": 3 }).as_object().unwrap().clone();
+        let errors = normalize_values(&schema, &mut map);
+        assert_eq!(errors.len(), 1);
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn normalize_values_canonicalizes_and_reports() {
         let schema = ColumnConfigSchema {
             fields: vec![
                 ControlSpec::Color {
@@ -874,7 +945,7 @@ mod tests {
         .unwrap()
         .clone();
 
-        let errors = normalize_css_values(&schema, &mut map);
+        let errors = normalize_values(&schema, &mut map);
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].0, "gradient");
         assert_eq!(

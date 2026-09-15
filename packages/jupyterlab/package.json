@@ -19,7 +19,7 @@
     "scripts": {
         "build": "node ./build.mjs",
         "clean": "node ./clean.mjs",
-        "test:jupyter": "PSP_JUPYTERLAB_TESTS=1 __JUPYTERLAB_PORT__=6538 npx playwright test --config ../../tools/test/playwright.config.ts",
+        "test:jupyter": "PSP_JUPYTERLAB_TESTS=1 __JUPYTERLAB_PORT__=6538 pnpm exec playwright test --config ../../tools/test/playwright.config.ts",
         "test:jupyter:build": "node ./build.mjs"
     },
     "dependencies": {

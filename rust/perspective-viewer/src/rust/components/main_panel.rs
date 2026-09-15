@@ -250,6 +250,9 @@ pub struct MainPanel {
     /// `Workspace::staged_changed` → [`MainPanelMsg::StagedChanged`] on THIS
     /// component's scope (see the message doc for why not the root's).
     _staged_sub: crate::utils::Subscription,
+
+    /// `Workspace::layout_staged` → [`MainPanelMsg::LayoutStaged`].
+    _layout_staged_sub: crate::utils::Subscription,
 }
 
 impl Component for MainPanel {
@@ -351,6 +354,15 @@ impl Component for MainPanel {
                 .add_listener(move |()| cb.emit(()))
         };
 
+        let layout_staged_sub = {
+            use crate::utils::AddListener;
+            let cb = ctx.link().callback(|_: ()| MainPanelMsg::LayoutStaged);
+            ctx.props()
+                .workspace
+                .layout_staged()
+                .add_listener(move |()| cb.emit(()))
+        };
+
         Self {
             main_panel_ref: NodeRef::default(),
             layout_ref: NodeRef::default(),
@@ -368,6 +380,7 @@ impl Component for MainPanel {
             theme_backgrounds: HashMap::new(),
             stamped_frame_themes: None,
             _staged_sub: staged_sub,
+            _layout_staged_sub: layout_staged_sub,
         }
     }
 
@@ -375,6 +388,7 @@ impl Component for MainPanel {
         match msg {
             MainPanelMsg::PointerEvent(event) => self.on_pointer_event(ctx, event),
             MainPanelMsg::StagedChanged => true,
+            MainPanelMsg::LayoutStaged => true,
             MainPanelMsg::LayoutUpdated => self.on_layout_updated(ctx),
             MainPanelMsg::TabSelected(name) => self.on_tab_selected(ctx, name),
             MainPanelMsg::ContextMenu(id, x, y) => self.on_context_menu(ctx, id, x, y),

@@ -47,7 +47,12 @@ function PerspectiveViewerImpl(props: PerspectiveViewerProps) {
                     wait_for_table: true,
                 });
             } else {
-                await viewer.restore(props.config, { wait_for_table: true });
+                await viewer.restore(
+                    props.config as pspViewer.ViewerConfigUpdate,
+                    {
+                        wait_for_table: true,
+                    },
+                );
             }
         })();
 

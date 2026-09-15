@@ -11,14 +11,19 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { FormatterCache, Formatter } from "./formatter_cache.js";
-import type { DatagridModel, ColumnsConfig, ColumnConfig } from "../types.js";
+import type {
+    ColumnConfig,
+    DatagridModel,
+    ResolvedColumnsConfig,
+    ResolvedColumnStyle,
+} from "../types.js";
 import type { ColumnType } from "@perspective-dev/client";
 
 const FORMAT_CACHE = new FormatterCache();
 
 export function format_raw(
     type: ColumnType,
-    value: ColumnConfig,
+    value: Pick<ColumnConfig, "date_format" | "number_format">,
 ): Formatter | false | undefined {
     return FORMAT_CACHE.get(type, value);
 }
@@ -30,7 +35,7 @@ export function format_cell(
     this: DatagridModel,
     title: string,
     val: unknown,
-    plugins: ColumnsConfig = {},
+    plugins: ResolvedColumnsConfig = {},
     use_table_schema = false,
 ): string | HTMLElement | null {
     if (val === null) {
@@ -41,14 +46,13 @@ export function format_cell(
         this._schema[title] ||
         this._window_schema?.[title] ||
         "string") as ColumnType;
-    const plugin: ColumnConfig = plugins[title] || {};
+    const plugin: ResolvedColumnStyle = plugins[title] || {};
     const is_numeric = type === "integer" || type === "float";
 
     if (
         is_numeric &&
         !use_table_schema &&
-        (plugin?.number_fg_mode === "bar" ||
-            plugin?.number_fg_mode === "label-bar")
+        (plugin.fg_mode === "bar" || plugin.fg_mode === "label-bar")
     ) {
         return "";
     } else if (plugin?.link === true && type === "string") {

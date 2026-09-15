@@ -14,7 +14,7 @@ import { RegularTableElement } from "regular-table";
 import { PRIVATE_PLUGIN_SYMBOL } from "../model/index.js";
 import type {
     DatagridModel,
-    ColumnsConfig,
+    ResolvedColumnsConfig,
     DatagridPluginElement,
     SelectedPositionMap,
 } from "../types.js";
@@ -42,7 +42,7 @@ export function createConsolidatedStyleListener(
     selectedPositionMap: SelectedPositionMap,
 ): () => void {
     return function consolidatedStyleListener(): void {
-        const plugins: ColumnsConfig =
+        const plugins: ResolvedColumnsConfig =
             (regularTable as any)[PRIVATE_PLUGIN_SYMBOL] || {};
         const isSettingsOpen = viewer.hasAttribute("settings");
         const isSelectable = model._edit_mode === "SELECT_ROW_TREE";

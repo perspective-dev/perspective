@@ -48,8 +48,8 @@ test.describe("Datagrid presize label-bar stability", () => {
                 columns: ["Sales", "Profit"],
                 sort: [["Row ID", "asc"]],
                 columns_config: {
-                    Sales: { number_fg_mode: "label-bar", fg_gradient: 1000 },
-                    Profit: { number_fg_mode: "label-bar", fg_gradient: 100 },
+                    Sales: { fg_mode: "label-bar", fg_gradient: 1000 },
+                    Profit: { fg_mode: "label-bar", fg_gradient: 100 },
                 },
             });
 

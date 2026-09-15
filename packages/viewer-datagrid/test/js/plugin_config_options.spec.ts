@@ -654,7 +654,7 @@ test.describe("Datagrid plugin_config text and row options", () => {
         await goto_ready(page);
         await restore(page, {
             columns: ["Sales"],
-            columns_config: { Sales: { number_fg_mode: "label-bar" } },
+            columns_config: { Sales: { fg_mode: "label-bar" } },
         });
 
         expect(await label_bar_placement(page)).toEqual([
@@ -676,7 +676,7 @@ test.describe("Datagrid plugin_config text and row options", () => {
 
         await restore(page, {
             columns_config: {
-                Sales: { number_fg_mode: "label-bar", align: "bottom-center" },
+                Sales: { fg_mode: "label-bar", align: "bottom-center" },
             },
         });
 
@@ -1042,8 +1042,8 @@ test.describe("Datagrid plugin_config text and row options", () => {
                 "font_size",
                 "word_wrap",
                 "align",
-                "string_fg_mode",
-                "string_bg_mode",
+                "fg_mode",
+                "bg_mode",
             ]),
         );
     });

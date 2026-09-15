@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 
 use perspective_client::config::Filter;
 
-use crate::config::{PanelViewerConfig, ViewerConfigInitial};
+use crate::config::{OptionalUpdate, PanelViewerConfig, ViewerConfigInitial};
 use crate::utils::CssKind;
 
 /// The workspace config format (`{version, active?, layout, panels}`) —
@@ -67,48 +67,52 @@ pub struct WorkspaceConfig {
     pub palette: BTreeMap<String, String>,
 }
 
-/// The parse target of a workspace config in
-/// [`PerspectiveViewerElement::restoreWorkspace`]. Mirrors
-/// [`WorkspaceConfig`], but `panels` entries are [`ViewerConfigInitial`]s —
-/// every entry creates a NEW panel, so `table` is required by type (a
-/// stray per-panel `settings` key is ignored; it is element-level state,
-/// carried by the top-level `active` field).
+/// The [`PerspectiveViewerElement::restoreWorkspace`] argument: a field-wise
+/// update of the element's workspace state, like [`ViewerConfigUpdate`] for a
+/// panel, where an absent key is unchanged, `null` resets and a value
+/// replaces.
 #[derive(serde::Deserialize, ts_rs::TS)]
 pub struct WorkspaceConfigUpdate {
+    /// The panel to activate with the settings sidebar open, by `panels` key
+    /// or existing panel id; `null` closes the sidebar.
     #[serde(default)]
+    #[ts(as = "Option<_>")]
     #[ts(optional)]
-    pub active: Option<String>,
+    pub active: OptionalUpdate<String>,
 
+    /// The layout tree to stage, naming `panels` keys or existing panel ids.
     #[serde(default)]
     #[ts(optional)]
     pub layout: Option<crate::js::Layout>,
 
-    pub panels: BTreeMap<String, ViewerConfigInitial>,
+    /// The complete replacement panel set, each [`ViewerConfigInitial`] entry
+    /// creating a new panel (`{}` empties the element); absent keeps the
+    /// existing panels.
+    #[serde(default)]
+    #[ts(optional)]
+    pub panels: Option<BTreeMap<String, ViewerConfigInitial>>,
 
-    /// The element-level global (master/detail cross-) filters to re-apply as
-    /// a transient overlay on every DETAIL panel. Restored as one
-    /// unattributed bucket: the next selection on any master replaces it.
-    /// `Option` so an explicit `undefined` property deserializes as
-    /// `None` like an absent key (also `masters` / `palette` below).
+    /// The element-level cross-filter set applied to every detail panel as
+    /// one unattributed bucket, replacing the current set; `null` clears it.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
-    pub global_filters: Option<Vec<Filter>>,
+    pub global_filters: OptionalUpdate<Vec<Filter>>,
 
-    /// The master (filter-source) panels, by saved `panels` key. An id not in
-    /// `panels` warns and is dropped.
+    /// The master (filter-source) panels by `panels` key or existing panel
+    /// id, unknown ids dropped with a warning; `null` demotes every panel.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
-    pub masters: Option<Vec<String>>,
+    pub masters: OptionalUpdate<Vec<String>>,
 
-    /// Named color-scale definitions to apply to the host (see
-    /// [`WorkspaceConfig::palette`]), replacing any previously restored
-    /// palette.
+    /// Named color-scale definitions applied to the host (see
+    /// [`WorkspaceConfig::palette`]), replacing the previous palette; `null`
+    /// clears it.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
-    pub palette: Option<BTreeMap<String, String>>,
+    pub palette: OptionalUpdate<BTreeMap<String, String>>,
 }
 
 /// Validate a restored palette map: each key's `--psp-user--<kind>-`
@@ -174,10 +178,47 @@ mod tests {
     }
 
     #[test]
+    fn update_absent_fields_are_missing_and_null_resets() {
+        let update: WorkspaceConfigUpdate = serde_json::from_value(json!({})).unwrap();
+        assert!(update.panels.is_none());
+        assert!(update.layout.is_none());
+        assert_eq!(update.active, OptionalUpdate::Missing);
+        assert_eq!(update.global_filters, OptionalUpdate::Missing);
+        assert_eq!(update.masters, OptionalUpdate::Missing);
+        assert_eq!(update.palette, OptionalUpdate::Missing);
+
+        let update: WorkspaceConfigUpdate = serde_json::from_value(json!({
+            "panels": null,
+            "active": null,
+            "global_filters": null,
+            "masters": null,
+            "palette": null,
+        }))
+        .unwrap();
+
+        assert!(update.panels.is_none());
+        assert_eq!(update.active, OptionalUpdate::SetDefault);
+        assert_eq!(update.global_filters, OptionalUpdate::SetDefault);
+        assert_eq!(update.masters, OptionalUpdate::SetDefault);
+        assert_eq!(update.palette, OptionalUpdate::SetDefault);
+
+        let update: WorkspaceConfigUpdate = serde_json::from_value(json!({
+            "panels": {},
+            "global_filters": [["Region", "==", "West"]],
+            "masters": ["a"],
+        }))
+        .unwrap();
+
+        assert_eq!(update.panels.map(|p| p.len()), Some(0));
+        assert_eq!(update.masters, OptionalUpdate::Update(vec!["a".to_owned()]));
+        assert!(matches!(update.global_filters, OptionalUpdate::Update(ref f) if f.len() == 1));
+    }
+
+    #[test]
     fn update_palette_defaults_empty_and_validates_by_prefix() {
         let update: WorkspaceConfigUpdate =
             serde_json::from_value(json!({ "panels": {} })).unwrap();
-        assert!(update.palette.is_none());
+        assert_eq!(update.palette, OptionalUpdate::Missing);
 
         let update: WorkspaceConfigUpdate = serde_json::from_value(json!({
             "panels": {},
@@ -189,7 +230,11 @@ mod tests {
         }))
         .unwrap();
 
-        let valid = validate_palette(update.palette.unwrap()).unwrap();
+        let OptionalUpdate::Update(palette) = update.palette else {
+            panic!("palette missing");
+        };
+
+        let valid = validate_palette(palette).unwrap();
         assert_eq!(
             valid.get("--psp-user--gradient-1").unwrap(),
             "linear-gradient(to right, #000000 0%, #ffffff 100%)"

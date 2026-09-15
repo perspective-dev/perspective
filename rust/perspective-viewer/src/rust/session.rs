@@ -1150,31 +1150,7 @@ impl Session {
             .clone()
             .ok_or("`restore()` called before `load()`")?;
 
-        // Populate the aggregates with defaults as a courtesy to the
-        // virtual server api. Snapshot-local — never written back.
-        let mut view_config = (*effective).clone();
-        for col in view_config
-            .columns
-            .iter()
-            .flatten()
-            .chain(view_config.sort.iter().map(|x| &x.0))
-        {
-            if !view_config.aggregates.contains_key(col.as_str()) {
-                let agg = self
-                    .metadata()
-                    .get_column_aggregates(col.as_str())
-                    .and_then(|mut aggs| aggs.next())
-                    .into_apierror();
-
-                match agg {
-                    Err(_) => {
-                        tracing::warn!("No default aggregate for column '{}' found, skipping", col)
-                    },
-                    Ok(agg) => _ = view_config.aggregates.insert(col.to_string(), agg),
-                };
-            }
-        }
-
+        let view_config = self.with_default_aggregates(&effective);
         let view = table.view(Some(view_config.into())).await?;
         let view_schema = view.schema().await?;
         self.metadata_mut().update_view_schema(&view_schema)?;
@@ -1204,6 +1180,43 @@ impl Session {
             Some(view) => Ok(BindDisposition::Rebuilt(FreshView::assert_fresh(view))),
             None => Ok(BindDisposition::Deferred),
         }
+    }
+
+    /// The engine config for a `View` built from `effective`, per-column
+    /// default aggregates filled in as a courtesy to the virtual server API.
+    fn with_default_aggregates(&self, effective: &ViewConfig) -> ViewConfig {
+        let mut view_config = effective.clone();
+        for col in view_config
+            .columns
+            .iter()
+            .flatten()
+            .chain(view_config.sort.iter().map(|x| &x.0))
+        {
+            if !view_config.aggregates.contains_key(col.as_str()) {
+                let agg = self
+                    .metadata()
+                    .get_column_aggregates(col.as_str())
+                    .and_then(|mut aggs| aggs.next())
+                    .into_apierror();
+
+                match agg {
+                    Err(_) => {
+                        tracing::warn!("No default aggregate for column '{}' found, skipping", col)
+                    },
+                    Ok(agg) => _ = view_config.aggregates.insert(col.to_string(), agg),
+                };
+            }
+        }
+
+        view_config
+    }
+
+    /// Build a caller-owned `View` from the effective config outside the
+    /// render pipeline, with no subscription and no interaction with pause.
+    pub async fn create_detached_view(&self) -> ApiResult<View> {
+        let table = self.borrow().table.clone().ok_or("No `Table` set")?;
+        let view_config = self.with_default_aggregates(&self.effective_view_config());
+        Ok(table.view(Some(view_config.into())).await?)
     }
 
     /// Record a failed pipeline run: error state plus a reconnect affordance

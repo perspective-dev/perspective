@@ -99,6 +99,34 @@ pub struct GetTableOptions {
     pub panel: Option<String>,
 }
 
+/// How `getView` resolves the `View` it returns.
+#[derive(Clone, Copy, Default, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "lowercase")]
+pub enum GetViewMode {
+    /// The panel's own bound `View`, which the viewer replaces on config
+    /// change and deletes on auto-pause or `delete()`; rejects when none is
+    /// bound.
+    #[default]
+    Live,
+
+    /// A caller-owned `View` built from the panel's effective config,
+    /// independent of the render lifecycle.
+    Clone,
+
+    /// `live` when the panel has a bound `View`, else `clone`.
+    Auto,
+}
+
+/// The `getView` argument: the `mode` and the target panel.
+#[derive(Deserialize, Default, TS)]
+pub struct GetViewOptions {
+    #[ts(optional)]
+    pub mode: Option<GetViewMode>,
+
+    #[ts(optional)]
+    pub panel: Option<String>,
+}
+
 /// The `getClient` argument: whether to `wait` for a `Client`, and the target
 /// panel.
 #[derive(Deserialize, Default, TS)]

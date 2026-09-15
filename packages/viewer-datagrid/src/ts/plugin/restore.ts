@@ -30,10 +30,13 @@ import {
     type GradientStopRgb,
 } from "../color_utils.js";
 import type {
+    ColumnConfig,
+    ColorRecord,
+    ColumnsConfig,
     DatagridPluginElement,
     EditMode,
-    ColumnsConfig,
-    ColorRecord,
+    ResolvedColumnStyle,
+    ResolvedColumnsConfig,
 } from "../types.js";
 
 interface RestoreToken {
@@ -191,33 +194,69 @@ function restore_grid_style(
     );
 }
 
-interface StylesConfig {
-    pos_fg_color?: ColorRecord;
-    neg_fg_color?: ColorRecord;
-    pos_bg_color?: ColorRecord;
-    neg_bg_color?: ColorRecord;
-    fg_color?: ColorRecord;
-    bg_color?: ColorRecord;
-    bg_color_stops?: GradientStopRgb[];
-    fg_palette_colors?: string[];
-    bg_palette_colors?: string[];
-    [key: string]: unknown;
+/**
+ * Every parsed form of one `fg_color` / `bg_color` string. Column types
+ * are unknown here (`restore()` may run before the model exists), so each
+ * reader runs and the style handlers pick the form their mode needs.
+ */
+interface ParsedColor {
+    color?: ColorRecord;
+    stops?: GradientStopRgb[];
+    palette?: string[];
 }
 
-function parse_stops(raw: unknown): GradientStopRgb[] | undefined {
+function parse_color_value(raw: unknown): ParsedColor {
     if (typeof raw !== "string") {
-        return undefined;
+        return {};
     }
 
-    return parseCssGradientStops(raw) ?? undefined;
+    const stops = parseCssGradientStops(raw) ?? undefined;
+    const palette = parseCssColorList(raw)?.map(rgbToHex) ?? undefined;
+    return {
+        color: is_single_color(raw) ? make_color_record(raw) : undefined,
+        stops,
+        palette,
+    };
 }
 
-function parse_palette(raw: unknown): string[] | undefined {
-    if (typeof raw !== "string") {
-        return undefined;
+/** A bare CSS color, as opposed to a `linear-gradient(…)` list. */
+function is_single_color(raw: string): boolean {
+    return !raw.trim().toLowerCase().startsWith("linear-gradient(");
+}
+
+function end_records(
+    stops: GradientStopRgb[] | undefined,
+): [neg: ColorRecord | undefined, pos: ColorRecord | undefined] {
+    if (!stops) {
+        return [undefined, undefined];
     }
 
-    return parseCssColorList(raw)?.map(rgbToHex) ?? undefined;
+    return [
+        make_color_record(rgbToHex(stops[0].rgb)),
+        make_color_record(rgbToHex(stops[stops.length - 1].rgb)),
+    ];
+}
+
+/** `config` with its color strings parsed into every form a handler reads. */
+function resolve_column_style(config: ColumnConfig): ResolvedColumnStyle {
+    const { fg_color, bg_color, ...rest } = config;
+    const fg = parse_color_value(fg_color);
+    const bg = parse_color_value(bg_color);
+    const [neg_fg_color, pos_fg_color] = end_records(fg.stops);
+    const [neg_bg_color, pos_bg_color] = end_records(bg.stops);
+    return {
+        ...rest,
+        fg_color: fg.color,
+        bg_color: bg.color,
+        fg_stops: fg.stops,
+        bg_stops: bg.stops,
+        pos_fg_color,
+        neg_fg_color,
+        pos_bg_color,
+        neg_bg_color,
+        fg_palette: fg.palette,
+        bg_palette: bg.palette,
+    };
 }
 
 export function restore(
@@ -241,34 +280,9 @@ export function restore(
     }
 
     this._columns_config = structuredClone(columns);
-    const styles: Record<string, StylesConfig> = {};
-    if (columns) {
-        for (const [col_name, controls] of Object.entries(columns)) {
-            const fg_stops = parse_stops(controls.fg_colors);
-            const bg_stops = parse_stops(controls.bg_colors);
-            const end = (stops: GradientStopRgb[], i: number) =>
-                make_color_record(rgbToHex(stops[i].rgb));
-            styles[col_name] = {
-                ...controls,
-                pos_fg_color: fg_stops
-                    ? end(fg_stops, fg_stops.length - 1)
-                    : undefined,
-                neg_fg_color: fg_stops ? end(fg_stops, 0) : undefined,
-                pos_bg_color: bg_stops
-                    ? end(bg_stops, bg_stops.length - 1)
-                    : undefined,
-                neg_bg_color: bg_stops ? end(bg_stops, 0) : undefined,
-                fg_color: controls.fg_color
-                    ? make_color_record(controls.fg_color)
-                    : undefined,
-                bg_color: controls.bg_color
-                    ? make_color_record(controls.bg_color)
-                    : undefined,
-                bg_color_stops: bg_stops,
-                fg_palette_colors: parse_palette(controls.fg_palette),
-                bg_palette_colors: parse_palette(controls.bg_palette),
-            };
-        }
+    const styles: ResolvedColumnsConfig = {};
+    for (const [col_name, controls] of Object.entries(columns)) {
+        styles[col_name] = resolve_column_style(controls);
     }
 
     // `echo = false`: this `restore()` IS the host delivering the config —
@@ -299,6 +313,5 @@ export function restore(
         });
     }
 
-    (this.regular_table as any)[PRIVATE_PLUGIN_SYMBOL] =
-        styles as ColumnsConfig;
+    (this.regular_table as any)[PRIVATE_PLUGIN_SYMBOL] = styles;
 }

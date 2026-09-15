@@ -180,15 +180,18 @@ test.describe("saveWorkspace / restoreWorkspace", () => {
         expect(ws.panels[ws.masters[0]].title).toBe("One");
     });
 
-    test("restoreWorkspace rejects a config without a panels map", async ({
+    test("restoreWorkspace without a panels map keeps the panels", async ({
         page,
     }) => {
+        const before = await panel_names(page);
         const threw = await restoreWorkspaceThrew(page, {
-            layout: { type: "tab-layout", tabs: ["x"], selected: 0 },
+            global_filters: [["State", "==", "Texas"]],
         });
 
-        expect(threw).toBe(true);
-        // The viewer is untouched — still the single seed panel.
-        expect((await panel_names(page)).length).toBe(1);
+        expect(threw).toBe(false);
+        expect(await panel_names(page)).toEqual(before);
+        expect((await saveWorkspace(page)).global_filters).toEqual([
+            ["State", "==", "Texas"],
+        ]);
     });
 });
