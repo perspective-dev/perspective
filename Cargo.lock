@@ -1953,7 +1953,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "perspective"
-version = "5.4.0"
+version = "5.5.0"
 dependencies = [
  "async-lock",
  "axum",
@@ -1979,7 +1979,7 @@ dependencies = [
 
 [[package]]
 name = "perspective-client"
-version = "5.4.0"
+version = "5.5.0"
 dependencies = [
  "arrow-array",
  "arrow-ipc",
@@ -2008,7 +2008,7 @@ dependencies = [
 
 [[package]]
 name = "perspective-js"
-version = "5.4.0"
+version = "5.5.0"
 dependencies = [
  "anyhow",
  "arrow-array",
@@ -2040,7 +2040,7 @@ dependencies = [
 
 [[package]]
 name = "perspective-lint"
-version = "5.4.0"
+version = "5.5.0"
 dependencies = [
  "glob",
  "yew-fmt",
@@ -2048,7 +2048,7 @@ dependencies = [
 
 [[package]]
 name = "perspective-python"
-version = "5.4.0"
+version = "5.5.0"
 dependencies = [
  "async-lock",
  "bytes",
@@ -2075,7 +2075,7 @@ dependencies = [
 
 [[package]]
 name = "perspective-server"
-version = "5.4.0"
+version = "5.5.0"
 dependencies = [
  "async-lock",
  "cmake",
@@ -2095,7 +2095,7 @@ dependencies = [
 
 [[package]]
 name = "perspective-viewer"
-version = "5.4.0"
+version = "5.5.0"
 dependencies = [
  "anyhow",
  "async-lock",
@@ -2681,7 +2681,7 @@ dependencies = [
 
 [[package]]
 name = "rust-axum"
-version = "5.4.0"
+version = "5.5.0"
 dependencies = [
  "axum",
  "futures",

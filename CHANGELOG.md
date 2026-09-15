@@ -1,3 +1,15 @@
+# [v5.5.0](https://github.com/perspective-dev/perspective/releases/tag/v5.5.0)
+
+_15 September 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.4.0...v5.5.0))
+
+**Breaking**
+
+- New `viewer-datagrid` options [#3229](https://github.com/finos/perspective/pull/3229)
+
+Features
+
+- `getView({mode})` API and columns_config cleanup [#3231](https://github.com/finos/perspective/pull/3231)
+
 # [v5.4.0](https://github.com/perspective-dev/perspective/releases/tag/v5.4.0)
 
 _9 September 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.3.1...v5.4.0))
