@@ -93,12 +93,10 @@ test.describe("page_to_disk", function () {
         await disk.delete();
     });
 
-    // Forces actual eviction (table > 1gb resident) so the `node:fs` bridge
-    // round-trips: columns are flushed to disk on eviction and re-read on access.
     test("evicts to disk over budget and restores correctly", async function () {
         const ROWS = 100_000;
-        const COLS = 256;
-        const UPDATES = 5; // 25M rows total
+        const COLS = 16;
+        const UPDATES = 2;
         const chunk = {};
         for (let c = 0; c < COLS; c++) {
             const col = new Array(ROWS);
@@ -112,12 +110,8 @@ test.describe("page_to_disk", function () {
 
         expect(await table.size()).toEqual(ROWS * UPDATES);
 
-        // Eviction must have spilled column buffers to disk.
         expect(disk_file_count()).toBeGreaterThan(before);
 
-        // Reading after eviction restores evicted columns from disk. Verify the
-        // head of every column matches the source (a broken restore would read
-        // zeros). `c[c][i] === c*1000 + i + 0.5` for i < 1000.
         const view = await table.view();
         const head = await view.to_columns({ start_row: 0, end_row: 4 });
         for (let c = 0; c < COLS; c++) {

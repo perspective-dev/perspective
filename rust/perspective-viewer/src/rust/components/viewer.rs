@@ -124,8 +124,8 @@ pub struct PerspectiveViewer {
     dragdrop_props: crate::presentation::DragDropProps,
 
     /// The active panel's in-flight config-run count — a LEVEL-triggered
-    /// snapshot of `Session::in_flight_config_runs` (RAII-settled;
-    /// assigned by `UpdateInFlight`, re-read on retarget). Threaded to
+    /// snapshot of `Session::config_runs` (RAII-settled; assigned by
+    /// `UpdateInFlight`, re-read on retarget). Threaded to
     /// `StatusIndicator` as the "updating" spinner.
     update_count: u32,
 

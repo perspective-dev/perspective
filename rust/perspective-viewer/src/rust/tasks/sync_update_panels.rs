@@ -17,7 +17,7 @@ use wasm_bindgen::prelude::*;
 use crate::components::viewer::PerspectiveViewerMsg;
 use crate::config::*;
 use crate::renderer::*;
-use crate::session::Session;
+use crate::session::{Disposal, Session};
 use crate::tasks::*;
 use crate::workspace::PanelId;
 use crate::*;
@@ -91,12 +91,12 @@ pub fn sync_update_panels(
             }
 
             if let Some(panel) = this.workspace.take_reserved() {
-                eject_tasks.push(eject_panel(panel));
+                eject_tasks.push(eject_panel(panel, Disposal::Reject));
             }
 
             for old in &old_ids {
                 if let Some(panel) = this.workspace.remove_panel(old) {
-                    eject_tasks.push(eject_panel(panel));
+                    eject_tasks.push(eject_panel(panel, Disposal::Reject));
                 }
             }
         },

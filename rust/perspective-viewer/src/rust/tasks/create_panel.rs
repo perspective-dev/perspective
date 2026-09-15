@@ -17,7 +17,7 @@ use crate::config::*;
 use crate::custom_events::wire_panel_events;
 use crate::presentation::*;
 use crate::renderer::*;
-use crate::session::{MissingTable, ResetOptions, Session};
+use crate::session::{Disposal, MissingTable, ResetOptions, Session};
 use crate::tasks::*;
 use crate::utils::*;
 use crate::workspace::{Panel, PanelId, PanelPhase, Workspace};
@@ -222,8 +222,8 @@ pub(crate) fn place_reserved(
 /// renderer (slot-scoped plugin + light-DOM cleanup) and eject its table.
 /// Shared by the root's `ClosePanel` handler and `restoreWorkspace`'s
 /// batch replacement of the pre-existing panel set.
-pub(crate) fn eject_panel(panel: Panel) -> ApiFuture<()> {
-    panel.session.mark_disposed();
+pub(crate) fn eject_panel(panel: Panel, disposal: Disposal) -> ApiFuture<()> {
+    panel.session.mark_disposed(disposal);
     ApiFuture::new(async move {
         panel.renderer.dispose().await?;
         let was_errored = panel.session.is_errored();

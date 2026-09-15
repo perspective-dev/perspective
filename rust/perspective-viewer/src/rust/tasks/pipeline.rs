@@ -22,7 +22,7 @@ use yew::prelude::*;
 use crate::config::{ColumnConfigUpdate, PluginConfigUpdate};
 use crate::presentation::Presentation;
 use crate::renderer::{RenderContext, Renderer};
-use crate::session::{BindDisposition, Session};
+use crate::session::{BindDisposition, Disposal, Session};
 use crate::utils::RenderGuard;
 
 /// Snapshot → validate → bind → cache + pin the [`RenderContext`]. The core
@@ -227,10 +227,10 @@ pub(crate) async fn locked_run(
     renderer
         .clone()
         .render_task(|guard| async move {
-            if session.is_disposed() {
-                return match spec.origin {
-                    RunOrigin::Public => Err(ApiError::new("Panel disposed")),
-                    RunOrigin::Internal => Ok(()),
+            if let Some(disposal) = session.disposal() {
+                return match (disposal, spec.origin) {
+                    (Disposal::Reject, RunOrigin::Public) => Err(ApiError::new("Panel disposed")),
+                    _ => Ok(()),
                 };
             }
 

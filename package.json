@@ -18,7 +18,7 @@
     "llvm": "17.0.6",
     "pyodide": "0.29.4",
     "engines": {
-        "node": ">=16 <24"
+        "node": ">=16 <27"
     },
     "workspaces": [
         "tools/test",

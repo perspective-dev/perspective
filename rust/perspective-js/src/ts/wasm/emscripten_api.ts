@@ -24,6 +24,8 @@ export interface DiskBridgeHelpers {
 }
 
 export interface CompileOptions {
+    env?: Record<string, string | undefined>;
+
     make_disk_bridge?: (helpers: DiskBridgeHelpers) => {
         store(
             namePtr: number | bigint,
@@ -49,6 +51,7 @@ export async function compile_perspective(
             return x;
         },
         make_disk_bridge: opts?.make_disk_bridge,
+        env: opts?.env,
         instantiateWasm: async (
             imports: any,
             receive: (_: WebAssembly.Instance) => void,

@@ -71,6 +71,10 @@ export default async function (obj: any) {
     // receives a resolved file name string (from `victim_fname`).
     const disk_helpers = { heap, toAddr, readCString };
 
+    const environ_entries: Uint8Array[] = Object.entries(obj.env ?? {})
+        .filter(([, value]) => typeof value === "string")
+        .map(([key, value]) => new TextEncoder().encode(`${key}=${value}\0`));
+
     function makeOpfsBridge() {
         async function opfsOpenFile(name: string, create: boolean) {
             const parts = name.split("/").filter((s) => s.length > 0);
@@ -281,10 +285,51 @@ export default async function (obj: any) {
                 console.error("abort");
             }
         },
-        environ_get(...args: any[]) {
+        environ_get(environ: number | bigint, environ_buf: number | bigint) {
+            const view = new DataView(wasm_memory.buffer);
+            let entry = toAddr(environ);
+            let cursor = toAddr(environ_buf);
+            for (const bytes of environ_entries) {
+                if (is_memory64) {
+                    view.setBigUint64(entry, BigInt(cursor), true);
+                    entry += 8;
+                } else {
+                    view.setUint32(entry, cursor, true);
+                    entry += 4;
+                }
+
+                heap().set(bytes, cursor);
+                cursor += bytes.length;
+            }
+
             return 0;
         },
-        environ_sizes_get(...args: any[]) {
+        environ_sizes_get(
+            environ_count: number | bigint,
+            environ_buf_size: number | bigint,
+        ) {
+            const view = new DataView(wasm_memory.buffer);
+            const total = environ_entries.reduce((n, x) => n + x.length, 0);
+            if (is_memory64) {
+                view.setBigUint64(
+                    toAddr(environ_count),
+                    BigInt(environ_entries.length),
+                    true,
+                );
+                view.setBigUint64(
+                    toAddr(environ_buf_size),
+                    BigInt(total),
+                    true,
+                );
+            } else {
+                view.setUint32(
+                    toAddr(environ_count),
+                    environ_entries.length,
+                    true,
+                );
+                view.setUint32(toAddr(environ_buf_size), total, true);
+            }
+
             return 0;
         },
         fd_close(...args: any[]) {
@@ -392,8 +437,9 @@ export default async function (obj: any) {
         }
         const n = Number(mod.psp_residency_prepare(server));
         for (let i = 0; i < n; i++) {
+            const index = is_memory64 ? BigInt(i) : i;
             const fname = readCString(
-                mod.psp_residency_victim_fname(server, i),
+                mod.psp_residency_victim_fname(server, index),
             );
             if (fname) {
                 await disk.ensureOpen(fname);

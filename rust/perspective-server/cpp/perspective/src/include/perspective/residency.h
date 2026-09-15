@@ -43,8 +43,9 @@ PERSPECTIVE_EXPORT extern std::uint64_t g_residency_tick;
  * exists — see the safepoint audit), and restoration is lazy via
  * `ensure_resident()` on every `t_lstore` data accessor.
  *
- * Disabled by default (zero overhead). Enabled by setting the `PSP_MEMORY_BUDGET`
- * environment variable (bytes), re-read at each safepoint.
+ * Configured by the `PSP_MEMORY_BUDGET` environment variable in bytes (`0`
+ * disables), re-read at each safepoint, with WASM falling back to the
+ * compile-time `PSP_WASM_MEMORY_BUDGET` (1 GiB) when it is unset.
  */
 class PERSPECTIVE_EXPORT t_residency_manager {
 public:

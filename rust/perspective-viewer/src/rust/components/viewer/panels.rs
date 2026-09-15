@@ -190,7 +190,7 @@ impl PerspectiveViewer {
     pub(super) fn on_panel_closed(&mut self, ctx: &Context<Self>, id: String) -> bool {
         let id = PanelId::from(id);
         if let Some(panel) = ctx.props().workspace.take_closing(&id) {
-            let eject = eject_panel(panel);
+            let eject = eject_panel(panel, Disposal::Reject);
             match self.pending_closes.remove(&id) {
                 Some(completion) => completion.resolve_after(eject),
                 None => spawn_owned("close-panel", eject),
@@ -201,7 +201,7 @@ impl PerspectiveViewer {
 
         match self.detach_panel(ctx, &id) {
             Some(panel) => {
-                spawn_owned("close-panel", eject_panel(panel));
+                spawn_owned("close-panel", eject_panel(panel, Disposal::Reject));
                 true
             },
             None => false,
@@ -337,7 +337,7 @@ impl PerspectiveViewer {
         self._active_subscriptions = create_active_subscriptions(ctx, &session, &renderer);
         self.session_props = session.to_props();
         self.renderer_props = renderer.to_props(None);
-        self.update_count = session.in_flight_config_runs();
+        self.update_count = session.config_runs.count();
         self.active_session = session;
         self.active_renderer = renderer;
         let presentation = ctx.props().presentation.clone();

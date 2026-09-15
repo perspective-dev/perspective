@@ -10,10 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use std::cell::Cell;
-use std::rc::Rc;
-
-use super::pubsub::PubSub;
+use super::in_flight::{InFlight, InFlightGuard};
 
 /// The element-scoped ledger of in-flight EFFECTS: every effectful public
 /// method (and the internal flows they schedule, e.g. the `before-resize`
@@ -22,41 +19,20 @@ use super::pubsub::PubSub;
 /// after the ledger drains, so "called before `flush`" implies "applied
 /// before `flush` resolves".
 #[derive(Clone, Default)]
-pub struct EffectLedger(Rc<EffectLedgerData>);
+pub struct EffectLedger(InFlight);
 
-#[derive(Default)]
-struct EffectLedgerData {
-    count: Cell<u32>,
-    on_drain: PubSub<()>,
-}
-
-pub struct EffectGuard(EffectLedger);
+pub type EffectGuard = InFlightGuard;
 
 impl EffectLedger {
     pub fn guard(&self) -> EffectGuard {
-        self.0.count.set(self.0.count.get() + 1);
-        EffectGuard(self.clone())
+        self.0.guard()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.count.get() == 0
+        self.0.is_empty()
     }
 
     pub async fn settle(&self) {
-        while self.0.count.get() > 0 {
-            if self.0.on_drain.read_next().await.is_err() {
-                break;
-            }
-        }
-    }
-}
-
-impl Drop for EffectGuard {
-    fn drop(&mut self) {
-        let data = &self.0.0;
-        data.count.set(data.count.get() - 1);
-        if data.count.get() == 0 {
-            data.on_drain.emit(());
-        }
+        self.0.settle().await
     }
 }

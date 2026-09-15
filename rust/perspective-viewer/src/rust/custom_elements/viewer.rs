@@ -38,7 +38,7 @@ use crate::js::*;
 use crate::presentation::*;
 use crate::queries::*;
 use crate::root::Root;
-use crate::session::{MissingTable, ResetOptions, TableLoadState};
+use crate::session::{Disposal, MissingTable, ResetOptions, TableLoadState};
 use crate::tasks::*;
 use crate::utils::*;
 use crate::workspace::{Panel, PanelId, Workspace};
@@ -548,14 +548,19 @@ impl PerspectiveViewerElement {
 
         let session = panel.session;
         let renderer = panel.renderer;
-        let generation = session.begin_pending_load();
+        let load = session.begin_pending_load();
         clone!(self.workspace, self.presentation);
         Ok(ApiFuture::new_throttled(async move {
             let _effect = effect;
+            enum Discard {
+                Unclaimed(Panel),
+                Evicted(Panel),
+            }
+
             renderer.set_throttle(None);
             let _run_token = session.begin_config_run();
             let result = {
-                clone!(session, renderer, workspace, notify);
+                clone!(session, renderer, workspace, notify, load);
                 renderer
                     .clone()
                     .render_task(|guard| async move {
@@ -569,7 +574,7 @@ impl PerspectiveViewerElement {
                             try_from_js_option::<perspective_js::Table>(jstable.clone())
                         {
                             tracing::warn!("{}", DEPRECATED_TABLE_MESSAGE);
-                            let Some(journal) = session.take_pending_load(generation) else {
+                            let Some(journal) = load.claim() else {
                                 return Ok(None);
                             };
 
@@ -630,10 +635,10 @@ impl PerspectiveViewerElement {
                             // window is discarded (not replayed): a `Client`
                             // performs no reset, and any racing `restore`'s
                             // commits already applied live (`commit_view_config`).
-                            let owned_window = session.take_pending_load(generation).is_some();
+                            let owned_window = load.claim().is_some();
                             let discard = if owned_window && notify.is_some() {
                                 match workspace.take_reserved() {
-                                    Some(panel) => Some((panel, None)),
+                                    Some(panel) => Some(Discard::Unclaimed(panel)),
                                     // The one-shot claim read: a table-less
                                     // `restore` claimed the reservation, and no
                                     // table has bound nor is pending — evict the
@@ -655,9 +660,7 @@ impl PerspectiveViewerElement {
                                             notify.emit(());
                                         }
 
-                                        evicted.map(|panel| {
-                                            (panel, Some(ApiError::new(CREATE_REQUIRES_TABLE)))
-                                        })
+                                        evicted.map(Discard::Evicted)
                                     },
                                     None => None,
                                 }
@@ -668,7 +671,7 @@ impl PerspectiveViewerElement {
                             workspace.set_default_client(client.get_client().clone());
                             Ok(discard)
                         } else {
-                            session.take_pending_load(generation);
+                            load.close();
                             Err(ApiError::new("Invalid argument"))
                         }
                     })
@@ -677,7 +680,7 @@ impl PerspectiveViewerElement {
 
             match result {
                 Err(e) => {
-                    session.take_pending_load(generation);
+                    load.close();
                     if let Some(notify) = &notify {
                         place_reserved(&workspace, notify, true);
                     }
@@ -685,12 +688,13 @@ impl PerspectiveViewerElement {
                     session.set_error(false, e.clone()).await?;
                     Err(e)
                 },
-                Ok(Some((panel, error))) => {
-                    eject_panel(panel).await?;
-                    match error {
-                        Some(e) => Err(e),
-                        None => Ok(()),
-                    }
+                Ok(Some(Discard::Unclaimed(panel))) => {
+                    eject_panel(panel, Disposal::Reject).await?;
+                    Ok(())
+                },
+                Ok(Some(Discard::Evicted(panel))) => {
+                    eject_panel(panel, Disposal::Resolve).await?;
+                    Err(ApiError::new(CREATE_REQUIRES_TABLE))
                 },
                 Ok(None) => Ok(()),
             }

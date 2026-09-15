@@ -828,55 +828,47 @@ function validate_typed_array(typed_array, column_data) {
 
     test.describe("Errors", function () {
         test("Table constructor should throw an exception and reject promise", async function () {
-            expect.assertions(1);
-            perspective.table([1, 2, 3]).catch((error) => {
-                expect(error.message).toContain(
-                    "Abort(): Cannot determine data types without column names!\n",
-                );
-            });
+            await expect(perspective.table([1, 2, 3])).rejects.toThrow(
+                "Abort(): Cannot determine data types without column names!\n",
+            );
         });
 
         test("View constructor should throw an exception and reject promise", async function () {
-            expect.assertions(1);
             const table = await perspective.table(int_float_string_data);
-            table
-                .view({
-                    group_by: ["abcd"],
-                })
-                .catch((error) => {
-                    expect(error.message).toContain(
-                        "Abort(): Invalid column 'abcd' found in View group_by.\n",
-                    );
-                    table.delete();
-                });
+            await expect(table.view({ group_by: ["abcd"] })).rejects.toThrow(
+                "Abort(): Invalid column 'abcd' found in View group_by.\n",
+            );
+
+            await table.delete();
         });
 
         test("Table constructor should throw an exception on await", async function () {
-            expect.assertions(1);
-
+            let error;
             try {
                 await perspective.table([1, 2, 3]);
-            } catch (error) {
-                expect(error.message).toContain(
-                    "Abort(): Cannot determine data types without column names!\n",
-                );
+            } catch (e) {
+                error = e;
             }
+
+            expect(error.message).toContain(
+                "Abort(): Cannot determine data types without column names!\n",
+            );
         });
 
         test("View constructor should throw an exception on await", async function () {
-            expect.assertions(1);
             const table = await perspective.table(int_float_string_data);
-
+            let error;
             try {
-                await table.view({
-                    group_by: ["abcd"],
-                });
-            } catch (error) {
-                expect(error.message).toContain(
-                    "Abort(): Invalid column 'abcd' found in View group_by.\n",
-                );
-                table.delete();
+                await table.view({ group_by: ["abcd"] });
+            } catch (e) {
+                error = e;
             }
+
+            expect(error.message).toContain(
+                "Abort(): Invalid column 'abcd' found in View group_by.\n",
+            );
+
+            await table.delete();
         });
 
         test("Table constructor pads short trailing columns with null", async function () {

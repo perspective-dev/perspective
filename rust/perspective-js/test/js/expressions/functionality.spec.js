@@ -1633,33 +1633,17 @@ import perspective from "../perspective_client";
         });
 
         test("Should not be able to overwrite table column with an expression", async function () {
-            expect.assertions(1);
             const table = await perspective.table(
                 expressions_common.int_float_data,
             );
-            let emit;
-            let emitReject;
-            let result = new Promise((success, reject) => {
-                emit = success;
-                emitReject = reject;
-            });
 
-            table
-                .view({
-                    expressions: { w: "upper('abc')" },
-                })
-                .catch((e) => {
-                    expect(e.message.split("\n")[0]).toMatch(
-                        `Abort(): Value Error - expression \"w\" cannot overwrite an existing column.`,
-                    );
-                    table.delete();
-                    emit();
-                })
-                .then(() => {
-                    emitReject("Promise should have thrown an error");
-                });
+            await expect(
+                table.view({ expressions: { w: "upper('abc')" } }),
+            ).rejects.toThrow(
+                `Abort(): Value Error - expression "w" cannot overwrite an existing column.`,
+            );
 
-            await result;
+            await table.delete();
         });
 
         test("Should be able to overwrite expression column with one that returns a different type", async function () {
@@ -1686,7 +1670,6 @@ import perspective from "../perspective_client";
         });
 
         test("A new view should not reference expression columns it did not create.", async function () {
-            expect.assertions(2);
             const table = await perspective.table(
                 expressions_common.int_float_data,
             );
@@ -1695,24 +1678,14 @@ import perspective from "../perspective_client";
             });
             const result = await view.to_columns();
             expect(result['"w" + "x"']).toEqual([2.5, 4.5, 6.5, 8.5]);
-            let emit;
-            let result2 = new Promise((x) => {
-                emit = x;
-            });
-            table
-                .view({
-                    columns: ['"w" + "x"', "x"],
-                })
-                .catch((e) => {
-                    expect(e.message).toMatch(
-                        `Abort(): Invalid column '"w" + "x"' found in View columns.\n`,
-                    );
-                    view.delete();
-                    table.delete();
-                    emit();
-                });
+            await expect(
+                table.view({ columns: ['"w" + "x"', "x"] }),
+            ).rejects.toThrow(
+                `Abort(): Invalid column '"w" + "x"' found in View columns.\n`,
+            );
 
-            await result2;
+            await view.delete();
+            await table.delete();
         });
 
         test("A view should be able to shadow real columns with an expression column", async function () {
@@ -2255,7 +2228,6 @@ import perspective from "../perspective_client";
         });
 
         test("A new view should not inherit expression columns if not created.", async function () {
-            expect.assertions(2);
             const table = await perspective.table(
                 expressions_common.int_float_data,
             );
@@ -2264,19 +2236,14 @@ import perspective from "../perspective_client";
             });
             const result = await view.to_columns();
             expect(result['"w" + "x"']).toEqual([2.5, 4.5, 6.5, 8.5]);
+            await expect(
+                table.view({ columns: ['"w" + "x"', "x"] }),
+            ).rejects.toThrow(
+                `Abort(): Invalid column '"w" + "x"' found in View columns.`,
+            );
 
-            try {
-                await table.view({
-                    columns: ['"w" + "x"', "x"],
-                });
-            } catch (e) {
-                expect(e.message.split("\n")[0]).toEqual(
-                    `Abort(): Invalid column '"w" + "x"' found in View columns.`,
-                );
-            }
-
-            view.delete();
-            table.delete();
+            await view.delete();
+            await table.delete();
         });
 
         test("The view's underlying table should not have a mutated schema.", async function () {

@@ -760,8 +760,6 @@ import * as expressions_common from "./common.js";
 
         test.describe("Deltas", () => {
             test("Appends delta", async () => {
-                expect.assertions(6);
-
                 const table = await perspective.table(expressions_common.data);
 
                 const v1 = await table.view({
@@ -778,59 +776,66 @@ import * as expressions_common from "./common.js";
                 expect(result["column"]).toEqual([11, 12, 13, 14]);
                 expect(result2["column"]).toEqual(["A", "B", "C", "D"]);
 
-                v1.on_update(
-                    async (updated) => {
-                        await validate_delta(
-                            "column",
-                            updated.delta,
-                            [11, 12, 13, 14],
-                        );
-                        const result = await v1.to_columns();
-                        expect(result["column"]).toEqual([
-                            11, 12, 13, 14, 11, 12, 13, 14,
-                        ]);
-                    },
-                    { mode: "row" },
-                );
-
-                let done;
-                let result3 = new Promise((x) => {
-                    done = x;
+                const updated1 = new Promise((resolve, reject) => {
+                    v1.on_update(
+                        async (updated) => {
+                            try {
+                                await validate_delta(
+                                    "column",
+                                    updated.delta,
+                                    [11, 12, 13, 14],
+                                );
+                                const result = await v1.to_columns();
+                                expect(result["column"]).toEqual([
+                                    11, 12, 13, 14, 11, 12, 13, 14,
+                                ]);
+                                resolve();
+                            } catch (e) {
+                                reject(e);
+                            }
+                        },
+                        { mode: "row" },
+                    );
                 });
-                v2.on_update(
-                    async (updated) => {
-                        await validate_delta("column", updated.delta, [
-                            "A",
-                            "B",
-                            "C",
-                            "D",
-                        ]);
-                        const result2 = await v2.to_columns();
-                        expect(result2["column"]).toEqual([
-                            "A",
-                            "B",
-                            "C",
-                            "D",
-                            "A",
-                            "B",
-                            "C",
-                            "D",
-                        ]);
-                        await v2.delete();
-                        await v1.delete();
-                        await table.delete();
-                        done();
-                    },
-                    { mode: "row" },
-                );
+
+                const updated2 = new Promise((resolve, reject) => {
+                    v2.on_update(
+                        async (updated) => {
+                            try {
+                                await validate_delta("column", updated.delta, [
+                                    "A",
+                                    "B",
+                                    "C",
+                                    "D",
+                                ]);
+                                const result2 = await v2.to_columns();
+                                expect(result2["column"]).toEqual([
+                                    "A",
+                                    "B",
+                                    "C",
+                                    "D",
+                                    "A",
+                                    "B",
+                                    "C",
+                                    "D",
+                                ]);
+                                resolve();
+                            } catch (e) {
+                                reject(e);
+                            }
+                        },
+                        { mode: "row" },
+                    );
+                });
 
                 await table.update(expressions_common.data);
-                await result3;
+                await Promise.all([updated1, updated2]);
+                await v2.delete();
+                await v1.delete();
+                await table.delete();
             });
 
             test("Partial update delta", async () => {
-                expect.assertions(6);
-
                 const table = await perspective.table(expressions_common.data, {
                     index: "x",
                 });
@@ -849,67 +854,75 @@ import * as expressions_common from "./common.js";
                 expect(result["column"]).toEqual([2, 4, 6, 8]);
                 expect(result2["column"]).toEqual(["A", "B", "C", "D"]);
 
-                v1.on_update(
-                    async (updated) => {
-                        await validate_delta("column", updated.delta, [
-                            null,
-                            4,
-                            6,
-                            8,
-                            20,
-                        ]);
-                        const result = await v1.to_columns();
-                        expect(result["column"]).toEqual([
-                            null,
-                            2,
-                            4,
-                            6,
-                            8,
-                            20,
-                        ]);
-                    },
-                    { mode: "row" },
-                );
-
-                let done;
-                let result3 = new Promise((x) => {
-                    done = x;
+                const updated1 = new Promise((resolve, reject) => {
+                    v1.on_update(
+                        async (updated) => {
+                            try {
+                                await validate_delta("column", updated.delta, [
+                                    null,
+                                    4,
+                                    6,
+                                    8,
+                                    20,
+                                ]);
+                                const result = await v1.to_columns();
+                                expect(result["column"]).toEqual([
+                                    null,
+                                    2,
+                                    4,
+                                    6,
+                                    8,
+                                    20,
+                                ]);
+                                resolve();
+                            } catch (e) {
+                                reject(e);
+                            }
+                        },
+                        { mode: "row" },
+                    );
                 });
-                v2.on_update(
-                    async (updated) => {
-                        await validate_delta("column", updated.delta, [
-                            "DEF",
-                            "X",
-                            "Z",
-                            "Y",
-                            "ABC",
-                        ]);
-                        const result = await v2.to_columns();
-                        expect(result["column"]).toEqual([
-                            "DEF",
-                            "A",
-                            "X",
-                            "Z",
-                            "Y",
-                            "ABC",
-                        ]);
-                        await v2.delete();
-                        await v1.delete();
-                        await table.delete();
-                        done();
-                    },
-                    { mode: "row" },
-                );
+
+                const updated2 = new Promise((resolve, reject) => {
+                    v2.on_update(
+                        async (updated) => {
+                            try {
+                                await validate_delta("column", updated.delta, [
+                                    "DEF",
+                                    "X",
+                                    "Z",
+                                    "Y",
+                                    "ABC",
+                                ]);
+                                const result = await v2.to_columns();
+                                expect(result["column"]).toEqual([
+                                    "DEF",
+                                    "A",
+                                    "X",
+                                    "Z",
+                                    "Y",
+                                    "ABC",
+                                ]);
+                                resolve();
+                            } catch (e) {
+                                reject(e);
+                            }
+                        },
+                        { mode: "row" },
+                    );
+                });
 
                 await table.update({
                     x: [2, 4, 3, 10, null],
                     y: ["X", "Y", "Z", "ABC", "DEF"],
                 });
-                await result3;
+                await Promise.all([updated1, updated2]);
+                await v2.delete();
+                await v1.delete();
+                await table.delete();
             });
 
             test("Partial update, sorted delta", async () => {
-                expect.assertions(6);
                 const table = await perspective.table(expressions_common.data, {
                     index: "x",
                 });
@@ -929,63 +942,72 @@ import * as expressions_common from "./common.js";
                 expect(result["column"]).toEqual([8, 6, 4, 2]);
                 expect(result2["column"]).toEqual(["D", "C", "B", "A"]);
 
-                v1.on_update(
-                    async (updated) => {
-                        await validate_delta("column", updated.delta, [
-                            20,
-                            8,
-                            6,
-                            4,
-                            null,
-                        ]);
-                        const result = await v1.to_columns();
-                        expect(result["column"]).toEqual([
-                            20,
-                            8,
-                            6,
-                            4,
-                            2,
-                            null,
-                        ]);
-                    },
-                    { mode: "row" },
-                );
-
-                let done;
-                let result3 = new Promise((x) => {
-                    done = x;
+                const updated1 = new Promise((resolve, reject) => {
+                    v1.on_update(
+                        async (updated) => {
+                            try {
+                                await validate_delta("column", updated.delta, [
+                                    20,
+                                    8,
+                                    6,
+                                    4,
+                                    null,
+                                ]);
+                                const result = await v1.to_columns();
+                                expect(result["column"]).toEqual([
+                                    20,
+                                    8,
+                                    6,
+                                    4,
+                                    2,
+                                    null,
+                                ]);
+                                resolve();
+                            } catch (e) {
+                                reject(e);
+                            }
+                        },
+                        { mode: "row" },
+                    );
                 });
-                v2.on_update(
-                    async (updated) => {
-                        await validate_delta("column", updated.delta, [
-                            "Z",
-                            "Y",
-                            "X",
-                            "DEF",
-                            "ABC",
-                        ]);
-                        const result2 = await v2.to_columns();
-                        expect(result2["column"]).toEqual([
-                            "Z",
-                            "Y",
-                            "X",
-                            "DEF",
-                            "ABC",
-                            "A",
-                        ]);
-                        await v2.delete();
-                        await v1.delete();
-                        await table.delete();
-                        done();
-                    },
-                    { mode: "row" },
-                );
+
+                const updated2 = new Promise((resolve, reject) => {
+                    v2.on_update(
+                        async (updated) => {
+                            try {
+                                await validate_delta("column", updated.delta, [
+                                    "Z",
+                                    "Y",
+                                    "X",
+                                    "DEF",
+                                    "ABC",
+                                ]);
+                                const result2 = await v2.to_columns();
+                                expect(result2["column"]).toEqual([
+                                    "Z",
+                                    "Y",
+                                    "X",
+                                    "DEF",
+                                    "ABC",
+                                    "A",
+                                ]);
+                                resolve();
+                            } catch (e) {
+                                reject(e);
+                            }
+                        },
+                        { mode: "row" },
+                    );
+                });
 
                 await table.update({
                     x: [2, 4, 3, 10, null],
                     y: ["X", "Y", "Z", "ABC", "DEF"],
                 });
-                await result3;
+                await Promise.all([updated1, updated2]);
+                await v2.delete();
+                await v1.delete();
+                await table.delete();
             });
         });
 
