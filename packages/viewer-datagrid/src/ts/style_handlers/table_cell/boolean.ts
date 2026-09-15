@@ -11,11 +11,15 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { CellMetadata } from "regular-table/dist/esm/types.js";
-import type { DatagridModel, ColumnConfig, ColorRecord } from "../../types.js";
+import type {
+    DatagridModel,
+    ResolvedColumnStyle,
+    ColorRecord,
+} from "../../types.js";
 
 export function cell_style_boolean(
     model: DatagridModel,
-    _plugin: ColumnConfig | undefined,
+    _plugin: ResolvedColumnStyle | undefined,
     td: HTMLElement,
     metadata: CellMetadata,
 ): void {

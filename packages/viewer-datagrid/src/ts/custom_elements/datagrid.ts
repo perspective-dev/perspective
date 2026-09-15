@@ -40,6 +40,7 @@ import type {
     EditMode,
     DatagridPluginConfig,
     ColumnsConfig,
+    ResolvedColumnsConfig,
     Align,
 } from "../types.js";
 import { RegularTableElement } from "regular-table";
@@ -283,7 +284,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
                 const type = this.model!._schema[col_name];
                 const pluginConfig = (this.regular_table as any)[
                     PRIVATE_PLUGIN_SYMBOL
-                ] as ColumnsConfig | undefined;
+                ] as ResolvedColumnsConfig | undefined;
                 const columnName = sourceColumn(col_name);
                 const formatter = format_raw(
                     type,

@@ -120,6 +120,19 @@ A `saveWorkspace()` token is a `WorkspaceConfig`
 single-panel `restore()` will _not_ restore the layout (its `panels`/`layout`
 keys are ignored).
 
+Like `restore()`, `restoreWorkspace()` applies an _update_: a field that is
+absent leaves that part of the element unchanged, `null` resets it to its
+default, and a value replaces it. `panels` is the whole panel set — when
+present every existing panel is replaced (`{}` empties the element); when
+absent the panels are kept, and `layout`, `active` and `masters` name them by
+their existing ids. So a cross-filter can be applied to the current panels
+without re-creating them:
+
+```javascript
+await elem.restoreWorkspace({ global_filters: [["Region", "==", "West"]] });
+await elem.restoreWorkspace({ global_filters: null }); // clear
+```
+
 ## Colors, palettes and gradients
 
 Per-column color styling lives in a panel's `columns_config`, keyed by column
@@ -131,21 +144,25 @@ name, and every color-scale value is a string usable verbatim in CSS:
 | palette  | `"linear-gradient(to right, #rrggbb, #rrggbb, …)"` — N colors, **no** positions     |
 | gradient | `"linear-gradient(to right, #rrggbb 0%, #rrggbb 37.5%, …)"` — every stop positioned |
 
-Which reader applies is decided by the style control's kind (the datagrid's
-`fg_colors`/`bg_colors` and the charts' `gradient` are gradients; `palette` is a
-palette), never by inspecting the string — a position anywhere in a palette is
-rejected, while a gradient may omit positions on input (the CSS
-implicit-position rules fill them) and may carry any direction token, which is
-normalized to `to right`. Values equal to the plugin's default are not
-serialized.
+Which reader applies is decided by the style control's kind, never by inspecting
+the string. The datagrid's `fg_color`/`bg_color` are read according to the
+column's type and its `fg_mode`/`bg_mode`: a gradient for numeric columns, a
+color for string and datetime columns in `"color"` mode, and a palette for
+string columns in `"series"` mode; the charts' `gradient` is a gradient and
+`palette` a palette. A position anywhere in a palette is rejected, while a
+gradient may omit positions on input (the CSS implicit-position rules fill them)
+and may carry any direction token, which is normalized to `to right`. A mode the
+column's type does not accept (say `fg_mode: "series"` on a float column)
+rejects the `restore()` call, as does a value that does not parse under the
+mode's reader. Values equal to the plugin's default are not serialized.
 
 ```javascript
 await viewer.restore({
     plugin: "Datagrid",
     columns_config: {
         Profit: {
-            number_bg_mode: "gradient",
-            bg_colors: "linear-gradient(to right, #ff0000, #ffffff, #0000ff)",
+            bg_mode: "gradient",
+            bg_color: "linear-gradient(to right, #ff0000, #ffffff, #0000ff)",
         },
     },
 });

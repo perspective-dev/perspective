@@ -92,7 +92,7 @@ async function read_max_cell_background(page: any) {
             .querySelector("perspective-viewer")!
             .shadowRoot!.querySelector("#column_settings_sidebar");
         const handles = sidebar?.querySelectorAll(
-            "#bg_colors-label ~ * .gradient-stop-handle input, fieldset:has(#bg_colors-label) .gradient-stop-handle input",
+            "#bg_color-label ~ * .gradient-stop-handle input, fieldset:has(#bg_color-label) .gradient-stop-handle input",
         );
         const last = handles?.[handles.length - 1] as
             | HTMLInputElement
@@ -142,7 +142,7 @@ test.describe("Datagrid restyle()", () => {
         await sidebar.waitFor();
         await sidebar
             .locator("fieldset.style-control", {
-                has: page.locator("#number_bg_mode-label"),
+                has: page.locator("#bg_mode-label"),
             })
             .locator("select")
             .selectOption("gradient");

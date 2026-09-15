@@ -398,6 +398,16 @@ impl ColumnConfigSchema {
         self
     }
 
+    /// The variants of the [`ControlSpec::Enum`] owning `key`, if any.
+    pub fn enum_variants_of(&self, key: &str) -> Option<&[EnumVariant]> {
+        self.leaf_fields().into_iter().find_map(|spec| match spec {
+            ControlSpec::Enum {
+                key: k, variants, ..
+            } if k == key => Some(variants.as_slice()),
+            _ => None,
+        })
+    }
+
     /// The CSS kind of the control owning `key`, if it is CSS-valued.
     pub fn css_kind_of(&self, key: &str) -> Option<CssKind> {
         self.leaf_fields().into_iter().find_map(|spec| match spec {
@@ -552,6 +562,39 @@ mod tests {
         assert_eq!(flat.active_keys(), grouped.active_keys());
         assert_eq!(flat.css_kind_of("color"), grouped.css_kind_of("color"));
         assert_eq!(flat.css_kind_of("stack"), grouped.css_kind_of("stack"));
+    }
+
+    #[test]
+    fn enum_variants_see_through_groups() {
+        let mode = ControlSpec::Enum {
+            key: "fg_mode".to_owned(),
+            default: "color".to_owned(),
+            variants: vec![
+                EnumVariant {
+                    value: "disabled".to_owned(),
+                    label: None,
+                },
+                EnumVariant {
+                    value: "color".to_owned(),
+                    label: None,
+                },
+            ],
+        };
+
+        let grouped = ColumnConfigSchema {
+            fields: vec![group("color", vec![mode, flag("flag")])],
+        };
+
+        let values: Vec<&str> = grouped
+            .enum_variants_of("fg_mode")
+            .unwrap()
+            .iter()
+            .map(|v| v.value.as_str())
+            .collect();
+
+        assert_eq!(values, vec!["disabled", "color"]);
+        assert!(grouped.enum_variants_of("flag").is_none());
+        assert!(grouped.enum_variants_of("missing").is_none());
     }
 
     #[test]

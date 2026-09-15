@@ -137,7 +137,7 @@ export default [
             sort: [["Profit", "col asc"]],
             columns_config: {
                 Profit: {
-                    number_bg_mode: "color",
+                    bg_mode: "color",
                 },
             },
         },
@@ -154,7 +154,7 @@ export default [
             sort: [["Profit", "col asc"]],
             columns_config: {
                 Profit: {
-                    number_bg_mode: "gradient",
+                    bg_mode: "gradient",
                     bg_gradient: 1600,
                 },
             },
@@ -171,7 +171,7 @@ export default [
             aggregates: { Sales: "avg" },
             columns_config: {
                 Sales: {
-                    number_fg_mode: "bar",
+                    fg_mode: "bar",
                     fg_gradient: 600,
                 },
             },
@@ -218,20 +218,20 @@ export default [
             columns_config: {
                 Discount: {
                     neg_bg_color: "#780aff",
-                    number_bg_mode: "color",
-                    number_fg_mode: "disabled",
+                    bg_mode: "color",
+                    fg_mode: "disabled",
                     pos_bg_color: "#f5ac0f",
                 },
                 Profit: {
                     neg_bg_color: "#f50fed",
-                    number_bg_mode: "color",
-                    number_fg_mode: "disabled",
+                    bg_mode: "color",
+                    fg_mode: "disabled",
                     pos_bg_color: "#32cd82",
                 },
                 Sales: {
                     neg_bg_color: "#f5ac0f",
-                    number_bg_mode: "color",
-                    number_fg_mode: "disabled",
+                    bg_mode: "color",
+                    fg_mode: "disabled",
                     pos_bg_color: "#780aff",
                 },
             },
@@ -266,19 +266,19 @@ export default [
             ],
             columns_config: {
                 Profit: {
-                    number_bg_mode: "gradient",
+                    bg_mode: "gradient",
                     bg_gradient: 600,
                     pos_bg_color: "#32cd82",
                     neg_bg_color: "#f50fed",
                 },
                 Sales: {
-                    number_bg_mode: "gradient",
+                    bg_mode: "gradient",
                     bg_gradient: 2268,
                     pos_bg_color: "#780aff",
                     neg_bg_color: "#f5ac0f",
                 },
                 Discount: {
-                    number_bg_mode: "gradient",
+                    bg_mode: "gradient",
                     bg_gradient: 0.8,
                     pos_bg_color: "#f5ac0f",
                     neg_bg_color: "#780aff",
@@ -303,19 +303,19 @@ export default [
             ],
             columns_config: {
                 Profit: {
-                    number_fg_mode: "bar",
+                    fg_mode: "bar",
                     fg_gradient: 600,
                     pos_fg_color: "#32cd82",
                     neg_fg_color: "#f50fed",
                 },
                 Sales: {
-                    number_fg_mode: "bar",
+                    fg_mode: "bar",
                     fg_gradient: 2268,
                     pos_fg_color: "#780aff",
                     neg_fg_color: "#f5ac0f",
                 },
                 Discount: {
-                    number_fg_mode: "bar",
+                    fg_mode: "bar",
                     fg_gradient: 0.8,
                     pos_fg_color: "#f5ac0f",
                     neg_fg_color: "#780aff",
@@ -340,15 +340,15 @@ export default [
             ],
             columns_config: {
                 Profit: {
-                    number_fg_mode: "label-bar",
+                    fg_mode: "label-bar",
                     fg_gradient: 600,
                 },
                 Sales: {
-                    number_fg_mode: "label-bar",
+                    fg_mode: "label-bar",
                     fg_gradient: 2268,
                 },
                 Discount: {
-                    number_fg_mode: "label-bar",
+                    fg_mode: "label-bar",
                     fg_gradient: 0.8,
                 },
             },
@@ -371,19 +371,19 @@ export default [
             ],
             columns_config: {
                 Profit: {
-                    number_fg_mode: "label-bar",
+                    fg_mode: "label-bar",
                     fg_gradient: 600,
                     pos_fg_color: "#32cd82",
                     neg_fg_color: "#f50fed",
                 },
                 Sales: {
-                    number_fg_mode: "label-bar",
+                    fg_mode: "label-bar",
                     fg_gradient: 2268,
                     pos_fg_color: "#780aff",
                     neg_fg_color: "#f5ac0f",
                 },
                 Discount: {
-                    number_fg_mode: "label-bar",
+                    fg_mode: "label-bar",
                     fg_gradient: 0.8,
                     pos_fg_color: "#f5ac0f",
                     neg_fg_color: "#780aff",
@@ -402,15 +402,15 @@ export default [
             columns: ["Profit (-)", "Profit", "Profit (+)"],
             columns_config: {
                 "Profit (-)": {
-                    number_fg_mode: "bar",
+                    fg_mode: "bar",
                     fg_gradient: 10000,
                 },
                 Profit: {
-                    number_bg_mode: "gradient",
+                    bg_mode: "gradient",
                     bg_gradient: 10000,
                 },
                 "Profit (+)": {
-                    number_fg_mode: "bar",
+                    fg_mode: "bar",
                     fg_gradient: 10000,
                 },
             },

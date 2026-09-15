@@ -47,10 +47,10 @@ class TestAnyWidgetSmoke:
 
         widget = PerspectiveWidget(
             {"a": [1, 2, 3]},
-            columns_config={"a": {"number_fg_mode": "bar"}},
+            columns_config={"a": {"fg_mode": "bar"}},
             group_rollup_mode="flat",
         )
-        assert widget.columns_config == {"a": {"number_fg_mode": "bar"}}
+        assert widget.columns_config == {"a": {"fg_mode": "bar"}}
         assert widget.group_rollup_mode == "flat"
 
     def test_frontend_state_update_applies_with_version(self):

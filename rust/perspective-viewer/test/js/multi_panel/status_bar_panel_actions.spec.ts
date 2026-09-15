@@ -124,11 +124,10 @@ test.describe("Status bar panel actions", () => {
         const fresh = names[1];
         await page.evaluate(async (name) => {
             const viewer = document.querySelector("perspective-viewer")! as any;
-            await viewer.restore({
-                panel: name,
-                columns: ["Quantity"],
-                settings: true,
-            });
+            await viewer.restore(
+                { columns: ["Quantity"], settings: true },
+                { panel: name },
+            );
         }, fresh);
 
         await pickNewPanel(page, fresh);

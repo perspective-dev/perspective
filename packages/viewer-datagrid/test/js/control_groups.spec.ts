@@ -58,11 +58,11 @@ test.describe("Datagrid column style control groups", function () {
             1,
         );
 
-        await expect(color.locator("#number_fg_mode-label")).toHaveCount(1);
-        await expect(color.locator("#fg_colors-label")).toHaveCount(1);
+        await expect(color.locator("#fg_mode-label")).toHaveCount(1);
+        await expect(color.locator("#fg_color-label")).toHaveCount(1);
         await expect(color.locator("#fg_gradient-label")).toHaveCount(0);
-        await expect(color.locator("#number_bg_mode-label")).toHaveCount(1);
-        await expect(color.locator("#bg_colors-label")).toHaveCount(0);
+        await expect(color.locator("#bg_mode-label")).toHaveCount(1);
+        await expect(color.locator("#bg_color-label")).toHaveCount(0);
 
         await expect(
             groups.first().locator("#column_size_override-label"),
@@ -79,7 +79,7 @@ test.describe("Datagrid column style control groups", function () {
         const color = sidebar.locator("details.control-group").nth(2);
         await color
             .locator("div.row", {
-                has: page.locator("label#number_fg_mode-label"),
+                has: page.locator("label#fg_mode-label"),
             })
             .locator("select")
             .selectOption("label-bar");
@@ -90,7 +90,7 @@ test.describe("Datagrid column style control groups", function () {
         const token = (await view.save()) as any;
         const config = token.columns_config["Row ID"];
 
-        expect(config.number_fg_mode).toEqual("label-bar");
+        expect(config.fg_mode).toEqual("label-bar");
         expect(config.fg_gradient).toBeUndefined();
         expect(config.color).toBeUndefined();
         expect(token.plugin_config.color).toBeUndefined();

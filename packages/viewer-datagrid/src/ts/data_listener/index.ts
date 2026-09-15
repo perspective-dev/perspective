@@ -20,7 +20,7 @@ import {
     format_tree_header_row_path,
 } from "./format_tree_header.js";
 import type {
-    ColumnsConfig,
+    ResolvedColumnsConfig,
     DatagridModel,
     RegularTable,
     Schema,
@@ -201,7 +201,7 @@ export function createDataListener(
             ? reconcile_column_widths(this, regularTable, x0, x1)
             : {};
 
-        const columns_config: ColumnsConfig =
+        const columns_config: ResolvedColumnsConfig =
             (regularTable as any)[PRIVATE_PLUGIN_SYMBOL] || {};
 
         for (

@@ -85,7 +85,8 @@ function playwright(pkg, is_jlab) {
     }
 
     const cmd = [
-        "npx",
+        "pnpm",
+        "exec",
         "playwright",
         "test",
         "--config=tools/test/playwright.config.ts",

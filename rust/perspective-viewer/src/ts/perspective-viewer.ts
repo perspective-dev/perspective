@@ -63,6 +63,8 @@ export type * from "./ts-rs/ClientOptions.d.ts";
 export type * from "./ts-rs/ExportOptions.d.ts";
 export type * from "./ts-rs/GetTableOptions.d.ts";
 export type * from "./ts-rs/GetClientOptions.d.ts";
+export type * from "./ts-rs/GetViewOptions.d.ts";
+export type * from "./ts-rs/GetViewMode.d.ts";
 
 export { init_client } from "./bootstrap";
 import { init_client } from "./bootstrap";

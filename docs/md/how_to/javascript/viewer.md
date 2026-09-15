@@ -93,8 +93,36 @@ the _active_ panel — e.g. `await viewer.save({ panel: "PANEL_ID_0" })`.
 | `delete()` | Release the element's resources |
 | `getClient(options?)` | Get a bound `Client` |
 | `getTable(options?)` | Get a panel's `Table` |
-| `getView(options?)` | Get a panel's `View` |
+| `getView(options?)` | Get a panel's `View` — `mode` selects `"live"` (default), `"clone"` or `"auto"` |
 | `getViewConfig(options?)` | Get a panel's `ViewConfig` |
+
+#### `View` lifecycle
+
+By default `getView()` returns the panel's own _live_ `View`. The viewer owns
+it: every config change replaces it, and auto-pause (the element scrolled out
+of view, `display: none`, or a backgrounded tab) or `delete()` deletes it. Any
+call on a live `View` can therefore fail with "View already deleted", even one
+already in flight, and it must never be `delete()`d by the caller. While a
+panel is auto-paused or has not rendered yet it has no live `View`, and
+`getView()` rejects with `No View for panel "<name>"`; `setAutoPause(false)`
+forces one to exist for every panel, at the cost of a live subscription each.
+
+A reference that has to outlive the render lifecycle should not borrow the
+viewer's `View` at all. `mode: "clone"` builds a new `View` from the panel's
+effective config (the element's global filter included) which is independent
+of rendering and pause, and which the caller owns and must `delete()`:
+
+```javascript
+for (const panel of viewer.getPanelNames()) {
+    const view = await viewer.getView({ panel, mode: "clone" });
+    const arrow = await view.to_arrow();
+    await view.delete();
+}
+```
+
+`mode: "auto"` returns the live `View` when one exists and a clone otherwise.
+Ownership follows whichever was returned, so use it only where the caller
+never deletes the result.
 
 ### Configuration
 
@@ -103,7 +131,7 @@ the _active_ panel — e.g. `await viewer.save({ panel: "PANEL_ID_0" })`.
 | `save(options?)` | Serialize one panel's configuration |
 | `restore(config, options?)` | Apply a configuration to one panel |
 | `saveWorkspace()` | Serialize the whole element — every panel, plus layout and global filters |
-| `restoreWorkspace(config)` | Restore a whole-element configuration |
+| `restoreWorkspace(config)` | Apply a workspace config update; absent fields are left unchanged |
 | `reset(all?, options?)` | Reset configuration (pass `true` to also reset expressions) |
 | `resetError()` | Clear the error overlay |
 

@@ -120,7 +120,7 @@ export const SUPERSTORE_PROJECTS: Project[] = [
                 PERSPECTIVE_GENERATED_ID_1: {
                     columns_config: {
                         Profit: {
-                            number_fg_mode: "label-bar",
+                            fg_mode: "label-bar",
                             fg_gradient: 17320,
                         },
                     },
