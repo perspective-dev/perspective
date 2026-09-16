@@ -41,11 +41,13 @@ t_residency_manager::unregister_store(t_lstore* store) {
     m_stores.erase(store);
 }
 
-// Hard-coded residency budget (bytes) for WASM. A browser has no environment,
-// so `PSP_MEMORY_BUDGET` is unreachable there — without a budget, residency is
-// inert, on-disk columns never evict to OPFS, and the heap can grow past the
-// 2GB signed-pointer ceiling. This caps resident disk-backed column buffers so
-// the cold set is flushed to OPFS. Tunable via `-DPSP_WASM_MEMORY_BUDGET=...`.
+// Default residency budget (bytes) for WASM when `PSP_MEMORY_BUDGET` is unset.
+// A browser has no environment, so this is what caps resident disk-backed
+// column buffers there — without a budget, residency is inert, on-disk columns
+// never evict to OPFS, and the heap can grow past the 2GB signed-pointer
+// ceiling. A Node host forwards its environment through WASI, so the variable
+// overrides this exactly as it does natively. Tunable via
+// `-DPSP_WASM_MEMORY_BUDGET=...`.
 #ifndef PSP_WASM_MEMORY_BUDGET
 #define PSP_WASM_MEMORY_BUDGET (1024ull * 1024ull * 1024ull) // 1 GiB
 #endif
@@ -53,12 +55,13 @@ t_residency_manager::unregister_store(t_lstore* store) {
 void
 t_residency_manager::refresh_config() {
     std::size_t budget = 0;
-#ifdef PSP_ENABLE_WASM
-    budget = static_cast<std::size_t>(PSP_WASM_MEMORY_BUDGET);
-#else
     const char* budget_env = std::getenv("PSP_MEMORY_BUDGET");
     if (budget_env != nullptr) {
         budget = static_cast<std::size_t>(std::strtoull(budget_env, nullptr, 10));
+    }
+#ifdef PSP_ENABLE_WASM
+    else {
+        budget = static_cast<std::size_t>(PSP_WASM_MEMORY_BUDGET);
     }
 #endif
 

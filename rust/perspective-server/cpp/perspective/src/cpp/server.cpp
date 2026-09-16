@@ -490,6 +490,30 @@ parse_expression_strings(const F& column_expr) {
 } // namespace perspective
 
 namespace perspective::server {
+
+/**
+ * @brief Map the wire `compression` name to the IPC codec: `"lz4"`,
+ * `"zstd"`, or empty for none; any other name is a request error.
+ */
+static t_arrow_compression
+parse_arrow_compression(const std::string& name) {
+    if (name.empty()) {
+        return t_arrow_compression::NONE;
+    }
+
+    if (name == "lz4") {
+        return t_arrow_compression::LZ4;
+    }
+
+    if (name == "zstd") {
+        return t_arrow_compression::ZSTD;
+    }
+
+    PSP_COMPLAIN_AND_ABORT(
+        "Unknown `compression` \"" + name + "\", expected \"lz4\" or \"zstd\""
+    );
+    return t_arrow_compression::NONE;
+}
 void
 ServerResources::host_table(const t_id& id, std::shared_ptr<Table> table) {
     PSP_WRITE_LOCK(m_write_lock);
@@ -3551,7 +3575,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 dims.start_col,
                 dims.end_col,
                 true,
-                r.compression() == "lz4",
+                parse_arrow_compression(r.compression()),
                 legacy_names
             );
 

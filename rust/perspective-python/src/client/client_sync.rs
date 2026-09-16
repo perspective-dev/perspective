@@ -672,7 +672,14 @@ impl View {
     ///
     /// # Arguments
     ///
-    /// - `window` - a [`ViewWindow`]
+    /// - `window` - a [`ViewWindow`]; its `compression` key selects Arrow IPC
+    ///   body compression, `"lz4"` or `"zstd"` (uncompressed when omitted).
+    ///
+    /// # Examples
+    ///
+    /// ```python
+    /// arrow = view.to_arrow(compression="zstd")
+    /// ```
     #[pyo3(signature = (**window))]
     pub fn to_arrow(&self, py: Python<'_>, window: Option<Py<PyDict>>) -> PyResult<Py<PyBytes>> {
         self.0.to_arrow(window).py_block_on(py)

@@ -57,16 +57,13 @@ test.describe("WebSocketManager", function () {
     });
 
     test("passes back errors from server", async () => {
-        expect.assertions(2);
         const data = [{ x: 1 }];
         const table = await perspective.table(data, { name: "test" });
         const client = await perspective.websocket(`ws://localhost:${port}`);
         const client_table = await client.open_table("test");
-        client_table.view({ columns: ["z"] }).catch((error) => {
-            expect(error.message).toContain(
-                "Abort(): Invalid column 'z' found in View columns.\n",
-            );
-        });
+        await expect(client_table.view({ columns: ["z"] })).rejects.toThrow(
+            "Abort(): Invalid column 'z' found in View columns.\n",
+        );
 
         const client_view = await client_table.view();
         const client_data = await client_view.to_json();
@@ -98,18 +95,15 @@ test.describe("WebSocketManager", function () {
     });
 
     test("passes back errors with multiple client on subscribe", async () => {
-        expect.assertions(3);
         const data = [{ x: 1 }];
         const table = await perspective.table(data, { name: "test" });
         const client_1 = await perspective.websocket(`ws://localhost:${port}`);
         const client_2 = await perspective.websocket(`ws://localhost:${port}`);
         const client_1_table = await client_1.open_table("test");
         const client_2_table = await client_2.open_table("test");
-        client_1_table.view({ columns: ["z"] }).catch((error) => {
-            expect(error.message).toContain(
-                "Abort(): Invalid column 'z' found in View columns.\n",
-            );
-        });
+        await expect(client_1_table.view({ columns: ["z"] })).rejects.toThrow(
+            "Abort(): Invalid column 'z' found in View columns.\n",
+        );
 
         const client_1_view = await client_1_table.view();
         const client_2_view = await client_2_table.view();

@@ -991,6 +991,11 @@ impl AsyncView {
     }
 
     /// Serializes a [`View`] to the Apache Arrow data format.
+    ///
+    /// # Arguments
+    ///
+    /// - `window` - a [`ViewWindow`]; its `compression` key selects Arrow IPC
+    ///   body compression, `"lz4"` or `"zstd"` (uncompressed when omitted).
     #[pyo3(signature=(**window))]
     pub async fn to_arrow(&self, window: Option<Py<PyDict>>) -> PyResult<Py<PyBytes>> {
         let window: ViewWindow = Python::attach(|py| window.map(|x| depythonize(x.bind(py))))

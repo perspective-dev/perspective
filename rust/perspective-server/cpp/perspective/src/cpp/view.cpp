@@ -796,7 +796,7 @@ View<CTX_T>::to_arrow(
     std::int32_t start_col,
     std::int32_t end_col,
     bool emit_group_by,
-    bool compress,
+    t_arrow_compression compression,
     bool emit_legacy_row_path_names
 ) const {
     PSP_GIL_UNLOCK();
@@ -804,7 +804,9 @@ View<CTX_T>::to_arrow(
 
     std::shared_ptr<t_data_slice<CTX_T>> data_slice =
         get_data(start_row, end_row, start_col, end_col);
-    return data_slice_to_arrow(data_slice, emit_group_by, compress, emit_legacy_row_path_names);
+    return data_slice_to_arrow(
+        data_slice, emit_group_by, compression, emit_legacy_row_path_names
+    );
 };
 
 template <>
@@ -1416,7 +1418,7 @@ std::shared_ptr<std::string>
 View<CTX_T>::data_slice_to_arrow(
     std::shared_ptr<t_data_slice<CTX_T>> data_slice,
     bool emit_group_by,
-    bool compress,
+    t_arrow_compression compression,
     bool emit_legacy_row_path_names
 ) const {
     std::pair<
@@ -1438,9 +1440,18 @@ View<CTX_T>::data_slice_to_arrow(
     buffer = *allocated;
     arrow::io::BufferOutputStream sink(buffer);
     auto options = arrow::ipc::IpcWriteOptions::Defaults();
-    if (compress) {
-        auto codec = arrow::util::Codec::Create(arrow::Compression::LZ4_FRAME);
-        options.codec = std::move(codec).ValueUnsafe();
+    switch (compression) {
+        case t_arrow_compression::LZ4: {
+            auto codec =
+                arrow::util::Codec::Create(arrow::Compression::LZ4_FRAME);
+            options.codec = std::move(codec).ValueUnsafe();
+        } break;
+        case t_arrow_compression::ZSTD: {
+            auto codec = arrow::util::Codec::Create(arrow::Compression::ZSTD);
+            options.codec = std::move(codec).ValueUnsafe();
+        } break;
+        case t_arrow_compression::NONE:
+            break;
     }
 
 #ifdef PSP_PARALLEL_FOR

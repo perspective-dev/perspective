@@ -76,6 +76,39 @@ test.describe("Viewer Export", () => {
 
         expect(byteLength).toBeGreaterThan(0);
     });
+
+    test("export > arrow-lz4 and arrow-zstd methods return compressed ArrayBuffers", async ({
+        page,
+    }) => {
+        const viewer = await load(page);
+        const sizes = await viewer.evaluate(async (viewer) => {
+            const plain = (await viewer.export({
+                method: "arrow",
+            })) as ArrayBuffer;
+            const lz4 = (await viewer.export({
+                method: "arrow-lz4",
+            })) as ArrayBuffer;
+            const zstd = (await viewer.export({
+                method: "arrow-zstd",
+            })) as ArrayBuffer;
+            const zstd_all = (await viewer.export({
+                method: "arrow-zstd-all",
+            })) as ArrayBuffer;
+            return {
+                plain: plain.byteLength,
+                lz4: lz4.byteLength,
+                zstd: zstd.byteLength,
+                zstd_all: zstd_all.byteLength,
+            };
+        });
+
+        expect(sizes.lz4).toBeGreaterThan(0);
+        expect(sizes.zstd).toBeGreaterThan(0);
+        expect(sizes.zstd_all).toBeGreaterThan(0);
+        expect(sizes.lz4).not.toBe(sizes.plain);
+        expect(sizes.zstd).not.toBe(sizes.plain);
+        expect(sizes.zstd).not.toBe(sizes.lz4);
+    });
 });
 
 test.describe("Viewer Export UTF8", () => {

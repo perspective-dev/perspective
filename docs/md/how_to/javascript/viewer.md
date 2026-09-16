@@ -153,8 +153,11 @@ never deletes the result.
 | `copy(options?)` | Copy a panel to the clipboard |
 
 `export()`, `download()` and `copy()` all take a `method`, one of `"csv"`,
-`"json"`, `"ndjson"` or `"arrow"` — each with `-all` and `-selected` variants
-(e.g. `"csv-selected"`) — plus `"html"`, `"json-config"`, and `"plugin"`.
+`"json"`, `"ndjson"`, `"arrow"`, `"arrow-lz4"` or `"arrow-zstd"` — each with
+`-all` and `-selected` variants (e.g. `"csv-selected"`, `"arrow-zstd-all"`) —
+plus `"html"`, `"json-config"`, and `"plugin"`. The `"arrow-lz4"` and
+`"arrow-zstd"` methods write the Arrow IPC stream with LZ4 or ZSTD body
+compression.
 The `"plugin"` method asks the plugin to render itself, which produces a PNG
 for charts and text for the datagrid.
 | `getSelection(options?)` / `setSelection(...)` | Get or set the selected region |

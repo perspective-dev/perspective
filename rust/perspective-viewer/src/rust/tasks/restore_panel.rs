@@ -16,7 +16,9 @@ use perspective_client::utils::PerspectiveResultExt;
 use crate::config::*;
 use crate::presentation::Presentation;
 use crate::renderer::Renderer;
-use crate::session::{MissingTable, ResetOptions, Session, TableIntermediateState, probe_table};
+use crate::session::{
+    LoadGuard, MissingTable, ResetOptions, Session, TableIntermediateState, probe_table,
+};
 use crate::tasks::*;
 use crate::workspace::Workspace;
 use crate::*;
@@ -88,18 +90,18 @@ pub(crate) async fn bind_table_task(
 }
 
 /// Rebind a session to `name`, probing the incoming table before the
-/// outgoing binding is dropped and replaying the journal opened as
-/// `generation` over the incoming table's defaults.
+/// outgoing binding is dropped and replaying `load`'s journal over the
+/// incoming table's defaults.
 async fn rebind_table_task(
     session: &Session,
     renderer: &Renderer,
     workspace: &Workspace,
     name: String,
     missing: MissingTable,
-    generation: u32,
+    load: &LoadGuard,
 ) -> ApiResult<()> {
     let probed = probe(session, workspace, &name, missing).await;
-    let journal = session.take_pending_load(generation);
+    let journal = load.claim();
     let (client, table) = probed?;
     let Some(journal) = journal else {
         return Ok(());
@@ -186,7 +188,7 @@ pub(crate) async fn restore_panel(
         session.pending_table(),
     );
 
-    let generation = match &update.table {
+    let load = match &update.table {
         OptionalUpdate::Update(name)
             if session.is_errored()
                 || (!fresh
@@ -207,18 +209,16 @@ pub(crate) async fn restore_panel(
         RunOrigin::Public,
         update.clone(),
         {
-            clone!(session, renderer, update.table, workspace);
+            clone!(session, renderer, update.table, workspace, load);
             async move {
                 let OptionalUpdate::Update(name) = table else {
                     return Ok(());
                 };
 
-                match generation {
-                    Some(generation) => {
-                        rebind_table_task(
-                            &session, &renderer, &workspace, name, missing, generation,
-                        )
-                        .await
+                match &load {
+                    Some(load) => {
+                        rebind_table_task(&session, &renderer, &workspace, name, missing, load)
+                            .await
                     },
                     None => bind_table_task(&session, &workspace, name, missing).await,
                 }
@@ -227,8 +227,8 @@ pub(crate) async fn restore_panel(
     )
     .await;
 
-    if let Some(generation) = generation {
-        session.take_pending_load(generation);
+    if let Some(load) = &load {
+        load.close();
     }
 
     if let Err(e) = &result {

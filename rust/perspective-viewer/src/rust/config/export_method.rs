@@ -69,6 +69,24 @@ pub enum ExportMethod {
     #[serde(rename = "arrow-all")]
     ArrowAll,
 
+    #[serde(rename = "arrow-lz4")]
+    ArrowLz4,
+
+    #[serde(rename = "arrow-lz4-selected")]
+    ArrowLz4Selected,
+
+    #[serde(rename = "arrow-lz4-all")]
+    ArrowLz4All,
+
+    #[serde(rename = "arrow-zstd")]
+    ArrowZstd,
+
+    #[serde(rename = "arrow-zstd-selected")]
+    ArrowZstdSelected,
+
+    #[serde(rename = "arrow-zstd-all")]
+    ArrowZstdAll,
+
     #[serde(rename = "json-config")]
     JsonConfig,
 }
@@ -94,6 +112,12 @@ impl ExportMethod {
             Self::CsvSelected => ".selected.csv",
             Self::JsonSelected => ".selected.json",
             Self::ArrowSelected => ".selected.arrow",
+            Self::ArrowLz4 => ".lz4.arrow",
+            Self::ArrowLz4Selected => ".selected.lz4.arrow",
+            Self::ArrowLz4All => ".all.lz4.arrow",
+            Self::ArrowZstd => ".zstd.arrow",
+            Self::ArrowZstdSelected => ".selected.zstd.arrow",
+            Self::ArrowZstdAll => ".all.zstd.arrow",
             Self::Ndjson => ".ndjson",
             Self::NdjsonAll => ".all.ndjson",
             Self::NdjsonSelected => ".selected.ndjson",

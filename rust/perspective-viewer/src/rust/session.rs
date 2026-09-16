@@ -21,7 +21,7 @@ use std::cell::{Cell, Ref, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::ops::Deref;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use perspective_client::config::*;
 use perspective_client::proto::ViewDimensionsResp;
@@ -71,12 +71,8 @@ pub struct SessionHandle {
     pub view_config_changed: PubSub<()>,
     pub title_changed: PubSub<Option<String>>,
 
-    /// Count of in-flight CONFIG-DRIVEN pipeline runs.
-    in_flight_config_runs: Cell<u32>,
-
-    /// Fires with the ABSOLUTE [`Self::in_flight_config_runs`] count after
-    /// every change.
-    pub run_state_changed: PubSub<u32>,
+    /// Account of in-flight CONFIG-DRIVEN pipeline runs.
+    pub config_runs: InFlight,
 
     /// Fires when the user clicks the status indicator while in
     /// [`StatusIconState::Normal`].
@@ -100,31 +96,22 @@ pub struct SessionHandle {
     /// copying the config.
     pub last_dispatched_config: RefCell<Option<std::rc::Rc<crate::config::ViewerConfig>>>,
 
-    /// Monotone load counter, bumped once per `load()` call
-    /// ([`Session::begin_pending_load`]). Identifies the LATEST load so a
-    /// stale async classification — React binds `load` to a prop and fires it
-    /// repeatedly, unawaited and out of order — no-ops instead of clobbering a
-    /// newer load ([`Session::is_current_load`]).
-    load_generation: Cell<u32>,
-
     /// Open between a `load()` call and its payload's classification as
-    /// `Table`/`Client` ([`PendingLoad`]).
-    pending_load: RefCell<Option<PendingLoad>>,
+    /// `Table`/`Client` ([`LoadWindow`]), held weakly so its [`LoadGuard`] is
+    /// the sole owner.
+    pending_load: RefCell<Weak<LoadWindow>>,
 
     /// Coalesces `view_config_changed`: multiple synchronous commits in one
     /// task emit ONE event on the next microtask — the cadence the deleted
     /// `is_clean` flag provided by accident, now deliberate.
     config_event_scheduled: Cell<bool>,
 
-    /// Count of in-flight `perspective-config-update` dispatch tasks for this
-    /// panel (see [`Session::track_dispatch`]). `flush()` joins these via
+    /// Account of in-flight `perspective-config-update` dispatch tasks for
+    /// this panel (see [`Session::track_dispatch`]). `flush()` joins these via
     /// [`Session::settle_dispatches`], so the "config-update fires before
     /// `flush()` resolves" contract holds by construction instead of by
     /// microtask luck.
-    pending_dispatches: Cell<u32>,
-
-    /// Fires when [`SessionHandle::pending_dispatches`] returns to zero.
-    dispatches_settled: PubSub<()>,
+    dispatches: InFlight,
 
     /// Fires when [`SessionHandle::column_stats`] is updated (insert or
     /// clear). Subscribers re-render and re-query the schema with the
@@ -211,6 +198,11 @@ pub struct SessionData {
     is_loading: bool,
     is_paused: bool,
 
+    /// Terminal: set by [`Session::mark_disposed`] when the owning panel is
+    /// ejected, never cleared. Distinct from an `Ejected` reset, which a
+    /// suspended or element-ejected session may legitimately rebind after.
+    disposed: Option<Disposal>,
+
     /// Memo for [`Session::validate_snapshot`]: the expression set validated
     /// by the last successful server round trip; an equal snapshot skips the
     /// round trip. Written only under the draw lock; cleared on table
@@ -255,6 +247,19 @@ impl TableErrorState {
     }
 }
 
+/// How a terminal disposal reports itself to a public run still in flight on
+/// the ejected panel.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Disposal {
+    /// A separate call destroyed the panel, so a racing public run rejects
+    /// rather than reporting a success it never achieved.
+    Reject,
+
+    /// The ejecting call reports the eviction on its own promise, so a racing
+    /// public run resolves rather than surfacing it twice.
+    Resolve,
+}
+
 #[derive(Debug, Default)]
 pub enum TableIntermediateState {
     #[default]
@@ -262,13 +267,52 @@ pub enum TableIntermediateState {
     Reloaded,
 }
 
-/// The open-load window state (see [`SessionHandle::pending_load`]): the
-/// generation that opened it (for supersession detection) and the raw config
-/// deltas committed while it was open, in commit order, awaiting replay over a
-/// reset base if the payload classifies as a `Table`.
-pub struct PendingLoad {
-    generation: u32,
-    journal: Vec<ViewConfigUpdate>,
+/// The raw config deltas committed while a `load()` classifies its payload, in
+/// commit order, awaiting replay over a reset base if it classifies as a
+/// `Table` — identified by [`Rc`] identity rather than a generation counter.
+#[derive(Default)]
+pub struct LoadWindow {
+    journal: RefCell<Vec<ViewConfigUpdate>>,
+}
+
+/// A `load()` call site's handle on THE window it opened, closing that window
+/// on `Drop` so no exit can strand `is_loading`.
+pub struct LoadGuard {
+    session: Session,
+    window: Rc<LoadWindow>,
+}
+
+impl LoadGuard {
+    /// Close this window and take its journal for replay, or `None` when a
+    /// later `load()` superseded it — "abandon this classification, hold the
+    /// frame".
+    pub fn claim(&self) -> Option<Vec<ViewConfigUpdate>> {
+        self.close_current().then(|| self.window.journal.take())
+    }
+
+    /// Close this window, discarding its journal; idempotent, and a no-op once
+    /// superseded.
+    pub fn close(&self) {
+        self.close_current();
+    }
+
+    fn close_current(&self) -> bool {
+        let mut slot = self.session.pending_load.borrow_mut();
+        if !slot.upgrade().is_some_and(|x| Rc::ptr_eq(&x, &self.window)) {
+            return false;
+        }
+
+        *slot = Weak::new();
+        drop(slot);
+        self.session.borrow_mut().is_loading = false;
+        true
+    }
+}
+
+impl Drop for LoadGuard {
+    fn drop(&mut self) {
+        self.close();
+    }
 }
 
 /// Options for [`Session::reset`]
@@ -292,19 +336,6 @@ pub struct ResetOptions {
 /// including the `ViewConfig`.
 #[derive(Clone)]
 pub struct Session(Rc<SessionHandle>);
-
-/// RAII spinner accounting for one config-driven pipeline run.
-pub struct ConfigRunToken(Session);
-
-impl Drop for ConfigRunToken {
-    fn drop(&mut self) {
-        let count = self.0.0.in_flight_config_runs.get();
-        debug_assert!(count > 0, "ConfigRunToken underflow");
-        let count = count.saturating_sub(1);
-        self.0.0.in_flight_config_runs.set(count);
-        self.0.run_state_changed.emit(count);
-    }
-}
 
 impl ImplicitClone for Session {}
 
@@ -409,21 +440,19 @@ impl Session {
         }
     }
 
-    /// Open a pending-load window (see [`SessionHandle::pending_load`]) at the
-    /// `load()` call site. Bumps the load generation and returns it — the
-    /// caller carries it into the async classification to detect supersession
-    /// by a later `load()`. Sets `is_loading` so a FRESH panel shows the
-    /// spinner while a slow payload resolves (a RELOAD keeps its bound table,
-    /// hence [`TableLoadState::Loaded`], throughout — no spinner flicker).
-    pub fn begin_pending_load(&self) -> u32 {
-        let generation = self.0.load_generation.get() + 1;
-        self.0.load_generation.set(generation);
-        *self.0.pending_load.borrow_mut() = Some(PendingLoad {
-            generation,
-            journal: Vec::new(),
-        });
+    /// Open a load window (see [`LoadWindow`]) at the `load()` call site,
+    /// returning the [`LoadGuard`] that owns it. Sets `is_loading` so a FRESH
+    /// panel shows the spinner while a slow payload resolves (a RELOAD keeps
+    /// its bound table, hence [`TableLoadState::Loaded`], throughout — no
+    /// spinner flicker).
+    pub fn begin_pending_load(&self) -> Rc<LoadGuard> {
+        let window = Rc::new(LoadWindow::default());
+        *self.0.pending_load.borrow_mut() = Rc::downgrade(&window);
         self.borrow_mut().is_loading = true;
-        generation
+        Rc::new(LoadGuard {
+            session: self.clone(),
+            window,
+        })
     }
 
     /// Whether a `load()` payload is still awaiting classification. A `true`
@@ -431,25 +460,23 @@ impl Session {
     /// ([`crate::tasks::bind_snapshot`]) — the incoming config must never draw
     /// against the outgoing table.
     pub fn has_pending_load(&self) -> bool {
-        self.0.pending_load.borrow().is_some()
+        self.0.pending_load.borrow().strong_count() > 0
     }
 
-    /// Close the pending-load window for `generation`, returning its journal
-    /// (the raw deltas committed while it was open, in order) for replay.
-    /// Returns `None` when a later `load()` already superseded this one (or it
-    /// was already closed), which the caller treats as "abandon this
-    /// classification, hold the frame". Clears `is_loading` — the
-    /// classification that follows sets the real table state.
-    pub fn take_pending_load(&self, generation: u32) -> Option<Vec<ViewConfigUpdate>> {
-        let mut slot = self.0.pending_load.borrow_mut();
-        if slot.as_ref().map(|p| p.generation) != Some(generation) {
-            return None;
-        }
+    /// Mark this session disposed (its panel was ejected): every later
+    /// table bind and locked run refuses, so nothing can rebind or draw a
+    /// panel that no longer exists.
+    pub(crate) fn mark_disposed(&self, disposal: Disposal) {
+        self.borrow_mut().disposed = Some(disposal);
+    }
 
-        let journal = slot.take().map(|p| p.journal);
-        drop(slot);
-        self.borrow_mut().is_loading = false;
-        journal
+    pub(crate) fn is_disposed(&self) -> bool {
+        self.borrow().disposed.is_some()
+    }
+
+    /// This session's disposal, if its panel was ejected.
+    pub(crate) fn disposal(&self) -> Option<Disposal> {
+        self.borrow().disposed
     }
 
     pub(crate) fn has_table(&self) -> Option<TableLoadState> {
@@ -544,6 +571,10 @@ impl Session {
     /// Bind an opened `Table`, replacing any previous binding and announcing
     /// `table_loaded`.
     pub(crate) async fn bind_table(&self, table: perspective_client::Table) -> ApiResult<()> {
+        if self.is_disposed() {
+            return Err(ApiError::new("Panel disposed"));
+        }
+
         let metadata = SessionMetadata::from_table(&table).await?;
         let client = table.get_client();
         let on_error = self.on_table_errored.borrow().clone();
@@ -584,6 +615,10 @@ impl Session {
     /// Record `name` as pending, dropping any bound `Table` so nothing binds
     /// against the outgoing table while the name waits for a host.
     pub(crate) async fn pend_table(&self, name: String) -> ApiResult<()> {
+        if self.is_disposed() {
+            return Err(ApiError::new("Panel disposed"));
+        }
+
         let sub = self.borrow_mut().view_sub.take();
         self.borrow_mut().table = None;
         self.borrow_mut().metadata = SessionMetadata::default();
@@ -810,20 +845,20 @@ impl Session {
         // absent from the outgoing one — mirroring the "no table bound yet"
         // leniency already in `validate_names`. Authoritative validation is
         // deferred to the replay.
-        let pending = self.has_pending_load();
+        let window = self.0.pending_load.borrow().upgrade();
         let mut candidate = self.borrow().config.clone();
-        let journal_entry = pending.then(|| config_update.clone());
+        let journal_entry = window.is_some().then(|| config_update.clone());
         if !candidate.apply_update(config_update) {
             return Ok(());
         }
 
-        if let Some(entry) = journal_entry
-            && let Some(p) = self.0.pending_load.borrow_mut().as_mut()
+        if let Some(window) = &window
+            && let Some(entry) = journal_entry
         {
-            p.journal.push(entry);
+            window.journal.borrow_mut().push(entry);
         }
 
-        if !pending {
+        if window.is_none() {
             self.validate_names(&candidate)?;
         }
 
@@ -927,19 +962,10 @@ impl Session {
     /// [`Self::settle_dispatches`]. Used by the `perspective-config-update`
     /// dispatcher, whose landing `flush()` must be able to await.
     pub fn track_dispatch(&self, fut: impl std::future::Future<Output = ApiResult<()>> + 'static) {
-        self.0
-            .pending_dispatches
-            .set(self.0.pending_dispatches.get() + 1);
-        let session = self.clone();
+        let guard = self.0.dispatches.guard();
         ApiFuture::spawn_named("config-update-dispatch", async move {
-            let result = fut.await;
-            let remaining = session.0.pending_dispatches.get() - 1;
-            session.0.pending_dispatches.set(remaining);
-            if remaining == 0 {
-                session.0.dispatches_settled.emit(());
-            }
-
-            if let Err(e) = result {
+            let _guard = guard;
+            if let Err(e) = fut.await {
                 tracing::error!("[config-update dispatch] {}", e);
             }
 
@@ -950,10 +976,7 @@ impl Session {
     /// Resolve once every in-flight tracked dispatch for this panel has
     /// landed. Immediate when none are pending.
     pub async fn settle_dispatches(&self) -> ApiResult<()> {
-        while self.0.pending_dispatches.get() > 0 {
-            self.0.dispatches_settled.read_next().await?;
-        }
-
+        self.0.dispatches.settle().await;
         Ok(())
     }
 
@@ -973,26 +996,10 @@ impl Session {
     }
 
     /// Begin spinner accounting for ONE config-driven pipeline run: call
-    /// immediately after the run's commit, and move the returned token INTO
-    /// the run future. `Drop` settles it on every exit — completion, error,
-    /// cancellation, and runs that never reach `bind_view` (the
-    /// deferred-draw restore) — so, unlike edge-counting PubSub pairs, the
-    /// count cannot strand by construction.
-    /// [`SessionHandle::run_state_changed`] broadcasts the ABSOLUTE count
-    /// on both edges.
-    pub fn begin_config_run(&self) -> ConfigRunToken {
-        let count = self.0.in_flight_config_runs.get() + 1;
-        self.0.in_flight_config_runs.set(count);
-        self.run_state_changed.emit(count);
-        ConfigRunToken(self.clone())
-    }
-
-    /// The number of config-driven pipeline runs currently in flight (see
-    /// [`Self::begin_config_run`]). Read directly when (re)targeting a
-    /// panel — level-triggered consumers initialize from this and then
-    /// track [`SessionHandle::run_state_changed`].
-    pub fn in_flight_config_runs(&self) -> u32 {
-        self.0.in_flight_config_runs.get()
+    /// immediately after the run's commit, and move the returned guard INTO
+    /// the run future.
+    pub fn begin_config_run(&self) -> InFlightGuard {
+        self.0.config_runs.guard()
     }
 
     /// Read the cached `ColumnStats` for a column. Returns `None` if no

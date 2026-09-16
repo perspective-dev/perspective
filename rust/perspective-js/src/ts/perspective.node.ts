@@ -181,6 +181,7 @@ async function compile_server_module(wasm_path: string) {
     const bytes = await load_wasm_stage_0(buffer.buffer as ArrayBuffer);
     return await compile_perspective(bytes.buffer as ArrayBuffer, {
         make_disk_bridge: make_node_disk_bridge,
+        env: process.env,
     });
 }
 

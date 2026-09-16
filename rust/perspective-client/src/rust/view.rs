@@ -105,8 +105,10 @@ pub struct ViewWindow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub formatted: Option<bool>,
 
-    /// Only impacts [`View::to_arrow`]
+    /// Arrow IPC body compression for [`View::to_arrow`], `"lz4"` or `"zstd"`
+    /// (uncompressed when omitted).
     #[ts(optional)]
+    #[ts(type = "\"lz4\" | \"zstd\"")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compression: Option<String>,
 
@@ -423,7 +425,8 @@ impl View {
         }
     }
 
-    /// Serializes a [`View`] to the Apache Arrow data format.
+    /// Serializes a [`View`] to the Apache Arrow data format, with IPC body
+    /// compression per [`ViewWindow::compression`].
     pub async fn to_arrow(&self, window: ViewWindow) -> ClientResult<Bytes> {
         let msg = self.client_message(ClientReq::ViewToArrowReq(ViewToArrowReq {
             viewport: Some(window.clone().into()),

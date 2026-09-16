@@ -284,7 +284,8 @@ pub(super) fn create_active_subscriptions(
         let sub4 = session.view_config_changed.add_notify_listener(&cb);
         let sub5 = session.title_changed.add_notify_listener(&cb);
         let sub6 = session
-            .run_state_changed
+            .config_runs
+            .changed()
             .add_listener(ctx.link().callback(UpdateInFlight));
 
         let sub7 = session.column_stats_changed.add_notify_listener(&cb);

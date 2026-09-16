@@ -32,6 +32,10 @@ const TEST_SERVER_PORT = 6598;
 
 const RUN_JUPYTERLAB = !!process.env.PSP_JUPYTERLAB_TESTS;
 
+// Residency budget for the Node engine (only `page_to_disk` tables count), so
+// the eviction tests spill at a few MB instead of the 1 GiB default.
+process.env.PSP_MEMORY_BUDGET ??= String(4 * 1024 * 1024);
+
 // TODO use this from core
 const package_venn = (get_scope() as string[]).reduce(
     (acc: { include: string[]; exclude: string[] }, x: string) => {
@@ -184,9 +188,7 @@ let PROJECTS = (() => {
                             ...DEVICE_OPTIONS[device],
                             baseURL: `http://localhost:${TEST_SERVER_PORT}`,
                             timezoneId: "UTC",
-                            trace: process.env.CI
-                                ? "retain-on-failure"
-                                : "off",
+                            trace: process.env.CI ? "retain-on-failure" : "off",
                             screenshot: process.env.CI
                                 ? "only-on-failure"
                                 : "off",

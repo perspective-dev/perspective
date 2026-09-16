@@ -847,7 +847,12 @@ jobs:
                     - ubuntu-22.04
                 python-version:
                     - 3.11
-                node-version: [22.x]
+                node-version: [22.x, 26.x]
+                is-release:
+                    - ${{ startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' || github.event.inputs.ci-full }}
+                exclude:
+                    - node-version: 26.x
+                      is-release: false
 
         steps:
             - name: Checkout
@@ -890,7 +895,7 @@ jobs:
               if: ${{ failure() && steps.run_tests.outcome == 'failure' }}
               uses: actions/upload-artifact@v4
               with:
-                  name: perspective-js-test-results
+                  name: perspective-js-test-results-node${{ matrix.node-version }}
                   path: tools/test/dist/results
                   if-no-files-found: ignore
                   overwrite: true

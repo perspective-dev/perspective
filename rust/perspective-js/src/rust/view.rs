@@ -195,6 +195,17 @@ impl View {
     }
 
     /// Serializes a [`View`] to the Apache Arrow data format.
+    ///
+    /// # Arguments
+    ///
+    /// - `window` - a [`ViewWindow`]; its `compression` key selects Arrow IPC
+    ///   body compression, `"lz4"` or `"zstd"` (uncompressed when omitted).
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// const arrow = await view.to_arrow({ compression: "zstd" });
+    /// ```
     #[wasm_bindgen]
     pub async fn to_arrow(&self, window: Option<JsViewWindow>) -> ApiResult<ArrayBuffer> {
         let window = window.into_serde_ext::<Option<ViewWindow>>()?;
