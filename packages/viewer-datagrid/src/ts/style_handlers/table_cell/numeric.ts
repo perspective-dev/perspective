@@ -152,7 +152,6 @@ export function cell_style_numeric(
                     td,
                     pos_bg_color,
                     neg_bg_color,
-                    is_settings_open,
                 );
                 td.style.backgroundColor = "";
                 break;

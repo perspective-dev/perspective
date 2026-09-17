@@ -64,11 +64,22 @@ t_fterm::compile_pattern() {
     }
 }
 
+/**
+ * @brief Coerce a filter term to `dtype`, unless it is `null` (`DTYPE_NONE`),
+ * which has no numeric value and would coerce to `0`.
+ */
+static void
+coerce_term_numeric(t_tscalar& term, t_dtype dtype) {
+    if (term.m_type != DTYPE_NONE) {
+        term.set(term.coerce_numeric_dtype(dtype));
+    }
+}
+
 void
 t_fterm::coerce_numeric(t_dtype dtype) {
-    m_threshold.set(m_threshold.coerce_numeric_dtype(dtype));
+    coerce_term_numeric(m_threshold, dtype);
     for (auto& f : m_bag) {
-        f.set(f.coerce_numeric_dtype(dtype));
+        coerce_term_numeric(f, dtype);
     }
 }
 

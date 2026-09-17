@@ -186,12 +186,13 @@ function run_cancellable(cmd, args) {
 export const run_with_scope = async function run_recursive(strings, ...args) {
     let scope = get_scope();
     const cmd = strings[0].split(" ")[0];
-    const filters = scope.flatMap((x) => ["--filter", x, "--if-present"]);
+    const filters = scope.flatMap((x) => ["--filter", x]);
     await run_cancellable("pnpm", [
         "run",
         "--sequential",
         "--recursive",
         ...filters,
+        "--if-present",
         cmd,
     ]);
 };

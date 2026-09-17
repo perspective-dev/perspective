@@ -304,6 +304,65 @@ test.describe("Global filters: replace semantics", () => {
         expect((await save(page)).global_filters ?? []).toEqual([]);
     });
 
+    test("a selection that derives no clause clears the contribution", async ({
+        page,
+    }) => {
+        await restore(page, { ...SPLIT_CONFIG, masters: ["one"] });
+        const master = await id_by_title(page, "One");
+        const detail = await id_by_title(page, "Two");
+        const baseline = await num_rows(page, detail);
+
+        await dispatch_select(page, {
+            panel: master,
+            selected: true,
+            insertFilters: [["State", "==", "Texas"]],
+        });
+
+        await expect.poll(() => num_rows(page, detail)).toBeLessThan(baseline);
+
+        await dispatch_select(page, {
+            panel: master,
+            selected: true,
+            insertFilters: [],
+            row: { Sales: 55 },
+            column_names: [],
+        });
+
+        await expect.poll(() => num_rows(page, detail)).toBe(baseline);
+        expect((await save(page)).global_filters ?? []).toEqual([]);
+    });
+
+    test("a click that derives no clause keeps the contribution", async ({
+        page,
+    }) => {
+        await restore(page, { ...SPLIT_CONFIG, masters: ["one"] });
+        const master = await id_by_title(page, "One");
+        const detail = await id_by_title(page, "Two");
+        const baseline = await num_rows(page, detail);
+
+        await dispatch_select(page, {
+            panel: master,
+            selected: true,
+            insertFilters: [["State", "==", "Texas"]],
+        });
+
+        await expect.poll(() => num_rows(page, detail)).toBeLessThan(baseline);
+
+        const texas_rows = await num_rows(page, detail);
+        await dispatch_click(page, {
+            panel: master,
+            row: { Sales: 55 },
+            column_names: [],
+            config: { filter: [] },
+        });
+
+        await page.waitForTimeout(100);
+        expect(await num_rows(page, detail)).toBe(texas_rows);
+        expect((await save(page)).global_filters).toEqual([
+            ["State", "==", "Texas"],
+        ]);
+    });
+
     test("two masters merge; demote drops only its own contribution; close drops the closed master's", async ({
         page,
     }) => {

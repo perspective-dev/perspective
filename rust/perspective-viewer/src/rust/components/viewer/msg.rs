@@ -43,6 +43,10 @@ pub struct MasterSelection {
     /// `filters` derives to nothing — e.g. a FLAT (un-grouped) datagrid
     /// master, whose clicks carry no group-by path to filter on.
     pub cell_fallback: Option<Filter>,
+
+    /// Whether an event deriving no clause and carrying no `cell_fallback`
+    /// clears the panel's contribution rather than leaving it untouched.
+    pub clear_if_underivable: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

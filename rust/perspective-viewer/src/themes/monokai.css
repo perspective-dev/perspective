@@ -131,7 +131,7 @@ perspective-viewer [theme="Monokai"] {
     --psp-datagrid--border-color: #444444;
 
     /* FIXME: broken in shadow DOM */
-    regular-table table tbody th:empty {
+    regular-table table tbody th.psp-tree-spacer {
         background: linear-gradient(
             to right,
             transparent 9px,

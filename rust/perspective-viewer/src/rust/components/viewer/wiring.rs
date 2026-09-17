@@ -150,6 +150,7 @@ pub(super) fn global_filter_listener(
         let selection = selected.then(|| MasterSelection {
             cell_fallback: cell_fallback(&row, &column_names),
             filters: insert_filters,
+            clear_if_underivable: true,
         });
 
         cb.emit((panel, selection));
@@ -210,6 +211,7 @@ pub(super) fn master_click_listener(
         let selection = MasterSelection {
             cell_fallback: cell_fallback(&row, &column_names),
             filters: config.map(|x| x.filter).unwrap_or_default(),
+            clear_if_underivable: false,
         };
 
         cb.emit((panel, Some(selection)));

@@ -20,6 +20,14 @@ packages:
     - "examples/*"
     - "docs"
 
+allowBuilds:
+  '@fortawesome/fontawesome-free': true
+  aws-sdk: true
+  core-js: true
+  esbuild: true
+  microtime: true
+  puppeteer: true
+
 catalog:
     # Dependencies
     "@jupyter-widgets/base": ">2 <5"
