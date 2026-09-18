@@ -18,7 +18,19 @@ import type {
     ResolvedColumnsConfig,
 } from "../types.js";
 
-type RowHeaderCell = string | HTMLElement | { toString(): string };
+type RowHeaderCell = string | HTMLElement | null | { toString(): string };
+
+/**
+ * The row-header cell for a group key: a `null` key and an `HTMLElement` pass
+ * through as-is, anything else renders through `toString()` as text.
+ */
+function row_header_cell(
+    formatted: string | HTMLElement | null,
+): RowHeaderCell {
+    return formatted instanceof HTMLElement || formatted === null
+        ? formatted
+        : { toString: () => String(formatted) };
+}
 
 /**
  * Format a single cell of the `group_by` tree header for __ROW_PATH__ data.
@@ -45,18 +57,7 @@ export function* format_tree_header_row_path(
             true,
         );
 
-        if (formatted instanceof HTMLElement) {
-            newPath = newPath.concat(formatted);
-        } else {
-            // `format_cell` contractually returns `string | HTMLElement |
-            // null`, but this wrapper is the row-header styling's only
-            // source of text - coerce defensively so a non-string can
-            // never surface from `toString()`. `null` (a null group key)
-            // coerces to `""`, keeping the is-empty styling predicate.
-            newPath = newPath.concat({
-                toString: () => String(formatted ?? ""),
-            });
-        }
+        newPath = newPath.concat(row_header_cell(formatted));
 
         newPath.length = row_headers.length + 1;
         yield newPath;

@@ -15,6 +15,10 @@ import { isMetaColumn } from "../model/meta_columns.js";
 import { reconcile_column_widths } from "../model/column_overrides.js";
 import { format_cell } from "./format_cell.js";
 import {
+    ColumnHeaderLabels,
+    type ColumnHeaderLabel,
+} from "./format_column_header.js";
+import {
     format_flat_header_row_path,
     format_tree_header,
     format_tree_header_row_path,
@@ -56,6 +60,7 @@ export function createDataListener(
     let last_ids: unknown[][] | undefined;
     let last_reverse_ids: Map<string, number> | undefined;
     let last_reverse_columns: Map<string, number> | undefined;
+    const header_labels = new ColumnHeaderLabels();
 
     return async function dataListener(
         this: DatagridModel,
@@ -165,7 +170,7 @@ export function createDataListener(
 
         const data: (string | HTMLElement)[][] = [];
         const metadata: unknown[][] = [];
-        const column_headers: string[][] = [];
+        const column_headers: (string | ColumnHeaderLabel)[][] = [];
         const column_paths: string[] = [];
 
         const is_settings_open =
@@ -211,6 +216,7 @@ export function createDataListener(
         ) {
             const path = this._column_paths[ipath];
             const path_parts = path.split("|");
+            const n_split_levels = path_parts.length - 1;
 
             // Under `split_rollup_mode: "rollup"`, grand-total and subtotal
             // columns have fewer than `split_by.length` levels. Pad between
@@ -270,11 +276,21 @@ export function createDataListener(
             );
 
             metadata.push(column as unknown[]);
-            if (is_settings_open) {
-                path_parts.push("");
+            const header: (string | ColumnHeaderLabel)[] = path_parts.slice();
+            for (let level = 0; level < n_split_levels; level++) {
+                header[level] = header_labels.format(
+                    this,
+                    path_parts,
+                    level,
+                    columns_config,
+                );
             }
 
-            column_headers.push(path_parts);
+            if (is_settings_open) {
+                header.push("");
+            }
+
+            column_headers.push(header);
             column_paths.push(path);
         }
 
@@ -300,7 +316,7 @@ export function createDataListener(
             num_rows: this._num_rows,
             num_columns,
             row_headers: row_headers as CellScalar[][], // Add `HTMLElement`
-            column_headers,
+            column_headers: column_headers as CellScalar[][],
             data: data as CellScalar[][],
             metadata,
             column_header_merge_depth: Math.max(

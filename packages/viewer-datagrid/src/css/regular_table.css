@@ -305,7 +305,7 @@ tbody th:last-of-type {
     text-overflow: ellipsis;
 }
 
-tbody th:empty {
+tbody th.psp-tree-spacer {
     background-image: linear-gradient(
         to right,
         transparent 9px,
@@ -476,7 +476,7 @@ regular-table table {
         border-top-width: 1px;
     }
 
-    tbody th:empty {
+    tbody th.psp-tree-spacer {
         background-position: 0px -10px;
     }
 
@@ -577,7 +577,7 @@ regular-table table tbody td .psp-wrap {
 }
 
 regular-table table tbody tr.psp-zebra td,
-regular-table table tbody tr.psp-zebra th:not(:empty),
+regular-table table tbody tr.psp-zebra th:not(.psp-tree-spacer),
 regular-table table tbody tr.psp-zebra:after {
     background-color: var(
         --psp-datagrid--zebra--color,

@@ -67,9 +67,11 @@ regular-table {
         }
 
         tr {
-            th:first-child:not(:empty),
-            th:first-child:empty + th:not(:empty),
-            th:first-child:empty ~ th:empty + th:not(:empty),
+            th:first-child:not(.psp-tree-spacer),
+            th.psp-tree-spacer:first-child + th:not(.psp-tree-spacer),
+            th.psp-tree-spacer:first-child
+                ~ th.psp-tree-spacer
+                + th:not(.psp-tree-spacer),
             td:first-child {
                 border-left-width: 1px;
                 border-left-color: transparent;
@@ -85,9 +87,11 @@ regular-table {
         tr:hover {
             color: inherit;
 
-            th:first-child:not(:empty),
-            th:first-child:empty + th:not(:empty),
-            th:first-child:empty ~ th:empty + th:not(:empty),
+            th:first-child:not(.psp-tree-spacer),
+            th.psp-tree-spacer:first-child + th:not(.psp-tree-spacer),
+            th.psp-tree-spacer:first-child
+                ~ th.psp-tree-spacer
+                + th:not(.psp-tree-spacer),
             td:first-child {
                 border-left-color: var(
                     --psp-datagrid--hover--border-color,

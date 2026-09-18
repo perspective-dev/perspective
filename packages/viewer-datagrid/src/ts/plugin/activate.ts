@@ -107,10 +107,12 @@ export async function activate(
                 }
             }
 
+            const col_idx = model._config.group_by.length > 0 ? undefined : 0;
+
             const { row, column_names, config } = await getCellConfig(
                 model,
                 area.y0,
-                0,
+                col_idx,
             );
 
             let detail: PerspectiveSelectDetail;

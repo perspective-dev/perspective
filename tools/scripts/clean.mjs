@@ -34,10 +34,7 @@ for (const pkg of PACKAGES) {
 if (JS_PKGS.length > 0 || RUST_PKGS.length > 0) {
     console.log(`-- Cleaning ${JS_PKGS.join(", ")} via pnpm`);
     const flags = JS_PKGS.concat(RUST_PKGS)
-        .map(
-            (x) =>
-                `--filter @perspective-dev/${x} --if-present --filter ${x} --if-present`,
-        )
+        .map((x) => `--filter @perspective-dev/${x} --filter ${x} --if-present`)
         .join(" ");
 
     execSync(`pnpm run ${flags} clean`, { stdio: "inherit" });

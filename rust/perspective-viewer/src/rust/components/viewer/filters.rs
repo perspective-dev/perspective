@@ -97,10 +97,10 @@ impl PerspectiveViewer {
                     derived
                 } else {
                     // Nothing derivable from the event's configs — fall back
-                    // to the clicked-cell clause if the detail carried one,
-                    // else leave the current contribution untouched.
+                    // to the clicked-cell clause if the detail carried one.
                     match selection.cell_fallback {
                         Some(x) => vec![x],
+                        None if selection.clear_if_underivable => Vec::new(),
                         None => return false,
                     }
                 }

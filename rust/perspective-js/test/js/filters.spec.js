@@ -828,6 +828,52 @@ const datetime_data_local = [
             });
         });
 
+        test.describe("== null", function () {
+            for (const type of ["integer", "float"]) {
+                test(`does not match 0 for ${type} column`, async function () {
+                    const table = await perspective.table({
+                        x: "integer",
+                        y: type,
+                    });
+
+                    await table.update([
+                        { x: 1, y: 0 },
+                        { x: 2, y: null },
+                        { x: 3, y: 1 },
+                    ]);
+
+                    const view = await table.view({
+                        filter: [["y", "==", null]],
+                    });
+
+                    expect(await view.to_json()).toEqual([]);
+                    view.delete();
+                    table.delete();
+                });
+
+                test(`in does not match 0 for a null ${type} term`, async function () {
+                    const table = await perspective.table({
+                        x: "integer",
+                        y: type,
+                    });
+
+                    await table.update([
+                        { x: 1, y: 0 },
+                        { x: 2, y: null },
+                        { x: 3, y: 1 },
+                    ]);
+
+                    const view = await table.view({
+                        filter: [["y", "in", [1, null]]],
+                    });
+
+                    expect(await view.to_json()).toEqual([{ x: 3, y: 1 }]);
+                    view.delete();
+                    table.delete();
+                });
+            }
+        });
+
         test.describe("nulls", function () {
             test("x > 2", async function () {
                 var table = await perspective.table([

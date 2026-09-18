@@ -19,14 +19,9 @@ export function style_cell_flash(
     td: HTMLElement,
     [, , , , , pos_s, pos_e]: ColorRecord,
     [, , , , , neg_s, neg_e]: ColorRecord,
-    is_settings_open: boolean,
 ): void {
     const id = model._ids?.[metadata.dy ?? 0]?.join("|");
-    const metadata_path = (
-        is_settings_open
-            ? (metadata.column_header ?? []).slice(0, -1)
-            : (metadata.column_header ?? [])
-    ).join("|");
+    const metadata_path = model._column_paths[metadata.x];
 
     if (
         model.last_reverse_columns?.has(metadata_path) &&

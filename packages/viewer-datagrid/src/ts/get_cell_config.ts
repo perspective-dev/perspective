@@ -24,10 +24,17 @@ interface RowData {
     [key: string]: unknown;
 }
 
+/**
+ * The filter clause matching one pivot level's key.
+ */
+function key_filter(column: string, value: Scalar): Filter {
+    return value === null ? [column, "is null", null] : [column, "==", value];
+}
+
 export default async function getCellConfig(
     { _view, _config }: ModelWithViewAndConfig,
     row_idx: number,
-    col_idx: number,
+    col_idx: number | undefined,
 ): Promise<CellConfigResult> {
     const group_by = _config.group_by;
     const split_by = _config.split_by;
@@ -36,12 +43,10 @@ export default async function getCellConfig(
     const r = (await _view.to_json({ start_row, end_row })) as RowData[];
     const row_paths = r.map((x) => x.__ROW_PATH__);
     const group_by_values = (row_paths[0] || []) as Scalar[];
-    const row_filters = group_by
-        .map((pivot, index): Filter | undefined => {
-            const pivot_value = group_by_values[index];
-            return pivot_value ? [pivot, "==", pivot_value] : undefined;
-        })
-        .filter((x): x is Filter => x !== undefined);
+
+    const row_filters = group_by_values.map((pivot_value, index) =>
+        key_filter(group_by[index], pivot_value),
+    );
 
     // Filter out *all* meta columns before indexing into the row's
     // keys — the DuckDB virtual server's JSON output now includes
@@ -50,7 +55,7 @@ export default async function getCellConfig(
     // assumed exactly one leading meta column) lands on a meta key
     // when group_by has multiple levels.
     const user_keys = Object.keys(r[0]).filter((k) => !isMetaColumn(k));
-    const column_paths = user_keys[col_idx];
+    const column_paths = col_idx === undefined ? undefined : user_keys[col_idx];
     const result: CellConfigResult = {
         row: r[0] as Record<string, unknown>,
         column_names: [],
