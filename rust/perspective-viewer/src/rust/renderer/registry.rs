@@ -147,11 +147,6 @@ pub impl LocalKey<Rc<RefCell<Vec<PluginRecord>>>> {
             });
         });
     }
-
-    #[cfg(test)]
-    fn reset(&'static self) {
-        self.with(|plugins| plugins.borrow_mut().clear());
-    }
 }
 
 fn register_default() {

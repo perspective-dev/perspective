@@ -23,7 +23,7 @@ use crate::config::ViewerConfigUpdate;
 use crate::js::*;
 use crate::presentation::Presentation;
 use crate::renderer::*;
-use crate::session::{OpKind, Session, StepOutcome};
+use crate::session::{OpKind, Session};
 use crate::utils::*;
 use crate::workspace::Workspace;
 use crate::*;
@@ -149,7 +149,7 @@ pub(crate) async fn set_panel_paused(
 ) -> ApiResult<()> {
     if visible {
         if session.set_pause(false) {
-            let ticket = session.submit(OpKind::Restore { fields: None }, {
+            let ticket = session.submit(OpKind::Restore { update: None }, {
                 clone!(session, renderer, presentation);
                 move |_ctx| {
                     Box::pin(async move {
@@ -162,7 +162,7 @@ pub(crate) async fn set_panel_paused(
                         )
                         .await?;
 
-                        Ok(StepOutcome::Done)
+                        Ok(None)
                     })
                 }
             });
@@ -170,8 +170,7 @@ pub(crate) async fn set_panel_paused(
             let result = ticket.settle().await;
 
             if let Err(e) = result.ignore_view_delete() {
-                session.set_run_error(e.clone()).await?;
-                return Err(e);
+                return renderer.fail(e);
             }
         }
     } else {

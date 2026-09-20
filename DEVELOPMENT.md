@@ -288,9 +288,9 @@ tests are run with `PACKAGE=jupyterlab pnpm run test --jupyter`.
 
 Many UI tests compare against screenshot and DOM snapshots, which live in
 `tools/test/dist/snapshots` and are not checked in to this repository. CI
-fetches them from a separate snapshots repository. To regenerate
-snapshots locally after an intentional rendering change, or to generate them
-for the first time from a known-passing (in CI) build you've checked out:
+fetches them from a separate snapshots repository. To regenerate snapshots
+locally after an intentional rendering change, or to generate them for the first
+time from a known-passing (in CI) build you've checked out:
 
 ```bash
 pnpm run test --update-snapshots
@@ -309,6 +309,10 @@ are forwarded to `pytest`.
 
 With `rust` selected, `pnpm run test` runs `cargo test` for the `perspective`
 and `perspective-client` crates.
+
+`perspective-viewer` and `perspective-js` deliberately carry no Rust unit tests;
+their behavior is tested through the Playwright suites, against the public
+JavaScript API.
 
 ## Lint
 

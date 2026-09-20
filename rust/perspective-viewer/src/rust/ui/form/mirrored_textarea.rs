@@ -98,15 +98,3 @@ pub fn MirroredTextarea(props: &MirroredTextareaProps) -> Html {
         </div>
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn mirror_never_compares_equal() {
-        let mirror = Mirror(Html::default());
-        assert!(mirror != mirror.clone());
-        assert!(Mirror(Html::default()) != Mirror(Html::default()));
-    }
-}

@@ -133,4 +133,37 @@ test.describe("Save/Restore", async () => {
         const contents = await get_contents(page);
         await compareContentsToSnapshot(contents);
     });
+
+    test("restore > a plugin without a schema round-trips plugin_config and columns_config verbatim", async ({
+        page,
+    }) => {
+        const config = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer");
+            await viewer.restore({
+                plugin: "Debug",
+                plugin_config: { fg_mode: "series", ghost: 1 },
+                columns_config: { Sales: { anything: "goes" } },
+            });
+
+            return await viewer.save();
+        });
+
+        expect(config.plugin_config).toEqual({ fg_mode: "series", ghost: 1 });
+        expect(config.columns_config).toEqual({
+            Sales: { anything: "goes" },
+        });
+    });
+
+    test("restore > plugin_config null clears what was restored", async ({
+        page,
+    }) => {
+        const config = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer");
+            await viewer.restore({ plugin_config: { ghost: 1 } });
+            await viewer.restore({ plugin_config: null });
+            return await viewer.save();
+        });
+
+        expect(config.plugin_config).toEqual({});
+    });
 });

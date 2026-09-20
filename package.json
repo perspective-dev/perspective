@@ -80,7 +80,6 @@
         "test_js": "node tools/scripts/test_js.mjs",
         "test_python": "node tools/scripts/test_python.mjs",
         "clean": "node tools/scripts/clean.mjs",
-        "start": "pnpm run start --workspace",
         "prepush": "node tools/scripts/prepush.mjs && pnpm run lint",
         "prepare": "husky install",
         "lint": "node tools/scripts/lint.mjs",

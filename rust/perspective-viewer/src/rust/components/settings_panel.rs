@@ -193,7 +193,7 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
         let session_metadata = props.metadata.clone();
         let view_config = props.view_config.clone();
         Callback::from(move |plugin_name: String| {
-            if session.is_errored() {
+            if session.is_errored() || renderer.failure().is_some() {
                 return;
             }
             // Pure resolve — the swap itself is committed inside the locked

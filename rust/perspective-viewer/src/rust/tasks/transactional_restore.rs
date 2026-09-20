@@ -23,11 +23,10 @@ use super::pipeline::{Committed, RunCommit, RunOrigin, RunSpec, locked_run, run_
 use crate::config::{OptionalUpdate, SettingsUpdate, ThemeUpdate, ViewerConfigUpdate};
 use crate::presentation::Presentation;
 use crate::renderer::{
-    Renderer, ValidatedColumnsConfig, ValidatedPluginConfig, apply_columns_config_to,
-    apply_plugin_config_to,
+    PluginRef, PreparedRenderer, Renderer, ValidatedColumnsConfig, ValidatedPluginConfig,
 };
 use crate::session::{
-    BindPlan, BindingEffects, OverlayClause, PluginRef, PreparedView, Session, ViewDefaults,
+    BindPlan, BindingEffects, OverlayClause, PreparedView, Session, ViewDefaults,
 };
 
 /// A restore that has passed every check and only awaits [`commit`].
@@ -235,7 +234,7 @@ pub(crate) async fn commit_and_render_locked(
     .await
 }
 
-/// Replace the panel's state with a [`Prepared`] restore, in one swap.
+/// Commit a [`Prepared`] restore to both engines, with no `await` between.
 fn commit(
     session: &Session,
     renderer: &Renderer,
@@ -253,36 +252,20 @@ fn commit(
 
     let had_plugin = renderer.active_plugin().is_some();
     let activate = plugin.is_some();
-    let mut plugin_config_changed = false;
-    let mut columns_config_changed = false;
-    let binding = session.commit_view(view, |mut next| {
-        if let Some(plugin) = plugin {
-            next = next.with_plugin(plugin);
-        }
-
-        let mut bucket = next.bucket(&target_name);
-        plugin_config_changed = apply_plugin_config_to(&mut bucket, plugin_config);
-        columns_config_changed = apply_columns_config_to(&mut bucket, columns_config);
-        if plugin_config_changed || columns_config_changed {
-            next = next.with_bucket(&target_name, bucket);
-        }
-
-        if let Some(theme) = theme {
-            next = next.with_theme(theme);
-        }
-
-        if let Some(title) = title {
-            next = next.with_title(title);
-        }
-
-        next
+    let binding = session.commit_view(view, title);
+    let changed = renderer.commit(PreparedRenderer {
+        plugin,
+        target_name,
+        plugin_config,
+        columns_config,
+        theme,
     });
 
     let committed = Committed {
         activate,
         plugin_swapped: activate && had_plugin,
-        plugin_config_changed,
-        columns_config_changed,
+        plugin_config_changed: changed.plugin_config,
+        columns_config_changed: changed.columns_config,
     };
 
     (committed, binding)

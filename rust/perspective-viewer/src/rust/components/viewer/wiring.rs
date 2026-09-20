@@ -446,6 +446,15 @@ pub(super) fn inject_active_callbacks(
 
         *renderer.on_render_limits_changed.borrow_mut() = Some(cb);
     }
+
+    {
+        let r = renderer.clone();
+        let cb = ctx
+            .link()
+            .callback(move |_: ()| UpdateRenderer(Box::new(r.to_props(None))));
+
+        *renderer.on_render_failure_changed.borrow_mut() = Some(cb);
+    }
 }
 
 /// Clear the active panel's session/renderer direct callbacks so a
@@ -454,6 +463,7 @@ pub(super) fn clear_active_callbacks(session: &Session, renderer: &Renderer) {
     *session.on_stats_changed.borrow_mut() = None;
     *session.on_table_errored.borrow_mut() = None;
     *renderer.on_render_limits_changed.borrow_mut() = None;
+    *renderer.on_render_failure_changed.borrow_mut() = None;
 }
 
 /// Inject element-level (shared) presentation callbacks. Created once at

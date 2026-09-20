@@ -189,7 +189,7 @@ pub(crate) fn create_panel_model(
     placement: Placement,
 ) -> (PanelId, Session, Renderer, ViewerConfigUpdate) {
     let session = Session::new();
-    let renderer = Renderer::new(elem, session.cell());
+    let renderer = Renderer::new(elem);
     let id = id.unwrap_or_else(|| workspace.generate_id());
     renderer.set_slot_name(id.as_str());
     let subs = wire_panel_subs(elem, presentation, &session, &renderer);

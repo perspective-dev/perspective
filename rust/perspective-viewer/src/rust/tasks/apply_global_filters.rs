@@ -12,12 +12,13 @@
 
 use std::rc::Rc;
 
+use futures::FutureExt;
 use perspective_client::clone;
 use perspective_js::utils::ApiFuture;
 
 use super::pipeline::{RunCommit, render_run};
 use super::transactional_restore::{commit_edit, prepare_overlay};
-use crate::session::{OpKind, OverlayClause, StepOutcome};
+use crate::session::{OpKind, OverlayClause};
 use crate::utils::spawn_owned;
 use crate::workspace::{Panel, PanelId, Workspace};
 
@@ -40,20 +41,16 @@ pub fn broadcast_overlay(workspace: &Workspace, panel: &Panel) -> ApiFuture<()> 
     let ticket = panel.session.submit(OpKind::Overlay, move |_ctx| {
         Box::pin(async move {
             if *session.committed_overlay() == *overlay {
-                return Ok(StepOutcome::Done);
+                return Ok(None);
             }
 
             let bound = session.get_table().is_some();
             let prepared = prepare_overlay(&session, &renderer, overlay).await?;
             let committed = commit_edit(&session, &renderer, prepared);
             Ok(if bound {
-                StepOutcome::Render(Box::pin(render_run(
-                    session,
-                    renderer,
-                    RunCommit::Done(committed),
-                )))
+                Some(render_run(session, renderer, RunCommit::Done(committed)).boxed_local())
             } else {
-                StepOutcome::Done
+                None
             })
         })
     });

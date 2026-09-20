@@ -13,26 +13,62 @@
 //! Theme reset / set task.
 
 use futures::future::join_all;
+use perspective_client::clone;
 use perspective_js::utils::*;
 
 use crate::presentation::Presentation;
-use crate::renderer::Renderer;
+use crate::renderer::{Renderer, StagedEdit};
+use crate::session::{EditDelta, OpKind, Session};
 use crate::workspace::Workspace;
 
 /// Give `renderer` the concrete registry default IF it has none yet — the
 /// cold-boot case, where the panel was created before the registry first
 /// parsed and `active_theme_name_sync` had nothing to resolve. Only ever
 /// FILLS IN, never overwrites, so it cannot repaint a themed panel.
-pub(crate) async fn seed_panel_theme(presentation: &Presentation, renderer: &Renderer) {
+pub(crate) async fn seed_panel_theme(
+    presentation: &Presentation,
+    session: &Session,
+    renderer: &Renderer,
+) {
     if renderer.theme().is_none() {
-        renderer.set_theme(presentation.get_default_theme_name().await);
+        submit_theme(
+            session,
+            renderer,
+            presentation.get_default_theme_name().await,
+        );
     }
+}
+
+/// Submit a theme pick as a UI edit, visible to the UI from this call.
+pub fn submit_theme(session: &Session, renderer: &Renderer, theme: Option<String>) {
+    let staged = renderer.stage(StagedEdit::Theme(theme.clone()));
+    let kind = OpKind::Edit {
+        delta: EditDelta::Renderer,
+        swaps_plugin: false,
+    };
+
+    let _ticket = session.submit(kind, {
+        clone!(renderer);
+        move |_ctx| {
+            Box::pin(async move {
+                renderer.commit_theme(theme);
+                drop(staged);
+                Ok(None)
+            })
+        }
+    });
+}
+
+/// [`submit_theme`] plus a synchronous [`Renderer::stamp_theme`].
+pub fn submit_theme_stamped(session: &Session, renderer: &Renderer, theme: Option<String>) {
+    submit_theme(session, renderer, theme);
+    renderer.stamp_theme(None);
 }
 
 /// [`seed_panel_theme`] for every panel.
 pub(crate) async fn seed_default_themes(presentation: &Presentation, workspace: &Workspace) {
     for panel in workspace.panels() {
-        seed_panel_theme(presentation, &panel.renderer).await;
+        seed_panel_theme(presentation, &panel.session, &panel.renderer).await;
     }
 }
 
@@ -55,6 +91,7 @@ pub(crate) async fn seed_default_themes(presentation: &Presentation, workspace: 
 /// stamped at the plugin's last capture): the picked panel when the value
 /// is genuinely new, and never a panel that has yet to first-paint.
 pub fn update_theme(
+    session: &Session,
     renderer: &Renderer,
     presentation: &Presentation,
     workspace: &Workspace,
@@ -65,12 +102,13 @@ pub fn update_theme(
     // cascade styles. Only "reset to default" has to await the registry, and
     // it records the resolved NAME, never an empty theme.
     if let Some(name) = &theme {
-        renderer.set_theme_stamped(Some(name.clone()));
+        submit_theme_stamped(session, renderer, Some(name.clone()));
     }
 
     let presentation = presentation.clone();
     let workspace = workspace.clone();
     let renderer = renderer.clone();
+    let session = session.clone();
     ApiFuture::spawn(async move {
         match theme {
             Some(name) => {
@@ -78,7 +116,8 @@ pub fn update_theme(
             },
             None => {
                 presentation.reset_theme().await?;
-                renderer.set_theme_stamped(presentation.get_default_theme_name().await);
+                let default = presentation.get_default_theme_name().await;
+                submit_theme_stamped(&session, &renderer, default);
             },
         }
 

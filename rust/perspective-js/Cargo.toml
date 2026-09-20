@@ -61,9 +61,6 @@ trace-allocator = []
 serde_json = { version = "1.0.107", features = ["raw_value"] }
 anyhow = "1.0.66"
 
-[dev-dependencies]
-wasm-bindgen-test = "0.3.13"
-
 [dependencies]
 perspective-client = { version = "5.5.1", features = ["sendable"] }
 arrow-array = { version = "57.3.0", default-features = false }

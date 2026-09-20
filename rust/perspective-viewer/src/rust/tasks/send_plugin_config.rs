@@ -10,12 +10,13 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use futures::FutureExt;
 use perspective_client::clone;
 use perspective_js::utils::*;
 
 use crate::config::ColumnConfigFieldUpdate;
-use crate::renderer::Renderer;
-use crate::session::{EditDelta, OpKind, Session, StepOutcome};
+use crate::renderer::{Renderer, StagedEdit};
+use crate::session::{EditDelta, OpKind, Session};
 
 /// Apply a [`ColumnConfigFieldUpdate`] from the Plugin-settings tab to
 /// the active plugin's bucket on [`Renderer`], then re-`restore` the
@@ -28,9 +29,10 @@ use crate::session::{EditDelta, OpKind, Session, StepOutcome};
 ///
 /// Column-style updates go through [`super::send_column_config`].
 pub fn send_plugin_config(session: &Session, renderer: &Renderer, update: ColumnConfigFieldUpdate) {
+    let staged = renderer.stage(StagedEdit::PluginField(update.clone()));
     let kind = OpKind::Edit {
-        delta: EditDelta::PluginField(update.clone()),
-        fields: None,
+        delta: EditDelta::Renderer,
+        swaps_plugin: false,
     };
 
     let ticket = session.submit(kind, {
@@ -39,13 +41,17 @@ pub fn send_plugin_config(session: &Session, renderer: &Renderer, update: Column
             Box::pin(async move {
                 let view_config = session.committed_view_config().clone();
                 let changed = renderer.update_plugin_config_field(&view_config, update);
-                Ok(StepOutcome::Render(Box::pin(async move {
-                    if changed {
-                        deliver_plugin_config(&session, &renderer).await?;
-                    }
+                drop(staged);
+                Ok(Some(
+                    async move {
+                        if changed {
+                            deliver_plugin_config(&session, &renderer).await?;
+                        }
 
-                    Ok(())
-                })))
+                        Ok(())
+                    }
+                    .boxed_local(),
+                ))
             })
         }
     });

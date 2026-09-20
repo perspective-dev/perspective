@@ -10,12 +10,13 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use futures::FutureExt;
 use perspective_client::clone;
 use perspective_js::utils::*;
 
 use crate::config::*;
-use crate::renderer::Renderer;
-use crate::session::{EditDelta, OpKind, Session, StepOutcome};
+use crate::renderer::{Renderer, StagedEdit};
+use crate::session::{EditDelta, OpKind, Session};
 
 /// Set the active plugin's `edit_mode`, persisting it in the [`Renderer`]'s
 /// plugin bucket and re-`restore`+rendering (the same merged-token path as
@@ -33,9 +34,10 @@ pub fn set_edit_mode(session: &Session, renderer: &Renderer, mode: &str) {
         serde_json::Value::String(mode.to_owned()),
     );
 
+    let staged = renderer.stage(StagedEdit::PluginConfig(map.clone()));
     let kind = OpKind::Edit {
-        delta: EditDelta::PluginConfig(map.clone()),
-        fields: None,
+        delta: EditDelta::Renderer,
+        swaps_plugin: false,
     };
 
     let ticket = session.submit(kind, {
@@ -47,14 +49,18 @@ pub fn set_edit_mode(session: &Session, renderer: &Renderer, mode: &str) {
                     .update_plugin_config(&view_config, OptionalUpdate::Update(map))
                     .unwrap_or_default();
 
-                Ok(StepOutcome::Render(Box::pin(async move {
-                    if changed {
-                        super::send_plugin_config::deliver_plugin_config(&session, &renderer)
-                            .await?;
-                    }
+                drop(staged);
+                Ok(Some(
+                    async move {
+                        if changed {
+                            super::send_plugin_config::deliver_plugin_config(&session, &renderer)
+                                .await?;
+                        }
 
-                    Ok(())
-                })))
+                        Ok(())
+                    }
+                    .boxed_local(),
+                ))
             })
         }
     });

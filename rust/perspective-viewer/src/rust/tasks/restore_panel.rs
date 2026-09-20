@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use std::collections::BTreeSet;
+use std::rc::Rc;
 
 use perspective_client::clone;
 use perspective_client::utils::PerspectiveResultExt;
@@ -18,9 +18,7 @@ use perspective_client::utils::PerspectiveResultExt;
 use crate::config::*;
 use crate::presentation::Presentation;
 use crate::renderer::Renderer;
-use crate::session::{
-    BindPlan, MissingTable, OpCtx, OpKind, Session, StepOutcome, probe_table, view_fields,
-};
+use crate::session::{BindPlan, MissingTable, OpCtx, OpKind, Session, probe_table};
 use crate::tasks::transactional_restore::{Outcome, commit_and_render, prepare};
 use crate::tasks::*;
 use crate::workspace::{PanelId, Workspace};
@@ -81,9 +79,11 @@ pub(crate) enum Rebind {
 
 /// Decide a restore's [`BindPlan`], probing the incoming table — without
 /// touching the session's own binding.
+#[allow(clippy::too_many_arguments)]
 async fn plan_binding(
     ctx: &OpCtx,
     session: &Session,
+    renderer: &Renderer,
     workspace: &Workspace,
     table: &TableUpdate,
     fresh: bool,
@@ -98,7 +98,7 @@ async fn plan_binding(
         .get_table()
         .is_some_and(|t| t.get_name() == name.as_str());
 
-    if same && !session.is_errored() {
+    if same && !session.is_errored() && renderer.failure().is_none() {
         return Ok(Some(BindPlan::Keep));
     }
 
@@ -129,56 +129,6 @@ async fn plan_binding(
     }))
 }
 
-/// The top-level config keys `update` OVERWRITES, or `None` when it cannot be
-/// superseded: `plugin_config` / `columns_config` updates MERGE into their
-/// buckets, and a fresh panel's restore is what creates it.
-fn restore_fields(
-    update: &ViewerConfigUpdate,
-    mode: &RestoreMode,
-) -> Option<BTreeSet<&'static str>> {
-    let ViewerConfigUpdate {
-        version,
-        plugin,
-        plugin_config,
-        columns_config,
-        settings,
-        theme,
-        title,
-        table,
-        view_config,
-    } = update;
-
-    let _ = version;
-    if matches!(mode, RestoreMode::Fresh)
-        || matches!(plugin_config, OptionalUpdate::Update(_))
-        || matches!(columns_config, OptionalUpdate::Update(_))
-    {
-        return None;
-    }
-
-    let mut fields = view_fields(view_config);
-    let mut set = |name: &'static str, present: bool| {
-        if present {
-            fields.insert(name);
-        }
-    };
-
-    set("plugin", !matches!(plugin, OptionalUpdate::Missing));
-    set(
-        "plugin_config",
-        !matches!(plugin_config, OptionalUpdate::Missing),
-    );
-    set(
-        "columns_config",
-        !matches!(columns_config, OptionalUpdate::Missing),
-    );
-    set("settings", !matches!(settings, OptionalUpdate::Missing));
-    set("theme", !matches!(theme, OptionalUpdate::Missing));
-    set("title", !matches!(title, OptionalUpdate::Missing));
-    set("table", !matches!(table, OptionalUpdate::Missing));
-    Some(fields)
-}
-
 /// Apply a [`ViewerConfigUpdate`] to a single panel and re-draw — the one
 /// pipeline shared by `restorePanel` (an existing panel), `restoreWorkspace`,
 /// and `addPanel` (both fresh panels).
@@ -194,8 +144,12 @@ pub(crate) async fn restore_panel(
     missing: MissingTable,
     preamble: Option<futures::future::LocalBoxFuture<'static, ApiResult<()>>>,
 ) -> ApiResult<()> {
-    let fields = restore_fields(&update, &mode);
-    let ticket = session.submit(OpKind::Restore { fields }, {
+    let update = Rc::new(update);
+    let kind = OpKind::Restore {
+        update: (!matches!(mode, RestoreMode::Fresh)).then(|| update.clone()),
+    };
+
+    let ticket = session.submit(kind, {
         clone!(session, renderer, presentation, workspace);
         move |ctx| {
             Box::pin(async move {
@@ -212,13 +166,13 @@ pub(crate) async fn restore_panel(
                     mode,
                     Rebind::Replace,
                     RunOrigin::Public,
-                    update,
+                    Rc::unwrap_or_clone(update),
                     errors,
                     missing,
                 )
                 .await?;
 
-                Ok(StepOutcome::Done)
+                Ok(None)
             })
         }
     });
@@ -248,6 +202,7 @@ pub(crate) async fn restore_panel_step(
     let Some(plan) = plan_binding(
         ctx,
         session,
+        renderer,
         workspace,
         &update.table,
         fresh,
@@ -284,7 +239,7 @@ pub(crate) async fn restore_panel_step(
         && committed
         && matches!(errors, RestoreErrors::Publish)
     {
-        let _ = session.set_run_error(e.clone()).await;
+        let _ = renderer.fail(e.clone());
     }
 
     result?;

@@ -15,61 +15,47 @@
 //! time in SUBMIT order.
 
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::VecDeque;
+use std::rc::Rc;
 
 use futures::channel::oneshot;
 use futures::future::LocalBoxFuture;
 use perspective_client::config::ViewConfigUpdate;
 use perspective_js::utils::*;
 
-use crate::config::ColumnConfigFieldUpdate;
+use crate::config::{OptionalUpdate, ViewerConfigUpdate};
 use crate::utils::InFlightGuard;
 
-/// What an op's step hands back to the drain.
-pub enum StepOutcome {
-    /// The op is finished; its ticket resolves now.
-    Done,
+/// The render an op's ticket waits on after its write is finished.
+pub type RenderFuture = LocalBoxFuture<'static, ApiResult<()>>;
 
-    /// The op's WRITE is finished, and the drain may run the next op; its
-    /// ticket resolves when this render lands.
-    Render(LocalBoxFuture<'static, ApiResult<()>>),
-}
-
-pub type StepFuture = LocalBoxFuture<'static, ApiResult<StepOutcome>>;
+/// An op's write, which yields the render its ticket resolves with, if any.
+pub type StepFuture = LocalBoxFuture<'static, ApiResult<Option<RenderFuture>>>;
 type Step = Box<dyn FnOnce(OpCtx) -> StepFuture>;
-
-/// The top-level config keys an op OVERWRITES.
-pub type Fields = Option<BTreeSet<&'static str>>;
 
 /// What a UI edit changes — enough to PROJECT it onto the committed state
 /// before the drain commits it.
 #[derive(Clone)]
 pub enum EditDelta {
-    /// Boxed: `ViewConfigUpdate` is several times the size of every other
-    /// variant, and every queued op pays for it.
     View(Box<ViewConfigUpdate>),
-
-    /// One plugin-level settings field of the selected plugin.
-    PluginField(ColumnConfigFieldUpdate),
-
-    /// One style field of one column, for the selected plugin.
-    ColumnField {
-        column: String,
-        update: ColumnConfigFieldUpdate,
-    },
-
-    /// Keys merged into the selected plugin's `plugin_config`.
-    PluginConfig(serde_json::Map<String, serde_json::Value>),
-    Theme(Option<String>),
     Title(Option<String>),
+
+    /// An edit of the renderer's own state, which the renderer projects.
+    Renderer,
 }
 
 pub enum OpKind {
-    /// A UI edit.
-    Edit { delta: EditDelta, fields: Fields },
+    /// A UI edit, which a later op may supersede unless it swaps the plugin.
+    Edit {
+        delta: EditDelta,
+        swaps_plugin: bool,
+    },
 
-    /// A restore-family op.
-    Restore { fields: Fields },
+    /// A restore-family op, which a later op may supersede when it carries
+    /// its `update`.
+    Restore {
+        update: Option<Rc<ViewerConfigUpdate>>,
+    },
 
     /// The element's global filter, broadcast to this panel.
     Overlay,
@@ -79,10 +65,19 @@ pub enum OpKind {
 }
 
 impl OpKind {
-    fn fields(&self) -> &Fields {
+    fn writes(&self) -> Option<Writes<'_>> {
         match self {
-            OpKind::Edit { fields, .. } | OpKind::Restore { fields } => fields,
-            OpKind::Load { .. } | OpKind::Overlay => &None,
+            OpKind::Edit {
+                delta: EditDelta::View(update),
+                swaps_plugin: false,
+            } => Some((update, None)),
+            OpKind::Restore {
+                update: Some(update),
+            } => Some((&update.view_config, Some(update))),
+            OpKind::Edit { .. }
+            | OpKind::Restore { .. }
+            | OpKind::Load { .. }
+            | OpKind::Overlay => None,
         }
     }
 
@@ -95,8 +90,8 @@ impl OpKind {
             (OpKind::Load { .. }, OpKind::Load { .. }) => true,
             (OpKind::Load { table_known }, _) => *table_known,
             (_, OpKind::Load { .. }) => false,
-            (later, earlier) => match (later.fields(), earlier.fields()) {
-                (Some(later), Some(earlier)) => earlier.is_subset(later),
+            (later, earlier) => match (later.writes(), earlier.writes()) {
+                (Some(later), Some(earlier)) => overwrites(later, earlier),
                 _ => false,
             },
         }
@@ -155,20 +150,13 @@ struct Entry {
 
 impl Entry {
     fn resolve(self, result: ApiResult<()>) {
-        resolve(self.replies, self.guards, result)
+        {
+            let replies = self.replies;
+            for reply in replies {
+                let _ = reply.send(result.clone());
+            }
+        }
     }
-}
-
-fn resolve(
-    replies: Vec<oneshot::Sender<ApiResult<()>>>,
-    guards: Vec<Pending>,
-    result: ApiResult<()>,
-) {
-    for reply in replies {
-        let _ = reply.send(result.clone());
-    }
-
-    drop(guards);
 }
 
 /// One unsettled op's accounts, released together when its ticket resolves — on
@@ -319,9 +307,23 @@ impl OpQueue {
 
             self.load_running.set(false);
             match outcome {
-                Ok(StepOutcome::Done) => resolve(replies, guards, Ok(())),
-                Ok(StepOutcome::Render(render)) => ApiFuture::spawn(async move {
-                    resolve(replies, guards, render.await);
+                Ok(None) => {
+                    let result = Ok(());
+                    for reply in replies {
+                        let _ = reply.send(result.clone());
+                    }
+
+                    drop(guards);
+                },
+                Ok(Some(render)) => ApiFuture::spawn(async move {
+                    {
+                        let result = render.await;
+                        for reply in replies {
+                            let _ = reply.send(result.clone());
+                        }
+
+                        drop(guards);
+                    };
                     Ok(())
                 }),
                 Err(error) => {
@@ -330,7 +332,14 @@ impl OpQueue {
                         on_exit(Exit::Rejected);
                     }
 
-                    resolve(replies, guards, Err(error));
+                    {
+                        let result = Err(error);
+                        for reply in replies {
+                            let _ = reply.send(result.clone());
+                        }
+
+                        drop(guards);
+                    };
                 },
             }
         }
@@ -347,8 +356,27 @@ impl OpQueue {
     }
 }
 
-/// The top-level view-config keys `update` overwrites.
-pub fn view_fields(update: &ViewConfigUpdate) -> BTreeSet<&'static str> {
+type Writes<'a> = (&'a ViewConfigUpdate, Option<&'a ViewerConfigUpdate>);
+
+/// Whether `later` overwrites every top-level key `earlier` writes, which a
+/// merging `plugin_config` / `columns_config` update never does.
+fn overwrites((later_view, later): Writes, (earlier_view, earlier): Writes) -> bool {
+    let empty = ViewerConfigUpdate::default();
+    let later = later.unwrap_or(&empty);
+    let ViewerConfigUpdate {
+        version,
+        plugin,
+        plugin_config,
+        columns_config,
+        settings,
+        theme,
+        title,
+        table,
+        view_config,
+    } = earlier.unwrap_or(&empty);
+
+    let _ = (version, view_config);
+
     let ViewConfigUpdate {
         group_by,
         split_by,
@@ -362,32 +390,41 @@ pub fn view_fields(update: &ViewConfigUpdate) -> BTreeSet<&'static str> {
         filter_op,
         group_rollup_mode,
         split_rollup_mode,
-    } = update;
+    } = earlier_view;
 
-    let mut fields = BTreeSet::new();
-    let mut set = |name: &'static str, present: bool| {
-        if present {
-            fields.insert(name);
-        }
-    };
+    fn merges<T: Clone>(update: &OptionalUpdate<T>) -> bool {
+        matches!(update, OptionalUpdate::Update(_))
+    }
 
-    set(
-        "group_by",
-        group_by.is_some() || group_rollup_mode.is_some(),
-    );
-    set(
-        "group_rollup_mode",
-        group_by.is_some() || group_rollup_mode.is_some(),
-    );
-    set("split_by", split_by.is_some());
-    set("columns", columns.is_some());
-    set("filter", filter.is_some());
-    set("sort", sort.is_some());
-    set("expressions", expressions.is_some());
-    set("windows", windows.is_some());
-    set("aggregates", aggregates.is_some());
-    set("group_by_depth", group_by_depth.is_some());
-    set("filter_op", filter_op.is_some());
-    set("split_rollup_mode", split_rollup_mode.is_some());
-    fields
+    fn kept<T: Clone>(earlier: &OptionalUpdate<T>, later: &OptionalUpdate<T>) -> bool {
+        !matches!(earlier, OptionalUpdate::Missing) && matches!(later, OptionalUpdate::Missing)
+    }
+
+    let merging = merges(plugin_config)
+        || merges(columns_config)
+        || merges(&later.plugin_config)
+        || merges(&later.columns_config);
+
+    let groups = |x: &ViewConfigUpdate| x.group_by.is_some() || x.group_rollup_mode.is_some();
+    let kept_view = (group_by.is_some() || group_rollup_mode.is_some()) && !groups(later_view)
+        || split_by.is_some() && later_view.split_by.is_none()
+        || columns.is_some() && later_view.columns.is_none()
+        || filter.is_some() && later_view.filter.is_none()
+        || sort.is_some() && later_view.sort.is_none()
+        || expressions.is_some() && later_view.expressions.is_none()
+        || windows.is_some() && later_view.windows.is_none()
+        || aggregates.is_some() && later_view.aggregates.is_none()
+        || group_by_depth.is_some() && later_view.group_by_depth.is_none()
+        || filter_op.is_some() && later_view.filter_op.is_none()
+        || split_rollup_mode.is_some() && later_view.split_rollup_mode.is_none();
+
+    !merging
+        && !kept_view
+        && !kept(plugin, &later.plugin)
+        && !kept(plugin_config, &later.plugin_config)
+        && !kept(columns_config, &later.columns_config)
+        && !kept(settings, &later.settings)
+        && !kept(theme, &later.theme)
+        && !kept(title, &later.title)
+        && !kept(table, &later.table)
 }

@@ -23,7 +23,7 @@ use super::PerspectiveViewer;
 use crate::presentation::{DragDropProps, PresentationProps};
 use crate::renderer::RendererProps;
 use crate::session::{SessionProps, TableLoadState};
-use crate::tasks::resize_visible_panels;
+use crate::tasks::{resize_visible_panels, submit_theme};
 
 impl PerspectiveViewer {
     pub(super) fn refresh_session_snapshot(&mut self, ctx: &Context<Self>) {
@@ -105,7 +105,7 @@ impl PerspectiveViewer {
                     continue;
                 }
 
-                panel.renderer.set_theme(new_default.clone());
+                submit_theme(&panel.session, &panel.renderer, new_default.clone());
                 if panel.renderer.needs_restyle() {
                     let renderer = panel.renderer.clone();
                     crate::utils::spawn_owned("default-theme-restyle", async move {

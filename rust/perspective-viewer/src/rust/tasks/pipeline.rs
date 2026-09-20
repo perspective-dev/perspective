@@ -12,6 +12,7 @@
 
 use std::rc::Rc;
 
+use futures::FutureExt;
 use perspective_client::config::ViewConfigUpdate;
 use perspective_client::{View, clone};
 use perspective_js::utils::*;
@@ -21,9 +22,7 @@ use yew::prelude::*;
 use super::transactional_restore::{commit_edit, prepare_edit};
 use crate::presentation::Presentation;
 use crate::renderer::{RenderContext, Renderer};
-use crate::session::{
-    BindDisposition, BindingEffects, Disposal, EditDelta, OpKind, Session, StepOutcome, view_fields,
-};
+use crate::session::{BindDisposition, BindingEffects, Disposal, EditDelta, OpKind, Session};
 use crate::utils::RenderGuard;
 
 /// Snapshot → validate → bind → cache + pin the [`RenderContext`]. The core
@@ -133,10 +132,9 @@ pub fn update_plugin_and_render(
     plugin_idx: Option<usize>,
 ) -> ApiResult<ApiFuture<()>> {
     session.check_edit(&update)?;
-    let fields = plugin_idx.is_none().then(|| view_fields(&update));
     let kind = OpKind::Edit {
         delta: EditDelta::View(Box::new(update.clone())),
-        fields,
+        swaps_plugin: plugin_idx.is_some(),
     };
 
     let ticket = session.submit(kind, {
@@ -145,11 +143,9 @@ pub fn update_plugin_and_render(
             Box::pin(async move {
                 let prepared = prepare_edit(&session, &renderer, update, plugin_idx).await?;
                 let committed = commit_edit(&session, &renderer, prepared);
-                Ok(StepOutcome::Render(Box::pin(render_run(
-                    session,
-                    renderer,
-                    RunCommit::Done(committed),
-                ))))
+                Ok(Some(
+                    render_run(session, renderer, RunCommit::Done(committed)).boxed_local(),
+                ))
             })
         }
     });
@@ -234,7 +230,7 @@ impl Default for RunSpec {
 ///
 /// A pre-existing session error skips the run for `Internal` origins and
 /// fails it for `Public` ones (the caller asked and must hear the failure —
-/// I6). Returns the RAW run result; error-reporting policy (`set_run_error`
+/// I6). Returns the RAW run result; error-reporting policy (`Renderer::fail`
 /// vs. propagate) belongs to the caller.
 pub(crate) async fn locked_run(
     session: &Session,
@@ -301,14 +297,16 @@ pub(crate) async fn run_locked(
             };
             let plugin = renderer.active_plugin().ok_or("No Plugin")?;
             renderer.stamp_theme(Some(&plugin));
-            if let Some(error) = session.blocking_error() {
+            let blocking = session
+                .get_error()
+                .or_else(|| renderer.failure().map(|x| x.0));
+
+            if let Some(error) = blocking {
                 return match spec.origin {
                     RunOrigin::Public => Err(error),
                     RunOrigin::Internal => Ok(()),
                 };
             }
-
-            session.set_rendered(false);
 
             let (disposition, _pin) = if session.get_table().is_some() {
                 bind_snapshot(&guard, &session, &renderer).await?
@@ -355,7 +353,7 @@ pub(crate) async fn run_locked(
                 dispatch_bound(&guard, &renderer, disposition, changed, spec.origin).await?;
             }
 
-            session.set_rendered(true);
+            renderer.landed();
             Ok(())
         }
     }
@@ -379,7 +377,7 @@ pub(super) async fn render_run(
         .await
         .ignore_view_delete()
     {
-        Err(e) => session.set_run_error(e).await,
+        Err(e) => renderer.fail(e),
         Ok(_) => Ok(()),
     }
 }

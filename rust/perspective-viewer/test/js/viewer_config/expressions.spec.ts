@@ -47,7 +47,76 @@ test.beforeEach(async ({ page }) => {
     });
 });
 
+const HIGHLIGHT_FIXTURES = {
+    "numbers, operators and column names": [
+        '"Sales" + 123',
+        [
+            ["column", '"Sales"'],
+            ["whitespace", " "],
+            ["operator", "+"],
+            ["whitespace", " "],
+            ["literal", "123"],
+        ],
+    ],
+    "function symbols and string literals": [
+        "concat('a', \"State\")",
+        [
+            ["symbol", "concat"],
+            ["operator", "("],
+            ["literal", "'a'"],
+            ["operator", ","],
+            ["whitespace", " "],
+            ["column", '"State"'],
+            ["operator", ")"],
+        ],
+    ],
+    "a comment ends at the line break": [
+        "// Title\n1 + 2",
+        [
+            ["comment", "// Title"],
+            ["br"],
+            ["literal", "1"],
+            ["whitespace", " "],
+            ["operator", "+"],
+            ["whitespace", " "],
+            ["literal", "2"],
+        ],
+    ],
+    "an escaped character stays inside its string": [
+        "'test\\/'",
+        [["literal", "'test\\/'"]],
+    ],
+};
+
 test.describe("Expressions", () => {
+    for (const [name, [expr, tokens]] of Object.entries(HIGHLIGHT_FIXTURES)) {
+        test(`editor > highlights ${name}`, async ({ page }) => {
+            await page.evaluate(openSidebarAndScrollToBottom);
+            await page.locator("perspective-viewer #add-expression").click();
+            const container = page.locator(
+                "perspective-viewer #editor-container",
+            );
+
+            await container.locator("textarea").fill(expr as string);
+            await expect
+                .poll(() =>
+                    container.locator("#content").evaluate((content) =>
+                        Array.from(content.children)
+                            .filter(
+                                (x) =>
+                                    x.tagName === "BR" || x.textContent !== "",
+                            )
+                            .map((x) =>
+                                x.tagName === "BR"
+                                    ? ["br"]
+                                    : [x.className, x.textContent],
+                            ),
+                    ),
+                )
+                .toEqual(tokens);
+        });
+    }
+
     test("editor > opens on add-column button click", async ({ page }) => {
         await page.evaluate(openSidebarAndScrollToBottom);
 

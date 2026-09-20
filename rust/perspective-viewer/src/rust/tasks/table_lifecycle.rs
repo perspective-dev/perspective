@@ -114,7 +114,7 @@ pub(crate) async fn sweep_table_bindings(
 async fn suspend_panel(panel: &Panel) -> ApiResult<()> {
     clone!(panel.session, panel.renderer);
     let ticket = panel.session.submit(
-        crate::session::OpKind::Restore { fields: None },
+        crate::session::OpKind::Restore { update: None },
         move |_ctx| {
             Box::pin(async move {
                 renderer
@@ -131,7 +131,7 @@ async fn suspend_panel(panel: &Panel) -> ApiResult<()> {
                     })
                     .await?;
 
-                Ok(crate::session::StepOutcome::Done)
+                Ok(None)
             })
         },
     );
@@ -150,11 +150,11 @@ async fn bind_pending(
 ) -> ApiResult<()> {
     clone!(panel.session, panel.renderer, workspace, presentation);
     let ticket = panel.session.submit(
-        crate::session::OpKind::Restore { fields: None },
+        crate::session::OpKind::Restore { update: None },
         move |ctx| {
             Box::pin(async move {
                 let Some(name) = session.pending_table() else {
-                    return Ok(crate::session::StepOutcome::Done);
+                    return Ok(None);
                 };
 
                 let update = ViewerConfigUpdate {
@@ -182,11 +182,11 @@ async fn bind_pending(
                 if let Err(e) = &result
                     && session.pending_table().is_some()
                 {
-                    let _ = session.set_run_error(e.clone()).await;
+                    let _ = renderer.fail(e.clone());
                 }
 
                 result?;
-                Ok(crate::session::StepOutcome::Done)
+                Ok(None)
             })
         },
     );

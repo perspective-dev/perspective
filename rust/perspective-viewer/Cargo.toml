@@ -46,9 +46,6 @@ lightningcss = "1.0.0-alpha.71"
 glob = "0.3.0"
 anyhow = "1.0.66"
 
-[dev-dependencies]
-wasm-bindgen-test = "0.3.13"
-
 [dependencies]
 perspective-client = { version = "5.5.1" }
 perspective-js = { version = "5.5.1" }
