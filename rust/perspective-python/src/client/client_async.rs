@@ -16,11 +16,12 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use futures::FutureExt;
+use perspective_client::config::ViewConfigUpdate;
 use perspective_client::proto::ListFlatten;
 use perspective_client::{
-    Client, ColumnWindow, DeleteOptions, OnRemoveData, OnUpdateData, OnUpdateMode, OnUpdateOptions,
-    Table, TableData, TableInitOptions, TableReadFormat, TableRef, UpdateData, UpdateOptions, View,
-    ViewWindow, assert_table_api, assert_view_api, asyncfn,
+    Client, ColumnWindow, DeleteOptions, DescribeVerdict, OnRemoveData, OnUpdateData, OnUpdateMode,
+    OnUpdateOptions, Table, TableData, TableInitOptions, TableReadFormat, TableRef, UpdateData,
+    UpdateOptions, View, ViewWindow, assert_table_api, assert_view_api, asyncfn,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -619,6 +620,32 @@ impl AsyncTable {
             .await
             .into_pyerr()?;
         Ok(())
+    }
+
+    /// Validate a complete view config against this table and report the
+    /// schema a [`View`] built from it would have, WITHOUT creating one.
+    ///
+    /// # Python Examples
+    ///
+    /// ```python
+    /// verdict = table.describe(
+    ///     columns=["Sales", "margin"],
+    ///     group_by=["Region"],
+    ///     expressions={"margin": '"Profit" / "Sales"'},
+    /// )
+    ///
+    /// if "view_schema" in verdict:
+    ///     view = table.view(**config)
+    /// ```
+    #[pyo3(signature = (**kwargs))]
+    pub async fn describe(&self, kwargs: Option<Py<PyDict>>) -> PyResult<Py<PyAny>> {
+        let config: ViewConfigUpdate = kwargs
+            .map(|config| Python::attach(|py| depythonize(config.bind(py))))
+            .transpose()?
+            .unwrap_or_default();
+
+        let verdict: DescribeVerdict = self.table.describe(config).await.into_pyerr()?.into();
+        Python::attach(|py| Ok(pythonize::pythonize(py, &verdict)?.unbind()))
     }
 
     /// Validates the given expressions.

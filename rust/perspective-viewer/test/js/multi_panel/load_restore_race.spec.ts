@@ -30,11 +30,23 @@ test.beforeEach(async ({ page }) => {
 
 armInvariants(test);
 
-for (const plugin of ["Datagrid", "Debug"]) {
+const PLUGIN_PAGES = [
+    ["Datagrid", "superstore-all.html"],
+    ["Debug", "superstore.html"],
+];
+
+for (const [plugin, html] of PLUGIN_PAGES) {
     test(`load + immediate restore holds \`columns\` across ${VIEWER_COUNT} viewers (${plugin})`, async ({
         page,
     }) => {
         test.setTimeout(120_000);
+        await page.goto(`/rust/perspective-viewer/test/html/${html}`);
+        await page.evaluate(async () => {
+            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+                await new Promise((x) => setTimeout(x, 10));
+            }
+        });
+
         const results = await page.evaluate(
             async ({ tableName, columns, plugin, count }) => {
                 const worker = (window as any).__TEST_WORKER__;
@@ -123,7 +135,7 @@ test("public mutators are render-quiescent at resolution (I6)", async ({
 
             await quiesce("load", () => v.load(table));
             await quiesce("restore", () =>
-                v.restore({ plugin: "Datagrid", columns: ["Sales"] }),
+                v.restore({ plugin: "Debug", columns: ["Sales"] }),
             );
             await quiesce("reset", () => v.reset());
             await quiesce("restore", () =>

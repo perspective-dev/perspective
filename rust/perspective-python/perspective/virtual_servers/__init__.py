@@ -104,12 +104,11 @@ class VirtualServerHandler:
 
         pass
 
-    def table_validate_expression(self, view_name, expression):
+    def table_describe(self, table_name, config):
         """
-        [OPTIONAL] Given a temporary table `view_name`, validate the type of
-        a column expression string `expression`, or raise an error if the
-        expression is invalid. This is enabeld by `"expressions"` via
-        `get_features` and defaults to allow all expressions.
+        Validate a complete query configuration `config` against `table_name`
+        and report the schema `table_make_view` would create, without creating
+        it.
         """
 
         pass
@@ -140,3 +139,68 @@ class VirtualServerHandler:
         """
 
         pass
+
+
+
+def describe_via_make_view(handler, table_name, config):
+    """A `table_describe` that builds a temporary table, reads its schema and
+    deletes it."""
+    view_name = f"__psp_describe_{id(config)}__"
+    try:
+        handler.table_make_view(table_name, view_name, config)
+    except Exception as e:
+        return {"config_error": str(e)}
+
+    try:
+        view_schema = handler.view_schema(view_name, config)
+    finally:
+        handler.view_delete(view_name)
+
+    expression_schema = {
+        name: view_schema[name]
+        for name in config.get("expressions", {})
+        if name in view_schema
+    }
+
+    return {"expression_schema": expression_schema, "view_schema": view_schema}
+
+
+def sql_table_describe(sql_builder, table_name, config, describe_query, schema=None):
+    """The `table_describe` flow shared by the SQL models."""
+    expression_schema = {}
+    query = sql_builder.expressions_describe(table_name, config)
+    if query is not None:
+        try:
+            expression_schema = describe_query(query)
+        except Exception as error:
+            expression_errors = {}
+            for name, expression in config.get("expressions", {}).items():
+                try:
+                    single = describe_query(
+                        sql_builder.expression_describe(table_name, expression)
+                    )
+                    expression_schema[name] = next(iter(single.values()))
+                except Exception as e:
+                    expression_errors[name] = {
+                        "error_message": str(e),
+                        "line": 0,
+                        "column": 0,
+                    }
+
+            if not expression_errors:
+                return {"config_error": str(error)}
+
+            return {
+                "expression_schema": expression_schema,
+                "expression_errors": expression_errors,
+            }
+
+    view_schema = {}
+    query = sql_builder.table_describe(table_name, config, schema)
+    if query is not None:
+        try:
+            view_schema = describe_query(query)
+        except Exception as error:
+            return {"config_error": str(error)}
+
+    return {"expression_schema": expression_schema, "view_schema": view_schema}

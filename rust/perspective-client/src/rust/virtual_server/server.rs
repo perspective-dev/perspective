@@ -22,16 +22,17 @@ use super::generic_sql_model::{column_path_source, sort_column_paths};
 use super::handler::VirtualServerHandler;
 use crate::config::{ViewConfig, ViewConfigUpdate};
 use crate::proto::response::ClientResp;
-use crate::proto::table_validate_expr_resp::ExprValidationError;
 use crate::proto::{
     ColumnType, GetFeaturesResp, GetHostedTablesResp, MakeTableResp, Request, Response,
-    ServerError, TableMakePortResp, TableMakeViewResp, TableOnDeleteResp, TableRemoveDeleteResp,
-    TableSchemaResp, TableSizeResp, TableValidateExprResp, ViewColumnPathsResp, ViewDeleteResp,
-    ViewDimensionsResp, ViewExpressionSchemaResp, ViewGetConfigResp, ViewGetMinMaxResp,
-    ViewOnDeleteResp, ViewOnRemoveResp, ViewOnUpdateResp, ViewRemoveDeleteResp,
+    ServerError, TableDescribeResp, TableMakePortResp, TableMakeViewResp, TableOnDeleteResp,
+    TableRemoveDeleteResp, TableSchemaResp, TableSizeResp, ViewColumnPathsResp, ViewDeleteResp,
+    ViewDescription, ViewDimensionsResp, ViewExpressionSchemaResp, ViewGetConfigResp,
+    ViewGetMinMaxResp, ViewOnDeleteResp, ViewOnRemoveResp, ViewOnUpdateResp, ViewRemoveDeleteResp,
     ViewRemoveOnRemoveResp, ViewRemoveOnUpdateResp, ViewSchemaResp, ViewToArrowResp,
     ViewToColumnsStringResp, ViewToCsvResp, ViewToNdjsonStringResp, ViewToRowsStringResp,
+    table_describe_resp,
 };
+use crate::table::{DescribeError, Description};
 
 macro_rules! respond {
     ($msg:ident, $name:ident { $($rest:tt)* }) => {{
@@ -60,6 +61,10 @@ pub struct VirtualServer<T: VirtualServerHandler> {
     view_to_table: IndexMap<String, String>,
     view_configs: IndexMap<String, ViewConfig>,
     view_schemas: IndexMap<String, IndexMap<String, ColumnType>>,
+
+    /// Per-view `table_describe` answers, computed LAZILY on the first
+    /// `ViewExpressionSchemaReq` for that view — never on view creation.
+    view_descriptions: IndexMap<String, Description>,
 }
 
 impl<T: VirtualServerHandler> VirtualServer<T> {
@@ -70,6 +75,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             view_configs: IndexMap::default(),
             view_to_table: IndexMap::default(),
             view_schemas: IndexMap::default(),
+            view_descriptions: IndexMap::default(),
         }
     }
 
@@ -206,34 +212,43 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     size: self.handler.table_size(msg.entity_id.as_str()).await?
                 })
             },
-            TableValidateExprReq(req) => {
-                let mut expression_schema = HashMap::<String, i32>::default();
-                let mut expression_alias = HashMap::<String, String>::default();
-                let mut errors = HashMap::<String, ExprValidationError>::default();
-                for (name, ex) in req.column_to_expr.iter() {
-                    let _ = expression_alias.insert(name.clone(), ex.clone());
-                    match self
-                        .handler
-                        .table_validate_expression(&msg.entity_id, ex.as_str())
-                        .await
-                    {
-                        Ok(dtype) => {
-                            let _ = expression_schema.insert(name.clone(), dtype as i32);
-                        },
-                        Err(e) => {
-                            let _ = errors.insert(name.clone(), ExprValidationError {
-                                error_message: format!("{}", e),
-                                line: 0,
-                                column: 0,
-                            });
-                        },
-                    }
-                }
+            TableDescribeReq(req) => {
+                let config: ViewConfig = req.config.unwrap_or_default().into();
+                let verdict = self
+                    .handler
+                    .table_describe(msg.entity_id.as_str(), &config)
+                    .await?;
 
-                respond!(msg, TableValidateExprResp {
-                    expression_schema,
-                    errors,
-                    expression_alias,
+                let (expression_schema, expression_errors, result) = match verdict {
+                    Ok(d) => (
+                        d.expression_schema,
+                        HashMap::new(),
+                        Some(table_describe_resp::Result::View(ViewDescription {
+                            schema: d
+                                .view_schema
+                                .into_iter()
+                                .map(|(x, y)| (x, y as i32))
+                                .collect(),
+                        })),
+                    ),
+                    Err(DescribeError::Expressions {
+                        expression_schema,
+                        errors,
+                    }) => (expression_schema, errors, None),
+                    Err(DescribeError::Config(msg)) => (
+                        HashMap::new(),
+                        HashMap::new(),
+                        Some(table_describe_resp::Result::ConfigError(msg)),
+                    ),
+                };
+
+                respond!(msg, TableDescribeResp {
+                    expression_schema: expression_schema
+                        .into_iter()
+                        .map(|(x, y)| (x, y as i32))
+                        .collect(),
+                    expression_errors,
+                    result,
                 })
             },
             ViewSchemaReq(_) => {
@@ -278,31 +293,31 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 })
             },
             ViewExpressionSchemaReq(_) => {
-                let mut schema = HashMap::<String, i32>::default();
-                let table_id = self.view_to_table.get(&msg.entity_id);
-                for (name, ex) in self
-                    .view_configs
-                    .get(&msg.entity_id)
-                    .unwrap()
-                    .expressions
-                    .iter()
-                {
-                    match self
+                let view_id = msg.entity_id.clone();
+                if !self.view_descriptions.contains_key(&view_id) {
+                    let table_id = self
+                        .view_to_table
+                        .get(&view_id)
+                        .cloned()
+                        .ok_or_else(|| VirtualServerError::UnknownViewId(view_id.clone()))?;
+
+                    let config = self.view_configs.get(&view_id).unwrap().clone();
+                    let description = self
                         .handler
-                        .table_validate_expression(table_id.unwrap(), ex.as_str())
-                        .await
-                    {
-                        Ok(dtype) => {
-                            let _ = schema.insert(name.clone(), dtype as i32);
-                        },
-                        Err(_e) => {
-                            // TODO: handle error
-                        },
-                    }
+                        .table_describe(&table_id, &config)
+                        .await?
+                        .map_err(|e| VirtualServerError::Other(e.to_string()))?;
+
+                    self.view_descriptions.insert(view_id.clone(), description);
                 }
 
-                let resp = ViewExpressionSchemaResp { schema };
-                respond!(msg, ViewExpressionSchemaResp { ..resp })
+                let schema = self.view_descriptions[&view_id]
+                    .expression_schema
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), *ty as i32))
+                    .collect();
+
+                respond!(msg, ViewExpressionSchemaResp { schema })
             },
             ViewColumnPathsReq(view_column_paths_req) => {
                 let config = self.view_configs.get(&msg.entity_id).unwrap();
@@ -426,6 +441,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 self.handler.view_delete(msg.entity_id.as_str()).await?;
                 self.view_to_table.shift_remove(&msg.entity_id);
                 self.view_configs.shift_remove(&msg.entity_id);
+                self.view_descriptions.shift_remove(&msg.entity_id);
                 respond!(msg, ViewDeleteResp {})
             },
             MakeTableReq(req) => {

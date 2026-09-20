@@ -42,10 +42,10 @@ pub struct PluginTabProps {
     /// Active plugin's `plugin_config` bucket — threaded as a value
     /// snapshot from `RendererProps`. Changes on every mutation path
     /// that fires `plugin_config_changed` (in-tab edit,
-    /// `restore_and_render` JSON paste, `reset_all` with `all=true`)
+    /// `restore` JSON paste, `reset_all` with `all=true`)
     /// AND on plugin switch (the active bucket is keyed by plugin
     /// name, so `to_props()` produces a fresh `Rc` after
-    /// `commit_plugin_idx`). PluginTab is a pure function of this
+    /// a restore or edit commit). PluginTab is a pure function of this
     /// prop — no `Renderer::get_plugin_config()` reads against the
     /// interior-mutable handle.
     pub plugin_config: PtrEqRc<serde_json::Map<String, serde_json::Value>>,
@@ -256,6 +256,7 @@ fn render_leaf(
             max,
             step,
             include,
+            ..
         } => {
             let current = raw_config.get(&key).and_then(|v| v.as_f64());
             Some(html! {

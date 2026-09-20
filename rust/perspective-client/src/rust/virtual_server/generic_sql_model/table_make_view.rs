@@ -262,7 +262,7 @@ fn window_sql(
     }
 }
 
-fn quote_ident(name: &str) -> String {
+pub(crate) fn quote_ident(name: &str) -> String {
     name.replace('"', "\"\"")
 }
 

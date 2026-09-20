@@ -40,13 +40,17 @@ use yew::prelude::*;
 
 use self::activate::*;
 pub use self::limits::RenderLimits;
-pub use self::plugin_config::{ColumnConfigMap, PluginScopedConfig};
+pub use self::plugin_config::{
+    ColumnConfigMap, PluginScopedConfig, ValidatedColumnsConfig, ValidatedPluginConfig,
+    apply_columns_config_to, apply_plugin_config_to,
+};
 use self::plugin_store::*;
 pub use self::props::RendererProps;
 pub use self::registry::*;
 use self::render_timer::*;
 use crate::config::*;
 use crate::js::plugin::*;
+use crate::session::{PanelCell, PluginRef};
 use crate::utils::*;
 
 /// Minimum geometry delta (px) considered a real size/position change by the
@@ -97,6 +101,8 @@ impl Drop for ContextPin {
 
 /// Immutable state
 pub struct RendererData {
+    /// This panel's committed [`PanelState`].
+    cell: PanelCell,
     plugin_data: RefCell<RendererMutData>,
     draw_lock: DebounceMutex,
     pub plugin_changed: PubSub<JsPerspectiveViewerPlugin>,
@@ -151,20 +157,12 @@ pub struct RendererData {
     /// coexist there.
     slot_name: RefCell<Option<String>>,
 
-    /// This panel's theme name — CONCRETE, resolved once at creation from
-    /// the config's `theme`, else the host's, else the registry default.
-    /// There is no "unthemed panel" that resolves against live element
-    /// state at draw time: a registry re-ordering must never repaint a
-    /// panel, so nothing but an explicit write may change this. `None` only
-    /// while no themes exist at all.
-    theme: RefCell<Option<String>>,
-
     /// Whether the active plugin has completed a draw. An EXPLICIT flag —
     /// not inferred from DOM connectedness — because plugin elements may be
     /// mounted eagerly (at panel creation / draw start, before the view
     /// query resolves), so "in the DOM" no longer implies "has rendered".
     /// Set by a successful `draw_view`; cleared on plugin swap
-    /// (`commit_plugin_idx`), `dispose` and `delete`.
+    /// (`activate_committed_plugin`), `dispose` and `delete`.
     has_drawn: Cell<bool>,
 
     /// The effective theme stamped at the active plugin's last `--psp-*`
@@ -210,12 +208,9 @@ pub struct RendererData {
 /// Mutable state
 pub struct RendererMutData {
     viewer_elem: HtmlElement,
-    metadata: Rc<PluginStaticConfig>,
     plugin_store: PluginStore,
-    plugins_idx: Option<usize>,
     timer: MovingWindowRenderTimer,
     selection: Option<ViewWindow>,
-    plugin_states: HashMap<String, PluginScopedConfig>,
 }
 
 /// The state object responsible for the active [`JsPerspectiveViewerPlugin`].
@@ -247,17 +242,15 @@ impl Deref for RendererData {
 }
 
 impl Renderer {
-    pub fn new(viewer_elem: &HtmlElement) -> Self {
+    pub fn new(viewer_elem: &HtmlElement, cell: PanelCell) -> Self {
         let draw_lock = DebounceMutex::default();
         Self(Rc::new(RendererData {
+            cell,
             plugin_data: RefCell::new(RendererMutData {
                 viewer_elem: viewer_elem.clone(),
-                metadata: Rc::new(PluginStaticConfig::default()),
                 plugin_store: PluginStore::default(),
-                plugins_idx: None,
                 selection: None,
                 timer: MovingWindowRenderTimer::default(),
-                plugin_states: HashMap::default(),
             }),
             geometry_slot: draw_lock.slot(),
             geometry_cmd: Cell::new(None),
@@ -274,7 +267,6 @@ impl Renderer {
             presized_box: Cell::new(None),
             on_render_limits_changed: Default::default(),
             slot_name: Default::default(),
-            theme: Default::default(),
             has_drawn: Cell::new(false),
             captured_theme: Default::default(),
             cached_context: Default::default(),
@@ -301,12 +293,24 @@ impl Renderer {
     /// resolve "the default" through `Presentation` before calling, never by
     /// leaving this empty.
     pub fn set_theme(&self, name: Option<String>) {
-        *self.0.theme.borrow_mut() = name;
+        self.cell.submit_theme(name);
     }
 
-    /// This panel's theme name.
+    /// Write this panel's theme name NOW.
+    pub fn commit_theme(&self, name: Option<String>) {
+        self.cell.swap(self.cell.state().with_theme(name));
+    }
+
+    /// [`Self::commit_theme`] plus a synchronous [`Self::stamp_theme`].
+    pub fn commit_theme_stamped(&self, theme: Option<String>) {
+        self.commit_theme(theme);
+        self.stamp_theme(None);
+    }
+
+    /// This panel's theme name, as the UI sees it: the committed theme, or the
+    /// latest pending pick.
     pub fn theme(&self) -> Option<String> {
-        self.0.theme.borrow().clone()
+        self.cell.projected_theme()
     }
 
     /// [`Self::set_theme`] plus a synchronous [`Self::stamp_theme`] — the
@@ -376,17 +380,25 @@ impl Renderer {
             plugin.delete();
         }
         self.plugin_data.borrow().viewer_elem.set_inner_text("");
-        let new_state = Self::new(&self.plugin_data.borrow().viewer_elem);
-        std::mem::swap(
-            &mut *self.plugin_data.borrow_mut(),
-            &mut *new_state.plugin_data.borrow_mut(),
-        );
+        let viewer_elem = self.plugin_data.borrow().viewer_elem.clone();
+        *self.plugin_data.borrow_mut() = RendererMutData {
+            viewer_elem,
+            plugin_store: PluginStore::default(),
+            selection: None,
+            timer: MovingWindowRenderTimer::default(),
+        };
 
+        self.cell.swap(self.cell.state().without_plugins());
         Ok(())
     }
 
     pub fn metadata(&self) -> Rc<PluginStaticConfig> {
-        self.borrow().metadata.clone()
+        self.cell
+            .state()
+            .plugin
+            .as_ref()
+            .map(|plugin| plugin.static_config.clone())
+            .unwrap_or_default()
     }
 
     pub fn is_chart(&self) -> bool {
@@ -440,7 +452,7 @@ impl Renderer {
     pub fn active_plugin(&self) -> Option<JsPerspectiveViewerPlugin> {
         // Bail on `plugins_idx` BEFORE touching `plugin_store`, so an unselected
         // renderer never snapshots the registry.
-        let idx = self.0.borrow().plugins_idx?;
+        let idx = self.selected_idx()?;
         self.0.borrow_mut().plugin_store.plugins().get(idx).cloned()
     }
 
@@ -556,7 +568,7 @@ impl Renderer {
 
         let idx = self.find_plugin_idx(name)?;
         let changed = !matches!(
-            self.0.borrow().plugins_idx,
+            self.selected_idx(),
             Some(selected_idx) if selected_idx == idx
         );
 
@@ -574,6 +586,24 @@ impl Renderer {
         }
     }
 
+    /// Reject a [`PluginUpdate`] naming a plugin that is not registered.
+    pub fn check_plugin_update(&self, update: &PluginUpdate) -> ApiResult<()> {
+        if let PluginUpdate::Update(name) = update
+            && self.find_plugin_idx(name).is_none()
+        {
+            let known = self
+                .get_all_plugin_configs()
+                .iter()
+                .map(|c| format!("\"{}\"", c.name))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            return Err(format!("Unknown plugin \"{name}\"; expected one of {known}").into());
+        }
+
+        Ok(())
+    }
+
     /// Commit a plugin selection previously resolved by
     /// [`Self::resolve_plugin_update`]. COMMAND — call only from inside a
     /// locked draw task, so the swap lands atomically with the view rebuild
@@ -586,7 +616,7 @@ impl Renderer {
         let idx = match idx {
             Some(idx) => idx,
             None => {
-                if self.0.borrow().plugins_idx.is_none() {
+                if self.selected_idx().is_none() {
                     let name = PLUGIN_REGISTRY.default_plugin_name();
                     let idx = self
                         .find_plugin_idx(&name)
@@ -600,7 +630,7 @@ impl Renderer {
         };
 
         let changed = !matches!(
-            self.0.borrow().plugins_idx,
+            self.selected_idx(),
             Some(selected_idx) if selected_idx == idx
         );
 
@@ -616,12 +646,6 @@ impl Renderer {
     /// reset the per-plugin render-warning flag, and fire
     /// `plugin_changed`.
     fn commit_plugin_idx(&self, idx: usize) -> ApiResult<()> {
-        // The newly-selected plugin element has not drawn (a swap keeps the
-        // OLD plugin mounted until the new one's draw lands) — and has
-        // captured no CSS.
-        self.0.has_drawn.set(false);
-        self.0.captured_theme.borrow_mut().take();
-        self.borrow_mut().plugins_idx = Some(idx);
         let config = self
             .0
             .borrow_mut()
@@ -631,22 +655,46 @@ impl Renderer {
             .cloned()
             .ok_or("No Plugin")?;
 
-        self.borrow_mut().metadata = config.clone();
+        self.cell.swap(self.cell.state().with_plugin(PluginRef {
+            idx,
+            static_config: config,
+        }));
+
+        self.activate_committed_plugin()
+    }
+
+    /// The `static_config` of the plugin at store index `idx`, for a
+    /// [`PluginRef`] committed by a transaction rather than by
+    /// [`Self::commit_plugin`].
+    pub fn plugin_ref(&self, idx: usize) -> ApiResult<PluginRef> {
+        let static_config = self
+            .0
+            .borrow_mut()
+            .plugin_store
+            .plugin_configs()
+            .get(idx)
+            .cloned()
+            .ok_or("No Plugin")?;
+
+        Ok(PluginRef { idx, static_config })
+    }
+
+    /// Bring the plugin ELEMENT in line with a just-committed selection: the
+    /// newly-selected element has drawn nothing and captured no CSS, takes its
+    /// own stored bucket, and is announced.
+    pub fn activate_committed_plugin(&self) -> ApiResult<()> {
+        // The newly-selected plugin element has not drawn (a swap keeps the
+        // OLD plugin mounted until the new one's draw lands) — and has
+        // captured no CSS.
+        self.0.has_drawn.set(false);
+        self.0.captured_theme.borrow_mut().take();
         self.0.render_warning.set(true);
-        // `commit_plugin_idx` is called *by* the selection path, so it must use
-        // the pure query (never `ensure_plugin_selected`, which would recurse
-        // through `commit_plugin`). `plugins_idx` was just set above.
         let plugin: JsPerspectiveViewerPlugin = self.active_plugin().ok_or("No Plugin")?;
 
         // Push the newly-activated plugin's stored bucket through
         // `plugin.restore` so the swap immediately reflects any
         // viewer-owned per-column and plugin-level config.
-        let bucket = self
-            .borrow()
-            .plugin_states
-            .get(&config.name)
-            .cloned()
-            .unwrap_or_default();
+        let bucket = self.cell.state().bucket(&self.metadata().name);
         let token = JsValue::from_serde_ext(&bucket.plugin).unwrap_or(JsValue::NULL);
         if let Err(e) = plugin.restore(&token, Some(&bucket.columns)) {
             tracing::warn!("plugin.restore on swap failed: {:?}", e);
@@ -654,6 +702,20 @@ impl Renderer {
 
         self.plugin_changed.emit(plugin);
         Ok(())
+    }
+
+    /// The committed plugin selection's index into the plugin store.
+    pub fn committed_plugin_idx(&self) -> Option<usize> {
+        self.selected_idx()
+    }
+
+    /// The COMMITTED panel theme, pending theme edits excluded.
+    pub fn committed_theme(&self) -> Option<String> {
+        self.cell.state().chrome.theme.clone()
+    }
+
+    fn selected_idx(&self) -> Option<usize> {
+        self.cell.state().plugin.as_ref().map(|plugin| plugin.idx)
     }
 
     pub fn render_timer(&self) -> MovingWindowRenderTimer {

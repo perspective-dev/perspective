@@ -18,11 +18,12 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::*;
 
+use super::transactional_restore::restore_in_place;
 use crate::config::ViewerConfigUpdate;
 use crate::js::*;
 use crate::presentation::Presentation;
 use crate::renderer::*;
-use crate::session::Session;
+use crate::session::{OpKind, Session, StepOutcome};
 use crate::utils::*;
 use crate::workspace::Workspace;
 use crate::*;
@@ -148,15 +149,25 @@ pub(crate) async fn set_panel_paused(
 ) -> ApiResult<()> {
     if visible {
         if session.set_pause(false) {
-            let result = super::restore_and_render(
-                session,
-                renderer,
-                presentation,
-                super::RunOrigin::Internal,
-                ViewerConfigUpdate::default(),
-                async move { Ok(()) },
-            )
-            .await;
+            let ticket = session.submit(OpKind::Restore { fields: None }, {
+                clone!(session, renderer, presentation);
+                move |_ctx| {
+                    Box::pin(async move {
+                        restore_in_place(
+                            &session,
+                            &renderer,
+                            &presentation,
+                            super::RunOrigin::Internal,
+                            ViewerConfigUpdate::default(),
+                        )
+                        .await?;
+
+                        Ok(StepOutcome::Done)
+                    })
+                }
+            });
+
+            let result = ticket.settle().await;
 
             if let Err(e) = result.ignore_view_delete() {
                 session.set_run_error(e.clone()).await?;

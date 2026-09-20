@@ -62,10 +62,59 @@ impl PyGenericSQLVirtualServerModel {
             .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
-    pub fn table_validate_expression(&self, table_id: &str, expression: &str) -> PyResult<String> {
+    /// The SQL query that plans every expression of `config` at once against a
+    /// table, one result column per expression alias, or `None` when the config
+    /// has no expressions.
+    pub fn expressions_describe(
+        &self,
+        table_id: &str,
+        config: Py<PyAny>,
+    ) -> PyResult<Option<String>> {
+        Python::attach(|py| {
+            let config: ViewConfig = pythonize::depythonize(config.bind(py))
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+            self.inner
+                .expressions_describe(table_id, &config)
+                .map_err(|e| PyValueError::new_err(e.to_string()))
+        })
+    }
+
+    /// The SQL query that plans ONE expression against a table - for
+    /// attributing a failed `expressions_describe` to the expressions at fault.
+    pub fn expression_describe(&self, table_id: &str, expression: &str) -> PyResult<String> {
         self.inner
-            .table_validate_expression(table_id, expression)
+            .expression_describe(table_id, expression)
             .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// The SQL query that plans the view `config` would build and reports its
+    /// result columns without materializing it (`split_by` folded into
+    /// `group_by`, no `PIVOT`), or `None` when the config selects no columns.
+    #[pyo3(signature = (table_id, config, schema=None))]
+    pub fn table_describe(
+        &self,
+        table_id: &str,
+        config: Py<PyAny>,
+        schema: Option<Py<PyAny>>,
+    ) -> PyResult<Option<String>> {
+        Python::attach(|py| {
+            let config: ViewConfig = pythonize::depythonize(config.bind(py))
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+            let schema = match &schema {
+                Some(schema) => {
+                    self.parse_schema(schema.cast_bound::<PyDict>(py).map_err(|_| {
+                        PyValueError::new_err("Schema must be a dict mapping column names to types")
+                    })?)?
+                },
+                None => IndexMap::new(),
+            };
+
+            self.inner
+                .table_describe(table_id, &config, &schema)
+                .map_err(|e| PyValueError::new_err(e.to_string()))
+        })
     }
 
     pub fn view_delete(&self, view_id: &str) -> PyResult<String> {

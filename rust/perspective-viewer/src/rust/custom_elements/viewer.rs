@@ -19,7 +19,6 @@ use futures::channel::oneshot::channel;
 use futures::future::join_all;
 use js_sys::{Array, JsString};
 use perspective_client::config::ViewConfigUpdate;
-use perspective_client::utils::PerspectiveResultExt;
 use perspective_js::utils::global;
 use perspective_js::{JsViewConfig, JsViewWindow, Table, View, apierror};
 use wasm_bindgen::JsCast;
@@ -38,7 +37,9 @@ use crate::js::*;
 use crate::presentation::*;
 use crate::queries::*;
 use crate::root::Root;
-use crate::session::{Disposal, MissingTable, ResetOptions, TableLoadState};
+use crate::session::{
+    BindPlan, Disposal, MissingTable, OpKind, ResetOptions, StepOutcome, TableLoadState,
+};
 use crate::tasks::*;
 use crate::utils::*;
 use crate::workspace::{Panel, PanelId, Workspace};
@@ -212,13 +213,13 @@ impl PerspectiveViewerElement {
             .panels()
             .into_iter()
             .filter(|panel| !fresh.contains(&panel.id))
-            .filter(|panel| stamp_global_overlay(&self.workspace, &panel.id, &panel.session))
             .collect::<Vec<_>>();
 
-        join_all(retained.iter().map(|panel| async move {
-            apply_and_render(&panel.session, &panel.renderer, ViewConfigUpdate::default())?.await?;
-            Ok(())
-        }))
+        join_all(
+            retained
+                .iter()
+                .map(|panel| broadcast_overlay(&self.workspace, panel)),
+        )
         .await
         .into_iter()
         .collect::<ApiResult<Vec<_>>>()?;
@@ -548,23 +549,28 @@ impl PerspectiveViewerElement {
 
         let session = panel.session;
         let renderer = panel.renderer;
-        let load = session.begin_pending_load();
         clone!(self.workspace, self.presentation);
-        Ok(ApiFuture::new_throttled(async move {
-            let _effect = effect;
-            enum Discard {
-                Unclaimed(Panel),
-                Evicted(Panel),
-            }
+        enum Discard {
+            Unclaimed(Panel),
+            Evicted(Panel),
+        }
 
-            renderer.set_throttle(None);
-            let _run_token = session.begin_config_run();
-            let result = {
-                clone!(session, renderer, workspace, notify, load);
-                renderer
+        let table_known = matches!(
+            try_from_js_option::<perspective_js::Table>(table.clone()),
+            Ok(Some(_))
+        );
+
+        let ticket = session.submit(OpKind::Load { table_known }, {
+            clone!(session, renderer);
+            move |load| {
+                Box::pin(async move {
+                    let _effect = effect;
+                    renderer.set_throttle(None);
+                    let result = {
+                        clone!(session, renderer, workspace, notify, load);
+                        renderer
                     .clone()
                     .render_task(|guard| async move {
-                        seed_panel_theme(&presentation, &renderer).await;
                         renderer.stamp_theme(None);
                         let jstable = JsFuture::from(promise)
                             .await
@@ -574,30 +580,17 @@ impl PerspectiveViewerElement {
                             try_from_js_option::<perspective_js::Table>(jstable.clone())
                         {
                             tracing::warn!("{}", DEPRECATED_TABLE_MESSAGE);
-                            let Some(journal) = load.claim() else {
+                            if load.is_superseded() {
                                 return Ok(None);
-                            };
+                            }
 
                             if let Some(notify) = &notify {
                                 place_reserved(&workspace, notify, true);
                             }
 
-                            let _plugin = renderer.ensure_plugin_selected()?;
-                            let _ = renderer.mount_active_plugin();
-                            session
-                                .reset(ResetOptions {
-                                    config: true,
-                                    expressions: true,
-                                    stats: true,
-                                    table: Some(session::TableIntermediateState::Reloaded),
-                                })
-                                .await
-                                .unwrap_or_log();
-
                             let client = table.get_client().await;
                             let inner_client = client.get_client().clone();
-                            session.set_client(inner_client.clone());
-                            workspace.set_default_client(inner_client);
+                            workspace.set_default_client(inner_client.clone());
                             let name = table.get_name().await;
                             tracing::debug!(
                                 "Loading {:.0} rows from `Table` {}",
@@ -605,21 +598,40 @@ impl PerspectiveViewerElement {
                                 name
                             );
 
-                            session.set_table(name).await?;
-                            for delta in journal {
-                                session.commit_view_config(delta)?;
-                            }
+                            let plan = match session::probe_table(
+                                &inner_client,
+                                &name,
+                                MissingTable::Pend,
+                            )
+                            .await?
+                            {
+                                Some(table) => BindPlan::Bind {
+                                    client: inner_client,
+                                    table: Box::new(table),
+                                    reset: true,
+                                },
+                                None => BindPlan::Pend {
+                                    client: inner_client,
+                                    name,
+                                    reset: true,
+                                },
+                            };
 
-                            session.commit_table_defaults();
-                            let (disposition, _pin) =
-                                crate::tasks::bind_snapshot(&guard, &session, &renderer).await?;
-
-                            crate::tasks::dispatch_bound(
-                                &guard,
+                            let prepared = crate::tasks::prepare(
+                                &session,
                                 &renderer,
-                                disposition,
+                                &presentation,
                                 false,
-                                crate::tasks::RunOrigin::Public,
+                                plan,
+                                renderer
+                                    .slot_name()
+                                    .map(|id| overlay_for(&workspace, &PanelId::from(id))),
+                                ViewerConfigUpdate::default(),
+                            )
+                            .await?;
+
+                            crate::tasks::commit_and_render_locked(
+                                guard, &session, &renderer, prepared,
                             )
                             .await?;
 
@@ -631,11 +643,8 @@ impl PerspectiveViewerElement {
                             // INERT: register the client only — never rebind or
                             // reset the active panel (its table is preserved).
                             // Panels bind their client lazily at table-resolution
-                            // time (`Workspace::resolve_client_for_table`). The
-                            // window is discarded (not replayed): a `Client`
-                            // performs no reset, and any racing `restore`'s
-                            // commits already applied live (`commit_view_config`).
-                            let owned_window = load.claim().is_some();
+                            // time (`Workspace::resolve_client_for_table`).
+                            let owned_window = !load.is_superseded();
                             let discard = if owned_window && notify.is_some() {
                                 match workspace.take_reserved() {
                                     Some(panel) => Some(Discard::Unclaimed(panel)),
@@ -671,34 +680,36 @@ impl PerspectiveViewerElement {
                             workspace.set_default_client(client.get_client().clone());
                             Ok(discard)
                         } else {
-                            load.close();
                             Err(ApiError::new("Invalid argument"))
                         }
                     })
                     .await
-            };
+                    };
 
-            match result {
-                Err(e) => {
-                    load.close();
-                    if let Some(notify) = &notify {
-                        place_reserved(&workspace, notify, true);
+                    match result {
+                        Err(e) => {
+                            if let Some(notify) = &notify {
+                                place_reserved(&workspace, notify, true);
+                            }
+
+                            session.set_error(false, e.clone()).await?;
+                            Err(e)
+                        },
+                        Ok(Some(Discard::Unclaimed(panel))) => {
+                            eject_panel(panel, Disposal::Reject).await?;
+                            Ok(StepOutcome::Done)
+                        },
+                        Ok(Some(Discard::Evicted(panel))) => {
+                            eject_panel(panel, Disposal::Resolve).await?;
+                            Err(ApiError::new(CREATE_REQUIRES_TABLE))
+                        },
+                        Ok(None) => Ok(StepOutcome::Done),
                     }
-
-                    session.set_error(false, e.clone()).await?;
-                    Err(e)
-                },
-                Ok(Some(Discard::Unclaimed(panel))) => {
-                    eject_panel(panel, Disposal::Reject).await?;
-                    Ok(())
-                },
-                Ok(Some(Discard::Evicted(panel))) => {
-                    eject_panel(panel, Disposal::Resolve).await?;
-                    Err(ApiError::new(CREATE_REQUIRES_TABLE))
-                },
-                Ok(None) => Ok(()),
+                })
             }
-        }))
+        });
+
+        Ok(ApiFuture::new_throttled(ticket.settle()))
     }
 
     /// Delete all internal [`View`]s and all associated state, rendering this
@@ -1006,6 +1017,7 @@ impl PerspectiveViewerElement {
 
                 let mut fulfilled = false;
                 for panel in &panels {
+                    panel.session.settle_ops().await;
                     panel.renderer.clone().with_lock(async { Ok(()) }).await?;
                     panel.renderer.clone().with_lock(async { Ok(()) }).await?;
                     panel.session.settle_dispatches().await?;
@@ -1064,11 +1076,9 @@ impl PerspectiveViewerElement {
     ///   either "json", "string" or "arraybuffer" format.
     /// - `options.panel` - The panel to target, or the active panel when
     ///   omitted.
-    /// - `options.suppress_errors` - when `true`, a failed restore only rejects
-    ///   the returned `Promise` and rolls the view config back, leaving the
-    ///   viewer's visible error state and any element-level state the call
-    ///   already applied (theme, title, plugin, a successful `table` change)
-    ///   untouched.
+    /// - `options.suppress_errors` - when `true`, a config that was applied and
+    ///   then failed to render only rejects the returned `Promise`, without
+    ///   raising the panel's visible error state.
     /// - `options.wait_for_table` - when `true`, a `table` no loaded client
     ///   hosts yet leaves the panel empty and pending until the table is
     ///   created, instead of the default error.
@@ -1142,14 +1152,24 @@ impl PerspectiveViewerElement {
                 },
             };
 
-            if !matches!(settings, OptionalUpdate::Missing) {
-                let (sender, receiver) = channel::<ApiResult<JsValue>>();
-                this.root.borrow().as_ref().into_apierror()?.send_message(
-                    PerspectiveViewerMsg::ToggleSettingsInit(Some(settings), false, Some(sender)),
-                );
+            let settings_toggle: Option<futures::future::LocalBoxFuture<'static, ApiResult<()>>> =
+                (!matches!(settings, OptionalUpdate::Missing)).then(|| {
+                    let this = this.clone();
+                    Box::pin(async move {
+                        let (sender, receiver) = channel::<ApiResult<JsValue>>();
+                        this.root.borrow().as_ref().into_apierror()?.send_message(
+                            PerspectiveViewerMsg::ToggleSettingsInit(
+                                Some(settings),
+                                false,
+                                Some(sender),
+                            ),
+                        );
 
-                receiver.await.map_err(|_| ApiError::new("Cancelled"))??;
-            }
+                        receiver.await.map_err(|_| ApiError::new("Cancelled"))??;
+                        Ok(())
+                    })
+                        as futures::future::LocalBoxFuture<'static, ApiResult<()>>
+                });
 
             match target {
                 Target::Existing { panel, active } => {
@@ -1162,6 +1182,7 @@ impl PerspectiveViewerElement {
                         update,
                         errors,
                         missing,
+                        settings_toggle,
                     )
                     .await
                 },
@@ -1175,10 +1196,15 @@ impl PerspectiveViewerElement {
                         update,
                         errors,
                         missing,
+                        settings_toggle,
                     )
                     .await
                 },
                 Target::Create(config) => {
+                    if let Some(settings_toggle) = settings_toggle {
+                        settings_toggle.await?;
+                    }
+
                     create_panel(
                         &this.elem,
                         &this.presentation,
@@ -1242,9 +1268,9 @@ impl PerspectiveViewerElement {
             let results = join_all(contents.into_iter().map(|(id, session, renderer, config)| {
                 let presentation = this.presentation.clone();
                 let workspace = this.workspace.clone();
+                let notify = this.layout_changed_notify();
                 async move {
-                    stamp_global_overlay(&workspace, &id, &session);
-                    restore_panel(
+                    let result = restore_panel(
                         &session,
                         &renderer,
                         &presentation,
@@ -1253,8 +1279,15 @@ impl PerspectiveViewerElement {
                         config,
                         crate::tasks::RestoreErrors::Publish,
                         missing,
+                        None,
                     )
-                    .await?;
+                    .await;
+
+                    if discard_rejected(&workspace, &id, &session, &result).await? {
+                        notify.emit(());
+                    }
+
+                    result?;
                     if workspace.is_master(&id) {
                         set_edit_mode(&session, &renderer, "SELECT_ROW_TREE");
                     }
@@ -1286,10 +1319,19 @@ impl PerspectiveViewerElement {
         };
 
         let reset_effect = self.workspace.effects().guard();
-        let reset_task = panel.session.reset(ResetOptions::default());
+        let reset = panel.session.submit(OpKind::Restore { fields: None }, {
+            let session = panel.session.clone();
+            move |_ctx| {
+                Box::pin(async move {
+                    session.reset(ResetOptions::default()).await?;
+                    Ok(StepOutcome::Done)
+                })
+            }
+        });
+
         ApiFuture::spawn(async move {
             let _effect = reset_effect;
-            reset_task.await
+            reset.settle().await
         });
 
         let effect = self.workspace.effects().guard();

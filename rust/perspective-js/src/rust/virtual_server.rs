@@ -20,8 +20,8 @@ use std::sync::{Arc, Mutex};
 use indexmap::IndexMap;
 use js_sys::{Array, Date, Object, Reflect, Uint8Array};
 use perspective_client::proto::{ColumnType, HostedTable};
-use perspective_client::virtual_server;
 use perspective_client::virtual_server::{Features, ResultExt, VirtualServerHandler};
+use perspective_client::{DescribeError, DescribeVerdict, Description, virtual_server};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
@@ -91,6 +91,25 @@ export interface VirtualHostedTable {
     limit?: number;
 }
 
+/** One expression's compile error, as reported by `tableDescribe`. */
+export interface ExpressionError {
+    error_message: string;
+    line: number;
+    column: number;
+}
+
+/** The verdict of `VirtualServerHandler.tableDescribe`. */
+export type TableDescription =
+    | {
+          expression_schema: Record<string, ColumnType>;
+          view_schema: Record<string, ColumnType>;
+      }
+    | {
+          expression_schema?: Record<string, ColumnType>;
+          expression_errors: Record<string, ExpressionError>;
+      }
+    | { config_error: string };
+
 /**
  * Handler interface that you implement to provide custom data sources.
  *
@@ -139,11 +158,14 @@ export interface VirtualServerHandler {
         config: ViewConfig,
     ): number | Promise<number>;
 
-    /** Required when `getFeatures()` reports `expressions: true`. */
-    tableValidateExpression?(
+    /**
+     * Validate a complete view config against a table and report the schema
+     * a view built from it would have, without creating one.
+     */
+    tableDescribe(
         tableId: string,
-        expression: string,
-    ): ColumnType | Promise<ColumnType>;
+        config: ViewConfig,
+    ): TableDescription | Promise<TableDescription>;
 
     viewGetMinMax?(
         viewId: string,
@@ -323,39 +345,39 @@ impl VirtualServerHandler for JsServerHandler {
         })
     }
 
-    fn table_validate_expression(
-        &self,
+    fn table_describe(
+        &mut self,
         table_id: &str,
-        expression: &str,
-    ) -> HandlerFuture<Result<ColumnType, Self::Error>> {
-        // TODO Cache these inspection calls
-        let has_method = Reflect::get(&self.0, &JsValue::from_str("tableValidateExpression"))
+        config: &perspective_client::config::ViewConfig,
+    ) -> HandlerFuture<Result<Result<Description, DescribeError>, Self::Error>> {
+        let has_method = Reflect::get(&self.0, &JsValue::from_str("tableDescribe"))
             .map(|val| !val.is_undefined())
             .unwrap_or(false);
 
         let handler = self.0.clone();
         let table_id = table_id.to_string();
-        let expression = expression.to_string();
+        let config_value = JsValue::from_serde_ext(config);
         Box::pin(async move {
             if !has_method {
                 return Err(JsError(JsValue::from_str(
-                    "feature `table_validate_expression` not implemented",
+                    "`tableDescribe` is required of a `VirtualServerHandler`",
                 )));
             }
 
             let this = JsServerHandler(handler);
             let args = Array::new();
             args.push(&JsValue::from_str(&table_id));
-            args.push(&JsValue::from_str(&expression));
-            let result = this
-                .call_method_js_async("tableValidateExpression", &args)
-                .await?;
+            args.push(&config_value?);
+            let result = this.call_method_js_async("tableDescribe", &args).await?;
+            let verdict: DescribeVerdict = result.into_serde_ext().map_err(|e| {
+                JsError(JsValue::from_str(&format!(
+                    "`tableDescribe` must return a `TableDescription`: {}",
+                    e
+                )))
+            })?;
 
-            let type_str = result
-                .as_string()
-                .ok_or_else(|| JsError(JsValue::from_str("Must return a string")))?;
-
-            Ok(ColumnType::from_str(&type_str).unwrap())
+            Result::<Description, DescribeError>::try_from(verdict)
+                .map_err(|e| JsError(JsValue::from_str(&e.to_string())))
         })
     }
 

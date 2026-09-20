@@ -24,6 +24,10 @@
 import type * as perspective from "@perspective-dev/client";
 import type { ColumnType } from "@perspective-dev/client/dist/esm/ts-rs/ColumnType.d.ts";
 import type { ViewConfig } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfig.d.ts";
+import type {
+    ExpressionError,
+    TableDescription,
+} from "@perspective-dev/client";
 import type { ViewConfigUpdate } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfigUpdate.d.ts";
 import type { ViewWindow } from "@perspective-dev/client/dist/esm/ts-rs/ViewWindow.d.ts";
 import type { WindowAggSpec } from "@perspective-dev/client/dist/esm/ts-rs/WindowAggSpec.d.ts";
@@ -374,13 +378,98 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
         await runQuery(this.db, query, { execute: true });
     }
 
-    async tableValidateExpression(tableId: string, expression: string) {
-        const query = this.sqlBuilder.tableValidateExpression(
+    async tableDescribe(
+        tableId: string,
+        config: ViewConfig,
+    ): Promise<TableDescription> {
+        let expression_schema = {} as Record<string, ColumnType>;
+        const expressions_query = this.sqlBuilder.expressionsDescribe(
             tableId,
-            expression,
+            config,
         );
+
+        if (expressions_query !== undefined) {
+            try {
+                expression_schema = await this.describeQuery(expressions_query);
+            } catch (error) {
+                return await this.attributeExpressionErrors(
+                    tableId,
+                    config,
+                    error,
+                );
+            }
+        }
+
+        const schema = Object.keys(config.windows ?? {}).length
+            ? await this.tableSchema(tableId)
+            : undefined;
+
+        const view_query = this.sqlBuilder.tableDescribe(
+            tableId,
+            config,
+            schema,
+        );
+
+        let view_schema = {} as Record<string, ColumnType>;
+        if (view_query !== undefined) {
+            try {
+                view_schema = await this.describeQuery(view_query);
+            } catch (error) {
+                return { config_error: errorMessage(error) };
+            }
+        }
+
+        return { expression_schema, view_schema };
+    }
+
+    /** The planned result columns of one `DESCRIBE` query. */
+    private async describeQuery(query: string) {
         const results = await runQuery(this.db, query);
-        return duckdbTypeToPsp(results[0]["type"]) as ColumnType;
+        const schema = {} as Record<string, ColumnType>;
+        for (const result of results) {
+            if (!result.name.startsWith("__")) {
+                schema[result.name] = duckdbTypeToPsp(
+                    result.type,
+                ) as ColumnType;
+            }
+        }
+
+        return schema;
+    }
+
+    /** Plans each expression on its own to name the ones at fault. */
+    private async attributeExpressionErrors(
+        tableId: string,
+        config: ViewConfig,
+        error: unknown,
+    ): Promise<TableDescription> {
+        const expression_schema = {} as Record<string, ColumnType>;
+        const expression_errors = {} as Record<string, ExpressionError>;
+        for (const [name, expression] of Object.entries(config.expressions)) {
+            const query = this.sqlBuilder.expressionDescribe(
+                tableId,
+                expression,
+            );
+
+            try {
+                const results = await runQuery(this.db, query);
+                expression_schema[name] = duckdbTypeToPsp(
+                    results[0]["type"],
+                ) as ColumnType;
+            } catch (error) {
+                expression_errors[name] = {
+                    error_message: errorMessage(error),
+                    line: 0,
+                    column: 0,
+                };
+            }
+        }
+
+        if (Object.keys(expression_errors).length === 0) {
+            return { config_error: errorMessage(error) };
+        }
+
+        return { expression_schema, expression_errors };
     }
 
     async viewDelete(viewId: string) {
@@ -435,4 +524,8 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
             }
         }
     }
+}
+
+function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
 }

@@ -121,7 +121,7 @@ test.describe("StatusIndicator 'updating' settles", () => {
         }
     });
 
-    test("after an errored run is reset (T6)", async ({ page }) => {
+    test("after a rejected restore (T6)", async ({ page }) => {
         await goto(page, "/rust/perspective-viewer/test/html/superstore.html");
         await open_settings(page);
         const status = page.locator("perspective-viewer #status_reconnect");
@@ -131,12 +131,10 @@ test.describe("StatusIndicator 'updating' settles", () => {
                 await viewer.restore({
                     expressions: { broken: 'upper("Sales")' },
                 });
-            } catch {
-                // The restore run fails; error state is the expectation.
-            }
+            } catch {}
         });
 
-        await expect(status).toHaveClass(/errored/, { timeout: 10_000 });
+        await expect(status).not.toHaveClass(/errored/);
         await assert_settled(page);
     });
 

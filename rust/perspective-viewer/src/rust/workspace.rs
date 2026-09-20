@@ -19,7 +19,7 @@ use perspective_client::Client;
 use perspective_client::config::Filter;
 
 use crate::renderer::Renderer;
-use crate::session::Session;
+use crate::session::{OverlayClause, Session};
 use crate::utils::{EffectLedger, PubSub, Subscription, spawn_owned};
 
 /// A unique identifier for a [`Panel`] within a [`Workspace`].
@@ -54,22 +54,37 @@ impl From<&str> for PanelId {
 #[derive(Default)]
 struct GlobalFilterSet {
     restored: Vec<Filter>,
-    contributions: Vec<(PanelId, Vec<Filter>)>,
+
+    /// Each master's selection, every clause typed as the MASTER types its
+    /// column — what decides which listeners it applies to.
+    contributions: Vec<(PanelId, Vec<OverlayClause>)>,
 }
 
 impl GlobalFilterSet {
     /// The effective set: `restored`, then each contribution in order,
     /// deduped by clause equality.
     fn flatten(&self) -> Vec<Filter> {
-        let mut flat: Vec<Filter> = Vec::new();
+        self.overlay().into_iter().map(|x| x.filter).collect()
+    }
+
+    /// [`Self::flatten`] with each clause's broadcaster type — untyped for the
+    /// restored bucket, which has no broadcaster.
+    fn overlay(&self) -> Vec<OverlayClause> {
+        let mut flat: Vec<OverlayClause> = Vec::new();
         let all = self
             .restored
             .iter()
-            .chain(self.contributions.iter().flat_map(|(_, fs)| fs.iter()));
+            .cloned()
+            .map(OverlayClause::from)
+            .chain(
+                self.contributions
+                    .iter()
+                    .flat_map(|(_, fs)| fs.iter().cloned()),
+            );
 
-        for filter in all {
-            if !flat.contains(filter) {
-                flat.push(filter.clone());
+        for clause in all {
+            if !flat.iter().any(|x| x.filter == clause.filter) {
+                flat.push(clause);
             }
         }
 
@@ -86,7 +101,8 @@ impl GlobalFilterSet {
     }
 
     /// Replace `id`'s contribution.
-    fn set_contribution(&mut self, id: &PanelId, filters: Vec<Filter>) -> bool {
+    fn set_contribution(&mut self, id: &PanelId, filters: Vec<impl Into<OverlayClause>>) -> bool {
+        let filters = filters.into_iter().map(Into::into).collect::<Vec<_>>();
         self.with_change(|s| {
             if filters.is_empty() {
                 s.contributions.retain(|(pid, _)| pid != id);
@@ -109,14 +125,14 @@ impl GlobalFilterSet {
         let owners = self
             .contributions
             .iter()
-            .filter(|(_, fs)| fs.contains(&clause))
+            .filter(|(_, fs)| fs.iter().any(|f| f.filter == clause))
             .map(|(pid, _)| pid.clone())
             .collect();
 
         let changed = self.with_change(|s| {
             s.restored.retain(|f| f != &clause);
             for (_, fs) in s.contributions.iter_mut() {
-                fs.retain(|f| f != &clause);
+                fs.retain(|f| f.filter != clause);
             }
 
             s.contributions.retain(|(_, fs)| !fs.is_empty());
@@ -477,6 +493,12 @@ impl Workspace {
         self.0.borrow().filters.flatten()
     }
 
+    /// [`Self::global_filters`] as broadcast to the panels: each clause with
+    /// the type its column has in the master that selected it.
+    pub fn overlay(&self) -> Vec<OverlayClause> {
+        self.0.borrow().filters.overlay()
+    }
+
     /// A handle to the `filters_changed` PubSub (fires after any change to the
     /// global filter set).
     pub fn filters_changed(&self) -> Rc<PubSub<()>> {
@@ -507,13 +529,13 @@ impl Workspace {
 
     /// Replace master `id`'s contribution with a new selection (empty =
     /// deselect). See [`GlobalFilterSet::set_contribution`].
-    pub fn set_contribution(&self, id: &PanelId, filters: Vec<Filter>) {
+    pub fn set_contribution(&self, id: &PanelId, filters: Vec<OverlayClause>) {
         self.mutate_filters(|s| (s.set_contribution(id, filters), ()));
     }
 
     /// Drop master `id`'s contribution (deselect / demote / close).
     pub fn clear_contribution(&self, id: &PanelId) {
-        self.mutate_filters(|s| (s.set_contribution(id, Vec::new()), ()));
+        self.mutate_filters(|s| (s.set_contribution(id, Vec::<OverlayClause>::new()), ()));
     }
 
     /// Remove the effective-set clause at `index`.
@@ -805,7 +827,9 @@ impl Workspace {
     pub fn remove_panel(&self, id: &PanelId) -> Option<Panel> {
         let (removed, changed, filters_pubsub, was_staged, staged_pubsub) = {
             let mut data = self.0.borrow_mut();
-            let changed = data.filters.set_contribution(id, Vec::new());
+            let changed = data
+                .filters
+                .set_contribution(id, Vec::<OverlayClause>::new());
             let (removed, was_staged) = match data.panels.iter().position(|p| &p.panel.id == id) {
                 Some(idx) => {
                     let entry = data.panels.remove(idx);
@@ -1049,7 +1073,7 @@ mod tests {
         // Re-selecting the same value reports no visible change.
         assert!(!s.set_contribution(&p("x"), vec![f("a", "2")]));
         // Empty = deselect: the entry is removed.
-        assert!(s.set_contribution(&p("x"), Vec::new()));
+        assert!(s.set_contribution(&p("x"), Vec::<Filter>::new()));
         assert_eq!(s.flatten(), Vec::<Filter>::new());
     }
 
@@ -1059,7 +1083,7 @@ mod tests {
         s.set_contribution(&p("x"), vec![f("a", "1")]);
         s.set_contribution(&p("y"), vec![f("b", "2")]);
         // Clearing one master's contribution leaves the other's intact.
-        assert!(s.set_contribution(&p("x"), Vec::new()));
+        assert!(s.set_contribution(&p("x"), Vec::<Filter>::new()));
         assert_eq!(s.flatten(), vec![f("b", "2")]);
     }
 
@@ -1083,7 +1107,7 @@ mod tests {
         let mut s = GlobalFilterSet::default();
         s.set_restored(vec![f("a", "1")]);
         // A deselect (empty contribution) does NOT drop the restored bucket.
-        assert!(!s.set_contribution(&p("x"), Vec::new()));
+        assert!(!s.set_contribution(&p("x"), Vec::<Filter>::new()));
         assert_eq!(s.flatten(), vec![f("a", "1")]);
         // A real selection replaces it.
         assert!(s.set_contribution(&p("x"), vec![f("b", "2")]));

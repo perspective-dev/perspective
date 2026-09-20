@@ -19,8 +19,8 @@ use perspective_js::utils::{ApiFuture, ApiResult, LocalPollLoop};
 use wasm_bindgen::JsValue;
 
 use super::pipeline::RunOrigin;
-use super::restore_and_render::restore_and_render;
-use crate::config::ViewerConfigUpdate;
+use super::restore_panel::{Rebind, RestoreErrors, RestoreMode, restore_panel_step};
+use crate::config::{OptionalUpdate, ViewerConfigUpdate};
 use crate::presentation::Presentation;
 use crate::utils::{AddListener, Subscription};
 use crate::workspace::{Panel, Workspace};
@@ -113,52 +113,83 @@ pub(crate) async fn sweep_table_bindings(
 /// sweep's observation suspends its CURRENT state or no-ops.
 async fn suspend_panel(panel: &Panel) -> ApiResult<()> {
     clone!(panel.session, panel.renderer);
-    renderer
-        .clone()
-        .render_task(|_guard| async move {
-            if let Some(reset) = session.suspend_table() {
-                reset.await?;
-                if let Some(plugin) = renderer.active_plugin() {
-                    plugin.clear().await?;
-                }
-            }
+    let ticket = panel.session.submit(
+        crate::session::OpKind::Restore { fields: None },
+        move |_ctx| {
+            Box::pin(async move {
+                renderer
+                    .clone()
+                    .render_task(|_guard| async move {
+                        if let Some(reset) = session.suspend_table() {
+                            reset.await?;
+                            if let Some(plugin) = renderer.active_plugin() {
+                                plugin.clear().await?;
+                            }
+                        }
 
-            Ok(())
-        })
-        .await
+                        Ok(())
+                    })
+                    .await?;
+
+                Ok(crate::session::StepOutcome::Done)
+            })
+        },
+    );
+
+    ticket.settle().await
 }
 
-/// Complete a PENDING panel's bind through the shared restore pipeline: the
-/// committed view config is untouched, the pending name re-derived inside the
-/// locked run (capture-free), the client federated exactly as a `restore`
-/// would. A name still un-hosted (the sweep raced a delete) simply re-pends.
+/// Complete a PENDING panel's bind, as the restore it is: the pending name
+/// re-derived inside the op (capture-free), the client federated exactly as a
+/// `restore` would, and the config and buckets committed as INTENT while the
+/// table was away validated against the table that arrived.
 async fn bind_pending(
     panel: &Panel,
     workspace: &Workspace,
     presentation: &Presentation,
 ) -> ApiResult<()> {
-    restore_and_render(
-        &panel.session,
-        &panel.renderer,
-        presentation,
-        RunOrigin::Internal,
-        ViewerConfigUpdate::default(),
-        {
-            clone!(panel.session, workspace);
-            async move {
+    clone!(panel.session, panel.renderer, workspace, presentation);
+    let ticket = panel.session.submit(
+        crate::session::OpKind::Restore { fields: None },
+        move |ctx| {
+            Box::pin(async move {
                 let Some(name) = session.pending_table() else {
-                    return Ok(());
+                    return Ok(crate::session::StepOutcome::Done);
                 };
 
-                super::restore_panel::bind_table_task(
+                let update = ViewerConfigUpdate {
+                    table: OptionalUpdate::Update(name),
+                    plugin_config: OptionalUpdate::Update(renderer.committed_plugin_config()),
+                    columns_config: OptionalUpdate::Update(renderer.committed_columns_configs()),
+                    ..ViewerConfigUpdate::default()
+                };
+
+                let result = restore_panel_step(
+                    &ctx,
                     &session,
+                    &renderer,
+                    &presentation,
                     &workspace,
-                    name,
+                    RestoreMode::Existing { active: false },
+                    Rebind::Complete,
+                    RunOrigin::Internal,
+                    update,
+                    RestoreErrors::Publish,
                     crate::session::MissingTable::Pend,
                 )
-                .await
-            }
+                .await;
+
+                if let Err(e) = &result
+                    && session.pending_table().is_some()
+                {
+                    let _ = session.set_run_error(e.clone()).await;
+                }
+
+                result?;
+                Ok(crate::session::StepOutcome::Done)
+            })
         },
-    )
-    .await
+    );
+
+    ticket.settle().await
 }

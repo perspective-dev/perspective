@@ -51,7 +51,7 @@ extern "C" {
     /// call — the view re-renders and re-queries the schema once the
     /// async fetch resolves.
     #[wasm_bindgen(method, catch, js_name = column_config_schema)]
-    pub fn _column_config_schema(this: &JsPerspectiveViewerPlugin, view_type: &str, group: Option<&str>, column_name: &str, current_value: &JsValue, view_config: &JsValue, column_stats: &JsValue) -> ApiResult<JsValue>;
+    pub fn _column_config_schema(this: &JsPerspectiveViewerPlugin, view_type: &str, group: Option<&str>, column_name: &str, current_value: &JsValue, view_config: &JsValue, plugin_config: &JsValue) -> ApiResult<JsValue>;
 
     /// The plugin-level settings schema as it applies to `current_value`, the
     /// `plugin_config` state the schema should describe.

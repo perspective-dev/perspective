@@ -116,6 +116,7 @@ enum SortOp {
 message Request {
     uint32 msg_id = 1;
     string entity_id = 2;
+    reserved 9; // `TableValidateExprReq`, replaced by `TableDescribeReq`
     oneof client_req {
         // Minimum Virtual API (theoretical).
         GetFeaturesReq get_features_req = 3;
@@ -125,7 +126,7 @@ message Request {
         TableMakeViewReq table_make_view_req = 6;
         TableSchemaReq table_schema_req = 7;
         TableSizeReq table_size_req = 8;
-        TableValidateExprReq table_validate_expr_req = 9;
+        TableDescribeReq table_describe_req = 41;
         ViewColumnPathsReq view_column_paths_req = 10;
         ViewDeleteReq view_delete_req = 11;
         ViewDimensionsReq view_dimensions_req = 12;
@@ -167,6 +168,7 @@ message Request {
 message Response {
     uint32 msg_id = 1;
     string entity_id = 2;
+    reserved 9; // `TableValidateExprResp`, replaced by `TableDescribeResp`
     oneof client_resp {
         GetFeaturesResp get_features_resp = 3;
         GetHostedTablesResp get_hosted_tables_resp = 4;
@@ -175,7 +177,7 @@ message Response {
         TableMakeViewResp table_make_view_resp = 6;
         TableSchemaResp table_schema_resp = 7;
         TableSizeResp table_size_resp = 8;
-        TableValidateExprResp table_validate_expr_resp = 9;
+        TableDescribeResp table_describe_resp = 41;
         ViewColumnPathsResp view_column_paths_resp = 10;
         ViewDeleteResp view_delete_resp = 11;
         ViewDimensionsResp view_dimensions_resp = 12;
@@ -307,20 +309,34 @@ message TableSchemaResp {
     Schema schema = 1;
 }
 
-// `Table::validate_expressions`
-// TODO: This should be just `validate()`
-message TableValidateExprReq {
-    map<string, string> column_to_expr = 1;
+// `Table::describe` - validate a complete `ViewConfig` against this table and
+// report its result schema, without creating a `View`.
+message TableDescribeReq {
+    ViewConfig config = 1;
 }
-message TableValidateExprResp {
+message TableDescribeResp {
+    // Every VALID expression's type, whether or not the config as a whole is
+    // valid.
     map<string, ColumnType> expression_schema = 1;
-    map<string, ExprValidationError> errors = 2;
-    map<string, string> expression_alias = 3;
-    message ExprValidationError {
-        string error_message = 1;
-        uint32 line = 2;
-        uint32 column = 3;
+    map<string, ExpressionError> expression_errors = 2;
+    oneof result {
+        // Present IFF `expression_errors` is empty and the whole config is
+        // valid.
+        ViewDescription view = 3;
+
+        // The first non-expression config error, when the expressions are all
+        // valid but the config is not.
+        string config_error = 4;
     }
+}
+message ViewDescription {
+    // Equal to `View::schema()` of a `View` built from the same config.
+    map<string, ColumnType> schema = 1;
+}
+message ExpressionError {
+    string error_message = 1;
+    uint32 line = 2;
+    uint32 column = 3;
 }
 
 // `Table::view`

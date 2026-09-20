@@ -236,7 +236,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
             split_by?: string[];
             group_rollup_mode?: string;
         },
-        column_stats?: { abs_max: number },
+        plugin_config?: Record<string, unknown> | null,
     ): ColumnConfigSchema {
         return column_config_schema.call(
             this,
@@ -245,7 +245,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
             column_name,
             current_value,
             viewer_config,
-            column_stats,
+            plugin_config,
         );
     }
 

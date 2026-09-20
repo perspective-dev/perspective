@@ -10,6 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use std::collections::BTreeSet;
+
 use perspective_client::clone;
 use perspective_client::utils::PerspectiveResultExt;
 
@@ -17,10 +19,11 @@ use crate::config::*;
 use crate::presentation::Presentation;
 use crate::renderer::Renderer;
 use crate::session::{
-    LoadGuard, MissingTable, ResetOptions, Session, TableIntermediateState, probe_table,
+    BindPlan, MissingTable, OpCtx, OpKind, Session, StepOutcome, probe_table, view_fields,
 };
+use crate::tasks::transactional_restore::{Outcome, commit_and_render, prepare};
 use crate::tasks::*;
-use crate::workspace::Workspace;
+use crate::workspace::{PanelId, Workspace};
 use crate::*;
 
 /// How a [`restore_panel`] call reached the pipeline — the only two genuine
@@ -30,7 +33,7 @@ pub(crate) enum RestoreMode {
     Fresh,
 }
 
-/// Where a failed restore's error goes.
+/// Where the error of a restore that COMMITTED and then failed to render goes.
 #[derive(Clone, Copy)]
 pub(crate) enum RestoreErrors {
     // Raise errors in the UI.
@@ -64,77 +67,116 @@ async fn probe(
     Ok((client, table))
 }
 
-/// Bind an unbound or same-named session to `name`.
-pub(crate) async fn bind_table_task(
-    session: &Session,
-    workspace: &Workspace,
-    name: String,
-    missing: MissingTable,
-) -> ApiResult<()> {
-    if session
-        .get_table()
-        .is_some_and(|t| t.get_name() == name.as_str())
-    {
-        return Ok(());
-    }
+/// What a restore naming `table` does to the panel's binding.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Rebind {
+    /// A caller's restore: a table that REPLACES what the panel showed (or
+    /// recovers an errored panel) starts from a default config.
+    Replace,
 
-    let (client, table) = probe(session, workspace, &name, missing).await?;
-    session.set_client(client);
-    match table {
-        Some(table) => session.bind_table(table).await?,
-        None => session.pend_table(name).await?,
-    }
-
-    session.commit_table_defaults();
-    Ok(())
+    /// The table lifecycle completing a pending bind: the committed config is
+    /// the intent the bind exists to honor.
+    Complete,
 }
 
-/// Rebind a session to `name`, probing the incoming table before the
-/// outgoing binding is dropped and replaying `load`'s journal over the
-/// incoming table's defaults.
-async fn rebind_table_task(
+/// Decide a restore's [`BindPlan`], probing the incoming table — without
+/// touching the session's own binding.
+async fn plan_binding(
+    ctx: &OpCtx,
     session: &Session,
-    renderer: &Renderer,
     workspace: &Workspace,
-    name: String,
+    table: &TableUpdate,
+    fresh: bool,
+    rebind: Rebind,
     missing: MissingTable,
-    load: &LoadGuard,
-) -> ApiResult<()> {
-    let probed = probe(session, workspace, &name, missing).await;
-    let journal = load.claim();
-    let (client, table) = probed?;
-    let Some(journal) = journal else {
-        return Ok(());
+) -> ApiResult<Option<BindPlan>> {
+    let OptionalUpdate::Update(name) = table else {
+        return Ok(Some(BindPlan::Keep));
     };
 
-    session
-        .reset(ResetOptions {
-            config: true,
-            expressions: true,
-            stats: true,
-            table: Some(TableIntermediateState::Reloaded),
-        })
-        .await?;
+    let same = session
+        .get_table()
+        .is_some_and(|t| t.get_name() == name.as_str());
 
-    session.set_client(client);
-    match table {
-        Some(table) => session.bind_table(table).await?,
-        None => session.pend_table(name).await?,
+    if same && !session.is_errored() {
+        return Ok(Some(BindPlan::Keep));
     }
 
-    session.commit_table_defaults();
-    for delta in journal {
-        session.commit_view_config(delta)?;
+    let (client, table) = probe(session, workspace, name, missing).await?;
+    if !fresh && ctx.is_superseded() {
+        return Ok(None);
     }
 
-    session.commit_table_defaults();
-    if session.get_table().is_none()
-        && let Some(plugin) = renderer.active_plugin()
+    if table.is_none()
+        && rebind == Rebind::Complete
+        && session.pending_table().as_deref() == Some(name.as_str())
     {
-        plugin.clear().await?;
+        return Ok(None);
     }
 
-    Ok(())
+    let reset = !fresh && rebind == Rebind::Replace;
+    Ok(Some(match table {
+        Some(table) => BindPlan::Bind {
+            client,
+            table: Box::new(table),
+            reset,
+        },
+        None => BindPlan::Pend {
+            client,
+            name: name.clone(),
+            reset,
+        },
+    }))
+}
+
+/// The top-level config keys `update` OVERWRITES, or `None` when it cannot be
+/// superseded: `plugin_config` / `columns_config` updates MERGE into their
+/// buckets, and a fresh panel's restore is what creates it.
+fn restore_fields(
+    update: &ViewerConfigUpdate,
+    mode: &RestoreMode,
+) -> Option<BTreeSet<&'static str>> {
+    let ViewerConfigUpdate {
+        version,
+        plugin,
+        plugin_config,
+        columns_config,
+        settings,
+        theme,
+        title,
+        table,
+        view_config,
+    } = update;
+
+    let _ = version;
+    if matches!(mode, RestoreMode::Fresh)
+        || matches!(plugin_config, OptionalUpdate::Update(_))
+        || matches!(columns_config, OptionalUpdate::Update(_))
+    {
+        return None;
+    }
+
+    let mut fields = view_fields(view_config);
+    let mut set = |name: &'static str, present: bool| {
+        if present {
+            fields.insert(name);
+        }
+    };
+
+    set("plugin", !matches!(plugin, OptionalUpdate::Missing));
+    set(
+        "plugin_config",
+        !matches!(plugin_config, OptionalUpdate::Missing),
+    );
+    set(
+        "columns_config",
+        !matches!(columns_config, OptionalUpdate::Missing),
+    );
+    set("settings", !matches!(settings, OptionalUpdate::Missing));
+    set("theme", !matches!(theme, OptionalUpdate::Missing));
+    set("title", !matches!(title, OptionalUpdate::Missing));
+    set("table", !matches!(table, OptionalUpdate::Missing));
+    Some(fields)
 }
 
 /// Apply a [`ViewerConfigUpdate`] to a single panel and re-draw — the one
@@ -147,110 +189,105 @@ pub(crate) async fn restore_panel(
     presentation: &Presentation,
     workspace: &Workspace,
     mode: RestoreMode,
-    mut update: ViewerConfigUpdate,
+    update: ViewerConfigUpdate,
+    errors: RestoreErrors,
+    missing: MissingTable,
+    preamble: Option<futures::future::LocalBoxFuture<'static, ApiResult<()>>>,
+) -> ApiResult<()> {
+    let fields = restore_fields(&update, &mode);
+    let ticket = session.submit(OpKind::Restore { fields }, {
+        clone!(session, renderer, presentation, workspace);
+        move |ctx| {
+            Box::pin(async move {
+                if let Some(preamble) = preamble {
+                    preamble.await?;
+                }
+
+                restore_panel_step(
+                    &ctx,
+                    &session,
+                    &renderer,
+                    &presentation,
+                    &workspace,
+                    mode,
+                    Rebind::Replace,
+                    RunOrigin::Public,
+                    update,
+                    errors,
+                    missing,
+                )
+                .await?;
+
+                Ok(StepOutcome::Done)
+            })
+        }
+    });
+
+    ticket.settle().await
+}
+
+/// The body of [`restore_panel`], to be called only from a running op's step.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn restore_panel_step(
+    ctx: &OpCtx,
+    session: &Session,
+    renderer: &Renderer,
+    presentation: &Presentation,
+    workspace: &Workspace,
+    mode: RestoreMode,
+    rebind: Rebind,
+    origin: RunOrigin,
+    update: ViewerConfigUpdate,
     errors: RestoreErrors,
     missing: MissingTable,
 ) -> ApiResult<()> {
     let active = matches!(mode, RestoreMode::Existing { active: true });
     let fresh = matches!(mode, RestoreMode::Fresh);
-    match &update.theme {
-        OptionalUpdate::Update(theme) => renderer.set_theme_stamped(Some(theme.clone())),
-        // `SetDefault` resolves to a CONCRETE registry default here, rather
-        // than clearing the panel's theme — nothing downstream re-resolves.
-        OptionalUpdate::SetDefault => {
-            renderer.set_theme_stamped(presentation.get_default_theme_name().await)
-        },
-        OptionalUpdate::Missing => {},
-    }
 
-    if !active {
-        update.theme = OptionalUpdate::Missing;
-    }
+    renderer.check_plugin_update(&update.plugin)?;
+    let Some(plan) = plan_binding(
+        ctx,
+        session,
+        workspace,
+        &update.table,
+        fresh,
+        rebind,
+        missing,
+    )
+    .await?
+    else {
+        return Ok(());
+    };
 
     if !fresh {
         tracing::info!("Restoring {update}");
     }
 
-    // NOTE: `update.settings` is deliberately NOT applied here. It is
-    // element-level chrome rather than panel state, so `restore()` — the
-    // only caller that can carry it — applies it before dispatching, and
-    // this pipeline stays per-panel. Applying it here reached only the
-    // `Existing { active: true }` mode, which is why a freshly created
-    // panel silently ignored it.
+    let overlay = renderer
+        .slot_name()
+        .map(|id| overlay_for(workspace, &PanelId::from(id)));
 
-    // Under `Suppress` the restore is TRANSACTIONAL, so snapshot the config
-    // it is about to overwrite — see the failure tail below for why.
-    let rollback =
-        matches!(errors, RestoreErrors::Suppress).then(|| session.get_view_config().clone());
-
-    let binding_before = (
-        session.get_table().map(|t| t.get_name().to_owned()),
-        session.pending_table(),
-    );
-
-    let load = match &update.table {
-        OptionalUpdate::Update(name)
-            if session.is_errored()
-                || (!fresh
-                    && session
-                        .get_table()
-                        .map(|t| t.get_name() != name.as_str())
-                        .unwrap_or(true)) =>
-        {
-            Some(session.begin_pending_load())
-        },
-        _ => None,
-    };
-
-    let result = restore_and_render(
+    let prepared = prepare(
         session,
         renderer,
         presentation,
-        RunOrigin::Public,
-        update.clone(),
-        {
-            clone!(session, renderer, update.table, workspace, load);
-            async move {
-                let OptionalUpdate::Update(name) = table else {
-                    return Ok(());
-                };
-
-                match &load {
-                    Some(load) => {
-                        rebind_table_task(&session, &renderer, &workspace, name, missing, load)
-                            .await
-                    },
-                    None => bind_table_task(&session, &workspace, name, missing).await,
-                }
-            }
-        },
+        active,
+        plan,
+        overlay,
+        update,
     )
-    .await;
+    .await?;
+    let Outcome { committed, result } =
+        commit_and_render(session, renderer, presentation, origin, prepared).await;
 
-    if let Some(load) = &load {
-        load.close();
-    }
-
-    if let Err(e) = &result {
-        match errors {
-            RestoreErrors::Publish => session.set_error(false, e.clone()).await?,
-            RestoreErrors::Suppress => {
-                let binding_after = (
-                    session.get_table().map(|t| t.get_name().to_owned()),
-                    session.pending_table(),
-                );
-
-                if let Some(config) = rollback
-                    && binding_after == binding_before
-                {
-                    session.commit_view_config(config.into()).unwrap_or_log();
-                }
-            },
-        }
+    if let Err(e) = &result
+        && committed
+        && matches!(errors, RestoreErrors::Publish)
+    {
+        let _ = session.set_run_error(e.clone()).await;
     }
 
     result?;
-
     if fresh {
         renderer.resize().await.unwrap_or_log();
     }

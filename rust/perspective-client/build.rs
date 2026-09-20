@@ -79,12 +79,14 @@ fn prost_build() -> Result<()> {
             .type_attribute(".", "#[derive(serde::Serialize)]")
             .type_attribute("ViewPort", "#[derive(serde::Deserialize)]")
             .type_attribute("ViewDimensionsResp", "#[derive(serde::Deserialize)]")
-            .type_attribute("TableValidateExprResp", "#[derive(serde::Deserialize)]")
+            .type_attribute("TableDescribeResp", "#[derive(serde::Deserialize)]")
+            .type_attribute("TableDescribeResp.result", "#[derive(serde::Deserialize)]")
+            .type_attribute("ViewDescription", "#[derive(serde::Deserialize)]")
             .type_attribute(
                 "ColumnType",
                 "#[derive(serde::Deserialize)]  #[serde(rename_all = \"snake_case\")]",
             )
-            .type_attribute("ExprValidationError", "#[derive(serde::Deserialize)]")
+            .type_attribute("ExpressionError", "#[derive(serde::Deserialize)]")
             .compile_protos(&[proto_file], &[include_path])
             .unwrap();
 

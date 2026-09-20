@@ -45,7 +45,7 @@ use crate::config::{
     FilterTerm, GroupRollupMode, Scalar, Sort, SortDir, SplitRollupMode, ViewConfig,
 };
 use crate::proto::{ColumnType, ViewPort};
-use crate::virtual_server::generic_sql_model::table_make_view::ViewQueryContext;
+use crate::virtual_server::generic_sql_model::table_make_view::{ViewQueryContext, quote_ident};
 
 /// Error type for SQL generation operations.
 #[derive(Debug, Clone)]
@@ -117,6 +117,10 @@ pub struct GenericSQLVirtualServerModelArgs {
     /// ClickHouse (both RE2, matching the engine's semantics). When
     /// omitted, regex filter clauses are dropped.
     regex_fn: Option<String>,
+
+    /// Template wrapping a `SELECT` so the dialect PLANS it and reports its
+    /// result columns without executing it; `{}` is the query.
+    describe_template: Option<String>,
 }
 
 /// Recovers the source column of a pivoted view column name — the longest
@@ -224,23 +228,88 @@ impl GenericSQLVirtualServerModel {
         Ok(format!("SELECT COUNT(*) FROM (DESCRIBE {})", view_id))
     }
 
-    /// Returns the SQL query to validate an expression against a table.
+    fn describe_wrap(&self, query: &str) -> String {
+        self.0
+            .describe_template
+            .as_deref()
+            .unwrap_or("DESCRIBE ({})")
+            .replacen("{}", query, 1)
+    }
+
+    /// Returns the SQL query that plans every expression of `config` at once
+    /// against `table_id`.
     ///
-    /// # Arguments
-    /// * `table_id` - The identifier of the table.
-    /// * `expression` - The SQL expression to validate.
+    /// # Returns
+    /// SQL: `DESCRIBE (SELECT {expr} AS "{alias}", ... FROM {table_id})`
+    pub fn expressions_describe(
+        &self,
+        table_id: &str,
+        config: &ViewConfig,
+    ) -> GenericSQLResult<Option<String>> {
+        if config.expressions.is_empty() {
+            return Ok(None);
+        }
+
+        let mut names = config.expressions.keys().collect::<Vec<_>>();
+        names.sort();
+        let selects = names
+            .iter()
+            .map(|name| {
+                format!(
+                    "{} AS \"{}\"",
+                    config.expressions.0[*name],
+                    quote_ident(name)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        Ok(Some(self.describe_wrap(&format!(
+            "SELECT {} FROM {}",
+            selects, table_id
+        ))))
+    }
+
+    /// Returns the SQL query that plans one expression against a table.
     ///
     /// # Returns
     /// SQL: `DESCRIBE (SELECT {expression} FROM {table_id})`
-    pub fn table_validate_expression(
+    pub fn expression_describe(
         &self,
         table_id: &str,
         expression: &str,
     ) -> GenericSQLResult<String> {
-        Ok(format!(
-            "DESCRIBE (SELECT {} FROM {})",
-            expression, table_id
-        ))
+        Ok(self.describe_wrap(&format!("SELECT {} FROM {}", expression, table_id)))
+    }
+
+    /// Returns the SQL query that plans the view `config` would build against
+    /// `table_id`, without materializing it.
+    ///
+    /// # Returns
+    /// SQL: `DESCRIBE (SELECT ... GROUP BY ...)`
+    pub fn table_describe(
+        &self,
+        table_id: &str,
+        config: &ViewConfig,
+        schema: &IndexMap<String, ColumnType>,
+    ) -> GenericSQLResult<Option<String>> {
+        if config.columns.iter().flatten().next().is_none() {
+            return Ok(None);
+        }
+
+        let mut folded = config.clone();
+        folded.sort.clear();
+        let split_by = std::mem::take(&mut folded.split_by);
+        if !split_by.is_empty() && folded.group_rollup_mode != GroupRollupMode::Total {
+            if folded.group_by.is_empty() {
+                folded.aggregates.clear();
+            }
+
+            folded.group_by.extend(split_by);
+        }
+
+        let ctx = ViewQueryContext::new(self, table_id, &folded, schema)?;
+        Ok(Some(self.describe_wrap(&ctx.build_query())))
     }
 
     /// Returns the SQL query to delete a view.

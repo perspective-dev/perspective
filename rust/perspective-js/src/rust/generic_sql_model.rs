@@ -83,15 +83,54 @@ impl GenericSQLVirtualServerModel {
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
-    /// Returns the SQL query to validate an expression against a table.
-    #[wasm_bindgen(js_name = "tableValidateExpression")]
-    pub fn table_validate_expression(
+    /// Returns the SQL query that plans every expression of `config` at once
+    /// against a table, one result column per expression alias, or `undefined`
+    /// when the config has no expressions.
+    #[wasm_bindgen(js_name = "expressionsDescribe")]
+    pub fn expressions_describe(
         &self,
         table_id: &str,
-        expression: &str,
-    ) -> Result<String, JsValue> {
+        config: JsValue,
+    ) -> Result<Option<String>, JsValue> {
+        let config: ViewConfig = serde_wasm_bindgen::from_value(config)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
         self.inner
-            .table_validate_expression(table_id, expression)
+            .expressions_describe(table_id, &config)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// Returns the SQL query that plans ONE expression against a table - for
+    /// attributing a failed `expressionsDescribe` to the expressions at fault.
+    #[wasm_bindgen(js_name = "expressionDescribe")]
+    pub fn expression_describe(&self, table_id: &str, expression: &str) -> Result<String, JsValue> {
+        self.inner
+            .expression_describe(table_id, expression)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// Returns the SQL query that plans the view `config` would build and
+    /// reports its result columns without materializing it (`split_by` folded
+    /// into `group_by`, no `PIVOT`), or `undefined` when the config selects no
+    /// columns.
+    #[wasm_bindgen(js_name = "tableDescribe")]
+    pub fn table_describe(
+        &self,
+        table_id: &str,
+        config: JsValue,
+        schema: JsValue,
+    ) -> Result<Option<String>, JsValue> {
+        let config: ViewConfig = serde_wasm_bindgen::from_value(config)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        let schema = if schema.is_undefined() || schema.is_null() {
+            IndexMap::new()
+        } else {
+            self.parse_schema(schema)?
+        };
+
+        self.inner
+            .table_describe(table_id, &config, &schema)
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 

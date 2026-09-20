@@ -22,7 +22,6 @@ use crate::components::code_editor::CodeEditor;
 use crate::config::*;
 use crate::js::{MimeType, copy_to_clipboard, paste_from_clipboard};
 use crate::presentation::*;
-use crate::queries::fetch_hosted_tables;
 use crate::renderer::*;
 use crate::session::*;
 use crate::utils::*;
@@ -283,21 +282,6 @@ impl DebugPanelProps {
                 },
             };
 
-            if let OptionalUpdate::Update(name) = &config.table {
-                let hosted = fetch_hosted_tables(&props.workspace).await;
-                if !hosted
-                    .iter()
-                    .any(|(_, names)| names.iter().any(|n| n == name))
-                {
-                    fail(
-                        format!("Unknown table \"{name}\""),
-                        locate_key(&source, "table"),
-                    );
-
-                    return Ok(());
-                }
-            }
-
             let active = props.workspace.active_renderer().as_ref() == Some(&props.renderer);
             let result = crate::tasks::restore_panel(
                 &props.session,
@@ -308,6 +292,7 @@ impl DebugPanelProps {
                 config,
                 crate::tasks::RestoreErrors::Suppress,
                 MissingTable::Error,
+                None,
             )
             .await;
 
@@ -318,7 +303,16 @@ impl DebugPanelProps {
                     modified.set(false);
                     props.set_text(text);
                 },
-                Err(e) => fail(format!("{e}"), (0, 0)),
+                Err(e) => {
+                    let message = format!("{e}");
+                    let position = if message.starts_with("Unknown table") {
+                        locate_key(&source, "table")
+                    } else {
+                        (0, 0)
+                    };
+
+                    fail(message, position)
+                },
             }
 
             Ok(())

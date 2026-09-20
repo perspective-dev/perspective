@@ -151,7 +151,7 @@ impl Component for PerspectiveViewer {
         let elem = ctx.props().elem.clone();
         let fonts = FontLoaderProps::new(&elem, ctx.link().callback(|()| PreloadFontsUpdate));
         let empty_session = Session::new();
-        let empty_renderer = Renderer::new(&elem);
+        let empty_renderer = Renderer::new(&elem, empty_session.cell());
         let active_session = ctx
             .props()
             .workspace
@@ -256,7 +256,8 @@ impl Component for PerspectiveViewer {
                     .into_iter()
                     .filter_map(|id| workspace.panel(&id).map(|p| (id, p)))
                 {
-                    stamp_global_overlay(workspace, &id, &panel.session);
+                    let _ = id;
+                    drop(broadcast_overlay(workspace, &panel));
                     tasks.push(reset_all(
                         &panel.session,
                         &panel.renderer,

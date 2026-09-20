@@ -13,6 +13,7 @@ import perspective from "@perspective-dev/client";
 import type {
     VirtualServerHandler,
     ColumnType,
+    TableDescription,
     ViewConfig,
     ViewWindow,
     VirtualDataSlice,
@@ -39,6 +40,17 @@ const handler = {
         // Translate `config` (group_by, sort, filter, etc.) into a query
         // against your data source. Store the query keyed by `viewId`
         // for later data retrieval.
+    },
+
+    async tableDescribe(
+        tableId: string,
+        config: ViewConfig,
+    ): Promise<TableDescription> {
+        // Validate `config` against `tableId` and report the schema the view
+        // would have, WITHOUT creating it: `{ expression_schema, view_schema }`
+        // when valid, `{ expression_schema, expression_errors }` when an
+        // expression is invalid, or `{ config_error }` otherwise.
+        return { expression_schema: {}, view_schema: { name: "string", price: "float" } };
     },
 
     async viewDelete(viewId: string): Promise<void> {

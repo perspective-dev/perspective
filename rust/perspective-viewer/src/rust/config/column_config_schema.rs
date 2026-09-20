@@ -61,6 +61,14 @@ impl ColumnConfigSchema {
     }
 }
 
+/// A per-column statistic a [`ControlSpec::Number`] may take its default from.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NumberStat {
+    /// The largest absolute value in the column.
+    AbsMax,
+}
+
 /// Discriminated union of widget kinds the viewer can render. Composite
 /// variants wrap an existing rich Yew component and carry only the
 /// component's `*DefaultConfig`. Primitive variants render generic scalar
@@ -126,6 +134,11 @@ pub enum ControlSpec {
 
         #[serde(default, skip_serializing_if = "Option::is_none")]
         step: Option<f64>,
+
+        /// The column statistic the HOST substitutes for `default`, once it has
+        /// fetched it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default_stat: Option<NumberStat>,
     },
     String {
         key: String,
@@ -309,6 +322,31 @@ pub fn discrete_pair(stops: Vec<GradientStopSpec>) -> Vec<GradientStopSpec> {
 impl ColumnConfigSchema {
     pub fn canonicalize(self) -> Self {
         self.canonicalize_defaults().group_format_controls()
+    }
+
+    /// Replace the `default` of every [`ControlSpec::Number`] that declares a
+    /// `default_stat` with that statistic, where the host has it.
+    pub fn resolve_stat_defaults(mut self, abs_max: Option<f64>) -> Self {
+        fn walk(fields: &mut [ControlSpec], abs_max: Option<f64>) {
+            for spec in fields {
+                match spec {
+                    ControlSpec::Group { fields, .. } => walk(fields, abs_max),
+                    ControlSpec::Number {
+                        default,
+                        default_stat: Some(NumberStat::AbsMax),
+                        ..
+                    } => {
+                        if let Some(abs_max) = abs_max {
+                            *default = abs_max;
+                        }
+                    },
+                    _ => {},
+                }
+            }
+        }
+
+        walk(&mut self.fields, abs_max);
+        self
     }
 
     pub fn group_format_controls(mut self) -> Self {

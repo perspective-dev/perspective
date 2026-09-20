@@ -18,7 +18,7 @@ import pyarrow.ipc as ipc
 from datetime import datetime
 import logging
 
-from perspective.virtual_servers import VirtualServerHandler
+from perspective.virtual_servers import VirtualServerHandler, sql_table_describe
 
 logger = logging.getLogger(__name__)
 
@@ -241,10 +241,18 @@ class DuckDBVirtualServerHandler(VirtualServerHandler):
         query = self.sql_builder.table_make_view(table_name, view_name, config, schema)
         run_query(self.db, query, execute=True)
 
-    def table_validate_expression(self, view_name, expression):
-        query = self.sql_builder.table_validate_expression(view_name, expression)
-        results = run_query(self.db, query)
-        return duckdb_type_to_psp(results[0][1])
+    def table_describe(self, table_name, config):
+        schema = self.table_schema(table_name) if config.get("windows") else None
+        return sql_table_describe(
+            self.sql_builder, table_name, config, self._describe_query, schema
+        )
+
+    def _describe_query(self, query):
+        return {
+            row[0]: duckdb_type_to_psp(row[1])
+            for row in run_query(self.db, query)
+            if not row[0].startswith("__")
+        }
 
     def view_delete(self, view_name):
         query = self.sql_builder.view_delete(view_name)

@@ -79,11 +79,61 @@ min_val, max_val = view.get_min_max("Sales")
 
 </div>
 
+## Describing a View Config
+
+`Table::describe` validates a complete view config against a table and
+reports the schema a `View` built from it would have - without creating one.
+`describe` reports a `view_schema` if and only if `Table::view` with the same
+config would succeed, and the two schemas are equal. It costs no engine
+resources, so it is the right way to check a config before applying it.
+
+<div class="javascript">
+
+```javascript
+const verdict = await table.describe({
+    columns: ["Sales", "margin"],
+    group_by: ["Region"],
+    expressions: { margin: '"Profit" / "Sales"' },
+    aggregates: { margin: "avg" },
+});
+
+if ("view_schema" in verdict) {
+    // { expression_schema: { margin: "float" },
+    //   view_schema: { Sales: "float", margin: "float" } }
+} else if ("expression_errors" in verdict) {
+    // { expression_schema: {...}, expression_errors: { margin: { error_message, line, column } } }
+} else {
+    // { config_error: "Invalid column 'Sales' found in View columns." }
+}
+```
+
+</div>
+<div class="python">
+
+```python
+verdict = table.describe(
+    columns=["Sales", "margin"],
+    group_by=["Region"],
+    expressions={"margin": '"Profit" / "Sales"'},
+    aggregates={"margin": "avg"},
+)
+
+if "view_schema" in verdict:
+    ...
+elif "expression_errors" in verdict:
+    ...
+else:
+    verdict["config_error"]
+```
+
+</div>
+
 ## Expression Validation
 
-Before creating a `View` with expressions, you can validate them against the
-table's schema using `Table::validate_expressions`. This returns information
-about which expressions are valid and their inferred types:
+`Table::validate_expressions` is a specialization of `Table::describe` over
+a config that selects no columns, so only the expressions are checked. It
+returns which expressions are valid and their inferred types, plus an
+`expression_alias` map echoing the request:
 
 <div class="javascript">
 

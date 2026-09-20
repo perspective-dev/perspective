@@ -97,6 +97,9 @@ export interface IPerspectiveViewerPlugin {
      * The per-column Style-tab schema: the controls the viewer renders
      * for one column, re-queried on every field edit so the field set
      * may depend on `current_value`.
+     *
+     * Must be a function of its arguments alone, never of what this element
+     * last drew or was last `restore`d with.
      */
     column_config_schema?(
         view_type: string,
@@ -104,7 +107,7 @@ export interface IPerspectiveViewerPlugin {
         column_name: string,
         current_value: Record<string, unknown> | null,
         viewer_config?: Record<string, unknown>,
-        column_stats?: Record<string, unknown>,
+        plugin_config?: Record<string, unknown> | null,
     ): { fields: Array<Record<string, unknown> & { kind: string }> };
 
     /**

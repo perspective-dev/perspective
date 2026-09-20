@@ -12,7 +12,9 @@
 
 use js_sys::Function;
 use perspective_client::config::*;
-use perspective_client::{DeleteOptions, UpdateData, UpdateOptions, assert_table_api};
+use perspective_client::{
+    DeleteOptions, DescribeVerdict, UpdateData, UpdateOptions, assert_table_api,
+};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_derive::TryFromJsValue;
 use wasm_bindgen_futures::spawn_local;
@@ -353,6 +355,36 @@ impl Table {
 
         let view = self.0.view(config).await?;
         Ok(View(view))
+    }
+
+    /// Validate a complete view config against this table and report the
+    /// schema a [`View`] built from it would have, WITHOUT creating one.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// const verdict = await table.describe({
+    ///     columns: ["Sales", "margin"],
+    ///     group_by: ["Region"],
+    ///     expressions: { margin: '"Profit" / "Sales"' },
+    /// });
+    ///
+    /// if ("view_schema" in verdict) {
+    ///     const view = await table.view(config);
+    /// }
+    /// ```
+    #[wasm_bindgen]
+    pub async fn describe(&self, config: Option<JsViewConfig>) -> ApiResult<JsValue> {
+        let config = config
+            .map(|config| js_sys::JSON::stringify(&config))
+            .transpose()?
+            .and_then(|x| x.as_string())
+            .map(|x| serde_json::from_str(x.as_str()))
+            .transpose()?
+            .unwrap_or_default();
+
+        let verdict: DescribeVerdict = self.0.describe(config).await?.into();
+        Ok(JsValue::from_serde_ext(&verdict)?)
     }
 
     /// Validates the given expressions.

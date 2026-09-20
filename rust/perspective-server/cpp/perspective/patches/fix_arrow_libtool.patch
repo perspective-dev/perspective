@@ -51,8 +51,9 @@ index 692efa78376f4..eb94563afcf77 100644
      execute_process(COMMAND ${LIBTOOL_MACOS} -V
                      OUTPUT_VARIABLE LIBTOOL_V_OUTPUT
                      OUTPUT_STRIP_TRAILING_WHITESPACE)
-     if(NOT "${LIBTOOL_V_OUTPUT}" MATCHES ".*cctools-([0-9.]+).*")
+-    if(NOT "${LIBTOOL_V_OUTPUT}" MATCHES ".*cctools-([0-9.]+).*")
 -      message(FATAL_ERROR "libtool found appears to be the incompatible GNU libtool: ${LIBTOOL_MACOS}"
++    if(NOT "${LIBTOOL_V_OUTPUT}" MATCHES ".*cctools(_ld)?-([0-9.]+).*")
 +      message(FATAL_ERROR "libtool found appears not to be Apple's libtool: ${LIBTOOL_MACOS}"
        )
      endif()
