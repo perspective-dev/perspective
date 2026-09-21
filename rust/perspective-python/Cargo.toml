@@ -14,12 +14,14 @@
 name = "perspective-python"
 version = "5.5.1"
 edition = "2024"
-description = "A data visualization and analytics component, especially well-suited for large and/or streaming datasets."
+description = "Interactive data grid, pivot table and charts for large, real-time and streaming datasets, with a Jupyter widget and WebSocket server."
 repository = "https://github.com/perspective-dev/perspective"
 license = "Apache-2.0"
 homepage = "https://perspective-dev.github.io"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
-keywords = []
+keywords = ["datagrid", "visualization", "streaming", "jupyter", "python"]
+categories = ["visualization", "wasm", "science"]
+documentation = "https://docs.rs/perspective-python"
 build = "build.rs"
 include = [
     "build.rs",

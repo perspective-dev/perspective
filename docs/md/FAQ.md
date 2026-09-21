@@ -1,5 +1,7 @@
 # FAQ
 
+<!-- description: Answers to common questions about installing, bundling, configuring and troubleshooting Perspective, the WebAssembly data grid, pivot table and charting component, in JavaScript, Python and Jupyter. -->
+
 ## Installation
 
 ### Python installation fails on Windows
@@ -270,8 +272,10 @@ depending on the number of columns and available memory. Performance also
 significantly depends on column types (`"string"` being slower and larger than
 other types due to dictionary interning).
 
-For larger datasets or out-of-memory virtualized datasets, see
-[Virtual Servers](./explanation/virtual_servers.md).
+For tables larger than the engine's memory, create the `Table` with
+[`page_to_disk`](./explanation/table/options.md#page_to_disk), which pages
+columns out to disk (OPFS in the browser). For datasets which should not be
+loaded at all, see [Virtual Servers](./explanation/virtual_servers.md).
 
 <!-- _Related: [#341](https://github.com/perspective-dev/perspective/issues/341),
 [#1719](https://github.com/perspective-dev/perspective/issues/1719),

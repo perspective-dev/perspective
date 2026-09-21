@@ -1,19 +1,27 @@
 {
     "name": "@perspective-dev/viewer",
     "version": "5.5.1",
-    "description": "The `<perspective-viewer>` Custom Element, frontend for Perspective",
+    "description": "`<perspective-viewer>`, a WebAssembly-powered data grid, pivot table and charting Web Component for large, real-time and streaming datasets.",
     "keywords": [
         "perspective",
-        "data",
-        "analytics",
-        "visualization",
         "datagrid",
+        "data-grid",
+        "pivot-table",
+        "pivot",
         "charts",
-        "web-component",
+        "visualization",
+        "dashboard",
+        "analytics",
+        "bi",
+        "streaming",
+        "real-time",
         "wasm",
-        "arrow"
+        "webassembly",
+        "arrow",
+        "web-component",
+        "custom-element"
     ],
-    "homepage": "https://perspective.finos.org",
+    "homepage": "https://perspective-dev.github.io",
     "repository": {
         "type": "git",
         "url": "https://github.com/perspective-dev/perspective"

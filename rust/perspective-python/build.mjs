@@ -205,7 +205,8 @@ function generatePkgInfo(pyproject, cargo, readme_md) {
     for (const extra of Object.keys(project["optional-dependencies"])) {
         addField("Provides-Extra", extra);
     }
-    addField("Summary", cargo.package.description);
+    addField("Summary", project.description);
+    addField("Keywords", project.keywords.join(","));
     addField("Home-page", cargo.package.homepage);
     addField("Author", cargo.package.authors[0]);
     addField("Author-email", cargo.package.authors[0]);
@@ -215,7 +216,10 @@ function generatePkgInfo(pyproject, cargo, readme_md) {
         "Description-Content-Type",
         "text/markdown; charset=UTF-8; variant=GFM",
     );
-    addField("Project-URL", `Source Code, ${cargo.package.repository}`);
+    for (const [label, url] of Object.entries(project.urls)) {
+        addField("Project-URL", `${label}, ${url}`);
+    }
+
     lines.push("");
     lines.push(readme_md);
 

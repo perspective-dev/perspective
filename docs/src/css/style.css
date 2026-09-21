@@ -21,6 +21,7 @@
 @import "./sql_drawer.css";
 @import "./s3_form.css";
 @import "./project_gallery.css";
+@import "./about.css";
 
 /**
  * The light palette is the BASE, so a page whose `data-theme` is unstamped

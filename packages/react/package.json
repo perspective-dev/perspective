@@ -1,13 +1,26 @@
 {
     "name": "@perspective-dev/react",
     "version": "5.5.1",
-    "description": "React component wrappers for `<perspective-viewer>`",
+    "description": "React data grid, pivot table and charts for large, real-time and streaming datasets — React bindings for `<perspective-viewer>`.",
     "keywords": [
         "perspective",
-        "react",
-        "data",
+        "datagrid",
+        "data-grid",
+        "pivot-table",
+        "pivot",
+        "charts",
+        "visualization",
+        "dashboard",
         "analytics",
-        "visualization"
+        "bi",
+        "streaming",
+        "real-time",
+        "wasm",
+        "webassembly",
+        "arrow",
+        "react",
+        "react-component",
+        "web-component"
     ],
     "homepage": "https://perspective-dev.github.io",
     "repository": {

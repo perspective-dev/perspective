@@ -2,6 +2,18 @@
 
 [What is Perspective](./perspective.md)
 
+# Use cases
+
+- [Real-time dashboards over WebSocket](./use_cases/real_time_dashboard.md)
+- [Streaming pivot tables](./use_cases/streaming_pivot_table.md)
+- [Visualizing millions of rows in the browser](./use_cases/large_datasets.md)
+- [Trading blotters, order books and market data](./use_cases/market_data.md)
+- [Interactive pivot tables and charts in Jupyter](./use_cases/jupyter.md)
+- [A UI for DuckDB, ClickHouse and PostgreSQL](./use_cases/database_ui.md)
+    - [Case study: a multi-billion row tick history in a browser tab with DuckLake and DuckDB-WASM](./use_cases/ducklake.md)
+- [Embedded analytics in a web application](./use_cases/embedded_analytics.md)
+- [LLM and agent-driven analytics](./use_cases/agent.md)
+
 # Concepts
 
 - [Data Architecture](./explanation/architecture.md)
@@ -13,7 +25,7 @@
     - [Schema and column types](./explanation/table/schema.md)
     - [Loading data](./explanation/table/loading_data.md)
     - [Construct an empty `Table` from a schema](./explanation/table/constructing_schema.md)
-    - [`index` and `limit` options](./explanation/table/options.md)
+    - [`index`, `limit` and `page_to_disk` options](./explanation/table/options.md)
     - [`update()` and `remove()` streaming methods](./explanation/table/update_and_remove.md)
     - [`clear()` and `replace()` start-over methods](./explanation/table/clear_and_replace.md)
 - [`View`](./explanation/view.md)
@@ -74,6 +86,12 @@
 
 - [Getting Started](./how_to/rust.md)
 
+# Integrations
+
+- [FastAPI and Starlette](./integrations/fastapi.md)
+- [Next.js, Vue, Svelte and Angular](./integrations/frameworks.md)
+- [Kafka and other message queues](./integrations/kafka.md)
+
 # Tutorials
 
 - [A `tornado` server in Python](./tutorials/python/tornado.md)
@@ -82,6 +100,8 @@
 
 - [API Reference](./api_reference.md)
 
-# FAQ
+# Reference
 
+- [Benchmarks](./benchmarks.md)
+- [Glossary](./glossary.md)
 - [FAQ](./FAQ.md)

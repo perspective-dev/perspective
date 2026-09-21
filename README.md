@@ -3,7 +3,7 @@
 <a href="https://perspective-dev.github.io">
 <picture>
 <source media="(prefers-color-scheme: dark)" srcset="https://github.com/perspective-dev/perspective/raw/master/docs/static/svg/perspective-logo-dark.svg?raw=true">
-<img width="260" src="https://github.com/perspective-dev/perspective/raw/master/docs/static/svg/perspective-logo-light.svg?raw=true" />
+<img width="260" alt="Perspective" src="https://github.com/perspective-dev/perspective/raw/master/docs/static/svg/perspective-logo-light.svg?raw=true" />
 </picture>
 </a>
 <br/><br/>
@@ -13,17 +13,24 @@
 [![PyPI](https://img.shields.io/pypi/v/perspective-python.svg?style=for-the-badge)](https://pypi.python.org/pypi/perspective-python)
 [![crates.io](https://img.shields.io/crates/v/perspective?style=for-the-badge)](https://crates.io/crates/perspective)
 
-Perspective is an interactive analytics and data visualization component for
-large, real-time and streaming datasets. Build user-configurable reports,
-dashboards, notebooks and applications, backed by a high-performance streaming
-query engine that runs in-browser via WebAssembly or server-side in Python,
-Node.js and Rust — or delegates to a database you already have.
+<!-- site:begin -->
+
+Perspective is an open-source data grid, pivot table and charting component for 
+large, real-time and streaming datasets. Build user-configurable reports, 
+dashboards, notebooks and embedded analytics applications, backed by a 
+high-performance streaming query engine that runs in-browser via WebAssembly or 
+server-side in Python, Node.js and Rust — or delegates to a database you 
+already have.
+
+<!-- site:end -->
 
 <br/>
 <a href="https://perspective-dev.github.io"><picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/collage.png" />
-    <img src="https://perspective-dev.github.io/projects/light/collage.png" />
+    <img alt="A collage of Perspective data grids, pivot tables, charts and maps" src="https://perspective-dev.github.io/projects/light/collage.png" />
 </picture></a>
+
+<!-- site:begin -->
 
 ## Features
 
@@ -35,7 +42,8 @@ Node.js and Rust — or delegates to a database you already have.
 
 - A fast, memory-efficient streaming query engine written in C++ and compiled
   for [WebAssembly](https://webassembly.org/) (including a 64-bit `memory64`
-  build for in-browser datasets larger than 4GB),
+  build for in-browser datasets larger than 4GB, and support for paging
+  columns to disk via OPFS in the browser or memory-mapped files natively),
   [Python](https://www.python.org/) and [Rust](https://www.rust-lang.org/).
   Tables update incrementally and views tick in real time, with reactive
   joins across tables, a columnar expression language based on
@@ -90,25 +98,25 @@ Node.js and Rust — or delegates to a database you already have.
 <td>Superstore</td><td>Workspace</td><td>Webcam</td>
 </tr>
 <tr>
-<td><a href="https://perspective-dev.github.io/?project=superstore"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/superstore.png" /><img src="https://perspective-dev.github.io/projects/light/superstore.png" /></picture></a></td>
-<td><a href="https://perspective-dev.github.io/?project=superstore-overview"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/superstore-overview.png" /><img src="https://perspective-dev.github.io/projects/light/superstore-overview.png" /></picture></a></td>
-<td><a href="https://perspective-dev.github.io/?project=webcam-video-wall"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/webcam-video-wall.png" /><img src="https://perspective-dev.github.io/projects/light/webcam-video-wall.png" /></picture></a></td>
+<td><a href="https://perspective-dev.github.io/?project=superstore"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/superstore.png" /><img alt="Perspective example: superstore" src="https://perspective-dev.github.io/projects/light/superstore.png" /></picture></a></td>
+<td><a href="https://perspective-dev.github.io/?project=superstore-overview"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/superstore-overview.png" /><img alt="Perspective example: superstore overview" src="https://perspective-dev.github.io/projects/light/superstore-overview.png" /></picture></a></td>
+<td><a href="https://perspective-dev.github.io/?project=webcam-video-wall"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/webcam-video-wall.png" /><img alt="Perspective example: webcam video wall" src="https://perspective-dev.github.io/projects/light/webcam-video-wall.png" /></picture></a></td>
 </tr>
 <tr>
 <td>Raycasting</td><td>Market</td><td>NYPD</td>
 </tr>
 <tr>
-<td><a href="https://perspective-dev.github.io/?project=raycasting"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/raycasting.png" /><img src="https://perspective-dev.github.io/projects/light/raycasting.png" /></picture></a></td>
-<td><a href="https://perspective-dev.github.io/?project=market-trading-desk"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/market-trading-desk.png" /><img src="https://perspective-dev.github.io/projects/light/market-trading-desk.png" /></picture></a></td>
-<td><a href="https://perspective-dev.github.io/?project=nypd-4"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/nypd-4.png" /><img src="https://perspective-dev.github.io/projects/light/nypd-4.png" /></picture></a></td>
+<td><a href="https://perspective-dev.github.io/?project=raycasting"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/raycasting.png" /><img alt="Perspective example: raycasting" src="https://perspective-dev.github.io/projects/light/raycasting.png" /></picture></a></td>
+<td><a href="https://perspective-dev.github.io/?project=market-trading-desk"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/market-trading-desk.png" /><img alt="Perspective example: market trading desk" src="https://perspective-dev.github.io/projects/light/market-trading-desk.png" /></picture></a></td>
+<td><a href="https://perspective-dev.github.io/?project=nypd-4"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/nypd-4.png" /><img alt="Perspective example: nypd 4" src="https://perspective-dev.github.io/projects/light/nypd-4.png" /></picture></a></td>
 </tr>
 <tr>
 <td>Movies</td><td>Evictions</td><td>Fractal</td>
 </tr>
 <tr>
-<td><a href="https://perspective-dev.github.io/?project=movies"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/movies.png" /><img src="https://perspective-dev.github.io/projects/light/movies.png" /></picture></a></td>
-<td><a href="https://perspective-dev.github.io/?project=evictions-2"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/evictions-2.png" /><img src="https://perspective-dev.github.io/projects/light/evictions-2.png" /></picture></a></td>
-<td><a href="https://perspective-dev.github.io/?project=fractal"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/fractal.png" /><img src="https://perspective-dev.github.io/projects/light/fractal.png" /></picture></a></td>
+<td><a href="https://perspective-dev.github.io/?project=movies"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/movies.png" /><img alt="Perspective example: movies" src="https://perspective-dev.github.io/projects/light/movies.png" /></picture></a></td>
+<td><a href="https://perspective-dev.github.io/?project=evictions-2"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/evictions-2.png" /><img alt="Perspective example: evictions 2" src="https://perspective-dev.github.io/projects/light/evictions-2.png" /></picture></a></td>
+<td><a href="https://perspective-dev.github.io/?project=fractal"><picture><source media="(prefers-color-scheme: dark)" srcset="https://perspective-dev.github.io/projects/dark/fractal.png" /><img alt="Perspective example: fractal" src="https://perspective-dev.github.io/projects/light/fractal.png" /></picture></a></td>
 </tr>
 </tbody>
 </table>
@@ -122,9 +130,9 @@ Node.js and Rust — or delegates to a database you already have.
 <td><a href="https://github.com/sc1f"><code>@sc1f</code></a></td>
 </tr>
 <tr>
-<td><a href="https://www.youtube.com/watch?v=v5Y5ftlGNhU"><img width="240" src="https://img.youtube.com/vi/v5Y5ftlGNhU/0.jpg" /></a></td>
-<td><a href="https://www.youtube.com/watch?v=lDpIu4dnp78"><img width="240" src="https://img.youtube.com/vi/lDpIu4dnp78/0.jpg" /></a></td>
-<td><a href="https://www.youtube.com/watch?v=IO-HJsGdleE"><img width="240"  src="https://img.youtube.com/vi/IO-HJsGdleE/0.jpg" /></a></td>
+<td><a href="https://www.youtube.com/watch?v=v5Y5ftlGNhU"><img width="240" alt="Perspective conference talk" src="https://img.youtube.com/vi/v5Y5ftlGNhU/0.jpg" /></a></td>
+<td><a href="https://www.youtube.com/watch?v=lDpIu4dnp78"><img width="240" alt="Perspective conference talk" src="https://img.youtube.com/vi/lDpIu4dnp78/0.jpg" /></a></td>
+<td><a href="https://www.youtube.com/watch?v=IO-HJsGdleE"><img width="240" alt="Perspective conference talk" src="https://img.youtube.com/vi/IO-HJsGdleE/0.jpg" /></a></td>
 </tr>
 <tr>
 <td><a href="https://github.com/texodus"><code>@texodus</code></a></td>
@@ -132,8 +140,8 @@ Node.js and Rust — or delegates to a database you already have.
 <td></td>
 </tr>
 <tr>
-<td><a href="https://www.youtube.com/watch?v=no0qChjvdgQ"><img width="240" src="https://img.youtube.com/vi/no0qChjvdgQ/0.jpg" /></a></td>
-<td><a href="https://www.youtube.com/watch?v=0ut-ynvBpGI"><img width="240" src="https://img.youtube.com/vi/0ut-ynvBpGI/0.jpg" /></a></td>
+<td><a href="https://www.youtube.com/watch?v=no0qChjvdgQ"><img width="240" alt="Perspective conference talk" src="https://img.youtube.com/vi/no0qChjvdgQ/0.jpg" /></a></td>
+<td><a href="https://www.youtube.com/watch?v=0ut-ynvBpGI"><img width="240" alt="Perspective conference talk" src="https://img.youtube.com/vi/0ut-ynvBpGI/0.jpg" /></a></td>
 <td></td>
 </tr>
 </tbody></table><br/><br/>
@@ -144,7 +152,7 @@ Node.js and Rust — or delegates to a database you already have.
 <br/>
 <picture>
 <source media="(prefers-color-scheme: dark)" srcset="https://github.com/openjs-foundation/artwork/raw/master/openjs_foundation/openjs_foundation-logo-horizontal-white.svg?raw=true">
-<img width="200" src="https://github.com/openjs-foundation/artwork/raw/master/openjs_foundation/openjs_foundation-logo-horizontal-black.svg?raw=true">
+<img width="200" alt="OpenJS Foundation" src="https://github.com/openjs-foundation/artwork/raw/master/openjs_foundation/openjs_foundation-logo-horizontal-black.svg?raw=true">
 </picture>
 <br/>
 <br/>

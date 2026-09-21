@@ -1,0 +1,132 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+.about {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    padding: 0;
+    width: min(860px, 92vw);
+    max-height: 86vh;
+    overflow-y: auto;
+}
+
+.about::backdrop {
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.about__body {
+    position: relative;
+    padding: 8px 28px 20px;
+    font-size: 14px;
+}
+
+.about__close {
+    position: sticky;
+    top: 8px;
+    float: right;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.about__close:hover {
+    color: var(--color-primary);
+}
+
+.about h1 {
+    font-size: 22px;
+    line-height: 1.3;
+}
+
+.about h2 {
+    font-size: 17px;
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.about h3 {
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.about a {
+    color: var(--color-primary);
+}
+
+.about img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
+
+.about pre {
+    overflow-x: auto;
+    max-height: 360px;
+    padding: 10px 12px;
+    border-radius: 4px;
+    background-color: var(--bg-surface);
+    font-size: 12px;
+}
+
+.about code {
+    font-family: var(--font-mono);
+}
+
+.about__crumbs {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.about__install dt {
+    font-weight: 600;
+    margin-top: 10px;
+}
+
+.about__install dd {
+    margin: 0;
+}
+
+.about__install pre {
+    margin: 4px 0;
+    white-space: pre-wrap;
+}
+
+.about__links {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 4px 24px;
+}
+
+.about__links ul,
+.about__examples {
+    padding-left: 18px;
+    margin: 0;
+}
+
+.about__examples {
+    columns: 2;
+}
+
+.about__footer {
+    margin-top: 28px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+    color: var(--text-muted);
+    font-size: 12px;
+}

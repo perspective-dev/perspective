@@ -15,11 +15,13 @@ name = "perspective"
 version = "5.5.1"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
-description = "A data visualization and analytics component, especially well-suited for large and/or streaming datasets."
+description = "Data grid, pivot table and charting engine for large, real-time and streaming datasets."
 repository = "https://github.com/perspective-dev/perspective"
 license = "Apache-2.0"
 homepage = "https://perspective-dev.github.io"
-keywords = []
+keywords = ["datagrid", "visualization", "streaming", "analytics", "wasm"]
+categories = ["visualization", "wasm", "science"]
+documentation = "https://docs.rs/perspective"
 include = ["src/**/*", "tests/**/*", "Cargo.toml"]
 
 [lib]
