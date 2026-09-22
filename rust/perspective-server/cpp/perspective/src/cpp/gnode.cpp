@@ -336,117 +336,58 @@ t_gnode::_process_mask_existed_rows(t_process_state& process_state) {
     return mask;
 }
 
-t_process_table_result
-t_gnode::_process_table(t_uindex port_id) {
-    m_was_updated = false;
-    m_removed_pkeys = nullptr;
-
-    t_process_table_result result;
-    result.m_flattened_data_table = nullptr;
-    result.m_should_notify_userspace = false;
-
-    std::shared_ptr<t_data_table> flattened = nullptr;
-
-    if (m_input_ports.count(port_id) == 0) {
-        std::cerr << "Cannot process table on port `" << port_id
-                  << "` as it does not exist." << '\n';
-        return result;
+void
+t_gnode::_take_reset_removes(
+    const t_column* pkey_col, t_uindex flattened_num_rows
+) {
+    if (!m_reset_pending) {
+        return;
     }
 
-    std::shared_ptr<t_port>& input_port = m_input_ports[port_id];
-
-    // A `reset` with no rows queued behind it (a bare `clear`) still
-    // produces one step, so listeners see the table empty and its keys gone.
-    if (input_port->get_table()->size() == 0) {
-        if (!m_reset_pending) {
-            return result;
-        }
-
-        m_reset_pending = false;
-        m_removed_pkeys = std::move(m_reset_pkeys);
-        m_reset_pkeys = nullptr;
-        m_was_updated = true;
-        result.m_should_notify_userspace = true;
-        return result;
+    m_reset_pending = false;
+    if (!m_reset_pkeys) {
+        return;
     }
 
-    m_was_updated = true;
-    flattened = input_port->get_table()->flatten();
-
-    PSP_GNODE_VERIFY_TABLE(flattened);
-    PSP_GNODE_VERIFY_TABLE(get_table());
-
-    t_uindex flattened_num_rows = flattened->num_rows();
-
-    std::vector<t_rlookup> row_lookup(flattened_num_rows);
-    t_column* pkey_col = flattened->_get_column("psp_pkey");
-
+    tsl::hopscotch_set<t_tscalar> incoming;
+    incoming.reserve(flattened_num_rows);
     for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
-        // See if each primary key in flattened already exist in the dataset
-        t_tscalar pkey = pkey_col->get_scalar(idx);
-        row_lookup[idx] = m_gstate->lookup(pkey);
+        incoming.insert(pkey_col->get_scalar(idx));
     }
 
-    if (m_reset_pending) {
-        m_reset_pending = false;
-        if (m_reset_pkeys) {
-            tsl::hopscotch_set<t_tscalar> incoming;
-            incoming.reserve(flattened_num_rows);
-            for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
-                incoming.insert(pkey_col->get_scalar(idx));
-            }
-
-            const t_column* stash_col =
-                m_reset_pkeys->_get_column("psp_pkey");
-            const t_uindex stash_size = m_reset_pkeys->size();
-            t_column* removed_col = nullptr;
-            for (t_uindex idx = 0; idx < stash_size; ++idx) {
-                t_tscalar pkey = stash_col->get_scalar(idx);
-                if (!incoming.contains(pkey)) {
-                    removed_col = append_removed_pkey(
-                        m_removed_pkeys,
-                        removed_col,
-                        stash_col->get_dtype(),
-                        stash_size,
-                        pkey
-                    );
-                }
-            }
-
-            m_reset_pkeys = nullptr;
+    const t_column* stash_col = m_reset_pkeys->_get_column("psp_pkey");
+    const t_uindex stash_size = m_reset_pkeys->size();
+    t_column* removed_col = nullptr;
+    for (t_uindex idx = 0; idx < stash_size; ++idx) {
+        t_tscalar pkey = stash_col->get_scalar(idx);
+        if (!incoming.contains(pkey)) {
+            removed_col = append_removed_pkey(
+                m_removed_pkeys,
+                removed_col,
+                stash_col->get_dtype(),
+                stash_size,
+                pkey
+            );
         }
     }
 
-    // first update - master table is empty
-    if (m_gstate->mapping_size() == 0) {
-        m_gstate->update_master_table(flattened);
-        m_oports[PSP_PORT_FLATTENED]->set_table(flattened);
+    m_reset_pkeys = nullptr;
+}
 
-        _compute_expressions(flattened);
-
-        // Update all contexts registered with the gnode with data.
-        _update_contexts_from_state(m_gstate->get_pkeyed_table());
-
-        input_port->release();
-        release_outputs();
-
-#ifdef PSP_GNODE_VERIFY
-        auto state_table = get_table();
-        PSP_GNODE_VERIFY_TABLE(state_table);
-#endif
-        // Make sure user is notified after first update.
-        result.m_should_notify_userspace = true;
-        return result;
-    }
-
-    input_port->release_or_clear();
+t_mask
+t_gnode::_compute_transitions(
+    const std::shared_ptr<t_data_table>& flattened,
+    const std::shared_ptr<t_data_table>& state_table,
+    const std::vector<t_rlookup>& lookup
+) {
+    t_uindex flattened_num_rows = flattened->num_rows();
 
     // Use `t_process_state` to manage intermediate structures
     t_process_state _process_state;
 
-    _process_state.m_state_data_table = get_table_sptr();
+    _process_state.m_state_data_table = state_table;
     _process_state.m_flattened_data_table = flattened;
-    _process_state.m_lookup = row_lookup;
+    _process_state.m_lookup = lookup;
 
     // Get data tables for process state
     _process_state.m_delta_data_table = m_oports[PSP_PORT_DELTA]->get_table();
@@ -657,9 +598,92 @@ t_gnode::_process_table(t_uindex port_id) {
         }
     );
 
+    return existed_mask;
+}
+
+t_process_table_result
+t_gnode::_process_table(t_uindex port_id) {
+    m_was_updated = false;
+    m_removed_pkeys = nullptr;
+
+    t_process_table_result result;
+    result.m_flattened_data_table = nullptr;
+    result.m_should_notify_userspace = false;
+
+    std::shared_ptr<t_data_table> flattened = nullptr;
+
+    if (m_input_ports.count(port_id) == 0) {
+        std::cerr << "Cannot process table on port `" << port_id
+                  << "` as it does not exist." << '\n';
+        return result;
+    }
+
+    std::shared_ptr<t_port>& input_port = m_input_ports[port_id];
+
+    // A `reset` with no rows queued behind it (a bare `clear`) still
+    // produces one step, so listeners see the table empty and its keys gone.
+    if (input_port->get_table()->size() == 0) {
+        if (!m_reset_pending) {
+            return result;
+        }
+
+        m_reset_pending = false;
+        m_removed_pkeys = std::move(m_reset_pkeys);
+        m_reset_pkeys = nullptr;
+        m_was_updated = true;
+        result.m_should_notify_userspace = true;
+        return result;
+    }
+
+    m_was_updated = true;
+    flattened = input_port->get_table()->flatten();
+
+    PSP_GNODE_VERIFY_TABLE(flattened);
+    PSP_GNODE_VERIFY_TABLE(get_table());
+
+    t_uindex flattened_num_rows = flattened->num_rows();
+
+    std::vector<t_rlookup> row_lookup(flattened_num_rows);
+    t_column* pkey_col = flattened->_get_column("psp_pkey");
+
+    for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
+        // See if each primary key in flattened already exist in the dataset
+        t_tscalar pkey = pkey_col->get_scalar(idx);
+        row_lookup[idx] = m_gstate->lookup(pkey);
+    }
+
+    _take_reset_removes(pkey_col, flattened_num_rows);
+
+    // first update - master table is empty
+    if (m_gstate->mapping_size() == 0) {
+        m_gstate->update_master_table(flattened);
+        m_oports[PSP_PORT_FLATTENED]->set_table(flattened);
+
+        _compute_expressions(flattened);
+
+        // Update all contexts registered with the gnode with data.
+        _update_contexts_from_state(m_gstate->get_pkeyed_table());
+
+        input_port->release();
+        release_outputs();
+
+#ifdef PSP_GNODE_VERIFY
+        auto state_table = get_table();
+        PSP_GNODE_VERIFY_TABLE(state_table);
+#endif
+        // Make sure user is notified after first update.
+        result.m_should_notify_userspace = true;
+        return result;
+    }
+
+    input_port->release_or_clear();
+
+    t_mask existed_mask =
+        _compute_transitions(flattened, get_table_sptr(), row_lookup);
+
     /**
      * After all columns have been processed (transitional tables written into),
-     * `_process_state.m_flattened_data_table` contains the accumulated state
+     * `flattened` contains the accumulated state
      * of the dataset that updates the master table on `m_gstate`, including
      * added rows, updated in-place rows, and rows to be removed.
      *
@@ -669,11 +693,10 @@ t_gnode::_process_table(t_uindex port_id) {
      */
     std::shared_ptr<t_data_table> flattened_masked;
 
-    if (existed_mask.count() == _process_state.m_flattened_data_table->size()) {
-        flattened_masked = _process_state.m_flattened_data_table;
+    if (existed_mask.count() == flattened->size()) {
+        flattened_masked = flattened;
     } else {
-        flattened_masked =
-            _process_state.m_flattened_data_table->clone(existed_mask);
+        flattened_masked = flattened->clone(existed_mask);
     }
 
     PSP_GNODE_VERIFY_TABLE(flattened_masked);
@@ -694,7 +717,7 @@ t_gnode::_process_table(t_uindex port_id) {
     }
 #endif
 
-    if (flattened_masked.get() == _process_state.m_flattened_data_table.get()) {
+    if (flattened_masked.get() == flattened.get()) {
         _process_windows(flattened_masked, row_lookup);
     } else {
         std::vector<t_rlookup> masked_lookup;
@@ -865,6 +888,92 @@ t_gnode::init_bulk(const std::shared_ptr<t_data_table>& data_table) {
     // notified.
     _compute_expressions(data_table);
     _update_contexts_from_state(m_gstate->get_pkeyed_table());
+}
+
+void
+t_gnode::set_derived_alias(
+    const std::string& name, std::shared_ptr<t_column> column
+) {
+    m_gstate->set_alias(name, std::move(column));
+}
+
+bool
+t_gnode::is_derived_alias(const std::string& name) const {
+    return m_gstate->is_aliased(name);
+}
+
+bool
+t_gnode::process_derived(const t_derived_step& step) {
+    PSP_TRACE_SENTINEL();
+    PSP_VERBOSE_ASSERT(m_init, "Cannot `process_derived` on an uninited gnode.");
+    PSP_GIL_UNLOCK();
+    PSP_WRITE_LOCK(*m_lock);
+    m_was_updated = false;
+    m_removed_pkeys = nullptr;
+
+    const std::shared_ptr<t_data_table>& flattened = step.m_flattened;
+    t_uindex flattened_num_rows = flattened->num_rows();
+    if (flattened_num_rows == 0) {
+        if (!m_reset_pending) {
+            return false;
+        }
+
+        m_reset_pending = false;
+        m_removed_pkeys = std::move(m_reset_pkeys);
+        m_reset_pkeys = nullptr;
+        m_was_updated = true;
+        return true;
+    }
+
+    m_was_updated = true;
+    t_column* pkey_col = flattened->_get_column("psp_pkey");
+    std::vector<t_rlookup> row_lookup(flattened_num_rows);
+    std::vector<t_rlookup> identity_lookup(flattened_num_rows);
+    for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
+        row_lookup[idx] = m_gstate->lookup(pkey_col->get_scalar(idx));
+        identity_lookup[idx] = t_rlookup(idx, row_lookup[idx].m_exists);
+    }
+
+    _take_reset_removes(pkey_col, flattened_num_rows);
+
+    if (m_gstate->mapping_size() == 0) {
+        m_gstate->commit_derived(flattened, step.m_rows);
+        m_oports[PSP_PORT_FLATTENED]->set_table(flattened);
+        if (!m_contexts.empty()) {
+            _compute_expressions(flattened);
+            _update_contexts_from_state(m_gstate->get_pkeyed_table());
+        }
+
+        release_outputs();
+        return true;
+    }
+
+    t_mask existed_mask =
+        _compute_transitions(flattened, step.m_prev_state, identity_lookup);
+
+    m_gstate->commit_derived(flattened, step.m_rows);
+
+    std::shared_ptr<t_data_table> flattened_masked;
+    if (existed_mask.count() == flattened->size()) {
+        flattened_masked = flattened;
+        _process_windows(flattened_masked, row_lookup);
+    } else {
+        flattened_masked = flattened->clone(existed_mask);
+        std::vector<t_rlookup> masked_lookup;
+        masked_lookup.reserve(flattened_masked->size());
+        for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
+            if (existed_mask.get(idx)) {
+                masked_lookup.push_back(row_lookup[idx]);
+            }
+        }
+
+        _process_windows(flattened_masked, masked_lookup);
+    }
+
+    m_oports[PSP_PORT_FLATTENED]->set_table(flattened_masked);
+    _compute_expressions(get_table_sptr(), flattened_masked);
+    notify_contexts(flattened_masked);
+    return true;
 }
 
 bool

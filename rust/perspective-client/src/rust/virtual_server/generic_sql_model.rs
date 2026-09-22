@@ -58,6 +58,17 @@ pub enum GenericSQLError {
     UnsupportedOperation(String),
 }
 
+fn sql_type(ty: ColumnType) -> &'static str {
+    match ty {
+        ColumnType::String => "VARCHAR",
+        ColumnType::Integer => "INTEGER",
+        ColumnType::Float => "DOUBLE PRECISION",
+        ColumnType::Boolean => "BOOLEAN",
+        ColumnType::Date => "DATE",
+        ColumnType::Datetime => "TIMESTAMP",
+    }
+}
+
 impl fmt::Display for GenericSQLError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -347,6 +358,80 @@ impl GenericSQLVirtualServerModel {
         let query = ctx.build_query();
         let template = self.0.create_entity.as_deref().unwrap_or("TABLE");
         Ok(format!("CREATE {} {} AS ({})", template, view_id, query))
+    }
+
+    /// Returns the SQL query to create a table from a view, with the view's
+    /// row path unrolled into `"<column> (Group by <n>)"` key columns.
+    ///
+    /// # Arguments
+    /// * `view_id` - The identifier of the source view.
+    /// * `table_id` - The identifier for the new table.
+    /// * `config` - The configuration the view was created with.
+    /// * `view_schema` - The schema of the view's relation.
+    /// * `schema` - The columns of the new table, in place of the view's.
+    ///
+    /// # Returns
+    /// SQL: `CREATE TABLE {table_id} AS (SELECT ... FROM {view_id})`
+    pub fn view_make_table(
+        &self,
+        view_id: &str,
+        table_id: &str,
+        config: &ViewConfig,
+        view_schema: &IndexMap<String, ColumnType>,
+        schema: Option<&IndexMap<String, ColumnType>>,
+    ) -> GenericSQLResult<String> {
+        let keys: IndexMap<String, String> = config
+            .group_by
+            .iter()
+            .enumerate()
+            .map(|(i, col)| {
+                (
+                    format!("{} (Group by {})", col, i + 1),
+                    format!("\"__ROW_PATH_{}__\"", i),
+                )
+            })
+            .collect();
+
+        let clauses: Vec<String> = match schema {
+            None => keys
+                .iter()
+                .map(|(name, path)| format!("{} AS \"{}\"", path, name))
+                .chain(
+                    view_schema
+                        .keys()
+                        .filter(|name| !name.starts_with("__"))
+                        .map(|name| format!("\"{}\"", name)),
+                )
+                .collect(),
+            Some(schema) => schema
+                .iter()
+                .map(|(name, ty)| {
+                    if let Some(path) = keys.get(name) {
+                        Ok(format!("{} AS \"{}\"", path, name))
+                    } else if let Some(actual) = view_schema.get(name) {
+                        if actual == ty {
+                            Ok(format!("\"{}\"", name))
+                        } else {
+                            Err(GenericSQLError::InvalidConfig(format!(
+                                "Column \"{}\" does not have the type of the View's column",
+                                name
+                            )))
+                        }
+                    } else {
+                        Ok(format!("CAST(NULL AS {}) AS \"{}\"", sql_type(*ty), name))
+                    }
+                })
+                .collect::<GenericSQLResult<Vec<_>>>()?,
+        };
+
+        let template = self.0.create_entity.as_deref().unwrap_or("TABLE");
+        Ok(format!(
+            "CREATE {} {} AS (SELECT {} FROM {})",
+            template,
+            table_id,
+            clauses.join(", "),
+            view_id
+        ))
     }
 
     /// Returns the SQL query to fetch data from a view with the given viewport.

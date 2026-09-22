@@ -559,8 +559,19 @@ t_ctx0::get_sort_by() const {
     return m_traversal->get_sort_by();
 }
 
+bool
+t_ctx0::has_pkey(t_tscalar pkey) const {
+    return m_traversal->get_row_idx(pkey) >= 0;
+}
+
+std::vector<t_tscalar>
+t_ctx0::get_member_pkeys() const {
+    return m_traversal->get_pkeys();
+}
+
 void
 t_ctx0::reset(bool reset_expressions) {
+    ++m_storage_generation;
     m_traversal->reset();
     m_deltas = std::make_shared<t_zcdeltas>();
     m_has_delta = false;

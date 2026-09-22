@@ -539,6 +539,7 @@ set(SOURCE_FILES
     ${PSP_CPP_SRC}/src/cpp/vocab.cpp
     ${PSP_CPP_SRC}/src/cpp/arrow_csv.cpp
     ${PSP_CPP_SRC}/src/cpp/join_engine.cpp
+    ${PSP_CPP_SRC}/src/cpp/derived_source.cpp
     ${PSP_CPP_SRC}/src/cpp/server.cpp
     ${PSP_CPP_SRC}/src/cpp/binding_api.cpp
 )

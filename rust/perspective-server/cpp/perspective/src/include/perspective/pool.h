@@ -57,6 +57,12 @@ public:
 
 #ifdef PSP_PARALLEL_FOR
     std::shared_mutex* get_lock() const;
+
+    /**
+     * @brief Share `other`'s lock, so the two pools' tables are read and
+     * written under one mutex.
+     */
+    void adopt_lock(const t_pool& other);
 #endif
 
     /**
@@ -109,6 +115,7 @@ protected:
 
 private:
 #ifdef PSP_PARALLEL_FOR
+    std::shared_ptr<std::shared_mutex> m_lock_owner;
     std::shared_mutex* m_lock;
 #endif
     std::vector<t_gnode*> m_gnodes;

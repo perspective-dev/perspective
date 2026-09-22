@@ -159,6 +159,20 @@ pub trait VirtualServerHandler {
 
     // Unused
 
+    /// Creates a table from a view, with `schema` in place of the view's
+    /// columns when given.
+    ///
+    /// Default implementation panics with "not implemented".
+    fn view_make_table(
+        &mut self,
+        _view_id: &str,
+        _table_id: &str,
+        _config: &ViewConfig,
+        _schema: Option<&IndexMap<String, ColumnType>>,
+    ) -> VirtualServerFuture<'_, Result<(), Self::Error>> {
+        Box::pin(async { unimplemented!("view_make_table not implemented") })
+    }
+
     /// Creates a new table with the given data.
     ///
     /// Default implementation panics with "not implemented".

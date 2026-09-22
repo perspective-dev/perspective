@@ -382,6 +382,7 @@ t_ctxunit::get_column_names() const {
 void
 t_ctxunit::reset() {
     m_has_delta = false;
+    ++m_storage_generation;
 }
 
 bool

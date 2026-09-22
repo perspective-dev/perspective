@@ -68,6 +68,12 @@ public:
 
     bool failed() const;
 
+    /**
+     * @brief A counter that advances each time `reset` replaces this
+     * context's storage.
+     */
+    t_uindex get_storage_generation() const;
+
     t_ctx_common<t_ctxbase>
     common() {
         return t_ctx_common<t_ctxbase>(this);
@@ -94,6 +100,7 @@ protected:
     std::shared_ptr<t_gstate> m_gstate;
     bool m_init;
     std::vector<bool> m_features;
+    t_uindex m_storage_generation = 0;
 };
 
 template <typename DERIVED_T>
@@ -190,6 +197,12 @@ template <typename DERIVED_T>
 bool
 t_ctxbase<DERIVED_T>::failed() const {
     return false;
+}
+
+template <typename DERIVED_T>
+t_uindex
+t_ctxbase<DERIVED_T>::get_storage_generation() const {
+    return m_storage_generation;
 }
 
 template <typename DERIVED_T>

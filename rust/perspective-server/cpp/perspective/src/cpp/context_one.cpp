@@ -567,6 +567,7 @@ t_ctx1::get_cell_delta(t_index bidx, t_index eidx) const {
 
 void
 t_ctx1::reset(bool reset_expressions) {
+    ++m_storage_generation;
     auto pivots = m_config.get_row_pivots();
     m_tree = std::make_shared<t_stree>(
         pivots, m_config.get_aggregates(), m_schema, m_config

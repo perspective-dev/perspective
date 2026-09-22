@@ -14,10 +14,10 @@
         "url": "https://github.com/perspective-dev/perspective/packages/bench"
     },
     "scripts": {
-        "bench_js": "node --experimental-wasm-memory64 basic_suite.mjs",
-        "bench_windows": "node --experimental-wasm-memory64 windows_suite.mjs",
-        "bench_python": "node --experimental-wasm-memory64 python_suite.mjs",
-        "bench_charts": "node --experimental-wasm-memory64 charts_suite.mjs"
+        "bench_js": "node basic_suite.mjs",
+        "bench_windows": "node  windows_suite.mjs",
+        "bench_python": "node python_suite.mjs",
+        "bench_charts": "node charts_suite.mjs"
     },
     "author": "",
     "license": "Apache-2.0",

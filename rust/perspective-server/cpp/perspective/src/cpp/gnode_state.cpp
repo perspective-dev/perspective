@@ -86,12 +86,17 @@ t_gstate::erase(const t_tscalar& pkey) {
         return;
     }
 
-    auto columns = m_table->get_columns();
-
     t_uindex idx = iter->second;
-
-    for (auto* c : columns) {
-        c->clear(idx);
+    if (m_aliased.empty()) {
+        for (auto* c : m_table->get_columns()) {
+            c->clear(idx);
+        }
+    } else {
+        for (const auto& name : m_table->get_schema().m_columns) {
+            if (!is_aliased(name)) {
+                m_table->_get_column(name)->clear(idx);
+            }
+        }
     }
 
     m_mapping.erase(iter);
@@ -257,6 +262,120 @@ t_gstate::init_from_table(const std::shared_ptr<t_data_table>& source) {
 #ifdef PSP_TABLE_VERIFY
     master_table->verify();
 #endif
+}
+
+void
+t_gstate::commit_derived(
+    const std::shared_ptr<t_data_table>& flattened,
+    const std::vector<t_uindex>& rows
+) {
+    const t_column* flattened_pkey_col =
+        flattened->_get_const_column("psp_pkey");
+    const t_column* flattened_op_col =
+        flattened->_get_const_column("psp_op");
+    const std::uint8_t* flattened_op_base =
+        flattened_op_col->get_nth_base<std::uint8_t>();
+    t_uindex num_rows = flattened->num_rows();
+    t_uindex extent = m_table->size();
+    m_pkcol = m_table->get_column("psp_pkey");
+    m_opcol = m_table->get_column("psp_op");
+    for (t_uindex idx = 0; idx < num_rows; ++idx) {
+        if (static_cast<t_op>(flattened_op_base[idx]) == OP_DELETE) {
+            erase(flattened_pkey_col->get_scalar(idx));
+        } else {
+            extent = std::max(extent, rows[idx] + 1);
+        }
+    }
+
+    resize_owned(extent);
+
+    for (t_uindex idx = 0; idx < num_rows; ++idx) {
+        if (static_cast<t_op>(flattened_op_base[idx]) == OP_DELETE) {
+            continue;
+        }
+
+        t_tscalar pkey = flattened_pkey_col->get_scalar(idx);
+        m_mapping[m_symtable.get_interned_tscalar(pkey)] = rows[idx];
+        m_free.erase(rows[idx]);
+        m_opcol->set_nth<std::uint8_t>(rows[idx], OP_INSERT);
+        m_pkcol->set_scalar(rows[idx], pkey);
+    }
+
+    const t_schema& master_schema = m_table->get_schema();
+    t_data_table* master_table = m_table.get();
+    parallel_for(
+        int(master_table->num_columns()),
+        [flattened, flattened_op_col, &master_schema, master_table, &rows, this](
+            int idx
+        ) {
+            const std::string& column_name = master_schema.m_columns[idx];
+            const t_column* flattened_column =
+                flattened->_get_const_column_safe(column_name);
+            if (!flattened_column || is_aliased(column_name)) {
+                return;
+            }
+
+            update_master_column(
+                master_table->_get_column(column_name),
+                flattened_column,
+                flattened_op_col,
+                rows,
+                flattened->num_rows()
+            );
+        }
+    );
+}
+
+void
+t_gstate::set_alias(const std::string& name, std::shared_ptr<t_column> column) {
+    m_table->set_column(name, std::move(column));
+    m_aliased.insert(name);
+}
+
+bool
+t_gstate::is_aliased(const std::string& name) const {
+    return m_aliased.find(name) != m_aliased.end();
+}
+
+void
+t_gstate::drop_aliases() {
+    const t_schema& schema = m_table->get_schema();
+    for (const auto& name : m_aliased) {
+        t_uindex idx = schema.get_colidx(name);
+        auto column = m_table->make_column(
+            name, schema.m_types[idx], schema.m_status_enabled[idx]
+        );
+
+        column->init();
+        m_table->set_column(name, std::move(column));
+    }
+
+    m_aliased.clear();
+}
+
+void
+t_gstate::resize_owned(t_uindex extent) {
+    if (extent <= m_table->size()) {
+        return;
+    }
+
+    t_uindex capacity = m_table->get_capacity();
+    if (extent > capacity) {
+        capacity = std::max(
+            extent, static_cast<t_uindex>(capacity * PSP_TABLE_GROW_RATIO)
+        );
+    }
+
+    for (const auto& name : m_table->get_schema().m_columns) {
+        if (!is_aliased(name)) {
+            t_column* column = m_table->_get_column(name);
+            column->reserve(capacity);
+            column->set_size(extent);
+        }
+    }
+
+    m_table->set_capacity(capacity);
+    m_table->set_table_size(extent);
 }
 
 void
@@ -858,6 +977,7 @@ t_gstate::mapping_size() const {
 
 void
 t_gstate::reset() {
+    drop_aliases();
     m_table->reset();
     m_mapping.clear();
     m_free.clear();

@@ -662,6 +662,64 @@ ServerResources::delete_table(const t_id& id) {
 }
 
 void
+DerivedTableEngine::register_table(
+    const t_id& view_id,
+    const t_id& table_id,
+    std::shared_ptr<t_derived_source> source
+) {
+    m_view_to_tables.emplace(view_id, table_id);
+    m_table_to_view[table_id] = view_id;
+    m_sources[table_id] = std::move(source);
+}
+
+void
+DerivedTableEngine::unregister_table(const t_id& table_id) {
+    auto iter = m_table_to_view.find(table_id);
+    if (iter == m_table_to_view.end()) {
+        return;
+    }
+
+    auto range = m_view_to_tables.equal_range(iter->second);
+    for (auto it = range.first; it != range.second; ++it) {
+        if (it->second == table_id) {
+            m_view_to_tables.erase(it);
+            break;
+        }
+    }
+
+    m_sources.at(table_id)->detach();
+    m_sources.erase(table_id);
+    m_table_to_view.erase(table_id);
+}
+
+bool
+DerivedTableEngine::is_derived_table(const t_id& table_id) const {
+    return m_table_to_view.find(table_id) != m_table_to_view.end();
+}
+
+bool
+DerivedTableEngine::has_dependents(const t_id& view_id) const {
+    return m_view_to_tables.find(view_id) != m_view_to_tables.end();
+}
+
+const DerivedTableEngine::t_id&
+DerivedTableEngine::get_view_id(const t_id& table_id) const {
+    return m_table_to_view.at(table_id);
+}
+
+std::vector<
+    std::pair<DerivedTableEngine::t_id, std::shared_ptr<t_derived_source>>>
+DerivedTableEngine::get_dependents(const t_id& view_id) const {
+    std::vector<std::pair<t_id, std::shared_ptr<t_derived_source>>> rval;
+    auto range = m_view_to_tables.equal_range(view_id);
+    for (auto it = range.first; it != range.second; ++it) {
+        rval.emplace_back(it->second, m_sources.at(it->second));
+    }
+
+    return rval;
+}
+
+void
 ServerResources::mark_table_dirty(const t_id& id) {
     PSP_WRITE_LOCK(m_write_lock);
     m_dirty_tables.insert(id);
@@ -1357,13 +1415,16 @@ ProtoServer::handle_process_table(
 ) {
     if (!m_realtime_mode && needs_poll(req.client_req_case())) {
         if (entity_type_is_table(req.client_req_case())) {
-            if (m_resources.is_table_dirty(req.entity_id())) {
-                auto table = m_resources.get_table(req.entity_id());
-                const auto& table_id = req.entity_id();
+            const auto table_id = _root_table_id(req.entity_id());
+            if (m_resources.is_table_dirty(table_id)) {
+                auto table = m_resources.get_table(table_id);
                 _process_table(table, table_id, proto_resp);
             }
         } else {
-            auto table_id = m_resources.get_table_id_for_view(req.entity_id());
+            auto table_id = _root_table_id(
+                m_resources.get_table_id_for_view(req.entity_id())
+            );
+
             if (m_resources.is_table_dirty(table_id)) {
                 auto table = m_resources.get_table(table_id);
                 _process_table(table, table_id, proto_resp);
@@ -2084,7 +2145,8 @@ ProtoServer::build_view_config(
         sides = 0;
     }
 
-    bool is_unit_context = table->get_index().empty() && sides == 0
+    bool is_unit_context = !table->is_derived()
+        && table->get_index().empty() && sides == 0
         && row_pivots.empty() && column_pivots.empty()
         && aggregates.empty() && columns.empty() && sort_str.empty()
         && cfg.expressions().empty() && cfg.windows().empty();
@@ -2417,10 +2479,13 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
 
             std::string index;
             std::uint32_t limit = std::numeric_limits<int>::max();
+            bool has_limit = false;
+            std::string make_error;
             std::shared_ptr<Table> table;
             switch (r.options().make_table_type_case()) {
                 case proto::MakeTableReq_MakeTableOptions::kMakeLimitTable: {
                     limit = r.options().make_limit_table();
+                    has_limit = true;
                     break;
                 }
                 case proto::MakeTableReq_MakeTableOptions::kMakeIndexTable: {
@@ -2453,31 +2518,19 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     break;
             }
 
+            if (r.options().has_view_schema()
+                && r.data().data_case() != proto::MakeTableData::kFromView) {
+                proto::Response resp;
+                *resp.mutable_server_error()->mutable_message() =
+                    "`schema` is only valid when making a Table from a View";
+                push_resp(std::move(resp));
+                break;
+            }
+
             switch (r.data().data_case()) {
                 case proto::MakeTableData::kFromView: {
-                    auto view = m_resources.get_view(r.data().from_view());
-                    proto::ViewPort viewport;
-                    auto dims = parse_format_options(
-                        viewport,
-                        view->num_columns(),
-                        view->num_rows(),
-                        view->sides(),
-                        view->get_view_config()->is_column_only(),
-                        0
-                    );
-                    auto arrow = view->to_arrow(
-                        dims.start_row,
-                        dims.end_row,
-                        dims.start_col,
-                        dims.end_col
-                    );
-
-                    table = Table::from_arrow(
-                        index,
-                        std::move(*arrow),
-                        limit,
-                        backing_store,
-                        list_flatten
+                    make_error = make_derived_table(
+                        r, entity_id, !index.empty() || has_limit, proto_resp, table
                     );
                     break;
                 }
@@ -2565,6 +2618,13 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     PSP_COMPLAIN_AND_ABORT("MakeTableReq malformed");
                     break;
                 }
+            }
+
+            if (!make_error.empty()) {
+                proto::Response resp;
+                *resp.mutable_server_error()->mutable_message() = make_error;
+                push_resp(std::move(resp));
+                break;
             }
 
             m_resources.host_table(entity_id, table);
@@ -2696,6 +2756,14 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             break;
         }
         case proto::Request::kTableMakePortReq: {
+            if (m_derived_engine.is_derived_table(req.entity_id())) {
+                proto::Response resp;
+                *resp.mutable_server_error()->mutable_message() =
+                    "Cannot update a read-only derived table";
+                push_resp(std::move(resp));
+                break;
+            }
+
             auto table = m_resources.get_table(req.entity_id());
             proto::Response resp;
             auto* make_port = resp.mutable_table_make_port_resp();
@@ -2779,6 +2847,14 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 push_resp(std::move(resp));
                 break;
             }
+
+            if (m_derived_engine.is_derived_table(req.entity_id())) {
+                proto::Response resp;
+                *resp.mutable_server_error()->mutable_message() =
+                    "Cannot update a read-only derived table";
+                push_resp(std::move(resp));
+                break;
+            }
             auto table = m_resources.get_table(req.entity_id());
             table->clear();
             const auto& r = req.table_replace_req();
@@ -2820,6 +2896,14 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 push_resp(std::move(resp));
                 break;
             }
+
+            if (m_derived_engine.is_derived_table(req.entity_id())) {
+                proto::Response resp;
+                *resp.mutable_server_error()->mutable_message() =
+                    "Cannot update a read-only derived table";
+                push_resp(std::move(resp));
+                break;
+            }
             const auto& r = req.table_remove_req();
             auto table = m_resources.get_table(req.entity_id());
             switch (r.data().data_case()) {
@@ -2856,6 +2940,14 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 proto::Response resp;
                 *resp.mutable_server_error()->mutable_message() =
                     "Cannot update a read-only join table";
+                push_resp(std::move(resp));
+                break;
+            }
+
+            if (m_derived_engine.is_derived_table(req.entity_id())) {
+                proto::Response resp;
+                *resp.mutable_server_error()->mutable_message() =
+                    "Cannot update a read-only derived table";
                 push_resp(std::move(resp));
                 break;
             }
@@ -3422,6 +3514,8 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 m_join_engine.unregister_join(req.entity_id());
             }
 
+            m_derived_engine.unregister_table(req.entity_id());
+
             const auto is_immediate = req.table_delete_req().is_immediate();
             if (is_immediate
                 || m_resources.get_table_view_count(req.entity_id()) == 0) {
@@ -3478,6 +3572,14 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             break;
         }
         case proto::Request::kViewDeleteReq: {
+            if (m_derived_engine.has_dependents(req.entity_id())) {
+                proto::Response resp;
+                *resp.mutable_server_error()->mutable_message() =
+                    "Cannot delete view: it is the source for a derived table";
+                push_resp(std::move(resp));
+                break;
+            }
+
             for (const auto& sub :
                  m_resources.get_view_on_delete_sub(req.entity_id())) {
                 proto::Response resp;
@@ -3762,11 +3864,17 @@ ProtoServer::_poll() {
         dirty_ids.insert(table_id);
     }
 
+    for (const auto& table_id : m_derived_updated) {
+        dirty_ids.insert(table_id);
+    }
+
+    m_derived_updated.clear();
+
     // Recompute join tables whose sources were dirty, using a worklist
     // to handle chained joins (join of join) in dependency order.
     tsl::hopscotch_set<ServerResources::t_id> processed_joins;
     std::vector<ServerResources::t_id> worklist;
-    for (auto& [_, table_id] : tables) {
+    for (const auto& table_id : dirty_ids) {
         auto dependents = m_join_engine.get_dependent_join_tables(table_id);
         for (auto& join_id : dependents) {
             if (processed_joins.find(join_id) == processed_joins.end()) {
@@ -3816,66 +3924,161 @@ ProtoServer::_poll() {
 }
 
 void
-ProtoServer::_process_table_unchecked(
+ProtoServer::_notify_table(
     std::shared_ptr<Table>& table,
     const ServerResources::t_id& table_id,
+    t_uindex port_id,
     std::vector<ProtoServerResp<ProtoServer::Response>>& outs
 ) {
-    table->get_pool()->_process([this, table, table_id, &outs](auto port_id) {
-        const auto removed = table->get_gnode()->get_removed_pkeys();
-        const bool has_removes =
-            !table->get_index().empty() && removed && removed->size() > 0;
-        std::shared_ptr<std::string> removed_indices;
+    const auto removed = table->get_gnode()->get_removed_pkeys();
+    const bool has_removes =
+        !table->get_index().empty() && removed && removed->size() > 0;
+    std::shared_ptr<std::string> removed_indices;
 
-        // record changes per port.
-        auto view_ids = m_resources.get_view_ids(table_id);
-        for (const auto& view_id : view_ids) {
-            if (!m_resources.has_view(view_id)) {
-                continue;
+    // record changes per port.
+    auto view_ids = m_resources.get_view_ids(table_id);
+    for (const auto& view_id : view_ids) {
+        if (!m_resources.has_view(view_id)) {
+            continue;
+        }
+
+        auto view = m_resources.get_view(view_id);
+        if (has_removes) {
+            auto remove_subs = m_resources.get_view_on_remove_sub(view_id);
+            if (!remove_subs.empty() && !removed_indices) {
+                removed_indices = apachearrow::column_to_arrow_ipc(
+                    *removed->get_const_column("psp_pkey"),
+                    table->get_index(),
+                    removed->size()
+                );
             }
 
-            auto view = m_resources.get_view(view_id);
-            if (has_removes) {
-                auto remove_subs = m_resources.get_view_on_remove_sub(view_id);
-                if (!remove_subs.empty() && !removed_indices) {
-                    removed_indices = apachearrow::column_to_arrow_ipc(
-                        *removed->get_const_column("psp_pkey"),
-                        table->get_index(),
-                        removed->size()
-                    );
-                }
-
-                for (auto& subscription : remove_subs) {
-                    Response out;
-                    out.set_msg_id(subscription.id);
-                    out.set_entity_id(view_id);
-                    auto* r = out.mutable_view_on_remove_resp();
-                    r->set_port_id(port_id);
-                    *r->mutable_indices() = *removed_indices;
-                    ProtoServerResp<proto::Response> resp2;
-                    resp2.data = std::move(out);
-                    resp2.client_id = subscription.client_id;
-                    outs.emplace_back(std::move(resp2));
-                }
-            }
-
-            auto subscriptions = m_resources.get_view_on_update_sub(view_id);
-            for (auto& subscription : subscriptions) {
+            for (auto& subscription : remove_subs) {
                 Response out;
                 out.set_msg_id(subscription.id);
                 out.set_entity_id(view_id);
-                auto* r = out.mutable_view_on_update_resp();
+                auto* r = out.mutable_view_on_remove_resp();
                 r->set_port_id(port_id);
-                if (view->get_deltas_enabled()) {
-                    *r->mutable_delta() = *view->get_row_delta_as_arrow();
-                }
-
+                *r->mutable_indices() = *removed_indices;
                 ProtoServerResp<proto::Response> resp2;
                 resp2.data = std::move(out);
                 resp2.client_id = subscription.client_id;
                 outs.emplace_back(std::move(resp2));
             }
         }
+
+        auto subscriptions = m_resources.get_view_on_update_sub(view_id);
+        for (auto& subscription : subscriptions) {
+            Response out;
+            out.set_msg_id(subscription.id);
+            out.set_entity_id(view_id);
+            auto* r = out.mutable_view_on_update_resp();
+            r->set_port_id(port_id);
+            if (view->get_deltas_enabled()) {
+                *r->mutable_delta() = *view->get_row_delta_as_arrow();
+            }
+
+            ProtoServerResp<proto::Response> resp2;
+            resp2.data = std::move(out);
+            resp2.client_id = subscription.client_id;
+            outs.emplace_back(std::move(resp2));
+        }
+    }
+
+    for (const auto& view_id : m_resources.get_view_ids(table_id)) {
+        for (auto& [child_id, source] :
+             m_derived_engine.get_dependents(view_id)) {
+            if (source->step()) {
+                m_derived_updated.insert(child_id);
+                auto child = source->child();
+                _notify_table(child, child_id, 0, outs);
+            }
+        }
+    }
+}
+
+std::string
+ProtoServer::make_derived_table(
+    const proto::MakeTableReq& req,
+    const ServerResources::t_id& table_id,
+    bool has_identity_options,
+    std::vector<ProtoServerResp<ProtoServer::Response>>& outs,
+    std::shared_ptr<Table>& table
+) {
+    const auto& view_id = req.data().from_view();
+    if (!m_resources.has_view(view_id)) {
+        return "View \"" + view_id + "\" does not exist";
+    }
+
+    if (has_identity_options) {
+        return "`index` and `limit` cannot be set on a Table made from a View";
+    }
+
+    auto parent_id = m_resources.get_table_id_for_view(view_id);
+    auto parent = m_resources.get_table(parent_id);
+    auto root_id = _root_table_id(parent_id);
+    if (m_resources.is_table_dirty(root_id)) {
+        auto root = m_resources.get_table(root_id);
+        _process_table(root, root_id, outs);
+    }
+
+    auto source = m_resources.get_view(view_id)->make_derived_source(parent);
+    t_schema schema = source->infer_schema();
+    if (req.options().has_view_schema()) {
+        std::vector<std::string> names;
+        std::vector<t_dtype> types;
+        for (const auto& it : req.options().view_schema().schema()) {
+            t_dtype dtype = column_type_to_dtype(it.type());
+            if (schema.has_column(it.name())) {
+                t_dtype inferred = schema.get_dtype(it.name());
+                if (dtype_to_column_type(inferred) != it.type()) {
+                    return "Column \"" + it.name()
+                        + "\" does not have the type of the View's column";
+                }
+
+                dtype = inferred;
+            }
+
+            names.push_back(it.name());
+            types.push_back(dtype);
+        }
+
+        schema = t_schema(names, types);
+    }
+
+    table = Table::make_derived(
+        schema, source->pkey_dtype(), source->index(), source->limit()
+    );
+
+#ifdef PSP_PARALLEL_FOR
+    table->get_pool()->adopt_lock(*parent->get_pool());
+#endif
+    source->attach(table);
+    m_derived_engine.register_table(view_id, table_id, source);
+    return "";
+}
+
+ServerResources::t_id
+ProtoServer::_root_table_id(const ServerResources::t_id& table_id) {
+    ServerResources::t_id id = table_id;
+    while (m_derived_engine.is_derived_table(id)) {
+        id = m_resources.get_table_id_for_view(
+            m_derived_engine.get_view_id(id)
+        );
+    }
+
+    return id;
+}
+
+void
+ProtoServer::_process_table_unchecked(
+    std::shared_ptr<Table>& table,
+    const ServerResources::t_id& table_id,
+    std::vector<ProtoServerResp<ProtoServer::Response>>& outs
+) {
+    auto table_ = table;
+    table->get_pool()->_process([this, &table_, &table_id, &outs](auto port_id) {
+        _notify_table(table_, table_id, port_id, outs);
     });
 }
 

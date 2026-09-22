@@ -59,6 +59,15 @@ class t_ctx_grouped_pkey;
 #endif
 
 /**
+ * @brief The rows a derived table's source touched in one step.
+ */
+struct PERSPECTIVE_EXPORT t_derived_step {
+    std::shared_ptr<t_data_table> m_flattened;
+    std::shared_ptr<t_data_table> m_prev_state;
+    std::vector<t_uindex> m_rows;
+};
+
+/**
  * @brief The struct returned from `_process_table`, which contains a
  * pointer to the flattened and processed `t_data_table`, and a boolean showing
  * whether the user's `on_update` callbacks should be called, i.e. whether the
@@ -111,6 +120,21 @@ public:
      * @param fragments
      */
     void send(t_uindex port_id, const t_data_table& fragments);
+
+    /**
+     * @brief Apply one step of a derived table whose state rows and previous
+     * values are dictated by its source.
+     */
+    bool process_derived(const t_derived_step& step);
+
+    /**
+     * @brief Make the derived master column `name` read `column`, which
+     * another table owns.
+     */
+    void
+    set_derived_alias(const std::string& name, std::shared_ptr<t_column> column);
+
+    bool is_derived_alias(const std::string& name) const;
 
     /**
      * @brief Bulk-initialize an empty gnode directly from `data_table`,
@@ -318,6 +342,24 @@ protected:
      * @param process_state
      */
     t_mask _process_mask_existed_rows(t_process_state& process_state);
+
+    /**
+     * @brief Fill the transitional output tables by diffing `flattened`
+     * against `state_table` at the rows given by `lookup`.
+     */
+    /**
+     * @brief Consume a pending reset, reporting stashed keys absent from
+     * `pkey_col` as removed.
+     */
+    void _take_reset_removes(
+        const t_column* pkey_col, t_uindex flattened_num_rows
+    );
+
+    t_mask _compute_transitions(
+        const std::shared_ptr<t_data_table>& flattened,
+        const std::shared_ptr<t_data_table>& state_table,
+        const std::vector<t_rlookup>& lookup
+    );
 
     /**
      * @brief Given a flattened column, the master column from `m_gstate`, and

@@ -13,6 +13,8 @@
 import { benchmark } from "./src/js/benchmark.mjs";
 import {
     check_version_gte,
+    keyed_superstore_uid,
+    new_keyed_superstore_table,
     new_superstore_table,
 } from "./src/js/superstore.mjs";
 
@@ -145,6 +147,106 @@ export async function window_suite(perspective, metadata) {
             await view.to_columns();
         },
     });
+}
+
+const TABLE_VIEW_CONFIGS = {
+    "": { columns: ["uid", "Region", "Sales", "Profit"] },
+    filter: {
+        columns: ["uid", "Region", "Sales", "Profit"],
+        filter: [["Sales", ">", 100]],
+    },
+    group_by: {
+        group_by: ["Product Name"],
+        columns: ["Sales", "Profit"],
+        aggregates: { Sales: "sum", Profit: "avg" },
+    },
+    "group_by: unique": {
+        group_by: ["uid"],
+        columns: ["Sales", "Profit"],
+        aggregates: { Sales: "sum", Profit: "avg" },
+    },
+    "group_by, split_by": {
+        group_by: ["Product Name"],
+        split_by: ["Region"],
+        columns: ["Sales", "Profit"],
+        aggregates: { Sales: "sum", Profit: "avg" },
+    },
+};
+
+export async function table_view_suite(perspective, metadata) {
+    if (!check_version_gte(metadata.version, "3.0.0")) {
+        return;
+    }
+
+    async function before_all() {
+        return {
+            arrow: await new_keyed_superstore_table(perspective, metadata),
+        };
+    }
+
+    async function make_source({ arrow }, config) {
+        const table = await perspective.table(arrow.slice(), {
+            index: "uid",
+        });
+
+        const view = await table.view(config);
+        return { table, view };
+    }
+
+    for (const [label, config] of Object.entries(TABLE_VIEW_CONFIGS)) {
+        const name = label === "" ? "view" : `view({${label}})`;
+        await benchmark({
+            name: `.table(${name})`,
+            before_all,
+            metadata,
+            async before(state) {
+                return await make_source(state, config);
+            },
+            async after(_, { table, view }, derived) {
+                await derived.delete();
+                await view.delete();
+                await table.delete();
+            },
+            async test(_, { view }) {
+                const derived = await perspective.table(view);
+                await derived.size();
+                return derived;
+            },
+        });
+
+        await benchmark({
+            name: `table.update(rows) with .table(${name})`,
+            before_all,
+            metadata,
+            async before(state) {
+                const source = await make_source(state, config);
+                const derived = await perspective.table(source.view);
+                const child = await derived.view();
+                await child.to_columns();
+                const state2 = { ...source, derived, child, tick: 0 };
+                await child.on_update(() => state2.resolve?.());
+                return state2;
+            },
+            async after(_, { table, view, derived, child }) {
+                await child.delete();
+                await derived.delete();
+                await view.delete();
+                await table.delete();
+            },
+            async test(_, source) {
+                const tick = source.tick++;
+                const rows = Array.from({ length: 100 }, (_, i) => ({
+                    uid: keyed_superstore_uid(tick * 100 + i),
+                    Sales: 1000 + tick + i,
+                }));
+
+                const updated = new Promise((x) => (source.resolve = x));
+                await source.table.update(rows);
+                await updated;
+                await source.child.to_columns();
+            },
+        });
+    }
 }
 
 export async function to_data_suite(perspective, metadata) {

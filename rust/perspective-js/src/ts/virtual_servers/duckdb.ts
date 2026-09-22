@@ -485,6 +485,23 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
         return { expression_schema, expression_errors };
     }
 
+    async viewMakeTable(
+        viewId: string,
+        tableId: string,
+        config: ViewConfig,
+        schema?: Record<string, ColumnType>,
+    ) {
+        const query = this.sqlBuilder.viewMakeTable(
+            viewId,
+            tableId,
+            config,
+            await this.tableSchema(viewId),
+            schema,
+        );
+
+        await runQuery(this.db, query);
+    }
+
     async viewDelete(viewId: string) {
         const query = this.sqlBuilder.viewDelete(viewId);
         await runQuery(this.db, query);

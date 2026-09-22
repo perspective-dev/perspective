@@ -16,7 +16,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use futures::FutureExt;
-use perspective_client::config::ViewConfigUpdate;
+use indexmap::IndexMap;
+use perspective_client::config::{ColumnType, ViewConfigUpdate};
 use perspective_client::proto::ListFlatten;
 use perspective_client::{
     Client, ColumnWindow, DeleteOptions, DescribeVerdict, OnRemoveData, OnUpdateData, OnUpdateMode,
@@ -30,7 +31,7 @@ use pythonize::depythonize;
 
 use super::pandas::arrow_to_pandas;
 use super::polars::arrow_to_polars;
-use super::table_data::TableDataExt;
+use super::table_data::{TableDataExt, psp_type_from_py_type};
 use super::update_data::UpdateDataExt;
 use super::{pandas, polars, pyarrow};
 use crate::py_async::{self, AllowThreads};
@@ -55,6 +56,16 @@ fn py_to_table_ref_from_owned(py: Python<'_>, val: &Py<PyAny>) -> PyResult<Table
 }
 
 /// An instance of a [`Client`] is a connection to a single
+fn parse_schema(
+    py: Python<'_>,
+    schema: &Bound<'_, PyDict>,
+) -> PyResult<IndexMap<String, ColumnType>> {
+    schema
+        .iter()
+        .map(|(name, ty)| Ok((name.extract::<String>()?, psp_type_from_py_type(py, ty)?)))
+        .collect()
+}
+
 fn parse_list_flatten(value: Option<String>) -> PyResult<Option<ListFlatten>> {
     match value.as_deref() {
         None => Ok(None),
@@ -182,6 +193,8 @@ impl AsyncClient {
     ///       and byte array alternative inputs.
     ///     - `page_to_disk` - Back this [`Table`]'s canonical data with the
     ///       on-disk (memory-mapped) storage backend instead of memory.
+    ///     - `schema` - The columns of a [`Table`] derived from a `View`, in
+    ///       place of the ones inferred from it.
     ///
     /// # Python Examples
     ///
@@ -191,7 +204,7 @@ impl AsyncClient {
     /// table = await client.table("x,y\n1,2\n3,4")
     /// ```
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature=(input, limit=None, index=None, name=None, format=None, page_to_disk=None, list_flatten=None))]
+    #[pyo3(signature=(input, limit=None, index=None, name=None, format=None, page_to_disk=None, list_flatten=None, schema=None))]
     pub async fn table(
         &self,
         input: Py<PyAny>,
@@ -201,6 +214,7 @@ impl AsyncClient {
         format: Option<Py<PyString>>,
         page_to_disk: Option<bool>,
         list_flatten: Option<Py<PyString>>,
+        schema: Option<Py<PyDict>>,
     ) -> PyResult<AsyncTable> {
         let client = self.client.clone();
         let py_client = Python::attach(|_| self.clone());
@@ -209,6 +223,7 @@ impl AsyncClient {
                 name: name.map(|x| x.extract::<String>(py)).transpose()?,
                 page_to_disk,
                 list_flatten: parse_list_flatten(list_flatten.map(|x| x.to_string()))?,
+                schema: schema.map(|x| parse_schema(py, x.bind(py))).transpose()?,
                 ..TableInitOptions::default()
             };
 

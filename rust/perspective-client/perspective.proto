@@ -388,6 +388,10 @@ message MakeTableReq {
         optional bool page_to_disk = 3;
 
         optional ListFlatten list_flatten = 4;
+
+        // The columns of a `Table` made from a `View`, in place of the ones
+        // inferred from it. Only valid with `MakeTableData.from_view`.
+        optional Schema view_schema = 5;
     }
 }
 

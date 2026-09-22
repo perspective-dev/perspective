@@ -1181,6 +1181,7 @@ t_ctx2::get_rows_changed() {
 
 void
 t_ctx2::reset(bool reset_expressions) {
+    ++m_storage_generation;
     for (t_uindex treeidx = 0, tree_loop_end = m_trees.size();
          treeidx < tree_loop_end;
          ++treeidx) {

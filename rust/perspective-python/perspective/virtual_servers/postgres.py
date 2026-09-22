@@ -294,6 +294,13 @@ class PostgresVirtualServerHandler(VirtualServerHandler):
             if not d.name.startswith("__")
         }
 
+    def view_make_table(self, view_name, table_name, config, schema=None):
+        query = self.sql_builder.view_make_table(
+            view_name, table_name, config, self.table_schema(view_name), schema
+        )
+
+        run_query(self.db, query, execute=True)
+
     def view_delete(self, view_name):
         query = self.sql_builder.view_delete(view_name)
         run_query(self.db, query, execute=True)

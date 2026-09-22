@@ -1419,6 +1419,31 @@ fn test_view_get_min_max_escapes_double_quotes_in_column_name() {
     );
 }
 
+fn view_make_table_schema() -> IndexMap<String, ColumnType> {
+    IndexMap::from([
+        ("__GROUPING_ID__".to_string(), ColumnType::Integer),
+        ("__ROW_PATH_0__".to_string(), ColumnType::String),
+        ("Mon|x".to_string(), ColumnType::Float),
+        ("Tue|x".to_string(), ColumnType::Float),
+    ])
+}
+
+#[test]
+fn test_view_make_table_flat() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let schema = IndexMap::from([
+        ("a".to_string(), ColumnType::Integer),
+        ("b".to_string(), ColumnType::String),
+    ]);
+
+    assert_eq!(
+        builder
+            .view_make_table("v", "t", &ViewConfig::default(), &schema, None)
+            .unwrap(),
+        "CREATE TABLE t AS (SELECT \"a\", \"b\" FROM v)"
+    );
+}
+
 #[test]
 fn test_table_make_view_escapes_double_quotes_in_column_names() {
     let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
@@ -1437,6 +1462,20 @@ fn test_table_make_view_escapes_double_quotes_in_column_names() {
         !sql.contains("\"a\"b\""),
         "expected no unescaped column identifier: {}",
         sql
+    );
+}
+
+fn test_view_make_table_unrolls_row_path() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.group_by = vec!["g".to_string()];
+    config.split_by = vec!["s".to_string()];
+    assert_eq!(
+        builder
+            .view_make_table("v", "t", &config, &view_make_table_schema(), None)
+            .unwrap(),
+        "CREATE TABLE t AS (SELECT \"__ROW_PATH_0__\" AS \"g (Group by 1)\", \"Mon|x\", \"Tue|x\" \
+         FROM v)"
     );
 }
 
@@ -1501,5 +1540,48 @@ fn test_view_get_data_orders_column_paths_containing_separator() {
     assert_eq!(
         sql,
         "SELECT \"a|b|amount\", \"a|b|qty\", \"b|c|amount\", \"b|c|qty\" FROM my_view"
+    );
+}
+
+fn test_view_make_table_explicit_schema() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.group_by = vec!["g".to_string()];
+    config.split_by = vec!["s".to_string()];
+    let declared = IndexMap::from([
+        ("g (Group by 1)".to_string(), ColumnType::String),
+        ("Tue|x".to_string(), ColumnType::Float),
+        ("Wed|x".to_string(), ColumnType::Float),
+    ]);
+
+    assert_eq!(
+        builder
+            .view_make_table(
+                "v",
+                "t",
+                &config,
+                &view_make_table_schema(),
+                Some(&declared)
+            )
+            .unwrap(),
+        "CREATE TABLE t AS (SELECT \"__ROW_PATH_0__\" AS \"g (Group by 1)\", \"Tue|x\", CAST(NULL \
+         AS DOUBLE PRECISION) AS \"Wed|x\" FROM v)"
+    );
+}
+
+#[test]
+fn test_view_make_table_rejects_type_mismatch() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let declared = IndexMap::from([("Mon|x".to_string(), ColumnType::String)]);
+    assert!(
+        builder
+            .view_make_table(
+                "v",
+                "t",
+                &ViewConfig::default(),
+                &view_make_table_schema(),
+                Some(&declared)
+            )
+            .is_err()
     );
 }

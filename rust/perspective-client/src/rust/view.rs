@@ -295,6 +295,10 @@ pub(crate) struct ViewSource {
 assert_view_api!(View);
 
 impl View {
+    pub(crate) fn client(&self) -> &Client {
+        &self.client
+    }
+
     pub fn new(name: String, client: Client) -> Self {
         View {
             name,

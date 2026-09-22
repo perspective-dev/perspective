@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -108,6 +109,12 @@ pub struct TableInitOptions {
     #[serde(default)]
     #[ts(optional)]
     pub list_flatten: Option<crate::proto::ListFlatten>,
+
+    /// The columns of a [`Table`] made from a [`View`], in place of the ones
+    /// inferred from it.
+    #[serde(default)]
+    #[ts(optional)]
+    pub schema: Option<IndexMap<String, ColumnType>>,
 }
 
 impl TableInitOptions {
@@ -122,9 +129,20 @@ impl TryFrom<TableOptions> for MakeTableOptions {
     fn try_from(value: TableOptions) -> Result<Self, Self::Error> {
         let page_to_disk = value.page_to_disk;
         let list_flatten = value.list_flatten.map(|x| x as i32);
+        let view_schema = value.schema.clone().map(|schema| crate::proto::Schema {
+            schema: schema
+                .into_iter()
+                .map(|(name, r#type)| crate::proto::schema::KeyTypePair {
+                    name,
+                    r#type: r#type as i32,
+                })
+                .collect(),
+        });
+
         Ok(MakeTableOptions {
             page_to_disk,
             list_flatten,
+            view_schema,
             make_table_type: match value {
                 TableOptions {
                     index: Some(_),
@@ -149,6 +167,7 @@ pub(crate) struct TableOptions {
     pub limit: Option<u32>,
     pub page_to_disk: Option<bool>,
     pub list_flatten: Option<crate::proto::ListFlatten>,
+    pub schema: Option<IndexMap<String, ColumnType>>,
 }
 
 /// The source [`View`] of a replica [`Table`] built by [`Client::table`],
@@ -167,6 +186,7 @@ impl From<TableInitOptions> for TableOptions {
             limit: value.limit,
             page_to_disk: value.page_to_disk,
             list_flatten: value.list_flatten,
+            schema: value.schema,
         }
     }
 }

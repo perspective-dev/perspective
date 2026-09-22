@@ -274,6 +274,18 @@ public:
             apachearrow::LIST_FLATTEN_ZIP
     );
 
+    /**
+     * @brief Create a read-only `Table` whose rows are dictated by a `View`.
+     */
+    static std::shared_ptr<Table> make_derived(
+        const t_schema& schema,
+        t_dtype pkey_dtype,
+        const std::string& index,
+        std::uint32_t limit
+    );
+
+    bool is_derived() const;
+
     static std::shared_ptr<Table> from_arrow(
         const std::string& index,
         std::string&& data,
@@ -365,6 +377,7 @@ private:
      */
     const std::string m_index;
     bool m_gnode_set;
+    bool m_derived = false;
     const t_backing_store m_backing_store;
 
     /**

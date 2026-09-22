@@ -92,6 +92,66 @@ export async function new_superstore_table(perspective, metadata) {
     return arrow.slice();
 }
 
+const SUPERSTORE_ROWS = 9994;
+const KEY_STRIDE = 10000;
+const KEYED = new Map();
+
+/**
+ * The key of the `n`th row of `new_keyed_superstore_table`.
+ * @param {number} n
+ * @returns
+ */
+export function keyed_superstore_uid(n) {
+    const total = SUPERSTORE_ROWS * Math.max(SUPERSTORE_COPIES, 1);
+    const k = n % total;
+    return (
+        Math.floor(k / SUPERSTORE_ROWS) * KEY_STRIDE + (k % SUPERSTORE_ROWS) + 1
+    );
+}
+
+/**
+ * Load the replicated Superstore data set with a `uid` column that is unique
+ * across copies, for benchmarks which need an `index`.
+ * @param {*} metadata
+ * @returns
+ */
+export async function new_keyed_superstore_table(perspective, metadata) {
+    const base = check_version_gte(metadata.version, "2.5.0")
+        ? SUPERSTORE_FEATHER
+        : SUPERSTORE_ARROW;
+
+    const cached = KEYED.get(base);
+    if (cached !== undefined) {
+        return cached.slice();
+    }
+
+    const source = await perspective.table(base.slice());
+    const columns = await source.columns();
+    let keyed;
+    for (let i = 0; i < Math.max(SUPERSTORE_COPIES, 1); i++) {
+        const view = await source.view({
+            columns: [...columns, "uid"],
+            expressions: { uid: `integer("Row ID" + ${i * KEY_STRIDE})` },
+        });
+
+        const arrow = await view.to_arrow();
+        await view.delete();
+        if (keyed === undefined) {
+            keyed = await perspective.table(arrow);
+        } else {
+            await keyed.update(arrow);
+        }
+    }
+
+    const view = await keyed.view();
+    const arrow = await view.to_arrow();
+    await view.delete();
+    await keyed.delete();
+    await source.delete();
+    KEYED.set(base, arrow);
+    return arrow.slice();
+}
+
 /**
  * Check whether a version string e.g. "v1.2.3" is greater or equal to another
  * version string, which must be of the same length/have the same number of

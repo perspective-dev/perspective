@@ -284,6 +284,47 @@ impl VirtualServerHandler for PyServerHandler {
         })
     }
 
+    fn view_make_table(
+        &mut self,
+        view_id: &str,
+        table_id: &str,
+        config: &perspective_client::config::ViewConfig,
+        schema: Option<&IndexMap<String, ColumnType>>,
+    ) -> VirtualServerFuture<'_, Result<(), Self::Error>> {
+        let handler = Python::attach(|py| self.0.clone_ref(py));
+        let view_id = view_id.to_string();
+        let table_id = table_id.to_string();
+        let config = config.clone();
+        let schema = schema.cloned();
+        Box::pin(async move {
+            Python::attach(|py| {
+                let schema = schema
+                    .map(|schema| {
+                        let dict = PyDict::new(py);
+                        for (name, ty) in schema {
+                            dict.set_item(name, ty.to_string())?;
+                        }
+
+                        PyResult::Ok(dict)
+                    })
+                    .transpose()?;
+
+                handler.call_method1(
+                    py,
+                    pyo3::intern!(py, "view_make_table"),
+                    (
+                        &view_id,
+                        &table_id,
+                        pythonize::pythonize(py, &config)?,
+                        schema,
+                    ),
+                )?;
+
+                Ok(())
+            })
+        })
+    }
+
     fn view_delete(&self, view_id: &str) -> VirtualServerFuture<'_, Result<(), Self::Error>> {
         let handler = Python::attach(|py| self.0.clone_ref(py));
         let view_id = view_id.to_string();

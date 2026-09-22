@@ -912,6 +912,9 @@ t_stree::update_shape_from_static(const t_dtree_ctx& ctx) {
             );
 
             m_newids.insert(sptidx);
+            for (const auto& capture : m_captures) {
+                capture->m_created.push_back(sptidx);
+            }
 
             if (ndepth == dtree.last_level()) {
                 m_newleaves.insert(sptidx);
@@ -2117,6 +2120,11 @@ t_stree::update_agg_table(
             m_deltas->insert(t_tcdelta(nidx, idx, old_value, new_value));
         }
 
+        if (!m_captures.empty()
+            && (val_neq || old_value.is_valid() != dst->is_valid(dst_ridx))) {
+            capture_change(nidx, idx, old_value);
+        }
+
     } // end for
 }
 
@@ -2280,6 +2288,9 @@ t_stree::drop_zero_strands() {
             leaves.push_back(iter->m_idx);
         }
         node_ids.push_back(iter->m_aggidx);
+        if (!m_captures.empty()) {
+            capture_dropped(*iter);
+        }
     }
 
     clear_aggregates(node_ids);
@@ -2655,6 +2666,66 @@ t_stree::set_alerts_enabled(bool enabled_state) {
 void
 t_stree::set_deltas_enabled(bool enabled_state) {
     m_features[CTX_FEAT_DELTA] = enabled_state;
+}
+
+void
+t_stree::add_capture(const std::shared_ptr<t_stree_capture>& capture) {
+    m_captures.push_back(capture);
+}
+
+void
+t_stree::remove_capture(const std::shared_ptr<t_stree_capture>& capture) {
+    m_captures.erase(
+        std::remove(m_captures.begin(), m_captures.end(), capture),
+        m_captures.end()
+    );
+}
+
+bool
+t_stree::node_exists(t_uindex idx) const {
+    return m_nodes->get<by_idx>().find(idx) != m_nodes->get<by_idx>().end();
+}
+
+void
+t_stree::for_each_node(const std::function<void(const t_stnode&)>& fn) const {
+    for (const auto& node : m_nodes->get<by_idx>()) {
+        fn(node);
+    }
+}
+
+void
+t_stree::capture_change(
+    t_uindex nidx, t_uindex aggnum, const t_tscalar& old_value
+) {
+    for (const auto& capture : m_captures) {
+        auto& cells = capture->m_changed[nidx];
+        bool seen = false;
+        for (const auto& cell : cells) {
+            seen = seen || cell.first == aggnum;
+        }
+
+        if (!seen) {
+            cells.emplace_back(aggnum, old_value);
+        }
+    }
+}
+
+void
+t_stree::capture_dropped(const t_stnode& node) {
+    t_stree_dropped dropped;
+    dropped.m_idx = node.m_idx;
+    dropped.m_aggidx = node.m_aggidx;
+    dropped.m_depth = node.m_depth;
+    get_path(node.m_idx, dropped.m_path);
+    std::reverse(dropped.m_path.begin(), dropped.m_path.end());
+    dropped.m_aggregates.reserve(m_aggcols.size());
+    for (t_uindex aggnum = 0; aggnum < m_aggcols.size(); ++aggnum) {
+        dropped.m_aggregates.push_back(get_aggregate(node.m_idx, aggnum));
+    }
+
+    for (const auto& capture : m_captures) {
+        capture->m_dropped.push_back(dropped);
+    }
 }
 
 void

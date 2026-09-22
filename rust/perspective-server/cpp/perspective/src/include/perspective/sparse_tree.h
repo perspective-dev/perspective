@@ -31,6 +31,8 @@ SUPPRESS_WARNINGS_VC(4503)
 #include <perspective/sym_table.h>
 #include <perspective/data_table.h>
 #include <perspective/dense_tree.h>
+#include <tsl/hopscotch_map.h>
+#include <functional>
 #include <vector>
 #include <algorithm>
 #include <deque>
@@ -133,6 +135,27 @@ typedef std::pair<iter_by_pidx, iter_by_pidx> t_by_pidx_ipair;
 typedef t_idxpkey::index<by_idx_pkey>::type::iterator iter_by_idx_pkey;
 
 typedef std::pair<iter_by_idx_pkey, iter_by_idx_pkey> t_by_idx_pkey_ipair;
+
+/**
+ * @brief A node removed from a `t_stree`, with its path and last aggregates.
+ */
+struct PERSPECTIVE_EXPORT t_stree_dropped {
+    t_uindex m_idx;
+    t_uindex m_aggidx;
+    t_depth m_depth;
+    std::vector<t_tscalar> m_path;
+    std::vector<t_tscalar> m_aggregates;
+};
+
+/**
+ * @brief The node changes a `t_stree` recorded for a derived table.
+ */
+struct PERSPECTIVE_EXPORT t_stree_capture {
+    tsl::hopscotch_map<t_uindex, std::vector<std::pair<t_uindex, t_tscalar>>>
+        m_changed;
+    std::vector<t_uindex> m_created;
+    std::vector<t_stree_dropped> m_dropped;
+};
 
 struct PERSPECTIVE_EXPORT t_agg_update_info {
     std::vector<const t_column*> m_src;
@@ -327,6 +350,21 @@ public:
 
     const std::shared_ptr<t_tcdeltas>& get_deltas() const;
 
+    /**
+     * @brief Record this tree's node changes into `capture` until it is
+     * removed.
+     */
+    void add_capture(const std::shared_ptr<t_stree_capture>& capture);
+
+    void remove_capture(const std::shared_ptr<t_stree_capture>& capture);
+
+    bool node_exists(t_uindex idx) const;
+
+    /**
+     * @brief Call `fn` with every live node in the tree.
+     */
+    void for_each_node(const std::function<void(const t_stnode&)>& fn) const;
+
     void clear();
 
     std::pair<t_tscalar, t_tscalar> first_last_helper(
@@ -452,6 +490,12 @@ private:
     std::shared_ptr<t_treenodes> m_nodes;
     std::shared_ptr<t_idxpkey> m_idxpkey;
     std::shared_ptr<t_idxleaf> m_idxleaf;
+    void capture_change(
+        t_uindex nidx, t_uindex aggnum, const t_tscalar& old_value
+    );
+
+    void capture_dropped(const t_stnode& node);
+
     t_uindex m_curidx;
     std::shared_ptr<t_data_table> m_aggregates;
     std::vector<t_aggspec> m_aggspecs;
@@ -467,6 +511,7 @@ private:
     std::vector<bool> m_features;
     t_symtable m_symtable;
     bool m_has_delta;
+    std::vector<std::shared_ptr<t_stree_capture>> m_captures;
     std::string m_grand_agg_str;
 
     // Used by AGGTYPE_GMV under split_by. For t_ctx1 (group_by only) the

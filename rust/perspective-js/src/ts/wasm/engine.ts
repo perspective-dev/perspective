@@ -247,7 +247,8 @@ async function convert_typed_array_to_pointer(
  *
  * @param callback A callback to which is passed the responses. THe responses
  * must be fully processed or copied before the callback returns, as it
- * references memory on the wasm stack.
+ * references memory on the wasm stack, which a `callback` that allocates may
+ * also detach - hence the message descriptors are read before dispatching.
  */
 async function decode_api_responses(
     core: MainModule,
@@ -255,28 +256,32 @@ async function decode_api_responses(
     callback: (_: ApiResponse) => Promise<void>,
 ) {
     const is_64 = core._psp_is_memory64();
+    const response_ptr = is_64 ? Number(ptr) : Number(ptr) >>> 0;
     const response = new DataView(
         core.HEAPU8.buffer,
-        is_64 ? Number(ptr) : Number(ptr) >>> 0,
+        response_ptr,
         is_64 ? 12 : 8,
     );
 
     const num_msgs = response.getUint32(0, true);
-    const msgs_ptr = is_64
-        ? response.getBigInt64(4, true)
-        : response.getUint32(4, true);
+    const msgs_ptr = Number(
+        is_64 ? response.getBigInt64(4, true) : response.getUint32(4, true),
+    );
 
     const messages = new DataView(
         core.HEAPU8.buffer,
-        Number(msgs_ptr),
+        msgs_ptr,
         num_msgs * (is_64 ? 16 : 12),
     );
 
-    try {
-        for (let i = 0; i < num_msgs; i++) {
-            const [data_ptr, data_len, client_id] = is_64
+    const free = (x: number) => core._psp_free((is_64 ? BigInt(x) : x) as any);
+
+    const descriptors: [number, number, number][] = [];
+    for (let i = 0; i < num_msgs; i++) {
+        descriptors.push(
+            is_64
                 ? [
-                      messages.getBigInt64(i * 16, true),
+                      Number(messages.getBigInt64(i * 16, true)),
                       messages.getInt32(i * 16 + 8, true),
                       messages.getInt32(i * 16 + 12, true),
                   ]
@@ -284,35 +289,21 @@ async function decode_api_responses(
                       messages.getUint32(i * 12, true),
                       messages.getUint32(i * 12 + 4, true),
                       messages.getInt32(i * 12 + 8, true),
-                  ];
+                  ],
+        );
+    }
 
-            const data = new Uint8Array(
-                core.HEAPU8.buffer,
-                Number(data_ptr),
-                data_len,
-            );
-
-            const resp = { client_id, data };
-            await callback(resp);
+    try {
+        for (const [data_ptr, data_len, client_id] of descriptors) {
+            const data = new Uint8Array(core.HEAPU8.buffer, data_ptr, data_len);
+            await callback({ client_id, data });
         }
     } finally {
-        for (let i = 0; i < num_msgs; i++) {
-            const data_ptr = is_64
-                ? messages.getBigInt64(i * 16, true)
-                : messages.getInt32(i * 12, true);
-
-            core._psp_free(data_ptr as any);
+        for (const [data_ptr] of descriptors) {
+            free(data_ptr);
         }
 
-        core._psp_free(
-            is_64
-                ? (BigInt(messages.byteOffset) as any as number)
-                : (messages.byteOffset as any),
-        );
-        core._psp_free(
-            is_64
-                ? (BigInt(response.byteOffset) as any as number)
-                : (response.byteOffset as any),
-        );
+        free(msgs_ptr);
+        free(response_ptr);
     }
 }

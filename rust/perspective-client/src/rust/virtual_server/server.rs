@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use prost::Message as ProstMessage;
 use prost::bytes::{Bytes, BytesMut};
 
@@ -24,13 +24,13 @@ use crate::config::{ViewConfig, ViewConfigUpdate};
 use crate::proto::response::ClientResp;
 use crate::proto::{
     ColumnType, GetFeaturesResp, GetHostedTablesResp, MakeTableResp, Request, Response,
-    ServerError, TableDescribeResp, TableMakePortResp, TableMakeViewResp, TableOnDeleteResp,
-    TableRemoveDeleteResp, TableSchemaResp, TableSizeResp, ViewColumnPathsResp, ViewDeleteResp,
-    ViewDescription, ViewDimensionsResp, ViewExpressionSchemaResp, ViewGetConfigResp,
-    ViewGetMinMaxResp, ViewOnDeleteResp, ViewOnRemoveResp, ViewOnUpdateResp, ViewRemoveDeleteResp,
-    ViewRemoveOnRemoveResp, ViewRemoveOnUpdateResp, ViewSchemaResp, ViewToArrowResp,
-    ViewToColumnsStringResp, ViewToCsvResp, ViewToNdjsonStringResp, ViewToRowsStringResp,
-    table_describe_resp,
+    ServerError, TableDeleteResp, TableDescribeResp, TableMakePortResp, TableMakeViewResp,
+    TableOnDeleteResp, TableRemoveDeleteResp, TableSchemaResp, TableSizeResp, ViewColumnPathsResp,
+    ViewDeleteResp, ViewDescription, ViewDimensionsResp, ViewExpressionSchemaResp,
+    ViewGetConfigResp, ViewGetMinMaxResp, ViewOnDeleteResp, ViewOnRemoveResp, ViewOnUpdateResp,
+    ViewRemoveDeleteResp, ViewRemoveOnRemoveResp, ViewRemoveOnUpdateResp, ViewSchemaResp,
+    ViewToArrowResp, ViewToColumnsStringResp, ViewToCsvResp, ViewToNdjsonStringResp,
+    ViewToRowsStringResp, table_describe_resp,
 };
 use crate::table::{DescribeError, Description};
 
@@ -62,6 +62,9 @@ pub struct VirtualServer<T: VirtualServerHandler> {
     view_configs: IndexMap<String, ViewConfig>,
     view_schemas: IndexMap<String, IndexMap<String, ColumnType>>,
 
+    /// The tables made from views, which this server created and may drop.
+    view_tables: IndexSet<String>,
+
     /// Per-view `table_describe` answers, computed LAZILY on the first
     /// `ViewExpressionSchemaReq` for that view — never on view creation.
     view_descriptions: IndexMap<String, Description>,
@@ -75,6 +78,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             view_configs: IndexMap::default(),
             view_to_table: IndexMap::default(),
             view_schemas: IndexMap::default(),
+            view_tables: IndexSet::default(),
             view_descriptions: IndexMap::default(),
         }
     }
@@ -445,9 +449,41 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 respond!(msg, ViewDeleteResp {})
             },
             MakeTableReq(req) => {
-                self.handler
-                    .make_table(&msg.entity_id, req.data.as_ref().unwrap())
-                    .await?;
+                let data = req.data.as_ref().unwrap();
+                if let Some(crate::proto::make_table_data::Data::FromView(view_id)) = &data.data {
+                    let options = req.options.clone().unwrap_or_default();
+                    if options.make_table_type.is_some() {
+                        return Err(VirtualServerError::Other(
+                            "`index` and `limit` cannot be set on a Table made from a View"
+                                .to_string(),
+                        ));
+                    }
+
+                    let config = self.view_configs.get(view_id).ok_or_else(|| {
+                        VirtualServerError::Other(format!("View \"{}\" does not exist", view_id))
+                    })?;
+
+                    let schema = options
+                        .view_schema
+                        .map(|schema| {
+                            schema
+                                .schema
+                                .into_iter()
+                                .map(|x| Ok((x.name, ColumnType::try_from(x.r#type)?)))
+                                .collect::<Result<IndexMap<_, _>, prost::DecodeError>>()
+                        })
+                        .transpose()
+                        .map_err(|e| VirtualServerError::Other(e.to_string()))?;
+
+                    self.handler
+                        .view_make_table(view_id, &msg.entity_id, config, schema.as_ref())
+                        .await?;
+
+                    self.view_tables.insert(msg.entity_id.clone());
+                } else {
+                    self.handler.make_table(&msg.entity_id, data).await?;
+                }
+
                 respond!(msg, MakeTableResp {})
             },
             ViewGetMinMaxReq(req) => {
@@ -460,6 +496,12 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     min: Some(min.into()),
                     max: Some(max.into()),
                 })
+            },
+
+            TableDeleteReq(_) if self.view_tables.contains(&msg.entity_id) => {
+                self.handler.view_delete(msg.entity_id.as_str()).await?;
+                self.view_tables.shift_remove(&msg.entity_id);
+                respond!(msg, TableDeleteResp {})
             },
 
             // Stub implementations for callback/update requests that VirtualServer doesn't support

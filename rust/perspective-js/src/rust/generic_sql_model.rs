@@ -166,6 +166,31 @@ impl GenericSQLVirtualServerModel {
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    /// Returns the SQL query to create a table from a view.
+    #[wasm_bindgen(js_name = "viewMakeTable")]
+    pub fn view_make_table(
+        &self,
+        view_id: &str,
+        table_id: &str,
+        config: JsValue,
+        view_schema: JsValue,
+        schema: JsValue,
+    ) -> Result<String, JsValue> {
+        let config: ViewConfig = serde_wasm_bindgen::from_value(config)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        let view_schema = self.parse_schema(view_schema)?;
+        let schema = if schema.is_undefined() || schema.is_null() {
+            None
+        } else {
+            Some(self.parse_schema(schema)?)
+        };
+
+        self.inner
+            .view_make_table(view_id, table_id, &config, &view_schema, schema.as_ref())
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
     /// Returns the SQL query to fetch data from a view with the given viewport.
     #[wasm_bindgen(js_name = "viewGetData")]
     pub fn view_get_data(

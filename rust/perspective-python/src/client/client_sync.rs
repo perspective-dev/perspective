@@ -157,6 +157,8 @@ impl Client {
     ///       `"json"`, `"columns"`, `"csv"` or `"arrow"`. This overrides
     ///       language-specific type dispatch behavior, which allows stringified
     ///       and byte array alternative inputs.
+    ///     - `schema` - The columns of a [`Table`] derived from a `View`, in
+    ///       place of the ones inferred from it.
     ///
     /// # Python Examples
     ///
@@ -166,7 +168,7 @@ impl Client {
     /// table = client.table("x,y\n1,2\n3,4")
     /// ```
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (input, limit=None, index=None, name=None, format=None, page_to_disk=None, list_flatten=None))]
+    #[pyo3(signature = (input, limit=None, index=None, name=None, format=None, page_to_disk=None, list_flatten=None, schema=None))]
     pub fn table(
         &self,
         py: Python<'_>,
@@ -177,6 +179,7 @@ impl Client {
         format: Option<Py<PyString>>,
         page_to_disk: Option<bool>,
         list_flatten: Option<Py<PyString>>,
+        schema: Option<Py<PyDict>>,
     ) -> PyResult<Table> {
         Ok(Table(
             self.0
@@ -188,6 +191,7 @@ impl Client {
                     format,
                     page_to_disk,
                     list_flatten,
+                    schema,
                 )
                 .py_block_on(py)?,
         ))

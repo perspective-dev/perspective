@@ -1184,3 +1184,80 @@ class TestDuckDBCoerceTypes:
         assert view.to_json() == []
         assert view.to_columns() == {"tiny": []}
         view.delete()
+
+
+class TestDuckDBTableFromView:
+    def test_group_by_view_unrolls_row_path(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Sales"], group_by=["Region"], aggregates={"Sales": "sum"}
+        )
+
+        derived = client.table(view, name="py_derived_group")
+        assert derived.schema() == {
+            "Region (Group by 1)": "string",
+            "Sales": "float",
+        }
+
+        child = derived.view(columns=["Region (Group by 1)", "Sales"])
+        expected = sorted(
+            (str(row["__ROW_PATH__"][0]) if row["__ROW_PATH__"] else "None", row["Sales"])
+            for row in view.to_json()
+        )
+
+        actual = sorted(
+            (str(row["Region (Group by 1)"]), row["Sales"]) for row in child.to_json()
+        )
+
+        assert actual == expected
+        child.delete()
+        derived.delete()
+        view.delete()
+
+    def test_explicit_schema(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Sales"],
+            group_by=["Category"],
+            split_by=["Region"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+
+        derived = client.table(
+            view,
+            name="py_derived_schema",
+            schema={
+                "Category (Group by 1)": "string",
+                "West|Sales": "float",
+                "North|Sales": "float",
+            },
+        )
+
+        assert derived.columns() == [
+            "Category (Group by 1)",
+            "West|Sales",
+            "North|Sales",
+        ]
+
+        child = derived.view(
+            columns=["Category (Group by 1)", "West|Sales", "North|Sales"]
+        )
+
+        rows = child.to_json()
+        assert len(rows) == 3
+        assert all(row["North|Sales"] is None for row in rows)
+        child.delete()
+        derived.delete()
+        view.delete()
+
+    def test_rejects_mismatched_type(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Sales"], group_by=["Region"], aggregates={"Sales": "sum"}
+        )
+
+        with pytest.raises(Exception):
+            client.table(view, schema={"Sales": "string"})
+
+        view.delete()

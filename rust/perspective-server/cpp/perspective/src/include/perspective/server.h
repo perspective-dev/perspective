@@ -15,6 +15,7 @@
 #include "perspective/base.h"
 #include "perspective/exports.h"
 #include "perspective/join_engine.h"
+#include "perspective/derived_source.h"
 #include "perspective/raw_types.h"
 #include "perspective/schema.h"
 #include "perspective/view.h"
@@ -226,6 +227,10 @@ namespace server {
         virtual std::uint32_t sides() const = 0;
 
         [[nodiscard]]
+        virtual std::shared_ptr<t_derived_source>
+        make_derived_source(const std::shared_ptr<Table>& parent) const = 0;
+
+        [[nodiscard]]
         virtual std::vector<std::vector<std::string>> column_paths() const = 0;
 
         [[nodiscard]]
@@ -426,6 +431,13 @@ namespace server {
         }
 
         [[nodiscard]]
+        std::shared_ptr<t_derived_source>
+        make_derived_source(const std::shared_ptr<Table>& parent
+        ) const override {
+            return perspective::make_derived_source(m_view, parent);
+        }
+
+        [[nodiscard]]
         std::vector<std::vector<std::string>>
         column_paths() const override {
             std::vector<std::vector<std::string>> out;
@@ -545,6 +557,39 @@ namespace server {
      * @brief ServerResources is a container for all the resources that the
      * server requires.
      */
+    /**
+     * @brief The `Table`s derived from `View`s, and the sources feeding them.
+     */
+    class PERSPECTIVE_EXPORT DerivedTableEngine {
+    public:
+        using t_id = std::string;
+
+        void register_table(
+            const t_id& view_id,
+            const t_id& table_id,
+            std::shared_ptr<t_derived_source> source
+        );
+
+        void unregister_table(const t_id& table_id);
+
+        bool is_derived_table(const t_id& table_id) const;
+
+        bool has_dependents(const t_id& view_id) const;
+
+        /**
+         * @brief The id of the `View` that `table_id` is derived from.
+         */
+        const t_id& get_view_id(const t_id& table_id) const;
+
+        std::vector<std::pair<t_id, std::shared_ptr<t_derived_source>>>
+        get_dependents(const t_id& view_id) const;
+
+    private:
+        std::multimap<t_id, t_id> m_view_to_tables;
+        tsl::hopscotch_map<t_id, t_id> m_table_to_view;
+        tsl::hopscotch_map<t_id, std::shared_ptr<t_derived_source>> m_sources;
+    };
+
     class PERSPECTIVE_EXPORT ServerResources {
     public:
         using t_id = std::string;
@@ -712,6 +757,36 @@ namespace server {
             std::vector<ProtoServerResp<Response>>& outs
         );
 
+        /**
+         * @brief Emit the `on_update` and `on_remove` responses owed by the
+         * views of a table that just stepped, then step its derived tables.
+         */
+        void _notify_table(
+            std::shared_ptr<Table>& table,
+            const ServerResources::t_id& table_id,
+            t_uindex port_id,
+            std::vector<ProtoServerResp<Response>>& outs
+        );
+
+        /**
+         * @brief The id of the non-derived table at the root of `table_id`'s
+         * chain of derived tables.
+         */
+        ServerResources::t_id
+        _root_table_id(const ServerResources::t_id& table_id);
+
+        /**
+         * @brief Create the read-only `Table` for a `from_view` request,
+         * returning an error message on failure.
+         */
+        std::string make_derived_table(
+            const proto::MakeTableReq& req,
+            const ServerResources::t_id& table_id,
+            bool has_identity_options,
+            std::vector<ProtoServerResp<Response>>& outs,
+            std::shared_ptr<Table>& table
+        );
+
         void _process_table_unchecked(
             std::shared_ptr<Table>& table,
             const ServerResources::t_id& table_id,
@@ -725,6 +800,8 @@ namespace server {
         std::atomic<long long> m_cpu_time;
         ServerResources m_resources;
         JoinEngine m_join_engine;
+        DerivedTableEngine m_derived_engine;
+        tsl::hopscotch_set<ServerResources::t_id> m_derived_updated;
         t_computed_expression_parser m_computed_expression_parser;
     };
 
