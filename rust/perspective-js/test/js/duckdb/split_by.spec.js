@@ -12,6 +12,7 @@
 
 import { test, expect } from "@perspective-dev/test";
 import { describeDuckDB } from "./setup.js";
+import { joined_column_paths } from "../column_paths.js";
 
 describeDuckDB("split_by", (getClient) => {
     test("single split_by", async function () {
@@ -23,7 +24,7 @@ describeDuckDB("split_by", (getClient) => {
             aggregates: { Sales: "sum" },
         });
 
-        const columns = await view.column_paths();
+        const columns = await joined_column_paths(view);
         expect(columns).toEqual([
             "Central|Sales",
             "East|Sales",
@@ -115,7 +116,7 @@ describeDuckDB("split_by", (getClient) => {
             columns: ["Sales"],
             split_by: ["Category"],
         });
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(paths.some((c) => c.includes("Furniture"))).toBe(true);
         expect(paths.some((c) => c.includes("Office Supplies"))).toBe(true);
         expect(paths.some((c) => c.includes("Technology"))).toBe(true);
@@ -133,9 +134,8 @@ describeDuckDB("split_by", (getClient) => {
         });
 
         expect(await view.column_paths()).toEqual([
-            "a_b|amount",
-            "plain|amount",
-            'say "hi"|amount',
+            ["a_b", "plain", 'say "hi"'],
+            ["amount", "amount", "amount"],
         ]);
 
         expect(await view.to_json()).toEqual([
@@ -171,7 +171,10 @@ describeDuckDB("split_by", (getClient) => {
             aggregates: { amount: "sum" },
         });
 
-        expect(await view.column_paths()).toEqual(["g1|amount", "g2|amount"]);
+        expect(await view.column_paths()).toEqual([
+            ["g1", "g2"],
+            ["amount", "amount"],
+        ]);
         await view.delete();
     });
 });

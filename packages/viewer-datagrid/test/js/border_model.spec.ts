@@ -22,27 +22,61 @@ import {
     split_levels,
     HeaderCellInput,
 } from "../../src/ts/style_handlers/border_model.js";
+import type { ColumnPathArea } from "../../src/ts/model/column_path_area.js";
 
-function cell(overrides: Partial<HeaderCellInput>): HeaderCellInput {
-    return {
-        paths: [],
+function to_area(
+    paths: (string | undefined)[],
+    split_by_len: number,
+): ColumnPathArea {
+    const depth = split_by_len + 1;
+    const area: ColumnPathArea = Array.from({ length: depth }, () => []);
+    for (let x = 0; x < paths.length; x++) {
+        const path = paths[x];
+        if (path === undefined) {
+            continue;
+        }
+
+        const parts = path.split("|");
+        for (let level = 0; level + 1 < parts.length; level++) {
+            area[level][x] = parts[level];
+        }
+
+        area[depth - 1][x] = parts[parts.length - 1];
+    }
+
+    return area;
+}
+
+function cell(
+    overrides: Partial<Omit<HeaderCellInput, "area">> & {
+        paths?: (string | undefined)[];
+    },
+): HeaderCellInput {
+    const { paths = [], ...rest } = overrides;
+    const base = {
         split_by_len: 0,
         colspan: 1,
         y: 0,
-        row_kind: "group",
+        row_kind: "group" as const,
         is_corner: false,
         is_last_header_row: false,
         single_header_row: false,
-        ...overrides,
+        ...rest,
     };
+
+    return { ...base, area: to_area(paths, base.split_by_len) };
 }
 
 test.describe("split_levels", () => {
     test("strips the trailing column name", () => {
-        expect(split_levels("false|b|w", 2)).toStrictEqual(["false", "b"]);
-        expect(split_levels("false|w", 2)).toStrictEqual(["false"]);
-        expect(split_levels("w", 2)).toStrictEqual([]);
-        expect(split_levels("w", 0)).toStrictEqual([]);
+        expect(
+            split_levels(to_area(["false|b|w"], 2), 2, 0),
+        ).toStrictEqual(["false", "b"]);
+        expect(split_levels(to_area(["false|w"], 2), 2, 0)).toStrictEqual([
+            "false",
+        ]);
+        expect(split_levels(to_area(["w"], 2), 2, 0)).toStrictEqual([]);
+        expect(split_levels(to_area(["w"], 0), 0, 0)).toStrictEqual([]);
     });
 });
 
@@ -58,29 +92,29 @@ test.describe("boundary_depth", () => {
     ];
 
     test("total-to-group boundary is depth 0", () => {
-        expect(boundary_depth(paths_2_level, 2, 0)).toEqual(0);
+        expect(boundary_depth(to_area(paths_2_level, 2), 2, 0)).toEqual(0);
     });
 
     test("subtotal-to-first-child boundary is depth 1", () => {
-        expect(boundary_depth(paths_2_level, 2, 1)).toEqual(1);
+        expect(boundary_depth(to_area(paths_2_level, 2), 2, 1)).toEqual(1);
     });
 
     test("sibling leaf boundary is depth 1", () => {
-        expect(boundary_depth(paths_2_level, 2, 2)).toEqual(1);
+        expect(boundary_depth(to_area(paths_2_level, 2), 2, 2)).toEqual(1);
     });
 
     test("last-child-to-next-group boundary is depth 0", () => {
-        expect(boundary_depth(paths_2_level, 2, 3)).toEqual(0);
+        expect(boundary_depth(to_area(paths_2_level, 2), 2, 3)).toEqual(0);
     });
 
     test("trailing edge is depth 0", () => {
-        expect(boundary_depth(paths_2_level, 2, 6)).toEqual(0);
+        expect(boundary_depth(to_area(paths_2_level, 2), 2, 6)).toEqual(0);
     });
 
     test("aggregate-internal boundary is depth == split_by_len", () => {
         const paths = ["false|w", "false|x", "true|w", "true|x"];
-        expect(boundary_depth(paths, 1, 0)).toEqual(1);
-        expect(boundary_depth(paths, 1, 1)).toEqual(0);
+        expect(boundary_depth(to_area(paths, 1), 1, 0)).toEqual(1);
+        expect(boundary_depth(to_area(paths, 1), 1, 1)).toEqual(0);
     });
 
     test("total/subtotal aggregate-internal boundaries are never group boundaries", () => {
@@ -95,17 +129,17 @@ test.describe("boundary_depth", () => {
             "false|b|w",
             "false|b|x",
         ];
-        expect(boundary_depth(paths, 2, 0)).toEqual(2);
-        expect(boundary_depth(paths, 2, 1)).toEqual(0);
-        expect(boundary_depth(paths, 2, 2)).toEqual(2);
-        expect(boundary_depth(paths, 2, 3)).toEqual(1);
-        expect(boundary_depth(paths, 2, 4)).toEqual(2);
+        expect(boundary_depth(to_area(paths, 2), 2, 0)).toEqual(2);
+        expect(boundary_depth(to_area(paths, 2), 2, 1)).toEqual(0);
+        expect(boundary_depth(to_area(paths, 2), 2, 2)).toEqual(2);
+        expect(boundary_depth(to_area(paths, 2), 2, 3)).toEqual(1);
+        expect(boundary_depth(to_area(paths, 2), 2, 4)).toEqual(2);
     });
 
     test("unloaded neighbor is null", () => {
         const paths: (string | undefined)[] = ["false|w", undefined, "true|w"];
-        expect(boundary_depth(paths, 1, 0)).toBeNull();
-        expect(boundary_depth(paths, 1, 1)).toBeNull();
+        expect(boundary_depth(to_area(paths, 1), 1, 0)).toBeNull();
+        expect(boundary_depth(to_area(paths, 1), 1, 1)).toBeNull();
     });
 });
 

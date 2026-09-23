@@ -192,66 +192,66 @@
         min-width: 0;
     }
 
+    /* Expression column toolbar buttons */
+    span.expression-edit-button,
+    span.expression-delete-button {
+        height: 19px;
+        width: 21px;
+        font-family: var(--psp-button--font-family, inherit);
+        cursor: pointer;
+        padding: 1.5px 2.5px 0;
+        margin-right: 2px;
+        margin-left: auto;
+        border-radius: 3px;
+        border: 1px solid transparent;
+        &:hover,
+        &.is-editing {
+            background-color: var(--psp--color);
+            .icon {
+                background-color: var(--psp--background-color);
+            }
+        }
+    }
+
+    span.expression-edit-button.disabled {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    span.expression-delete-button {
+        padding-left: 5px;
+        margin-right: 8px;
+        margin-left: auto;
+
+        &:before {
+            content: var(--column-close--content, "close");
+        }
+    }
+
+    span.expression-delete-button + span.expression-edit-button {
+        margin-left: 0px;
+    }
+
+    span.expression-edit-button .icon {
+        background-repeat: no-repeat;
+        background-color: var(--psp--color);
+        display: inline-block;
+        -webkit-mask-size: cover;
+        mask-size: cover;
+        -webkit-mask-image: var(--psp-icon--column-settings--mask-image);
+        mask-image: var(--psp-icon--column-settings--mask-image);
+
+        &:before {
+            content: var(--psp-icon--column-settings--mask-image);
+            visibility: hidden;
+        }
+    }
+
     .column-selector-column {
         display: flex;
         flex-direction: row-reverse;
         align-items: center;
         flex: 1 1 auto;
-
-        /* Expression column toolbar buttons */
-        span.expression-edit-button,
-        span.expression-delete-button {
-            height: 19px;
-            width: 21px;
-            font-family: var(--psp-button--font-family, inherit);
-            cursor: pointer;
-            padding: 1.5px 2.5px 0;
-            margin-right: 2px;
-            margin-left: auto;
-            border-radius: 3px;
-            border: 1px solid transparent;
-            &:hover,
-            &.is-editing {
-                background-color: var(--psp--color);
-                .icon {
-                    background-color: var(--psp--background-color);
-                }
-            }
-        }
-
-        span.expression-edit-button.disabled {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        span.expression-delete-button {
-            padding-left: 5px;
-            margin-right: 8px;
-            margin-left: auto;
-
-            &:before {
-                content: var(--column-close--content, "close");
-            }
-        }
-
-        span.expression-delete-button + span.expression-edit-button {
-            margin-left: 0px;
-        }
-
-        span.expression-edit-button .icon {
-            background-repeat: no-repeat;
-            background-color: var(--psp--color);
-            display: inline-block;
-            -webkit-mask-size: cover;
-            mask-size: cover;
-            -webkit-mask-image: var(--psp-icon--column-settings--mask-image);
-            mask-image: var(--psp-icon--column-settings--mask-image);
-
-            &:before {
-                content: var(--psp-icon--column-settings--mask-image);
-                visibility: hidden;
-            }
-        }
 
         .column-selector-draggable {
             cursor: move;

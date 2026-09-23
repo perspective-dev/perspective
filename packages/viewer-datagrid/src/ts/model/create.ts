@@ -32,6 +32,7 @@ import {
     type EditMode,
 } from "../types.js";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
+import type { CellScalar } from "regular-table/dist/esm/types";
 
 // Mirror of the engine's window-aggregate result types (the
 // `GetFeaturesResp.window_aggregates` table in `server.cpp`): these
@@ -287,6 +288,11 @@ export async function createModel(
     );
 
     const _column_paths: string[] = [];
+    const _column_path_area: (CellScalar | null)[][] = Array.from(
+        { length: config.split_by.length + 1 },
+        () => [],
+    );
+
     const _is_editable: boolean[] = [];
     const _column_types: ColumnType[] = [];
     let _edit_mode: EditMode = this._edit_mode || "READ_ONLY";
@@ -319,6 +325,7 @@ export async function createModel(
         _ids: [],
         ...style,
         _column_paths,
+        _column_path_area,
         _column_types,
         _is_editable,
         _edit_mode,

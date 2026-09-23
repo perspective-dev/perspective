@@ -37,6 +37,7 @@ import {
     type ColumnAlignment,
 } from "./column_alignment.js";
 import { CollectedCell } from "./types.js";
+import { is_loaded, split_depth } from "../model/column_path_area.js";
 
 const B_VALUE_NULL = 1;
 const B_USER_NULL = 2;
@@ -162,9 +163,9 @@ export function applyBodyCellStyles(
             : undefined;
 
         const n_split_levels =
-            meta_x === undefined
+            meta_x === undefined || !is_loaded(model, meta_x)
                 ? undefined
-                : model._column_paths[meta_x]?.split("|").length - 1;
+                : split_depth(model, meta_x);
 
         const is_rollup_col =
             n_split_by > 0 &&

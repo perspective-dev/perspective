@@ -94,12 +94,21 @@ impl View {
         self.0.name.clone()
     }
 
-    /// Returns an array of strings containing the column paths of the [`View`]
-    /// without any of the source columns.
+    /// Returns this [`View`]'s column header area for `window`, transposed as
+    /// `area[level][column]`.
     ///
     /// A column path shows the columns that a given cell belongs to after
-    /// pivots are applied.
-    #[wasm_bindgen]
+    /// pivots are applied. The area is rectangular with one level per
+    /// `split_by` plus one: a column's split values occupy the leading levels
+    /// and its name always occupies the last, so a subtotal or grand total
+    /// under `split_rollup_mode: "rollup"` reads `null` at the levels it does
+    /// not pivot on. Values keep their column's type - a `datetime` split value
+    /// is epoch milliseconds, not text - so formatting them is the caller's
+    /// choice.
+    ///
+    /// `window` slices the *column* axis; the number of levels does not depend
+    /// on it.
+    #[wasm_bindgen(unchecked_return_type = "(string | number | boolean | null)[][]")]
     pub async fn column_paths(&self, window: Option<JsColumnWindow>) -> ApiResult<JsValue> {
         let window = window.into_serde_ext::<Option<ColumnWindow>>()?;
         let columns = self.0.column_paths(window.unwrap_or_default()).await?;

@@ -754,17 +754,27 @@ assert_view_api!(AsyncView);
 
 #[pymethods]
 impl AsyncView {
-    /// Returns an array of strings containing the column paths of the [`View`]
-    /// without any of the source columns.
+    /// Returns this [`View`]'s column header area for `window`, transposed as
+    /// `area[level][column]`.
     ///
     /// A column path shows the columns that a given cell belongs to after
-    /// pivots are applied.
-    pub async fn column_paths(&self, window: Option<Py<PyDict>>) -> PyResult<Vec<String>> {
+    /// pivots are applied. The area is rectangular with one level per
+    /// `split_by` plus one: a column's split values occupy the leading levels
+    /// and its name always occupies the last, so a subtotal or grand total
+    /// under `split_rollup_mode: "rollup"` reads `None` at the levels it does
+    /// not pivot on. Values keep their column's type - a `datetime` split value
+    /// is epoch milliseconds, not text - so formatting them is the caller's
+    /// choice.
+    ///
+    /// `window` slices the *column* axis; the number of levels does not depend
+    /// on it.
+    pub async fn column_paths(&self, window: Option<Py<PyDict>>) -> PyResult<Py<PyAny>> {
         let window: ColumnWindow = Python::attach(|py| window.map(|x| depythonize(x.bind(py))))
             .transpose()?
             .unwrap_or_default();
 
-        self.view.column_paths(window).await.into_pyerr()
+        let area = self.view.column_paths(window).await.into_pyerr()?;
+        Python::attach(|py| Ok(pythonize::pythonize(py, &area)?.unbind()))
     }
 
     /// Delete this [`View`] and clean up all resources associated with it.

@@ -27,7 +27,7 @@ use crate::session::*;
 use crate::utils::*;
 use crate::workspace::Workspace;
 
-#[derive(Clone, PartialEq, Properties)]
+#[derive(Clone, Properties)]
 pub struct DebugPanelProps {
     pub presentation: Presentation,
     pub renderer: Renderer,
@@ -46,9 +46,16 @@ pub struct DebugPanelProps {
     pub on_auto_width: Callback<f64>,
 }
 
+impl PartialEq for DebugPanelProps {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.initial_width == rhs.initial_width
+    }
+}
+
 /// Whether the editor holds text the panel has not successfully applied, read
-/// synchronously by the config-change listeners so a failed apply's own
-/// `view_config_changed` never discards it.
+/// synchronously by the config-change listeners and again when a
+/// [`DebugPanelProps::set_text`] read lands, so neither a failed apply's own
+/// `view_config_changed` nor an in-flight config read discards it.
 type Dirty = Rc<Cell<bool>>;
 
 #[function_component(DebugPanel)]
@@ -71,10 +78,12 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
         }
     });
 
-    use_effect_with((expr.setter(), props.clone()), {
+    use_effect_with((), {
         clone!(error, modified, dirty);
-        move |(text, state)| {
-            state.set_text(text.clone());
+        let state = props.clone();
+        let text = expr.setter();
+        move |()| {
+            state.set_text(text.clone(), dirty.clone());
             error.set(None);
             let sub1 = state
                 .renderer
@@ -153,7 +162,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
         clone!(modified, dirty);
         move |_, (text, error, props)| {
             dirty.set(false);
-            props.set_text(text.clone());
+            props.set_text(text.clone(), dirty.clone());
             error.set(None);
             modified.set(false);
         }
@@ -213,7 +222,9 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
 }
 
 impl DebugPanelProps {
-    fn set_text(&self, setter: UseStateSetter<Rc<String>>) {
+    /// Asynchronously read this panel's config into the editor, unless the
+    /// editor has unapplied text by the time the read lands.
+    fn set_text(&self, setter: UseStateSetter<Rc<String>>, dirty: Dirty) {
         let props = self.clone();
         ApiFuture::spawn(async move {
             let config = crate::queries::get_viewer_config(
@@ -226,7 +237,10 @@ impl DebugPanelProps {
             let js_string =
                 js_sys::JSON::stringify_with_replacer_and_space(&json, &JsValue::NULL, &2.into())?;
 
-            setter.set(Rc::new(js_string.as_string().unwrap()));
+            if !dirty.get() {
+                setter.set(Rc::new(js_string.as_string().unwrap()));
+            }
+
             Ok(())
         });
     }
@@ -245,7 +259,7 @@ impl DebugPanelProps {
             }
 
             error.set(None);
-            props.set_text(text.clone());
+            props.set_text(text.clone(), dirty.clone());
             modified.set(false);
         }
     }
@@ -301,7 +315,7 @@ impl DebugPanelProps {
                     dirty.set(false);
                     error.set(None);
                     modified.set(false);
-                    props.set_text(text);
+                    props.set_text(text, dirty.clone());
                 },
                 Err(e) => {
                     let message = format!("{e}");

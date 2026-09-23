@@ -19,6 +19,7 @@ import duckdb
 
 from perspective import Client
 from perspective.virtual_servers.duckdb import DuckDBVirtualServer
+from perspective.tests.column_paths import joined_column_paths
 
 _SUPERSTORE_LOCAL = os.path.join(
     os.path.dirname(__file__),
@@ -227,7 +228,7 @@ class TestDuckDBView:
     def test_column_paths(self, client):
         table = client.open_table("memory.superstore")
         view = table.view(columns=["Sales", "Profit", "State"])
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert paths == ["Sales", "Profit", "State"]
         view.delete()
 
@@ -362,7 +363,7 @@ class TestDuckDBSplitBy:
             aggregates={"Sales": "sum"},
         )
 
-        column_paths = view.column_paths()
+        column_paths = joined_column_paths(view)
         assert column_paths == [
             "Central|Sales",
             "East|Sales",
@@ -409,7 +410,7 @@ class TestDuckDBSplitBy:
             columns=["Sales"],
             split_by=["Category"],
         )
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert any("Furniture" in c for c in paths)
         assert any("Office Supplies" in c for c in paths)
         assert any("Technology" in c for c in paths)
@@ -905,7 +906,7 @@ class TestDuckDBCombinedOperations:
             aggregates={"Sales": "sum"},
         )
 
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert paths == [
             "Central|Sales",
             "East|Sales",
@@ -957,7 +958,7 @@ class TestDuckDBCombinedOperations:
             filter=[["Quantity", ">", 3]],
         )
 
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert paths == [
             "Central|Sales",
             "East|Sales",

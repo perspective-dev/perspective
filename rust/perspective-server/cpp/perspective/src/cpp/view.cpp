@@ -373,31 +373,7 @@ View<t_ctxunit>::column_names_range(
 
 template <typename CTX_T>
 std::vector<std::vector<t_tscalar>>
-View<CTX_T>::column_paths() const {
-    auto num_column_pivots = m_column_pivots.size();
-    auto names = column_names(true, num_column_pivots);
-    if (!m_hidden_sort.empty()) {
-        // make a new vector so we don't have to erase while iterating
-        std::vector<std::vector<t_tscalar>> visible_column_paths;
-
-        for (const auto& column : names) {
-            // Remove undisplayed column names used to sort
-            std::string name = column.back().to_string();
-            if (std::find(m_hidden_sort.begin(), m_hidden_sort.end(), name)
-                == m_hidden_sort.end()) {
-                visible_column_paths.push_back(column);
-            }
-        }
-
-        return visible_column_paths;
-    }
-
-    return names;
-}
-
-template <typename CTX_T>
-std::vector<std::vector<t_tscalar>>
-View<CTX_T>::column_paths_range(t_uindex start_col, t_uindex end_col) const {
+View<CTX_T>::column_paths(t_uindex start_col, t_uindex end_col) const {
     auto num_column_pivots = m_column_pivots.size();
     auto names =
         column_names_range(true, num_column_pivots, start_col, end_col);
@@ -414,29 +390,28 @@ View<CTX_T>::column_paths_range(t_uindex start_col, t_uindex end_col) const {
             }
         }
 
-        return visible_column_paths;
+        names = std::move(visible_column_paths);
     }
 
-    return names;
-}
+    const auto depth = num_column_pivots + 1;
+    std::vector<std::vector<t_tscalar>> area(
+        depth, std::vector<t_tscalar>(names.size(), mknone())
+    );
 
-template <typename CTX_T>
-std::vector<std::vector<std::string>>
-View<CTX_T>::column_paths_string() const {
-    auto paths = column_paths();
-    std::vector<std::vector<std::string>> out;
-    out.reserve(paths.size());
-    for (const auto& path : paths) {
-        std::vector<std::string> row;
-        row.reserve(path.size());
-        for (const auto& c : path) {
-            row.push_back(c.to_string());
+    for (t_uindex col = 0; col < names.size(); ++col) {
+        const auto& path = names[col];
+        if (path.empty()) {
+            continue;
         }
 
-        out.push_back(row);
+        for (t_uindex level = 0; level + 1 < path.size(); ++level) {
+            area[level][col] = path[level];
+        }
+
+        area[depth - 1][col] = path.back();
     }
 
-    return out;
+    return area;
 }
 
 static std::string

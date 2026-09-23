@@ -14,6 +14,7 @@ import { test, expect } from "@perspective-dev/test";
 import perspective from "../perspective_client.ts";
 import { expect_tree_parity, key_name } from "./oracle.ts";
 import { make_source, rows, ROLLUPS, SPLIT_ROLLUPS } from "./fixtures.ts";
+import { joined_column_paths } from "../column_paths.js";
 
 const CONFIG = {
     group_by: ["g"],
@@ -27,7 +28,7 @@ test.describe("Derived table from a split_by view", function () {
         const source = await make_source();
         const view = await source.view(CONFIG);
         const derived = await perspective.table(view);
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(await derived.columns()).toEqual([
             key_name("g", 0),
             ...paths.filter((p: string) => p !== "__ROW_PATH__"),

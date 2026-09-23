@@ -12,6 +12,7 @@
 
 import { test, expect } from "@perspective-dev/test";
 import { describeDuckDB } from "./setup.js";
+import { joined_column_paths } from "../column_paths.js";
 
 describeDuckDB("combined operations", (getClient) => {
     test("group_by + filter + sort", async function () {
@@ -52,7 +53,7 @@ describeDuckDB("combined operations", (getClient) => {
             aggregates: { Sales: "sum" },
         });
 
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(paths).toEqual([
             "Central|Sales",
             "East|Sales",
@@ -106,7 +107,7 @@ describeDuckDB("combined operations", (getClient) => {
             filter: [["Quantity", ">", 3]],
         });
 
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(paths).toEqual([
             "Central|Sales",
             "East|Sales",
@@ -138,7 +139,7 @@ describeDuckDB("combined operations", (getClient) => {
             filter: [["Quantity", ">", 3]],
         });
 
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(paths).toEqual([
             "Central|Sales",
             "East|Sales",

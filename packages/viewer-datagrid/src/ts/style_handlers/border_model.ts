@@ -27,6 +27,9 @@
 
 /// One edge of a cell. `miter-start` gaps the corner nearest the axis origin
 /// (top for vertical edges, left for horizontal edges).
+import type { CellScalar } from "regular-table/dist/esm/types.js";
+import type { ColumnPathArea } from "../model/column_path_area.js";
+
 export type EdgeState =
     | "none"
     | "full"
@@ -42,9 +45,9 @@ export interface CellBorders {
 }
 
 export interface HeaderCellInput {
-    /// Raw (unpadded) column paths, `model._column_paths`. May be sparse
+    /// The column path area, `model._column_path_area`. May be sparse
     /// where the virtual viewport has not loaded a column.
-    paths: (string | undefined)[];
+    area: ColumnPathArea;
 
     /// `config.split_by.length`.
     split_by_len: number;
@@ -86,14 +89,35 @@ const NONE: CellBorders = {
     left: "none",
 };
 
-/// The split levels of a raw column path - the path minus its trailing
-/// column name. Total/subtotal columns (`split_rollup_mode: "rollup"`) have
-/// fewer than `split_by_len` levels. NOTE a column NAME containing `"|"`
-/// mis-splits here; this is a pre-existing ambiguity shared with the data
-/// listener, not worsened.
-export function split_levels(path: string, split_by_len: number): string[] {
-    const parts = path.split("|");
-    return parts.slice(0, Math.min(split_by_len, parts.length - 1));
+/// The split levels of column `x` - its path minus the trailing column name.
+/// Total/subtotal columns (`split_rollup_mode: "rollup"`) have fewer than
+/// `split_by_len` levels.
+export function split_levels(
+    area: ColumnPathArea,
+    split_by_len: number,
+    x: number,
+): (CellScalar | null)[] {
+    const levels: (CellScalar | null)[] = [];
+    for (let level = 0; level < split_by_len && level < area.length; level++) {
+        const value = area[level][x];
+        if (value === null || value === undefined) {
+            break;
+        }
+
+        levels.push(value);
+    }
+
+    return levels;
+}
+
+/// The loaded extent of `area`, in data columns.
+function area_width(area: ColumnPathArea): number {
+    return area[area.length - 1]?.length ?? 0;
+}
+
+/// Whether column `x` has been loaded into `area`.
+function is_loaded(area: ColumnPathArea, x: number): boolean {
+    return area[area.length - 1]?.[x] !== undefined;
 }
 
 /// Depth of the boundary between data columns `x` and `x + 1`:
@@ -104,26 +128,24 @@ export function split_levels(path: string, split_by_len: number): string[] {
 ///   levels: `0..split_by_len`, where `split_by_len` means "same group"
 ///   (an aggregate-internal boundary).
 export function boundary_depth(
-    paths: (string | undefined)[],
+    area: ColumnPathArea,
     split_by_len: number,
     x: number,
 ): number | null {
-    const left = paths[x];
-    if (left === undefined) {
+    if (!is_loaded(area, x)) {
         return null;
     }
 
-    if (x + 1 >= paths.length) {
+    if (x + 1 >= area_width(area)) {
         return 0;
     }
 
-    const right = paths[x + 1];
-    if (right === undefined) {
+    if (!is_loaded(area, x + 1)) {
         return null;
     }
 
-    const a = split_levels(left, split_by_len);
-    const b = split_levels(right, split_by_len);
+    const a = split_levels(area, split_by_len, x);
+    const b = split_levels(area, split_by_len, x + 1);
     let depth = 0;
     while (depth < a.length && depth < b.length && a[depth] === b[depth]) {
         depth++;
@@ -148,17 +170,16 @@ export function boundary_depth(
 /// `"Total"` label of a zero-level grand-total column counts as a pad too:
 /// the whole Total column header stack reads as one open block.
 function has_real_text(
-    paths: (string | undefined)[],
+    area: ColumnPathArea,
     split_by_len: number,
     x: number,
     y: number,
 ): boolean {
-    const path = paths[x];
-    if (path === undefined) {
+    if (!is_loaded(area, x)) {
         return false;
     }
 
-    return y < split_levels(path, split_by_len).length;
+    return y < split_levels(area, split_by_len, x).length;
 }
 
 export function classify_header_cell(input: HeaderCellInput): CellBorders {
@@ -190,8 +211,8 @@ export function classify_header_cell(input: HeaderCellInput): CellBorders {
     }
 
     const x_end = input.x + input.colspan - 1;
-    const depth = boundary_depth(input.paths, input.split_by_len, x_end);
-    const is_trailing = x_end >= input.paths.length - 1;
+    const depth = boundary_depth(input.area, input.split_by_len, x_end);
+    const is_trailing = x_end >= area_width(input.area) - 1;
 
     let right: EdgeState = "none";
     if (depth !== null) {
@@ -206,7 +227,7 @@ export function classify_header_cell(input: HeaderCellInput): CellBorders {
 
     const bottom: EdgeState =
         input.row_kind === "group" &&
-        has_real_text(input.paths, input.split_by_len, input.x, input.y)
+        has_real_text(input.area, input.split_by_len, input.x, input.y)
             ? "miter-both"
             : "none";
 

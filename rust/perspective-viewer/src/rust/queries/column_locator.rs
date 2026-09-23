@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_client::config::ViewConfig;
+use perspective_client::config::{ColumnType, ViewConfig};
 
 use crate::presentation::{ColumnLocator, ColumnSettingsTarget, OpenColumnSettings};
 use crate::renderer::Renderer;
@@ -37,11 +37,62 @@ pub fn classify_column(
     }
 }
 
+/// Whether `name` is one of `view_config`'s pivots, whose own raw values a
+/// plugin draws as a header label or axis tick and therefore formats with its
+/// TABLE type rather than an aggregate's view type.
+pub fn is_pivot_column(name: &str, view_config: &ViewConfig) -> bool {
+    view_config.group_by.iter().any(|col| col == name)
+        || view_config.split_by.iter().any(|col| col == name)
+}
+
+/// Whether `name` is configured AS a pivot: a pivot that is also in `columns`
+/// is configured as that aggregate instead, so its pivot copy is not
+/// separately configurable.
+pub fn is_pivot_only_column(name: &str, view_config: &ViewConfig) -> bool {
+    is_pivot_column(name, view_config)
+        && !view_config
+            .columns
+            .iter()
+            .any(|col| col.as_deref() == Some(name))
+}
+
+/// Whether the active plugin offers `name` any column config, gating every
+/// affordance that opens the Style tab.
+// TODO This hardcodes the set of types a plugin offers a pivot a format control
+// for, instead of asking it. `get_column_config_schema` answers exactly
+// (`!schema.leaf_fields().is_empty()`) but costs a plugin call per pivot pill
+// per render; switch to it if pills ever outgrow a handful, or if a plugin's
+// pivot controls stop being format-only.
+pub fn has_column_config(
+    name: &str,
+    view_config: &ViewConfig,
+    metadata: &SessionMetadata,
+    renderer: &Renderer,
+) -> bool {
+    if !renderer.can_render_column_styles() {
+        return false;
+    }
+
+    if view_config
+        .columns
+        .iter()
+        .any(|col| col.as_deref() == Some(name))
+    {
+        return true;
+    }
+
+    is_pivot_column(name, view_config)
+        && matches!(
+            metadata.get_column_table_type(name),
+            Some(ColumnType::Integer | ColumnType::Float | ColumnType::Date | ColumnType::Datetime)
+        )
+}
+
 /// Gets a [`ColumnLocator`] for the current UI's column settings state,
 /// or [`None`] if it is not currently active.
 ///
-/// Table columns only have a useful sidebar (the Style tab)
-/// when they're in `view_config.columns`.
+/// Table columns only have a useful sidebar (the Style tab) when they're in
+/// `view_config.columns` or are a pivot.
 pub fn get_current_column_locator(
     open_column_settings: &OpenColumnSettings,
     renderer: &Renderer,
@@ -54,14 +105,7 @@ pub fn get_current_column_locator(
             let locator = classify_column(name, view_config, metadata)?;
             match locator {
                 ColumnLocator::Table(_) => {
-                    let in_columns = view_config.columns.iter().any(|maybe_col| {
-                        maybe_col
-                            .as_ref()
-                            .map(|col| col == name)
-                            .unwrap_or_default()
-                    });
-
-                    (in_columns && renderer.can_render_column_styles()).then_some(locator)
+                    has_column_config(name, view_config, metadata, renderer).then_some(locator)
                 },
                 locator => Some(locator),
             }

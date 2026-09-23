@@ -12,6 +12,7 @@
 
 import { test, expect } from "@perspective-dev/test";
 import perspective from "./perspective_client";
+import { joined_column_paths } from "./column_paths.js";
 
 var data = [
     { x: 1, y: "a", z: true },
@@ -991,7 +992,7 @@ const std = (nums) => {
         test("Should return all columns, 0-sided view from schema", async function () {
             const table = await perspective.table(meta);
             const view = await table.view();
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["x", "y", "z"]);
             view.delete();
             table.delete();
@@ -1002,7 +1003,7 @@ const std = (nums) => {
             const view = await table.view({
                 columns: ["z", "y", "x"],
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["z", "y", "x"]);
             view.delete();
             table.delete();
@@ -1013,7 +1014,7 @@ const std = (nums) => {
             const view = await table.view({
                 columns: ["x"],
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["x"]);
             view.delete();
             table.delete();
@@ -1022,7 +1023,7 @@ const std = (nums) => {
         test("Should return all columns, 0-sided view", async function () {
             const table = await perspective.table(data);
             const view = await table.view();
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["x", "y", "z"]);
             view.delete();
             table.delete();
@@ -1033,7 +1034,7 @@ const std = (nums) => {
             const view = await table.view({
                 columns: ["z", "y", "x"],
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["z", "y", "x"]);
             view.delete();
             table.delete();
@@ -1044,7 +1045,7 @@ const std = (nums) => {
             const view = await table.view({
                 columns: ["x"],
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["x"]);
             view.delete();
             table.delete();
@@ -1055,7 +1056,7 @@ const std = (nums) => {
             const view = await table.view({
                 group_by: ["x"],
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["x", "y", "z"]);
             view.delete();
             table.delete();
@@ -1082,7 +1083,7 @@ const std = (nums) => {
                     1234: "sum",
                 },
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["2345", "1234", "x", "1.23456789"]);
             view.delete();
             table.delete();
@@ -1094,7 +1095,7 @@ const std = (nums) => {
                 group_by: ["x"],
                 columns: ["z", "y", "x"],
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["z", "y", "x"]);
             view.delete();
             table.delete();
@@ -1106,7 +1107,7 @@ const std = (nums) => {
                 columns: ["x"],
                 group_by: ["x"],
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["x"]);
             view.delete();
             table.delete();
@@ -1118,7 +1119,7 @@ const std = (nums) => {
                 group_by: ["x"],
                 split_by: ["y"],
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual([
                 "a|x",
                 "a|y",
@@ -1144,7 +1145,7 @@ const std = (nums) => {
                 group_by: ["x"],
                 split_by: ["y"],
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual([
                 "a|z",
                 "a|y",
@@ -1170,13 +1171,13 @@ const std = (nums) => {
                 group_by: ["x"],
                 split_by: ["y"],
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["a|x", "b|x", "c|x", "d|x"]);
             view.delete();
             table.delete();
         });
 
-        test("Should format date columns in split_by", async function () {
+        test("Should return date split_by values as epoch milliseconds", async function () {
             const table = await perspective.table({
                 w: "float",
                 x: "integer",
@@ -1186,16 +1187,12 @@ const std = (nums) => {
 
             await table.update(data_8);
             const view = await table.view({ group_by: ["y"], split_by: ["z"] });
-            const paths = await view.column_paths();
-            expect(paths).toEqual([
-                "2019-04-11|w",
-                "2019-04-11|x",
-                "2019-04-11|y",
-                "2019-04-11|z",
-                "2019-04-13|w",
-                "2019-04-13|x",
-                "2019-04-13|y",
-                "2019-04-13|z",
+            const area = await view.column_paths();
+            const d11 = Date.UTC(2019, 3, 11);
+            const d13 = Date.UTC(2019, 3, 13);
+            expect(area).toEqual([
+                [d11, d11, d11, d11, d13, d13, d13, d13],
+                ["w", "x", "y", "z", "w", "x", "y", "z"],
             ]);
 
             view.delete();

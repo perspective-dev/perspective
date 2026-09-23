@@ -23,14 +23,14 @@ use super::handler::VirtualServerHandler;
 use crate::config::{ViewConfig, ViewConfigUpdate};
 use crate::proto::response::ClientResp;
 use crate::proto::{
-    ColumnType, GetFeaturesResp, GetHostedTablesResp, MakeTableResp, Request, Response,
-    ServerError, TableDeleteResp, TableDescribeResp, TableMakePortResp, TableMakeViewResp,
-    TableOnDeleteResp, TableRemoveDeleteResp, TableSchemaResp, TableSizeResp, ViewColumnPathsResp,
-    ViewDeleteResp, ViewDescription, ViewDimensionsResp, ViewExpressionSchemaResp,
-    ViewGetConfigResp, ViewGetMinMaxResp, ViewOnDeleteResp, ViewOnRemoveResp, ViewOnUpdateResp,
-    ViewRemoveDeleteResp, ViewRemoveOnRemoveResp, ViewRemoveOnUpdateResp, ViewSchemaResp,
-    ViewToArrowResp, ViewToColumnsStringResp, ViewToCsvResp, ViewToNdjsonStringResp,
-    ViewToRowsStringResp, table_describe_resp,
+    ColumnPathLevel, ColumnType, GetFeaturesResp, GetHostedTablesResp, MakeTableResp, Request,
+    Response, Scalar, ServerError, TableDeleteResp, TableDescribeResp, TableMakePortResp,
+    TableMakeViewResp, TableOnDeleteResp, TableRemoveDeleteResp, TableSchemaResp, TableSizeResp,
+    ViewColumnPathsResp, ViewDeleteResp, ViewDescription, ViewDimensionsResp,
+    ViewExpressionSchemaResp, ViewGetConfigResp, ViewGetMinMaxResp, ViewOnDeleteResp,
+    ViewOnRemoveResp, ViewOnUpdateResp, ViewRemoveDeleteResp, ViewRemoveOnRemoveResp,
+    ViewRemoveOnUpdateResp, ViewSchemaResp, ViewToArrowResp, ViewToColumnsStringResp,
+    ViewToCsvResp, ViewToNdjsonStringResp, ViewToRowsStringResp, scalar, table_describe_resp,
 };
 use crate::table::{DescribeError, Description};
 
@@ -342,9 +342,48 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     .end_col
                     .map_or(paths.len(), |x| x as usize);
 
-                let paths = paths.into_iter().take(end).skip(start).collect::<Vec<_>>();
+                let paths = paths
+                    .into_iter()
+                    .skip(start)
+                    .take(end.saturating_sub(start))
+                    .collect::<Vec<_>>();
 
-                respond!(msg, ViewColumnPathsResp { paths })
+                let depth = config.split_by.len() + 1;
+                let mut area = vec![
+                    ColumnPathLevel {
+                        values: Vec::with_capacity(paths.len())
+                    };
+                    depth
+                ];
+
+                for path in paths {
+                    let mut split = path.splitn(depth, '|');
+                    let mut levels = Vec::with_capacity(depth);
+                    for _ in 0..depth {
+                        match split.next() {
+                            Some(x) => levels.push(Some(x.to_owned())),
+                            None => levels.push(None),
+                        }
+                    }
+
+                    let name = levels
+                        .iter()
+                        .rposition(|x| x.is_some())
+                        .map(|i| levels[i].take().unwrap())
+                        .unwrap_or_default();
+
+                    for (level, value) in area.iter_mut().zip(levels).take(depth - 1) {
+                        level.values.push(Scalar {
+                            scalar: value.map(scalar::Scalar::String),
+                        });
+                    }
+
+                    area[depth - 1].values.push(Scalar {
+                        scalar: Some(scalar::Scalar::String(name)),
+                    });
+                }
+
+                respond!(msg, ViewColumnPathsResp { area })
             },
             ViewToArrowReq(view_to_arrow_req) => {
                 let viewport = view_to_arrow_req.viewport.unwrap();
@@ -451,6 +490,12 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             MakeTableReq(req) => {
                 let data = req.data.as_ref().unwrap();
                 if let Some(crate::proto::make_table_data::Data::FromView(view_id)) = &data.data {
+                    if !self.handler.get_features().await?.view_derivations {
+                        return Err(VirtualServerError::Other(
+                            "This data source cannot derive a Table from a View".to_string(),
+                        ));
+                    }
+
                     let options = req.options.clone().unwrap_or_default();
                     if options.make_table_type.is_some() {
                         return Err(VirtualServerError::Other(

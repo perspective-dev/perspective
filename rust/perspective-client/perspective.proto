@@ -251,6 +251,9 @@ message GetFeaturesResp {
     bool unordered = 10;
     repeated SplitRollupMode split_rollup_mode = 11;
 
+    // Whether a `Table` can be derived from a `View` of this server.
+    bool view_derivations = 12;
+
     message WindowAggregateOptions {
         repeated WindowAggregateArgs options = 1;
     }
@@ -538,16 +541,17 @@ message ViewColumnPathsReq {
     optional uint32 end_col = 2;
 }
 
-// // TODO This is a better paths representations but its not compatible with
-// // the legacy API. Let's do this when we can fix the API.
-
-// message ColumnPath {
-//     repeated string path = 1;
-// }
+// One row of a column path area, `width` values long.
+message ColumnPathLevel {
+    repeated Scalar values = 1;
+}
 
 message ViewColumnPathsResp {
-    repeated string paths = 1;
-    // repeated ColumnPath paths = 1;
+    reserved 1;
+    reserved "paths";
+
+    // Transposed, `split_by.len() + 1` rows of `width` values each.
+    repeated ColumnPathLevel area = 2;
 }
 
 message ViewDeleteReq {}

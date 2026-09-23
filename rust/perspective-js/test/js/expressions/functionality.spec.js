@@ -14,6 +14,7 @@ import * as expressions_common from "./common.js";
 
 import { test, expect } from "@perspective-dev/test";
 import perspective from "../perspective_client";
+import { joined_column_paths } from "../column_paths.js";
 
 /**
  * Tests the functionality of `View`-based expressions, specifically that
@@ -2353,7 +2354,7 @@ import perspective from "../perspective_client";
                 expressions: { column: '"w" + "x"' },
             });
 
-            let paths = await view.column_paths();
+            let paths = await joined_column_paths(view);
             expect(paths).toEqual(["w", "x", "y", "z", "column"]);
 
             await view.delete();
@@ -2371,7 +2372,7 @@ import perspective from "../perspective_client";
                     expressions: { column: '"w" + "x"' },
                     columns: expected,
                 });
-                paths = await view.column_paths();
+                paths = await joined_column_paths(view);
                 expect(paths).toEqual(output);
                 view.delete();
             }
@@ -2383,7 +2384,7 @@ import perspective from "../perspective_client";
                     expressions: { column: '"w" + "x"' },
                     columns: expected,
                 });
-                paths = await view.column_paths();
+                paths = await joined_column_paths(view);
                 expect(paths).toEqual(output);
                 view.delete();
             }
@@ -2407,7 +2408,7 @@ import perspective from "../perspective_client";
             // default order
             let view = await table.view(config);
 
-            let paths = await view.column_paths();
+            let paths = await joined_column_paths(view);
             expect(paths).toEqual(["w", "x", "y", "z", "1234"]);
 
             await view.delete();
@@ -2424,7 +2425,7 @@ import perspective from "../perspective_client";
                     ...config,
                     columns: expected,
                 });
-                paths = await view.column_paths();
+                paths = await joined_column_paths(view);
                 expect(paths).toEqual(output);
                 view.delete();
             }
@@ -2435,7 +2436,7 @@ import perspective from "../perspective_client";
                     ...config,
                     columns: expected,
                 });
-                paths = await view.column_paths();
+                paths = await joined_column_paths(view);
                 expect(paths).toEqual(output);
                 view.delete();
             }

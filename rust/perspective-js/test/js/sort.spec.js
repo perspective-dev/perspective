@@ -12,6 +12,7 @@
 
 import { test, expect } from "@perspective-dev/test";
 import perspective from "./perspective_client";
+import { joined_column_paths } from "./column_paths.js";
 
 const data = {
     w: [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5],
@@ -411,7 +412,7 @@ const data3 = {
                     columns: ["w", "y"],
                     sort: [["x", "desc"]],
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toEqual(["w", "y"]);
                 view.delete();
                 table.delete();
@@ -425,7 +426,7 @@ const data3 = {
                     split_by: ["z"],
                     sort: [["x", "col desc"]],
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toEqual(["false|w", "true|w"]);
                 view.delete();
                 table.delete();
@@ -442,7 +443,7 @@ const data3 = {
                         ["y", "desc"],
                     ],
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toEqual(["false|w", "true|w"]);
                 view.delete();
                 table.delete();
@@ -601,7 +602,7 @@ const data3 = {
                     split_by: ["y"],
                     sort: [["x", "desc"]],
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toEqual(["a|w", "b|w", "c|w", "d|w"]);
                 const answer = [
                     { "a|w": null, "b|w": null, "c|w": null, "d|w": 4.5 },
@@ -626,7 +627,7 @@ const data3 = {
                     split_by: ["y"],
                     sort: [["x", "col desc"]],
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toEqual(["d|w", "c|w", "b|w", "a|w"]);
                 const answer = {
                     "d|w": [null, null, null, 4.5, null, null, null, 8.5],
@@ -651,7 +652,7 @@ const data3 = {
                     sort: [["y", "desc"]],
                 });
 
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 // regular non-col sort should not change order of column paths
                 expect(paths).toEqual(["a|x", "b|x"]);
 
@@ -675,7 +676,7 @@ const data3 = {
                     sort: [["y", "col desc"]],
                 });
 
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toEqual(["b|x", "a|x"]);
 
                 const result = await view.to_columns();
@@ -704,7 +705,7 @@ const data3 = {
                     },
                 });
 
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 // regular non-col sort should not change order of column paths
                 expect(paths).toEqual(["a|x", "b|x"]);
 
@@ -734,7 +735,7 @@ const data3 = {
                     },
                 });
 
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toEqual(["b|x", "a|x"]);
 
                 const result = await view.to_columns();
@@ -758,7 +759,7 @@ const data3 = {
                     sort: [["y", "col desc"]],
                 });
 
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 // Col sort will override aggregate
                 expect(paths).toEqual(["b|x", "a|x"]);
 
@@ -811,7 +812,7 @@ const data3 = {
                         ["y", "col asc"],
                     ],
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toEqual(["x|z", "y|z"]);
                 const expected = {
                     __ROW_PATH__: [[], ["a"], ["b"], ["c"]],
@@ -839,7 +840,7 @@ const data3 = {
                         ["y", "col desc"],
                     ],
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toEqual(["y|z", "x|z"]);
                 const expected = {
                     __ROW_PATH__: [[], ["c"], ["b"], ["a"]],
@@ -864,7 +865,7 @@ const data3 = {
                     split_by: ["x"],
                     sort: [["x", "desc"]],
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toEqual(["a|z", "b|z", "c|z"]);
                 const expected = {
                     __ROW_PATH__: [[], ["x"], ["y"]],

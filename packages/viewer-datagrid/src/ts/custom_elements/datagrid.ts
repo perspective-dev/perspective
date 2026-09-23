@@ -26,9 +26,8 @@ import column_config_schema, {
 import plugin_config_schema from "../plugin/plugin_config_schema.js";
 import datagridStyles from "../../../dist/css/perspective-viewer-datagrid.css";
 import { format_raw } from "../data_listener/format_cell.js";
-import { sourceColumn } from "@perspective-dev/viewer/column-format";
 
-import type { View, ViewWindow } from "@perspective-dev/client";
+import type { ColumnWindow, View, ViewWindow } from "@perspective-dev/client";
 import type {
     HTMLPerspectiveViewerElement,
     IPerspectiveViewerPlugin,
@@ -42,8 +41,11 @@ import type {
     ColumnsConfig,
     ResolvedColumnsConfig,
     Align,
+    ColumnRole,
 } from "../types.js";
 import { RegularTableElement } from "regular-table";
+import type { CellScalar } from "regular-table/dist/esm/types.js";
+import { isMetaColumn } from "../model/meta_columns.js";
 
 type RenderTarget = "shadow" | "light";
 
@@ -237,6 +239,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
             group_rollup_mode?: string;
         },
         plugin_config?: Record<string, unknown> | null,
+        role?: ColumnRole,
     ): ColumnConfigSchema {
         return column_config_schema.call(
             this,
@@ -246,6 +249,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
             current_value,
             viewer_config,
             plugin_config,
+            role,
         );
     }
 
@@ -267,8 +271,18 @@ export class HTMLPerspectiveViewerDatagridPluginElement
     }
 
     async render(view: View, viewport?: ViewWindow): Promise<string> {
-        const json = await view.to_columns(viewport as any);
-        const cols = await view.column_paths(viewport as any);
+        const [json, area] = await Promise.all([
+            view.to_columns(viewport as any),
+            view.column_paths(viewport as ColumnWindow) as Promise<
+                (CellScalar | null)[][]
+            >,
+        ]);
+
+        const keys = Object.keys(json as Record<string, unknown[]>).filter(
+            (x) => !isMetaColumn(x),
+        );
+
+        const names = area[area.length - 1] ?? [];
         const nrows =
             viewport?.end_row !== undefined &&
             viewport?.end_row !== null &&
@@ -277,20 +291,23 @@ export class HTMLPerspectiveViewerDatagridPluginElement
                 ? viewport.end_row - viewport.start_row
                 : await view.num_rows();
 
+        const pluginConfig = (this.regular_table as any)[
+            PRIVATE_PLUGIN_SYMBOL
+        ] as ResolvedColumnsConfig | undefined;
+
+        const formatters = keys.map((_, cidx) => {
+            const name = String(names[cidx] ?? "");
+            return format_raw(
+                this.model!._schema[name],
+                pluginConfig?.[name] || {},
+            );
+        });
+
         let out = "";
         for (let ridx = 0; ridx < nrows; ridx++) {
-            for (const col_name of cols) {
-                const col = (json as Record<string, unknown[]>)[col_name];
-                const type = this.model!._schema[col_name];
-                const pluginConfig = (this.regular_table as any)[
-                    PRIVATE_PLUGIN_SYMBOL
-                ] as ResolvedColumnsConfig | undefined;
-                const columnName = sourceColumn(col_name);
-                const formatter = format_raw(
-                    type,
-                    pluginConfig?.[columnName] || {},
-                );
-
+            for (let cidx = 0; cidx < keys.length; cidx++) {
+                const col = (json as Record<string, unknown[]>)[keys[cidx]];
+                const formatter = formatters[cidx];
                 if (formatter) {
                     out += formatter.format(col[ridx]) + "\t";
                 } else {

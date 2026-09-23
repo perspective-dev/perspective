@@ -22,6 +22,7 @@ pq = pytest.importorskip("pyarrow.parquet")
 
 from perspective import Client
 from perspective.virtual_servers.postgres import PostgresVirtualServer
+from perspective.tests.column_paths import joined_column_paths
 
 # Set `PSP_TEST_POSTGRES_DSN` to point these tests at a server; without a
 # reachable PostgreSQL >= 16 they skip rather than fail.
@@ -266,7 +267,7 @@ class TestPostgresView:
     def test_column_paths(self, client):
         table = client.open_table("psp_test.superstore")
         view = table.view(columns=["Sales", "Profit", "State"])
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert paths == ["Sales", "Profit", "State"]
         view.delete()
 

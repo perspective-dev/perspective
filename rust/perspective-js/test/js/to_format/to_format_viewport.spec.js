@@ -12,6 +12,7 @@
 
 import { test, expect } from "@perspective-dev/test";
 import perspective from "../perspective_client";
+import { joined_column_paths } from "../column_paths.js";
 
 const data = {
     w: [
@@ -298,7 +299,7 @@ test.describe("to_format viewport", function () {
         test("0 sided", async function () {
             const table = await perspective.table(data);
             const view = await table.view({});
-            const paths = await view.column_paths({
+            const paths = await joined_column_paths(view, {
                 start_col: 1,
                 end_col: 3,
             });
@@ -311,10 +312,10 @@ test.describe("to_format viewport", function () {
             const table = await perspective.table(data);
             const view = await table.view({ group_by: ["y"] });
             expect(
-                await view.column_paths({ start_col: 0, end_col: 1 }),
+                await joined_column_paths(view, { start_col: 0, end_col: 1 }),
             ).toEqual(["w"]);
             expect(
-                await view.column_paths({ start_col: 1, end_col: 3 }),
+                await joined_column_paths(view, { start_col: 1, end_col: 3 }),
             ).toEqual(["x", "y"]);
             view.delete();
             table.delete();
@@ -327,13 +328,13 @@ test.describe("to_format viewport", function () {
                 split_by: ["z"],
             });
             expect(
-                await view.column_paths({ start_col: 0, end_col: 1 }),
+                await joined_column_paths(view, { start_col: 0, end_col: 1 }),
             ).toEqual(["false|w"]);
             expect(
-                await view.column_paths({ start_col: 1, end_col: 2 }),
+                await joined_column_paths(view, { start_col: 1, end_col: 2 }),
             ).toEqual(["false|x"]);
             expect(
-                await view.column_paths({ start_col: 3, end_col: 5 }),
+                await joined_column_paths(view, { start_col: 3, end_col: 5 }),
             ).toEqual(["false|z", "true|w"]);
             view.delete();
             table.delete();
@@ -343,7 +344,7 @@ test.describe("to_format viewport", function () {
             const table = await perspective.table(data);
             const view = await table.view({ split_by: ["z"] });
             expect(
-                await view.column_paths({ start_col: 0, end_col: 1 }),
+                await joined_column_paths(view, { start_col: 0, end_col: 1 }),
             ).toEqual(["false|w"]);
             view.delete();
             table.delete();
@@ -365,7 +366,7 @@ test.describe("to_format viewport", function () {
                 };
 
                 const cols = await view.to_columns(viewport);
-                const paths = await view.column_paths({
+                const paths = await joined_column_paths(view, {
                     start_col: viewport.start_col,
                     end_col: viewport.end_col,
                 });

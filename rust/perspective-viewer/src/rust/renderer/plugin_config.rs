@@ -28,7 +28,7 @@ use super::Renderer;
 use super::state::PluginRef;
 use crate::config::*;
 use crate::js::plugin::JsPerspectiveViewerPlugin;
-use crate::queries::resolve_abs_max;
+use crate::queries::{is_pivot_only_column, resolve_abs_max};
 use crate::session::Session;
 use crate::utils::{CssKind, CssLiteralUse, parse_var_ref, resolve_css_refs};
 
@@ -36,6 +36,25 @@ type ConfigMap = serde_json::Map<String, serde_json::Value>;
 
 /// A schema query's answer: `Ok(None)` when the plugin declares no schema.
 pub type SchemaResult = Result<Option<ColumnConfigSchema>, ValidationError>;
+
+/// Where in the `ViewConfig` a column being configured appears, which is a
+/// different axis from its plugin column slot.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ColumnRole {
+    Column,
+    GroupBy,
+    SplitBy,
+}
+
+impl ColumnRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Column => "column",
+            Self::GroupBy => "group_by",
+            Self::SplitBy => "split_by",
+        }
+    }
+}
 
 /// Everything a column's schema is a function of, besides the column itself.
 struct ColumnSchemaEnv<'a> {
@@ -862,6 +881,14 @@ impl Renderer {
             .and_then(|idx| names.get(idx))
             .map(|s| s.as_str());
 
+        let role = if !is_pivot_only_column(column_name, view_config) {
+            ColumnRole::Column
+        } else if view_config.split_by.iter().any(|x| x == column_name) {
+            ColumnRole::SplitBy
+        } else {
+            ColumnRole::GroupBy
+        };
+
         let view_type = match view_schema {
             Some(view_schema) => view_schema.get(column_name).copied(),
             None => {
@@ -871,6 +898,14 @@ impl Renderer {
 
                 session.metadata().get_column_view_type(column_name)
             },
+        };
+
+        let view_type = match role {
+            ColumnRole::Column => view_type,
+            _ => session
+                .metadata()
+                .get_column_table_type(column_name)
+                .or(view_type),
         };
 
         let Some(view_type) = view_type else {
@@ -887,6 +922,7 @@ impl Renderer {
             &current_js,
             &view_config_js,
             &plugin_config_js,
+            role.as_str(),
         )?;
 
         let abs_max = column_stats

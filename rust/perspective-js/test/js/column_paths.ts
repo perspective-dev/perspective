@@ -10,31 +10,37 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { test, expect } from "@perspective-dev/test";
-import perspective from "../perspective_client.ts";
-import { expect_rejects } from "./oracle.ts";
-import { make_source } from "./fixtures.ts";
+/**
+ * A `View`'s column paths as `"|"`-joined strings, for the many tests whose
+ * subject is which columns exist in what order rather than the typed values
+ * `column_paths` now returns.
+ *
+ * Tests of `column_paths` itself assert the area directly - this helper is
+ * deliberately lossy in the same way the old wire format was, so it must not
+ * be used to pin a split value's type or rendering.
+ */
+export async function joined_column_paths(
+    view: {
+        column_paths(
+            window?: unknown,
+        ): Promise<(string | number | boolean | null)[][]>;
+    },
+    window?: unknown,
+): Promise<string[]> {
+    const area = await view.column_paths(window ?? {});
+    const width = area[area.length - 1]?.length ?? 0;
+    const out: string[] = [];
+    for (let x = 0; x < width; x++) {
+        const parts: string[] = [];
+        for (let level = 0; level < area.length; level++) {
+            const value = area[level][x];
+            if (value !== null && value !== undefined) {
+                parts.push(String(value));
+            }
+        }
 
-const PARENTS = {
-    flat: {},
-    group_by: { group_by: ["g"], columns: ["x"] },
-    split_by: { group_by: ["g"], split_by: ["s"], columns: ["x"] },
-};
-
-test.describe("Derived tables are read-only", function () {
-    for (const [name, config] of Object.entries(PARENTS)) {
-        test(`${name} parent`, async function () {
-            const source = await make_source();
-            const view = await source.view(config);
-            const derived = await perspective.table(view);
-            await expect_rejects(derived.update([{ x: 1 }]));
-            await expect_rejects(derived.remove([1]));
-            await expect_rejects(derived.clear());
-            await expect_rejects(derived.replace([{ x: 1 }]));
-            expect(typeof (await derived.make_port())).toEqual("number");
-            await derived.delete();
-            await view.delete();
-            await source.delete();
-        });
+        out.push(parts.join("|"));
     }
-});
+
+    return out;
+}

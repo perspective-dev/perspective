@@ -231,11 +231,8 @@ namespace server {
         make_derived_source(const std::shared_ptr<Table>& parent) const = 0;
 
         [[nodiscard]]
-        virtual std::vector<std::vector<std::string>> column_paths() const = 0;
-
-        [[nodiscard]]
-        virtual std::vector<std::vector<std::string>>
-        column_paths_range(t_uindex start_col, t_uindex end_col) const = 0;
+        virtual std::vector<std::vector<t_tscalar>>
+        column_paths(t_uindex start_col, t_uindex end_col) const = 0;
 
         [[nodiscard]]
         virtual std::map<std::string, std::string>
@@ -438,42 +435,9 @@ namespace server {
         }
 
         [[nodiscard]]
-        std::vector<std::vector<std::string>>
-        column_paths() const override {
-            std::vector<std::vector<std::string>> out;
-            std::vector<std::vector<t_tscalar>> column_paths =
-                m_view->column_paths();
-
-            for (const auto& path : column_paths) {
-                std::vector<std::string> path_str;
-                path_str.reserve(path.size());
-                for (const auto& scalar : path) {
-                    path_str.push_back(scalar.to_string());
-                }
-                out.push_back(path_str);
-            }
-
-            return out;
-        }
-
-        [[nodiscard]]
-        std::vector<std::vector<std::string>>
-        column_paths_range(t_uindex start_col, t_uindex end_col)
-            const override {
-            std::vector<std::vector<std::string>> out;
-            std::vector<std::vector<t_tscalar>> column_paths =
-                m_view->column_paths_range(start_col, end_col);
-
-            for (const auto& path : column_paths) {
-                std::vector<std::string> path_str;
-                path_str.reserve(path.size());
-                for (const auto& scalar : path) {
-                    path_str.push_back(scalar.to_string());
-                }
-                out.push_back(path_str);
-            }
-
-            return out;
+        std::vector<std::vector<t_tscalar>>
+        column_paths(t_uindex start_col, t_uindex end_col) const override {
+            return m_view->column_paths(start_col, end_col);
         }
 
         [[nodiscard]]

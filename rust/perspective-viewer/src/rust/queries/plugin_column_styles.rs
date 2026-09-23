@@ -14,8 +14,9 @@ use itertools::Itertools;
 use perspective_client::config::ViewConfig;
 use perspective_js::utils::{ApiResult, JsValueSerdeExt};
 
+use super::column_locator::is_pivot_only_column;
 use crate::config::ColumnConfigSchema;
-use crate::renderer::Renderer;
+use crate::renderer::{ColumnRole, Renderer};
 use crate::session::SessionMetadata;
 
 /// Queries the active plugin for its plugin-scoped [`ColumnConfigSchema`] as
@@ -58,9 +59,22 @@ pub fn get_column_config_schema(
         .and_then(|(idx, _)| names.get(idx))
         .map(|s| s.as_str());
 
-    let view_type = if let Some(x) = metadata.get_column_view_type(column_name) {
-        x
+    let role = if !is_pivot_only_column(column_name, view_config) {
+        ColumnRole::Column
+    } else if view_config.split_by.iter().any(|x| x == column_name) {
+        ColumnRole::SplitBy
     } else {
+        ColumnRole::GroupBy
+    };
+
+    let view_type = match role {
+        ColumnRole::Column => metadata.get_column_view_type(column_name),
+        _ => metadata
+            .get_column_table_type(column_name)
+            .or_else(|| metadata.get_column_view_type(column_name)),
+    };
+
+    let Some(view_type) = view_type else {
         return Ok(ColumnConfigSchema { fields: vec![] });
     };
 
@@ -82,6 +96,7 @@ pub fn get_column_config_schema(
         &current_js,
         &view_config_js,
         &plugin_config_js,
+        role.as_str(),
     )?;
 
     serde_wasm_bindgen::from_value::<ColumnConfigSchema>(raw)

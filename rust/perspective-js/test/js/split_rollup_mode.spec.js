@@ -12,6 +12,7 @@
 
 import { test, expect } from "@perspective-dev/test";
 import perspective from "./perspective_client";
+import { joined_column_paths } from "./column_paths.js";
 
 const data = {
     w: [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5],
@@ -31,7 +32,7 @@ const data = {
                     split_by: ["z"],
                     split_rollup_mode: "rollup",
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toStrictEqual(["w", "false|w", "true|w"]);
                 expect(await view.num_columns()).toEqual(3);
                 view.delete();
@@ -65,7 +66,7 @@ const data = {
                     split_by: ["z", "y"],
                     split_rollup_mode: "rollup",
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toStrictEqual([
                     "w",
                     "false|w",
@@ -120,7 +121,7 @@ const data = {
                     split_rollup_mode: "rollup",
                     sort: [["x", "asc"]],
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toStrictEqual(["w", "false|w", "true|w"]);
                 expect(await view.num_columns()).toEqual(3);
                 view.delete();
@@ -154,7 +155,7 @@ const data = {
                     split_by: ["z"],
                     split_rollup_mode: "rollup",
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toStrictEqual(["w", "false|w", "true|w"]);
 
                 // Each column-only row is a single-row group, so the
@@ -178,7 +179,7 @@ const data = {
                     split_by: ["z"],
                     split_rollup_mode: "rollup",
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toStrictEqual(["w", "false|w", "true|w"]);
 
                 const cols = await view.to_columns();
@@ -199,7 +200,7 @@ const data = {
                     split_by: ["z"],
                     split_rollup_mode: "rollup",
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toStrictEqual([
                     "w",
                     "x",
@@ -353,7 +354,7 @@ const data = {
                     group_by: ["y"],
                     split_by: ["z"],
                 });
-                const paths = await view.column_paths();
+                const paths = await joined_column_paths(view);
                 expect(paths).toStrictEqual(["false|w", "true|w"]);
                 const config = await view.get_config();
                 expect(config.split_rollup_mode).toEqual("flat");

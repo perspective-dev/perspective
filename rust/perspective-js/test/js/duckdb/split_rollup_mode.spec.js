@@ -17,6 +17,7 @@
 
 import { test, expect } from "@perspective-dev/test";
 import { describeDuckDB } from "./setup.js";
+import { joined_column_paths } from "../column_paths.js";
 
 describeDuckDB("split_rollup_mode", (getClient) => {
     test("rollup emits grand-total column group in totals-before order", async function () {
@@ -28,7 +29,7 @@ describeDuckDB("split_rollup_mode", (getClient) => {
             aggregates: { total_sales: "sum" },
             split_rollup_mode: "rollup",
         });
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(paths).toEqual([
             "total_sales",
             "bay_area|total_sales",
@@ -58,7 +59,7 @@ describeDuckDB("split_rollup_mode", (getClient) => {
             aggregates: { total_sales: "sum" },
             split_rollup_mode: "rollup",
         });
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(paths).toEqual([
             "total_sales",
             "east_coast|total_sales",

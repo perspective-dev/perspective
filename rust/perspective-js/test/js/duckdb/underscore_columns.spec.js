@@ -16,6 +16,7 @@
 
 import { test, expect } from "@perspective-dev/test";
 import { describeDuckDB } from "./setup.js";
+import { joined_column_paths } from "../column_paths.js";
 
 describeDuckDB("underscore columns", (getClient) => {
     test("table schema() preserves underscore names", async function () {
@@ -35,7 +36,7 @@ describeDuckDB("underscore columns", (getClient) => {
             columns: ["account_number", "total_sales"],
         });
 
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(paths).toEqual(["account_number", "total_sales"]);
 
         const schema = await view.schema();
@@ -108,7 +109,7 @@ describeDuckDB("underscore columns", (getClient) => {
             split_by: ["region_name"],
         });
 
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(paths).toEqual([
             "east_coast|total_sales",
             "west_coast|total_sales",
@@ -140,7 +141,7 @@ describeDuckDB("underscore columns", (getClient) => {
             aggregates: { account_number: "sum", total_sales: "sum" },
         });
 
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(paths).toEqual([
             "east_coast|account_number",
             "east_coast|total_sales",
@@ -247,7 +248,7 @@ describeDuckDB("underscore columns", (getClient) => {
             split_by: ["region_name", "sub_region"],
         });
 
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(paths).toEqual([
             "east_coast|new_jersey|total_sales",
             "east_coast|new_york|total_sales",
@@ -292,7 +293,7 @@ describeDuckDB("underscore columns", (getClient) => {
             expressions: { double_sales: '"total_sales" * 2' },
         });
 
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(paths).toEqual([
             "east_coast|double_sales",
             "west_coast|double_sales",

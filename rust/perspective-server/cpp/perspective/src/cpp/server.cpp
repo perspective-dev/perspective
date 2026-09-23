@@ -68,6 +68,43 @@ tscalar_to_proto(const t_tscalar& scalar, proto::Scalar* out) {
     }
 }
 
+/// Encode a column path scalar as `View::write_scalar` does unformatted, so a
+/// split value reaches a client in the same encoding as a cell of its type.
+static void
+column_path_scalar_to_proto(const t_tscalar& scalar, proto::Scalar* out) {
+    if (scalar.is_none() || !scalar.is_valid()) {
+        out->set_null(::google::protobuf::NullValue::NULL_VALUE);
+        return;
+    }
+
+    switch (scalar.get_dtype()) {
+        case DTYPE_BOOL:
+            out->set_bool_(scalar.get<bool>());
+            break;
+        case DTYPE_STR:
+            out->set_string(scalar.get<const char*>());
+            break;
+        case DTYPE_TIME:
+            out->set_float_((double)scalar.get<std::int64_t>());
+            break;
+        case DTYPE_DATE:
+            out->set_float_((double)scalar.get<t_date>().as_epoch_ms());
+            break;
+        case DTYPE_FLOAT32:
+        case DTYPE_FLOAT64:
+            if (scalar.is_nan()) {
+                out->set_null(::google::protobuf::NullValue::NULL_VALUE);
+            } else {
+                out->set_float_(scalar.to_double());
+            }
+
+            break;
+        default:
+            out->set_float_(scalar.to_double());
+            break;
+    }
+}
+
 std::uint32_t server::ProtoServer::m_client_id = 1;
 
 template <>
@@ -2184,6 +2221,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             features->set_sort(true);
             features->set_on_update(true);
             features->set_expressions(true);
+            features->set_view_derivations(true);
 
             const auto window_agg = [](const char* name,
                                         std::initializer_list<const char*> frames,
@@ -2756,14 +2794,6 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             break;
         }
         case proto::Request::kTableMakePortReq: {
-            if (m_derived_engine.is_derived_table(req.entity_id())) {
-                proto::Response resp;
-                *resp.mutable_server_error()->mutable_message() =
-                    "Cannot update a read-only derived table";
-                push_resp(std::move(resp));
-                break;
-            }
-
             auto table = m_resources.get_table(req.entity_id());
             proto::Response resp;
             auto* make_port = resp.mutable_table_make_port_resp();
@@ -3337,43 +3367,19 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             auto view = m_resources.get_view(req.entity_id());
 
             const auto& r = req.view_column_paths_req();
+            const auto start_col = r.has_start_col() ? r.start_col() : 0;
+            const auto end_col =
+                r.has_end_col() ? r.end_col() : view->num_columns();
 
             proto::Response resp;
-            auto* view_col_paths =
-                resp.mutable_view_column_paths_resp()->mutable_paths();
+            auto* area = resp.mutable_view_column_paths_resp()->mutable_area();
 
-            // // TODO this is a better representation of column_paths but
-            // // it is not legacy compat.
-            // for (const auto& col_paths : view->column_paths()) {
-            //     auto* col_path = view_col_paths->Add();
-            //     auto* paths = col_path->mutable_path();
-            //     for (const auto& path : col_paths) {
-            //         *paths->Add() = path;
-            //     }
-            // }
-
-            std::string col;
-            const auto column_paths = r.has_start_col() ? r.has_end_col()
-                    ? view->column_paths_range(r.start_col(), r.end_col())
-                    : view->column_paths_range(
-                        r.start_col(), view->num_columns()
-                    )
-                : r.has_end_col() ? view->column_paths_range(0, r.end_col())
-                                  : view->column_paths();
-
-            for (auto& col_paths : column_paths) {
-                col = "";
-                if (!col_paths.empty()) {
-                    auto it = col_paths.begin();
-                    col += *it;
-
-                    for (++it; it != col_paths.end(); ++it) {
-                        col += "|";
-                        col += *it;
-                    }
+            for (const auto& level : view->column_paths(start_col, end_col)) {
+                auto* values = area->Add()->mutable_values();
+                values->Reserve(level.size());
+                for (const auto& scalar : level) {
+                    column_path_scalar_to_proto(scalar, values->Add());
                 }
-
-                *view_col_paths->Add() = col;
             }
 
             push_resp(std::move(resp));

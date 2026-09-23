@@ -193,6 +193,7 @@ class PostgresVirtualServerHandler(VirtualServerHandler):
             "split_by": False,
             "sort": True,
             "expressions": True,
+            "view_derivations": True,
             "group_rollup_mode": ["rollup", "flat", "total"],
             # `ctid` is not a stable row identity, so natural-order windows
             # are unsupported.

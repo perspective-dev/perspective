@@ -42,7 +42,7 @@ use yew::prelude::*;
 use self::activate::*;
 pub use self::limits::RenderLimits;
 pub use self::plugin_config::{
-    ColumnConfigMap, PluginScopedConfig, PreparedRenderer, ValidatedColumnsConfig,
+    ColumnConfigMap, ColumnRole, PluginScopedConfig, PreparedRenderer, ValidatedColumnsConfig,
     ValidatedPluginConfig,
 };
 use self::plugin_store::*;

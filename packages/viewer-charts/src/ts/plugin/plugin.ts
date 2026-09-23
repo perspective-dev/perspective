@@ -255,6 +255,24 @@ const GLOBAL_STYLES = (() => {
  */
 let BLIT_MODE: "direct" | "blit" = RENDER_BLIT_MODE;
 
+/**
+ * A column's `date_format` / `number_format` controls, which are the only ones
+ * that apply to a value rendered as an axis tick or tooltip label.
+ */
+function format_fields(
+    column_type: string,
+): Array<Record<string, unknown> & { kind: string }> {
+    if (column_type === "integer" || column_type === "float") {
+        return [{ kind: "NumberFormat", default: CHART_NUMBER_DEFAULTS }];
+    } else if (column_type === "datetime") {
+        return [{ kind: "DatetimeFormat", default: CHART_DATETIME_DEFAULTS }];
+    } else if (column_type === "date") {
+        return [{ kind: "DatetimeFormat", default: CHART_DATE_DEFAULTS }];
+    }
+
+    return [];
+}
+
 export class HTMLPerspectiveViewerWebGLPluginElement
     extends HTMLElement
     implements IPerspectiveViewerPlugin
@@ -601,8 +619,14 @@ export class HTMLPerspectiveViewerWebGLPluginElement
             split_by?: string[];
             group_rollup_mode?: string;
         },
+        _plugin_config?: Record<string, unknown> | null,
+        role?: "column" | "group_by" | "split_by",
     ) {
         const fields: Array<Record<string, unknown> & { kind: string }> = [];
+
+        if (role === "group_by" || role === "split_by") {
+            return { fields: format_fields(column_type) };
+        }
 
         if (group === "Color") {
             const numeric_gradient =
@@ -721,23 +745,7 @@ export class HTMLPerspectiveViewerWebGLPluginElement
 
         // Per-column formatter widgets. Surfaced for every chart type so
         // axes / tooltips / legends honor the user's format choice.
-        if (column_type === "integer" || column_type === "float") {
-            fields.push({
-                kind: "NumberFormat",
-                default: CHART_NUMBER_DEFAULTS,
-            });
-        } else if (column_type === "datetime") {
-            fields.push({
-                kind: "DatetimeFormat",
-                default: CHART_DATETIME_DEFAULTS,
-            });
-        } else if (column_type === "date") {
-            fields.push({
-                kind: "DatetimeFormat",
-                default: CHART_DATE_DEFAULTS,
-            });
-        }
-
+        fields.push(...format_fields(column_type));
         return { fields };
     }
 

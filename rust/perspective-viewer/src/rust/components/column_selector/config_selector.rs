@@ -24,7 +24,8 @@ use crate::components::column_dropdown::{ColumnDropDownElement, ColumnDropDownPo
 use crate::components::dragdrop_list::*;
 use crate::components::filter_dropdown::{FilterDropDownElement, FilterDropDownPortal};
 use crate::config::PluginStaticConfig;
-use crate::presentation::Presentation;
+use crate::presentation::{ColumnLocator, ColumnSettingsTarget, Presentation};
+use crate::queries::has_column_config;
 use crate::renderer::*;
 use crate::session::drag_drop_update::*;
 use crate::session::*;
@@ -36,6 +37,13 @@ use crate::utils::*;
 pub struct ConfigSelectorProps {
     pub onselect: Callback<()>,
 
+    /// Opens a pivot column's settings, so its format config is reachable.
+    pub on_open_expr_panel: Callback<ColumnSettingsTarget>,
+
+    /// The column whose settings sidebar is open, threaded as a VALUE prop so
+    /// closing or retargeting the sidebar clears this pill's open indicator.
+    pub selected_column: Option<ColumnLocator>,
+
     #[prop_or_default]
     pub ondragenter: Callback<()>,
 
@@ -43,9 +51,11 @@ pub struct ConfigSelectorProps {
     /// (group_by, sort, filter, etc.) trigger re-renders via normal prop
     /// diffing rather than a PubSub `view_created` subscription.
     pub view_config: PtrEqRc<ViewConfig>,
+
     /// Column currently being dragged — threaded to show `dragdrop-highlight`
     /// without subscribing to `dragstart_received`/`dragend_received`.
     pub drag_column: Option<String>,
+
     /// Session metadata snapshot — threaded from `SessionProps`.
     pub metadata: SessionMetadataRc,
 
@@ -69,6 +79,7 @@ pub struct ConfigSelectorProps {
 impl PartialEq for ConfigSelectorProps {
     fn eq(&self, other: &Self) -> bool {
         self.view_config == other.view_config
+            && self.selected_column == other.selected_column
             && self.drag_column == other.drag_column
             && self.metadata == other.metadata
             && self.selected_theme == other.selected_theme
@@ -578,6 +589,17 @@ impl Component for ConfigSelector {
             )
         };
 
+        let has_config = |name: &str| {
+            has_column_config(name, config, &ctx.props().metadata, &ctx.props().renderer)
+        };
+
+        let editing_column = match &ctx.props().selected_column {
+            Some(ColumnLocator::Table(x))
+            | Some(ColumnLocator::Expression(x))
+            | Some(ColumnLocator::Window(x)) => Some(x.clone()),
+            _ => None,
+        };
+
         let transpose = ctx.link().callback(|_| ConfigSelectorMsg::TransposePivots);
         let column_dropdown = self.column_dropdown.clone();
         let mut class = classes!();
@@ -665,6 +687,9 @@ impl Component for ConfigSelector {
                                         action={DragTarget::GroupBy}
                                         column={group_by.clone()}
                                         metadata={metadata.clone()}
+                                        on_open_expr_panel={has_config(group_by)
+                                            .then(|| ctx.props().on_open_expr_panel.clone())}
+                                        is_editing={editing_column.as_deref() == Some(group_by.as_str())}
                                         {presentation}
                                         opt_session={session}
                                     >
@@ -716,6 +741,9 @@ impl Component for ConfigSelector {
                                     action={ DragTarget::SplitBy }
                                     column={ split_by.clone() }
                                     metadata={metadata.clone()}
+                                    on_open_expr_panel={has_config(split_by)
+                                        .then(|| ctx.props().on_open_expr_panel.clone())}
+                                    is_editing={editing_column.as_deref() == Some(split_by.as_str())}
                                     {presentation}
                                     opt_session={session}>
                                 </PivotColumn>

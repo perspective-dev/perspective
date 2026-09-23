@@ -299,6 +299,7 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
             split_by: true,
             sort: true,
             expressions: true,
+            view_derivations: true,
             window_aggregates: {
                 // `ema` is recursive and has no SQL window translation.
                 integer: WINDOW_AGGREGATES,

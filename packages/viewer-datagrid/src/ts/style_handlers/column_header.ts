@@ -16,6 +16,7 @@ import { CollectedHeaderRow } from "./types.js";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 import { apply_borders, classify_header_cell } from "./border_model.js";
 import { corner_boundary_x } from "./group_header.js";
+import { is_loaded, split_depth } from "../model/column_path_area.js";
 
 /**
  * Apply selected column styling in response to column settings toggle events.
@@ -117,7 +118,7 @@ export function styleColumnHeaderRow(
         const sort = model._config.sort.find((x) => x[0] === column_name);
         const is_corner = typeof metadata.x === "undefined";
         const borders = classify_header_cell({
-            paths: model._column_paths,
+            area: model._column_path_area,
             split_by_len,
             x: is_corner ? undefined : metadata.x,
             colspan: td.colSpan || 1,
@@ -140,9 +141,10 @@ export function styleColumnHeaderRow(
         // Under `split_rollup_mode: "rollup"`, columns whose raw path has
         // fewer levels than `split_by` are subtotal (or, with zero levels,
         // grand-total) column groups.
-        const n_split_levels = is_corner
-            ? undefined
-            : model._column_paths[metadata.x!]?.split("|").length - 1;
+        const n_split_levels =
+            is_corner || !is_loaded(model, metadata.x!)
+                ? undefined
+                : split_depth(model, metadata.x!);
         const is_rollup_col =
             model._config.split_by.length > 0 &&
             n_split_levels !== undefined &&

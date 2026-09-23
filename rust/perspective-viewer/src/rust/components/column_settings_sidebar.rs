@@ -34,6 +34,7 @@ use crate::components::expression_editor::ExpressionEditorProps;
 use crate::components::type_icon::TypeIconType;
 use crate::components::window_editor::WindowEditorProps;
 use crate::presentation::{ColumnLocator, ColumnSettingsTab, Presentation};
+use crate::queries::{has_column_config, is_pivot_only_column};
 use crate::renderer::Renderer;
 use crate::session::{Session, SessionMetadataRc};
 use crate::tasks::{
@@ -551,23 +552,35 @@ impl ColumnSettingsPanel {
     }
 
     fn refresh_derived(&mut self, ctx: &yew::prelude::Context<Self>) {
-        self.maybe_ty = ctx
+        let view_ty = ctx
             .props()
             .metadata
             .locator_view_type(&ctx.props().selected_column);
 
+        self.maybe_ty = match ctx.props().selected_column.name() {
+            Some(name) if is_pivot_only_column(name, &ctx.props().view_config) => {
+                ctx.props().metadata.get_column_table_type(name).or(view_ty)
+            },
+            _ => view_ty,
+        };
+
         self.tabs = {
             let mut tabs = vec![];
             let is_new_expr = ctx.props().selected_column.is_new_expr();
+            let selected_name = ctx
+                .props()
+                .selected_column
+                .name()
+                .map(|x| x.to_string())
+                .unwrap_or_default();
+
             let show_styles = !is_new_expr
-                && ctx.props().renderer.can_render_column_styles()
-                && ctx.props().view_config.columns.contains(&Some(
-                    ctx.props()
-                        .selected_column
-                        .name()
-                        .map(|x| x.to_string())
-                        .unwrap_or_default(),
-                ));
+                && has_column_config(
+                    &selected_name,
+                    &ctx.props().view_config,
+                    &ctx.props().metadata,
+                    &ctx.props().renderer,
+                );
 
             if !is_new_expr && show_styles {
                 tabs.push(ColumnSettingsTab::Style);

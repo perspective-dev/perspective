@@ -24,6 +24,7 @@ import {
     parse_fg_mode,
     type BgMode,
     type ColumnConfig,
+    type ColumnRole,
     type DatagridPluginElement,
     type FgMode,
 } from "../types.js";
@@ -44,6 +45,20 @@ export interface ColumnConfigSchema {
  * Plugin schema for the Datagrid column-settings sidebar. Returns the
  * controls the viewer should render in the Style tab for a given column.
  */
+/**
+ * A column's `date_format` / `number_format` controls, which are the only ones
+ * that apply to a value rendered as a pivot label rather than a cell.
+ */
+function format_fields(type: ColumnType): ControlSpec[] {
+    if (type === "integer" || type === "float") {
+        return [{ kind: "NumberFormat" }];
+    } else if (type === "date" || type === "datetime") {
+        return [{ kind: "DatetimeFormat" }];
+    }
+
+    return [];
+}
+
 export default function column_config_schema(
     this: DatagridPluginElement,
     type: ColumnType,
@@ -52,7 +67,12 @@ export default function column_config_schema(
     current_value: Record<string, unknown> | null,
     viewer_config?: ViewerConfigLike,
     plugin_config?: Record<string, unknown> | null,
+    role?: ColumnRole,
 ): ColumnConfigSchema {
+    if (role === "group_by" || role === "split_by") {
+        return { fields: format_fields(type) };
+    }
+
     const grid =
         plugin_config === undefined || plugin_config === null
             ? {
@@ -160,11 +180,8 @@ export default function column_config_schema(
         fields.push({ kind: "Group", key: "color", fields: color_fields });
     }
 
-    if (type === "integer" || type === "float") {
-        fields.push({ kind: "NumberFormat" });
-    } else if (type === "date" || type === "datetime") {
-        fields.push({ kind: "DatetimeFormat" });
-    } else if (type === "string") {
+    fields.push(...format_fields(type));
+    if (type === "string") {
         fields.push({
             kind: "Bool",
             key: "link" satisfies keyof ColumnConfig,

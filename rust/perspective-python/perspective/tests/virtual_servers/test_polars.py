@@ -18,6 +18,7 @@ import polars as pl
 from perspective import Client
 from perspective.virtual_servers.polars import PolarsVirtualServer
 import urllib
+from perspective.tests.column_paths import joined_column_paths
 
 
 def approx_json(expected):
@@ -190,7 +191,7 @@ class TestPolarsView:
     def test_column_paths(self, client):
         table = client.open_table("superstore")
         view = table.view(columns=["Sales", "Profit", "State"])
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert paths == ["Sales", "Profit", "State"]
         view.delete()
 
@@ -478,7 +479,7 @@ class TestPolarsSplitBy:
             aggregates={"Sales": "sum"},
         )
 
-        column_paths = view.column_paths()
+        column_paths = joined_column_paths(view)
         assert column_paths == [
             "Central_Sales",
             "East_Sales",
@@ -527,7 +528,7 @@ class TestPolarsSplitBy:
             columns=["Sales"],
             split_by=["Category"],
         )
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert any("Furniture" in c for c in paths)
         assert any("Office Supplies" in c for c in paths)
         assert any("Technology" in c for c in paths)
@@ -934,7 +935,7 @@ class TestPolarsCombinedOperations:
             aggregates={"Sales": "sum"},
         )
 
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert paths == [
             "Central_Sales",
             "East_Sales",
@@ -988,7 +989,7 @@ class TestPolarsCombinedOperations:
             filter=[["Quantity", ">", 3]],
         )
 
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert paths == [
             "Central_Sales",
             "East_Sales",

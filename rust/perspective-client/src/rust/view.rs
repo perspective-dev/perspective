@@ -323,22 +323,40 @@ impl View {
         }
     }
 
-    /// Returns an array of strings containing the column paths of the [`View`]
-    /// without any of the source columns.
+    /// Returns this [`View`]'s column header area for `window`, transposed as
+    /// `area[level][column]`.
     ///
     /// A column path shows the columns that a given cell belongs to after
-    /// pivots are applied.
-    pub async fn column_paths(&self, window: ColumnWindow) -> ClientResult<Vec<String>> {
+    /// pivots are applied. The area is rectangular with one level per
+    /// `split_by` plus one: a column's split values occupy the leading levels
+    /// and its name always occupies the last, so a subtotal or grand total
+    /// under `split_rollup_mode: "rollup"` reads [`Scalar::Null`] at the levels
+    /// it does not pivot on. Values keep their column's type - a `datetime`
+    /// split value is epoch milliseconds, not text - so formatting them is the
+    /// caller's choice.
+    ///
+    /// `window` slices the *column* axis; the number of levels does not depend
+    /// on it.
+    pub async fn column_paths(
+        &self,
+        window: ColumnWindow,
+    ) -> ClientResult<Vec<Vec<crate::config::Scalar>>> {
         let msg = self.client_message(ClientReq::ViewColumnPathsReq(ViewColumnPathsReq {
             start_col: window.start_col.map(|x| x as u32),
             end_col: window.end_col.map(|x| x as u32),
         }));
 
         match self.client.oneshot(&msg).await? {
-            ClientResp::ViewColumnPathsResp(ViewColumnPathsResp { paths }) => {
-                // Ok(paths.into_iter().map(|x| x.path).collect())
-                Ok(paths)
-            },
+            ClientResp::ViewColumnPathsResp(ViewColumnPathsResp { area }) => Ok(area
+                .into_iter()
+                .map(|level| {
+                    level
+                        .values
+                        .into_iter()
+                        .map(crate::config::Scalar::from)
+                        .collect()
+                })
+                .collect()),
             resp => Err(resp.into()),
         }
     }
