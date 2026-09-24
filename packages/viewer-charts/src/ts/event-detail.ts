@@ -49,4 +49,4 @@ export interface PerspectiveClickDetail {
     panel?: string;
 }
 
-export { PerspectiveSelectDetail } from "@perspective-dev/viewer/src/ts/extensions.js";
+export { PerspectiveSelectDetail } from "@perspective-dev/viewer/select-detail";

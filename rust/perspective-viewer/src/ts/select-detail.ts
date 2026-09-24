@@ -10,28 +10,39 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type {
-    DateFormatConfig,
-    NumberFormatConfig,
-} from "@perspective-dev/viewer/column-format";
+import type { ViewConfigUpdate, Filter } from "@perspective-dev/client";
 
 /**
- * The chart plugin's default per-column formats, declared to the viewer in
- * `column_config_schema()` and applied by the render path under sparse or
- * absent configs.
+ * The `detail` of a `perspective-global-filter` event.
  */
-export const CHART_NUMBER_DEFAULTS: NumberFormatConfig = {
-    notation: "compact",
-    compactDisplay: "short",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 1,
-};
+export class PerspectiveSelectDetail {
+    selected: boolean;
+    row: Record<string, unknown>;
+    column_names?: string[];
+    removeConfigs: ViewConfigUpdate[];
+    insertConfigs: ViewConfigUpdate[];
+    panel?: string;
+    constructor(
+        selected: boolean,
+        row: Record<string, unknown>,
+        column_names: string[],
+        removeConfigs: ViewConfigUpdate[],
+        insertConfigs: ViewConfigUpdate[],
+        panel?: string,
+    ) {
+        this.selected = selected;
+        this.row = row;
+        this.column_names = column_names;
+        this.removeConfigs = removeConfigs;
+        this.insertConfigs = insertConfigs;
+        this.panel = panel;
+    }
 
-export const CHART_DATETIME_DEFAULTS: DateFormatConfig = {
-    dateStyle: "medium",
-    timeStyle: "disabled",
-};
+    get removeFilters(): Filter[] {
+        return this.removeConfigs.flatMap((x) => x.filter ?? []);
+    }
 
-export const CHART_DATE_DEFAULTS: DateFormatConfig = {
-    dateStyle: "medium",
-};
+    get insertFilters(): Filter[] {
+        return this.insertConfigs.flatMap((x) => x.filter ?? []);
+    }
+}

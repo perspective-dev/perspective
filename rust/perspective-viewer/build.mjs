@@ -110,6 +110,15 @@ export async function build_all() {
                 }),
             ],
         },
+        // Dependency-free leaf modules, published as the `./select-detail`
+        // and `./column-format` subpath exports. Plugin packages import these
+        // instead of the package root, which would link the entire viewer and
+        // its wasm asset into a plugin's standalone `dist/cdn` bundle.
+        {
+            entryPoints: ["src/ts/select-detail.ts", "src/ts/column-format.ts"],
+            format: "esm",
+            outdir: "dist/esm",
+        },
         // WASM assets linked to relative path via `fetch()`. This efficiently
         // loading build is great for `<script>` tags but will give many
         // bundlers trouble.

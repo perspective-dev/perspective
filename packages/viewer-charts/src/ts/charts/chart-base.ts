@@ -18,7 +18,7 @@ import {
     sourceColumn,
     type NumberFormatConfig,
     type DateFormatConfig,
-} from "@perspective-dev/viewer/src/ts/column-format.js";
+} from "@perspective-dev/viewer/column-format";
 import type { ColumnDataMap } from "../data/view-reader";
 import { LazyRowFetcher } from "../data/lazy-row";
 import {

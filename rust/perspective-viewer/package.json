@@ -34,6 +34,16 @@
             "import": "./dist/esm/perspective-viewer.inline.js",
             "default": "./dist/esm/perspective-viewer.inline.js"
         },
+        "./select-detail": {
+            "types": "./dist/esm/select-detail.d.ts",
+            "import": "./dist/esm/select-detail.js",
+            "default": "./dist/esm/select-detail.js"
+        },
+        "./column-format": {
+            "types": "./dist/esm/column-format.d.ts",
+            "import": "./dist/esm/column-format.js",
+            "default": "./dist/esm/column-format.js"
+        },
         "./themes": "./dist/css/themes.css",
         "./themes/*.css": "./dist/css/*.css",
         "./themes/intl/*.css": "./dist/css/intl/*.css",

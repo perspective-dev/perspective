@@ -26,7 +26,7 @@ import column_config_schema, {
 import plugin_config_schema from "../plugin/plugin_config_schema.js";
 import datagridStyles from "../../../dist/css/perspective-viewer-datagrid.css";
 import { format_raw } from "../data_listener/format_cell.js";
-import { sourceColumn } from "@perspective-dev/viewer/src/ts/column-format.js";
+import { sourceColumn } from "@perspective-dev/viewer/column-format";
 
 import type { View, ViewWindow } from "@perspective-dev/client";
 import type {
