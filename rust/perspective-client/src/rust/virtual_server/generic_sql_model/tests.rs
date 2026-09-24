@@ -1384,3 +1384,122 @@ fn test_expression_describe_uses_template() {
         "SELECT * FROM (SELECT \"x\" + 1 FROM t) AS __psp_describe__ LIMIT 0"
     );
 }
+
+#[test]
+fn test_view_get_data_escapes_double_quotes_in_column_paths() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("amount".to_string())];
+    config.split_by = vec!["item_title".to_string()];
+    let viewport = ViewPort::default();
+
+    let mut schema = IndexMap::new();
+    schema.insert("plain|amount".to_string(), ColumnType::Integer);
+    schema.insert("say \"hi\"|amount".to_string(), ColumnType::Integer);
+    let sql = builder
+        .view_get_data("my_view", &config, &viewport, &schema)
+        .unwrap();
+
+    assert_eq!(
+        sql,
+        "SELECT \"plain|amount\", \"say \"\"hi\"\"|amount\" FROM my_view"
+    );
+}
+
+#[test]
+fn test_view_get_min_max_escapes_double_quotes_in_column_name() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let config = ViewConfig::default();
+
+    assert_eq!(
+        builder
+            .view_get_min_max("my_view", "say \"hi\"|amount", &config)
+            .unwrap(),
+        "SELECT MIN(\"say \"\"hi\"\"|amount\"), MAX(\"say \"\"hi\"\"|amount\") FROM my_view"
+    );
+}
+
+#[test]
+fn test_table_make_view_escapes_double_quotes_in_column_names() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("a\"b".to_string())];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
+        .unwrap();
+
+    assert!(
+        sql.contains("\"a\"\"b\" as \"a\"\"b\""),
+        "expected escaped column identifier: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("\"a\"b\""),
+        "expected no unescaped column identifier: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_escapes_double_quotes_in_group_by() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string())];
+    config.group_by = vec!["ca\"t".to_string()];
+    config.group_rollup_mode = GroupRollupMode::Flat;
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
+        .unwrap();
+
+    assert!(
+        sql.contains("GROUP BY \"ca\"\"t\""),
+        "expected escaped group_by identifier: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_table_make_view_escapes_double_quotes_in_split_by() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("value".to_string())];
+    config.group_by = vec!["category".to_string()];
+    config.split_by = vec!["sta\"te".to_string()];
+    let sql = builder
+        .table_make_view("source_table", "dest_view", &config, &IndexMap::new())
+        .unwrap();
+
+    assert!(
+        sql.contains("\"sta\"\"te\" || '|value'"),
+        "expected escaped split_by identifier in ON expression: {}",
+        sql
+    );
+    assert!(
+        !sql.contains("\"sta\"te\""),
+        "expected no unescaped split_by identifier: {}",
+        sql
+    );
+}
+
+#[test]
+fn test_view_get_data_orders_column_paths_containing_separator() {
+    let builder = GenericSQLVirtualServerModel::new(GenericSQLVirtualServerModelArgs::default());
+    let mut config = ViewConfig::default();
+    config.columns = vec![Some("amount".to_string()), Some("qty".to_string())];
+    config.split_by = vec!["item_title".to_string()];
+    let viewport = ViewPort::default();
+
+    let mut schema = IndexMap::new();
+    schema.insert("b|c|qty".to_string(), ColumnType::Integer);
+    schema.insert("a|b|amount".to_string(), ColumnType::Integer);
+    schema.insert("b|c|amount".to_string(), ColumnType::Integer);
+    schema.insert("a|b|qty".to_string(), ColumnType::Integer);
+    let sql = builder
+        .view_get_data("my_view", &config, &viewport, &schema)
+        .unwrap();
+
+    assert_eq!(
+        sql,
+        "SELECT \"a|b|amount\", \"a|b|qty\", \"b|c|amount\", \"b|c|qty\" FROM my_view"
+    );
+}

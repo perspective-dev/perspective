@@ -121,4 +121,57 @@ describeDuckDB("split_by", (getClient) => {
         expect(paths.some((c) => c.includes("Technology"))).toBe(true);
         await view.delete();
     });
+
+    // https://github.com/perspective-dev/perspective/issues/3237
+    test("split_by on values containing double quotes", async function () {
+        const table = await getClient().open_table("memory.quoted_test");
+        const view = await table.view({
+            columns: ["amount"],
+            split_by: ["item_title"],
+            group_by: ['we"ird'],
+            aggregates: { amount: "sum" },
+        });
+
+        expect(await view.column_paths()).toEqual([
+            "a_b|amount",
+            "plain|amount",
+            'say "hi"|amount',
+        ]);
+
+        expect(await view.to_json()).toEqual([
+            {
+                __ROW_PATH__: [],
+                "a_b|amount": 36,
+                "plain|amount": 18,
+                'say "hi"|amount': 9,
+            },
+            {
+                __ROW_PATH__: ["g1"],
+                "a_b|amount": 4,
+                "plain|amount": 2,
+                'say "hi"|amount': 1,
+            },
+            {
+                __ROW_PATH__: ["g2"],
+                "a_b|amount": 32,
+                "plain|amount": 16,
+                'say "hi"|amount': 8,
+            },
+        ]);
+        await view.delete();
+    });
+
+    // https://github.com/perspective-dev/perspective/issues/3237
+    test("split_by on a column name containing double quotes", async function () {
+        const table = await getClient().open_table("memory.quoted_test");
+        const view = await table.view({
+            columns: ["amount"],
+            split_by: ['we"ird'],
+            group_by: ["item_title"],
+            aggregates: { amount: "sum" },
+        });
+
+        expect(await view.column_paths()).toEqual(["g1|amount", "g2|amount"]);
+        await view.delete();
+    });
 });

@@ -332,7 +332,7 @@ impl<'a> ViewQueryContext<'a> {
             expressions
                 .get(col)
                 .cloned()
-                .unwrap_or_else(|| format!("\"{}\"", col))
+                .unwrap_or_else(|| format!("\"{}\"", quote_ident(col)))
         };
 
         let row_id_expr = model.0.row_id_expr.as_deref().unwrap_or("rowid");
@@ -702,7 +702,7 @@ impl<'a> ViewQueryContext<'a> {
             .0
             .get(col)
             .cloned()
-            .unwrap_or_else(|| format!("\"{}\"", col))
+            .unwrap_or_else(|| format!("\"{}\"", quote_ident(col)))
     }
 
     fn get_aggregate(&self, col: &str) -> String {
@@ -991,7 +991,7 @@ impl<'a> ViewQueryContext<'a> {
         self.config
             .split_by
             .iter()
-            .map(|c| format!("\"{}\"", c))
+            .map(|c| format!("\"{}\"", quote_ident(c)))
             .collect::<Vec<_>>()
             .join(", ")
     }
