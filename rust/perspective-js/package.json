@@ -38,11 +38,6 @@
             "import": "./dist/esm/perspective.node.js",
             "default": "./dist/esm/perspective.node.js"
         },
-        "./inline": {
-            "types": "./dist/esm/perspective.browser.d.ts",
-            "import": "./dist/esm/perspective.inline.js",
-            "default": "./dist/esm/perspective.inline.js"
-        },
         "./virtual_servers/*": {
             "types": "./dist/esm/virtual_servers/*.d.ts",
             "import": "./dist/esm/virtual_servers/*.js",

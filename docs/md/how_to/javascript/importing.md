@@ -38,13 +38,12 @@ The exact syntax will vary slightly depending on the bundler.
 
 ### Memory64 (wasm64)
 
-`@perspective-dev/server` also ships a WebAssembly Memory64 build of the
-engine, `dist/wasm/perspective-server.memory64.wasm`, which raises the
-engine's heap ceiling from 4GB to 16GB (at some engine performance cost).
-`init_server` accepts both binaries at once — register each as a _thunk_ and
-only the selected binary is ever downloaded. The wasm64 binary is used
-whenever the browser supports Memory64; registering only the wasm32 binary
-(as above) opts out.
+`@perspective-dev/server` also ships a WebAssembly Memory64 build of the engine,
+`dist/wasm/perspective-server.memory64.wasm`, which raises the engine's heap
+ceiling from 4GB to 16GB (at some engine performance cost). `init_server`
+accepts both binaries at once — register each as a _thunk_ and only the selected
+binary is ever downloaded. The wasm64 binary is used whenever the browser
+supports Memory64; registering only the wasm32 binary (as above) opts out.
 
 ```javascript
 perspective.init_server({
@@ -138,18 +137,103 @@ Webpack config:
 
 ## Inline builds with a bundler
 
-<span class="warning">Inline builds are deprecated and will be removed in a
-future release.</span>
+<span class="warning">Perspective no longer publishes prebuilt _inline_ bundles.
+The `@perspective-dev/client/inline` and `@perspective-dev/viewer/inline` entry
+points, and the `dist/esm/*.inline.js` files behind them, have been removed.
+Produce an equivalent build with your bundler's asset inlining, as below.</span>
 
-Perspective's _Inline_ Builds work by _inlining_ WebAssembly binary content as
-a base64-encoded string. While inline builds work with most bundlers and _do
-not_ require bootstrapping, there is an inherent file-size and boot-performance
-penalty. Prefer your bundler's inlining features and Perspective ESM builds
-where possible.
+An _inline_ build embeds the WebAssembly binaries in the `.js` bundle as base64
+instead of emitting them as separate assets, so nothing needs to be served
+alongside the bundle. It costs bundle size and boot time — base64 is 33% larger
+than the binary it encodes, and the browser must decode it before compiling — so
+prefer the ESM builds above where you control asset hosting.
+
+Only the bundler's `.wasm` loader changes; the bootstrapping code is identical
+to the ESM builds.
+
+### ESBuild
+
+Use the `binary` loader in place of `file`. The imported value is a
+`Uint8Array`, which `init_server()` and `init_client()` accept directly.
 
 ```javascript
-import "@perspective-dev/viewer/dist/esm/perspective-viewer.inline.js";
-import psp from "@perspective-dev/client/dist/esm/perspective.inline.js";
+import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wasm";
+import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm";
+
+await Promise.all([
+    perspective.init_server(SERVER_WASM),
+    perspective_viewer.init_client(CLIENT_WASM),
+]);
+```
+
+ESBuild config JSON to encode this asset as `binary`:
+
+```javascript
+{
+    // ...
+    "loader": {
+        // ...
+        ".wasm": "binary"
+    }
+}
+```
+
+### Webpack
+
+Use `asset/inline` in place of `asset/resource`. The imported value is a `data:`
+URL rather than a path, so read it into an `ArrayBuffer` first.
+
+```javascript
+import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wasm";
+import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm";
+
+const buffer = async (url) => await (await fetch(url)).arrayBuffer();
+
+await Promise.all([
+    perspective.init_server(await buffer(SERVER_WASM)),
+    perspective_viewer.init_client(await buffer(CLIENT_WASM)),
+]);
+```
+
+Webpack config:
+
+```javascript
+{
+    // ...
+    module: {
+        // ...
+        rules: [
+            // ...
+            {
+                test: /\.wasm$/,
+                type: "asset/inline"
+            },
+        ]
+    },
+    experiments: {
+        // ...
+        asyncWebAssembly: false,
+        syncWebAssembly: false,
+    },
+}
+```
+
+### Vite
+
+Vite inlines assets below `build.assetsInlineLimit` as `data:` URLs. Raising the
+limit past the size of the `.wasm` binaries inlines them, and the `?url`
+bootstrapping from the ESM section applies unchanged. This threshold is a
+build-wide setting and its interaction with `?url` imports has changed between
+Vite major versions, so check the emitted bundle rather than assuming.
+
+```javascript
+import { defineConfig } from "vite";
+export default defineConfig({
+    build: {
+        target: "esnext",
+        assetsInlineLimit: 16 * 1024 * 1024,
+    },
+});
 ```
 
 ## CDN builds

@@ -29,11 +29,6 @@
             "import": "./dist/esm/perspective-viewer.js",
             "default": "./dist/esm/perspective-viewer.js"
         },
-        "./inline": {
-            "types": "./dist/esm/perspective-viewer.d.ts",
-            "import": "./dist/esm/perspective-viewer.inline.js",
-            "default": "./dist/esm/perspective-viewer.inline.js"
-        },
         "./select-detail": {
             "types": "./dist/esm/select-detail.d.ts",
             "import": "./dist/esm/select-detail.js",

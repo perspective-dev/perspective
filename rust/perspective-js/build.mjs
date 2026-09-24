@@ -30,23 +30,6 @@ const BUILD = [
         // loader: { ".wasm": "binary" },
         outfile: "dist/cdn/perspective-server.worker.js",
     },
-    // WASM assets inlined into a single monolithic `.js` file. No special
-    // loades required, this version of Perspective should be the easiest
-    // to use but also the least performant at load time.
-    // {
-    //     'Import via `<script type="module">`': true,
-    //     "Requires WASM bootstrap": false,
-    //     "Load as binary": false,
-    //     "Bundler friendly": true,
-    // },
-    {
-        entryPoints: ["src/ts/perspective.inline.ts"],
-        format: "esm",
-        target: "es2022",
-        plugins: [PerspectiveEsbuildPlugin()],
-        loader: { ".wasm": "binary" },
-        outfile: "dist/esm/perspective.inline.js",
-    },
     // WASM assets linked to relative path via `fetch()`. This efficiently
     // loading build is great for `<script>` tags but will give many
     // bundlers trouble.
