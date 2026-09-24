@@ -461,4 +461,12 @@ private:
 
     std::shared_ptr<t_view_config> m_view_config;
 };
+
+/**
+ * @brief The schema a `View` built from `config` over `schema` reports,
+ * derived statically from the config with no context constructed.
+ */
+PERSPECTIVE_EXPORT std::map<std::string, std::string> describe_view_schema(
+    const t_view_config& config, const t_schema& schema, bool pivoted
+);
 } // end namespace perspective

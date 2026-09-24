@@ -21,12 +21,12 @@ packages:
     - "docs"
 
 allowBuilds:
-  '@fortawesome/fontawesome-free': true
-  aws-sdk: true
-  core-js: true
-  esbuild: true
-  microtime: true
-  puppeteer: true
+    "@fortawesome/fontawesome-free": true
+    aws-sdk: true
+    core-js: true
+    esbuild: true
+    microtime: true
+    puppeteer: false
 
 catalog:
     # Dependencies

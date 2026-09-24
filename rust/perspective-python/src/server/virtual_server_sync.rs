@@ -20,6 +20,7 @@ use perspective_client::virtual_server::{
     Features, ResultExt, RowPathStyle, VirtualDataSlice, VirtualServer, VirtualServerFuture,
     VirtualServerHandler,
 };
+use perspective_client::{DescribeError, DescribeVerdict, Description};
 use pyo3::exceptions::PyValueError;
 use pyo3::types::{
     PyAnyMethods, PyBytes, PyDate, PyDict, PyDictMethods, PyList, PyListMethods, PyString,
@@ -146,27 +147,38 @@ impl VirtualServerHandler for PyServerHandler {
         })
     }
 
-    fn table_validate_expression(
-        &self,
+    fn table_describe(
+        &mut self,
         table_id: &str,
-        expression: &str,
-    ) -> VirtualServerFuture<'_, Result<ColumnType, Self::Error>> {
+        config: &perspective_client::config::ViewConfig,
+    ) -> VirtualServerFuture<'_, Result<Result<Description, DescribeError>, Self::Error>> {
         let handler = Python::attach(|py| self.0.clone_ref(py));
         let table_id = table_id.to_string();
-        let expression = expression.to_string();
+        let config = config.clone();
         Box::pin(async move {
             Python::attach(|py| {
-                let name = pyo3::intern!(py, "table_validate_expression");
-                if handler.getattr(py, name).is_ok() {
-                    Ok(handler
-                        .call_method1(py, name, (&table_id, &expression))?
-                        .cast_bound::<PyString>(py)?
-                        .extract::<String>()?)
-                    .map(|x| ColumnType::from_str(x.as_str()).unwrap())
-                } else {
-                    // TODO this should probably be an error.
-                    Ok(ColumnType::Float)
+                let name = pyo3::intern!(py, "table_describe");
+                if handler.getattr(py, name).is_err() {
+                    return Err(PyValueError::new_err(
+                        "`table_describe` is required of a virtual server handler",
+                    ));
                 }
+
+                let result = handler.call_method1(
+                    py,
+                    name,
+                    (&table_id, pythonize::pythonize(py, &config)?),
+                )?;
+
+                let verdict: DescribeVerdict =
+                    pythonize::depythonize(result.bind(py)).map_err(|e| {
+                        PyValueError::new_err(format!(
+                            "`table_describe` must return a describe verdict dict: {e}"
+                        ))
+                    })?;
+
+                Result::<Description, DescribeError>::try_from(verdict)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))
             })
         })
     }

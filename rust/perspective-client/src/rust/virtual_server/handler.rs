@@ -17,8 +17,10 @@ use indexmap::IndexMap;
 
 use super::data::VirtualDataSlice;
 use super::features::Features;
+use super::generic_sql_model::column_path_source;
 use crate::config::{ViewConfig, ViewConfigUpdate};
 use crate::proto::{ColumnType, HostedTable, TableMakePortReq, ViewPort};
+use crate::table::{DescribeError, Description};
 
 #[cfg(feature = "sendable")]
 pub type VirtualServerFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
@@ -70,6 +72,14 @@ pub trait VirtualServerHandler {
         config: &mut ViewConfigUpdate,
     ) -> VirtualServerFuture<'_, Result<String, Self::Error>>;
 
+    /// Validates a complete view config against a table and reports the schema
+    /// a view built from it would have, WITHOUT creating one.
+    fn table_describe(
+        &mut self,
+        table_id: &str,
+        config: &ViewConfig,
+    ) -> VirtualServerFuture<'_, Result<Result<Description, DescribeError>, Self::Error>>;
+
     /// Deletes a view and releases its resources.
     fn view_delete(&self, view_id: &str) -> VirtualServerFuture<'_, Result<(), Self::Error>>;
 
@@ -117,17 +127,6 @@ pub trait VirtualServerHandler {
         Box::pin(self.table_schema(view_id))
     }
 
-    /// Validates an expression against a table and returns its result type.
-    ///
-    /// Default implementation returns `Float` for all expressions.
-    fn table_validate_expression(
-        &self,
-        _table_id: &str,
-        _expression: &str,
-    ) -> VirtualServerFuture<'_, Result<ColumnType, Self::Error>> {
-        Box::pin(async { Ok(ColumnType::Float) })
-    }
-
     /// Returns the features supported by this handler.
     ///
     /// Default implementation returns default features.
@@ -170,4 +169,55 @@ pub trait VirtualServerHandler {
     ) -> VirtualServerFuture<'_, Result<(), Self::Error>> {
         Box::pin(async { unimplemented!("make_table not implemented") })
     }
+}
+
+/// A [`VirtualServerHandler::table_describe`] implementation for backends with
+/// no cheaper native answer: build a real view on a private id, read its
+/// schema, delete it.
+pub async fn describe_via_make_view<H: VirtualServerHandler + ?Sized>(
+    handler: &mut H,
+    table_id: &str,
+    config: &ViewConfig,
+) -> Result<Result<Description, DescribeError>, H::Error> {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let view_id = format!(
+        "__psp_describe_{}__",
+        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    );
+
+    let mut update: ViewConfigUpdate = config.clone().into();
+    let view_id = match handler
+        .table_make_view(table_id, &view_id, &mut update)
+        .await
+    {
+        Ok(view_id) => view_id,
+        Err(e) => return Ok(Err(DescribeError::Config(e.to_string()))),
+    };
+
+    let config: ViewConfig = update.into();
+    let schema = handler.view_schema(&view_id, &config).await;
+    let deleted = handler.view_delete(&view_id).await;
+    let schema = schema?;
+    deleted?;
+    let view_schema = schema
+        .iter()
+        .map(|(name, ty)| {
+            let source = column_path_source(name, &config)
+                .map(|(_, col)| col.to_string())
+                .unwrap_or_else(|| name.clone());
+
+            (source, *ty)
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+
+    let expression_schema = config
+        .expressions
+        .keys()
+        .filter_map(|name| view_schema.get(name).map(|ty| (name.clone(), *ty)))
+        .collect();
+
+    Ok(Ok(Description {
+        expression_schema,
+        view_schema,
+    }))
 }

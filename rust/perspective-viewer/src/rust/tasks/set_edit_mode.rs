@@ -15,7 +15,7 @@ use perspective_js::utils::*;
 
 use crate::config::*;
 use crate::renderer::Renderer;
-use crate::session::Session;
+use crate::session::{EditDelta, OpKind, Session, StepOutcome};
 
 /// Set the active plugin's `edit_mode`, persisting it in the [`Renderer`]'s
 /// plugin bucket and re-`restore`+rendering (the same merged-token path as
@@ -27,35 +27,37 @@ use crate::session::Session;
 /// (e.g. charts) schema-gate the key out in [`Renderer::update_plugin_config`],
 /// making this a no-op for them.
 pub fn set_edit_mode(session: &Session, renderer: &Renderer, mode: &str) {
-    let view_config = session.get_view_config().clone();
     let mut map = serde_json::Map::new();
     map.insert(
         "edit_mode".to_owned(),
         serde_json::Value::String(mode.to_owned()),
     );
 
-    let changed = renderer
-        .update_plugin_config(&view_config, OptionalUpdate::Update(map))
-        .unwrap_or_default();
-    clone!(session, renderer);
-    ApiFuture::spawn(async move {
-        if changed {
-            let plugin_config = renderer.get_plugin_config();
-            let plugin_token = wasm_bindgen::JsValue::from_serde_ext(&plugin_config).unwrap();
-            let view_config_snapshot = session.get_view_config().clone();
-            let columns_configs = renderer
-                .all_columns_configs_materialized(&view_config_snapshot, &session)
-                .await;
-            renderer
-                .ensure_plugin_selected()?
-                .restore(&plugin_token, Some(&columns_configs))?;
-            clone!(session);
-            renderer
-                .update_lazy(async move { Ok(session.get_view_with_dimensions()) })
-                .await?;
-            renderer.plugin_config_changed.emit(plugin_config);
-        }
+    let kind = OpKind::Edit {
+        delta: EditDelta::PluginConfig(map.clone()),
+        fields: None,
+    };
 
-        Ok(())
-    })
+    let ticket = session.submit(kind, {
+        clone!(session, renderer);
+        move |_ctx| {
+            Box::pin(async move {
+                let view_config = session.committed_view_config().clone();
+                let changed = renderer
+                    .update_plugin_config(&view_config, OptionalUpdate::Update(map))
+                    .unwrap_or_default();
+
+                Ok(StepOutcome::Render(Box::pin(async move {
+                    if changed {
+                        super::send_plugin_config::deliver_plugin_config(&session, &renderer)
+                            .await?;
+                    }
+
+                    Ok(())
+                })))
+            })
+        }
+    });
+
+    ApiFuture::spawn(ticket.settle());
 }

@@ -12,7 +12,9 @@
 
 import type { ColumnType } from "@perspective-dev/client";
 import { colorsToCss, rgbToHex, stopsToCss } from "../color_utils.js";
-import { measure_px } from "./plugin_config_schema.js";
+import { readThemeStyle } from "../model/create.js";
+import { measure_px, parse_align } from "./plugin_config_schema.js";
+import { positive_px } from "./restore.js";
 import {
     bg_modes_for,
     default_bg_mode,
@@ -42,10 +44,6 @@ export interface ColumnConfigSchema {
  * Plugin schema for the Datagrid column-settings sidebar. Returns the
  * controls the viewer should render in the Style tab for a given column.
  */
-interface ColumnStats {
-    abs_max?: number;
-}
-
 export default function column_config_schema(
     this: DatagridPluginElement,
     type: ColumnType,
@@ -53,8 +51,30 @@ export default function column_config_schema(
     _column_name: string,
     current_value: Record<string, unknown> | null,
     viewer_config?: ViewerConfigLike,
-    column_stats?: ColumnStats,
+    plugin_config?: Record<string, unknown> | null,
 ): ColumnConfigSchema {
+    const grid =
+        plugin_config === undefined || plugin_config === null
+            ? {
+                  font_family: this._font_family,
+                  font_size: this._font_size,
+                  bold: this._bold,
+                  italic: this._italic,
+                  align: this._align,
+                  word_wrap: this._word_wrap,
+              }
+            : {
+                  font_family:
+                      typeof plugin_config.font_family === "string"
+                          ? plugin_config.font_family
+                          : undefined,
+                  font_size: positive_px(plugin_config.font_size),
+                  bold: plugin_config.bold === true,
+                  italic: plugin_config.italic === true,
+                  align: parse_align(plugin_config.align),
+                  word_wrap: plugin_config.word_wrap === true,
+              };
+
     const fields: ControlSpec[] = [];
     const group: ControlSpec & { fields: ControlSpec[] } = {
         kind: "Group",
@@ -88,33 +108,33 @@ export default function column_config_schema(
             {
                 kind: "Font",
                 key: "font_family" satisfies keyof ColumnConfig,
-                default: this._font_family ?? "inherit",
+                default: grid.font_family ?? "inherit",
                 size: {
                     key: "font_size" satisfies keyof ColumnConfig,
                     default:
-                        this._font_size ?? measure_px(this, "font-size", 12),
+                        grid.font_size ?? measure_px(this, "font-size", 12),
                     min: 4,
                     max: 96,
                     step: 1,
                 },
                 bold: {
                     key: "bold" satisfies keyof ColumnConfig,
-                    default: this._bold,
+                    default: grid.bold,
                 },
                 italic: {
                     key: "italic" satisfies keyof ColumnConfig,
-                    default: this._italic,
+                    default: grid.italic,
                 },
             },
             {
                 kind: "Alignment",
                 key: "align" satisfies keyof ColumnConfig,
-                ...(this._align !== undefined ? { default: this._align } : {}),
+                ...(grid.align !== undefined ? { default: grid.align } : {}),
             },
             {
                 kind: "Bool",
                 key: "word_wrap" satisfies keyof ColumnConfig,
-                default: this._word_wrap,
+                default: grid.word_wrap,
             },
         ],
     });
@@ -132,9 +152,9 @@ export default function column_config_schema(
 
         const color_fields: ControlSpec[] = [
             mode_spec("fg_mode", fg_modes, default_fg_mode(type)),
-            ...value_specs.call(this, type, "fg", fg_mode, column_stats),
+            ...value_specs.call(this, type, "fg", fg_mode),
             mode_spec("bg_mode", bg_modes, default_bg_mode(type)),
-            ...value_specs.call(this, type, "bg", bg_mode, column_stats),
+            ...value_specs.call(this, type, "bg", bg_mode),
         ];
 
         fields.push({ kind: "Group", key: "color", fields: color_fields });
@@ -191,16 +211,17 @@ function value_specs(
     type: ColumnType,
     side: "fg" | "bg",
     mode: FgMode | BgMode,
-    column_stats: ColumnStats | undefined,
 ): ControlSpec[] {
     if (mode === "disabled") {
         return [];
     }
 
+    const theme = this.model ?? readThemeStyle(this.regular_table);
+
     const key = `${side}_color` satisfies keyof ColumnConfig;
     if (type === "integer" || type === "float") {
-        const pos = this.model![`_pos_${side}_color`][0];
-        const neg = this.model![`_neg_${side}_color`][0];
+        const pos = theme[`_pos_${side}_color`][0];
+        const neg = theme[`_neg_${side}_color`][0];
         const stops: ControlSpec =
             mode === "gradient" || mode === "pulse"
                 ? {
@@ -210,7 +231,7 @@ function value_specs(
                           { color: neg, offset: 0 },
                           {
                               color: rgbToHex(
-                                  this.model!._plugin_background as [
+                                  theme._plugin_background as [
                                       number,
                                       number,
                                       number,
@@ -241,7 +262,8 @@ function value_specs(
                       kind: "Number",
                       key: `${side}_gradient` satisfies keyof ColumnConfig,
                       include: true,
-                      default: column_stats?.abs_max ?? 0,
+                      default: 0,
+                      default_stat: "abs_max",
                   },
               ]
             : [stops];
@@ -250,10 +272,10 @@ function value_specs(
             {
                 kind: "Palette",
                 key,
-                default: colorsToCss(this.model!._series_palette),
+                default: colorsToCss(theme._series_palette),
             },
         ];
     } else {
-        return [{ kind: "Color", key, default: this.model!._color[0] }];
+        return [{ kind: "Color", key, default: theme._color[0] }];
     }
 }

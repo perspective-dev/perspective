@@ -459,6 +459,14 @@ impl Table {
         table.schema().py_block_on(py)
     }
 
+    /// Validate a complete view config against this table and report the schema
+    /// a [`View`] built from it would have, WITHOUT creating one.
+    #[pyo3(signature = (**config))]
+    pub fn describe(&self, py: Python<'_>, config: Option<Py<PyDict>>) -> PyResult<Py<PyAny>> {
+        let table = self.0.clone();
+        table.describe(config).py_block_on(py)
+    }
+
     /// Validates the given expressions.
     pub fn validate_expressions(
         &self,

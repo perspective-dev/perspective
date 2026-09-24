@@ -12,17 +12,18 @@
 
 use std::rc::Rc;
 
-use futures::future::LocalBoxFuture;
 use perspective_client::config::ViewConfigUpdate;
 use perspective_client::{View, clone};
 use perspective_js::utils::*;
 use wasm_bindgen::JsValue;
 use yew::prelude::*;
 
-use crate::config::{ColumnConfigUpdate, PluginConfigUpdate};
+use super::transactional_restore::{commit_edit, prepare_edit};
 use crate::presentation::Presentation;
 use crate::renderer::{RenderContext, Renderer};
-use crate::session::{BindDisposition, Disposal, Session};
+use crate::session::{
+    BindDisposition, BindingEffects, Disposal, EditDelta, OpKind, Session, StepOutcome, view_fields,
+};
 use crate::utils::RenderGuard;
 
 /// Snapshot → validate → bind → cache + pin the [`RenderContext`]. The core
@@ -35,15 +36,6 @@ pub async fn bind_snapshot(
     session: &Session,
     renderer: &Renderer,
 ) -> ApiResult<(BindDisposition, Option<crate::renderer::ContextPin>)> {
-    // A `load()` is mid-classification (see [`Session::pending_load`]): DEFER
-    // rather than bind the incoming config against the still-bound outgoing
-    // table. Holds the last painted frame; the `load()` run performs the one
-    // reconciling bind once its payload resolves — the single visible
-    // transition, correct in whichever future (Table/Client) materializes.
-    if session.has_pending_load() {
-        return Ok((BindDisposition::Deferred, None));
-    }
-
     let snap = session.snapshot(guard);
     let validated = session.validate_snapshot(guard, snap).await?;
     let disposition = session.bind_view(guard, validated).await?;
@@ -132,32 +124,74 @@ pub fn apply_and_render(
 }
 
 /// [`apply_and_render`] plus a plugin selection (resolved via
-/// [`Renderer::resolve_plugin_update`]). The plugin swap is committed inside
-/// the locked run, atomically with the view rebind — never staged on the
-/// `Renderer` where a concurrent draw could observe it.
+/// [`Renderer::resolve_plugin_update`]), committed in the SAME swap as the
+/// view config — in the op's step, never by the detached render.
 pub fn update_plugin_and_render(
     session: &Session,
     renderer: &Renderer,
     update: ViewConfigUpdate,
     plugin_idx: Option<usize>,
 ) -> ApiResult<ApiFuture<()>> {
-    session.commit_view_config(update)?;
-    // Spinner accounting (RAII): created only when the commit succeeded,
-    // moved into the run future, settled on every exit path by `Drop`.
-    let run_token = session.begin_config_run();
-    clone!(session, renderer);
-    Ok(ApiFuture::new(async move {
-        let _run_token = run_token;
-        render_run(session, renderer, plugin_idx).await
-    }))
+    session.check_edit(&update)?;
+    let fields = plugin_idx.is_none().then(|| view_fields(&update));
+    let kind = OpKind::Edit {
+        delta: EditDelta::View(Box::new(update.clone())),
+        fields,
+    };
+
+    let ticket = session.submit(kind, {
+        clone!(session, renderer);
+        move |_ctx| {
+            Box::pin(async move {
+                let prepared = prepare_edit(&session, &renderer, update, plugin_idx).await?;
+                let committed = commit_edit(&session, &renderer, prepared);
+                Ok(StepOutcome::Render(Box::pin(render_run(
+                    session,
+                    renderer,
+                    RunCommit::Done(committed),
+                ))))
+            })
+        }
+    });
+
+    Ok(ApiFuture::new(ticket.settle()))
 }
 
 /// Re-render from the current commit without applying an update.
 pub fn just_render(session: &Session, renderer: &Renderer) -> ApiResult<ApiFuture<()>> {
     clone!(session, renderer);
     Ok(ApiFuture::new(async move {
-        render_run(session, renderer, None).await
+        render_run(session, renderer, RunCommit::None).await
     }))
+}
+
+/// What a transactional restore committed (see
+/// [`super::transactional_restore`]): the run has to bring the plugin element
+/// and the paint in line with it.
+pub(crate) struct Committed {
+    /// A plugin selection was committed; its element must be activated.
+    pub activate: bool,
+
+    /// ...and it REPLACED an earlier selection (a first selection is not a
+    /// swap, and does not force a `plugin.restore`).
+    pub plugin_swapped: bool,
+    pub plugin_config_changed: bool,
+    pub columns_config_changed: bool,
+}
+
+/// The commit a locked run renders.
+pub(crate) enum RunCommit {
+    /// Whatever is committed (a repaint, an activation, a resize).
+    None,
+
+    /// A UI edit its op's step ALREADY committed; the plugin receives the final
+    /// buckets in ONE `plugin.restore`.
+    Done(Committed),
+
+    /// A restore's commit, run first thing under the lock — a restore may
+    /// REBIND, and under the lock no render of the outgoing state can bind a
+    /// `View` over the incoming table.
+    Deferred(Box<dyn FnOnce() -> (Committed, BindingEffects)>),
 }
 
 /// Everything that varies between locked render runs, consumed by
@@ -168,21 +202,8 @@ pub(crate) struct RunSpec {
     /// Who initiated this run (see [`RunOrigin`]).
     pub origin: RunOrigin,
 
-    /// A plugin swap resolved by [`Renderer::resolve_plugin_update`],
-    /// committed inside the run atomically with the rebind.
-    pub plugin_idx: Option<usize>,
-
-    /// Plugin-level bucket update, applied inside the run after the bind
-    /// (so strip-on-write sees fresh schemas).
-    pub plugin_config: PluginConfigUpdate,
-
-    /// Per-column bucket update; same timing as `plugin_config`.
-    pub columns_config: ColumnConfigUpdate,
-
-    /// Pre-bind hook awaited inside the lock (table binding, resets) —
-    /// BEFORE the error guard, so a task that recovers the session (e.g.
-    /// `restorePanel`'s errored-recovery reset) unblocks its own run.
-    pub task: Option<LocalBoxFuture<'static, ApiResult<()>>>,
+    /// What this run renders — see [`RunCommit`].
+    pub commit: RunCommit,
 
     /// When set, plugin dispatch is skipped while the host element is not
     /// visible (`Presentation::is_visible`) — the `restore` family's gate
@@ -196,10 +217,7 @@ impl Default for RunSpec {
     fn default() -> Self {
         Self {
             origin: RunOrigin::Internal,
-            plugin_idx: None,
-            plugin_config: PluginConfigUpdate::Missing,
-            columns_config: ColumnConfigUpdate::Missing,
-            task: None,
+            commit: RunCommit::None,
             presentation: None,
         }
     }
@@ -208,7 +226,7 @@ impl Default for RunSpec {
 /// One locked, witnessed, snapshot-consuming render run — the SINGLE lock
 /// body shared by every config-driven run (`apply_and_render` &co. via
 /// [`render_run`]'s tail, the `restore` family via
-/// [`super::restore_and_render`]): eager mount → pre-bind `task` →
+/// [`super::transactional_restore`]): the restore's commit → eager mount →
 /// plugin-swap commit → theme stamp → error guard → [`bind_snapshot`]
 /// (gated on a bound `Table`, else `Deferred` — the config is already
 /// committed, so the eventual `load()` run binds from it) → bucket updates
@@ -226,7 +244,19 @@ pub(crate) async fn locked_run(
     clone!(session, renderer);
     renderer
         .clone()
-        .render_task(|guard| async move {
+        .render_task(|guard| run_locked(guard, session, renderer, spec))
+        .await
+}
+
+/// [`locked_run`]'s body, for a caller that already holds the draw lock.
+pub(crate) async fn run_locked(
+    guard: RenderGuard,
+    session: Session,
+    renderer: Renderer,
+    spec: RunSpec,
+) -> ApiResult<()> {
+    {
+        {
             if let Some(disposal) = session.disposal() {
                 return match (disposal, spec.origin) {
                     (Disposal::Reject, RunOrigin::Public) => Err(ApiError::new("Panel disposed")),
@@ -234,20 +264,51 @@ pub(crate) async fn locked_run(
                 };
             }
 
-            renderer.mount_active_plugin()?;
-            if let Some(task) = spec.task {
-                task.await?;
+            let committed = match spec.commit {
+                RunCommit::Done(committed) => Some(committed),
+                RunCommit::Deferred(commit) => {
+                    let (committed, binding) = commit();
+                    let rebound = binding.rebound();
+                    session.finish_binding(binding).await?;
+                    if rebound
+                        && session.get_table().is_none()
+                        && let Some(plugin) = renderer.active_plugin()
+                    {
+                        plugin.clear().await?;
+                    }
+
+                    Some(committed)
+                },
+                RunCommit::None => None,
+            };
+
+            if !committed.as_ref().is_some_and(|c| c.activate) {
+                renderer.mount_active_plugin()?;
             }
 
-            let plugin_swapped = renderer.commit_plugin(spec.plugin_idx)?;
+            let plugin_swapped = match &committed {
+                Some(committed) => {
+                    if committed.activate {
+                        renderer.activate_committed_plugin()?;
+                    }
+
+                    committed.plugin_swapped
+                },
+                None => {
+                    renderer.ensure_plugin_selected()?;
+                    false
+                },
+            };
             let plugin = renderer.active_plugin().ok_or("No Plugin")?;
             renderer.stamp_theme(Some(&plugin));
-            if let Some(error) = session.get_error() {
+            if let Some(error) = session.blocking_error() {
                 return match spec.origin {
                     RunOrigin::Public => Err(error),
                     RunOrigin::Internal => Ok(()),
                 };
             }
+
+            session.set_rendered(false);
 
             let (disposition, _pin) = if session.get_table().is_some() {
                 bind_snapshot(&guard, &session, &renderer).await?
@@ -255,39 +316,35 @@ pub(crate) async fn locked_run(
                 (BindDisposition::Deferred, None)
             };
 
-            let view_config_snapshot = session.get_view_config().clone();
-            let plugin_config_changed =
-                renderer.update_plugin_config(&view_config_snapshot, spec.plugin_config)?;
-            let plugin_config_snapshot = renderer.get_plugin_config();
-            let plugin_update =
-                JsValue::from_serde_ext(&plugin_config_snapshot).unwrap_or(JsValue::NULL);
+            let view_config_snapshot = session.committed_view_config().clone();
+            let changed = match committed {
+                Some(committed) => {
+                    let changed =
+                        committed.plugin_config_changed || committed.columns_config_changed;
 
-            let plugin_restored = plugin_config_changed || plugin_swapped;
-            if plugin_restored {
-                let columns_config = renderer
-                    .all_columns_configs_materialized(&view_config_snapshot, &session)
-                    .await;
-                plugin.restore(&plugin_update, Some(&columns_config))?;
-            }
+                    if changed || plugin_swapped {
+                        let plugin_config = renderer.committed_plugin_config();
+                        let plugin_update =
+                            JsValue::from_serde_ext(&plugin_config).unwrap_or(JsValue::NULL);
 
-            let columns_config_changed = renderer.update_columns_configs(
-                &view_config_snapshot,
-                &session,
-                spec.columns_config,
-            )?;
+                        let columns_config = renderer
+                            .all_columns_configs_materialized(&view_config_snapshot, &session)
+                            .await;
 
-            let changed = plugin_config_changed || columns_config_changed;
-            if columns_config_changed {
-                let columns_config = renderer
-                    .all_columns_configs_materialized(&view_config_snapshot, &session)
-                    .await;
-                plugin.restore(&plugin_update, Some(&columns_config))?;
-                renderer.columns_config_changed.emit(columns_config);
-            }
+                        plugin.restore(&plugin_update, Some(&columns_config))?;
+                        if committed.columns_config_changed {
+                            renderer.columns_config_changed.emit(columns_config);
+                        }
 
-            if plugin_config_changed {
-                renderer.plugin_config_changed.emit(plugin_config_snapshot);
-            }
+                        if committed.plugin_config_changed {
+                            renderer.plugin_config_changed.emit(plugin_config);
+                        }
+                    }
+
+                    changed
+                },
+                None => false,
+            };
 
             if spec
                 .presentation
@@ -298,22 +355,23 @@ pub(crate) async fn locked_run(
                 dispatch_bound(&guard, &renderer, disposition, changed, spec.origin).await?;
             }
 
+            session.set_rendered(true);
             Ok(())
-        })
-        .await
+        }
+    }
 }
 
 /// [`locked_run`]'s host-internal tail: a failed RUN sets error state (with
 /// the reset-reconnect affordance); the committed config is NOT rolled back
 /// (I4). Cancellation by a superseding run ("View already deleted") is not
 /// a failure.
-async fn render_run(
+pub(super) async fn render_run(
     session: Session,
     renderer: Renderer,
-    plugin_idx: Option<usize>,
+    commit: RunCommit,
 ) -> ApiResult<()> {
     let spec = RunSpec {
-        plugin_idx,
+        commit,
         ..RunSpec::default()
     };
 

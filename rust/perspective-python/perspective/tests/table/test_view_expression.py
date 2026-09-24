@@ -17,6 +17,8 @@ from pytest import raises
 from datetime import date, datetime
 from time import mktime
 from perspective import PerspectiveError
+import pytest
+
 from .test_view import compare_delta
 import perspective as psp
 
@@ -35,6 +37,61 @@ class TestViewExpression(object):
         assert validate["expression_schema"] == {}
         assert validate["expression_alias"] == {}
         assert validate["errors"] == {}
+
+    def test_table_describe_valid(self):
+        table = Table({"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]})
+        config = dict(
+            columns=["a", "b", "x"],
+            group_by=["b"],
+            aggregates={"a": "avg"},
+            expressions={"x": '"a" * 2'},
+        )
+
+        verdict = table.describe(**config)
+        view = table.view(**config)
+        assert verdict == {
+            "expression_schema": {"x": "float"},
+            "view_schema": view.schema(),
+        }
+
+        view.delete()
+
+    def test_table_describe_split_by_parity(self):
+        table = Table({"a": [1, 2, 3, 4], "b": ["x", "y", "x", "y"], "c": [1.5, 2.5, 3.5, 4.5]})
+        for config in [
+            dict(columns=["a", "c"], split_by=["b"]),
+            dict(columns=["a", "c"], split_by=["b"], aggregates={"a": "avg"}),
+            dict(columns=["a", "c"], group_by=["b"], split_by=["b"], aggregates={"a": "avg"}),
+            dict(columns=["a", "c"], split_by=["b"], group_rollup_mode="total", aggregates={"a": "avg"}),
+        ]:
+            verdict = table.describe(**config)
+            view = table.view(**config)
+            assert verdict["view_schema"] == view.schema(), config
+            view.delete()
+
+    def test_table_describe_expression_errors(self):
+        table = Table({"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]})
+        verdict = table.describe(
+            columns=["a"],
+            expressions={"good": '"a" + 1', "bad": '"nope" + 1', "worse": "for () {}"},
+        )
+
+        assert sorted(verdict.keys()) == ["expression_errors", "expression_schema"]
+        assert verdict["expression_schema"] == {"good": "float"}
+        assert sorted(verdict["expression_errors"].keys()) == ["bad", "worse"]
+        assert verdict["expression_errors"]["bad"] == {
+            "column": 0,
+            "error_message": 'Value Error - Input column "nope" does not exist.',
+            "line": 0,
+        }
+
+    def test_table_describe_config_error(self):
+        table = Table({"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]})
+        verdict = table.describe(columns=["a", "nope"])
+        assert list(verdict.keys()) == ["config_error"]
+        assert "nope" in verdict["config_error"]
+        with pytest.raises(Exception):
+            table.view(columns=["a", "nope"])
 
     def test_view_expression_schema_empty(self):
         table = Table({"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]})

@@ -13,6 +13,7 @@
 use std::collections::{HashMap, HashSet};
 use std::iter::IntoIterator;
 use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
 
 use perspective_client::config::*;
 use perspective_js::apierror;
@@ -56,7 +57,18 @@ impl DerefMut for SessionMetadata {
     }
 }
 
-pub type MetadataRef<'a> = std::cell::Ref<'a, SessionMetadata>;
+/// An OWNED read guard over a panel's [`SessionMetadata`]: a snapshot that
+/// borrows nothing, so holding one can never make a later state write panic.
+pub struct MetadataRef(pub(super) Rc<SessionMetadata>);
+
+impl Deref for MetadataRef {
+    type Target = SessionMetadata;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 pub type MetadataMutRef<'a> = std::cell::RefMut<'a, SessionMetadata>;
 
 /// TODO the multiple `Option` types could probably be merged since they are
@@ -288,6 +300,12 @@ impl SessionMetadata {
 
     pub fn get_edit_port(&self) -> Option<f64> {
         self.as_ref().map(|meta| meta.edit_port)
+    }
+
+    /// The type of a column of the `Table` itself — expression and window
+    /// columns, which belong to a config, excluded.
+    pub fn get_table_schema_type(&self, name: &str) -> Option<ColumnType> {
+        self.as_ref()?.table_schema.get(name).copied()
     }
 
     /// Returns the type of a column name relative to the `Table`.  Despite the

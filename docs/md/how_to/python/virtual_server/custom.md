@@ -51,6 +51,16 @@ class MyHandler(VirtualServerHandler):
         # for later data retrieval.
         pass
 
+    def table_describe(self, table_name, config):
+        # Validate `config` against `table_name` and report the schema the
+        # temporary table would have, WITHOUT creating it. Return
+        # {"expression_schema", "view_schema"} when valid,
+        # {"expression_schema", "expression_errors"} when an expression is
+        # invalid, or {"config_error"} otherwise. A model with no cheaper
+        # answer may `return describe_via_make_view(self, table_name, config)`,
+        # which builds and drops a real temporary table - at that cost.
+        pass
+
     def view_delete(self, view_name):
         # Clean up resources for this view. The UI does this automatically,
         # and can recover if a view dies early.
@@ -70,7 +80,6 @@ class MyHandler(VirtualServerHandler):
 | `get_features()` | `columns` only | Which UI controls to enable — see [Features declaration](../../../explanation/virtual_servers.md#features-declaration) |
 | `view_schema(view_name, config)` | `table_schema` | Schema of a temporary table, when it differs from its source |
 | `view_size(view_name)` | `table_size` | Row count of a temporary table, when it differs from its source |
-| `table_validate_expression(view_name, expression)` | allow all | Type-check an expression column; enabled by `"expressions"` in `get_features` |
 | `view_get_min_max(view_name, column_name, config)` | unsupported | Column bounds as a `(min, max)` tuple — required for gradient and sparkbar column styles |
 
 ## The session factory

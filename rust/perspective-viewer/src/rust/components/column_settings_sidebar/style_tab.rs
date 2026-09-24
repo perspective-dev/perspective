@@ -471,6 +471,7 @@ fn render_leaf(spec: ControlSpec, keys: &[String], ctx: &FieldRenderCtx) -> Opti
             max,
             step,
             include,
+            ..
         } => {
             let current = raw_config
                 .as_ref()

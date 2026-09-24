@@ -11,20 +11,20 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 //! Cross-engine reset orchestration: reset session config, optionally clear
-//! presentation columns config / theme, then delegate to `restore_and_render`
-//! to switch back to the default plugin and redraw.
+//! presentation columns config / theme, then delegate to a transactional
+//! restore to switch back to the default plugin and redraw.
 
 use perspective_client::clone;
-use perspective_js::utils::ApiFuture;
+use perspective_js::utils::{ApiFuture, ApiResult};
 
 use super::pipeline::RunOrigin;
-use super::restore_and_render;
+use super::transactional_restore::restore_in_place;
 use crate::config::{
     ColumnConfigUpdate, OptionalUpdate, PluginConfigUpdate, PluginUpdate, ViewerConfigUpdate,
 };
 use crate::presentation::Presentation;
 use crate::renderer::Renderer;
-use crate::session::{ResetOptions, Session};
+use crate::session::{OpKind, ResetOptions, Session, StepOutcome};
 
 /// Reset the viewer's `ViewerConfig` to the default.
 ///
@@ -37,7 +37,7 @@ use crate::session::{ResetOptions, Session};
 /// futures like this one) and error, rather than this task spawning unowned
 /// work.
 ///
-/// Delegates plugin selection + draw to [`restore_and_render`], whose
+/// Delegates plugin selection + draw to [`restore_in_place`], whose
 /// two-pass restore guarantees the default plugin sees materialized
 /// `columns_config` / `plugin_config` on its first draw — fixing a race
 /// where the raw post-reset bucket would reach the plugin before
@@ -49,8 +49,27 @@ pub fn reset_all(
     all: bool,
 ) -> ApiFuture<()> {
     presentation.set_open_column_settings(None);
-    clone!(session, renderer, presentation);
-    ApiFuture::new(async move {
+    let ticket = session.submit(OpKind::Restore { fields: None }, {
+        clone!(session, renderer, presentation);
+        move |_ctx| {
+            Box::pin(async move {
+                reset_all_step(&session, &renderer, &presentation, all).await?;
+                Ok(StepOutcome::Done)
+            })
+        }
+    });
+
+    ApiFuture::new(ticket.settle())
+}
+
+/// The body of [`reset_all`], run as one op on the panel's queue.
+async fn reset_all_step(
+    session: &Session,
+    renderer: &Renderer,
+    presentation: &Presentation,
+    all: bool,
+) -> ApiResult<()> {
+    {
         session
             .reset(ResetOptions {
                 config: true,
@@ -65,10 +84,10 @@ pub fn reset_all(
             // `reset_theme` only resets the host, which an explicitly-themed
             // panel would otherwise keep overriding.
             presentation.reset_theme().await?;
-            renderer.set_theme(presentation.get_default_theme_name().await);
+            renderer.commit_theme(presentation.get_default_theme_name().await);
         }
 
-        // For `all = true`, route the bucket clears through `restore_and_render`'s
+        // For `all = true`, route the bucket clears through the restore's
         // `update_*` paths as `SetDefault`. This guarantees the materialized
         // restore fires even when the user is already on the default plugin
         // (no plugin_swap signal), since `SetDefault` reports the bucket as
@@ -93,16 +112,8 @@ pub fn reset_all(
 
         // `reset()` is a public element API — `Public` keeps its repaint
         // affordance even on an already-default config.
-        restore_and_render(
-            &session,
-            &renderer,
-            &presentation,
-            RunOrigin::Public,
-            update,
-            async { Ok(()) },
-        )
-        .await?;
+        restore_in_place(session, renderer, presentation, RunOrigin::Public, update).await?;
         renderer.reset_changed.emit(());
         Ok(())
-    })
+    }
 }

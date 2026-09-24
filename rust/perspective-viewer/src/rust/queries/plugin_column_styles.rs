@@ -13,21 +13,10 @@
 use itertools::Itertools;
 use perspective_client::config::ViewConfig;
 use perspective_js::utils::{ApiResult, JsValueSerdeExt};
-use serde::Serialize;
 
 use crate::config::ColumnConfigSchema;
 use crate::renderer::Renderer;
 use crate::session::SessionMetadata;
-
-/// Stats payload passed to `plugin.column_config_schema` as the
-/// `column_stats` arg. The caller (e.g. the StyleTab) owns the value —
-/// typically populated by `fetch_column_abs_max` resolving into a
-/// component-local `use_state`. Missing when no fetch has resolved yet.
-#[derive(Default, Serialize)]
-struct ColumnStats {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    abs_max: Option<f64>,
-}
 
 /// Queries the active plugin for its plugin-scoped [`ColumnConfigSchema`] as
 /// it applies to `current_value`.
@@ -51,10 +40,6 @@ pub fn get_plugin_config_schema(
 ///
 /// `current_value` is the column's existing flat JSON config (if any);
 /// plugins use it to dynamically gate fields based on prior state.
-/// `abs_max` is the caller-owned numeric stat (typically a Yew
-/// `use_state` populated by an in-flight `fetch_column_abs_max` task);
-/// `None` means the fetch has not yet resolved and gradient defaults
-/// fall back to 0.
 pub fn get_column_config_schema(
     renderer: &Renderer,
     view_config: &ViewConfig,
@@ -87,9 +72,8 @@ pub fn get_column_config_schema(
     let view_config_js =
         wasm_bindgen::JsValue::from_serde_ext(view_config).unwrap_or(wasm_bindgen::JsValue::NULL);
 
-    let stats = ColumnStats { abs_max };
-    let stats_js =
-        wasm_bindgen::JsValue::from_serde_ext(&stats).unwrap_or(wasm_bindgen::JsValue::NULL);
+    let plugin_config_js = wasm_bindgen::JsValue::from_serde_ext(&renderer.get_plugin_config())
+        .unwrap_or(wasm_bindgen::JsValue::NULL);
 
     let raw = plugin._column_config_schema(
         &view_type.to_string(),
@@ -97,10 +81,10 @@ pub fn get_column_config_schema(
         column_name,
         &current_js,
         &view_config_js,
-        &stats_js,
+        &plugin_config_js,
     )?;
 
     serde_wasm_bindgen::from_value::<ColumnConfigSchema>(raw)
-        .map(|schema| schema.canonicalize())
+        .map(|schema| schema.canonicalize().resolve_stat_defaults(abs_max))
         .map_err(|e| e.into())
 }

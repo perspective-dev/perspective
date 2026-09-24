@@ -97,7 +97,6 @@ pub(crate) async fn create_panel(
         Placement::Staged,
     );
 
-    stamp_global_overlay(workspace, &id, &session);
     notify.emit(());
 
     ApiFuture::spawn({
@@ -123,17 +122,37 @@ pub(crate) async fn create_panel(
         update,
         crate::tasks::RestoreErrors::Publish,
         missing,
+        None,
     )
     .await;
 
-    // Promote on completion AND error — a failed restore's error state
-    // must become visible too.
-    if workspace.promote(&id) {
+    let discarded = discard_rejected(workspace, &id, &session, &result).await?;
+    if discarded || workspace.promote(&id) {
         notify.emit(());
     }
 
     result?;
     Ok(id)
+}
+
+/// Remove the panel a rejected CREATING restore was for.
+pub(crate) async fn discard_rejected(
+    workspace: &Workspace,
+    id: &PanelId,
+    session: &Session,
+    result: &ApiResult<()>,
+) -> ApiResult<bool> {
+    if result.is_ok() || session.get_table().is_some() || session.pending_table().is_some() {
+        return Ok(false);
+    }
+
+    match workspace.remove_panel(id) {
+        Some(panel) => {
+            eject_panel(panel, Disposal::Resolve).await?;
+            Ok(true)
+        },
+        None => Ok(false),
+    }
 }
 
 /// Where [`create_panel_model`] registers the new panel model.
@@ -170,7 +189,7 @@ pub(crate) fn create_panel_model(
     placement: Placement,
 ) -> (PanelId, Session, Renderer, ViewerConfigUpdate) {
     let session = Session::new();
-    let renderer = Renderer::new(elem);
+    let renderer = Renderer::new(elem, session.cell());
     let id = id.unwrap_or_else(|| workspace.generate_id());
     renderer.set_slot_name(id.as_str());
     let subs = wire_panel_subs(elem, presentation, &session, &renderer);
@@ -182,7 +201,7 @@ pub(crate) fn create_panel_model(
     }
 
     update.settings = OptionalUpdate::Missing;
-    renderer.set_theme(match &update.theme {
+    renderer.commit_theme(match &update.theme {
         OptionalUpdate::Update(theme) => Some(theme.clone()),
         _ => presentation.active_theme_name_sync(),
     });
@@ -213,7 +232,6 @@ pub(crate) fn place_reserved(
     has_table: bool,
 ) -> Option<Panel> {
     let panel = workspace.claim_reserved(has_table)?;
-    stamp_global_overlay(workspace, &panel.id, &panel.session);
     notify.emit(());
     Some(panel)
 }
@@ -223,7 +241,7 @@ pub(crate) fn place_reserved(
 /// Shared by the root's `ClosePanel` handler and `restoreWorkspace`'s
 /// batch replacement of the pre-existing panel set.
 pub(crate) fn eject_panel(panel: Panel, disposal: Disposal) -> ApiFuture<()> {
-    panel.session.mark_disposed(disposal);
+    panel.session.dispose(disposal);
     ApiFuture::new(async move {
         panel.renderer.dispose().await?;
         let was_errored = panel.session.is_errored();

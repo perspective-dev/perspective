@@ -35,13 +35,9 @@ pub struct RestoreOptions {
     #[ts(optional)]
     pub panel: Option<String>,
 
-    /// When `true`, a failed restore only REJECTS the returned `Promise` —
-    /// the error is not committed to the viewer's visible error state, and
-    /// the session remains usable for subsequent calls. For programmatic
-    /// callers (e.g. the LLM agent's `set_view_config` tool) for whom a
-    /// failed config patch is feedback rather than a user-facing fault.
-    /// The config may be partially applied on failure; restore a
-    /// known-good config to recover exactly.
+    /// When `true`, a config that was applied and then failed to render only
+    /// rejects the returned `Promise`, without raising the panel's visible
+    /// error state.
     #[ts(optional)]
     pub suppress_errors: Option<bool>,
 

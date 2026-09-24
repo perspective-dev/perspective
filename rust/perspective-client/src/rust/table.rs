@@ -205,8 +205,139 @@ pub struct UpdateOptions {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ExprValidationResult {
     pub expression_schema: Schema,
-    pub errors: HashMap<String, table_validate_expr_resp::ExprValidationError>,
+    pub errors: HashMap<String, ExpressionError>,
     pub expression_alias: HashMap<String, String>,
+}
+
+/// The successful result of [`Table::describe`]: what a [`View`] built from the
+/// described config would report, WITHOUT building one.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Description {
+    /// The type of every expression, before aggregation.
+    pub expression_schema: Schema,
+
+    /// Equal to [`View::schema`] of a [`View`] built from the same config.
+    pub view_schema: Schema,
+}
+
+/// Why [`Table::describe`] rejected a config.
+#[derive(Clone, Debug, PartialEq)]
+pub enum DescribeError {
+    /// At least one expression failed to compile.
+    Expressions {
+        expression_schema: Schema,
+        errors: HashMap<String, ExpressionError>,
+    },
+
+    /// Every expression compiled but the rest of the config is invalid.
+    Config(String),
+}
+
+impl Display for DescribeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Expressions { errors, .. } => {
+                let mut names = errors.keys().collect::<Vec<_>>();
+                names.sort();
+                write!(f, "Invalid expressions: ")?;
+                for (i, name) in names.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, "; ")?;
+                    }
+
+                    write!(f, "{}: {}", name, errors[*name].error_message)?;
+                }
+
+                Ok(())
+            },
+            Self::Config(msg) => write!(f, "{}", msg),
+        }
+    }
+}
+
+impl std::error::Error for DescribeError {}
+
+/// The wire/serde shape of a [`Table::describe`] verdict, as exchanged with
+/// JavaScript and Python (both client results and virtual-server handler
+/// returns): exactly one of the three arms, discriminated by its keys.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DescribeVerdict {
+    Ok {
+        expression_schema: Schema,
+        view_schema: Schema,
+    },
+    Expressions {
+        #[serde(default)]
+        expression_schema: Schema,
+        expression_errors: HashMap<String, ExpressionError>,
+    },
+    Config {
+        config_error: String,
+    },
+}
+
+impl From<Result<Description, DescribeError>> for DescribeVerdict {
+    fn from(value: Result<Description, DescribeError>) -> Self {
+        match value {
+            Ok(d) => Self::Ok {
+                expression_schema: d.expression_schema,
+                view_schema: d.view_schema,
+            },
+            Err(DescribeError::Expressions {
+                expression_schema,
+                errors,
+            }) => Self::Expressions {
+                expression_schema,
+                expression_errors: errors,
+            },
+            Err(DescribeError::Config(config_error)) => Self::Config { config_error },
+        }
+    }
+}
+
+impl TryFrom<DescribeVerdict> for Result<Description, DescribeError> {
+    type Error = ClientError;
+
+    /// Fails only for the unrepresentable `Expressions` arm with no errors.
+    fn try_from(value: DescribeVerdict) -> Result<Self, ClientError> {
+        Ok(match value {
+            DescribeVerdict::Ok {
+                expression_schema,
+                view_schema,
+            } => Ok(Description {
+                expression_schema,
+                view_schema,
+            }),
+            DescribeVerdict::Expressions {
+                expression_schema,
+                expression_errors,
+            } => {
+                if expression_errors.is_empty() {
+                    return Err(ClientError::Unknown(
+                        "Describe verdict has an empty `expression_errors`".to_string(),
+                    ));
+                }
+
+                Err(DescribeError::Expressions {
+                    expression_schema,
+                    errors: expression_errors,
+                })
+            },
+            DescribeVerdict::Config { config_error } => Err(DescribeError::Config(config_error)),
+        })
+    }
+}
+
+fn decode_schema(schema: HashMap<String, i32>) -> ClientResult<Schema> {
+    schema
+        .into_iter()
+        .map(|(name, ty)| {
+            ColumnType::try_from(ty)
+                .map(|ty| (name, ty))
+                .map_err(|e| ClientError::Unknown(e.to_string()))
+        })
+        .collect()
 }
 
 /// [`Table`] is Perspective's columnar data frame, analogous to a Pandas/Polars
@@ -571,26 +702,72 @@ impl Table {
         }
     }
 
+    /// Validate a complete [`ViewConfigUpdate`] against this table and report
+    /// the schema a [`View`] built from it would have, without creating one.
+    pub async fn describe(
+        &self,
+        config: ViewConfigUpdate,
+    ) -> ClientResult<Result<Description, DescribeError>> {
+        let msg = self.client_message(ClientReq::TableDescribeReq(TableDescribeReq {
+            config: Some(config.into()),
+        }));
+
+        let resp = match self.client.oneshot(&msg).await? {
+            ClientResp::TableDescribeResp(resp) => resp,
+            resp => return Err(resp.into()),
+        };
+
+        let expression_schema = decode_schema(resp.expression_schema)?;
+        let has_errors = !resp.expression_errors.is_empty();
+        Ok(match (resp.result, has_errors) {
+            (Some(table_describe_resp::Result::View(view)), false) => Ok(Description {
+                expression_schema,
+                view_schema: decode_schema(view.schema)?,
+            }),
+            (Some(table_describe_resp::Result::ConfigError(msg)), false) => {
+                Err(DescribeError::Config(msg))
+            },
+            (None, true) => Err(DescribeError::Expressions {
+                expression_schema,
+                errors: resp.expression_errors,
+            }),
+            (result, _) => {
+                return Err(ClientError::Unknown(format!(
+                    "Malformed describe response: result={:?} expression_errors={:?}",
+                    result.is_some(),
+                    resp.expression_errors.keys().collect::<Vec<_>>()
+                )));
+            },
+        })
+    }
+
     /// Validates the given expressions.
     pub async fn validate_expressions(
         &self,
         expressions: Expressions,
     ) -> ClientResult<ExprValidationResult> {
-        let msg = self.client_message(ClientReq::TableValidateExprReq(TableValidateExprReq {
-            column_to_expr: expressions.0,
-        }));
+        let expression_alias = expressions.0.clone();
+        let config = ViewConfigUpdate {
+            expressions: Some(expressions),
+            columns: Some(vec![]),
+            ..ViewConfigUpdate::default()
+        };
 
-        match self.client.oneshot(&msg).await? {
-            ClientResp::TableValidateExprResp(result) => Ok(ExprValidationResult {
-                errors: result.errors,
-                expression_alias: result.expression_alias,
-                expression_schema: result
-                    .expression_schema
-                    .into_iter()
-                    .map(|(x, y)| (x, ColumnType::try_from(y).unwrap()))
-                    .collect(),
+        match self.describe(config).await? {
+            Ok(d) => Ok(ExprValidationResult {
+                expression_schema: d.expression_schema,
+                errors: HashMap::new(),
+                expression_alias,
             }),
-            resp => Err(resp.into()),
+            Err(DescribeError::Expressions {
+                expression_schema,
+                errors,
+            }) => Ok(ExprValidationResult {
+                expression_schema,
+                errors,
+                expression_alias,
+            }),
+            Err(DescribeError::Config(msg)) => Err(ClientError::Internal(msg)),
         }
     }
 

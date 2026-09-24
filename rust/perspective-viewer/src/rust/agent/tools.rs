@@ -873,22 +873,8 @@ impl PerspectiveViewerElement {
     async fn tool_set_view_config(&self, ctx: &ToolCtx, args: Value) -> Result<Value, ToolError> {
         let args: SetViewConfigArgs = serde_json::from_value(args)?;
         let target = args.panel.as_deref();
-        let panel = self.agent_panel(target)?;
-        let snapshot =
-            get_viewer_config(&panel.session, &panel.renderer, &self.presentation).await?;
-
+        self.agent_panel(target)?;
         if let Err(err) = self.agent_restore(target, &args.config).await {
-            let rolled = self
-                .agent_restore(target, &serde_json::to_value(&snapshot)?)
-                .await;
-
-            let err = match rolled {
-                Ok(()) => err,
-                Err(rollback_err) => ToolError(format!(
-                    "{err} (additionally, restoring the prior config failed: {rollback_err})"
-                )),
-            };
-
             return Err(with_docs_hint(ctx, err));
         }
 

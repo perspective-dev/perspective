@@ -1010,6 +1010,34 @@ class TestPolarsCombinedOperations:
         ]
         view.delete()
 
+    def test_describe_parity_with_view(self, client):
+        table = client.open_table("superstore")
+        for config in [
+            dict(columns=["Sales", "Quantity", "Region"]),
+            dict(
+                columns=["Sales", "Quantity"],
+                group_by=["Region"],
+                aggregates={"Sales": "sum", "Quantity": "avg"},
+            ),
+            dict(columns=["Sales", "Quantity"], group_rollup_mode="total"),
+            dict(columns=["Sales", "double"], expressions={"double": '"Sales" * 2'}),
+        ]:
+            verdict = table.describe(**config)
+            view = table.view(**config)
+            assert sorted(verdict.keys()) == ["expression_schema", "view_schema"], config
+            assert verdict["view_schema"] == view.schema(), config
+            view.delete()
+
+    def test_describe_reports_a_bad_expression(self, client):
+        table = client.open_table("superstore")
+        verdict = table.describe(
+            columns=["Sales", "double"],
+            expressions={"double": '"Sales" * 2', "bad": '"nope" * 2'},
+        )
+
+        assert sorted(verdict.keys()) == ["expression_errors", "expression_schema"]
+        assert list(verdict["expression_errors"].keys()) == ["bad"]
+
     def test_expressions_group_by_sort(self, client):
         table = client.open_table("superstore")
         view = table.view(

@@ -139,17 +139,61 @@ class PolarsVirtualServerHandler(VirtualServerHandler):
             return self.views[view_name].height
         return self.table_size(view_name)
 
-    def table_validate_expression(self, table_name, expression):
-        df = self.tables.get(table_name)
-        if df is None:
-            return None
-        expr = parse_expression(expression)
-        result = df.select(expr.alias("__expr__"))
-        return polars_type_to_psp(result["__expr__"].dtype)
+    def table_describe(self, table_name, config):
+        empty = self.tables[table_name].clear()
+        expression_schema = {}
+        expression_errors = {}
+        for name, expr_str in config.get("expressions", {}).items():
+            try:
+                expr = parse_expression(expr_str)
+                result = empty.select(expr.alias("__expr__"))
+                expression_schema[name] = polars_type_to_psp(result["__expr__"].dtype)
+            except Exception as e:
+                expression_errors[name] = {
+                    "error_message": str(e),
+                    "line": 0,
+                    "column": 0,
+                }
+
+        if expression_errors:
+            return {
+                "expression_schema": expression_schema,
+                "expression_errors": expression_errors,
+            }
+
+        folded = dict(config)
+        folded["sort"] = []
+        split_by = list(config.get("split_by", []))
+        if split_by:
+            group_by = list(config.get("group_by", []))
+            if not group_by and config.get("group_rollup_mode", "rollup") != "total":
+                folded["aggregates"] = {
+                    c: "first" for c in config.get("columns", []) if c is not None
+                }
+
+            folded["group_by"] = group_by + split_by
+            folded["split_by"] = []
+
+        try:
+            result = self._build_view(empty, folded)
+        except Exception as e:
+            return {"config_error": str(e)}
+
+        return {
+            "expression_schema": expression_schema,
+            "view_schema": compute_view_schema(result),
+        }
 
     def table_make_view(self, table_name, view_name, config):
         start = datetime.now()
-        df = self.tables[table_name]
+        result = self._build_view(self.tables[table_name], config)
+        self.views[view_name] = result
+        self.view_schemas[view_name] = compute_view_schema(result)
+        logger.debug(
+            f"{datetime.now() - start} table_make_view {table_name} -> {view_name}"
+        )
+
+    def _build_view(self, df, config):
         group_by = config.get("group_by", [])
         columns = [c for c in config.get("columns", []) if c is not None]
         aggregates = config.get("aggregates", {})
@@ -207,11 +251,7 @@ class PolarsVirtualServerHandler(VirtualServerHandler):
             result = df.select(select_exprs)
             result = apply_sort_flat(result, sort, col_alias)
 
-        self.views[view_name] = result
-        self.view_schemas[view_name] = compute_view_schema(result)
-        logger.debug(
-            f"{datetime.now() - start} table_make_view {table_name} -> {view_name}"
-        )
+        return result
 
     def view_delete(self, view_name):
         self.views.pop(view_name, None)

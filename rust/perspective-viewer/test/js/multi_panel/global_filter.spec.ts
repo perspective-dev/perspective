@@ -601,3 +601,134 @@ test.describe("Global filters: persistence", () => {
         expect((await save(page)).masters ?? []).toEqual([]);
     });
 });
+
+const FOREIGN_TABLES = {
+    "a table without the column": "City,Units\nAustin,1\nDallas,2\nReno,3",
+    "a table typing the column differently": "State,Units\n1,10\n2,20\n3,30",
+};
+
+async function restore_with_foreign(page, csv) {
+    await page.evaluate(async (csv) => {
+        const worker = (window as any).__TEST_WORKER__;
+        const names = await worker.get_hosted_table_names();
+        if (!names.includes("gf-foreign")) {
+            await worker.table(csv, { name: "gf-foreign" });
+        }
+    }, csv);
+
+    await restore(page, {
+        ...TRI_CONFIG,
+        panels: {
+            one: { table: TABLE, title: "One" },
+            two: { table: TABLE, title: "Two" },
+            three: { table: "gf-foreign", title: "Three" },
+        },
+        masters: ["one"],
+    });
+}
+
+test.describe("Global filters: listeners that cannot honor a clause", () => {
+    for (const [name, csv] of Object.entries(FOREIGN_TABLES)) {
+        test(`a listener on ${name} ignores the clause and keeps rendering`, async ({
+            page,
+        }) => {
+            await restore_with_foreign(page, csv);
+            const master = await id_by_title(page, "One");
+            const detail = await id_by_title(page, "Two");
+            const foreign = await id_by_title(page, "Three");
+            const baseline = await num_rows(page, detail);
+            const foreign_rows = await num_rows(page, foreign);
+            await dispatch_select(page, {
+                panel: master,
+                selected: true,
+                insertFilters: [["State", "==", "Texas"]],
+            });
+
+            await wait_rows_below(page, detail, baseline);
+            await page.evaluate(async () => {
+                await (
+                    document.querySelector("perspective-viewer") as any
+                ).flush();
+            });
+
+            expect(await num_rows(page, foreign)).toBe(foreign_rows);
+            expect(foreign_rows).toBe(3);
+            expect((await save_panel(page, foreign)).filter).toEqual([]);
+            expect((await save(page)).global_filters).toEqual([
+                ["State", "==", "Texas"],
+            ]);
+
+            await expect(
+                page.locator("perspective-viewer span#status.errored"),
+            ).toHaveCount(0);
+        });
+    }
+
+    test("a listener rebound to a table that has the column starts filtering with no new selection", async ({
+        page,
+    }) => {
+        await restore_with_foreign(
+            page,
+            FOREIGN_TABLES["a table without the column"],
+        );
+
+        const master = await id_by_title(page, "One");
+        const detail = await id_by_title(page, "Two");
+        const foreign = await id_by_title(page, "Three");
+        const baseline = await num_rows(page, detail);
+        await dispatch_select(page, {
+            panel: master,
+            selected: true,
+            insertFilters: [["State", "==", "Texas"]],
+        });
+
+        await wait_rows_below(page, detail, baseline);
+        const filtered = await num_rows(page, detail);
+        await page.evaluate(
+            async ({ id, table }) => {
+                const viewer = document.querySelector(
+                    "perspective-viewer",
+                ) as any;
+                await viewer.restore({ table }, { panel: id });
+            },
+            { id: foreign, table: TABLE },
+        );
+
+        expect(await num_rows(page, foreign)).toBe(filtered);
+        expect((await save_panel(page, foreign)).filter).toEqual([]);
+    });
+
+    test("a listener rebound to a table that lacks the column stops filtering", async ({
+        page,
+    }) => {
+        await restore_with_foreign(
+            page,
+            FOREIGN_TABLES["a table without the column"],
+        );
+
+        const master = await id_by_title(page, "One");
+        const detail = await id_by_title(page, "Two");
+        const baseline = await num_rows(page, detail);
+        await dispatch_select(page, {
+            panel: master,
+            selected: true,
+            insertFilters: [["State", "==", "Texas"]],
+        });
+
+        await wait_rows_below(page, detail, baseline);
+        await page.evaluate(
+            async ({ id }) => {
+                const viewer = document.querySelector(
+                    "perspective-viewer",
+                ) as any;
+                await viewer.restore({ table: "gf-foreign" }, { panel: id });
+            },
+            { id: detail },
+        );
+
+        expect(await num_rows(page, detail)).toBe(3);
+        await expect(
+            page.locator("perspective-viewer span#status.errored"),
+        ).toHaveCount(0);
+    });
+});

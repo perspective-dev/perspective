@@ -1256,7 +1256,6 @@ needs_poll(const proto::Request::ClientReqCase proto_case) {
         case ReqCase::kTableSizeReq:
         case ReqCase::kTableSchemaReq:
         case ReqCase::kTableMakePortReq:
-        case ReqCase::kTableValidateExprReq:
         case ReqCase::kMakeTableReq:
         case ReqCase::kViewDimensionsReq:
         case ReqCase::kViewToColumnsStringReq:
@@ -1292,6 +1291,7 @@ needs_poll(const proto::Request::ClientReqCase proto_case) {
         case ReqCase::kServerSystemInfoReq:
         case ReqCase::kGetFeaturesReq:
         case ReqCase::kMakeJoinTableReq:
+        case ReqCase::kTableDescribeReq:
             return false;
         case proto::Request::CLIENT_REQ_NOT_SET:
             throw std::runtime_error("Unhandled request type 2");
@@ -1307,7 +1307,7 @@ entity_type_is_table(const proto::Request::ClientReqCase proto_case) {
         case ReqCase::kTableSizeReq:
         case ReqCase::kTableSchemaReq:
         case ReqCase::kTableMakePortReq:
-        case ReqCase::kTableValidateExprReq:
+        case ReqCase::kTableDescribeReq:
         case ReqCase::kMakeTableReq:
         case ReqCase::kTableOnDeleteReq:
         case ReqCase::kTableRemoveReq:
@@ -1557,6 +1557,539 @@ coerce_to(const t_dtype dtype, const A& val) {
     } else {
         static_assert(!std::is_same_v<A, A>, "Unsupported type");
     }
+}
+
+ProtoServer::BuiltViewConfig
+ProtoServer::build_view_config(
+    const std::shared_ptr<Table>& table, const proto::ViewConfig& cfg
+) {
+    auto schema =
+        std::make_shared<t_schema>(table->get_gnode()->get_output_schema());
+
+    const auto& group_by = cfg.group_by();
+    std::vector<std::string> row_pivots{
+        group_by.begin(), group_by.end()
+    };
+
+    const auto& split_by = cfg.split_by();
+    std::vector<std::string> column_pivots{
+        split_by.begin(), split_by.end()
+    };
+
+    const auto& aggs = cfg.aggregates();
+    tsl::ordered_map<std::string, std::vector<std::string>> aggregates;
+    for (const auto& [col_name, agg_list] : aggs) {
+        aggregates[col_name] = std::vector<std::string>();
+        for (const auto& agg : agg_list.aggregations()) {
+            aggregates[col_name].push_back(agg);
+        }
+    }
+
+    const auto& sorts = cfg.sort();
+    std::vector<t_sortspec> sortby;
+    std::vector<std::vector<std::string>> sort_str;
+    for (const auto& sort : sorts) {
+        const char* column_sort = sort_op_str_from_proto(sort.op());
+        sort_str.push_back({sort.column(), column_sort});
+    }
+
+    bool column_only = false;
+    bool is_total =
+        cfg.has_group_rollup_mode() ? cfg.group_rollup_mode() == 2 : false;
+
+    // make sure that primary keys are created for column-only views
+    if (row_pivots.empty() && !column_pivots.empty()) {
+        row_pivots.emplace_back("psp_okey");
+        column_only = true;
+    }
+
+    std::vector<std::shared_ptr<t_computed_expression>> expressions;
+    auto exprs = parse_expression_strings(cfg.expressions());
+
+    std::vector<std::tuple<
+        std::string,
+        std::string,
+        std::string,
+        std::vector<std::pair<std::string, std::string>>>>
+        legacy_exprs;
+
+    legacy_exprs.resize(1);
+    for (const auto& expr : exprs) {
+        legacy_exprs[0] = {
+            expr.expression_alias,
+            expr.expression,
+            expr.parse_expression_string,
+            std::vector<std::pair<std::string, std::string>>{
+                expr.column_id_map.begin(), expr.column_id_map.end()
+            }
+        };
+
+        // Validate these expression, creating is not the same thing!
+        const auto& res = table->validate_expressions(legacy_exprs);
+        if (!res.get_expression_errors().empty()) {
+            // TODO unify error reporting - this works differently than
+            // `validate_expressions()`. In this case there is
+            // guaranteed to only be one ...
+            PSP_COMPLAIN_AND_ABORT(res.get_expression_errors()
+                                       .at(expr.expression_alias)
+                                       .m_error_message);
+        }
+
+        const auto& gnode = table->get_gnode();
+        auto column_id_map =
+            std::vector<std::pair<std::string, std::string>>(
+                expr.column_id_map.begin(), expr.column_id_map.end()
+            );
+
+        auto expr_vocab = gnode->get_expression_vocab();
+        t_expression_vocab& expression_vocab = *expr_vocab;
+        auto expression_regex_mapping =
+            gnode->get_expression_regex_mapping();
+        t_regex_mapping& regex_mapping = *expression_regex_mapping;
+
+        std::shared_ptr<t_computed_expression> computed_expression =
+            m_computed_expression_parser.precompute(
+                expr.expression_alias,
+                expr.expression,
+                expr.parse_expression_string,
+                column_id_map,
+                gnode->get_table_sptr(),
+                gnode->get_pkey_map(),
+                schema,
+                expression_vocab,
+                regex_mapping
+            );
+
+        auto dtype = computed_expression->get_dtype();
+
+        schema->add_column(expr.expression_alias, dtype);
+        expressions.push_back(std::make_shared<t_computed_expression>(
+            expr.expression_alias,
+            expr.expression,
+            expr.parse_expression_string,
+            column_id_map,
+            dtype
+        ));
+    }
+
+    std::vector<t_window_spec> windows;
+    windows.reserve(cfg.windows_size());
+    const t_schema& table_schema = table->get_schema();
+
+    // `windows` is a proto map keyed by output alias; iterate in
+    // sorted-name order so output column registration (and thus
+    // any error precedence) is deterministic.
+    std::vector<std::string> window_names;
+    window_names.reserve(cfg.windows_size());
+    for (const auto& it : cfg.windows()) {
+        window_names.push_back(it.first);
+    }
+    std::sort(window_names.begin(), window_names.end());
+    for (const auto& name : window_names) {
+        const auto& w = cfg.windows().at(name);
+        if (name.empty()) {
+            PSP_COMPLAIN_AND_ABORT("Window `name` must not be empty");
+        }
+
+        if (schema->has_column(name)) {
+            PSP_COMPLAIN_AND_ABORT(
+                "Window `name` collides with an existing column: "
+                + name
+            );
+        }
+
+        if (!schema->has_column(w.source())) {
+            PSP_COMPLAIN_AND_ABORT(
+                "Window `source` column not found: " + w.source()
+            );
+        }
+
+        // `order_by`/`partition_by` must be real `Table` columns -
+        // the window engine reads them from the gnode master table,
+        // where expression aliases do not exist. An OMITTED
+        // `order_by` takes natural (primary key) order.
+        if (w.has_order_by()
+            && !table_schema.has_column(w.order_by().column())) {
+            PSP_COMPLAIN_AND_ABORT(
+                "Window `order_by` must be a `Table` column: "
+                + w.order_by().column()
+            );
+        }
+
+        for (const auto& p : w.partition_by()) {
+            if (!table_schema.has_column(p)) {
+                PSP_COMPLAIN_AND_ABORT(
+                    "Window `partition_by` must be a `Table` column: "
+                    + p
+                );
+            }
+        }
+
+        static const std::unordered_map<std::string, t_window_op>
+            WINDOW_OPS{
+                {"sum", t_window_op::WINDOW_OP_SUM},
+                {"avg", t_window_op::WINDOW_OP_AVG},
+                {"count", t_window_op::WINDOW_OP_COUNT},
+                {"min", t_window_op::WINDOW_OP_MIN},
+                {"max", t_window_op::WINDOW_OP_MAX},
+                {"stddev", t_window_op::WINDOW_OP_STDDEV},
+                {"var", t_window_op::WINDOW_OP_VAR},
+                {"first", t_window_op::WINDOW_OP_FIRST},
+                {"last", t_window_op::WINDOW_OP_LAST},
+                {"lag", t_window_op::WINDOW_OP_LAG},
+                {"lead", t_window_op::WINDOW_OP_LEAD},
+                {"diff", t_window_op::WINDOW_OP_DIFF},
+                {"rate", t_window_op::WINDOW_OP_RATE},
+                {"ema", t_window_op::WINDOW_OP_EMA},
+            };
+
+        const auto op_entry = WINDOW_OPS.find(w.op());
+        if (op_entry == WINDOW_OPS.end()) {
+            PSP_COMPLAIN_AND_ABORT(
+                "Window `op` not implemented in this build: " + w.op()
+            );
+        }
+
+        t_window_op op = op_entry->second;
+
+        // An OMITTED frame means cumulative for aggregating
+        // ops - the initializer below IS that default.
+        t_window_frame_type frame_type =
+            t_window_frame_type::WINDOW_FRAME_CUMULATIVE;
+        t_uindex frame_rows = 0;
+        double frame_range = 0;
+        bool has_frame = true;
+        switch (w.frame_case()) {
+            case proto::WindowSpec::kRows:
+                frame_type = t_window_frame_type::WINDOW_FRAME_ROWS;
+                frame_rows = w.rows();
+                break;
+            case proto::WindowSpec::kCumulative:
+                frame_type =
+                    t_window_frame_type::WINDOW_FRAME_CUMULATIVE;
+                break;
+            case proto::WindowSpec::kRange: {
+                frame_type = t_window_frame_type::WINDOW_FRAME_RANGE;
+                frame_range = w.range();
+                if (!(frame_range > 0)) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Window `range` must be a positive interval"
+                    );
+                }
+
+                // Interval arithmetic is defined on the order
+                // column's raw units (ms for datetime, days for
+                // date) - the natural-order fallback has no units,
+                // so `range` requires an explicit `order_by`.
+                if (!w.has_order_by()) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Window `range` frames require an explicit "
+                        "`order_by`"
+                    );
+                }
+
+                t_dtype order_dtype =
+                    table_schema.get_dtype(w.order_by().column());
+                switch (order_dtype) {
+                    case DTYPE_INT8:
+                    case DTYPE_INT16:
+                    case DTYPE_INT32:
+                    case DTYPE_INT64:
+                    case DTYPE_UINT8:
+                    case DTYPE_UINT16:
+                    case DTYPE_UINT32:
+                    case DTYPE_UINT64:
+                    case DTYPE_FLOAT32:
+                    case DTYPE_FLOAT64:
+                    case DTYPE_TIME:
+                    case DTYPE_DATE:
+                        break;
+                    default:
+                        PSP_COMPLAIN_AND_ABORT(
+                            "Window `range` frames require a numeric "
+                            "or temporal `order_by` column: "
+                            + w.order_by().column()
+                        );
+                }
+            } break;
+            default:
+                has_frame = false;
+                break;
+        }
+
+        switch (op) {
+            case t_window_op::WINDOW_OP_LAG:
+            case t_window_op::WINDOW_OP_LEAD:
+            case t_window_op::WINDOW_OP_DIFF:
+                if (has_frame) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Window `frame` is not applicable to "
+                        "`lag`/`lead`/`diff` (use `offset`)"
+                    );
+                }
+                break;
+            case t_window_op::WINDOW_OP_RATE:
+                if (frame_type
+                        != t_window_frame_type::WINDOW_FRAME_RANGE
+                    || !has_frame) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Window `rate` requires a `range` frame"
+                    );
+                }
+                break;
+            case t_window_op::WINDOW_OP_EMA:
+                if (has_frame
+                    && frame_type
+                        != t_window_frame_type::
+                            WINDOW_FRAME_CUMULATIVE) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Window `ema` is cumulative; it does not "
+                        "accept a `rows` or `range` frame"
+                    );
+                }
+
+                if (!w.has_alpha() || !(w.alpha() > 0)
+                    || w.alpha() > 1) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Window `ema` requires `alpha` in (0, 1]"
+                    );
+                }
+                break;
+            default:
+                break;
+        }
+
+        if (!t_window_engine::is_implemented(op, frame_type)) {
+            PSP_COMPLAIN_AND_ABORT(
+                "Window op/frame combination not implemented"
+            );
+        }
+
+        t_dtype source_dtype = schema->get_dtype(w.source());
+        t_dtype dtype =
+            t_window_engine::resolve_dtype(op, source_dtype);
+        if (dtype == DTYPE_NONE) {
+            PSP_COMPLAIN_AND_ABORT(
+                "Window op requires a numeric `source` column: "
+                + w.source()
+            );
+        }
+
+        t_window_spec spec;
+        spec.m_name = name;
+        spec.m_source = w.source();
+
+        // Empty `m_order_by` = natural (primary key) order; the
+        // engine's comparator degenerates to its pkey tiebreak when
+        // every order key is absent.
+        spec.m_order_by =
+            w.has_order_by() ? w.order_by().column() : "";
+        spec.m_order_desc =
+            w.has_order_by() && w.order_by().desc();
+        spec.m_partition_by = {
+            w.partition_by().begin(), w.partition_by().end()
+        };
+        spec.m_op = op;
+        spec.m_frame_type = frame_type;
+        spec.m_frame_rows = frame_rows;
+        spec.m_frame_range = frame_range;
+        spec.m_offset = w.has_offset() ? w.offset() : 1;
+        spec.m_alpha = w.has_alpha() ? w.alpha() : 0;
+        spec.m_dtype = dtype;
+
+        schema->add_column(spec.m_name, dtype);
+        windows.push_back(std::move(spec));
+    }
+
+    t_vocab vocab;
+    vocab.init(false);
+    std::vector<
+        std::tuple<std::string, std::string, std::vector<t_tscalar>>>
+        filter;
+    filter.reserve(cfg.filter().size());
+
+    for (const auto& f : cfg.filter()) {
+        for (const auto& arg : f.value()) {
+            switch (arg.scalar_case()) {
+                case proto::Scalar::kString: {
+#ifdef PSP_SSO_SCALAR
+                    if (!t_tscalar::can_store_inplace(arg.string())) {
+                        vocab.get_interned(arg.string());
+                    }
+#else
+                    vocab.get_interned(arg.string());
+#endif
+                    break;
+                }
+                case proto::Scalar::kBool:
+                case proto::Scalar::kFloat:
+                case proto::Scalar::kNull:
+                case proto::Scalar::SCALAR_NOT_SET:
+                    break;
+            }
+        }
+    }
+
+    for (const auto& f : cfg.filter()) {
+        std::vector<t_tscalar> args;
+        args.reserve(f.value().size());
+        for (const auto& arg : f.value()) {
+            t_tscalar a;
+            a.clear();
+            switch (arg.scalar_case()) {
+                case proto::Scalar::kBool: {
+                    a.set(arg.bool_());
+                    args.push_back(a);
+                    break;
+                }
+                case proto::Scalar::kFloat: {
+                    a = coerce_to(
+                        schema->get_dtype(f.column()), arg.float_()
+                    );
+
+                    args.push_back(a);
+                    break;
+                }
+                case proto::Scalar::kString: {
+                    if (!schema->has_column(f.column())) {
+                        PSP_COMPLAIN_AND_ABORT(
+                            "Filter column not in schema: " + f.column()
+                        );
+                    }
+
+#ifdef PSP_SSO_SCALAR
+                    if (!t_tscalar::can_store_inplace(arg.string())) {
+#endif
+                        a = coerce_to(
+                            schema->get_dtype(f.column()),
+                            vocab.unintern_c(
+                                vocab.get_interned(arg.string())
+                            )
+                        );
+#ifdef PSP_SSO_SCALAR
+                    } else {
+
+                        a = coerce_to(
+                            schema->get_dtype(f.column()),
+                            arg.string().c_str()
+                        );
+                    }
+#endif
+                    args.push_back(a);
+                    break;
+                }
+                case proto::Scalar::kNull:
+                    a.set(t_none());
+                    args.push_back(a);
+                    break;
+                case proto::Scalar::SCALAR_NOT_SET:
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Filter scalar type not implemented: "
+                        + std::to_string(arg.scalar_case())
+                    )
+                    break;
+            }
+        }
+
+        filter.emplace_back(f.column(), f.op(), args);
+    }
+
+    const auto& cols = cfg.columns();
+    std::vector<std::string> columns;
+    if (cols.has_columns()) {
+        columns = {
+            cols.columns().columns().begin(),
+            cols.columns().columns().end()
+        };
+    } else {
+        columns = table->get_column_names();
+        for (const auto& f : expressions) {
+            columns.push_back(f->get_expression_alias());
+        }
+        for (const auto& w : windows) {
+            columns.push_back(w.m_name);
+        }
+    }
+
+    LOG_DEBUG(
+        "Creating view config with \n"
+        << "row_pivots: " << row_pivots << '\n'
+        << "column_pivots: " << column_pivots
+        << '\n'
+        // << "aggregates: " << aggregates << '\n'
+        << "columns: " << columns
+        << '\n'
+        // << "filter: " << filter << '\n'
+        << "sort_str: " << sort_str << '\n'
+        << "expressions: " << expressions << '\n'
+        << "column_only: " << column_only << '\n'
+    );
+
+    std::string filter_op;
+    switch (cfg.filter_op()) {
+        case proto::ViewConfig_FilterReducer::
+            ViewConfig_FilterReducer_OR:
+            filter_op = "or";
+            break;
+        case proto::ViewConfig_FilterReducer::
+            ViewConfig_FilterReducer_AND:
+        default:
+            filter_op = "and";
+            break;
+    }
+
+    LOG_DEBUG("FILTER_OP: " << filter_op);
+
+    bool leaves_only =
+        cfg.has_group_rollup_mode() ? cfg.group_rollup_mode() == 1 : false;
+    bool total_only =
+        cfg.has_group_rollup_mode() ? cfg.group_rollup_mode() == 2 : false;
+    bool split_rollup = cfg.has_split_rollup_mode()
+        && cfg.split_rollup_mode()
+            == proto::SplitRollupMode::SPLIT_ROLLUP_MODE_ROLLUP;
+
+    auto config = std::make_shared<t_view_config>(
+        vocab,
+        row_pivots,
+        column_pivots,
+        aggregates,
+        columns,
+        filter,
+        sort_str,
+        expressions,
+        filter_op,
+        column_only,
+        leaves_only,
+        total_only,
+        windows,
+        split_rollup
+    );
+    config->init(schema);
+
+    if (cfg.has_group_by_depth()) {
+        config->set_row_pivot_depth(cfg.group_by_depth());
+    }
+
+    std::uint32_t sides;
+
+    if (!group_by.empty() || !split_by.empty()) {
+        if (!split_by.empty()) {
+            sides = 2;
+        } else {
+            sides = 1;
+        }
+    } else if (total_only) {
+        sides = 1;
+    } else {
+        sides = 0;
+    }
+
+    bool is_unit_context = table->get_index().empty() && sides == 0
+        && row_pivots.empty() && column_pivots.empty()
+        && aggregates.empty() && columns.empty() && sort_str.empty()
+        && cfg.expressions().empty() && cfg.windows().empty();
+
+    return BuiltViewConfig{schema, config, sides, is_unit_context};
 }
 
 std::vector<ProtoServerResp<ProtoServer::Response>>
@@ -2171,17 +2704,13 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             push_resp(std::move(resp));
             break;
         }
-        case proto::Request::kTableValidateExprReq: {
+        case proto::Request::kTableDescribeReq: {
             auto table = m_resources.get_table(req.entity_id());
-            const auto& r = req.table_validate_expr_req();
-
-            const auto& col_with_expr = r.column_to_expr();
-            const auto& exprs = parse_expression_strings(col_with_expr);
-
-            // TODO: validate the expression, mocked out for now
+            const auto& cfg = req.table_describe_req().config();
             proto::Response resp;
-            auto* validate_expr = resp.mutable_table_validate_expr_resp();
+            auto* out = resp.mutable_table_describe_resp();
 
+            const auto& exprs = parse_expression_strings(cfg.expressions());
             std::vector<std::tuple<
                 std::string,
                 std::string,
@@ -2202,35 +2731,41 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             }
 
             const auto& res = table->validate_expressions(legacy_exprs);
-
-            std::vector<std::pair<std::string, proto::ColumnType>> schema;
             for (const auto& [col, val] : res.get_expression_schema()) {
-                schema.emplace_back(
-                    col, dtype_to_column_type(str_to_dtype(val))
+                (*out->mutable_expression_schema())[col] =
+                    dtype_to_column_type(str_to_dtype(val));
+            }
+
+            const auto& errors = res.get_expression_errors();
+            if (!errors.empty()) {
+                for (const auto& [col_name, err] : errors) {
+                    proto::ExpressionError proto_err;
+                    *proto_err.mutable_error_message() = err.m_error_message;
+                    proto_err.set_column(err.m_column);
+                    proto_err.set_line(err.m_line);
+                    (*out->mutable_expression_errors())[col_name] =
+                        std::move(proto_err);
+                }
+
+                push_resp(std::move(resp));
+                break;
+            }
+
+            try {
+                auto built = build_view_config(table, cfg);
+                auto* view = out->mutable_view();
+                const auto schema = describe_view_schema(
+                    *built.config, *built.schema, built.sides > 0
                 );
-            }
 
-            for (auto&& [col_name, col_type] : schema) {
-                (*validate_expr->mutable_expression_schema())[col_name] =
-                    col_type;
-            }
-
-            std::vector<std::pair<
-                std::string,
-                proto::TableValidateExprResp_ExprValidationError>>
-                errors;
-            for (const auto& [col_name, err] : res.get_expression_errors()) {
-                proto::TableValidateExprResp_ExprValidationError proto_err;
-                *proto_err.mutable_error_message() = err.m_error_message;
-                proto_err.set_column(err.m_column);
-                proto_err.set_line(err.m_line);
-                (*validate_expr->mutable_errors())[col_name] =
-                    std::move(proto_err);
-            }
-
-            for (const auto& [col_name, col_expr] : r.column_to_expr()) {
-                (*validate_expr->mutable_expression_alias())[col_name] =
-                    col_expr;
+                for (const auto& [name, type_str] : schema) {
+                    (*view->mutable_schema())[name] =
+                        dtype_to_column_type(str_to_dtype(type_str));
+                }
+            } catch (const PerspectiveException& e) {
+                out->set_config_error(e.what());
+            } catch (const std::exception& e) {
+                out->set_config_error(e.what());
             }
 
             push_resp(std::move(resp));
@@ -2363,534 +2898,12 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
         }
         case proto::Request::kTableMakeViewReq: {
             auto table = m_resources.get_table(req.entity_id());
-            auto schema = std::make_shared<t_schema>(
-                table->get_gnode()->get_output_schema()
-            );
             const auto& r = req.table_make_view_req();
-            const auto& cfg = r.config();
-
-            const auto& group_by = cfg.group_by();
-            std::vector<std::string> row_pivots{
-                group_by.begin(), group_by.end()
-            };
-
-            const auto& split_by = cfg.split_by();
-            std::vector<std::string> column_pivots{
-                split_by.begin(), split_by.end()
-            };
-
-            const auto& aggs = cfg.aggregates();
-            tsl::ordered_map<std::string, std::vector<std::string>> aggregates;
-            for (const auto& [col_name, agg_list] : aggs) {
-                aggregates[col_name] = std::vector<std::string>();
-                for (const auto& agg : agg_list.aggregations()) {
-                    aggregates[col_name].push_back(agg);
-                }
-            }
-
-            const auto& sorts = cfg.sort();
-            std::vector<t_sortspec> sortby;
-            std::vector<std::vector<std::string>> sort_str;
-            for (const auto& sort : sorts) {
-                const char* column_sort = sort_op_str_from_proto(sort.op());
-                sort_str.push_back({sort.column(), column_sort});
-            }
-
-            bool column_only = false;
-            bool is_total =
-                cfg.has_group_rollup_mode() ? cfg.group_rollup_mode() == 2 : false;
-
-            // make sure that primary keys are created for column-only views
-            if (row_pivots.empty() && !column_pivots.empty()) {
-                row_pivots.emplace_back("psp_okey");
-                column_only = true;
-            }
-
-            std::vector<std::shared_ptr<t_computed_expression>> expressions;
-            auto exprs = parse_expression_strings(cfg.expressions());
-
-            std::vector<std::tuple<
-                std::string,
-                std::string,
-                std::string,
-                std::vector<std::pair<std::string, std::string>>>>
-                legacy_exprs;
-
-            legacy_exprs.resize(1);
-            for (const auto& expr : exprs) {
-                legacy_exprs[0] = {
-                    expr.expression_alias,
-                    expr.expression,
-                    expr.parse_expression_string,
-                    std::vector<std::pair<std::string, std::string>>{
-                        expr.column_id_map.begin(), expr.column_id_map.end()
-                    }
-                };
-
-                // Validate these expression, creating is not the same thing!
-                const auto& res = table->validate_expressions(legacy_exprs);
-                if (!res.get_expression_errors().empty()) {
-                    // TODO unify error reporting - this works differently than
-                    // `validate_expressions()`. In this case there is
-                    // guaranteed to only be one ...
-                    PSP_COMPLAIN_AND_ABORT(res.get_expression_errors()
-                                               .at(expr.expression_alias)
-                                               .m_error_message);
-                }
-
-                const auto& gnode = table->get_gnode();
-                auto column_id_map =
-                    std::vector<std::pair<std::string, std::string>>(
-                        expr.column_id_map.begin(), expr.column_id_map.end()
-                    );
-
-                auto expr_vocab = gnode->get_expression_vocab();
-                t_expression_vocab& expression_vocab = *expr_vocab;
-                auto expression_regex_mapping =
-                    gnode->get_expression_regex_mapping();
-                t_regex_mapping& regex_mapping = *expression_regex_mapping;
-
-                std::shared_ptr<t_computed_expression> computed_expression =
-                    m_computed_expression_parser.precompute(
-                        expr.expression_alias,
-                        expr.expression,
-                        expr.parse_expression_string,
-                        column_id_map,
-                        gnode->get_table_sptr(),
-                        gnode->get_pkey_map(),
-                        schema,
-                        expression_vocab,
-                        regex_mapping
-                    );
-
-                auto dtype = computed_expression->get_dtype();
-
-                schema->add_column(expr.expression_alias, dtype);
-                expressions.push_back(std::make_shared<t_computed_expression>(
-                    expr.expression_alias,
-                    expr.expression,
-                    expr.parse_expression_string,
-                    column_id_map,
-                    dtype
-                ));
-            }
-
-            std::vector<t_window_spec> windows;
-            windows.reserve(cfg.windows_size());
-            const t_schema& table_schema = table->get_schema();
-
-            // `windows` is a proto map keyed by output alias; iterate in
-            // sorted-name order so output column registration (and thus
-            // any error precedence) is deterministic.
-            std::vector<std::string> window_names;
-            window_names.reserve(cfg.windows_size());
-            for (const auto& it : cfg.windows()) {
-                window_names.push_back(it.first);
-            }
-            std::sort(window_names.begin(), window_names.end());
-            for (const auto& name : window_names) {
-                const auto& w = cfg.windows().at(name);
-                if (name.empty()) {
-                    PSP_COMPLAIN_AND_ABORT("Window `name` must not be empty");
-                }
-
-                if (schema->has_column(name)) {
-                    PSP_COMPLAIN_AND_ABORT(
-                        "Window `name` collides with an existing column: "
-                        + name
-                    );
-                }
-
-                if (!schema->has_column(w.source())) {
-                    PSP_COMPLAIN_AND_ABORT(
-                        "Window `source` column not found: " + w.source()
-                    );
-                }
-
-                // `order_by`/`partition_by` must be real `Table` columns -
-                // the window engine reads them from the gnode master table,
-                // where expression aliases do not exist. An OMITTED
-                // `order_by` takes natural (primary key) order.
-                if (w.has_order_by()
-                    && !table_schema.has_column(w.order_by().column())) {
-                    PSP_COMPLAIN_AND_ABORT(
-                        "Window `order_by` must be a `Table` column: "
-                        + w.order_by().column()
-                    );
-                }
-
-                for (const auto& p : w.partition_by()) {
-                    if (!table_schema.has_column(p)) {
-                        PSP_COMPLAIN_AND_ABORT(
-                            "Window `partition_by` must be a `Table` column: "
-                            + p
-                        );
-                    }
-                }
-
-                static const std::unordered_map<std::string, t_window_op>
-                    WINDOW_OPS{
-                        {"sum", t_window_op::WINDOW_OP_SUM},
-                        {"avg", t_window_op::WINDOW_OP_AVG},
-                        {"count", t_window_op::WINDOW_OP_COUNT},
-                        {"min", t_window_op::WINDOW_OP_MIN},
-                        {"max", t_window_op::WINDOW_OP_MAX},
-                        {"stddev", t_window_op::WINDOW_OP_STDDEV},
-                        {"var", t_window_op::WINDOW_OP_VAR},
-                        {"first", t_window_op::WINDOW_OP_FIRST},
-                        {"last", t_window_op::WINDOW_OP_LAST},
-                        {"lag", t_window_op::WINDOW_OP_LAG},
-                        {"lead", t_window_op::WINDOW_OP_LEAD},
-                        {"diff", t_window_op::WINDOW_OP_DIFF},
-                        {"rate", t_window_op::WINDOW_OP_RATE},
-                        {"ema", t_window_op::WINDOW_OP_EMA},
-                    };
-
-                const auto op_entry = WINDOW_OPS.find(w.op());
-                if (op_entry == WINDOW_OPS.end()) {
-                    PSP_COMPLAIN_AND_ABORT(
-                        "Window `op` not implemented in this build: " + w.op()
-                    );
-                }
-
-                t_window_op op = op_entry->second;
-
-                // An OMITTED frame means cumulative for aggregating
-                // ops - the initializer below IS that default.
-                t_window_frame_type frame_type =
-                    t_window_frame_type::WINDOW_FRAME_CUMULATIVE;
-                t_uindex frame_rows = 0;
-                double frame_range = 0;
-                bool has_frame = true;
-                switch (w.frame_case()) {
-                    case proto::WindowSpec::kRows:
-                        frame_type = t_window_frame_type::WINDOW_FRAME_ROWS;
-                        frame_rows = w.rows();
-                        break;
-                    case proto::WindowSpec::kCumulative:
-                        frame_type =
-                            t_window_frame_type::WINDOW_FRAME_CUMULATIVE;
-                        break;
-                    case proto::WindowSpec::kRange: {
-                        frame_type = t_window_frame_type::WINDOW_FRAME_RANGE;
-                        frame_range = w.range();
-                        if (!(frame_range > 0)) {
-                            PSP_COMPLAIN_AND_ABORT(
-                                "Window `range` must be a positive interval"
-                            );
-                        }
-
-                        // Interval arithmetic is defined on the order
-                        // column's raw units (ms for datetime, days for
-                        // date) - the natural-order fallback has no units,
-                        // so `range` requires an explicit `order_by`.
-                        if (!w.has_order_by()) {
-                            PSP_COMPLAIN_AND_ABORT(
-                                "Window `range` frames require an explicit "
-                                "`order_by`"
-                            );
-                        }
-
-                        t_dtype order_dtype =
-                            table_schema.get_dtype(w.order_by().column());
-                        switch (order_dtype) {
-                            case DTYPE_INT8:
-                            case DTYPE_INT16:
-                            case DTYPE_INT32:
-                            case DTYPE_INT64:
-                            case DTYPE_UINT8:
-                            case DTYPE_UINT16:
-                            case DTYPE_UINT32:
-                            case DTYPE_UINT64:
-                            case DTYPE_FLOAT32:
-                            case DTYPE_FLOAT64:
-                            case DTYPE_TIME:
-                            case DTYPE_DATE:
-                                break;
-                            default:
-                                PSP_COMPLAIN_AND_ABORT(
-                                    "Window `range` frames require a numeric "
-                                    "or temporal `order_by` column: "
-                                    + w.order_by().column()
-                                );
-                        }
-                    } break;
-                    default:
-                        has_frame = false;
-                        break;
-                }
-
-                switch (op) {
-                    case t_window_op::WINDOW_OP_LAG:
-                    case t_window_op::WINDOW_OP_LEAD:
-                    case t_window_op::WINDOW_OP_DIFF:
-                        if (has_frame) {
-                            PSP_COMPLAIN_AND_ABORT(
-                                "Window `frame` is not applicable to "
-                                "`lag`/`lead`/`diff` (use `offset`)"
-                            );
-                        }
-                        break;
-                    case t_window_op::WINDOW_OP_RATE:
-                        if (frame_type
-                                != t_window_frame_type::WINDOW_FRAME_RANGE
-                            || !has_frame) {
-                            PSP_COMPLAIN_AND_ABORT(
-                                "Window `rate` requires a `range` frame"
-                            );
-                        }
-                        break;
-                    case t_window_op::WINDOW_OP_EMA:
-                        if (has_frame
-                            && frame_type
-                                != t_window_frame_type::
-                                    WINDOW_FRAME_CUMULATIVE) {
-                            PSP_COMPLAIN_AND_ABORT(
-                                "Window `ema` is cumulative; it does not "
-                                "accept a `rows` or `range` frame"
-                            );
-                        }
-
-                        if (!w.has_alpha() || !(w.alpha() > 0)
-                            || w.alpha() > 1) {
-                            PSP_COMPLAIN_AND_ABORT(
-                                "Window `ema` requires `alpha` in (0, 1]"
-                            );
-                        }
-                        break;
-                    default:
-                        break;
-                }
-
-                if (!t_window_engine::is_implemented(op, frame_type)) {
-                    PSP_COMPLAIN_AND_ABORT(
-                        "Window op/frame combination not implemented"
-                    );
-                }
-
-                t_dtype source_dtype = schema->get_dtype(w.source());
-                t_dtype dtype =
-                    t_window_engine::resolve_dtype(op, source_dtype);
-                if (dtype == DTYPE_NONE) {
-                    PSP_COMPLAIN_AND_ABORT(
-                        "Window op requires a numeric `source` column: "
-                        + w.source()
-                    );
-                }
-
-                t_window_spec spec;
-                spec.m_name = name;
-                spec.m_source = w.source();
-
-                // Empty `m_order_by` = natural (primary key) order; the
-                // engine's comparator degenerates to its pkey tiebreak when
-                // every order key is absent.
-                spec.m_order_by =
-                    w.has_order_by() ? w.order_by().column() : "";
-                spec.m_order_desc =
-                    w.has_order_by() && w.order_by().desc();
-                spec.m_partition_by = {
-                    w.partition_by().begin(), w.partition_by().end()
-                };
-                spec.m_op = op;
-                spec.m_frame_type = frame_type;
-                spec.m_frame_rows = frame_rows;
-                spec.m_frame_range = frame_range;
-                spec.m_offset = w.has_offset() ? w.offset() : 1;
-                spec.m_alpha = w.has_alpha() ? w.alpha() : 0;
-                spec.m_dtype = dtype;
-
-                schema->add_column(spec.m_name, dtype);
-                windows.push_back(std::move(spec));
-            }
-
-            t_vocab vocab;
-            vocab.init(false);
-            std::vector<
-                std::tuple<std::string, std::string, std::vector<t_tscalar>>>
-                filter;
-            filter.reserve(cfg.filter().size());
-
-            for (const auto& f : cfg.filter()) {
-                for (const auto& arg : f.value()) {
-                    switch (arg.scalar_case()) {
-                        case proto::Scalar::kString: {
-#ifdef PSP_SSO_SCALAR
-                            if (!t_tscalar::can_store_inplace(arg.string())) {
-                                vocab.get_interned(arg.string());
-                            }
-#else
-                            vocab.get_interned(arg.string());
-#endif
-                            break;
-                        }
-                        case proto::Scalar::kBool:
-                        case proto::Scalar::kFloat:
-                        case proto::Scalar::kNull:
-                        case proto::Scalar::SCALAR_NOT_SET:
-                            break;
-                    }
-                }
-            }
-
-            for (const auto& f : cfg.filter()) {
-                std::vector<t_tscalar> args;
-                args.reserve(f.value().size());
-                for (const auto& arg : f.value()) {
-                    t_tscalar a;
-                    a.clear();
-                    switch (arg.scalar_case()) {
-                        case proto::Scalar::kBool: {
-                            a.set(arg.bool_());
-                            args.push_back(a);
-                            break;
-                        }
-                        case proto::Scalar::kFloat: {
-                            a = coerce_to(
-                                schema->get_dtype(f.column()), arg.float_()
-                            );
-
-                            args.push_back(a);
-                            break;
-                        }
-                        case proto::Scalar::kString: {
-                            if (!schema->has_column(f.column())) {
-                                PSP_COMPLAIN_AND_ABORT(
-                                    "Filter column not in schema: " + f.column()
-                                );
-                            }
-
-#ifdef PSP_SSO_SCALAR
-                            if (!t_tscalar::can_store_inplace(arg.string())) {
-#endif
-                                a = coerce_to(
-                                    schema->get_dtype(f.column()),
-                                    vocab.unintern_c(
-                                        vocab.get_interned(arg.string())
-                                    )
-                                );
-#ifdef PSP_SSO_SCALAR
-                            } else {
-
-                                a = coerce_to(
-                                    schema->get_dtype(f.column()),
-                                    arg.string().c_str()
-                                );
-                            }
-#endif
-                            args.push_back(a);
-                            break;
-                        }
-                        case proto::Scalar::kNull:
-                            a.set(t_none());
-                            args.push_back(a);
-                            break;
-                        case proto::Scalar::SCALAR_NOT_SET:
-                            PSP_COMPLAIN_AND_ABORT(
-                                "Filter scalar type not implemented: "
-                                + std::to_string(arg.scalar_case())
-                            )
-                            break;
-                    }
-                }
-
-                filter.emplace_back(f.column(), f.op(), args);
-            }
-
-            const auto& cols = cfg.columns();
-            std::vector<std::string> columns;
-            if (cols.has_columns()) {
-                columns = {
-                    cols.columns().columns().begin(),
-                    cols.columns().columns().end()
-                };
-            } else {
-                columns = table->get_column_names();
-                for (const auto& f : expressions) {
-                    columns.push_back(f->get_expression_alias());
-                }
-                for (const auto& w : windows) {
-                    columns.push_back(w.m_name);
-                }
-            }
-
-            LOG_DEBUG(
-                "Creating view config with \n"
-                << "row_pivots: " << row_pivots << '\n'
-                << "column_pivots: " << column_pivots
-                << '\n'
-                // << "aggregates: " << aggregates << '\n'
-                << "columns: " << columns
-                << '\n'
-                // << "filter: " << filter << '\n'
-                << "sort_str: " << sort_str << '\n'
-                << "expressions: " << expressions << '\n'
-                << "column_only: " << column_only << '\n'
-            );
-
-            std::string filter_op;
-            switch (cfg.filter_op()) {
-                case proto::ViewConfig_FilterReducer::
-                    ViewConfig_FilterReducer_OR:
-                    filter_op = "or";
-                    break;
-                case proto::ViewConfig_FilterReducer::
-                    ViewConfig_FilterReducer_AND:
-                default:
-                    filter_op = "and";
-                    break;
-            }
-
-            LOG_DEBUG("FILTER_OP: " << filter_op);
-
-            bool leaves_only =
-                cfg.has_group_rollup_mode() ? cfg.group_rollup_mode() == 1 : false;
-            bool total_only =
-                cfg.has_group_rollup_mode() ? cfg.group_rollup_mode() == 2 : false;
-            bool split_rollup = cfg.has_split_rollup_mode()
-                && cfg.split_rollup_mode()
-                    == proto::SplitRollupMode::SPLIT_ROLLUP_MODE_ROLLUP;
-
-            auto config = std::make_shared<t_view_config>(
-                vocab,
-                row_pivots,
-                column_pivots,
-                aggregates,
-                columns,
-                filter,
-                sort_str,
-                expressions,
-                filter_op,
-                column_only,
-                leaves_only,
-                total_only,
-                windows,
-                split_rollup
-            );
-            config->init(schema);
-
-            if (cfg.has_group_by_depth()) {
-                config->set_row_pivot_depth(cfg.group_by_depth());
-            }
-
-            std::uint32_t sides;
-
-            if (!group_by.empty() || !split_by.empty()) {
-                if (!split_by.empty()) {
-                    sides = 2;
-                } else {
-                    sides = 1;
-                }
-            } else if (total_only) {
-                sides = 1;
-            } else {
-                sides = 0;
-            }
-
-            bool is_unit_context = table->get_index().empty() && sides == 0
-                && row_pivots.empty() && column_pivots.empty()
-                && aggregates.empty() && columns.empty() && sort_str.empty()
-                && cfg.expressions().empty() && cfg.windows().empty();
+            auto built = build_view_config(table, r.config());
+            const auto& schema = built.schema;
+            const auto& config = built.config;
+            const std::uint32_t sides = built.sides;
+            const bool is_unit_context = built.is_unit_context;
 
             std::shared_ptr<ErasedView> erased_view;
 

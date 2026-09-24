@@ -23,6 +23,7 @@ use yew::prelude::*;
 
 use super::PerspectiveViewer;
 use super::msg::MasterSelection;
+use crate::session::OverlayClause;
 use crate::tasks::*;
 use crate::workspace::PanelId;
 
@@ -107,7 +108,18 @@ impl PerspectiveViewer {
             },
         };
 
-        workspace.set_contribution(&id, filters);
+        let metadata = workspace.panel(&id).map(|p| p.session.metadata());
+        let clauses = filters
+            .into_iter()
+            .map(|filter| OverlayClause {
+                column_type: metadata
+                    .as_ref()
+                    .and_then(|m| m.get_column_table_type(filter.column())),
+                filter,
+            })
+            .collect();
+
+        workspace.set_contribution(&id, clauses);
         apply_global_filters(workspace);
         false
     }

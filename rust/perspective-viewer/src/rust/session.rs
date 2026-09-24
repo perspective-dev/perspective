@@ -13,19 +13,23 @@
 pub(crate) mod column_defaults_update;
 pub(crate) mod drag_drop_update;
 mod metadata;
+mod op_queue;
+mod panel_state;
 mod props;
 pub(crate) mod replace_expression_update;
 mod view_subscription;
 
-use std::cell::{Cell, Ref, RefCell};
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::ops::Deref;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
 use perspective_client::config::*;
 use perspective_client::proto::ViewDimensionsResp;
-use perspective_client::{Client, ClientError, ReconnectCallback, View};
+use perspective_client::{
+    Client, ClientError, DescribeError, Description, ExprValidationResult, ReconnectCallback, View,
+};
 use perspective_js::apierror;
 use perspective_js::utils::*;
 use wasm_bindgen::prelude::*;
@@ -34,6 +38,10 @@ use yew::prelude::*;
 
 use self::metadata::*;
 pub use self::metadata::{MetadataRef, SessionMetadata, SessionMetadataRc};
+use self::op_queue::OpQueue;
+pub use self::op_queue::{EditDelta, OpCtx, OpKind, StepFuture, StepOutcome, Ticket, view_fields};
+use self::panel_state::effective;
+pub use self::panel_state::{Binding, OverlayClause, PanelState, PluginRef};
 pub use self::props::{SessionProps, TableLoadState};
 pub use self::view_subscription::ViewStats;
 use self::view_subscription::*;
@@ -96,10 +104,9 @@ pub struct SessionHandle {
     /// copying the config.
     pub last_dispatched_config: RefCell<Option<std::rc::Rc<crate::config::ViewerConfig>>>,
 
-    /// Open between a `load()` call and its payload's classification as
-    /// `Table`/`Client` ([`LoadWindow`]), held weakly so its [`LoadGuard`] is
-    /// the sole owner.
-    pending_load: RefCell<Weak<LoadWindow>>,
+    /// Every writer of this panel's committed state, run one at a time in
+    /// submit order (see [`op_queue`]).
+    queue: Rc<OpQueue>,
 
     /// Coalesces `view_config_changed`: multiple synchronous commits in one
     /// task emit ONE event on the next microtask — the cadence the deleted
@@ -187,29 +194,264 @@ pub(crate) async fn probe_table(
 /// Mutable state for `Session`.
 #[derive(Default)]
 pub struct SessionData {
-    client: Option<perspective_client::Client>,
-    table: Option<perspective_client::Table>,
-    pending_table: Option<String>,
-    metadata: SessionMetadata,
-    config: ViewConfig,
-    global_filter: Vec<Filter>,
+    /// This panel's committed state: ONE immutable value, replaced whole by
+    /// [`SessionData::swap`].
+    state: Lifecycle,
+
+    /// What [`Session::metadata`] answers while nothing is bound, and what
+    /// [`Session::metadata_mut`] scribbles on (every write is a no-op then).
+    unbound_metadata: Rc<SessionMetadata>,
     view_sub: Option<ViewSubscription>,
     stats: Option<ViewStats>,
-    is_loading: bool,
     is_paused: bool,
 
-    /// Terminal: set by [`Session::mark_disposed`] when the owning panel is
-    /// ejected, never cleared. Distinct from an `Ejected` reset, which a
-    /// suspended or element-ejected session may legitimately rebind after.
-    disposed: Option<Disposal>,
+    /// How the last config-driven run of the committed state went.
+    rendered: Rendered,
+}
 
-    /// Memo for [`Session::validate_snapshot`]: the expression set validated
-    /// by the last successful server round trip; an equal snapshot skips the
-    /// round trip. Written only under the draw lock; cleared on table
-    /// (re)bind and expression reset.
-    last_validated_expressions: Option<Expressions>,
-    error: Option<TableErrorState>,
-    title: Option<String>,
+/// A panel's state and whether it can still be written.
+enum Lifecycle {
+    Live(Rc<PanelState>),
+
+    /// Terminal: the owning panel was ejected ([`Session::dispose`]).
+    Disposed {
+        last: Rc<PanelState>,
+        disposal: Disposal,
+    },
+}
+
+impl Default for Lifecycle {
+    fn default() -> Self {
+        Self::Live(Rc::default())
+    }
+}
+
+impl Deref for Lifecycle {
+    type Target = Rc<PanelState>;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Lifecycle::Live(state) | Lifecycle::Disposed { last: state, .. } => state,
+        }
+    }
+}
+
+impl Lifecycle {
+    fn live_mut(&mut self) -> Option<&mut Rc<PanelState>> {
+        match self {
+            Lifecycle::Live(state) => Some(state),
+            Lifecycle::Disposed { .. } => None,
+        }
+    }
+
+    fn disposal(&self) -> Option<Disposal> {
+        match self {
+            Lifecycle::Live(_) => None,
+            Lifecycle::Disposed { disposal, .. } => Some(*disposal),
+        }
+    }
+}
+
+/// An OWNED read guard over the committed [`ViewConfig`]: a snapshot that
+/// borrows nothing.
+pub struct ViewConfigRef(Rc<ViewConfig>);
+
+impl Deref for ViewConfigRef {
+    type Target = ViewConfig;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// The [`crate::renderer::Renderer`]'s handle on its panel's committed
+/// [`PanelState`] — read the current value, or swap in the next one.
+#[derive(Clone)]
+pub struct PanelCell(Session);
+
+impl PanelCell {
+    /// The COMMITTED state — what a running step reads.
+    pub fn state(&self) -> Rc<PanelState> {
+        self.0.borrow().state.clone()
+    }
+
+    /// The theme as the UI sees it: the committed theme, or the latest pending
+    /// pick.
+    pub fn projected_theme(&self) -> Option<String> {
+        let pending = self
+            .0
+            .0
+            .queue
+            .pending_edits()
+            .into_iter()
+            .filter_map(|delta| match delta {
+                EditDelta::Theme(theme) => Some(theme),
+                _ => None,
+            })
+            .next_back();
+
+        pending.unwrap_or_else(|| self.state().chrome.theme.clone())
+    }
+
+    /// The SELECTED plugin's bucket as the UI and `save()` see it: the
+    /// committed bucket with every pending style / settings edit applied, in
+    /// submit order.
+    pub fn projected_bucket(&self, name: &str) -> crate::renderer::PluginScopedConfig {
+        let mut bucket = self.state().bucket(name);
+        for delta in self.0.0.queue.pending_edits() {
+            match delta {
+                EditDelta::PluginField(update) => {
+                    for key in &update.keys {
+                        match update.value.get(key) {
+                            Some(value) => {
+                                bucket.plugin.insert(key.clone(), value.clone());
+                            },
+                            None => {
+                                bucket.plugin.remove(key);
+                            },
+                        }
+                    }
+                },
+                EditDelta::ColumnField { column, update } => {
+                    let entry = bucket.columns.entry(column.clone()).or_default();
+                    for key in &update.keys {
+                        entry.remove(key);
+                    }
+
+                    for (key, value) in update.value {
+                        if update.keys.contains(&key) {
+                            entry.insert(key, value);
+                        }
+                    }
+
+                    if entry.is_empty() {
+                        bucket.columns.remove(&column);
+                    }
+                },
+                EditDelta::PluginConfig(map) => bucket.plugin.extend(map),
+                EditDelta::View(_) | EditDelta::Theme(_) | EditDelta::Title(_) => {},
+            }
+        }
+
+        bucket
+    }
+
+    /// Submit a theme pick — a UI edit, committed by the drain in its turn.
+    pub fn submit_theme(&self, theme: Option<String>) {
+        let cell = self.clone();
+        let _ticket = self.0.submit(
+            OpKind::Edit {
+                delta: EditDelta::Theme(theme.clone()),
+                fields: None,
+            },
+            move |_ctx| {
+                Box::pin(async move {
+                    cell.swap(cell.state().with_theme(theme));
+                    Ok(StepOutcome::Done)
+                })
+            },
+        );
+    }
+
+    /// Submit an op on this panel's queue (see [`Session::submit`]).
+    pub fn submit(&self, kind: OpKind, step: impl FnOnce(OpCtx) -> StepFuture + 'static) -> Ticket {
+        self.0.submit(kind, step)
+    }
+
+    pub fn swap(&self, next: PanelState) {
+        self.0.borrow_mut().swap(next);
+    }
+}
+
+/// The outcome of the last config-driven run.
+#[derive(Clone, Default)]
+pub enum Rendered {
+    #[default]
+    Never,
+    Ok,
+
+    /// The run of THIS state failed.
+    Failed(Rc<PanelState>, TableErrorState),
+}
+
+impl SessionData {
+    fn error(&self) -> Option<&TableErrorState> {
+        self.state.lost().or(match &self.rendered {
+            Rendered::Failed(_, error) => Some(error),
+            _ => None,
+        })
+    }
+
+    fn clear_errors(&mut self) {
+        if self.state.lost().is_some() {
+            self.swap(self.state.recovered());
+        }
+
+        if matches!(self.rendered, Rendered::Failed(..)) {
+            self.rendered = Rendered::Never;
+        }
+    }
+
+    fn swap(&mut self, next: PanelState) {
+        if let Some(state) = self.state.live_mut() {
+            *state = Rc::new(next);
+        }
+    }
+
+    fn table(&self) -> Option<&perspective_client::Table> {
+        self.state.bound().map(|bound| &bound.table)
+    }
+
+    fn pending_table(&self) -> Option<&str> {
+        self.state.awaiting()
+    }
+
+    fn metadata(&self) -> &Rc<SessionMetadata> {
+        match self.state.bound() {
+            Some(bound) => &bound.metadata,
+            None => &self.unbound_metadata,
+        }
+    }
+
+    /// Copy-on-write: a snapshot held elsewhere never observes the mutation.
+    fn metadata_mut(&mut self) -> &mut SessionMetadata {
+        let Some(state) = self.state.live_mut() else {
+            return Rc::make_mut(&mut self.unbound_metadata);
+        };
+
+        let binding = match &mut Rc::make_mut(state).binding {
+            Binding::Lost { prior, .. } => Rc::make_mut(prior),
+            binding => binding,
+        };
+
+        match binding {
+            Binding::Bound(bound) => Rc::make_mut(&mut Rc::make_mut(bound).metadata),
+            _ => Rc::make_mut(&mut self.unbound_metadata),
+        }
+    }
+
+    fn config(&self) -> &ViewConfig {
+        self.state.config()
+    }
+
+    fn set_config(&mut self, config: ViewConfig) {
+        self.swap(self.state.with_config(Rc::new(config)));
+    }
+
+    /// Memo for [`Session::validate_snapshot`]: the [`Description`] the server
+    /// gave for the last validated effective config; an equal snapshot skips
+    /// the round trip.
+    fn description(&self) -> Option<&(Rc<ViewConfig>, Rc<Description>)> {
+        self.state.bound()?.description.as_ref()
+    }
+
+    fn set_description(&mut self, description: Option<(Rc<ViewConfig>, Rc<Description>)>) {
+        self.swap(self.state.with_description(description));
+    }
+
+    fn unbind(&mut self) {
+        self.swap(self.state.unbound());
+    }
 }
 
 #[derive(Clone)]
@@ -260,59 +502,19 @@ pub enum Disposal {
     Resolve,
 }
 
+impl From<Disposal> for ApiResult<()> {
+    fn from(disposal: Disposal) -> Self {
+        match disposal {
+            Disposal::Reject => Err(ApiError::new("Panel disposed")),
+            Disposal::Resolve => Ok(()),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub enum TableIntermediateState {
     #[default]
     Ejected,
-    Reloaded,
-}
-
-/// The raw config deltas committed while a `load()` classifies its payload, in
-/// commit order, awaiting replay over a reset base if it classifies as a
-/// `Table` — identified by [`Rc`] identity rather than a generation counter.
-#[derive(Default)]
-pub struct LoadWindow {
-    journal: RefCell<Vec<ViewConfigUpdate>>,
-}
-
-/// A `load()` call site's handle on THE window it opened, closing that window
-/// on `Drop` so no exit can strand `is_loading`.
-pub struct LoadGuard {
-    session: Session,
-    window: Rc<LoadWindow>,
-}
-
-impl LoadGuard {
-    /// Close this window and take its journal for replay, or `None` when a
-    /// later `load()` superseded it — "abandon this classification, hold the
-    /// frame".
-    pub fn claim(&self) -> Option<Vec<ViewConfigUpdate>> {
-        self.close_current().then(|| self.window.journal.take())
-    }
-
-    /// Close this window, discarding its journal; idempotent, and a no-op once
-    /// superseded.
-    pub fn close(&self) {
-        self.close_current();
-    }
-
-    fn close_current(&self) -> bool {
-        let mut slot = self.session.pending_load.borrow_mut();
-        if !slot.upgrade().is_some_and(|x| Rc::ptr_eq(&x, &self.window)) {
-            return false;
-        }
-
-        *slot = Weak::new();
-        drop(slot);
-        self.session.borrow_mut().is_loading = false;
-        true
-    }
-}
-
-impl Drop for LoadGuard {
-    fn drop(&mut self) {
-        self.close();
-    }
 }
 
 /// Options for [`Session::reset`]
@@ -361,21 +563,62 @@ impl Session {
         Self(Rc::default())
     }
 
-    pub(crate) fn metadata(&self) -> MetadataRef<'_> {
-        std::cell::Ref::map(self.borrow(), |x| &x.metadata)
+    pub(crate) fn metadata(&self) -> MetadataRef {
+        MetadataRef(self.borrow().metadata().clone())
+    }
+
+    /// A handle on this panel's committed [`PanelState`] for the panel's
+    /// [`crate::renderer::Renderer`], which owns none of it.
+    pub fn cell(&self) -> PanelCell {
+        PanelCell(self.clone())
     }
 
     pub(crate) fn metadata_mut(&self) -> MetadataMutRef<'_> {
-        std::cell::RefMut::map(self.borrow_mut(), |x| &mut x.metadata)
+        std::cell::RefMut::map(self.borrow_mut(), |x| x.metadata_mut())
     }
 
+    /// The title as the UI and `save()` see it: the committed title, or the
+    /// latest pending rename.
     pub(crate) fn get_title(&self) -> Option<String> {
-        self.borrow().title.clone()
+        let pending = self
+            .0
+            .queue
+            .pending_edits()
+            .into_iter()
+            .filter_map(|delta| match delta {
+                EditDelta::Title(title) => Some(title),
+                _ => None,
+            })
+            .next_back();
+
+        pending.unwrap_or_else(|| self.borrow().state.chrome.title.clone())
     }
 
+    /// Rename this panel — a UI edit, committed by the drain in its turn.
     pub fn set_title(&self, title: Option<String>) {
+        let title = title.filter(|x| !x.is_empty());
+        let session = self.clone();
+        let _ticket = self.submit(
+            OpKind::Edit {
+                delta: EditDelta::Title(title.clone()),
+                fields: None,
+            },
+            move |_ctx| {
+                Box::pin(async move {
+                    session.commit_title(title);
+                    Ok(StepOutcome::Done)
+                })
+            },
+        );
+
+        self.title_changed.emit(self.get_title());
+    }
+
+    /// Write the title NOW.
+    pub(crate) fn commit_title(&self, title: Option<String>) {
         let new_title = title.filter(|x| !x.is_empty());
-        self.borrow_mut().title.clone_from(&new_title);
+        let next = self.borrow().state.with_title(new_title.clone());
+        self.borrow_mut().swap(next);
         self.title_changed.emit(new_title);
     }
 
@@ -385,37 +628,26 @@ impl Session {
     /// `Session`.
     pub fn reset(&self, options: ResetOptions) -> impl Future<Output = ApiResult<()>> + use<> {
         let view = self.0.borrow_mut().view_sub.take();
-        let had_table = self.borrow().table.is_some();
+        let had_table = self.borrow().table().is_some();
         let err = self.get_error();
-        self.borrow_mut().error = None;
+        self.borrow_mut().clear_errors();
         if options.stats {
             self.update_stats(ViewStats::default());
         }
 
         if options.config {
-            self.borrow_mut().config.reset(options.expressions);
+            let mut config = self.borrow().config().clone();
+            config.reset(options.expressions);
+            self.borrow_mut().set_config(config);
         }
 
         if options.expressions {
-            self.borrow_mut().last_validated_expressions = None;
+            self.borrow_mut().set_description(None);
         }
 
         match options.table {
-            Some(TableIntermediateState::Ejected) => {
-                self.borrow_mut().is_loading = false;
-                self.borrow_mut().table = None;
-                self.borrow_mut().pending_table = None;
-                self.borrow_mut().metadata = SessionMetadata::default();
-            },
-            Some(TableIntermediateState::Reloaded) => {
-                self.borrow_mut().is_loading = true;
-                self.borrow_mut().table = None;
-                self.borrow_mut().pending_table = None;
-                self.borrow_mut().metadata = SessionMetadata::default();
-            },
-            _ => {
-                self.borrow_mut().is_loading = false;
-            },
+            Some(TableIntermediateState::Ejected) => self.borrow_mut().unbind(),
+            None => {},
         };
 
         // A config reset that KEEPS its `Table` is itself a commit, and every
@@ -440,52 +672,82 @@ impl Session {
         }
     }
 
-    /// Open a load window (see [`LoadWindow`]) at the `load()` call site,
-    /// returning the [`LoadGuard`] that owns it. Sets `is_loading` so a FRESH
-    /// panel shows the spinner while a slow payload resolves (a RELOAD keeps
-    /// its bound table, hence [`TableLoadState::Loaded`], throughout — no
-    /// spinner flicker).
-    pub fn begin_pending_load(&self) -> Rc<LoadGuard> {
-        let window = Rc::new(LoadWindow::default());
-        *self.0.pending_load.borrow_mut() = Rc::downgrade(&window);
-        self.borrow_mut().is_loading = true;
-        Rc::new(LoadGuard {
-            session: self.clone(),
-            window,
-        })
+    /// Submit a writer of this panel's state.
+    pub fn submit(&self, kind: OpKind, step: impl FnOnce(OpCtx) -> StepFuture + 'static) -> Ticket {
+        if let Some(disposal) = self.disposal() {
+            return Ticket::settled(disposal.into());
+        }
+
+        let is_edit = matches!(kind, OpKind::Edit {
+            delta: EditDelta::View(_),
+            ..
+        });
+
+        let guard = self.begin_config_run();
+        let (ticket, start) = self.0.queue.push(kind, guard, step);
+        if is_edit {
+            self.notify_view_config_changed();
+        }
+
+        if start {
+            let queue = self.0.queue.clone();
+            let session = self.clone();
+            ApiFuture::spawn_named("op-queue-drain", async move {
+                queue
+                    .drain(move |_exit| session.notify_view_config_changed())
+                    .await;
+
+                Ok(())
+            });
+        }
+
+        ticket
     }
 
-    /// Whether a `load()` payload is still awaiting classification. A `true`
-    /// value makes every config-driven bind DEFER
-    /// ([`crate::tasks::bind_snapshot`]) — the incoming config must never draw
-    /// against the outgoing table.
+    /// Resolves once every op submitted to this panel has settled — its write
+    /// made (or rejected) AND its render landed.
+    pub async fn settle_ops(&self) {
+        self.0.queue.idle().await
+    }
+
+    /// Whether a `load()` is queued or running.
     pub fn has_pending_load(&self) -> bool {
-        self.0.pending_load.borrow().strong_count() > 0
+        self.0.queue.has_load()
     }
 
-    /// Mark this session disposed (its panel was ejected): every later
-    /// table bind and locked run refuses, so nothing can rebind or draw a
-    /// panel that no longer exists.
-    pub(crate) fn mark_disposed(&self, disposal: Disposal) {
-        self.borrow_mut().disposed = Some(disposal);
+    /// The ONE `Live → Disposed` transition (this session's panel was ejected):
+    /// the state is frozen as its last value, everything queued settles per
+    /// `disposal`, and every later `submit` settles at once.
+    pub(crate) fn dispose(&self, disposal: Disposal) {
+        {
+            let mut data = self.borrow_mut();
+            if let Lifecycle::Live(last) = &data.state {
+                data.state = Lifecycle::Disposed {
+                    last: last.clone(),
+                    disposal,
+                };
+            }
+        }
+
+        self.0.queue.reject_all(disposal.into());
     }
 
     pub(crate) fn is_disposed(&self) -> bool {
-        self.borrow().disposed.is_some()
+        self.disposal().is_some()
     }
 
     /// This session's disposal, if its panel was ejected.
     pub(crate) fn disposal(&self) -> Option<Disposal> {
-        self.borrow().disposed
+        self.borrow().state.disposal()
     }
 
     pub(crate) fn has_table(&self) -> Option<TableLoadState> {
         let data = self.borrow();
-        if data.table.is_some() {
+        if data.table().is_some() {
             Some(TableLoadState::Loaded)
-        } else if data.is_loading {
+        } else if self.0.queue.has_load() {
             Some(TableLoadState::Loading)
-        } else if data.pending_table.is_some() {
+        } else if data.pending_table().is_some() {
             Some(TableLoadState::Pending)
         } else {
             None
@@ -493,13 +755,15 @@ impl Session {
     }
 
     pub fn get_table(&self) -> Option<perspective_client::Table> {
-        self.borrow().table.clone()
+        self.borrow().table().cloned()
     }
 
+    /// Look this panel's tables up on `client` — unbinding it from a table of
+    /// any other client's.
     pub fn set_client(&self, client: Client) -> bool {
-        if Some(&client) != self.borrow().client.as_ref() {
-            self.borrow_mut().client = Some(client);
-            self.borrow_mut().table = None;
+        if Some(&client) != self.get_client().as_ref() {
+            let next = self.borrow().state.unbound_on(Some(client));
+            self.borrow_mut().swap(next);
             true
         } else {
             false
@@ -507,13 +771,13 @@ impl Session {
     }
 
     pub fn get_client(&self) -> Option<Client> {
-        self.borrow().client.clone()
+        self.borrow().state.client()
     }
 
     /// The configured table name awaiting a host, if any (see
     /// [`SessionData::pending_table`]).
     pub fn pending_table(&self) -> Option<String> {
-        self.borrow().pending_table.clone()
+        self.borrow().pending_table().map(str::to_owned)
     }
 
     /// Suspend a BOUND table to PENDING: delete the `View`, drop the `Table`
@@ -523,64 +787,35 @@ impl Session {
     /// as it was when the name is hosted again. `None` when no table is
     /// bound.
     pub fn suspend_table(&self) -> Option<impl Future<Output = ApiResult<()>> + use<>> {
-        let name = self.borrow().table.as_ref()?.get_name().to_owned();
+        let name = self.borrow().table()?.get_name().to_owned();
+        let client = self.get_client()?;
         let fut = self.reset(ResetOptions {
             table: Some(TableIntermediateState::Ejected),
             stats: true,
             ..ResetOptions::default()
         });
 
-        self.borrow_mut().pending_table = Some(name);
+        let next = self.borrow().state.awaiting_table(client, name);
+        self.borrow_mut().swap(next);
         Some(fut)
     }
 
-    /// Reset this `Session`'s state with a new `Table`.  Implicitly clears the
-    /// `ViewSubscription`, which will need to be re-initialized later via
-    /// `create_view()`.
-    ///
-    /// # Arguments
-    ///
-    /// - `table_name` The name of the `Table` to load.
-    ///
-    /// # Returns
-    ///
-    /// `table_name` is unique per `Client`, so if this value has not changed,
-    /// `Session::set_table` does nothing and returns `Ok(false)`.
-    ///
-    /// A name no loaded client hosts pends ([`MissingTable::Pend`]) and
-    /// returns `Ok(false)` until the table lifecycle re-runs the bind.
-    pub async fn set_table(&self, table_name: String) -> ApiResult<bool> {
-        if Some(table_name.as_str()) == self.0.borrow().table.as_ref().map(|x| x.get_name()) {
-            self.0.borrow_mut().pending_table = None;
-            return Ok(false);
-        }
-
-        let client = self.0.borrow().client.clone().into_apierror()?;
-        match probe_table(&client, &table_name, MissingTable::Pend).await? {
-            Some(table) => match self.bind_table(table).await {
-                Ok(()) => Ok(true),
-                Err(err) => self.set_error(false, err).await.map(|_| false),
-            },
-            None => {
-                self.pend_table(table_name).await?;
-                Ok(false)
-            },
-        }
-    }
-
-    /// Bind an opened `Table`, replacing any previous binding and announcing
-    /// `table_loaded`.
-    pub(crate) async fn bind_table(&self, table: perspective_client::Table) -> ApiResult<()> {
-        if self.is_disposed() {
-            return Err(ApiError::new("Panel disposed"));
-        }
-
-        let metadata = SessionMetadata::from_table(&table).await?;
-        let client = table.get_client();
+    /// Record a connection error on `client` as this panel's lost binding — for
+    /// as long as `client` is the one the panel is bound through.
+    async fn watch_client(&self, client: &Client) -> ApiResult<()> {
         let on_error = self.on_table_errored.borrow().clone();
         let session = self.clone();
+        let watched = client.clone();
         let poll_loop = LocalPollLoop::new(move |(message, reconnect): (ApiError, _)| {
-            session.borrow_mut().error = Some(TableErrorState(message, reconnect));
+            if session.get_client().as_ref() != Some(&watched) {
+                return Ok(JsValue::UNDEFINED);
+            }
+
+            let next = session
+                .borrow()
+                .state
+                .with_lost(TableErrorState(message, reconnect));
+            session.borrow_mut().swap(next);
             if let Some(cb) = &on_error {
                 cb.emit(());
             }
@@ -601,31 +836,7 @@ impl Session {
             }))
             .await?;
 
-        let sub = self.borrow_mut().view_sub.take();
-        self.borrow_mut().metadata = metadata;
-        self.borrow_mut().table = Some(table);
-        self.borrow_mut().pending_table = None;
-        self.borrow_mut().is_loading = false;
-        self.borrow_mut().last_validated_expressions = None;
-        sub.delete().await?;
-        self.table_loaded.emit(());
         Ok(())
-    }
-
-    /// Record `name` as pending, dropping any bound `Table` so nothing binds
-    /// against the outgoing table while the name waits for a host.
-    pub(crate) async fn pend_table(&self, name: String) -> ApiResult<()> {
-        if self.is_disposed() {
-            return Err(ApiError::new("Panel disposed"));
-        }
-
-        let sub = self.borrow_mut().view_sub.take();
-        self.borrow_mut().table = None;
-        self.borrow_mut().metadata = SessionMetadata::default();
-        self.borrow_mut().pending_table = Some(name);
-        self.borrow_mut().is_loading = false;
-        self.borrow_mut().last_validated_expressions = None;
-        sub.delete().await
     }
 
     pub async fn set_error(&self, reset_table: bool, err: ApiError) -> ApiResult<()> {
@@ -639,7 +850,7 @@ impl Session {
             Ok(JsValue::UNDEFINED)
         });
 
-        self.borrow_mut().error = Some(TableErrorState(
+        let error = TableErrorState(
             err.clone(),
             Some(ReconnectCallback::new(move || {
                 clone!(poll_loop);
@@ -648,7 +859,10 @@ impl Session {
                     Ok(())
                 })
             })),
-        ));
+        );
+
+        let next = self.borrow().state.with_lost(error);
+        self.borrow_mut().swap(next);
 
         if let Some(cb) = self.on_table_errored.borrow().as_ref() {
             cb.emit(());
@@ -656,7 +870,7 @@ impl Session {
 
         let sub = self.borrow_mut().view_sub.take();
         if reset_table {
-            self.borrow_mut().table = None;
+            self.borrow_mut().unbind();
         }
 
         sub.delete().await?;
@@ -686,24 +900,61 @@ impl Session {
     }
 
     pub fn js_get_table(&self) -> Option<JsValue> {
-        Some(perspective_js::Table::from(self.borrow().table.clone()?).into())
+        Some(perspective_js::Table::from(self.borrow().table().cloned()?).into())
     }
 
+    /// Whether the binding is lost OR the last run failed.
     pub(crate) fn is_errored(&self) -> bool {
-        self.borrow().error.is_some()
+        self.borrow().error().is_some()
     }
 
     pub(crate) fn get_error(&self) -> Option<ApiError> {
-        self.borrow().error.as_ref().map(|x| x.0.clone())
+        self.borrow().error().map(|x| x.0.clone())
     }
 
+    /// The error a config-driven run must not proceed past: a lost binding, or
+    /// a failed run of EXACTLY the state now committed (re-running it would
+    /// only fail again).
+    pub(crate) fn blocking_error(&self) -> Option<ApiError> {
+        let data = self.borrow();
+        if let Some(error) = data.state.lost() {
+            return Some(error.0.clone());
+        }
+
+        match &data.rendered {
+            Rendered::Failed(state, error) if Rc::ptr_eq(state, &data.state) => {
+                Some(error.0.clone())
+            },
+            _ => None,
+        }
+    }
+
+    /// Record that a config-driven run of the committed state is starting (any
+    /// earlier failure is stale) or has landed.
+    pub(crate) fn set_rendered(&self, ok: bool) {
+        self.borrow_mut().rendered = if ok { Rendered::Ok } else { Rendered::Never };
+    }
+
+    /// Recover from an error state (the overlay's button) — a writer, so an op
+    /// on the queue like any other.
     pub async fn reconnect(&self) -> ApiResult<()> {
-        let err = self.borrow().error.clone();
+        let session = self.clone();
+        self.submit(OpKind::Restore { fields: None }, move |_ctx| {
+            Box::pin(async move {
+                session.reconnect_step().await?;
+                Ok(StepOutcome::Done)
+            })
+        })
+        .settle()
+        .await
+    }
+
+    async fn reconnect_step(&self) -> ApiResult<()> {
+        let err = self.borrow().error().cloned();
         if let Some(TableErrorState(_, Some(reconnect))) = err {
             reconnect().await?;
-            self.borrow_mut().is_loading = false;
-            self.borrow_mut().error = None;
-            self.borrow_mut().last_validated_expressions = None;
+            self.borrow_mut().clear_errors();
+            self.borrow_mut().set_description(None);
             self.borrow_mut().view_sub = None;
             self.table_loaded.emit(());
         }
@@ -739,36 +990,93 @@ impl Session {
             .is_some_and(|s| s.num_table_cells.is_some())
     }
 
-    pub fn get_view_config(&'_ self) -> Ref<'_, ViewConfig> {
-        Ref::map(self.borrow(), |x| &x.config)
+    /// The view config as the UI and `save()` see it: the committed config with
+    /// every pending UI edit applied, in submit order.
+    pub fn get_view_config(&self) -> ViewConfigRef {
+        ViewConfigRef(self.projected())
     }
 
-    /// The effective [`ViewConfig`] the `View` is built from: the stored config
-    /// with the transient element-level [`SessionData::global_filter`] clauses
-    /// appended. Used at view-creation only; the stored `config` (hence
-    /// `savePanel`/the settings UI) is unaffected.
-    fn effective_view_config(&self) -> ViewConfig {
+    /// The COMMITTED view config — what a running op must read, since the edits
+    /// still queued behind it have not happened yet.
+    pub fn committed_view_config(&self) -> ViewConfigRef {
+        ViewConfigRef(self.borrow().state.config().clone())
+    }
+
+    fn projected(&self) -> Rc<ViewConfig> {
+        let committed = self.borrow().state.config().clone();
+        let edits = self
+            .0
+            .queue
+            .pending_edits()
+            .into_iter()
+            .filter_map(|delta| match delta {
+                EditDelta::View(delta) => Some(*delta),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        if edits.is_empty() {
+            return committed;
+        }
+
+        let mut config = (*committed).clone();
+        for delta in edits {
+            let mut candidate = config.clone();
+            if candidate.apply_update(delta) && self.validate_names(&candidate).is_ok() {
+                self.normalize_view_config(&mut candidate);
+                config = candidate;
+            }
+        }
+
+        Rc::new(config)
+    }
+
+    /// Whether `delta` is an edit the UI may submit: SYNCHRONOUS validation
+    /// against the projection, so an invalid edit is refused at the control
+    /// that made it.
+    pub fn check_edit(&self, delta: &ViewConfigUpdate) -> ApiResult<()> {
+        if let Some(x) = self.borrow().state.lost() {
+            return Err(ApiError::new(x.0.clone()));
+        }
+
+        let mut candidate = (*self.projected()).clone();
+        if candidate.apply_update(delta.clone()) {
+            self.validate_names(&candidate)?;
+        }
+
+        Ok(())
+    }
+
+    /// The effective [`ViewConfig`] the `View` is built from — the one the
+    /// committed description describes.
+    fn effective_view_config(&self) -> Rc<ViewConfig> {
         let data = self.borrow();
-        if data.global_filter.is_empty() {
-            return data.config.clone();
+        if let Some((effective, _)) = data.description() {
+            return effective.clone();
         }
 
-        let mut config = data.config.clone();
-        config.filter.extend(data.global_filter.iter().cloned());
-        config
+        let metadata = data.metadata().clone();
+        let (config, _) = effective(data.config(), &data.state.overlay, &|name| {
+            metadata.get_column_table_type(name)
+        });
+
+        Rc::new(config)
     }
 
-    /// Replace the transient element-level global filters and re-render the
-    /// view (no-op if unchanged). These are applied on top of the panel's
-    /// own config at view-creation but never persisted into it.
-    pub fn set_global_filter(&self, filter: Vec<Filter>) -> bool {
-        if self.borrow().global_filter != filter {
-            self.borrow_mut().global_filter = filter;
-            self.notify_view_config_changed();
-            true
-        } else {
-            false
-        }
+    /// The overlay clauses this panel's table cannot honor, by index — a column
+    /// it lacks, or has with another type.
+    pub fn skipped_overlay(&self) -> Vec<usize> {
+        let data = self.borrow();
+        let metadata = data.metadata().clone();
+        effective(data.config(), &data.state.overlay, &|name| {
+            metadata.get_column_table_type(name)
+        })
+        .1
+    }
+
+    /// The element's global filter as last broadcast to this panel.
+    pub(crate) fn committed_overlay(&self) -> Rc<Vec<OverlayClause>> {
+        self.borrow().state.overlay.clone()
     }
 
     /// Snapshot of the [`ViewConfig`] the currently-bound `View` was
@@ -777,9 +1085,8 @@ impl Session {
     ///
     /// Prefer this over [`Self::get_view_config`] when you need a
     /// value consistent with what the active plugin is rendering.
-    /// `get_view_config` returns the live config, which is mutated
-    /// synchronously by [`Self::commit_view_config`] ahead of the next
-    /// queued run and so may temporarily disagree with the bound `View`.
+    /// `get_view_config` returns the PROJECTED config — committed state plus
+    /// pending edits — which runs ahead of the bound `View`.
     pub fn get_rendered_view_config(&self) -> Option<Rc<ViewConfig>> {
         self.borrow().view_sub.as_ref().map(|s| s.get_view_config())
     }
@@ -790,7 +1097,7 @@ impl Session {
         config_static: &PluginStaticConfig,
     ) {
         use self::column_defaults_update::*;
-        let config = self.get_view_config();
+        let config = self.committed_view_config();
         config_update.set_update_column_defaults(
             &self.metadata(),
             &config,
@@ -812,72 +1119,18 @@ impl Session {
         use self::column_defaults_update::*;
         config_update.set_update_rollup_defaults(
             &self.metadata(),
-            &self.get_view_config(),
+            &self.committed_view_config(),
             config_static,
         )
     }
 
-    /// Apply a `ViewConfigUpdate` to the live config — the ONLY view-config
-    /// mutator (invariant I1: synchronous and total; no `await` separates any
-    /// read of the config from this write, so a lost update is
-    /// unrepresentable).
-    ///
-    /// Validation is SYNCHRONOUS and happens before anything is applied: an
-    /// update naming an unknown column is rejected with `Err` and the config
-    /// is untouched (I4 — invalid state is never entered, so no rollback
-    /// path exists). Server-side expression compilation is deliberately NOT
-    /// checked here; it is a property of a pipeline run
-    /// ([`Self::validate_snapshot`]) and fails that run, never the commit.
-    pub fn commit_view_config(&self, config_update: ViewConfigUpdate) -> ApiResult<()> {
-        if let Some(x) = self.borrow().error.as_ref() {
-            tracing::warn!("Errored state");
-
-            // Load bearing return
-            return Err(ApiError::new(x.0.clone()));
-        }
-
-        // A `load()` is classifying its payload (see
-        // [`SessionHandle::pending_load`]): record the RAW delta so a `Table`
-        // classification can replay it over the reset base, validated against
-        // the INCOMING table's schema. The live apply below is a best-effort
-        // preview (kept for `save()` coherence, I1) that SKIPS name validation
-        // — the delta may legitimately name the incoming table's columns,
-        // absent from the outgoing one — mirroring the "no table bound yet"
-        // leniency already in `validate_names`. Authoritative validation is
-        // deferred to the replay.
-        let window = self.0.pending_load.borrow().upgrade();
-        let mut candidate = self.borrow().config.clone();
-        let journal_entry = window.is_some().then(|| config_update.clone());
-        if !candidate.apply_update(config_update) {
-            return Ok(());
-        }
-
-        if let Some(window) = &window
-            && let Some(entry) = journal_entry
-        {
-            window.journal.borrow_mut().push(entry);
-        }
-
-        if window.is_none() {
-            self.validate_names(&candidate)?;
-        }
-
+    /// Re-normalize the config against the bound table's metadata — the
+    /// default-view materialization after a config reset that keeps its table.
+    fn commit_table_defaults(&self) {
+        let mut candidate = self.borrow().config().clone();
         self.normalize_view_config(&mut candidate);
-        self.borrow_mut().config = candidate;
-        self.notify_view_config_changed();
-        Ok(())
-    }
-
-    /// Table-bind commit: normalize the (possibly empty) config against the
-    /// newly-bound table's metadata — the default-view materialization that
-    /// previously happened inside the async validate write-back. SYNC;
-    /// called immediately after `set_table().await` inside the binding run,
-    /// so it is ordered like any other commit.
-    pub fn commit_table_defaults(&self) {
-        let mut candidate = self.borrow().config.clone();
-        self.normalize_view_config(&mut candidate);
-        if candidate != self.borrow().config {
-            self.borrow_mut().config = candidate;
+        if candidate != *self.borrow().config() {
+            self.borrow_mut().set_config(candidate);
             self.notify_view_config_changed();
         }
     }
@@ -889,7 +1142,13 @@ impl Session {
     /// when no table is bound yet: the config rides along until `load()`
     /// binds one, and the engine surfaces any residual error on that run.
     fn validate_names(&self, config: &ViewConfig) -> ApiResult<()> {
-        let table_columns = self.all_columns();
+        Self::validate_names_with(&self.metadata(), config)
+    }
+
+    /// [`Self::validate_names`] against an explicit table's metadata — the
+    /// INCOMING table's, for a restore that binds one.
+    fn validate_names_with(metadata: &SessionMetadata, config: &ViewConfig) -> ApiResult<()> {
+        let table_columns = Self::columns_of(metadata);
         if table_columns.is_empty() {
             return Ok(());
         }
@@ -932,7 +1191,11 @@ impl Session {
     /// write-back): fill empty `columns` from the table, prune `aggregates`
     /// to referenced columns.
     fn normalize_view_config(&self, config: &mut ViewConfig) {
-        let table_columns = self.all_columns();
+        Self::normalize_with(&self.metadata(), config)
+    }
+
+    fn normalize_with(metadata: &SessionMetadata, config: &mut ViewConfig) {
+        let table_columns = Self::columns_of(metadata);
         if table_columns.is_empty() {
             return;
         }
@@ -1038,53 +1301,335 @@ impl Session {
     /// that preceded run *N*'s completion (invariant I3).
     pub fn snapshot(&self, _guard: &RenderGuard) -> ConfigSnapshot {
         ConfigSnapshot {
-            config: Rc::new(self.borrow().config.clone()),
-            effective: Rc::new(self.effective_view_config()),
+            config: self.borrow().state.config().clone(),
+            effective: self.effective_view_config(),
         }
     }
 
-    /// Validate a snapshot's expressions against the server (the only
-    /// inherently-async validation), updating the metadata expression
-    /// schema. Reads nothing from — and writes nothing to — the live
-    /// config; a failure fails this RUN, never the committed config (I4).
-    ///
-    /// Memoized: when the snapshot's expressions equal the last successfully
-    /// validated set, the round trip is skipped entirely — safe because the
-    /// memo key is an immutable snapshot field and the recorded set is
-    /// written only under the draw lock.
+    /// Validate a snapshot against the server with `Table::describe`, failing
+    /// this run and never the committed config.
     pub async fn validate_snapshot(
         &self,
         _guard: &RenderGuard,
         snap: ConfigSnapshot,
     ) -> ApiResult<ValidatedSnapshot> {
-        let memo_hit =
-            self.borrow().last_validated_expressions.as_ref() == Some(&snap.effective.expressions);
-        if !memo_hit {
-            let supports_expressions = self
-                .metadata()
-                .get_features()
-                .map(|x| x.expressions)
-                .unwrap_or_default();
-
-            if supports_expressions {
-                let table = self
-                    .borrow()
-                    .table
-                    .as_ref()
-                    .ok_or_else(|| apierror!(NoTableError))?
-                    .clone();
-
-                let valid_recs = table
-                    .validate_expressions(snap.effective.expressions.clone())
-                    .await?;
-
-                self.metadata_mut().update_expressions(&valid_recs)?;
-            }
-
-            self.borrow_mut().last_validated_expressions = Some(snap.effective.expressions.clone());
+        let (description, fresh) = self.describe_effective(&snap.effective).await?;
+        if fresh {
+            tracing::warn!("Rendering a commit that was not described");
+            Self::record_description(&mut self.metadata_mut(), &snap.effective, &description)?;
+            self.borrow_mut()
+                .set_description(Some((snap.effective.clone(), description.clone())));
         }
 
-        Ok(ValidatedSnapshot(snap))
+        Ok(ValidatedSnapshot { snap })
+    }
+
+    /// The server's [`Description`] of `effective`, and whether it took a round
+    /// trip (`false` when the memo already held it).
+    async fn describe_effective(
+        &self,
+        effective: &Rc<ViewConfig>,
+    ) -> ApiResult<(Rc<Description>, bool)> {
+        let memo = self
+            .borrow()
+            .description()
+            .cloned()
+            .filter(|(key, _)| **key == **effective)
+            .map(|(_, description)| description);
+
+        if let Some(description) = memo {
+            return Ok((description, false));
+        }
+
+        let table = self
+            .borrow()
+            .table()
+            .cloned()
+            .ok_or_else(|| apierror!(NoTableError))?;
+
+        Self::describe_with(&table, &self.metadata(), effective)
+            .await
+            .map(|description| (description, true))
+    }
+
+    /// `table`'s [`Description`] of `effective`, with validation failures as
+    /// the errors a `restore()` rejects with.
+    async fn describe_with(
+        table: &perspective_client::Table,
+        metadata: &SessionMetadata,
+        effective: &Rc<ViewConfig>,
+    ) -> ApiResult<Rc<Description>> {
+        let engine_config = Self::with_default_aggregates_of(metadata, effective);
+        match table.describe(engine_config.into()).await? {
+            Ok(description) => Ok(Rc::new(description)),
+            Err(DescribeError::Expressions {
+                expression_schema,
+                errors,
+            }) => Err(apierror!(InvalidViewerConfigExpressionsError(Rc::new(
+                ExprValidationResult {
+                    expression_schema,
+                    errors,
+                    expression_alias: effective.expressions.0.clone(),
+                }
+            )))),
+            Err(DescribeError::Config(msg)) => Err(ApiError::new(msg)),
+        }
+    }
+
+    /// The PREPARE half of a transactional restore's view of the panel: the
+    /// binding `plan` resolved, and the config it leaves — the committed one (a
+    /// default one, for a plan that resets) with `update` applied —
+    /// name-checked, normalized and DESCRIBED by the table it will be bound to.
+    pub(crate) async fn prepare_view(
+        &self,
+        plan: BindPlan,
+        mut update: ViewConfigUpdate,
+        defaults: ViewDefaults<'_>,
+        overlay: Option<Rc<Vec<OverlayClause>>>,
+    ) -> ApiResult<PreparedView> {
+        if self.is_disposed() {
+            return Err(ApiError::new("Panel disposed"));
+        }
+
+        if matches!(plan, BindPlan::Keep)
+            && let Some(error) = self.borrow().state.lost()
+        {
+            return Err(error.0.clone());
+        }
+
+        let committed = self.borrow().state.config().clone();
+        let base = match &plan {
+            BindPlan::Bind { reset: true, .. } | BindPlan::Pend { reset: true, .. } => {
+                Rc::new(ViewConfig::default())
+            },
+            _ => committed.clone(),
+        };
+
+        let (binding, checked) = match plan {
+            BindPlan::Keep => {
+                let bound = self.borrow().state.bound().cloned();
+                (
+                    PreparedBinding::Keep,
+                    bound.map(|bound| (bound.table.clone(), bound.metadata.clone())),
+                )
+            },
+            BindPlan::Bind { client, table, .. } => {
+                let metadata = Rc::new(SessionMetadata::from_table(&table).await?);
+                let binding = PreparedBinding::Bind {
+                    client,
+                    table: table.clone(),
+                    metadata: metadata.clone(),
+                };
+
+                (binding, Some((*table, metadata)))
+            },
+            BindPlan::Pend { client, name, .. } => (PreparedBinding::Pend { client, name }, None),
+        };
+
+        {
+            use self::column_defaults_update::*;
+            let metadata = match &checked {
+                Some((_, metadata)) => metadata.clone(),
+                None => self.borrow().metadata().clone(),
+            };
+
+            match defaults {
+                ViewDefaults::Swap(plugin) => {
+                    update.set_update_column_defaults(&metadata, &base, &base.columns, plugin)
+                },
+                ViewDefaults::Rollup(plugin) => {
+                    update.set_update_rollup_defaults(&metadata, &base, plugin)
+                },
+                ViewDefaults::AsGiven => {},
+            }
+        }
+
+        let mut candidate = (*base).clone();
+        candidate.apply_update(update);
+        if let Some((_, metadata)) = &checked {
+            Self::validate_names_with(metadata, &candidate)?;
+            Self::normalize_with(metadata, &mut candidate);
+        }
+
+        let config = if candidate == *committed {
+            committed.clone()
+        } else {
+            Rc::new(candidate)
+        };
+
+        let changed = !Rc::ptr_eq(&config, &committed);
+        let clauses = overlay
+            .clone()
+            .unwrap_or_else(|| self.borrow().state.overlay.clone());
+
+        let (effective, description) = match &checked {
+            None => (config.clone(), None),
+            Some((table, metadata)) => {
+                let on_expression = clauses
+                    .iter()
+                    .any(|x| config.expressions.0.contains_key(x.filter.column()));
+
+                let bare = if on_expression {
+                    Some(Self::describe_with(table, metadata, &config).await?)
+                } else {
+                    None
+                };
+
+                let (effective, _) = effective(&config, &clauses, &|name| {
+                    metadata.get_table_schema_type(name).or_else(|| {
+                        bare.as_ref()
+                            .and_then(|x| x.expression_schema.get(name).copied())
+                    })
+                });
+
+                let effective = if effective == *config {
+                    config.clone()
+                } else {
+                    Rc::new(effective)
+                };
+
+                let description = match (&binding, bare) {
+                    (_, Some(bare)) if Rc::ptr_eq(&effective, &config) => bare,
+                    (PreparedBinding::Keep, _) => self.describe_effective(&effective).await?.0,
+                    _ => Self::describe_with(table, metadata, &effective).await?,
+                };
+
+                (effective, Some(description))
+            },
+        };
+
+        Ok(PreparedView {
+            binding,
+            overlay,
+            config,
+            effective,
+            description,
+            changed,
+            announce: true,
+        })
+    }
+
+    /// The COMMIT half of [`Self::prepare_view`], as ONE swap: `state` with the
+    /// prepared binding, config, description and expression metadata, then
+    /// whatever else of the panel `rest` replaces.
+    pub(crate) fn commit_view(
+        &self,
+        view: PreparedView,
+        rest: impl FnOnce(PanelState) -> PanelState,
+    ) -> BindingEffects {
+        let state = self.borrow().state.clone();
+        let title_before = state.chrome.title.clone();
+        let had_table = state.bound().is_some();
+        let (rebound, watch) = match view.binding {
+            PreparedBinding::Keep => (None, None),
+            PreparedBinding::Bind {
+                client,
+                table,
+                metadata,
+            } => (
+                Some(state.bound_to(*table, (*metadata).clone())),
+                Some(client),
+            ),
+            PreparedBinding::Pend { client, name } => {
+                (Some(state.awaiting_table(client, name)), None)
+            },
+        };
+
+        let rebinds = rebound.is_some();
+        let mut next = rebound.unwrap_or_else(|| (*state).clone());
+        next = next.with_config(view.config.clone());
+        if let Some(overlay) = view.overlay {
+            next = next.with_overlay(overlay);
+        }
+
+        if let Some(description) = view.description {
+            if let Some(bound) = next.bound() {
+                let mut metadata = (*bound.metadata).clone();
+                if Self::record_description(&mut metadata, &view.effective, &description).is_ok() {
+                    next = next.with_metadata(Rc::new(metadata));
+                }
+            }
+
+            next = next.with_description(Some((view.effective, description)));
+        }
+
+        let next = rest(next);
+        let title_after = next.chrome.title.clone();
+        let bound = next.bound().is_some();
+        self.borrow_mut().swap(next);
+        let outgoing = if rebinds {
+            let mut data = self.borrow_mut();
+            data.rendered = Rendered::Never;
+            data.view_sub.take()
+        } else {
+            None
+        };
+
+        if rebinds {
+            self.update_stats(ViewStats::default());
+        }
+
+        if (view.changed && view.announce) || rebinds {
+            self.notify_view_config_changed();
+        }
+
+        if title_before != title_after {
+            self.title_changed.emit(title_after);
+        }
+
+        BindingEffects {
+            rebinds,
+            outgoing,
+            unloaded: rebinds && had_table,
+            loaded: rebinds && bound,
+            watch,
+        }
+    }
+
+    /// Everything the metadata derives from a [`Description`] of `effective`:
+    /// the expression types, the types the `View` will have, and the window
+    /// columns.
+    fn record_description(
+        metadata: &mut SessionMetadata,
+        effective: &ViewConfig,
+        description: &Description,
+    ) -> ApiResult<()> {
+        metadata.update_expressions(&ExprValidationResult {
+            expression_schema: description.expression_schema.clone(),
+            errors: HashMap::new(),
+            expression_alias: effective.expressions.0.clone(),
+        })?;
+
+        metadata.update_view_schema(&description.view_schema)?;
+        metadata.update_windows(&effective.windows)?;
+        Ok(())
+    }
+
+    /// Finish a committed rebind: dispose of the outgoing `View`, announce the
+    /// table change, and watch the incoming client for errors.
+    pub(crate) async fn finish_binding(&self, effects: BindingEffects) -> ApiResult<()> {
+        let BindingEffects {
+            outgoing,
+            unloaded,
+            loaded,
+            watch,
+            ..
+        } = effects;
+
+        let deleted = outgoing.delete().await;
+        if unloaded {
+            self.table_unloaded.emit(true);
+        }
+
+        if let Some(client) = watch {
+            self.watch_client(&client).await?;
+        }
+
+        if loaded {
+            self.table_loaded.emit(());
+        }
+
+        deleted
     }
 
     /// Bind the engine `View` for a validated snapshot: SKIP
@@ -1112,7 +1657,9 @@ impl Session {
             }
         }
 
-        let ConfigSnapshot { config, effective } = validated.0;
+        let ValidatedSnapshot {
+            snap: ConfigSnapshot { config, effective },
+        } = validated;
         if self.borrow().is_paused {
             // A paused bind still RECONCILES the committed config (no `View`
             // is constructed — `view_created` stays silent). Without this
@@ -1128,8 +1675,7 @@ impl Session {
             return Ok(unchanged_or_deferred(self));
         }
 
-        let needs_schema = !self.metadata().has_view_schema();
-        if !needs_schema {
+        {
             let bound = self.borrow().view_sub.as_ref().map(|x| x.build_config());
             if let Some(bound) = bound {
                 if *bound == *effective {
@@ -1153,15 +1699,12 @@ impl Session {
 
         let table = self
             .borrow()
-            .table
-            .clone()
+            .table()
+            .cloned()
             .ok_or("`restore()` called before `load()`")?;
 
         let view_config = self.with_default_aggregates(&effective);
         let view = table.view(Some(view_config.into())).await?;
-        let view_schema = view.schema().await?;
-        self.metadata_mut().update_view_schema(&view_schema)?;
-        self.metadata_mut().update_windows(&effective.windows)?;
         let on_stats = Callback::from({
             let this = self.clone();
             move |stats| this.update_stats(stats)
@@ -1192,6 +1735,13 @@ impl Session {
     /// The engine config for a `View` built from `effective`, per-column
     /// default aggregates filled in as a courtesy to the virtual server API.
     fn with_default_aggregates(&self, effective: &ViewConfig) -> ViewConfig {
+        Self::with_default_aggregates_of(&self.metadata(), effective)
+    }
+
+    fn with_default_aggregates_of(
+        metadata: &SessionMetadata,
+        effective: &ViewConfig,
+    ) -> ViewConfig {
         let mut view_config = effective.clone();
         for col in view_config
             .columns
@@ -1200,8 +1750,7 @@ impl Session {
             .chain(view_config.sort.iter().map(|x| &x.0))
         {
             if !view_config.aggregates.contains_key(col.as_str()) {
-                let agg = self
-                    .metadata()
+                let agg = metadata
                     .get_column_aggregates(col.as_str())
                     .and_then(|mut aggs| aggs.next())
                     .into_apierror();
@@ -1221,7 +1770,7 @@ impl Session {
     /// Build a caller-owned `View` from the effective config outside the
     /// render pipeline, with no subscription and no interaction with pause.
     pub async fn create_detached_view(&self) -> ApiResult<View> {
-        let table = self.borrow().table.clone().ok_or("No `Table` set")?;
+        let table = self.borrow().table().cloned().ok_or("No `Table` set")?;
         let view_config = self.with_default_aggregates(&self.effective_view_config());
         Ok(table.view(Some(view_config.into())).await?)
     }
@@ -1242,7 +1791,7 @@ impl Session {
             Ok(JsValue::UNDEFINED)
         });
 
-        self.borrow_mut().error = Some(TableErrorState(
+        let error = TableErrorState(
             err.clone(),
             Some(ReconnectCallback::new(move || {
                 clone!(poll_loop);
@@ -1251,7 +1800,10 @@ impl Session {
                     Ok(())
                 })
             })),
-        ));
+        );
+
+        let state = self.borrow().state.clone();
+        self.borrow_mut().rendered = Rendered::Failed(state, error);
 
         if let Some(cb) = self.on_table_errored.borrow().as_ref() {
             cb.emit(());
@@ -1269,8 +1821,8 @@ impl Session {
         self.stats_changed.emit(());
     }
 
-    fn all_columns(&self) -> Vec<String> {
-        self.metadata()
+    fn columns_of(metadata: &SessionMetadata) -> Vec<String> {
+        metadata
             .get_table_columns()
             .into_iter()
             .flatten()
@@ -1283,6 +1835,8 @@ impl Session {
     /// session-related PubSub event fires.
     pub fn to_props(&self) -> SessionProps {
         let column_stats = PtrEqRc::new(self.column_stats.borrow().clone());
+        let projected = self.projected();
+        let title = self.get_title();
         let data = self.borrow();
 
         // Reuse memoized snapshots when the underlying value hasn't
@@ -1292,15 +1846,15 @@ impl Session {
         // these `PtrEqRc`s will spuriously refire.
         let config = {
             let mut cached = self.cached_config.borrow_mut();
-            if !matches!(&*cached, Some(c) if **c == data.config) {
-                *cached = Some(PtrEqRc::new(data.config.clone()));
+            if !matches!(&*cached, Some(c) if **c == *projected) {
+                *cached = Some(PtrEqRc::new((*projected).clone()));
             }
             cached.clone().unwrap()
         };
         let metadata = {
             let mut cached = self.cached_metadata.borrow_mut();
-            if !matches!(&*cached, Some(m) if **m == data.metadata) {
-                *cached = Some(PtrEqRc::new(data.metadata.clone()));
+            if !matches!(&*cached, Some(m) if **m == **data.metadata()) {
+                *cached = Some(PtrEqRc::new((**data.metadata()).clone()));
             }
             cached.clone().unwrap()
         };
@@ -1311,20 +1865,126 @@ impl Session {
                 .stats
                 .as_ref()
                 .is_some_and(|s| s.num_table_cells.is_some()),
-            has_table: if data.table.is_some() {
+            has_table: if data.table().is_some() {
                 Some(TableLoadState::Loaded)
-            } else if data.is_loading {
+            } else if self.0.queue.has_load() {
                 Some(TableLoadState::Loading)
-            } else if data.pending_table.is_some() {
+            } else if data.pending_table().is_some() {
                 Some(TableLoadState::Pending)
             } else {
                 None
             },
-            error: data.error.clone(),
-            title: data.title.clone(),
+            error: data.error().cloned(),
+            title,
             metadata,
             column_stats,
         }
+    }
+}
+
+/// A view-config change that has passed every check — names, normalization and
+/// the server's `describe` — and only awaits [`Session::commit_view`].
+pub(crate) struct PreparedView {
+    binding: PreparedBinding,
+
+    /// A new overlay to commit, when the op broadcasts one.
+    overlay: Option<Rc<Vec<OverlayClause>>>,
+    config: Rc<ViewConfig>,
+    effective: Rc<ViewConfig>,
+    description: Option<Rc<Description>>,
+    changed: bool,
+
+    /// `false` for a projected UI edit, whose SUBMIT already announced it.
+    announce: bool,
+}
+
+/// The plugin whose advice fills in what a restore's view config leaves unsaid
+/// — computed against the table and config the restore LANDS on.
+pub(crate) enum ViewDefaults<'a> {
+    /// The restore swaps to this plugin: default its columns and rollup mode.
+    Swap(&'a PluginStaticConfig),
+
+    /// The restore stays on this plugin: re-enforce its rollup mode only.
+    Rollup(&'a PluginStaticConfig),
+
+    /// The update is complete as given (a UI edit, whose control applied the
+    /// plugin's advice when it made it).
+    AsGiven,
+}
+
+/// What a restore does to the panel's table binding — decided by its caller
+/// from the restore's `table` and the panel it lands on, with the incoming
+/// table already probed.
+pub(crate) enum BindPlan {
+    /// The binding stands: bound, awaiting or unbound, as it is.
+    Keep,
+
+    /// Bind `table`.
+    ///
+    /// Boxed: `Table` is a value handle several times the size of every other
+    /// variant here.
+    Bind {
+        client: Client,
+        table: Box<perspective_client::Table>,
+        reset: bool,
+    },
+
+    /// Await a host for `name`.
+    Pend {
+        client: Client,
+        name: String,
+        reset: bool,
+    },
+}
+
+enum PreparedBinding {
+    Keep,
+    Bind {
+        client: Client,
+        table: Box<perspective_client::Table>,
+        metadata: Rc<SessionMetadata>,
+    },
+    Pend {
+        client: Client,
+        name: String,
+    },
+}
+
+/// What [`Session::commit_view`] leaves for [`Session::finish_binding`].
+#[must_use]
+pub(crate) struct BindingEffects {
+    rebinds: bool,
+    outgoing: Option<ViewSubscription>,
+    unloaded: bool,
+    loaded: bool,
+    watch: Option<Client>,
+}
+
+impl BindingEffects {
+    /// Whether the commit replaced the panel's table binding.
+    pub fn rebound(&self) -> bool {
+        self.rebinds
+    }
+
+    /// Discard the effects of a commit that kept its binding (there are none).
+    pub fn forget(self) {}
+}
+
+impl PreparedView {
+    /// Mark this as a projected UI edit: the UI has shown it since it was
+    /// submitted, so committing it announces nothing.
+    pub fn projected(mut self) -> Self {
+        self.announce = false;
+        self
+    }
+
+    pub fn config(&self) -> &ViewConfig {
+        &self.config
+    }
+
+    /// The type each column will have in the `View` this config builds.
+    pub fn view_schema(&self) -> Option<&HashMap<String, perspective_client::proto::ColumnType>> {
+        self.description.as_ref().map(|x| &x.view_schema)
     }
 }
 
@@ -1338,10 +1998,11 @@ pub struct ConfigSnapshot {
     pub effective: Rc<ViewConfig>,
 }
 
-/// Type-state token: proof this snapshot's expressions were validated by
-/// [`Session::validate_snapshot`]. [`Session::bind_view`] accepts only this
-/// token, so a `View` can never be built from an unvalidated snapshot.
-pub struct ValidatedSnapshot(ConfigSnapshot);
+/// Type-state token: proof this snapshot was validated by
+/// [`Session::validate_snapshot`], carrying the server's [`Description`] of it.
+pub struct ValidatedSnapshot {
+    snap: ConfigSnapshot,
+}
 
 /// Type-state witness that a `View` is NEW for the plugin about to render
 /// it.

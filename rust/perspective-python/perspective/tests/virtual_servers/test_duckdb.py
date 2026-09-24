@@ -639,6 +639,107 @@ class TestDuckDBSort:
         view.delete()
 
 
+DESCRIBE_CONFIGS = [
+    dict(columns=["Sales", "Quantity", "Region"]),
+    dict(
+        columns=["Sales", "Quantity"],
+        group_by=["Region"],
+        aggregates={"Sales": "sum", "Quantity": "avg"},
+    ),
+    dict(columns=["Sales", "Quantity"], group_by=["Region"], group_rollup_mode="flat"),
+    dict(columns=["Sales"], group_by=["Region"], sort=[["Quantity", "desc"]]),
+    dict(columns=["Sales", "Quantity"], split_by=["Region"]),
+    dict(columns=["Sales", "Quantity"], split_by=["Region"], aggregates={"Quantity": "avg"}),
+    dict(
+        columns=["Sales", "Quantity"],
+        group_by=["Category"],
+        split_by=["Region"],
+        aggregates={"Sales": "sum", "Quantity": "avg"},
+    ),
+    dict(
+        columns=["Sales"],
+        group_by=["Category"],
+        split_by=["Region"],
+        group_rollup_mode="flat",
+    ),
+    dict(
+        columns=["Sales"],
+        group_by=["Category"],
+        split_by=["Region"],
+        split_rollup_mode="rollup",
+    ),
+    dict(columns=["Sales", "Quantity"], group_rollup_mode="total", aggregates={"Quantity": "avg"}),
+    dict(
+        columns=["Sales", "Quantity"],
+        split_by=["Region"],
+        group_rollup_mode="total",
+        aggregates={"Quantity": "avg"},
+    ),
+    dict(columns=["Sales", "double"], expressions={"double": '"Sales" * 2'}),
+    dict(
+        columns=["total"],
+        group_by=["Region"],
+        expressions={"total": '"Sales" + "Profit"'},
+        aggregates={"total": "sum"},
+    ),
+]
+
+
+class TestDuckDBDescribe:
+    @pytest.mark.parametrize("config", DESCRIBE_CONFIGS)
+    def test_parity_with_view(self, client, config):
+        table = client.open_table("memory.superstore")
+        verdict = table.describe(**config)
+        view = table.view(**config)
+        assert sorted(verdict.keys()) == ["expression_schema", "view_schema"]
+        assert verdict["view_schema"] == view.schema()
+        assert sorted(verdict["expression_schema"].keys()) == sorted(
+            config.get("expressions", {}).keys()
+        )
+        view.delete()
+
+    def test_attributes_a_bad_expression(self, client):
+        table = client.open_table("memory.superstore")
+        verdict = table.describe(
+            columns=["Sales", "good", "bad"],
+            expressions={"good": '"Sales" * 2', "bad": '"nope" * 2'},
+        )
+
+        assert sorted(verdict.keys()) == ["expression_errors", "expression_schema"]
+        assert verdict["expression_schema"] == {"good": "float"}
+        assert list(verdict["expression_errors"].keys()) == ["bad"]
+        assert "nope" in verdict["expression_errors"]["bad"]["error_message"]
+        with pytest.raises(Exception):
+            table.view(
+                columns=["Sales", "good", "bad"],
+                expressions={"good": '"Sales" * 2', "bad": '"nope" * 2'},
+            )
+
+    def test_unused_invalid_expression_is_still_rejected(self, client):
+        table = client.open_table("memory.superstore")
+        verdict = table.describe(columns=["Sales"], expressions={"bad": '"nope" * 2'})
+        assert list(verdict["expression_errors"].keys()) == ["bad"]
+
+    def test_bad_column_is_a_config_error(self, client):
+        table = client.open_table("memory.superstore")
+        verdict = table.describe(columns=["Sales", "nope"])
+        assert list(verdict.keys()) == ["config_error"]
+
+    def test_validate_expressions(self, client):
+        table = client.open_table("memory.superstore")
+        expressions = {"good": '"Sales" * 2', "bad": '"nope" * 2'}
+        validated = table.validate_expressions(expressions)
+        assert validated["expression_schema"] == {"good": "float"}
+        assert list(validated["errors"].keys()) == ["bad"]
+        assert validated["expression_alias"] == expressions
+
+    def test_view_expression_schema(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(columns=["double"], expressions={"double": '"Sales" * 2'})
+        assert view.expression_schema() == {"double": "float"}
+        view.delete()
+
+
 class TestDuckDBExpressions:
     def test_simple_expression(self, client):
         table = client.open_table("memory.superstore")

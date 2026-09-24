@@ -10,50 +10,67 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_client::config::ViewConfigUpdate;
+use std::rc::Rc;
 
-use super::apply_and_render;
-use crate::session::Session;
+use perspective_client::clone;
+use perspective_js::utils::ApiFuture;
+
+use super::pipeline::{RunCommit, render_run};
+use super::transactional_restore::{commit_edit, prepare_overlay};
+use crate::session::{OpKind, OverlayClause, StepOutcome};
 use crate::utils::spawn_owned;
-use crate::workspace::{PanelId, Workspace};
+use crate::workspace::{Panel, PanelId, Workspace};
 
-/// Stamp `session`'s transient global-filter overlay from the
-/// [`Workspace`]'s current set — EMPTY for master (filter-source) panels,
-/// the full set for details. Master immunity is enforced here and only
-/// here. Returns whether the overlay changed.
-///
-/// Synchronous, so panel-creation paths can stamp BEFORE the panel's first
-/// locked bind — the initial render then picks the overlay up via its
-/// `ConfigSnapshot.effective`, with no second render and no unfiltered
-/// first paint.
-pub fn stamp_global_overlay(workspace: &Workspace, id: &PanelId, session: &Session) -> bool {
-    let filters = if workspace.is_master(id) {
+/// The element's global filter as broadcast to panel `id` — EMPTY for master
+/// (filter-source) panels, the full set for details.
+pub(crate) fn overlay_for(workspace: &Workspace, id: &PanelId) -> Rc<Vec<OverlayClause>> {
+    Rc::new(if workspace.is_master(id) {
         Vec::new()
     } else {
-        workspace.global_filters()
-    };
-
-    session.set_global_filter(filters)
+        workspace.overlay()
+    })
 }
 
-/// Re-stamp every panel's overlay and re-render those whose overlay CHANGED
-/// (details are usually non-active, so they need an explicit re-render
-/// rather than relying on a subscription; unchanged panels aren't touched
-/// at all).
+/// Broadcast the [`Workspace`]'s current global filter to one panel, as an op
+/// on ITS queue: the overlay is panel state, committed with the description of
+/// the config it yields, like any other write.
+pub fn broadcast_overlay(workspace: &Workspace, panel: &Panel) -> ApiFuture<()> {
+    let overlay = overlay_for(workspace, &panel.id);
+    clone!(panel.session, panel.renderer);
+    let ticket = panel.session.submit(OpKind::Overlay, move |_ctx| {
+        Box::pin(async move {
+            if *session.committed_overlay() == *overlay {
+                return Ok(StepOutcome::Done);
+            }
+
+            let bound = session.get_table().is_some();
+            let prepared = prepare_overlay(&session, &renderer, overlay).await?;
+            let committed = commit_edit(&session, &renderer, prepared);
+            Ok(if bound {
+                StepOutcome::Render(Box::pin(render_run(
+                    session,
+                    renderer,
+                    RunCommit::Done(committed),
+                )))
+            } else {
+                StepOutcome::Done
+            })
+        })
+    });
+
+    ApiFuture::new(ticket.settle())
+}
+
+/// Broadcast the global filter to every panel; panels whose overlay is
+/// unchanged aren't touched at all.
 pub fn apply_global_filters(workspace: &Workspace) {
-    for pid in workspace.panel_ids() {
-        if let Some(panel) = workspace.panel(&pid)
-            && stamp_global_overlay(workspace, &pid, &panel.session)
-        {
-            let effect = workspace.effects().guard();
-            let session = panel.session.clone();
-            let renderer = panel.renderer.clone();
-            spawn_owned("apply-global-filters", async move {
-                let _effect = effect;
-                apply_and_render(&session, &renderer, ViewConfigUpdate::default())?.await?;
-                Ok(())
-            });
-        }
+    for panel in workspace.panels() {
+        let effect = workspace.effects().guard();
+        let task = broadcast_overlay(workspace, &panel);
+        spawn_owned("apply-global-filters", async move {
+            let _effect = effect;
+            task.await
+        });
     }
 }
 

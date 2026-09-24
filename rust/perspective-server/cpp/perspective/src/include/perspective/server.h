@@ -689,6 +689,21 @@ namespace server {
         std::vector<ProtoServerResp<Response>>
         _handle_request(std::uint32_t client_id, Request&& req);
 
+        /**
+         * @brief A parsed `proto::ViewConfig`, shared by `TableMakeViewReq`
+         * and `TableDescribeReq`.
+         */
+        struct BuiltViewConfig {
+            std::shared_ptr<t_schema> schema;
+            std::shared_ptr<t_view_config> config;
+            std::uint32_t sides;
+            bool is_unit_context;
+        };
+
+        BuiltViewConfig build_view_config(
+            const std::shared_ptr<Table>& table, const proto::ViewConfig& cfg
+        );
+
         std::vector<ProtoServerResp<Response>> _poll();
 
         void _process_table(

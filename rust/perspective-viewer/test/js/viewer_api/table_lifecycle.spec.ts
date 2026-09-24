@@ -289,8 +289,8 @@ test.describe("Reactive table lifecycle", () => {
         expect(result.table).toBe("load-viewer-csv");
         expect(result.bound).toBe("load-viewer-csv");
         await expect(
-            page.locator("perspective-viewer span#status"),
-        ).toHaveClass(/errored/);
+            page.locator("perspective-viewer span#status.errored"),
+        ).toHaveCount(0);
     });
 
     test("addPanel({table}) with an un-hosted name rejects by default", async ({
@@ -310,6 +310,131 @@ test.describe("Reactive table lifecycle", () => {
         });
 
         expect(result.addError).toContain('Unknown table "lifecycle-t7"');
-        expect(result.after).toBe(result.before + 1);
+        expect(result.after).toBe(result.before);
+    });
+
+    test("addPanel() with a config its table rejects creates no panel", async ({
+        page,
+    }) => {
+        const result = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            const before = viewer.getPanelNames().length;
+            let addError: string | null = null;
+            try {
+                await viewer.addPanel({
+                    table: "load-viewer-csv",
+                    group_by: ["Not A Column"],
+                });
+            } catch (e) {
+                addError = String(e);
+            }
+
+            return { addError, before, after: viewer.getPanelNames().length };
+        });
+
+        expect(result.addError).toContain("Not A Column");
+        expect(result.after).toBe(result.before);
+    });
+
+    test("restore({table}) with a config the incoming table rejects leaves the panel bound to the outgoing one", async ({
+        page,
+    }) => {
+        const result = await page.evaluate(async () => {
+            const worker = (window as any).__TEST_WORKER__;
+            const viewer = document.querySelector("perspective-viewer") as any;
+            await worker.table("a,b\n1,x\n2,y", { name: "lifecycle-t8" });
+            await viewer.restore({ group_by: ["State"], columns: ["Sales"] });
+            const before = await viewer.save();
+            const view = await viewer.getView();
+            let restoreError: string | null = null;
+            try {
+                await viewer.restore({
+                    table: "lifecycle-t8",
+                    columns: ["a", "Sales"],
+                });
+            } catch (e) {
+                restoreError = String(e);
+            }
+
+            const table = await viewer.getTable();
+            return {
+                restoreError,
+                before,
+                after: await viewer.save(),
+                bound: await table.get_name(),
+                rows: await view.num_rows(),
+            };
+        });
+
+        expect(result.restoreError).toContain("Sales");
+        expect(result.bound).toBe("load-viewer-csv");
+        expect(result.after).toEqual(result.before);
+        expect(result.rows).toBeGreaterThan(0);
+        await expect(
+            page.locator("perspective-viewer span#status.errored"),
+        ).toHaveCount(0);
+    });
+
+    test("restore({table}) with an expression the incoming table rejects leaves the panel bound to the outgoing one", async ({
+        page,
+    }) => {
+        const result = await page.evaluate(async () => {
+            const worker = (window as any).__TEST_WORKER__;
+            const viewer = document.querySelector("perspective-viewer") as any;
+            await worker.table("a,b\n1,x\n2,y", { name: "lifecycle-t9" });
+            const before = await viewer.save();
+            let restoreError: string | null = null;
+            try {
+                await viewer.restore({
+                    table: "lifecycle-t9",
+                    columns: ["a", "bad"],
+                    expressions: { bad: '"Sales" + 1' },
+                });
+            } catch (e) {
+                restoreError = String(e);
+            }
+
+            const table = await viewer.getTable();
+            return {
+                restoreError,
+                before,
+                after: await viewer.save(),
+                bound: await table.get_name(),
+            };
+        });
+
+        expect(result.restoreError).not.toBeNull();
+        expect(result.bound).toBe("load-viewer-csv");
+        expect(result.after).toEqual(result.before);
+    });
+
+    test("a pending restore whose config the arriving table rejects never binds, and shows the error", async ({
+        page,
+    }) => {
+        const result = await page.evaluate(async () => {
+            const worker = (window as any).__TEST_WORKER__;
+            const viewer = document.querySelector("perspective-viewer") as any;
+            await viewer.restore(
+                { table: "lifecycle-t10", group_by: ["Not A Column"] },
+                { wait_for_table: true },
+            );
+
+            const pending = await viewer.save();
+            await worker.table("a,b\n1,x\n2,y", { name: "lifecycle-t10" });
+            await new Promise((x) => setTimeout(x, 1000));
+            const table = await viewer.getTable().catch(() => null);
+            return {
+                pending: pending.group_by,
+                table: (await viewer.save()).table,
+                bound: table ? await table.get_name() : null,
+            };
+        });
+
+        expect(result.pending).toEqual(["Not A Column"]);
+        expect(result.table).toBe("lifecycle-t10");
+        expect(result.bound).toBeNull();
+        await expect(
+            page.locator("perspective-viewer span#status"),
+        ).toHaveClass(/errored/);
     });
 });

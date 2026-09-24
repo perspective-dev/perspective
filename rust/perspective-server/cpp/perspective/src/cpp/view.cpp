@@ -439,87 +439,88 @@ View<CTX_T>::column_paths_string() const {
     return out;
 }
 
+static std::string
+map_aggregate_type(t_aggtype agg, const std::string& typestring) {
+    switch (agg) {
+        case AGGTYPE_DISTINCT_COUNT:
+        case AGGTYPE_COUNT: {
+            return "integer";
+        } break;
+        case AGGTYPE_MEAN:
+        case AGGTYPE_MEAN_BY_COUNT:
+        case AGGTYPE_WEIGHTED_MEAN:
+        case AGGTYPE_PCT_SUM_PARENT:
+        case AGGTYPE_PCT_SUM_GRAND_TOTAL:
+        case AGGTYPE_VARIANCE:
+        case AGGTYPE_STANDARD_DEVIATION: {
+            return "float";
+        } break;
+        default: {
+            return typestring;
+        } break;
+    }
+}
+
+std::map<std::string, std::string>
+describe_view_schema(
+    const t_view_config& config, const t_schema& schema, bool pivoted
+) {
+    std::map<std::string, std::string> out;
+    const auto type_of = [&schema](const std::string& name) {
+        return dtype_to_str(
+            schema.has_column(name) ? schema.get_dtype(name) : DTYPE_NONE
+        );
+    };
+
+    if (!pivoted) {
+        for (const auto& name : config.get_columns()) {
+            if (name == "psp_okey") {
+                continue;
+            }
+
+            out[name] = type_of(name);
+        }
+
+        return out;
+    }
+
+    const bool map_types =
+        (!config.get_row_pivots().empty() || config.is_total_only())
+        && (!config.is_column_only() || config.is_total_only());
+
+    for (const t_aggspec& agg : config.get_aggspecs()) {
+        const std::string& name = agg.name();
+        if (name == "psp_okey") {
+            continue;
+        }
+
+        std::string type_str = type_of(name);
+        if (map_types) {
+            type_str = map_aggregate_type(agg.agg(), type_str);
+        }
+
+        out[name] = type_str;
+    }
+
+    return out;
+}
+
 template <typename CTX_T>
 std::map<std::string, std::string>
 View<CTX_T>::schema() const {
-    // TODO: should revert to m_table
-    auto schema = m_ctx->get_schema();
-    auto _types = schema.types();
-    auto names = schema.columns();
-
-    std::map<std::string, t_dtype> types;
-    std::map<std::string, std::string> new_schema;
-
-    for (std::size_t i = 0, max = names.size(); i != max; ++i) {
-        types[names[i]] = _types[i];
-    }
-
-    auto col_names = column_names(false);
-    for (const std::vector<t_tscalar>& name : col_names) {
-        // Pull out the main aggregate column
-        std::string agg_name = name.back().to_string();
-        std::string type_string = dtype_to_str(types[agg_name]);
-        new_schema[agg_name] = type_string;
-
-        if ((!m_row_pivots.empty() || m_view_config->is_total_only()) && (!is_column_only() || m_view_config->is_total_only())) {
-            new_schema[agg_name] =
-                _map_aggregate_types(agg_name, new_schema[agg_name]);
-        }
-    }
-
-    return new_schema;
+    return describe_view_schema(*m_view_config, m_ctx->get_schema(), true);
 }
 
 template <>
 std::map<std::string, std::string>
 View<t_ctxunit>::schema() const {
-    t_schema schema = m_ctx->get_schema();
-    std::vector<t_dtype> _types = schema.types();
-    std::vector<std::string> names = schema.columns();
-
-    std::map<std::string, t_dtype> types;
-    for (std::size_t i = 0, max = names.size(); i != max; ++i) {
-        types[names[i]] = _types[i];
-    }
-
-    std::vector<std::vector<t_tscalar>> cols = column_names(false);
-    std::map<std::string, std::string> new_schema;
-
-    for (auto& col : cols) {
-        std::string name = col.back().to_string();
-        if (name == "psp_okey") {
-            continue;
-        }
-        new_schema[name] = dtype_to_str(types[name]);
-    }
-
-    return new_schema;
+    return describe_view_schema(*m_view_config, m_ctx->get_schema(), false);
 }
 
 template <>
 std::map<std::string, std::string>
 View<t_ctx0>::schema() const {
-    const t_schema& schema = m_ctx->get_schema();
-    const std::vector<t_dtype>& _types = schema.types();
-    const std::vector<std::string>& names = schema.columns();
-
-    std::map<std::string, t_dtype> types;
-    for (std::size_t i = 0, max = names.size(); i != max; ++i) {
-        types[names[i]] = _types[i];
-    }
-
-    std::vector<std::vector<t_tscalar>> cols = column_names(false);
-    std::map<std::string, std::string> new_schema;
-
-    for (auto& col : cols) {
-        std::string name = col.back().to_string();
-        if (name == "psp_okey") {
-            continue;
-        }
-        new_schema[name] = dtype_to_str(types[name]);
-    }
-
-    return new_schema;
+    return describe_view_schema(*m_view_config, m_ctx->get_schema(), false);
 }
 
 template <typename CTX_T>
@@ -1757,27 +1758,9 @@ std::string
 View<CTX_T>::_map_aggregate_types(
     const std::string& name, const std::string& typestring
 ) const {
-
     for (const t_aggspec& agg : m_aggregates) {
         if (agg.name() == name) {
-            switch (agg.agg()) {
-                case AGGTYPE_DISTINCT_COUNT:
-                case AGGTYPE_COUNT: {
-                    return "integer";
-                } break;
-                case AGGTYPE_MEAN:
-                case AGGTYPE_MEAN_BY_COUNT:
-                case AGGTYPE_WEIGHTED_MEAN:
-                case AGGTYPE_PCT_SUM_PARENT:
-                case AGGTYPE_PCT_SUM_GRAND_TOTAL:
-                case AGGTYPE_VARIANCE:
-                case AGGTYPE_STANDARD_DEVIATION: {
-                    return "float";
-                } break;
-                default: {
-                    return typestring;
-                } break;
-            }
+            return map_aggregate_type(agg.agg(), typestring);
         }
     }
 

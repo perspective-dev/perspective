@@ -15,7 +15,7 @@ use perspective_js::utils::*;
 
 use crate::config::ColumnConfigFieldUpdate;
 use crate::renderer::Renderer;
-use crate::session::Session;
+use crate::session::{EditDelta, OpKind, Session, StepOutcome};
 
 /// Apply a [`ColumnConfigFieldUpdate`] from the Plugin-settings tab to
 /// the active plugin's bucket on [`Renderer`], then re-`restore` the
@@ -28,27 +28,50 @@ use crate::session::Session;
 ///
 /// Column-style updates go through [`super::send_column_config`].
 pub fn send_plugin_config(session: &Session, renderer: &Renderer, update: ColumnConfigFieldUpdate) {
-    let view_config = session.get_view_config().clone();
-    let changed = renderer.update_plugin_config_field(&view_config, update);
-    clone!(session, renderer);
-    ApiFuture::spawn(async move {
-        if changed {
-            let plugin_config = renderer.get_plugin_config();
-            let plugin_token = wasm_bindgen::JsValue::from_serde_ext(&plugin_config).unwrap();
-            let view_config_snapshot = session.get_view_config().clone();
-            let columns_configs = renderer
-                .all_columns_configs_materialized(&view_config_snapshot, &session)
-                .await;
-            renderer
-                .ensure_plugin_selected()?
-                .restore(&plugin_token, Some(&columns_configs))?;
-            clone!(session);
-            renderer
-                .update_lazy(async move { Ok(session.get_view_with_dimensions()) })
-                .await?;
-            renderer.plugin_config_changed.emit(plugin_config);
-        }
+    let kind = OpKind::Edit {
+        delta: EditDelta::PluginField(update.clone()),
+        fields: None,
+    };
 
-        Ok(())
-    })
+    let ticket = session.submit(kind, {
+        clone!(session, renderer);
+        move |_ctx| {
+            Box::pin(async move {
+                let view_config = session.committed_view_config().clone();
+                let changed = renderer.update_plugin_config_field(&view_config, update);
+                Ok(StepOutcome::Render(Box::pin(async move {
+                    if changed {
+                        deliver_plugin_config(&session, &renderer).await?;
+                    }
+
+                    Ok(())
+                })))
+            })
+        }
+    });
+
+    ApiFuture::spawn(ticket.settle());
+}
+
+/// Re-`restore` the active plugin with its committed buckets, repaint, and
+/// announce the plugin-level change.
+pub(super) async fn deliver_plugin_config(session: &Session, renderer: &Renderer) -> ApiResult<()> {
+    let plugin_config = renderer.committed_plugin_config();
+    let plugin_token = wasm_bindgen::JsValue::from_serde_ext(&plugin_config).unwrap();
+    let view_config_snapshot = session.committed_view_config().clone();
+    let columns_configs = renderer
+        .all_columns_configs_materialized(&view_config_snapshot, session)
+        .await;
+
+    renderer
+        .ensure_plugin_selected()?
+        .restore(&plugin_token, Some(&columns_configs))?;
+
+    clone!(session);
+    renderer
+        .update_lazy(async move { Ok(session.get_view_with_dimensions()) })
+        .await?;
+
+    renderer.plugin_config_changed.emit(plugin_config);
+    Ok(())
 }
