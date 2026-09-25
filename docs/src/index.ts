@@ -14,6 +14,7 @@ import "@perspective-dev/viewer";
 import "@perspective-dev/viewer-datagrid";
 import "@perspective-dev/viewer-charts";
 
+import { initAboutDialog } from "./components/about_dialog.js";
 import { initAgentDialog } from "./components/agent_dialog.js";
 import { initSidebar } from "./components/sidebar.js";
 import { initProjectGallery } from "./components/project_gallery.js";
@@ -44,3 +45,4 @@ const gallery = initProjectGallery(shell, viewer);
 browseProjects.addEventListener("click", () => gallery.openModal());
 initSourceModal(viewer, createSource);
 initAgentDialog(viewer, configureAgent);
+initAboutDialog();

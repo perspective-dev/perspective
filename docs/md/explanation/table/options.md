@@ -57,3 +57,40 @@ limit_table = perspective.Table(data, limit=1000);
 ```
 
 </div>
+
+## `page_to_disk`
+
+By default a `Table` keeps its columns in memory. Initializing a `Table` with
+`page_to_disk` backs its column data with on-disk storage instead, so the
+`Table` can be larger than the memory available to the engine. It is otherwise
+an ordinary `Table`: `index`, `update()`, views, aggregates, expressions and
+Arrow round-trips all behave as they do in memory, and produce identical
+results.
+
+<div class="javascript">
+
+JavaScript:
+
+```javascript
+const table = await perspective.table(arrow, { page_to_disk: true });
+```
+
+</div>
+<div class="python">
+
+Python:
+
+```python
+table = perspective.table(arrow, page_to_disk=True)
+```
+
+</div>
+
+Where the data goes depends on the runtime:
+
+| Runtime | Backing storage |
+| --- | --- |
+| Browser (WebAssembly, in a Web Worker) | The [Origin Private File System](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) (OPFS) |
+| Node.js (WebAssembly) | Files under the OS temp directory, via `node:fs` |
+| Python and Rust (native) | Memory-mapped files under the OS temp directory |
+

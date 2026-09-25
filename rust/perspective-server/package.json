@@ -3,6 +3,26 @@
     "author": "The Perspective Authors",
     "license": "Apache-2.0",
     "version": "5.5.1",
+    "description": "Perspective's streaming query engine compiled to WebAssembly: incremental pivots, aggregates and joins for large, real-time datasets.",
+    "keywords": [
+        "perspective",
+        "datagrid",
+        "data-grid",
+        "pivot-table",
+        "pivot",
+        "charts",
+        "visualization",
+        "dashboard",
+        "analytics",
+        "bi",
+        "streaming",
+        "real-time",
+        "wasm",
+        "webassembly",
+        "arrow",
+        "query-engine"
+    ],
+    "homepage": "https://perspective-dev.github.io",
     "main": "./dist/wasm/perspective-server.js",
     "files": [
         "dist/wasm/**/*"

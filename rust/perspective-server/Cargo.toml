@@ -15,11 +15,13 @@ name = "perspective-server"
 version = "5.5.1"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
-description = "A data visualization and analytics component, especially well-suited for large and/or streaming datasets."
+description = "Streaming query engine for Perspective: incremental pivots, aggregates and joins over large, real-time datasets."
 repository = "https://github.com/perspective-dev/perspective"
 license = "Apache-2.0"
 homepage = "https://perspective-dev.github.io"
-keywords = []
+keywords = ["streaming", "analytics", "pivot", "arrow", "database"]
+categories = ["visualization", "wasm", "science"]
+documentation = "https://docs.rs/perspective-server"
 build = "build.rs"
 include = [
     "src/**/*",

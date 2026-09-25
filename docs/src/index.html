@@ -3,15 +3,37 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no" />
-        <title>Perspective</title>
-        <meta name="description" content="Interactive analytics and data visualization component for large and streaming datasets." />
-        <link rel="icon" href="https://openjsf.org/favicon.ico" />
-        <link rel="stylesheet" href="style.css" />
+        <!--seo:head-->
+        <link rel="icon" type="image/svg+xml" href="/svg/perspective_logo.svg" />
+        <link rel="stylesheet" href="/style.css" />
+        <noscript>
+            <style>
+                #app {
+                    display: none;
+                }
+
+                #about {
+                    display: block;
+                    position: static;
+                    margin: 0 auto;
+                    border: none;
+                    max-width: 860px;
+                    max-height: none;
+                }
+
+                #about .about__close {
+                    display: none;
+                }
+            </style>
+        </noscript>
     </head>
     <body>
         <div class="app-shell" id="app" data-sidebar="expanded">
             <perspective-viewer id="viewer"></perspective-viewer>
         </div>
-        <script type="module" src="index.js"></script>
+        <dialog id="about" class="about">
+            <!--seo:about-->
+        </dialog>
+        <script type="module" src="/index.js"></script>
     </body>
 </html>

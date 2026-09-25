@@ -145,6 +145,40 @@ export function slug(value: string): string {
         .replace(/^-|-$/g, "");
 }
 
+/** The site's `<title>` when no Project is routed. */
+export const HOME_TITLE =
+    "Perspective — WebAssembly data grid, pivot table and charts for streaming data";
+
+/**
+ * Whether a Project is one of the generated feature variants, whose titles
+ * repeat and whose `description` is what tells them apart.
+ *
+ * @param project the corpus entry.
+ */
+export function isFeature(project: Project): boolean {
+    return project.id.startsWith("feature-");
+}
+
+/**
+ * A Project's display name, unique enough to title its gallery page.
+ *
+ * @param project the corpus entry.
+ */
+export function pageName(project: Project): string {
+    return isFeature(project) && project.description
+        ? `${project.title} — ${project.description}`
+        : project.title;
+}
+
+/**
+ * The `<title>` of a Project's gallery page.
+ *
+ * @param project the corpus entry.
+ */
+export function pageTitle(project: Project): string {
+    return `${pageName(project)} — Perspective example`;
+}
+
 /** A `prefers-color-scheme` value, one thumbnail set per member. */
 export type ThumbnailTheme = "light" | "dark";
 

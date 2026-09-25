@@ -10,43 +10,38 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { BENCHMARK_PROJECTS } from "./benchmarks.js";
-import {
-    EXPRESSIONS_PROJECTS,
-    MOVIES_PROJECTS,
-    NYPD_PROJECTS,
-    OLYMPICS_PROJECTS,
-    SF_PROJECTS,
-    SUPERSTORE_PROJECTS,
-} from "./blocks.js";
-import { DASHBOARD_PROJECTS } from "./dashboards.js";
-import { FEATURE_PROJECTS } from "./features.js";
-import { MARKET_PROJECTS, WEBCAM_PROJECTS } from "./streams.js";
-import type { Project } from "./types.js";
+const HASH = "#about";
 
 /**
- * Every saved starting point the gallery offers. Blocks first — they are the
- * interesting ones; feature variants are a long tail.
+ * Open the statically-rendered About dialog from the `#about` route, and
+ * clear that route when it closes.
  */
-export const PROJECTS: Project[] = [
-    ...SUPERSTORE_PROJECTS,
-    ...EXPRESSIONS_PROJECTS,
-    ...NYPD_PROJECTS,
-    ...SF_PROJECTS,
-    ...MOVIES_PROJECTS,
-    ...OLYMPICS_PROJECTS,
-    ...DASHBOARD_PROJECTS,
-    ...MARKET_PROJECTS,
-    ...WEBCAM_PROJECTS,
-    ...BENCHMARK_PROJECTS,
-    ...FEATURE_PROJECTS,
-];
+export function initAboutDialog(): void {
+    const dialog = document.getElementById("about") as HTMLDialogElement | null;
+    if (!dialog) {
+        return;
+    }
 
-/**
- * The Project `id` names, if the corpus has one.
- *
- * @param id a Project id, e.g. from the `?project=` route.
- */
-export function projectById(id: string): Project | undefined {
-    return PROJECTS.find((p) => p.id === id);
+    const sync = () => {
+        if (location.hash === HASH && !dialog.open) {
+            dialog.showModal();
+            dialog.scrollTop = 0;
+        }
+    };
+
+    dialog.addEventListener("click", (event) => {
+        const target = event.target as HTMLElement;
+        if (target === dialog || target.closest("[data-role=close]")) {
+            dialog.close();
+        }
+    });
+
+    dialog.addEventListener("close", () => {
+        if (location.hash === HASH) {
+            history.replaceState(null, "", location.pathname + location.search);
+        }
+    });
+
+    window.addEventListener("hashchange", sync);
+    sync();
 }

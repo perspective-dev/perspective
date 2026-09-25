@@ -1,16 +1,26 @@
 {
     "name": "@perspective-dev/client",
     "version": "5.5.1",
-    "description": "Client for Perspective, a high-performance WASM engine with reactive Tables, Views, and joins.",
+    "description": "Streaming query engine for data grids, pivot tables and charts over large, real-time datasets — WebAssembly in the browser, native in Node.js, or remote over WebSocket.",
     "keywords": [
         "perspective",
-        "data",
+        "datagrid",
+        "data-grid",
+        "pivot-table",
+        "pivot",
+        "charts",
+        "visualization",
+        "dashboard",
         "analytics",
+        "bi",
         "streaming",
+        "real-time",
         "wasm",
+        "webassembly",
         "arrow",
         "duckdb",
-        "clickhouse"
+        "clickhouse",
+        "websocket"
     ],
     "homepage": "https://perspective-dev.github.io",
     "repository": {

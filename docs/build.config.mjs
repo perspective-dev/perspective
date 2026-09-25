@@ -17,6 +17,12 @@ import * as path from "node:path";
 import { createRequire } from "module";
 import { bundleAsync as bundleCssAsync, composeVisitors } from "lightningcss";
 import { fileURLToPath } from "node:url";
+import {
+    postprocessGuide,
+    writeCrawlFiles,
+    writeLlms,
+    writePages,
+} from "./build.seo.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(__dirname, "dist");
@@ -28,6 +34,8 @@ const RELOAD_PORT = Number(
 );
 
 const HTML_PAGES = ["index.html"];
+
+const PAGE_URLS = { pages: [], guide: [] };
 
 function copyRecursive(src, dest) {
     if (!fs.existsSync(src)) return;
@@ -188,19 +196,21 @@ async function buildCss() {
     fs.writeFileSync(path.join(DIST, "style.css"), code);
 }
 
-function copyHtml() {
+async function copyHtml() {
     for (const html of HTML_PAGES) {
         const source = fs.readFileSync(
             path.join(__dirname, "src", html),
             "utf8",
         );
 
-        const output = WATCH
+        const template = WATCH
             ? source.replace("</body>", `${RELOAD_SNIPPET}    </body>`)
             : source;
 
-        fs.writeFileSync(path.join(DIST, html), output);
+        PAGE_URLS.pages = await writePages(template, DIST);
     }
+
+    writeCrawlFiles(DIST, [...PAGE_URLS.pages, ...PAGE_URLS.guide]);
 }
 
 function copyStatic() {
@@ -216,6 +226,10 @@ function copyStatic() {
     } else {
         console.warn("Missing superstore-arrow; Superstore Projects will 404.");
     }
+
+    PAGE_URLS.guide = postprocessGuide(DIST);
+    writeLlms(DIST);
+    writeCrawlFiles(DIST, [...PAGE_URLS.pages, ...PAGE_URLS.guide]);
 }
 
 function copyDocsBundle() {
@@ -289,6 +303,7 @@ function esbuildOptions() {
         splitting: true,
         format: "esm",
         outdir: DIST,
+        publicPath: "/",
         minify: !WATCH,
         sourcemap: true,
         target: ["es2022"],
@@ -307,7 +322,7 @@ async function build() {
     fs.mkdirSync(DIST, { recursive: true });
     await buildCss();
     await esbuild.build(esbuildOptions());
-    copyHtml();
+    await copyHtml();
     copyStatic();
     copyDocsBundle();
     console.log("Build complete: dist/");
@@ -346,7 +361,7 @@ async function watch() {
         console.error(`  ✗ css failed:\n${e.message ?? e}`);
     }
 
-    copyHtml();
+    await copyHtml();
     copyStatic();
     copyDocsBundle();
 

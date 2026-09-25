@@ -16,6 +16,24 @@ build-backend = "maturin"
 
 [project]
 name = "perspective-python"
+description = "Interactive data grid, pivot table and charts for large, real-time and streaming datasets, with a Jupyter widget and WebSocket server."
+readme = "README.md"
+keywords = [
+    "datagrid",
+    "pivot",
+    "visualization",
+    "analytics",
+    "dashboard",
+    "jupyter",
+    "anywidget",
+    "streaming",
+    "real-time",
+    "arrow",
+    "pandas",
+    "polars",
+    "duckdb",
+    "webassembly",
+]
 requires-python = ">=3.9"
 dynamic = ["version"]
 dependencies = []
@@ -23,6 +41,12 @@ license = "Apache-2.0"
 license-files = ["LICENSE*"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Office/Business :: Financial",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: 3",
@@ -31,12 +55,20 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Framework :: Jupyter",
     "Framework :: Jupyter :: JupyterLab",
     "Framework :: Jupyter :: JupyterLab :: 3",
     "Framework :: Jupyter :: JupyterLab :: Extensions",
     # "Framework :: Jupyter :: JupyterLab :: Extensions :: Mime Renderers",
     "Framework :: Jupyter :: JupyterLab :: Extensions :: Prebuilt",
 ]
+
+[project.urls]
+Homepage = "https://perspective-dev.github.io"
+Documentation = "https://perspective-dev.github.io/guide/"
+Repository = "https://github.com/perspective-dev/perspective"
+Issues = "https://github.com/perspective-dev/perspective/issues"
+Changelog = "https://github.com/perspective-dev/perspective/blob/master/CHANGELOG.md"
 
 [project.optional-dependencies]
 jupyter = ["anywidget>=0.9"]

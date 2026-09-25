@@ -15,11 +15,13 @@ name = "perspective-viewer"
 version = "5.5.1"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
-description = "A data visualization and analytics component, especially well-suited for large and/or streaming datasets."
+description = "The `<perspective-viewer>` Custom Element: a WebAssembly data grid, pivot table and charting UI for large, real-time and streaming datasets."
 repository = "https://github.com/perspective-dev/perspective"
 license = "Apache-2.0"
 homepage = "https://perspective-dev.github.io"
-keywords = ["experimental"]
+keywords = ["datagrid", "visualization", "charts", "web-component", "wasm"]
+categories = ["visualization", "wasm", "science"]
+documentation = "https://docs.rs/perspective-viewer"
 build = "build.rs"
 include = ["build.rs", "src/**/*", "Cargo.toml", "package.json", "docs/**/*"]
 

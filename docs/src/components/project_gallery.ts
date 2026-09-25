@@ -12,7 +12,12 @@
 
 import { createSource } from "../data/create_source.js";
 import { PROJECTS, projectById } from "../data/projects/corpus.js";
-import { type Project, thumbnailUrl } from "../data/projects/types.js";
+import {
+    HOME_TITLE,
+    type Project,
+    pageTitle,
+    thumbnailUrl,
+} from "../data/projects/types.js";
 import {
     addSource,
     listSources,
@@ -23,7 +28,6 @@ import { currentTheme, subscribeTheme } from "../data/theme.js";
 import { errorText, escape, html, query } from "./dom.js";
 
 const PROJECT_PARAM = "project";
-const BASE_TITLE = document.title;
 
 const TEMPLATE = `<div class="projects">
     <button
@@ -49,8 +53,20 @@ export interface ProjectGalleryHandle {
     openModal(): void;
 }
 
+const GALLERY_PATH = /^\/gallery\/([^/]+?)(?:\.html)?$/;
+
+function galleryPath(id: string): string {
+    return `/gallery/${id}.html`;
+}
+
 function currentRouteId(): string | null {
-    return new URLSearchParams(location.search).get(PROJECT_PARAM);
+    const legacy = new URLSearchParams(location.search).get(PROJECT_PARAM);
+    if (legacy) {
+        return legacy;
+    }
+
+    const id = GALLERY_PATH.exec(location.pathname)?.[1];
+    return id && id !== "index" ? decodeURIComponent(id) : null;
 }
 
 function route(project: Project | null, mode: RouteMode): void {
@@ -58,12 +74,13 @@ function route(project: Project | null, mode: RouteMode): void {
         return;
     }
 
-    document.title = project ? `${project.title} — ${BASE_TITLE}` : BASE_TITLE;
+    document.title = project ? pageTitle(project) : HOME_TITLE;
     const url = new URL(location.href);
+    url.searchParams.delete(PROJECT_PARAM);
     if (project) {
-        url.searchParams.set(PROJECT_PARAM, project.id);
-    } else {
-        url.searchParams.delete(PROJECT_PARAM);
+        url.pathname = galleryPath(project.id);
+    } else if (GALLERY_PATH.test(url.pathname)) {
+        url.pathname = "/";
     }
 
     if (url.href === location.href) {

@@ -214,7 +214,7 @@ importers:
         version: 17.2.3
       eslint:
         specifier: 'catalog:'
-        version: 9.39.4(jiti@1.21.7)
+        version: 9.39.4(jiti@1.21.7)(supports-color@8.1.1)
       husky:
         specifier: 'catalog:'
         version: 9.1.7
@@ -229,7 +229,7 @@ importers:
         version: 4.20.6
       typescript-eslint:
         specifier: 'catalog:'
-        version: 8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
+        version: 8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
 
   docs:
     dependencies:
@@ -253,7 +253,7 @@ importers:
         version: link:../packages/viewer-datagrid
       puppeteer:
         specifier: 'catalog:'
-        version: 24.26.1(typescript@5.9.3)
+        version: 24.26.1(supports-color@8.1.1)(typescript@5.9.3)
       superstore-arrow:
         specifier: 'catalog:'
         version: 3.2.0
@@ -371,7 +371,7 @@ importers:
         version: 0.25.11
       http-server:
         specifier: 'catalog:'
-        version: 14.1.1
+        version: 14.1.1(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
 
   examples/esbuild-remote:
     dependencies:
@@ -569,7 +569,7 @@ importers:
         version: 0.25.11
       http-server:
         specifier: 'catalog:'
-        version: 14.1.1
+        version: 14.1.1(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
 
   examples/rust-axum:
     dependencies:
@@ -631,7 +631,7 @@ importers:
         version: 3.2.0
       webpack:
         specifier: 'catalog:'
-        version: 5.102.1(webpack-cli@5.1.4)
+        version: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
       webpack-cli:
         specifier: 'catalog:'
         version: 5.1.4(webpack@5.102.1)
@@ -680,7 +680,7 @@ importers:
         version: 14.0.1
       puppeteer:
         specifier: 'catalog:'
-        version: 24.26.1(typescript@5.9.3)
+        version: 24.26.1(supports-color@8.1.1)(typescript@5.9.3)
     devDependencies:
       '@perspective-dev/test':
         specifier: workspace:^
@@ -712,7 +712,7 @@ importers:
     devDependencies:
       '@jupyterlab/builder':
         specifier: ^4
-        version: 4.4.10
+        version: 4.4.10(esbuild@0.25.11)(uglify-js@3.19.3)
       '@perspective-dev/anywidget':
         specifier: workspace:^
         version: link:../anywidget
@@ -829,7 +829,7 @@ importers:
         version: link:../perspective-server
       pro_self_extracting_wasm:
         specifier: 'catalog:'
-        version: 0.0.9
+        version: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
       stoppable:
         specifier: 'catalog:'
         version: 1.1.0
@@ -918,7 +918,7 @@ importers:
     devDependencies:
       pro_self_extracting_wasm:
         specifier: 'catalog:'
-        version: 0.0.9
+        version: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -933,7 +933,7 @@ importers:
         version: link:../perspective-js
       pro_self_extracting_wasm:
         specifier: 'catalog:'
-        version: 0.0.9
+        version: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
       regular-layout:
         specifier: 'catalog:'
         version: 0.6.1
@@ -1051,34 +1051,43 @@ importers:
         version: '@finos/perspective@3.7.0'
       perspective-3-8-0:
         specifier: npm:@finos/perspective@3.8.0
-        version: '@finos/perspective@3.8.0'
+        version: '@finos/perspective@3.8.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
       perspective-4-0-0:
         specifier: npm:@perspective-dev/client@4.0.0
-        version: '@perspective-dev/client@4.0.0'
+        version: '@perspective-dev/client@4.0.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
       perspective-4-1-0:
         specifier: npm:@perspective-dev/client@4.1.0
-        version: '@perspective-dev/client@4.1.0'
+        version: '@perspective-dev/client@4.1.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
       perspective-4-2-0:
         specifier: npm:@perspective-dev/client@4.2.0
-        version: '@perspective-dev/client@4.2.0'
+        version: '@perspective-dev/client@4.2.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
       perspective-4-3-0:
         specifier: npm:@perspective-dev/client@4.3.0
-        version: '@perspective-dev/client@4.3.0'
+        version: '@perspective-dev/client@4.3.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
       perspective-4-4-0:
         specifier: npm:@perspective-dev/client@4.4.0
-        version: '@perspective-dev/client@4.4.0'
+        version: '@perspective-dev/client@4.4.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
       perspective-4-5-0:
         specifier: npm:@perspective-dev/client@4.5.0
-        version: '@perspective-dev/client@4.5.0'
-      perspective-4-5-1:
-        specifier: npm:@perspective-dev/client@4.5.1
-        version: '@perspective-dev/client@4.5.1'
+        version: '@perspective-dev/client@4.5.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
       perspective-5-0-0:
         specifier: npm:@perspective-dev/client@5.0.0
-        version: '@perspective-dev/client@5.0.0'
+        version: '@perspective-dev/client@5.0.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
       perspective-5-1-0:
         specifier: npm:@perspective-dev/client@5.1.0
-        version: '@perspective-dev/client@5.1.0'
+        version: '@perspective-dev/client@5.1.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
+      perspective-5-2-0:
+        specifier: npm:@perspective-dev/client@5.2.0
+        version: '@perspective-dev/client@5.2.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
+      perspective-5-3-0:
+        specifier: npm:@perspective-dev/client@5.3.0
+        version: '@perspective-dev/client@5.3.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
+      perspective-5-4-0:
+        specifier: npm:@perspective-dev/client@5.4.0
+        version: '@perspective-dev/client@5.4.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
+      perspective-5-5-0:
+        specifier: npm:@perspective-dev/client@5.5.0
+        version: '@perspective-dev/client@5.5.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
     devDependencies:
       '@perspective-dev/client':
         specifier: workspace:^
@@ -1395,85 +1404,108 @@ packages:
   '@finos/perspective@0.10.0':
     resolution: {integrity: sha512-PmsUiaOjChJaivDxGLNH8vAw8lG98OLlPjKCvci3iAFAEclGKMhSkHP/qYDU+NUZSPqsvk2Rf66TFsK8aiy/jg==}
     engines: {node: '>=12'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@0.9.0':
     resolution: {integrity: sha512-CkQ8thiCcSLpIr08aMYaYaMcHgk0Cj2PS1TPpz0hbwlR27UZeItgqrR4LNb3Fl4O6lZ3DaBQXIlqV05sP9yvGg==}
     engines: {node: '>=12'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@1.0.0':
     resolution: {integrity: sha512-WTi0hxM+EpWTpzqKp5w+ulGepUX6JGp+cwitSdCVHNsodRfatUNwVzdliVD5O8f2UMrkKMP4Dqwrm2WmxAj8Bg==}
     engines: {node: '>=12'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@1.1.0':
     resolution: {integrity: sha512-UHqkIKXmJ+q++hhVrVe9uFuNXifeyImHinUOi1Vyw172GpWZE1w8b53zRRk9P2U3WtYm7x7Jrhp1ILqkZ5F+aw==}
     engines: {node: '>=12'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@2.1.0':
     resolution: {integrity: sha512-NgDJtM7BbPEry574qQuSkzKEDdhSBSJecFeMyTOOlfzQ8cldR9xMg7/Lo5/NQWWi5cKuyzTWjTphOn6bP2M6YA==}
     engines: {node: '>=14'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@2.10.0':
     resolution: {integrity: sha512-8g6hsKhpS2gR7GYQWksNDm8kpymHZiSbJkC4HAp1dI95RArksr4U9CUAOnALgw8JI9B5CYI6b1SWQxbzCsTQ6A==}
     engines: {node: '>=14'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@2.2.0':
     resolution: {integrity: sha512-OPSFrwnaUyDnAL4jQb4kICMDBO6tqZ1vGGgd9xgTssB0VToIXObPMzlNAFtuWDL7qwiyxupqMYkjXMhoRGY7pA==}
     engines: {node: '>=14'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@2.3.0':
     resolution: {integrity: sha512-SnsdYdYHXKarG/mFIUcZmUiTKo9yccnbd+r0a9BRUcY3p9VuDPdp8fnPanoXLKi1xUkIz7RJSSTVpbPL1T+jWg==}
     engines: {node: '>=14'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@2.4.0':
     resolution: {integrity: sha512-JPYGAZq0WmcYUKXnyqdgZW+UPvgSAiWHmYx6I+ZVbjz1TIuuPFZ5Yw1n/VumUrjNGn/XNl7WnUUovh31Tez7tQ==}
     engines: {node: '>=14'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@2.5.0':
     resolution: {integrity: sha512-4YUs0oLvvGG4HQzqLJQCkRic+FW4h623etmcjBSuqcC3tLT+OMFxNZ8Z3NjS6uvdFu6vPTO7fAA0RnTdZKhXKg==}
     engines: {node: '>=14'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@2.6.0':
     resolution: {integrity: sha512-3YIBv4h1wQl8FBuabWLIV6H5aS1ufDC4/xjsrp3bIL5y5dgYwV5Uqr3gFj6cpmbWn0jNaFb6pEVm3Scn2QyDNw==}
     engines: {node: '>=14'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@2.7.0':
     resolution: {integrity: sha512-/9UHAnH1iW8ANnfplDLGMS60dx3R8UWRoL0dKTx9A3jNbeP2l+5wd0twsal00FqR/wgUomd3+tbbkzOIMsNclA==}
     engines: {node: '>=14'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@2.8.0':
     resolution: {integrity: sha512-D2LSwwFqs4mcZjwBBCNn7JdidK+Th29ZA6rdA1LMKn4pvedok0YzKii0beKTzovhVeKthlcVROKQpFY3DEjptw==}
     engines: {node: '>=14'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@2.9.0':
     resolution: {integrity: sha512-O40EzleYRpmX2k8xwbcJfWlgi4QDJ2cUJlmEA0wG1LLVmSOQD7vFeQK9H2v6xQBwn6+/andpDLglrzDYCEBOHg==}
     engines: {node: '>=14'}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@3.0.0':
     resolution: {integrity: sha512-myWGlfxN97vV3qvv34QAxCH389Oo2SH0EGN4eyrGdZSb+UlFjv9HR1TYM18GRhdM1ASg7jFwnIvGDcw7oM+qNA==}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@3.1.0':
     resolution: {integrity: sha512-nyO4NWU1+C4C0SOYDdHM7p01uPl9eeJUYMG+YNy+LNOg5xGSpNZ4CI4iT9+1N7mSKLl9mrly8OAoRQXEHoDKTA==}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@3.2.0':
     resolution: {integrity: sha512-shV80NUE44V6AX2jhEAD4XS4uhMyv5A22SJ9kbop/ZKAC3Z9rbrmJffQqymZCgM2457fkjy/GxIcwcDur7GgFQ==}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@3.3.0':
     resolution: {integrity: sha512-GYzXPqHnhrWQz930f9OejVvsBs5I6jjJLvbK/xfUK2AUijMhzAUsPI70uEKUFwsy5VMA6sxWPl/UQB9W9IBGDw==}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@3.4.0':
     resolution: {integrity: sha512-7FlOdnotYkJOc5/+yerpcSv9VH+1e2fs53ZiOAm0/id2cke9RySbm30NpHICGq13SQW5J3ezByZElx3V72A8mQ==}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@3.5.0':
     resolution: {integrity: sha512-J4Q6aGq541iFeNeCrnW6tuq1ELfg0hhILH8qYoI9oJUSx1O/kwackunHOkxcPxW6zeaT0vUfHZaJjS7u1dYTuA==}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@3.6.0':
     resolution: {integrity: sha512-MOXifjSsPNO39Bc0LiXp1OvV6ujNes4EoFxJ58edzCutbeSWf0yknXyEBmwR0PB/QWNHx1Czl3cnnJHXgRPn3Q==}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@3.7.0':
     resolution: {integrity: sha512-UCtIGE6fuT7A7ljS9R5EmDfN7PZd5DwMg3iAikB/WPVE7dOtulEbvbsnkUMKa78zL8aN5hAGR4h4hxWMlv7fnw==}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@finos/perspective@3.8.0':
     resolution: {integrity: sha512-9pot9YJq1RDdIRJlffp97ktbd0Sxk74mnoSOcf6U/luWceyEnfceQYHwJqUPR1IMNb9H1ZC6NQTbU4WRUT3hAQ==}
+    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@fontsource/roboto-mono@4.5.10':
     resolution: {integrity: sha512-KrJdmkqz6DszT2wV/bbhXef4r0hV3B0vw2mAqei8A2kRnvq+gcJLmmIeQ94vu9VEXrUQzos5M9lH1TAAXpRphw==}
@@ -1917,29 +1949,29 @@ packages:
   '@perspective-dev/client@4.5.0':
     resolution: {integrity: sha512-eTJqHvmZOFvr+QDOZlmg6vmYuL7CtDAawFSGWhzuYw50PdC0osdKIvQmcoTY5eUcekNRCrOwGaGlp+KihpCAkA==}
 
-  '@perspective-dev/client@4.5.1':
-    resolution: {integrity: sha512-Yb/huLDHEQ9FFeTloipHKM2oVtgTkHLIEqh971eznOc0sNQGg9Sd7flju8xlKe8KMGe3VCo7/wlvxr4GqBi1Bw==}
-
   '@perspective-dev/client@5.0.0':
     resolution: {integrity: sha512-K+Rg+j9GNHsGyD0uI7kng8nuodtdEa/DHQecZYcUe4ikk7ztLuekTAp0DzhIEZWyEdzG5JChFpqvId4RgCuDOw==}
 
   '@perspective-dev/client@5.1.0':
     resolution: {integrity: sha512-nB/iP0CdB0rj7CsVesTjRROFFySbHW0jLnZ8oOWj3uEKApEDBs5e+q0dyQKNykFLhyspUdVm74NL0qnnj2i0xg==}
 
-  '@perspective-dev/server@4.3.0':
-    resolution: {integrity: sha512-UH3ADscynozVx42RF07DTBmPE/0PUwH+SS0cgvMLuLfBjtvnPm6msfOU0tHlgFnNZOHJO0q6RZ9WI5fD6wF07A==}
+  '@perspective-dev/client@5.2.0':
+    resolution: {integrity: sha512-zkJmJFwdw0wMREoJt8gUJyCsflzi7s7Yc8ZtUCOLE9XB6fdyxJmDB99cxO3Q+hno/57kLsz8VNoz8XSm6PZNrg==}
 
-  '@perspective-dev/server@4.4.1':
-    resolution: {integrity: sha512-eOWr0qy2T2KwClbYgRjfDrcnkR023gHn/7J/tQEPa6rEYTfqXwicWsObFU4mZHi3rTySxYf6qsY6O+SJIM+BzA==}
+  '@perspective-dev/client@5.3.0':
+    resolution: {integrity: sha512-41ITlb3PsgnmcG+icZWb+O+eyUnY2zyqrKJZFclCiEHOQXw9Yde1Ou/wVo3CLViPwM3OQQtT1BLuuG0zQdDy+A==}
 
-  '@perspective-dev/server@4.5.1':
-    resolution: {integrity: sha512-VzR1Z+SdUlB4K1hTHFxVE7PLxFXtTb008fBGMg/uo3Y3qDbJh/9IcZjOwvpI86k6QUZ49VR2w3BDGdh7YzF/8A==}
+  '@perspective-dev/client@5.4.0':
+    resolution: {integrity: sha512-Rc/hm/GqtCtkOuvZuHFBKBg6YOb4HwX8Mqql9wSysYldQfaUF/UPZgoYtVsO18SupbsIUcN2JI/q+ZpsPdbvQQ==}
 
-  '@perspective-dev/server@5.0.0':
-    resolution: {integrity: sha512-tuWAHeOusI+Jva34x5PPXBVnEaXB0Yeq/rfpioUygnLwmz4LJVk+SIjfoK4uEriScbV52dgatQjSbyWzUcKtqQ==}
+  '@perspective-dev/client@5.5.0':
+    resolution: {integrity: sha512-c6nN671nxKphyL2U9cjzTNnZm6+mwnTECXsCtaL+HWixPBeE5KMd9LTXsigiXMinC7gYrvpGZsvaJlRecv2jKQ==}
 
   '@perspective-dev/server@5.1.0':
     resolution: {integrity: sha512-lepN5Cvcx4MSCAv5FVYefA8HLqUhzVLgrO6h6FOtoLNoPR5C9N2MA7ZssSOyU3/6WSuidxs5iIqSFfldRYrRyw==}
+
+  '@perspective-dev/server@5.5.1':
+    resolution: {integrity: sha512-JBBdRLzg7yxm/WEhaif6dsAx3IFn1Qi172AswGtb0vb5ElBf7hv5ZOtCEP99Y/OBxz4xF9uNLkg1laNDKb8bqw==}
 
   '@playwright/experimental-ct-core@1.62.0':
     resolution: {integrity: sha512-jmd7zmlTHrDf4coLZKxIQSmc8Dqr9NuNnadSQx1xeBlkoCUYO9eiiL5yIQ71LKHm/xcipRpe6HSIFEjoxXsAvQ==}
@@ -3100,6 +3132,7 @@ packages:
   eslint@9.39.4:
     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -5417,17 +5450,17 @@ snapshots:
   '@esbuild/win32-x64@0.25.11':
     optional: true
 
-  '@eslint-community/eslint-utils@4.9.1(eslint@9.39.4(jiti@1.21.7))':
+  '@eslint-community/eslint-utils@4.9.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))':
     dependencies:
-      eslint: 9.39.4(jiti@1.21.7)
+      eslint: 9.39.4(jiti@1.21.7)(supports-color@8.1.1)
       eslint-visitor-keys: 3.4.3
 
   '@eslint-community/regexpp@4.12.2': {}
 
-  '@eslint/config-array@0.21.2':
+  '@eslint/config-array@0.21.2(supports-color@8.1.1)':
     dependencies:
       '@eslint/object-schema': 2.1.7
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@8.1.1)
       minimatch: 3.1.5
     transitivePeerDependencies:
       - supports-color
@@ -5440,10 +5473,10 @@ snapshots:
     dependencies:
       '@types/json-schema': 7.0.15
 
-  '@eslint/eslintrc@3.3.5':
+  '@eslint/eslintrc@3.3.5(supports-color@8.1.1)':
     dependencies:
       ajv: 6.15.0
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@8.1.1)
       espree: 10.4.0
       globals: 14.0.0
       ignore: 5.3.2
@@ -5661,9 +5694,9 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@finos/perspective@3.8.0':
+  '@finos/perspective@3.8.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
     dependencies:
-      pro_self_extracting_wasm: 0.0.9
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
       stoppable: 1.1.0
       ws: 8.18.3
     transitivePeerDependencies:
@@ -5925,7 +5958,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@jupyterlab/builder@4.4.10':
+  '@jupyterlab/builder@4.4.10(esbuild@0.25.11)(uglify-js@3.19.3)':
     dependencies:
       '@lumino/algorithm': 2.0.3
       '@lumino/application': 2.4.4
@@ -5953,8 +5986,8 @@ snapshots:
       source-map-loader: 1.0.2(webpack@5.102.1)
       style-loader: 3.3.4(webpack@5.102.1)
       supports-color: 7.2.0
-      terser-webpack-plugin: 5.3.14(webpack@5.102.1)
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      terser-webpack-plugin: 5.3.14(esbuild@0.25.11)(uglify-js@3.19.3)(webpack@5.102.1)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
       webpack-cli: 5.1.4(webpack@5.102.1)
       webpack-merge: 5.10.0
       worker-loader: 3.0.8(webpack@5.102.1)
@@ -6483,106 +6516,10 @@ snapshots:
 
   '@oxc-project/types@0.149.0': {}
 
-  '@perspective-dev/client@4.0.0':
-    dependencies:
-      '@perspective-dev/server': 4.3.0
-      pro_self_extracting_wasm: 0.0.9
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - supports-color
-      - utf-8-validate
-
-  '@perspective-dev/client@4.1.0':
-    dependencies:
-      '@perspective-dev/server': 4.3.0
-      pro_self_extracting_wasm: 0.0.9
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - supports-color
-      - utf-8-validate
-
-  '@perspective-dev/client@4.2.0':
-    dependencies:
-      '@perspective-dev/server': 4.3.0
-      pro_self_extracting_wasm: 0.0.9
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - supports-color
-      - utf-8-validate
-
-  '@perspective-dev/client@4.3.0':
-    dependencies:
-      '@perspective-dev/server': 4.4.1
-      pro_self_extracting_wasm: 0.0.9
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - supports-color
-      - utf-8-validate
-
-  '@perspective-dev/client@4.4.0':
-    dependencies:
-      '@perspective-dev/server': 4.4.1
-      pro_self_extracting_wasm: 0.0.9
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - supports-color
-      - utf-8-validate
-
-  '@perspective-dev/client@4.5.0':
-    dependencies:
-      '@perspective-dev/server': 4.5.1
-      pro_self_extracting_wasm: 0.0.9
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - supports-color
-      - utf-8-validate
-
-  '@perspective-dev/client@4.5.1':
-    dependencies:
-      '@perspective-dev/server': 4.5.1
-      pro_self_extracting_wasm: 0.0.9
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - supports-color
-      - utf-8-validate
-
-  '@perspective-dev/client@5.0.0':
-    dependencies:
-      '@perspective-dev/server': 5.0.0
-      pro_self_extracting_wasm: 0.0.9
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - supports-color
-      - utf-8-validate
-
-  '@perspective-dev/client@5.1.0':
+  '@perspective-dev/client@4.0.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
     dependencies:
       '@perspective-dev/server': 5.1.0
-      pro_self_extracting_wasm: 0.0.9
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
       stoppable: 1.1.0
       ws: 8.18.3
     transitivePeerDependencies:
@@ -6591,15 +6528,141 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@perspective-dev/server@4.3.0': {}
+  '@perspective-dev/client@4.1.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+    dependencies:
+      '@perspective-dev/server': 5.1.0
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
 
-  '@perspective-dev/server@4.4.1': {}
+  '@perspective-dev/client@4.2.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+    dependencies:
+      '@perspective-dev/server': 5.1.0
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
 
-  '@perspective-dev/server@4.5.1': {}
+  '@perspective-dev/client@4.3.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+    dependencies:
+      '@perspective-dev/server': 5.1.0
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
 
-  '@perspective-dev/server@5.0.0': {}
+  '@perspective-dev/client@4.4.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+    dependencies:
+      '@perspective-dev/server': 5.1.0
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
+  '@perspective-dev/client@4.5.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+    dependencies:
+      '@perspective-dev/server': 5.1.0
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
+  '@perspective-dev/client@5.0.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+    dependencies:
+      '@perspective-dev/server': 5.1.0
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
+  '@perspective-dev/client@5.1.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+    dependencies:
+      '@perspective-dev/server': 5.1.0
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
+  '@perspective-dev/client@5.2.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+    dependencies:
+      '@perspective-dev/server': 5.1.0
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
+  '@perspective-dev/client@5.3.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+    dependencies:
+      '@perspective-dev/server': 5.1.0
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
+  '@perspective-dev/client@5.4.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+    dependencies:
+      '@perspective-dev/server': 5.5.1
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
+  '@perspective-dev/client@5.5.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+    dependencies:
+      '@perspective-dev/server': 5.5.1
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
 
   '@perspective-dev/server@5.1.0': {}
+
+  '@perspective-dev/server@5.5.1': {}
 
   '@playwright/experimental-ct-core@1.62.0(@types/node@24.9.1)(jiti@1.21.7)(less@4.4.2)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)':
     dependencies:
@@ -6646,12 +6709,12 @@ snapshots:
     dependencies:
       playwright: 1.62.0
 
-  '@puppeteer/browsers@2.10.12':
+  '@puppeteer/browsers@2.10.12(supports-color@8.1.1)':
     dependencies:
-      debug: 4.4.3
-      extract-zip: 2.0.1
+      debug: 4.4.3(supports-color@8.1.1)
+      extract-zip: 2.0.1(supports-color@8.1.1)
       progress: 2.0.3
-      proxy-agent: 6.5.0
+      proxy-agent: 6.5.0(supports-color@8.1.1)
       semver: 7.7.3
       tar-fs: 3.1.1
       yargs: 17.7.2
@@ -6901,15 +6964,15 @@ snapshots:
       '@types/node': 24.9.1
     optional: true
 
-  '@typescript-eslint/eslint-plugin@8.59.1(@typescript-eslint/parser@8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)':
+  '@typescript-eslint/eslint-plugin@8.59.1(@typescript-eslint/parser@8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.2
-      '@typescript-eslint/parser': 8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
+      '@typescript-eslint/parser': 8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
       '@typescript-eslint/scope-manager': 8.59.1
-      '@typescript-eslint/type-utils': 8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
-      '@typescript-eslint/utils': 8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
+      '@typescript-eslint/type-utils': 8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/utils': 8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
       '@typescript-eslint/visitor-keys': 8.59.1
-      eslint: 9.39.4(jiti@1.21.7)
+      eslint: 9.39.4(jiti@1.21.7)(supports-color@8.1.1)
       ignore: 7.0.5
       natural-compare: 1.4.0
       ts-api-utils: 2.5.0(typescript@5.9.3)
@@ -6917,23 +6980,23 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/parser@8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)':
+  '@typescript-eslint/parser@8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)':
     dependencies:
       '@typescript-eslint/scope-manager': 8.59.1
       '@typescript-eslint/types': 8.59.1
-      '@typescript-eslint/typescript-estree': 8.59.1(typescript@5.9.3)
+      '@typescript-eslint/typescript-estree': 8.59.1(supports-color@8.1.1)(typescript@5.9.3)
       '@typescript-eslint/visitor-keys': 8.59.1
-      debug: 4.4.3
-      eslint: 9.39.4(jiti@1.21.7)
+      debug: 4.4.3(supports-color@8.1.1)
+      eslint: 9.39.4(jiti@1.21.7)(supports-color@8.1.1)
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/project-service@8.59.1(typescript@5.9.3)':
+  '@typescript-eslint/project-service@8.59.1(supports-color@8.1.1)(typescript@5.9.3)':
     dependencies:
       '@typescript-eslint/tsconfig-utils': 8.59.1(typescript@5.9.3)
       '@typescript-eslint/types': 8.59.1
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@8.1.1)
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
@@ -6947,13 +7010,13 @@ snapshots:
     dependencies:
       typescript: 5.9.3
 
-  '@typescript-eslint/type-utils@8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)':
+  '@typescript-eslint/type-utils@8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)':
     dependencies:
       '@typescript-eslint/types': 8.59.1
-      '@typescript-eslint/typescript-estree': 8.59.1(typescript@5.9.3)
-      '@typescript-eslint/utils': 8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
-      debug: 4.4.3
-      eslint: 9.39.4(jiti@1.21.7)
+      '@typescript-eslint/typescript-estree': 8.59.1(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/utils': 8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
+      debug: 4.4.3(supports-color@8.1.1)
+      eslint: 9.39.4(jiti@1.21.7)(supports-color@8.1.1)
       ts-api-utils: 2.5.0(typescript@5.9.3)
       typescript: 5.9.3
     transitivePeerDependencies:
@@ -6961,13 +7024,13 @@ snapshots:
 
   '@typescript-eslint/types@8.59.1': {}
 
-  '@typescript-eslint/typescript-estree@8.59.1(typescript@5.9.3)':
+  '@typescript-eslint/typescript-estree@8.59.1(supports-color@8.1.1)(typescript@5.9.3)':
     dependencies:
-      '@typescript-eslint/project-service': 8.59.1(typescript@5.9.3)
+      '@typescript-eslint/project-service': 8.59.1(supports-color@8.1.1)(typescript@5.9.3)
       '@typescript-eslint/tsconfig-utils': 8.59.1(typescript@5.9.3)
       '@typescript-eslint/types': 8.59.1
       '@typescript-eslint/visitor-keys': 8.59.1
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@8.1.1)
       minimatch: 10.2.5
       semver: 7.7.3
       tinyglobby: 0.2.15
@@ -6976,13 +7039,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/utils@8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)':
+  '@typescript-eslint/utils@8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)':
     dependencies:
-      '@eslint-community/eslint-utils': 4.9.1(eslint@9.39.4(jiti@1.21.7))
+      '@eslint-community/eslint-utils': 4.9.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))
       '@typescript-eslint/scope-manager': 8.59.1
       '@typescript-eslint/types': 8.59.1
-      '@typescript-eslint/typescript-estree': 8.59.1(typescript@5.9.3)
-      eslint: 9.39.4(jiti@1.21.7)
+      '@typescript-eslint/typescript-estree': 8.59.1(supports-color@8.1.1)(typescript@5.9.3)
+      eslint: 9.39.4(jiti@1.21.7)(supports-color@8.1.1)
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
@@ -7073,19 +7136,19 @@ snapshots:
       '@webassemblyjs/ast': 1.14.1
       '@xtuc/long': 4.2.2
 
-  '@webpack-cli/configtest@2.1.1(webpack-cli@5.1.4(webpack@5.102.1))(webpack@5.102.1)':
+  '@webpack-cli/configtest@2.1.1(webpack-cli@5.1.4)(webpack@5.102.1)':
     dependencies:
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
       webpack-cli: 5.1.4(webpack@5.102.1)
 
-  '@webpack-cli/info@2.0.2(webpack-cli@5.1.4(webpack@5.102.1))(webpack@5.102.1)':
+  '@webpack-cli/info@2.0.2(webpack-cli@5.1.4)(webpack@5.102.1)':
     dependencies:
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
       webpack-cli: 5.1.4(webpack@5.102.1)
 
-  '@webpack-cli/serve@2.0.5(webpack-cli@5.1.4(webpack@5.102.1))(webpack@5.102.1)':
+  '@webpack-cli/serve@2.0.5(webpack-cli@5.1.4)(webpack@5.102.1)':
     dependencies:
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
       webpack-cli: 5.1.4(webpack@5.102.1)
 
   '@xtuc/ieee754@1.2.0': {}
@@ -7528,7 +7591,7 @@ snapshots:
       postcss-value-parser: 4.2.0
       semver: 7.7.3
     optionalDependencies:
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
 
   css-loader@7.1.2(webpack@5.102.1):
     dependencies:
@@ -7541,7 +7604,7 @@ snapshots:
       postcss-value-parser: 4.2.0
       semver: 7.7.3
     optionalDependencies:
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
 
   css-select@4.3.0:
     dependencies:
@@ -7587,9 +7650,11 @@ snapshots:
       es-errors: 1.3.0
       is-data-view: 1.0.2
 
-  debug@4.4.3:
+  debug@4.4.3(supports-color@8.1.1):
     dependencies:
       ms: 2.1.3
+    optionalDependencies:
+      supports-color: 8.1.1
 
   deep-is@0.1.4: {}
 
@@ -7854,14 +7919,14 @@ snapshots:
 
   eslint-visitor-keys@5.0.1: {}
 
-  eslint@9.39.4(jiti@1.21.7):
+  eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1):
     dependencies:
-      '@eslint-community/eslint-utils': 4.9.1(eslint@9.39.4(jiti@1.21.7))
+      '@eslint-community/eslint-utils': 4.9.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))
       '@eslint-community/regexpp': 4.12.2
-      '@eslint/config-array': 0.21.2
+      '@eslint/config-array': 0.21.2(supports-color@8.1.1)
       '@eslint/config-helpers': 0.4.2
       '@eslint/core': 0.17.0
-      '@eslint/eslintrc': 3.3.5
+      '@eslint/eslintrc': 3.3.5(supports-color@8.1.1)
       '@eslint/js': 9.39.4
       '@eslint/plugin-kit': 0.4.1
       '@humanfs/node': 0.16.8
@@ -7871,7 +7936,7 @@ snapshots:
       ajv: 6.15.0
       chalk: 4.1.2
       cross-spawn: 7.0.6
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@8.1.1)
       escape-string-regexp: 4.0.0
       eslint-scope: 8.4.0
       eslint-visitor-keys: 4.2.1
@@ -7932,9 +7997,9 @@ snapshots:
 
   exenv-es6@1.1.1: {}
 
-  extract-zip@2.0.1:
+  extract-zip@2.0.1(supports-color@8.1.1):
     dependencies:
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@8.1.1)
       get-stream: 5.2.0
       yauzl: 2.10.0
     optionalDependencies:
@@ -8001,7 +8066,9 @@ snapshots:
 
   flatted@3.4.2: {}
 
-  follow-redirects@1.15.11: {}
+  follow-redirects@1.15.11(debug@4.4.3(supports-color@8.1.1)):
+    optionalDependencies:
+      debug: 4.4.3(supports-color@8.1.1)
 
   for-each@0.3.5:
     dependencies:
@@ -8080,11 +8147,11 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
-  get-uri@6.0.5:
+  get-uri@6.0.5(supports-color@8.1.1):
     dependencies:
       basic-ftp: 5.0.5
       data-uri-to-buffer: 6.0.2
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -8196,7 +8263,7 @@ snapshots:
       pretty-error: 4.0.0
       tapable: 2.3.0
     optionalDependencies:
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
 
   htmlparser2@6.1.0:
     dependencies:
@@ -8212,33 +8279,33 @@ snapshots:
       domutils: 3.2.2
       entities: 4.5.0
 
-  http-proxy-agent@7.0.2:
+  http-proxy-agent@7.0.2(supports-color@8.1.1):
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  http-proxy@1.18.1:
+  http-proxy@1.18.1(debug@4.4.3(supports-color@8.1.1)):
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.15.11
+      follow-redirects: 1.15.11(debug@4.4.3(supports-color@8.1.1))
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
 
-  http-server@14.1.1:
+  http-server@14.1.1(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       basic-auth: 2.0.1
       chalk: 4.1.2
       corser: 2.0.1
       he: 1.2.0
       html-encoding-sniffer: 3.0.0
-      http-proxy: 1.18.1
+      http-proxy: 1.18.1(debug@4.4.3(supports-color@8.1.1))
       mime: 1.6.0
       minimist: 1.2.8
       opener: 1.5.2
-      portfinder: 1.0.38
+      portfinder: 1.0.38(supports-color@8.1.1)
       secure-compare: 3.0.1
       union: 0.5.0
       url-join: 4.0.1
@@ -8246,10 +8313,10 @@ snapshots:
       - debug
       - supports-color
 
-  https-proxy-agent@7.0.6:
+  https-proxy-agent@7.0.6(supports-color@8.1.1):
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -8597,7 +8664,7 @@ snapshots:
       '@types/webpack-sources': 0.1.12
       webpack-sources: 1.4.3
     optionalDependencies:
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
 
   lightningcss-android-arm64@1.32.0:
     optional: true
@@ -8820,7 +8887,7 @@ snapshots:
     dependencies:
       schema-utils: 4.3.3
       tapable: 2.3.0
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
 
   mini-svg-data-uri@1.4.4: {}
 
@@ -8983,16 +9050,16 @@ snapshots:
 
   p-try@2.2.0: {}
 
-  pac-proxy-agent@7.2.0:
+  pac-proxy-agent@7.2.0(supports-color@8.1.1):
     dependencies:
       '@tootallnate/quickjs-emscripten': 0.23.0
       agent-base: 7.1.4
-      debug: 4.4.3
-      get-uri: 6.0.5
-      http-proxy-agent: 7.0.2
-      https-proxy-agent: 7.0.6
+      debug: 4.4.3(supports-color@8.1.1)
+      get-uri: 6.0.5(supports-color@8.1.1)
+      http-proxy-agent: 7.0.2(supports-color@8.1.1)
+      https-proxy-agent: 7.0.6(supports-color@8.1.1)
       pac-resolver: 7.0.1
-      socks-proxy-agent: 8.0.5
+      socks-proxy-agent: 8.0.5(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -9082,10 +9149,10 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.2
 
-  portfinder@1.0.38:
+  portfinder@1.0.38(supports-color@8.1.1):
     dependencies:
       async: 3.2.6
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -9140,9 +9207,9 @@ snapshots:
       lodash: 4.17.21
       renderkid: 3.0.0
 
-  pro_self_extracting_wasm@0.0.9:
+  pro_self_extracting_wasm@0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
-      http-server: 14.1.1
+      http-server: 14.1.1(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
       leb128: 0.0.5
       zx: 8.8.5
     transitivePeerDependencies:
@@ -9159,16 +9226,16 @@ snapshots:
       object-assign: 4.1.1
       react-is: 16.13.1
 
-  proxy-agent@6.5.0:
+  proxy-agent@6.5.0(supports-color@8.1.1):
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.3
-      http-proxy-agent: 7.0.2
-      https-proxy-agent: 7.0.6
+      debug: 4.4.3(supports-color@8.1.1)
+      http-proxy-agent: 7.0.2(supports-color@8.1.1)
+      https-proxy-agent: 7.0.6(supports-color@8.1.1)
       lru-cache: 7.18.3
-      pac-proxy-agent: 7.2.0
+      pac-proxy-agent: 7.2.0(supports-color@8.1.1)
       proxy-from-env: 1.1.0
-      socks-proxy-agent: 8.0.5
+      socks-proxy-agent: 8.0.5(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -9189,11 +9256,11 @@ snapshots:
 
   punycode@2.3.1: {}
 
-  puppeteer-core@24.26.1:
+  puppeteer-core@24.26.1(supports-color@8.1.1):
     dependencies:
-      '@puppeteer/browsers': 2.10.12
+      '@puppeteer/browsers': 2.10.12(supports-color@8.1.1)
       chromium-bidi: 10.5.1(devtools-protocol@0.0.1508733)
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@8.1.1)
       devtools-protocol: 0.0.1508733
       typed-query-selector: 2.12.0
       webdriver-bidi-protocol: 0.3.8
@@ -9206,13 +9273,13 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  puppeteer@24.26.1(typescript@5.9.3):
+  puppeteer@24.26.1(supports-color@8.1.1)(typescript@5.9.3):
     dependencies:
-      '@puppeteer/browsers': 2.10.12
+      '@puppeteer/browsers': 2.10.12(supports-color@8.1.1)
       chromium-bidi: 10.5.1(devtools-protocol@0.0.1508733)
       cosmiconfig: 9.0.0(typescript@5.9.3)
       devtools-protocol: 0.0.1508733
-      puppeteer-core: 24.26.1
+      puppeteer-core: 24.26.1(supports-color@8.1.1)
       typed-query-selector: 2.12.0
     transitivePeerDependencies:
       - bare-abort-controller
@@ -9518,10 +9585,10 @@ snapshots:
 
   smart-buffer@4.2.0: {}
 
-  socks-proxy-agent@8.0.5:
+  socks-proxy-agent@8.0.5(supports-color@8.1.1):
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@8.1.1)
       socks: 2.8.7
     transitivePeerDependencies:
       - supports-color
@@ -9542,7 +9609,7 @@ snapshots:
       loader-utils: 2.0.4
       schema-utils: 2.7.1
       source-map: 0.6.1
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
 
   source-map-support@0.5.21:
     dependencies:
@@ -9630,11 +9697,11 @@ snapshots:
 
   style-loader@3.3.4(webpack@5.102.1):
     dependencies:
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
 
   style-loader@4.0.0(webpack@5.102.1):
     dependencies:
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
 
   superstore-arrow@3.2.0: {}
 
@@ -9690,14 +9757,17 @@ snapshots:
       minizlib: 3.1.0
       yallist: 5.0.0
 
-  terser-webpack-plugin@5.3.14(webpack@5.102.1):
+  terser-webpack-plugin@5.3.14(esbuild@0.25.11)(uglify-js@3.19.3)(webpack@5.102.1):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
       schema-utils: 4.3.3
       serialize-javascript: 6.0.2
       terser: 5.44.0
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
+    optionalDependencies:
+      esbuild: 0.25.11
+      uglify-js: 3.19.3
 
   terser@5.44.0:
     dependencies:
@@ -9804,13 +9874,13 @@ snapshots:
       typescript: 5.9.3
       yaml: 2.8.1
 
-  typescript-eslint@8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3):
+  typescript-eslint@8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3):
     dependencies:
-      '@typescript-eslint/eslint-plugin': 8.59.1(@typescript-eslint/parser@8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3))(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
-      '@typescript-eslint/parser': 8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
-      '@typescript-eslint/typescript-estree': 8.59.1(typescript@5.9.3)
-      '@typescript-eslint/utils': 8.59.1(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
-      eslint: 9.39.4(jiti@1.21.7)
+      '@typescript-eslint/eslint-plugin': 8.59.1(@typescript-eslint/parser@8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/parser': 8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/typescript-estree': 8.59.1(supports-color@8.1.1)(typescript@5.9.3)
+      '@typescript-eslint/utils': 8.59.1(eslint@9.39.4(jiti@1.21.7)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
+      eslint: 9.39.4(jiti@1.21.7)(supports-color@8.1.1)
       typescript: 5.9.3
     transitivePeerDependencies:
       - supports-color
@@ -9966,9 +10036,9 @@ snapshots:
   webpack-cli@5.1.4(webpack@5.102.1):
     dependencies:
       '@discoveryjs/json-ext': 0.5.7
-      '@webpack-cli/configtest': 2.1.1(webpack-cli@5.1.4(webpack@5.102.1))(webpack@5.102.1)
-      '@webpack-cli/info': 2.0.2(webpack-cli@5.1.4(webpack@5.102.1))(webpack@5.102.1)
-      '@webpack-cli/serve': 2.0.5(webpack-cli@5.1.4(webpack@5.102.1))(webpack@5.102.1)
+      '@webpack-cli/configtest': 2.1.1(webpack-cli@5.1.4)(webpack@5.102.1)
+      '@webpack-cli/info': 2.0.2(webpack-cli@5.1.4)(webpack@5.102.1)
+      '@webpack-cli/serve': 2.0.5(webpack-cli@5.1.4)(webpack@5.102.1)
       colorette: 2.0.20
       commander: 10.0.1
       cross-spawn: 7.0.6
@@ -9977,7 +10047,7 @@ snapshots:
       import-local: 3.2.0
       interpret: 3.1.1
       rechoir: 0.8.0
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
       webpack-merge: 5.10.0
 
   webpack-glsl-minify@1.5.0:
@@ -9998,7 +10068,7 @@ snapshots:
 
   webpack-sources@3.3.3: {}
 
-  webpack@5.102.1(webpack-cli@5.1.4):
+  webpack@5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4):
     dependencies:
       '@types/eslint-scope': 3.7.7
       '@types/estree': 1.0.8
@@ -10022,7 +10092,7 @@ snapshots:
       neo-async: 2.6.2
       schema-utils: 4.3.3
       tapable: 2.3.0
-      terser-webpack-plugin: 5.3.14(webpack@5.102.1)
+      terser-webpack-plugin: 5.3.14(esbuild@0.25.11)(uglify-js@3.19.3)(webpack@5.102.1)
       watchpack: 2.4.4
       webpack-sources: 3.3.3
     optionalDependencies:
@@ -10110,7 +10180,7 @@ snapshots:
     dependencies:
       loader-utils: 2.0.4
       schema-utils: 3.3.0
-      webpack: 5.102.1(webpack-cli@5.1.4)
+      webpack: 5.102.1(esbuild@0.25.11)(uglify-js@3.19.3)(webpack-cli@5.1.4)
 
   wrap-ansi@6.2.0:
     dependencies:

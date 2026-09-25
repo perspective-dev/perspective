@@ -43,6 +43,7 @@ const TEMPLATE = `<aside class="sidebar">
         </a>
         <div class="sidebar__brand-right">
             <ul class="sidebar__links">
+                <li><a href="#about">About</a></li>
                 <li><a href="/guide/index.html">Docs</a></li>
                 <li>
                     <a href="https://github.com/perspective-dev/perspective">

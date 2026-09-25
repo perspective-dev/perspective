@@ -56,6 +56,11 @@ const EVICTIONS_URL =
 
 const MOVIES_URL = "https://vega.github.io/editor/data/movies.json";
 
+const RELEASE_ASSETS =
+    "https://github.com/perspective-dev/perspective/releases/latest/download";
+
+const BENCHMARKS = ["benchmark-js.arrow", "benchmark-python.arrow"];
+
 const MOVIES_SCHEMA = {
     Title: "string",
     "US Gross": "float",
@@ -140,6 +145,17 @@ async function buildMoviesArrow(out) {
     fs.writeFileSync(out, arrow);
 }
 
+function buildReleaseAsset(name) {
+    return async (out) => {
+        const response = await fetch(`${RELEASE_ASSETS}/${name}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status} ${response.statusText}`);
+        }
+
+        fs.writeFileSync(out, new Uint8Array(await response.arrayBuffer()));
+    };
+}
+
 async function buildNypdArrow(out) {
     const response = await fetch(NYPD_URL);
     if (!response.ok) {
@@ -164,20 +180,29 @@ async function buildOlympicsArrow(out) {
     }
 }
 
-async function prepareDataset(name, build) {
+async function prepareDataset(name, build, { refresh = false } = {}) {
     fs.mkdirSync(DATA, { recursive: true });
     const cached = path.join(DATA, name);
-    if (!fs.existsSync(cached)) {
+    const stale = refresh && fs.existsSync(cached);
+    if (refresh || !fs.existsSync(cached)) {
+        const fresh = `${cached}.tmp`;
         try {
-            await build(cached);
+            await build(fresh);
+            fs.renameSync(fresh, cached);
             console.log(`Wrote ${name}`);
         } catch (e) {
-            fs.rmSync(cached, { force: true });
-            console.warn(
-                `  ✗ ${name}: ${e.message ?? e} — its Projects will 404.`,
-            );
+            fs.rmSync(fresh, { force: true });
+            if (!stale) {
+                console.warn(
+                    `  ✗ ${name}: ${e.message ?? e} — its Projects will 404.`,
+                );
 
-            return;
+                return;
+            }
+
+            console.warn(
+                `  ✗ ${name}: ${e.message ?? e} — keeping the cached copy.`,
+            );
         }
     }
 
@@ -207,6 +232,9 @@ async function run() {
     await prepareDataset("nypdccrb.arrow", buildNypdArrow);
     await prepareDataset("evictions.arrow", buildEvictionsArrow);
     await prepareDataset("movies.arrow", buildMoviesArrow);
+    for (const name of BENCHMARKS) {
+        await prepareDataset(name, buildReleaseAsset(name), { refresh: true });
+    }
 
     const server = new perspective.WebSocketServer({
         port: PORT,

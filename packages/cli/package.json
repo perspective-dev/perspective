@@ -1,7 +1,26 @@
 {
     "name": "@perspective-dev/cli",
     "version": "5.5.1",
-    "description": "Perspective.js CLI",
+    "description": "Command line tool for Perspective: convert between Arrow, CSV and JSON, or host a local file as an interactive data grid, pivot table and charts.",
+    "keywords": [
+        "perspective",
+        "datagrid",
+        "data-grid",
+        "pivot-table",
+        "pivot",
+        "charts",
+        "visualization",
+        "dashboard",
+        "analytics",
+        "bi",
+        "streaming",
+        "real-time",
+        "wasm",
+        "webassembly",
+        "arrow",
+        "cli"
+    ],
+    "homepage": "https://perspective-dev.github.io",
     "main": "src/js/index.js",
     "publishConfig": {
         "access": "public"

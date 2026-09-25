@@ -2,6 +2,27 @@
     "name": "@perspective-dev/jupyterlab",
     "version": "5.5.1",
     "description": "JupyterLab file renderers for the Perspective library (CSV, JSON, Arrow). The PerspectiveWidget itself ships via the perspective-python wheel using anywidget.",
+    "keywords": [
+        "perspective",
+        "datagrid",
+        "data-grid",
+        "pivot-table",
+        "pivot",
+        "charts",
+        "visualization",
+        "dashboard",
+        "analytics",
+        "bi",
+        "streaming",
+        "real-time",
+        "wasm",
+        "webassembly",
+        "arrow",
+        "jupyter",
+        "jupyterlab",
+        "jupyterlab-extension"
+    ],
+    "homepage": "https://perspective-dev.github.io",
     "files": [
         "dist/**/*",
         "src/**/*"

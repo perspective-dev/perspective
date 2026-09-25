@@ -15,11 +15,13 @@ name = "perspective-js"
 version = "5.5.1"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
-description = "A data visualization and analytics component, especially well-suited for large and/or streaming datasets."
+description = "JavaScript/WebAssembly client for Perspective, a streaming query engine for data grids, pivot tables and charts."
 repository = "https://github.com/perspective-dev/perspective"
 license = "Apache-2.0"
 homepage = "https://perspective-dev.github.io"
-keywords = ["experimental"]
+keywords = ["datagrid", "visualization", "streaming", "analytics", "wasm"]
+categories = ["visualization", "wasm", "science"]
+documentation = "https://docs.rs/perspective-js"
 include = ["src/**/*", "Cargo.toml", "./package.json", "docs/**/*"]
 
 [package.metadata.docs.rs]
