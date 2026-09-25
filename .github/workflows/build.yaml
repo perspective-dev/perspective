@@ -526,8 +526,8 @@ jobs:
                   name: perspective-metadata
                   path: rust/
 
-            # Shares the `emscripten-wasm32` ccache prefix and `wasm32`
-            # emsdk sysroot with `build_js` — same toolchain, same target.
+            # Pyodide requires a newer Emscripten toolchain than the browser
+            # build, so its compiler and sysroot caches must remain separate.
             - name: Initialize Build
               id: init-step
               uses: ./.github/actions/install-deps
@@ -535,8 +535,8 @@ jobs:
                   javascript: "false"
                   arch: ${{ matrix.arch }}
                   manylinux: "false"
-                  ccache: "emscripten-wasm32"
-                  emsdk_cache: "wasm32"
+                  ccache: "pyodide-wasm32"
+                  emsdk_cache: "pyodide-wasm32"
                   cargo_cache: "false"
                   cache_save: ${{ steps.config-step.outputs.SAVE_CACHE }}
                   skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}

@@ -138,10 +138,10 @@ Deviating from this specific version of Emscripten specified in the project's
 `package.json` can introduce various errors that are extremely difficult to
 debug.
 
-To install a specific version of Emscripten (e.g. `5.0.3`):
+To install a specific version of Emscripten (e.g. `4.0.9`):
 
 ```bash
-./emsdk install 5.0.3
+./emsdk install 4.0.9
 ```
 
 Set `PSP_SKIP_EMSDK_INSTALL=1` to prevent `pnpm install` from downloading the
@@ -168,7 +168,8 @@ this within a virtual environment.
 
 To build for [Pyodide](https://pyodide.org/), select
 `perspective-python (pyodide)` in `pnpm run setup` and install the pinned
-Pyodide distribution with `pnpm run install_pyodide`.
+Pyodide distribution with `pnpm run install_pyodide`. Pyodide builds use the
+separate `pyodide_emscripten` version pinned in `package.json`.
 
 ### `perspective-jupyterlab`
 
