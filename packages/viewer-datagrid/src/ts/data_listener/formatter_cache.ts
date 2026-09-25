@@ -15,7 +15,7 @@ import {
     createDateFormatter,
     createDatetimeFormatter,
     createNumberFormatter,
-} from "@perspective-dev/viewer/src/ts/column-format.js";
+} from "@perspective-dev/viewer/column-format";
 import type { ColumnConfig } from "../types.js";
 
 export interface Formatter {

@@ -19,7 +19,13 @@ import perspective from "./perspective_client";
             await page.goto("/rust/perspective-js/test/html/test.html");
             const [json0, json1] = await page.evaluate(async () => {
                 let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/esm/perspective.inline.js"
+                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
+                );
+
+                perspective.init_client(
+                    fetch(
+                        "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
+                    ),
                 );
 
                 const worker0 = await perspective.worker();
@@ -42,7 +48,13 @@ import perspective from "./perspective_client";
             await page.goto("/rust/perspective-js/test/html/test.html");
             const [json0, json1] = await page.evaluate(async () => {
                 let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/esm/perspective.inline.js"
+                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
+                );
+
+                perspective.init_client(
+                    fetch(
+                        "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
+                    ),
                 );
 
                 const worker0 = await perspective.worker();
@@ -67,7 +79,13 @@ import perspective from "./perspective_client";
             await page.goto("/rust/perspective-js/test/html/test.html");
             const [json0, json1] = await page.evaluate(async () => {
                 let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/esm/perspective.inline.js"
+                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
+                );
+
+                perspective.init_client(
+                    fetch(
+                        "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
+                    ),
                 );
 
                 const worker0 = await perspective.worker();

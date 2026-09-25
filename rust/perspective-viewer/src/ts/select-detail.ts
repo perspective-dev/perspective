@@ -10,14 +10,39 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import perspective_viewer from "./perspective-viewer.ts";
-export * from "./perspective-viewer.ts";
+import type { ViewConfigUpdate, Filter } from "@perspective-dev/client";
 
-// @ts-ignore
-import client_wasm from "../../dist/wasm/perspective-viewer.wasm";
+/**
+ * The `detail` of a `perspective-global-filter` event.
+ */
+export class PerspectiveSelectDetail {
+    selected: boolean;
+    row: Record<string, unknown>;
+    column_names?: string[];
+    removeConfigs: ViewConfigUpdate[];
+    insertConfigs: ViewConfigUpdate[];
+    panel?: string;
+    constructor(
+        selected: boolean,
+        row: Record<string, unknown>,
+        column_names: string[],
+        removeConfigs: ViewConfigUpdate[],
+        insertConfigs: ViewConfigUpdate[],
+        panel?: string,
+    ) {
+        this.selected = selected;
+        this.row = row;
+        this.column_names = column_names;
+        this.removeConfigs = removeConfigs;
+        this.insertConfigs = insertConfigs;
+        this.panel = panel;
+    }
 
-await perspective_viewer.init_client(client_wasm as any as ArrayBuffer);
+    get removeFilters(): Filter[] {
+        return this.removeConfigs.flatMap((x) => x.filter ?? []);
+    }
 
-console.warn("Perspective wasn been initialized in inline mode");
-
-export default perspective_viewer;
+    get insertFilters(): Filter[] {
+        return this.insertConfigs.flatMap((x) => x.filter ?? []);
+    }
+}

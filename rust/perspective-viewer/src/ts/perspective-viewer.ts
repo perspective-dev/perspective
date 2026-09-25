@@ -47,7 +47,7 @@ export {
 export type { NumberFormatConfig, DateFormatConfig } from "./column-format";
 
 export type * from "./extensions.ts";
-export { PerspectiveSelectDetail } from "./extensions.ts";
+export { PerspectiveSelectDetail } from "./select-detail.ts";
 export type * from "./ts-rs/ViewerConfigUpdate.d.ts";
 export type * from "./ts-rs/ViewerConfig.d.ts";
 export type * from "./ts-rs/WorkspaceConfigUpdate.d.ts";

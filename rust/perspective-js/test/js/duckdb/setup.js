@@ -92,6 +92,28 @@ async function loadUnderscoreData(db) {
     `);
 }
 
+// Column names AND `split_by` values contain double quotes, which SQL
+// identifier quoting must escape. https://github.com/perspective-dev/perspective/issues/3237
+async function loadQuotedData(db) {
+    await db.query(`
+        CREATE TABLE quoted_test (
+            "we""ird" VARCHAR,
+            item_title VARCHAR,
+            amount DOUBLE
+        );
+    `);
+
+    await db.query(`
+        INSERT INTO quoted_test VALUES
+            ('g1', 'say "hi"', 1.0),
+            ('g1', 'plain', 2.0),
+            ('g1', 'a_b', 4.0),
+            ('g2', 'say "hi"', 8.0),
+            ('g2', 'plain', 16.0),
+            ('g2', 'a_b', 32.0);
+    `);
+}
+
 async function loadCoerceTypesData(db) {
     await db.query(`CREATE TYPE mood AS ENUM ('happy', 'sad')`);
     await db.query(`
@@ -152,6 +174,7 @@ export function describeDuckDB(name, fn) {
             client = await perspective.worker(server);
             await loadSuperstoreData(db);
             await loadUnderscoreData(db);
+            await loadQuotedData(db);
             await loadCoerceTypesData(db);
             await loadTemporalData(db);
         });

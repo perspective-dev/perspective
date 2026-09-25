@@ -62,31 +62,6 @@ export async function build_all() {
 
     // JavaScript
     const BUILD = [
-        // WASM assets inlined into a single monolithic `.js` file. No special
-        // loades required, this version of Perspective should be the easiest
-        // to use but also the least performant at load time.
-        // {
-        //     'Import via `<script type="module">`': true,
-        //     "Requires WASM bootstrap": false,
-        //     "Load as binary": false,
-        //     "Bundler friendly": true,
-        // },
-        {
-            entryPoints: ["src/ts/perspective-viewer.inline.ts"],
-            format: "esm",
-            loader: { ".wasm": "binary" },
-            outfile: "dist/esm/perspective-viewer.inline.js",
-            plugins: [
-                WorkerPlugin({
-                    inline: !process.env.PSP_DEBUG,
-                    // plugins: [GlslMinify(), LightningCssMinify()],
-                    // loader: {
-                    //     ".css": "text",
-                    //     ".glsl": "text",
-                    // },
-                }),
-            ],
-        },
         // No WASM assets inlined or linked.
         // {
         //     'Import via `<script type="module">`': true, // *****
@@ -109,6 +84,15 @@ export async function build_all() {
                     // },
                 }),
             ],
+        },
+        // Dependency-free leaf modules, published as the `./select-detail`
+        // and `./column-format` subpath exports. Plugin packages import these
+        // instead of the package root, which would link the entire viewer and
+        // its wasm asset into a plugin's standalone `dist/cdn` bundle.
+        {
+            entryPoints: ["src/ts/select-detail.ts", "src/ts/column-format.ts"],
+            format: "esm",
+            outdir: "dist/esm",
         },
         // WASM assets linked to relative path via `fetch()`. This efficiently
         // loading build is great for `<script>` tags but will give many

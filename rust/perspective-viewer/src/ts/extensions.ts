@@ -14,43 +14,10 @@ import type { HTMLPerspectiveViewerPluginElement } from "./plugin";
 import type { PerspectiveViewerElement } from "../../dist/wasm/perspective-viewer.js";
 import type React from "react";
 import type { ViewerConfigUpdate } from "./ts-rs/ViewerConfigUpdate.js";
-import type {
-    ViewWindow,
-    ViewConfigUpdate,
-    Filter,
-} from "@perspective-dev/client";
+import type { ViewWindow, Filter } from "@perspective-dev/client";
+import type { PerspectiveSelectDetail } from "./select-detail.ts";
 
-export class PerspectiveSelectDetail {
-    selected: boolean;
-    row: Record<string, unknown>;
-    column_names?: string[];
-    removeConfigs: ViewConfigUpdate[];
-    insertConfigs: ViewConfigUpdate[];
-    panel?: string;
-    constructor(
-        selected: boolean,
-        row: Record<string, unknown>,
-        column_names: string[],
-        removeConfigs: ViewConfigUpdate[],
-        insertConfigs: ViewConfigUpdate[],
-        panel?: string,
-    ) {
-        this.selected = selected;
-        this.row = row;
-        this.column_names = column_names;
-        this.removeConfigs = removeConfigs;
-        this.insertConfigs = insertConfigs;
-        this.panel = panel;
-    }
-
-    get removeFilters(): Filter[] {
-        return this.removeConfigs.flatMap((x) => x.filter ?? []);
-    }
-
-    get insertFilters(): Filter[] {
-        return this.insertConfigs.flatMap((x) => x.filter ?? []);
-    }
-}
+export { PerspectiveSelectDetail } from "./select-detail.ts";
 
 // DOM extensions
 

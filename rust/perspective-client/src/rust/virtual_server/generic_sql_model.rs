@@ -417,7 +417,11 @@ impl GenericSQLVirtualServerModel {
 
         let all_columns: Vec<String> = group_by_cols
             .into_iter()
-            .chain(data_columns.iter().map(|col| format!("\"{}\"", col)))
+            .chain(
+                data_columns
+                    .iter()
+                    .map(|col| format!("\"{}\"", quote_ident(col))),
+            )
             .collect();
 
         Ok(format!(
@@ -477,6 +481,7 @@ impl GenericSQLVirtualServerModel {
             ""
         };
 
+        let column_name = quote_ident(column_name);
         Ok(format!(
             "SELECT MIN(\"{}\"), MAX(\"{}\") FROM {}{}",
             column_name, column_name, view_id, where_clause

@@ -32,6 +32,27 @@ const VERSIONS = [
     "perspective-2-10-0",
 ];
 
+const WORKSPACE_CLIENT = "@perspective-dev/client";
+
+/**
+ * The module a candidate version loads from, plus the client wasm it must
+ * bootstrap itself with, since only published versions ship an inline build.
+ */
+function candidate_urls(version) {
+    if (version !== WORKSPACE_CLIENT) {
+        return {
+            module: `/tools/bench/node_modules/${version}/dist/esm/perspective.inline.js`,
+            client_wasm: null,
+        };
+    }
+
+    return {
+        module: "/node_modules/@perspective-dev/client/dist/cdn/perspective.js",
+        client_wasm:
+            "/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
+    };
+}
+
 perspective_bench.suite(
     [...VERSIONS],
     path.join(__dirname, "dist/benchmark-js.arrow"),
@@ -48,10 +69,12 @@ perspective_bench.suite(
 
         async function test_suite(suite) {
             const items = await page.evaluate(
-                async ([version, suite, version_idx]) => {
-                    const { default: perspective } = await import(
-                        `/tools/bench/node_modules/${version}/dist/esm/perspective.inline.js`
-                    );
+                async ([version, suite, version_idx, urls]) => {
+                    const { default: perspective } = await import(urls.module);
+                    if (urls.client_wasm) {
+                        perspective.init_client(fetch(urls.client_wasm));
+                    }
+
                     const benchmarks = await import(
                         "/tools/bench/cross_platform_suite.mjs"
                     );
@@ -69,7 +92,7 @@ perspective_bench.suite(
                     await benchmarks[suite](client, metadata);
                     return total;
                 },
-                [path, suite, version_idx],
+                [path, suite, version_idx, candidate_urls(path)],
             );
 
             for (const { obs_records, stats } of items) {

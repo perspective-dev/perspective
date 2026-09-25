@@ -66,4 +66,20 @@ describeDuckDB("min_max", (getClient) => {
         expect(result[1]).toBe(14);
         await view.delete();
     });
+
+    // https://github.com/perspective-dev/perspective/issues/3237
+    test("get_min_max() on a column path containing double quotes", async function () {
+        const table = await getClient().open_table("memory.quoted_test");
+        const view = await table.view({
+            columns: ["amount"],
+            split_by: ["item_title"],
+            group_by: ['we"ird'],
+            aggregates: { amount: "sum" },
+        });
+
+        const result = await view.get_min_max('say "hi"|amount');
+        expect(result[0]).toBe(1);
+        expect(result[1]).toBe(8);
+        await view.delete();
+    });
 });

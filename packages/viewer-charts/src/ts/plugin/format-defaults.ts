@@ -13,7 +13,7 @@
 import type {
     DateFormatConfig,
     NumberFormatConfig,
-} from "@perspective-dev/viewer/src/ts/column-format.js";
+} from "@perspective-dev/viewer/column-format";
 
 /**
  * The chart plugin's default per-column formats, declared to the viewer in

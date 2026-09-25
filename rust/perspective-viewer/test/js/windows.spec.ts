@@ -14,9 +14,7 @@ import { test, expect, compareInnerHTMLToSnapshot } from "./helpers.ts";
 
 test.describe("Window columns", () => {
     test.beforeEach(async function init({ page }) {
-        await page.goto(
-            "/rust/perspective-viewer/test/html/superstore-inline.html",
-        );
+        await page.goto("/rust/perspective-viewer/test/html/superstore.html");
 
         await page.evaluate(async () => {
             while (!window["__TEST_PERSPECTIVE_READY__"]) {

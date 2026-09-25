@@ -20,7 +20,7 @@ import {
 } from "../../../webgl/instanced-attrs";
 import { compileProgram } from "../../../webgl/program-cache";
 import { colorRangePivot } from "../../../theme/gradient";
-import { formatTickValue, formatDateTickValue } from "../../../layout/ticks";
+import { buildPointRowTooltipLines } from "../tooltip-lines";
 import lineVert from "../../../shaders/line.vert.glsl";
 import lineFrag from "../../../shaders/line.frag.glsl";
 
@@ -122,41 +122,11 @@ export class LineGlyph implements Glyph {
 
     //  helpers
 
-    async buildTooltipLines(
+    buildTooltipLines(
         chart: CartesianChart,
         flatIdx: number,
     ): Promise<string[][]> {
-        const grid: string[][] = [];
-        if (!chart._xData || !chart._yData) {
-            return grid;
-        }
-
-        if (chart._splitGroups.length > 0 && chart._seriesCapacity > 0) {
-            const seriesIdx = Math.floor(flatIdx / chart._seriesCapacity);
-            const sg = chart._splitGroups[seriesIdx];
-            if (sg) {
-                grid.push([sg.prefix]);
-            }
-        }
-
-        const xVal = chart._xData[flatIdx];
-        const yVal = chart._yData[flatIdx];
-
-        const xType = chart._columnTypes[chart._xLabel] || "";
-        const xIsDate = xType === "date" || xType === "datetime";
-        const xFormatted = xIsDate
-            ? formatDateTickValue(xVal)
-            : formatTickValue(xVal);
-        grid.push([chart._xLabel || "Row", xFormatted]);
-
-        const yType = chart._columnTypes[chart._yLabel] || "";
-        const yIsDate = yType === "date" || yType === "datetime";
-        const yFormatted = yIsDate
-            ? formatDateTickValue(yVal)
-            : formatTickValue(yVal);
-        grid.push([chart._yLabel, yFormatted]);
-
-        return grid;
+        return buildPointRowTooltipLines(chart, flatIdx);
     }
 
     tooltipOptions() {

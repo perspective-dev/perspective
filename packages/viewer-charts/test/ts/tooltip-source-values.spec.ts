@@ -10,38 +10,56 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { test } from "../helpers.ts";
-import { run_standard_tests } from "../helpers/standard_tests.ts";
+import type { ViewerConfigUpdate } from "@perspective-dev/viewer";
+import { expect, test } from "@perspective-dev/test";
+import {
+    gotoBasic,
+    restoreChart,
+    sweepPinnedTooltips,
+    tooltipValue,
+    viewYearRange,
+} from "./helpers";
 
-async function get_contents(page) {
-    return await page.evaluate(async () => {
-        const viewer = document.querySelector(
-            "perspective-viewer perspective-viewer-plugin",
-        );
+const DATETIME_X: ViewerConfigUpdate = {
+    columns: ["Order Date", "Sales"],
+    group_by: [],
+    split_by: ["Region"],
+    sort: [["Order Date", "asc"]],
+} as ViewerConfigUpdate;
 
-        // Don't format - light DOM is CSV in a <pre> tag.
-        return viewer.innerHTML;
+const YEAR = /\b(\d{4})\b/;
+
+test.describe("Tooltip source values", () => {
+    test.beforeEach(async ({ page }) => {
+        await gotoBasic(page);
     });
-}
 
-test.describe("Superstore Inline", () => {
-    test.beforeEach(async function init({ page }) {
-        await page.goto(
-            "/node_modules/@perspective-dev/viewer/test/html/superstore-inline.html",
-        );
+    for (const plugin of ["X/Y Scatter", "X/Y Line"]) {
+        test(`${plugin} pins dates and values from the source row`, async ({
+            page,
+        }) => {
+            await restoreChart(page, {
+                ...DATETIME_X,
+                plugin,
+            } as ViewerConfigUpdate);
 
-        await page.evaluate(async () => {
-            while (!window["__TEST_PERSPECTIVE_READY__"]) {
-                await new Promise((x) => setTimeout(x, 10));
+            const [minYear, maxYear] = await viewYearRange(page, "Order Date");
+            expect(minYear).toBeGreaterThan(1970);
+
+            const tooltips = await sweepPinnedTooltips(page);
+            expect(tooltips.length).toBeGreaterThan(4);
+
+            for (const cells of tooltips) {
+                const date = tooltipValue(cells, "Order Date");
+                const sales = tooltipValue(cells, "Sales");
+                expect(date).toBeDefined();
+                expect(sales).toBeDefined();
+
+                const year = Number(YEAR.exec(date!)?.[1]);
+                expect(year).toBeGreaterThanOrEqual(minYear - 1);
+                expect(year).toBeLessThanOrEqual(maxYear + 1);
+                expect(sales!.startsWith("-")).toBe(false);
             }
         });
-
-        await page.evaluate(async () => {
-            await document.querySelector("perspective-viewer").restore({
-                plugin: "Debug",
-            });
-        });
-    });
-
-    run_standard_tests("superstore inline", get_contents);
+    }
 });
