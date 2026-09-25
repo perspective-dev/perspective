@@ -511,7 +511,7 @@ jobs:
                 arch:
                     - x86_64
                 python-version:
-                    - "3.13"
+                    - "3.14"
                 node-version: [22.x]
         steps:
             - name: Checkout
@@ -526,8 +526,8 @@ jobs:
                   name: perspective-metadata
                   path: rust/
 
-            # Shares the `emscripten-wasm32` ccache prefix and `wasm32`
-            # emsdk sysroot with `build_js` — same toolchain, same target.
+            # Pyodide requires a newer Emscripten toolchain than the browser
+            # build, so its compiler and sysroot caches must remain separate.
             - name: Initialize Build
               id: init-step
               uses: ./.github/actions/install-deps
@@ -535,8 +535,8 @@ jobs:
                   javascript: "false"
                   arch: ${{ matrix.arch }}
                   manylinux: "false"
-                  ccache: "emscripten-wasm32"
-                  emsdk_cache: "wasm32"
+                  ccache: "pyodide-wasm32"
+                  emsdk_cache: "pyodide-wasm32"
                   cargo_cache: "false"
                   cache_save: ${{ steps.config-step.outputs.SAVE_CACHE }}
                   skip_cache: ${{ steps.config-step.outputs.SKIP_CACHE }}
@@ -578,8 +578,8 @@ jobs:
                   for w in "${wheels[@]}"; do
                       echo "checking $w"
                       case "$w" in
-                          *pyemscripten_2025_0_wasm32.whl) ;;
-                          *) echo "::error::$w is not tagged pyemscripten_2025_0_wasm32"; exit 1 ;;
+                          *pyemscripten_2026_0_wasm32.whl) ;;
+                          *) echo "::error::$w is not tagged pyemscripten_2026_0_wasm32"; exit 1 ;;
                       esac
                       unzip -l "$w" | grep 'perspective/widget/static/perspective-anywidget.js' \
                           || { echo "::error::$w is missing the anywidget JS bundle"; exit 1; }
@@ -605,7 +605,7 @@ jobs:
                 arch:
                     - x86_64
                 python-version:
-                    - "3.13"
+                    - "3.14"
                 node-version: [22.x]
         steps:
             - name: Checkout
@@ -1240,7 +1240,7 @@ jobs:
 
             - uses: actions/download-artifact@v4
               with:
-                  name: perspective-python-dist-wasm32-emscripten-3.13
+                  name: perspective-python-dist-wasm32-emscripten-3.14
 
             - uses: actions/download-artifact@v4
               with:

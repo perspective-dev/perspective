@@ -168,7 +168,8 @@ this within a virtual environment.
 
 To build for [Pyodide](https://pyodide.org/), select
 `perspective-python (pyodide)` in `pnpm run setup` and install the pinned
-Pyodide distribution with `pnpm run install_pyodide`.
+Pyodide distribution with `pnpm run install_pyodide`. Pyodide builds use the
+separate `pyodide_emscripten` version pinned in `package.json`.
 
 ### `perspective-jupyterlab`
 

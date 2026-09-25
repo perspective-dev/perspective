@@ -14,9 +14,10 @@
     },
     "type": "module",
     "emscripten": "4.0.9",
+    "pyodide_emscripten": "5.0.3",
     "binaryen": "version_132",
     "llvm": "17.0.6",
-    "pyodide": "0.29.4",
+    "pyodide": "314.0.7",
     "engines": {
         "node": ">=16 <27"
     },
