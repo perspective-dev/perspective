@@ -138,10 +138,10 @@ Deviating from this specific version of Emscripten specified in the project's
 `package.json` can introduce various errors that are extremely difficult to
 debug.
 
-To install a specific version of Emscripten (e.g. `4.0.9`):
+To install a specific version of Emscripten (e.g. `5.0.3`):
 
 ```bash
-./emsdk install 4.0.9
+./emsdk install 5.0.3
 ```
 
 Set `PSP_SKIP_EMSDK_INSTALL=1` to prevent `pnpm install` from downloading the

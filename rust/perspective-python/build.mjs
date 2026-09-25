@@ -32,7 +32,7 @@ if (!!process.env.PSP_DEBUG) {
 const is_pyodide = !!process.env.PSP_PYODIDE;
 
 const python_version =
-    process.env.PSP_PYTHON_VERSION || (is_pyodide ? "3.13" : "3.12");
+    process.env.PSP_PYTHON_VERSION || (is_pyodide ? "3.14" : "3.12");
 
 const version = pkg.version;
 
@@ -50,7 +50,7 @@ if (is_pyodide) {
     );
     emsdk_prefix = `cd ${emsdkdir} && . ./emsdk_env.sh && ./emsdk activate ${emscripten} && cd ${cwd} && `;
     env.MATURIN_PYEMSCRIPTEN_PLATFORM_VERSION =
-        process.env.MATURIN_PYEMSCRIPTEN_PLATFORM_VERSION || "2025_0";
+        process.env.MATURIN_PYEMSCRIPTEN_PLATFORM_VERSION || "2026_0";
 }
 
 // if not windows
