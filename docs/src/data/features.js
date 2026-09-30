@@ -193,16 +193,16 @@ export default [
             ],
             columns_config: {
                 Profit: {
-                    pos_fg_color: "#32cd82",
-                    neg_fg_color: "#f50fed",
+                    fg_color:
+                        "linear-gradient(to right, #f50fed 0%, #32cd82 100%)",
                 },
                 Sales: {
-                    pos_fg_color: "#780aff",
-                    neg_fg_color: "#f5ac0f",
+                    fg_color:
+                        "linear-gradient(to right, #f5ac0f 0%, #780aff 100%)",
                 },
                 Discount: {
-                    pos_fg_color: "#f5ac0f",
-                    neg_fg_color: "#780aff",
+                    fg_color:
+                        "linear-gradient(to right, #780aff 0%, #f5ac0f 100%)",
                 },
             },
             sort: [["Sub-Category", "desc"]],
@@ -217,22 +217,22 @@ export default [
             plugin: "Datagrid",
             columns_config: {
                 Discount: {
-                    neg_bg_color: "#780aff",
+                    bg_color:
+                        "linear-gradient(to right, #780aff 0%, #f5ac0f 100%)",
                     bg_mode: "color",
                     fg_mode: "disabled",
-                    pos_bg_color: "#f5ac0f",
                 },
                 Profit: {
-                    neg_bg_color: "#f50fed",
+                    bg_color:
+                        "linear-gradient(to right, #f50fed 0%, #32cd82 100%)",
                     bg_mode: "color",
                     fg_mode: "disabled",
-                    pos_bg_color: "#32cd82",
                 },
                 Sales: {
-                    neg_bg_color: "#f5ac0f",
+                    bg_color:
+                        "linear-gradient(to right, #f5ac0f 0%, #780aff 100%)",
                     bg_mode: "color",
                     fg_mode: "disabled",
-                    pos_bg_color: "#780aff",
                 },
             },
             plugin_config: {
@@ -268,20 +268,20 @@ export default [
                 Profit: {
                     bg_mode: "gradient",
                     bg_gradient: 600,
-                    pos_bg_color: "#32cd82",
-                    neg_bg_color: "#f50fed",
+                    bg_color:
+                        "linear-gradient(to right, #f50fed 0%, #ffffff 50%, #32cd82 100%)",
                 },
                 Sales: {
                     bg_mode: "gradient",
                     bg_gradient: 2268,
-                    pos_bg_color: "#780aff",
-                    neg_bg_color: "#f5ac0f",
+                    bg_color:
+                        "linear-gradient(to right, #f5ac0f 0%, #ffffff 50%, #780aff 100%)",
                 },
                 Discount: {
                     bg_mode: "gradient",
                     bg_gradient: 0.8,
-                    pos_bg_color: "#f5ac0f",
-                    neg_bg_color: "#780aff",
+                    bg_color:
+                        "linear-gradient(to right, #780aff 0%, #ffffff 50%, #f5ac0f 100%)",
                 },
             },
             sort: [["Sub-Category", "desc"]],
@@ -305,20 +305,20 @@ export default [
                 Profit: {
                     fg_mode: "bar",
                     fg_gradient: 600,
-                    pos_fg_color: "#32cd82",
-                    neg_fg_color: "#f50fed",
+                    fg_color:
+                        "linear-gradient(to right, #f50fed 0%, #32cd82 100%)",
                 },
                 Sales: {
                     fg_mode: "bar",
                     fg_gradient: 2268,
-                    pos_fg_color: "#780aff",
-                    neg_fg_color: "#f5ac0f",
+                    fg_color:
+                        "linear-gradient(to right, #f5ac0f 0%, #780aff 100%)",
                 },
                 Discount: {
                     fg_mode: "bar",
                     fg_gradient: 0.8,
-                    pos_fg_color: "#f5ac0f",
-                    neg_fg_color: "#780aff",
+                    fg_color:
+                        "linear-gradient(to right, #780aff 0%, #f5ac0f 100%)",
                 },
             },
             sort: [["Sub-Category", "desc"]],
@@ -373,20 +373,20 @@ export default [
                 Profit: {
                     fg_mode: "label-bar",
                     fg_gradient: 600,
-                    pos_fg_color: "#32cd82",
-                    neg_fg_color: "#f50fed",
+                    fg_color:
+                        "linear-gradient(to right, #f50fed 0%, #32cd82 100%)",
                 },
                 Sales: {
                     fg_mode: "label-bar",
                     fg_gradient: 2268,
-                    pos_fg_color: "#780aff",
-                    neg_fg_color: "#f5ac0f",
+                    fg_color:
+                        "linear-gradient(to right, #f5ac0f 0%, #780aff 100%)",
                 },
                 Discount: {
                     fg_mode: "label-bar",
                     fg_gradient: 0.8,
-                    pos_fg_color: "#f5ac0f",
-                    neg_fg_color: "#780aff",
+                    fg_color:
+                        "linear-gradient(to right, #780aff 0%, #f5ac0f 100%)",
                 },
             },
             sort: [["Sub-Category", "desc"]],
@@ -418,6 +418,113 @@ export default [
                 [`Profit (-)`]: `if("Profit"<0){"Profit"}else{0}`,
                 [`Profit (+)`]: `if("Profit">0){"Profit"}else{0}`,
             },
+        },
+    },
+    {
+        name: "Zebra Stripes 2",
+        description:
+            "Data grid with 6 columns, banded with a zebra stripe every 2 rows.",
+        config: {
+            title: "Zebra Stripes 2",
+            plugin: "Datagrid",
+            columns: [
+                "Category",
+                "Sales",
+                "Discount",
+                "Profit",
+                "Sub-Category",
+                "Order Date",
+            ],
+            plugin_config: {
+                zebra_rows: 2,
+            },
+            sort: [["Sub-Category", "desc"]],
+        },
+    },
+    {
+        name: "Zebra Stripes 5",
+        description:
+            "Data grid with 6 columns, banded with a zebra stripe every 5 rows.",
+        config: {
+            title: "Zebra Stripes 5",
+            plugin: "Datagrid",
+            columns: [
+                "Category",
+                "Sales",
+                "Discount",
+                "Profit",
+                "Sub-Category",
+                "Order Date",
+            ],
+            plugin_config: {
+                zebra_rows: 5,
+            },
+            sort: [["Sub-Category", "desc"]],
+        },
+    },
+    {
+        name: "Large Rows",
+        description:
+            "Data grid with 6 columns whose rows are 48px tall, twice the default.",
+        config: {
+            title: "Large Row Height",
+            plugin: "Datagrid",
+            columns: [
+                "Category",
+                "Sales",
+                "Discount",
+                "Profit",
+                "Sub-Category",
+                "Order Date",
+            ],
+            plugin_config: {
+                font_size: 20,
+                row_height: 48,
+            },
+            sort: [["Sub-Category", "desc"]],
+        },
+    },
+    {
+        name: "Typewriter Ledger",
+        description:
+            "Data grid combining a monospace font, taller rows, 2-row zebra striping with a custom stripe color, and custom bar and gradient colors.",
+        config: {
+            title: "Typewriter Ledger",
+            plugin: "Datagrid",
+            columns: [
+                "Category",
+                "Sales",
+                "Discount",
+                "Profit",
+                "Sub-Category",
+                "Order Date",
+            ],
+            plugin_config: {
+                font_family: "Courier New, monospace",
+                font_size: 15,
+                row_height: 32,
+                zebra_rows: 2,
+                zebra_color: "#666",
+            },
+            columns_config: {
+                Sales: {
+                    fg_mode: "bar",
+                    fg_gradient: 2268,
+                    fg_color:
+                        "linear-gradient(to right, #b00020 0%, #0f9d58 100%)",
+                },
+                Profit: {
+                    bg_mode: "gradient",
+                    bg_gradient: 600,
+                    bg_color:
+                        "linear-gradient(to right, #b00020 0%, #fdf1d6 50%, #0f9d58 100%)",
+                },
+                Discount: {
+                    fg_color:
+                        "linear-gradient(to right, #7a5c00 0%, #1b5e20 100%)",
+                },
+            },
+            sort: [["Sub-Category", "desc"]],
         },
     },
     {

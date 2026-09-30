@@ -253,3 +253,41 @@ class TestServer(object):
             executor.shutdown()
 
         assert checked > 0
+
+    def test_concurrent_flat_view_reads_are_threadsafe(self):
+        client = Server().new_local_client()
+        table = client.table(
+            {"a": "integer", "b": "string", "index": "integer"}, index="index"
+        )
+        table.update(
+            [{"a": i, "b": ascii_letters[i % 52], "index": i} for i in range(60)]
+        )
+        for config in ({}, {"filter": [["a", ">", 2]]}):
+            view = table.view(**config)
+            errors = []
+            stop = threading.Event()
+
+            def read():
+                try:
+                    while not stop.is_set():
+                        view.column_paths()
+                        view.to_columns()
+                        view.to_arrow()
+                except Exception as e:
+                    errors.append(e)
+
+            readers = [threading.Thread(target=read) for _ in range(8)]
+            for reader in readers:
+                reader.start()
+
+            try:
+                for i in range(300):
+                    table.update([{"a": i, "b": "z", "index": i % 60}])
+            finally:
+                stop.set()
+                for reader in readers:
+                    reader.join()
+
+            assert errors == []
+            assert view.num_rows() == len(view.to_columns()["a"])
+            view.delete()

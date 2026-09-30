@@ -68,7 +68,6 @@ struct t_expression_tables {
     std::shared_ptr<t_data_table> m_flattened;
     std::shared_ptr<t_data_table> m_prev;
     std::shared_ptr<t_data_table> m_current;
-    std::shared_ptr<t_data_table> m_delta;
     std::shared_ptr<t_data_table> m_transitions;
 };
 

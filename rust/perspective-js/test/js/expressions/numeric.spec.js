@@ -225,7 +225,7 @@ function validate_binary_operations(output, expressions, operator) {
                         expect(await view.to_columns()).toEqual({
                             __ROW_PATH__: [[], [null], [1], [2], [3], [4]],
                             a: [295, 220, 10, 15, 20, 30],
-                            b: [10, 0, 1, 2, 3, 4],
+                            b: [10, null, 1, 2, 3, 4],
                             '"a"': [295, 220, 10, 15, 20, 30],
                         });
                         await view.delete();

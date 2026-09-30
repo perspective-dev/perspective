@@ -588,8 +588,11 @@ maybe_str_to_aggtype(const std::string& str) {
     if (str == "abs sum" || str == "abs_sum") {
         return t_aggtype::AGGTYPE_ABS_SUM;
     }
+    if (str == "sum or zero" || str == "sum_or_zero") {
+        return t_aggtype::AGGTYPE_SUM_OR_ZERO;
+    }
     if (str == "sum not null" || str == "sum_not_null") {
-        return t_aggtype::AGGTYPE_SUM_NOT_NULL;
+        return t_aggtype::AGGTYPE_SUM;
     }
     if (str == "mean by count" || str == "mean_by_count") {
         return t_aggtype::AGGTYPE_MEAN_BY_COUNT;

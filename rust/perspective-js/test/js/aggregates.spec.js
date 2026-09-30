@@ -1545,7 +1545,7 @@ const std = (nums) => {
                 __ROW_PATH__: [[]],
                 x: [""],
                 y: [0],
-                index: [0],
+                index: [null],
             });
 
             await table.update({

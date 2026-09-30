@@ -704,6 +704,7 @@ DerivedTableEngine::register_table(
     const t_id& table_id,
     std::shared_ptr<t_derived_source> source
 ) {
+    PSP_WRITE_LOCK(m_lock);
     m_view_to_tables.emplace(view_id, table_id);
     m_table_to_view[table_id] = view_id;
     m_sources[table_id] = std::move(source);
@@ -711,6 +712,7 @@ DerivedTableEngine::register_table(
 
 void
 DerivedTableEngine::unregister_table(const t_id& table_id) {
+    PSP_WRITE_LOCK(m_lock);
     auto iter = m_table_to_view.find(table_id);
     if (iter == m_table_to_view.end()) {
         return;
@@ -731,22 +733,26 @@ DerivedTableEngine::unregister_table(const t_id& table_id) {
 
 bool
 DerivedTableEngine::is_derived_table(const t_id& table_id) const {
+    PSP_READ_LOCK(m_lock);
     return m_table_to_view.find(table_id) != m_table_to_view.end();
 }
 
 bool
 DerivedTableEngine::has_dependents(const t_id& view_id) const {
+    PSP_READ_LOCK(m_lock);
     return m_view_to_tables.find(view_id) != m_view_to_tables.end();
 }
 
-const DerivedTableEngine::t_id&
+DerivedTableEngine::t_id
 DerivedTableEngine::get_view_id(const t_id& table_id) const {
+    PSP_READ_LOCK(m_lock);
     return m_table_to_view.at(table_id);
 }
 
 std::vector<
     std::pair<DerivedTableEngine::t_id, std::shared_ptr<t_derived_source>>>
 DerivedTableEngine::get_dependents(const t_id& view_id) const {
+    PSP_READ_LOCK(m_lock);
     std::vector<std::pair<t_id, std::shared_ptr<t_derived_source>>> rval;
     auto range = m_view_to_tables.equal_range(view_id);
     for (auto it = range.first; it != range.second; ++it) {
@@ -2419,7 +2425,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             number_opts.add_aggregates()->set_name("pct sum total");
             number_opts.add_aggregates()->set_name("stddev");
             number_opts.add_aggregates()->set_name("sum abs");
-            number_opts.add_aggregates()->set_name("sum not null");
+            number_opts.add_aggregates()->set_name("sum or zero");
             number_opts.add_aggregates()->set_name("unique");
             number_opts.add_aggregates()->set_name("var");
             auto args3 = number_opts.add_aggregates();
@@ -3870,11 +3876,9 @@ ProtoServer::_poll() {
         dirty_ids.insert(table_id);
     }
 
-    for (const auto& table_id : m_derived_updated) {
+    for (const auto& table_id : _take_derived_updated()) {
         dirty_ids.insert(table_id);
     }
-
-    m_derived_updated.clear();
 
     // Recompute join tables whose sources were dirty, using a worklist
     // to handle chained joins (join of join) in dependency order.
@@ -3995,7 +3999,7 @@ ProtoServer::_notify_table(
         for (auto& [child_id, source] :
              m_derived_engine.get_dependents(view_id)) {
             if (source->step()) {
-                m_derived_updated.insert(child_id);
+                _mark_derived_updated(child_id);
                 auto child = source->child();
                 _notify_table(child, child_id, 0, outs);
             }
@@ -4023,10 +4027,14 @@ ProtoServer::make_derived_table(
     auto parent_id = m_resources.get_table_id_for_view(view_id);
     auto parent = m_resources.get_table(parent_id);
     auto root_id = _root_table_id(parent_id);
-    if (m_resources.is_table_dirty(root_id)) {
-        auto root = m_resources.get_table(root_id);
-        _process_table(root, root_id, outs);
-    }
+    auto root = m_resources.get_table(root_id);
+    _process_table(root, root_id, outs);
+
+#ifdef PSP_PARALLEL_FOR
+    std::lock_guard<std::mutex> process_guard(
+        root->get_pool()->get_process_lock()
+    );
+#endif
 
     auto source = m_resources.get_view(view_id)->make_derived_source(parent);
     t_schema schema = source->infer_schema();
@@ -4083,9 +4091,32 @@ ProtoServer::_process_table_unchecked(
     std::vector<ProtoServerResp<ProtoServer::Response>>& outs
 ) {
     auto table_ = table;
+#ifdef PSP_PARALLEL_FOR
+    std::lock_guard<std::mutex> process_guard(
+        table->get_pool()->get_process_lock()
+    );
+#endif
     table->get_pool()->_process([this, &table_, &table_id, &outs](auto port_id) {
         _notify_table(table_, table_id, port_id, outs);
     });
+}
+
+void
+ProtoServer::_mark_derived_updated(const ServerResources::t_id& table_id) {
+#ifdef PSP_PARALLEL_FOR
+    std::lock_guard<std::mutex> guard(m_derived_updated_lock);
+#endif
+    m_derived_updated.insert(table_id);
+}
+
+tsl::hopscotch_set<ServerResources::t_id>
+ProtoServer::_take_derived_updated() {
+#ifdef PSP_PARALLEL_FOR
+    std::lock_guard<std::mutex> guard(m_derived_updated_lock);
+#endif
+    tsl::hopscotch_set<ServerResources::t_id> rval;
+    std::swap(rval, m_derived_updated);
+    return rval;
 }
 
 void

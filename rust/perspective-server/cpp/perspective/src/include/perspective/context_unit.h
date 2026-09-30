@@ -76,7 +76,6 @@ public:
 
     void notify(
         const t_data_table& flattened,
-        const t_data_table& delta,
         const t_data_table& prev,
         const t_data_table& current,
         const t_data_table& transitions,
@@ -123,7 +122,7 @@ public:
 
     std::shared_ptr<t_data_table> get_table() const;
 
-    t_tscalar get_column_name(t_index idx);
+    t_tscalar get_column_name(t_index idx) const;
 
     std::vector<std::string> get_column_names() const;
 

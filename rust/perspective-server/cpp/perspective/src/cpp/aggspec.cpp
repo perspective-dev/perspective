@@ -220,8 +220,11 @@ t_aggspec::agg_str() const {
             ss << "udf_reducer_" << disp_name();
             return ss.str();
         }
-        case AGGTYPE_SUM_NOT_NULL: {
-            return "sum not null";
+        case AGGTYPE_SUM_OR_ZERO: {
+            return "sum or zero";
+        }
+        case AGGTYPE_VALID_COUNT: {
+            return "valid count";
         }
         case AGGTYPE_MEAN_BY_COUNT: {
             return "mean by count";
@@ -269,15 +272,13 @@ get_simple_accumulator_type(t_dtype coltype) {
         case DTYPE_INT64:
         case DTYPE_INT32:
         case DTYPE_INT16:
-        case DTYPE_INT8: {
-            return DTYPE_INT64;
-        } break;
+        case DTYPE_INT8:
         case DTYPE_UINT64:
         case DTYPE_UINT32:
         case DTYPE_UINT16:
         case DTYPE_UINT8: {
-            return DTYPE_UINT64;
-        }
+            return DTYPE_INT64;
+        } break;
         case DTYPE_FLOAT64:
         case DTYPE_FLOAT32: {
             return DTYPE_FLOAT64;
@@ -350,11 +351,14 @@ t_aggspec::get_output_specs(const t_schema& schema) const {
         case AGGTYPE_PCT_SUM_PARENT:
         case AGGTYPE_PCT_SUM_GRAND_TOTAL:
         case AGGTYPE_MUL:
-        case AGGTYPE_SUM_NOT_NULL: {
+        case AGGTYPE_SUM_OR_ZERO: {
             t_dtype coltype = schema.get_dtype(m_dependencies[0].name());
             return mk_col_name_type_vec(
                 name(), get_simple_accumulator_type(coltype)
             );
+        }
+        case AGGTYPE_VALID_COUNT: {
+            return mk_col_name_type_vec(name(), DTYPE_INT64);
         }
         case AGGTYPE_ANY:
         case AGGTYPE_UNIQUE:

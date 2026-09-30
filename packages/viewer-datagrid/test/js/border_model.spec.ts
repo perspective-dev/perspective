@@ -69,9 +69,10 @@ function cell(
 
 test.describe("split_levels", () => {
     test("strips the trailing column name", () => {
-        expect(
-            split_levels(to_area(["false|b|w"], 2), 2, 0),
-        ).toStrictEqual(["false", "b"]);
+        expect(split_levels(to_area(["false|b|w"], 2), 2, 0)).toStrictEqual([
+            "false",
+            "b",
+        ]);
         expect(split_levels(to_area(["false|w"], 2), 2, 0)).toStrictEqual([
             "false",
         ]);

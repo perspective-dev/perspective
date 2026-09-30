@@ -147,6 +147,11 @@ t_pool::get_lock() const {
     return m_lock;
 }
 
+std::mutex&
+t_pool::get_process_lock() {
+    return m_process_lock;
+}
+
 void
 t_pool::adopt_lock(const t_pool& other) {
     m_lock_owner = other.m_lock_owner;

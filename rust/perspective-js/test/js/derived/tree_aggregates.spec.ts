@@ -40,7 +40,7 @@ const NUMERIC = [
     "high minus low",
     "sum abs",
     "abs sum",
-    "sum not null",
+    "sum or zero",
     "pct sum parent",
     "pct sum grand total",
     "var",

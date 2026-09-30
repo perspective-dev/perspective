@@ -68,6 +68,19 @@ struct by_idx_lfidx {};
 
 PERSPECTIVE_EXPORT t_tscalar get_dominant(std::vector<t_tscalar>& values);
 
+/// How one aggschema column is populated during a strand build.
+enum t_strand_col_kind : std::uint8_t {
+    STRAND_COL_VALUE,
+    STRAND_COL_ABS,
+    STRAND_COL_VALID,
+    STRAND_COL_COUNT
+};
+
+struct t_strand_col {
+    t_strand_col_kind m_kind;
+    std::string m_source;
+};
+
 struct t_build_strand_table_metadata {
     t_schema m_flattened_schema;
     t_schema m_strand_schema;
@@ -75,6 +88,10 @@ struct t_build_strand_table_metadata {
     t_uindex m_npivotlike;
     std::vector<std::string> m_pivot_like_columns;
     t_uindex m_pivsize;
+
+    /// One entry per `m_aggschema` column, classifying how the strand
+    /// builders populate it.
+    std::vector<t_strand_col> m_agg_cols;
 };
 
 typedef multi_index_container<
@@ -162,6 +179,13 @@ struct PERSPECTIVE_EXPORT t_agg_update_info {
     std::vector<t_column*> m_dst;
     std::vector<t_aggspec> m_aggspecs;
 
+    /// Whether each aggregate's source column has a numeric dtype.
+    std::vector<bool> m_numeric_source;
+
+    /// Each aggregate's index into its source's `AGGTYPE_VALID_COUNT`
+    /// column, or `t_uindex(-1)` when it has none.
+    std::vector<t_uindex> m_valid_idx;
+
     std::vector<t_uindex> m_dst_topo_sorted;
 };
 
@@ -208,13 +232,12 @@ public:
         t_op op,
         t_uindex idx,
         t_uindex npivots,
-        t_uindex strand_count_idx,
-        t_uindex aggcolsize,
+        const std::vector<t_strand_col>& agg_kinds,
         bool force_current_row,
         const std::vector<const t_column*>& piv_ccols,
         const std::vector<const t_column*>& piv_tcols,
         const std::vector<const t_column*>& agg_ccols,
-        const std::vector<const t_column*>& agg_dcols,
+        const std::vector<const t_column*>& agg_pcols,
         std::vector<t_column*>& piv_scols,
         std::vector<t_column*>& agg_acols,
         t_column* agg_scountspar,
@@ -228,8 +251,7 @@ public:
         t_tscalar pkey,
         t_uindex idx,
         t_uindex npivots,
-        t_uindex strand_count_idx,
-        t_uindex aggcolsize,
+        const std::vector<t_strand_col>& agg_kinds,
         const std::vector<const t_column*>& piv_pcols,
         const std::vector<const t_column*>& agg_pcols,
         std::vector<t_column*>& piv_scols,
@@ -243,7 +265,6 @@ public:
     std::pair<std::shared_ptr<t_data_table>, std::shared_ptr<t_data_table>>
     build_strand_table(
         const t_data_table& flattened,
-        const t_data_table& delta,
         const t_data_table& prev,
         const t_data_table& current,
         const t_data_table& transitions,

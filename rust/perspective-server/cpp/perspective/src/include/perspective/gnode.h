@@ -122,8 +122,8 @@ public:
     void send(t_uindex port_id, const t_data_table& fragments);
 
     /**
-     * @brief Apply one step of a derived table whose state rows and previous
-     * values are dictated by its source.
+     * @brief Apply one step of a derived table dictated by its source, with
+     * the caller holding the pool's write lock.
      */
     bool process_derived(const t_derived_step& step);
 
@@ -369,7 +369,6 @@ protected:
      * @tparam DATA_T
      * @param fcolumn
      * @param scolumn
-     * @param dcolumn
      * @param pcolumn
      * @param ccolumn
      * @param tcolumn
@@ -379,7 +378,6 @@ protected:
     void _process_column(
         const t_column* fcolumn,
         const t_column* scolumn,
-        t_column* dcolumn,
         t_column* pcolumn,
         t_column* ccolumn,
         t_column* tcolumn,
@@ -499,7 +497,6 @@ t_gnode::notify_context(
     CTX_T* ctx = ctxh.get<CTX_T>();
 
     // Tables from the gnode which do not have the expressions applied yet
-    std::shared_ptr<t_data_table> delta = m_oports[PSP_PORT_DELTA]->get_table();
     std::shared_ptr<t_data_table> prev = m_oports[PSP_PORT_PREV]->get_table();
     std::shared_ptr<t_data_table> current =
         m_oports[PSP_PORT_CURRENT]->get_table();
@@ -521,7 +518,6 @@ t_gnode::notify_context(
 
         auto joined_flattened =
             flattened->join(ctx_expression_tables->m_flattened);
-        auto joined_delta = delta->join(ctx_expression_tables->m_delta);
         auto joined_prev = prev->join(ctx_expression_tables->m_prev);
         auto joined_current = current->join(ctx_expression_tables->m_current);
         auto joined_transitions =
@@ -532,14 +528,13 @@ t_gnode::notify_context(
         // as the contexts do not retain a reference to these tables.
         ctx->notify(
             *joined_flattened,
-            *joined_delta,
             *joined_prev,
             *joined_current,
             *joined_transitions,
             existed
         );
     } else {
-        ctx->notify(*flattened, *delta, *prev, *current, *transitions, existed);
+        ctx->notify(*flattened, *prev, *current, *transitions, existed);
     }
 
     ctx->step_end();
@@ -608,7 +603,6 @@ template <>
 void t_gnode::_process_column<std::string>(
     const t_column* fcolumn,
     const t_column* scolumn,
-    t_column* dcolumn,
     t_column* pcolumn,
     t_column* ccolumn,
     t_column* tcolumn,
@@ -620,7 +614,6 @@ void
 t_gnode::_process_column(
     const t_column* fcolumn,
     const t_column* scolumn,
-    t_column* dcolumn,
     t_column* pcolumn,
     t_column* ccolumn,
     t_column* tcolumn,
@@ -644,7 +637,10 @@ t_gnode::_process_column(
                 bool prev_valid = false;
 
                 DATA_T cur_value = *(fcolumn->get_nth<DATA_T>(idx));
-                bool cur_valid = fcolumn->is_valid(idx);
+
+                t_status cur_status = *(fcolumn->get_nth_status(idx));
+                bool cur_valid = cur_status == STATUS_VALID;
+                bool cur_cleared = cur_status == STATUS_CLEAR;
 
                 if (row_pre_existed) {
                     prev_value = *(scolumn->get_nth<DATA_T>(rlookup.m_idx));
@@ -665,36 +661,18 @@ t_gnode::_process_column(
                     prev_pkey_eq
                 );
 
-                // Mirrors `t_gstate::update_master_column`: an invalid cell
-                // is an explicit null if CLEAR (removes this row's
-                // contribution from additive aggregates), and a no-op if
-                // INVALID (column omitted from a partial update). A slot's
-                // raw bits are unspecified when its validity flag is false,
-                // so only the valid side of a transition may be read (#1256).
-                DATA_T delta_value;
-                if (cur_valid) {
-                    delta_value =
-                        cur_value - (prev_valid ? prev_value : DATA_T(0));
-                } else if (fcolumn->is_cleared(idx) && prev_valid) {
-                    SUPPRESS_WARNINGS_VC(4146)
-                    delta_value = -prev_value;
-                    RESTORE_WARNINGS_VC()
-                } else {
-                    delta_value = DATA_T(0);
-                }
-
-                dcolumn->set_nth<DATA_T>(added_count, delta_value);
-                dcolumn->set_valid(added_count, true);
-
                 pcolumn->set_nth<DATA_T>(added_count, prev_value);
                 pcolumn->set_valid(added_count, prev_valid);
 
-                ccolumn->set_nth<DATA_T>(
-                    added_count, cur_valid ? cur_value : prev_value
-                );
-                ccolumn->set_valid(
-                    added_count, cur_valid ? cur_valid : prev_valid
-                );
+                if (cur_valid) {
+                    ccolumn->set_nth<DATA_T>(added_count, cur_value);
+                    ccolumn->set_valid(added_count, true);
+                } else if (prev_valid && !cur_cleared) {
+                    ccolumn->set_nth<DATA_T>(added_count, prev_value);
+                    ccolumn->set_valid(added_count, true);
+                } else {
+                    ccolumn->clear(added_count);
+                }
 
                 tcolumn->set_nth<std::uint8_t>(idx, trans);
             } break;
@@ -709,13 +687,6 @@ t_gnode::_process_column(
 
                     ccolumn->set_nth<DATA_T>(added_count, prev_value);
                     ccolumn->set_valid(added_count, prev_valid);
-
-                    SUPPRESS_WARNINGS_VC(4146)
-                    dcolumn->set_nth<DATA_T>(
-                        added_count, prev_valid ? -prev_value : DATA_T(0)
-                    );
-                    RESTORE_WARNINGS_VC()
-                    dcolumn->set_valid(added_count, true);
 
                     tcolumn->set_nth<std::uint8_t>(
                         added_count, VALUE_TRANSITION_NEQ_TDF

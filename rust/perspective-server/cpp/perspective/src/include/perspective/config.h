@@ -160,7 +160,7 @@ public:
 
     t_uindex get_num_columns() const;
 
-    std::string col_at(t_uindex idx) const;
+    const std::string& col_at(t_uindex idx) const;
 
     bool has_pkey_agg() const;
 

@@ -864,8 +864,10 @@ function it_old_behavior(name, capture) {
                 });
                 view.on_update(
                     async function (updated) {
-                        // underlying data changes, but only total aggregate row is affected
-                        const expected = [{ x: 10, y: 3, z: 2 }];
+                        const expected = [
+                            { x: 10, y: 3, z: 2 },
+                            { x: 5, y: 1, z: 2 },
+                        ];
                         await match_delta(perspective, updated.delta, expected);
                         view.delete();
                         table.delete();
@@ -1253,9 +1255,11 @@ function it_old_behavior(name, capture) {
                 });
                 view.on_update(
                     async function (updated) {
-                        // underlying data changes, but only total aggregate row is affected
-                        const expected = await view.to_json();
-                        expected.splice(3, 1);
+                        const expected = (await view.to_json()).filter(
+                            (d) =>
+                                d["__ROW_PATH__"].length === 0 ||
+                                d["__ROW_PATH__"][0] !== "c",
+                        );
                         expected.map((d) => {
                             delete d["__ROW_PATH__"];
                         });
@@ -1285,9 +1289,11 @@ function it_old_behavior(name, capture) {
                     });
                     view.on_update(
                         async function (updated) {
-                            // underlying data changes, but only total aggregate row is affected
-                            const expected = await view.to_json();
-                            expected.splice(3, 1);
+                            const expected = (await view.to_json()).filter(
+                                (d) =>
+                                    d["__ROW_PATH__"].length === 0 ||
+                                    d["__ROW_PATH__"][0] !== "c",
+                            );
                             expected.map((d) => {
                                 delete d["__ROW_PATH__"];
                             });

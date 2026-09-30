@@ -93,7 +93,6 @@ t_gnode::t_gnode(
         m_input_schema,
         m_output_schema,
         m_output_schema,
-        m_output_schema,
         trans_schema,
         existed_schema
     };
@@ -390,7 +389,6 @@ t_gnode::_compute_transitions(
     _process_state.m_lookup = lookup;
 
     // Get data tables for process state
-    _process_state.m_delta_data_table = m_oports[PSP_PORT_DELTA]->get_table();
     _process_state.m_prev_data_table = m_oports[PSP_PORT_PREV]->get_table();
     _process_state.m_current_data_table =
         m_oports[PSP_PORT_CURRENT]->get_table();
@@ -399,7 +397,6 @@ t_gnode::_compute_transitions(
     _process_state.m_existed_data_table =
         m_oports[PSP_PORT_EXISTED]->get_table();
 
-    // Clear delta, prev, current, transitions, existed on EACH call.
     _process_state.clear_transitional_data_tables();
 
     // And re-reserved for the amount of data in `flattened`
@@ -424,8 +421,6 @@ t_gnode::_compute_transitions(
                 _process_state.m_flattened_data_table->_get_column(cname);
             auto* scolumn =
                 _process_state.m_state_data_table->_get_column(cname);
-            auto* dcolumn =
-                _process_state.m_delta_data_table->_get_column(cname);
             auto* pcolumn =
                 _process_state.m_prev_data_table->_get_column(cname);
             auto* ccolumn =
@@ -440,7 +435,6 @@ t_gnode::_compute_transitions(
                     _process_column<std::int64_t>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -451,7 +445,6 @@ t_gnode::_compute_transitions(
                     _process_column<std::int32_t>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -462,7 +455,6 @@ t_gnode::_compute_transitions(
                     _process_column<std::int16_t>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -473,7 +465,6 @@ t_gnode::_compute_transitions(
                     _process_column<std::int8_t>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -484,7 +475,6 @@ t_gnode::_compute_transitions(
                     _process_column<std::uint64_t>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -495,7 +485,6 @@ t_gnode::_compute_transitions(
                     _process_column<std::uint32_t>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -506,7 +495,6 @@ t_gnode::_compute_transitions(
                     _process_column<std::uint16_t>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -517,7 +505,6 @@ t_gnode::_compute_transitions(
                     _process_column<std::uint8_t>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -528,7 +515,6 @@ t_gnode::_compute_transitions(
                     _process_column<double>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -539,7 +525,6 @@ t_gnode::_compute_transitions(
                     _process_column<float>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -550,7 +535,6 @@ t_gnode::_compute_transitions(
                     _process_column<std::uint8_t>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -561,7 +545,6 @@ t_gnode::_compute_transitions(
                     _process_column<std::int64_t>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -572,7 +555,6 @@ t_gnode::_compute_transitions(
                     _process_column<std::uint32_t>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -583,7 +565,6 @@ t_gnode::_compute_transitions(
                     _process_column<std::string>(
                         fcolumn,
                         scolumn,
-                        dcolumn,
                         pcolumn,
                         ccolumn,
                         tcolumn,
@@ -745,7 +726,6 @@ void
 t_gnode::_process_column<std::string>(
     const t_column* fcolumn,
     const t_column* scolumn,
-    t_column* dcolumn,
     t_column* pcolumn,
     t_column* ccolumn,
     t_column* tcolumn,
@@ -772,7 +752,9 @@ t_gnode::_process_column<std::string>(
                 const auto* cur_value = fcolumn->get_nth<const char>(idx);
                 std::string curs(cur_value);
 
-                bool cur_valid = fcolumn->is_valid(idx);
+                t_status cur_status = *(fcolumn->get_nth_status(idx));
+                bool cur_valid = cur_status == STATUS_VALID;
+                bool cur_cleared = cur_status == STATUS_CLEAR;
 
                 if (row_pre_existed) {
                     prev_value = scolumn->get_nth<const char>(rlookup.m_idx);
@@ -806,15 +788,13 @@ t_gnode::_process_column<std::string>(
 
                 if (cur_valid) {
                     ccolumn->set_nth<const char*>(added_count, cur_value);
-                }
-
-                if (!cur_valid && prev_valid) {
+                    ccolumn->set_valid(added_count, true);
+                } else if (prev_valid && !cur_cleared) {
                     ccolumn->set_nth<const char*>(added_count, prev_value);
+                    ccolumn->set_valid(added_count, true);
+                } else {
+                    ccolumn->clear(added_count);
                 }
-
-                ccolumn->set_valid(
-                    added_count, cur_valid ? cur_valid : prev_valid
-                );
 
                 tcolumn->set_nth<std::uint8_t>(idx, trans);
             } break;
@@ -906,8 +886,6 @@ bool
 t_gnode::process_derived(const t_derived_step& step) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "Cannot `process_derived` on an uninited gnode.");
-    PSP_GIL_UNLOCK();
-    PSP_WRITE_LOCK(*m_lock);
     m_was_updated = false;
     m_removed_pkeys = nullptr;
 
@@ -1200,7 +1178,6 @@ t_gnode::notify_context<t_ctxunit>(
 ) {
     auto* ctx = ctxh.get<t_ctxunit>();
 
-    std::shared_ptr<t_data_table> delta = m_oports[PSP_PORT_DELTA]->get_table();
     std::shared_ptr<t_data_table> prev = m_oports[PSP_PORT_PREV]->get_table();
     std::shared_ptr<t_data_table> current =
         m_oports[PSP_PORT_CURRENT]->get_table();
@@ -1213,9 +1190,7 @@ t_gnode::notify_context<t_ctxunit>(
     // pass the tables as const references - the destructors for all of the
     // joined tables will be called after this function finishes executing,
     // as the contexts do not retain a reference to these tables.
-    ctx->notify(
-        *(flattened), *(delta), *(prev), *(current), *(transitions), existed
-    );
+    ctx->notify(*(flattened), *(prev), *(current), *(transitions), existed);
 
     ctx->step_end();
 }
@@ -1515,7 +1490,6 @@ t_gnode::_process_windows(
     t_uindex n_old = flattened->size();
     t_uindex n_new = n_old + extra.size();
 
-    std::shared_ptr<t_data_table> delta = m_oports[PSP_PORT_DELTA]->get_table();
     std::shared_ptr<t_data_table> prev = m_oports[PSP_PORT_PREV]->get_table();
     std::shared_ptr<t_data_table> current =
         m_oports[PSP_PORT_CURRENT]->get_table();
@@ -1525,7 +1499,6 @@ t_gnode::_process_windows(
         m_oports[PSP_PORT_EXISTED]->get_table();
 
     flattened->extend(n_new);
-    delta->extend(n_new);
     prev->extend(n_new);
     current->extend(n_new);
     transitions->extend(n_new);
@@ -1570,7 +1543,6 @@ t_gnode::_process_windows(
     copy_plans.push_back(plan_table(flattened));
     copy_plans.push_back(plan_table(prev));
     copy_plans.push_back(plan_table(current));
-    std::vector<t_wcol> delta_plan = plan_table(delta);
     std::vector<t_wcol> transitions_plan = plan_table(transitions);
     t_column* existed_col = existed->get_column("psp_existed").get();
     t_column* widened_col = existed->get_column("psp_widened").get();
@@ -1606,20 +1578,6 @@ t_gnode::_process_windows(
                         wcol.m_col->clear(row);
                         break;
                 }
-            }
-        }
-
-        for (const auto& wcol : delta_plan) {
-            switch (wcol.m_kind) {
-                case t_wcol_kind::PKEY:
-                    wcol.m_col->set_scalar(row, pkey);
-                    break;
-                case t_wcol_kind::OP:
-                    wcol.m_col->set_nth<std::uint8_t>(row, OP_INSERT);
-                    break;
-                default:
-                    wcol.m_col->clear(row);
-                    break;
             }
         }
 
@@ -1784,7 +1742,6 @@ t_gnode::_compute_expressions(
     const std::shared_ptr<t_data_table>& master,
     const std::shared_ptr<t_data_table>& flattened
 ) {
-    std::shared_ptr<t_data_table> delta = m_oports[PSP_PORT_DELTA]->get_table();
     std::shared_ptr<t_data_table> prev = m_oports[PSP_PORT_PREV]->get_table();
     std::shared_ptr<t_data_table> current =
         m_oports[PSP_PORT_CURRENT]->get_table();
@@ -1806,7 +1763,6 @@ t_gnode::_compute_expressions(
                     master,
                     m_gstate->get_pkey_map(),
                     flattened,
-                    delta,
                     prev,
                     current,
                     transitions,
@@ -1821,7 +1777,6 @@ t_gnode::_compute_expressions(
                     master,
                     m_gstate->get_pkey_map(),
                     flattened,
-                    delta,
                     prev,
                     current,
                     transitions,
@@ -1836,7 +1791,6 @@ t_gnode::_compute_expressions(
                     master,
                     m_gstate->get_pkey_map(),
                     flattened,
-                    delta,
                     prev,
                     current,
                     transitions,
@@ -1851,7 +1805,6 @@ t_gnode::_compute_expressions(
                     master,
                     m_gstate->get_pkey_map(),
                     flattened,
-                    delta,
                     prev,
                     current,
                     transitions,

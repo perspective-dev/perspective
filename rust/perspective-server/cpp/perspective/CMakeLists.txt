@@ -599,7 +599,6 @@ else()
 # -s MEMORY_GROWTH_GEOMETRIC_CAP=536870912 \
 
     set(PSP_FILESYSTEM_FLAGS "-s NO_FILESYSTEM=1 ")
-    set(PSP_CLOSURE_FLAGS "--closure=1 ")
 
     # On-disk tables in the browser are backed by OPFS via emscripten's WasmFS.
     if(PSP_WASM_OPFS)
@@ -608,7 +607,6 @@ else()
 
     set(PSP_WASM_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \
         --no-entry \
-        ${PSP_CLOSURE_FLAGS} \
         ${PSP_FILESYSTEM_FLAGS} \
         -s ALLOW_MEMORY_GROWTH=1 \
         -s MODULARIZE=1 \

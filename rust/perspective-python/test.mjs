@@ -59,6 +59,7 @@ if (process.env.PSP_PYODIDE) {
             "perspective/tests",
             "-W error",
             "--timeout=300",
+            "--capture=sys",
             ...process.argv.slice(2),
         ],
         execOpts,

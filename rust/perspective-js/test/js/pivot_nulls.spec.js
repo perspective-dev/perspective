@@ -332,6 +332,229 @@ import perspective from "./perspective_client";
                 },
             ]);
         });
+        test.describe("an all-null group", function () {
+            const SOURCE = { g: "string", a: "float" };
+            const ROWS = { g: ["x", "x", "y", "y"], a: [null, null, 1, 3] };
+
+            async function grouped(aggregates, expressions, column) {
+                const table = await perspective.table(SOURCE);
+                await table.update(ROWS);
+                const view = await table.view({
+                    group_by: ["g"],
+                    columns: [column],
+                    aggregates,
+                    expressions,
+                });
+
+                const result = await view.to_columns();
+                await view.delete();
+                await table.delete();
+                return result[column];
+            }
+
+            test("sum reports null for an all-null group", async function () {
+                expect(await grouped({}, {}, "a")).toEqual([4, null, 4]);
+            });
+
+            test("sum or zero reports zero, keeping its incremental fast path", async function () {
+                expect(await grouped({ a: "sum or zero" }, {}, "a")).toEqual([
+                    4, 0, 4,
+                ]);
+            });
+
+            test("sum reports null for an expression column too", async function () {
+                const column = await grouped({}, { e: '"a"' }, "e");
+                expect(column).toEqual([4, null, 4]);
+            });
+
+            test("sum not null is a legacy alias for sum", async function () {
+                const column = await grouped({ a: "sum not null" }, {}, "a");
+                expect(column).toEqual([4, null, 4]);
+            });
+
+            test("sum or zero still matches sum when a value is present", async function () {
+                const plain = await grouped({}, {}, "a");
+                const or_zero = await grouped({ a: "sum or zero" }, {}, "a");
+                expect([plain[0], plain[2]]).toEqual([or_zero[0], or_zero[2]]);
+            });
+
+            test("sum abs reports null for an all-null group", async function () {
+                const column = await grouped({ a: "sum abs" }, {}, "a");
+                expect(column).toEqual([4, null, 4]);
+            });
+
+            test("abs sum reports null for an all-null group", async function () {
+                const column = await grouped({ a: "abs sum" }, {}, "a");
+                expect(column).toEqual([4, null, 4]);
+            });
+
+            test("pct sum parent reports null for an all-null group", async function () {
+                const column = await grouped({ a: "pct sum parent" }, {}, "a");
+                expect(column).toEqual([100, null, 100]);
+            });
+
+            test("pct sum grand total reports null for an all-null group", async function () {
+                const column = await grouped(
+                    { a: "pct sum grand total" },
+                    {},
+                    "a",
+                );
+                expect(column).toEqual([100, null, 100]);
+            });
+
+            test("a group with one non-null value still sums to it", async function () {
+                const table = await perspective.table(SOURCE);
+                await table.update({ g: ["x", "x"], a: [null, 5] });
+                const view = await table.view({
+                    group_by: ["g"],
+                    columns: ["a"],
+                });
+
+                expect((await view.to_columns()).a).toEqual([5, 5]);
+                await view.delete();
+                await table.delete();
+            });
+
+            test("min, max and mean already report null for an all-null group", async function () {
+                for (const agg of ["min", "max", "mean"]) {
+                    const column = await grouped({ a: agg }, {}, "a");
+                    expect([agg, column[1]]).toEqual([agg, null]);
+                }
+            });
+        });
+        test.describe("sum across accumulator dtypes", function () {
+            for (const dtype of ["integer", "float"]) {
+                async function grouped(rows, aggregates) {
+                    const table = await perspective.table({
+                        g: "string",
+                        a: dtype,
+                    });
+
+                    await table.update(rows);
+                    const view = await table.view({
+                        group_by: ["g"],
+                        columns: ["a"],
+                        aggregates: aggregates ?? { a: "sum" },
+                    });
+
+                    const out = (await view.to_columns()).a;
+                    await view.delete();
+                    await table.delete();
+                    return out;
+                }
+
+                test(`${dtype} > an all-null group is null`, async function () {
+                    const out = await grouped({
+                        g: ["x", "x", "y", "y"],
+                        a: [null, null, 1, 3],
+                    });
+
+                    expect(out).toEqual([4, null, 4]);
+                });
+
+                test(`${dtype} > a populated group sums normally`, async function () {
+                    const out = await grouped({
+                        g: ["x", "x", "y"],
+                        a: [2, 3, 7],
+                    });
+
+                    expect(out).toEqual([12, 5, 7]);
+                });
+
+                test(`${dtype} > a group netting to zero is zero, not null`, async function () {
+                    const out = await grouped({
+                        g: ["x", "x", "y"],
+                        a: [5, -5, 1],
+                    });
+
+                    expect(out).toEqual([1, 0, 1]);
+                });
+
+                test(`${dtype} > sum or zero still reports zero for an all-null group`, async function () {
+                    const out = await grouped(
+                        { g: ["x", "x", "y", "y"], a: [null, null, 1, 3] },
+                        { a: "sum or zero" },
+                    );
+
+                    expect(out).toEqual([4, 0, 4]);
+                });
+
+                test(`${dtype} > nulling a group's only value reports null`, async function () {
+                    const table = await perspective.table(
+                        { ticker: "string", pnl: dtype },
+                        { index: "ticker" },
+                    );
+
+                    await table.update([
+                        { ticker: "IBM", pnl: 100 },
+                        { ticker: "AAPL", pnl: 100 },
+                    ]);
+
+                    const view = await table.view({
+                        group_by: ["ticker"],
+                        columns: ["pnl"],
+                        aggregates: { pnl: "sum" },
+                    });
+
+                    await table.update([{ ticker: "AAPL", pnl: null }]);
+                    expect(await view.to_json()).toEqual([
+                        { __ROW_PATH__: [], pnl: 100 },
+                        { __ROW_PATH__: ["AAPL"], pnl: null },
+                        { __ROW_PATH__: ["IBM"], pnl: 100 },
+                    ]);
+
+                    await view.delete();
+                    await table.delete();
+                });
+            }
+
+            test("float > draining a group across batches reports null, not residue", async function () {
+                const table = await perspective.table(
+                    { id: "integer", g: "string", pnl: "float" },
+                    { index: "id" },
+                );
+
+                await table.update([
+                    { id: 0, g: "x", pnl: 0.1 },
+                    { id: 1, g: "x", pnl: 0.2 },
+                    { id: 2, g: "y", pnl: 1 },
+                ]);
+
+                const view = await table.view({
+                    group_by: ["g"],
+                    columns: ["pnl"],
+                });
+
+                await view.to_columns();
+                await table.update([{ id: 0, pnl: null }]);
+                await table.update([{ id: 1, pnl: null }]);
+                expect((await view.to_columns()).pnl).toEqual([1, null, 1]);
+                await view.delete();
+                await table.delete();
+            });
+
+            test("float > a NaN is skipped rather than poisoning the total", async function () {
+                const table = await perspective.table({
+                    g: "string",
+                    a: "float",
+                });
+
+                await table.update({
+                    g: ["x", "x", "x"],
+                    a: [1, Number.NaN, 4],
+                });
+
+                const view = await table.view({
+                    group_by: ["g"],
+                    columns: ["a"],
+                    aggregates: { a: "sum" },
+                });
+
+                expect((await view.to_columns()).a).toEqual([5, 5]);
+                await view.delete();
+                await table.delete();
+            });
+        });
         test.describe("sum aggregate with null updates (#1256)", function () {
             test("sum does not accumulate when an indexed row flips between null and a value", async function () {
                 const table = await perspective.table(
@@ -352,7 +575,7 @@ import perspective from "./perspective_client";
 
                 const nulled = [
                     { __ROW_PATH__: [], pnl: 100 },
-                    { __ROW_PATH__: ["AAPL"], pnl: 0 },
+                    { __ROW_PATH__: ["AAPL"], pnl: null },
                     { __ROW_PATH__: ["IBM"], pnl: 100 },
                 ];
 
@@ -393,7 +616,7 @@ import perspective from "./perspective_client";
 
                 const nulled = [
                     { __ROW_PATH__: [], pnl: 100.5 },
-                    { __ROW_PATH__: ["AAPL"], pnl: 0 },
+                    { __ROW_PATH__: ["AAPL"], pnl: null },
                     { __ROW_PATH__: ["IBM"], pnl: 100.5 },
                 ];
 

@@ -228,14 +228,16 @@ a given column accepts depends on its type — see
 
 | Aggregate | Description | Result type |
 | --- | --- | --- |
-| `sum` | Total of the group's values | `integer` or `float` |
-| `sum not null` | As `sum`, but non-finite (`NaN`) values are skipped rather than poisoning the total | `integer` or `float` |
-| `sum abs` | Sum of the absolute values — `Σ abs(v)` | `integer` or `float` |
-| `abs sum` | Absolute value of the sum — `abs(Σ v)` | `integer` or `float` |
+| `sum` | Total of the group's values, or `null` when the group has no non-null values | `integer` or `float` |
+| `sum or zero` | As `sum`, but reports `0` rather than `null` for a group with no non-null values | `integer` or `float` |
+| `sum abs` | Sum of the absolute values — `Σ abs(v)`; `null` when the group has no non-null values | `integer` or `float` |
+| `abs sum` | Absolute value of the sum — `abs(Σ v)`; `null` when the group has no non-null values | `integer` or `float` |
 | `mul` | Product of the group's values | `integer` or `float` |
 | `gmv` | Gross market value — leaf rows are a plain `sum`, parent rows sum the _absolute_ subtotal of each immediate child group | `integer` or `float` |
 | `pct sum parent` | The group's `sum` as a percentage of its parent row's, `0`–`100`; `100` at the root, and `null` when the parent's sum is `0` | `float` |
 | `pct sum total` | The group's `sum` as a percentage of the grand total, `0`–`100` | `float` |
+
+`sum not null` is accepted as a legacy alias for `sum`.
 
 A numeric aggregate widens to the input's numeric class — `integer` columns
 accumulate as `integer`, `float` columns as `float`.
@@ -311,7 +313,7 @@ aggregates differ:
 The aggregates a column accepts depend on its type:
 
 **Numeric columns** (`integer`, `float`): `sum`, `abs sum`, `sum abs`,
-`sum not null`, `mul`, `gmv`, `any`, `avg`, `mean`, `count`, `distinct count`,
+`sum or zero`, `mul`, `gmv`, `any`, `avg`, `mean`, `count`, `distinct count`,
 `distinct leaf`, `dominant`, `first`, `last`, `last by index`, `high`, `low`,
 `max`, `min`, `min by`, `max by`, `high minus low`, `last minus first`,
 `median`, `q1`, `q3`, `pct sum parent`, `pct sum total`, `stddev`, `var`,
@@ -391,9 +393,10 @@ anywhere an aggregate is, and each group refers to one function:
 | `pct sum total` | `pct sum grand total`, `pct_sum_grand_total` |
 | `var` | `variance` |
 | `stddev` | `standard deviation` |
+| `sum` | `sum not null`, `sum_not_null` (legacy name) |
 
 Most multi-word aggregates also answer to a snake_case spelling —
-`sum_not_null`, `sum_abs`, `abs_sum`, `weighted_mean`, `distinct_leaf`,
+`sum_or_zero`, `sum_abs`, `abs_sum`, `weighted_mean`, `distinct_leaf`,
 `pct_sum_parent`, `pct_sum_total`, `min_by`, `max_by`. Three do not, and are
 only accepted spelled with spaces: `high minus low`, `last minus first` and
 `last by index`.

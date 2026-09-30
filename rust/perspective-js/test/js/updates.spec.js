@@ -552,7 +552,7 @@ async function match_delta(perspective, delta, expected) {
                 __ROW_PATH__: [[]],
                 x: [""],
                 y: [0],
-                idx: [0],
+                idx: [null],
             });
 
             await view.delete();
@@ -2124,7 +2124,7 @@ async function match_delta(perspective, delta, expected) {
             expect(json).toEqual([
                 { __ROW_PATH__: [], y: 1 },
                 { __ROW_PATH__: [1], y: 1 },
-                { __ROW_PATH__: [2], y: 0 },
+                { __ROW_PATH__: [2], y: null },
             ]);
             view.delete();
             table.delete();

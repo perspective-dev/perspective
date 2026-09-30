@@ -1430,7 +1430,6 @@ t_window_engine::compute_update(
     const std::shared_ptr<t_data_table>& expr_flattened,
     const std::shared_ptr<t_data_table>& expr_prev,
     const std::shared_ptr<t_data_table>& expr_current,
-    const std::shared_ptr<t_data_table>& expr_delta,
     const std::shared_ptr<t_data_table>& flattened,
     const std::shared_ptr<t_data_table>& existed
 ) {
@@ -1529,13 +1528,7 @@ t_window_engine::compute_update(
     }
 
     fill_transitional(
-        pkey_map,
-        expr_master,
-        expr_flattened,
-        expr_prev,
-        expr_current,
-        expr_delta,
-        flattened
+        pkey_map, expr_master, expr_flattened, expr_current, flattened
     );
 }
 
@@ -1544,9 +1537,7 @@ t_window_engine::fill_transitional(
     const t_gstate::t_mapping& pkey_map,
     const std::shared_ptr<t_data_table>& expr_master,
     const std::shared_ptr<t_data_table>& expr_flattened,
-    const std::shared_ptr<t_data_table>& expr_prev,
     const std::shared_ptr<t_data_table>& expr_current,
-    const std::shared_ptr<t_data_table>& expr_delta,
     const std::shared_ptr<t_data_table>& flattened
 ) const {
     t_uindex num_rows = flattened->size();
@@ -1555,35 +1546,23 @@ t_window_engine::fill_transitional(
     // Rows-outer so the pkey hash lookup happens ONCE per row, shared by
     // every spec.
     struct t_fill_cols {
-        t_dtype m_dtype;
         const t_column* m_new;
-        const t_column* m_prev;
         t_column* m_flattened;
         t_column* m_current;
-        t_column* m_delta;
     };
     std::vector<t_fill_cols> fill_cols;
     fill_cols.reserve(m_states.size());
     for (const auto& state : m_states) {
         const auto& spec = state.m_spec;
         auto new_col = expr_master->get_column(spec.m_name);
-        auto prev_col = expr_prev->get_column(spec.m_name);
         auto flattened_col =
             expr_flattened->add_column_sptr(spec.m_name, spec.m_dtype, true);
         auto current_col =
             expr_current->add_column_sptr(spec.m_name, spec.m_dtype, true);
-        auto delta_col =
-            expr_delta->add_column_sptr(spec.m_name, spec.m_dtype, true);
         flattened_col->reserve(num_rows);
         current_col->reserve(num_rows);
-        delta_col->reserve(num_rows);
         fill_cols.push_back(
-            {spec.m_dtype,
-             new_col.get(),
-             prev_col.get(),
-             flattened_col.get(),
-             current_col.get(),
-             delta_col.get()}
+            {new_col.get(), flattened_col.get(), current_col.get()}
         );
     }
 
@@ -1595,32 +1574,12 @@ t_window_engine::fill_transitional(
             if (!found || !cols.m_new->is_valid(it->second)) {
                 cols.m_flattened->clear(ridx);
                 cols.m_current->clear(ridx);
-                cols.m_delta->clear(ridx);
                 continue;
             }
 
             t_tscalar value = cols.m_new->get_scalar(it->second);
             cols.m_flattened->set_scalar(ridx, value);
             cols.m_current->set_scalar(ridx, value);
-
-            bool prev_valid = cols.m_prev->is_valid(ridx);
-            if (cols.m_dtype == DTYPE_FLOAT64 && prev_valid) {
-                write_float(
-                    *cols.m_delta,
-                    ridx,
-                    value.to_double()
-                        - cols.m_prev->get_scalar(ridx).to_double()
-                );
-            } else if (cols.m_dtype == DTYPE_INT64 && prev_valid) {
-                write_int(
-                    *cols.m_delta,
-                    ridx,
-                    value.get<std::int64_t>()
-                        - cols.m_prev->get_scalar(ridx).get<std::int64_t>()
-                );
-            } else {
-                cols.m_delta->set_scalar(ridx, value);
-            }
         }
     }
 }

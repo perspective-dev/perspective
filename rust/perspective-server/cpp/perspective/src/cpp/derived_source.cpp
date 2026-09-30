@@ -12,6 +12,7 @@
 
 #include <perspective/derived_source.h>
 #include <perspective/gnode.h>
+#include <perspective/pyutils.h>
 #include <perspective/sparse_tree.h>
 #include <perspective/expression_tables.h>
 #include <tsl/hopscotch_set.h>
@@ -218,6 +219,9 @@ t_derived_source::attach(const std::shared_ptr<Table>& child) {
 
 bool
 t_derived_source::step() {
+#ifdef PSP_PARALLEL_FOR
+    PSP_WRITE_LOCK(*m_child->get_pool()->get_lock());
+#endif
     bool full = take_replaced() || !m_attached;
     auto gnode = m_child->get_gnode();
     if (full && m_attached) {

@@ -173,6 +173,81 @@ const TABLE_VIEW_CONFIGS = {
     },
 };
 
+const UPDATE_VIEW_CONFIGS = {
+    "group_by, sum": {
+        group_by: ["State"],
+        columns: ["Sales", "Profit"],
+        aggregates: { Sales: "sum", Profit: "sum" },
+    },
+    "group_by, expression sum": {
+        group_by: ["State"],
+        columns: ["expr"],
+        expressions: { expr: '"Sales" + 100' },
+        aggregates: { expr: "sum" },
+    },
+    "group_by, sum abs": {
+        group_by: ["State"],
+        columns: ["Sales"],
+        aggregates: { Sales: "sum abs" },
+    },
+    "group_by split_by, sum": {
+        group_by: ["State"],
+        split_by: ["Category"],
+        columns: ["Sales"],
+        aggregates: { Sales: "sum" },
+    },
+};
+
+/**
+ * Measures pivoted view maintenance under single-row partial updates.
+ */
+export async function update_view_suite(perspective, metadata) {
+    if (!check_version_gte(metadata.version, "3.0.0")) {
+        return;
+    }
+
+    async function before_all() {
+        return {
+            arrow: await new_keyed_superstore_table(perspective, metadata),
+        };
+    }
+
+    for (const [label, config] of Object.entries(UPDATE_VIEW_CONFIGS)) {
+        await benchmark({
+            name: `table.update(row) with view({${label}})`,
+            before_all,
+            metadata,
+            async before({ arrow }) {
+                const table = await perspective.table(arrow.slice(), {
+                    index: "uid",
+                });
+
+                const view = await table.view(config);
+                await view.to_columns();
+                const state = { table, view, tick: 0 };
+                await view.on_update(() => state.resolve?.());
+                return state;
+            },
+            async after(_, { table, view }) {
+                await view.delete();
+                await table.delete();
+            },
+            async test(_, state) {
+                const tick = state.tick++;
+                const updated = new Promise((x) => (state.resolve = x));
+                await state.table.update([
+                    {
+                        uid: keyed_superstore_uid(tick),
+                        Sales: 100 + (tick % 7),
+                    },
+                ]);
+
+                await updated;
+            },
+        });
+    }
+}
+
 export async function table_view_suite(perspective, metadata) {
     if (!check_version_gte(metadata.version, "3.0.0")) {
         return;

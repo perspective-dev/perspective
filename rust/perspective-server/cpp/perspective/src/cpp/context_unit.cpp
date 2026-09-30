@@ -62,7 +62,6 @@ t_ctxunit::step_end() {}
 void
 t_ctxunit::notify(
     const t_data_table& flattened,
-    const t_data_table& delta,
     const t_data_table& prev,
     const t_data_table& curr,
     const t_data_table& transitions,
@@ -335,14 +334,10 @@ t_ctxunit::get_pkeys(const std::vector<std::pair<t_uindex, t_uindex>>& cells
  * @return t_tscalar
  */
 t_tscalar
-t_ctxunit::get_column_name(t_index idx) {
-    std::string empty;
-
-    if (idx >= get_column_count()) {
-        return m_symtable.get_interned_tscalar(empty.c_str());
-    }
-
-    return m_symtable.get_interned_tscalar(m_config.col_at(idx).c_str());
+t_ctxunit::get_column_name(t_index idx) const {
+    t_tscalar rval;
+    rval.set(idx < get_column_count() ? m_config.col_at(idx).c_str() : "");
+    return rval;
 }
 
 /**

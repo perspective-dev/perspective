@@ -90,10 +90,17 @@ runs:
           shell: bash
           run: echo "CMAKE_GENERATOR=Ninja" >> "$GITHUB_ENV"
 
-        - name: Install pnpm
-          uses: pnpm/action-setup@v3
+        - name: Use Node.js ${{ matrix.node-version }}
+          uses: actions/setup-node@v4
           with:
-              version: 9
+              node-version: ${{ matrix.node-version }}
+
+        - name: Install pnpm
+          uses: pnpm/action-setup@v6
+          with:
+              version: 12
+              cache: true
+              cache_dependency_path: pnpm-lock.yaml
 
         # emsdk installs to `<workspace>/.emsdk` (`install_emsdk.mjs`), and
         # the emscripten sysroot libraries generated during the first build
@@ -165,13 +172,6 @@ runs:
         #       python get-pip.py --ignore-installed
         #       pip debug --verbose
         #   shell: bash
-
-        - name: Use Node.js ${{ matrix.node-version }}
-          uses: actions/setup-node@v4
-          with:
-              node-version: ${{ matrix.node-version }}
-              cache: "pnpm"
-              cache-dependency-path: pnpm-lock.yaml
 
         - name: Install rust
           uses: dtolnay/rust-toolchain@nightly

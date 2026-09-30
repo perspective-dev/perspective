@@ -19,8 +19,7 @@ t_update_task::t_update_task(t_pool& pool) : m_pool(pool) {}
 
 void
 t_update_task::run(std::optional<std::function<void(std::uint32_t)>> callback) {
-    auto work_to_do = m_pool.m_data_remaining.load();
-    m_pool.m_data_remaining.store(false);
+    auto work_to_do = m_pool.m_data_remaining.exchange(false);
 
     if (work_to_do) {
         for (auto* g : m_pool.m_gnodes) {

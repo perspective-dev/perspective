@@ -38,7 +38,7 @@ public:
     ~t_ctx0();
 #include <perspective/context_common_decls.h>
 
-    t_tscalar get_column_name(t_index idx);
+    t_tscalar get_column_name(t_index idx) const;
 
     std::vector<std::string> get_column_names() const;
 

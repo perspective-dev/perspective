@@ -152,10 +152,7 @@ export function createDataListener(
 
                 this._schema = { ...(a as Schema), ...(b as Schema) };
                 for (let i = 0; i < new_col_paths.length; i++) {
-                    const column = column_name(
-                        this,
-                        i + new_window.start_col!,
-                    );
+                    const column = column_name(this, i + new_window.start_col!);
 
                     this._is_editable[i + new_window.start_col!] =
                         !!this._table_schema[column];

@@ -210,7 +210,6 @@ t_ctx_grouped_pkey::get_data(
 void
 t_ctx_grouped_pkey::notify(
     const t_data_table& flattened,
-    const t_data_table& delta,
     const t_data_table& prev,
     const t_data_table& current,
     const t_data_table& transitions,
@@ -761,7 +760,6 @@ t_ctx_grouped_pkey::compute_expressions(
     const std::shared_ptr<t_data_table>& master,
     const t_gstate::t_mapping& pkey_map,
     const std::shared_ptr<t_data_table>& flattened,
-    const std::shared_ptr<t_data_table>& delta,
     const std::shared_ptr<t_data_table>& prev,
     const std::shared_ptr<t_data_table>& current,
     const std::shared_ptr<t_data_table>& transitions,
@@ -802,16 +800,6 @@ t_ctx_grouped_pkey::compute_expressions(
             regex_mapping
         );
 
-        // delta: for each numerical column, the numerical delta between the
-        // previous value and the current value in the row.
-        expr->compute(
-            delta,
-            pkey_map,
-            m_expression_tables->m_delta,
-            expression_vocab,
-            regex_mapping
-        );
-
         // prev: the values of the updated rows before this update was applied
         expr->compute(
             prev,
@@ -841,7 +829,6 @@ t_ctx_grouped_pkey::compute_expressions(
         m_expression_tables->m_flattened,
         m_expression_tables->m_prev,
         m_expression_tables->m_current,
-        m_expression_tables->m_delta,
         flattened,
         existed
     );
