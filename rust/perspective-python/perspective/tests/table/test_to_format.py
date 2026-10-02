@@ -852,13 +852,19 @@ class TestToFormat(object):
         data = [{"a": 1, "b": 2}, {"a": 1, "b": 2}]
         tbl = Table(data)
         view = tbl.view(group_by=["a"])
-        assert view.to_csv() == '"a (Group by 1)","a","b"\n,2,4\n1,2,4\n'
+        assert view.to_csv() == '"a","a (sum)","b"\n,2,4\n1,2,4\n'
+
+    def test_to_csv_one_qualifies_key_aggregate(self):
+        data = [{"a": 1, "b": 2}, {"a": 1, "b": 2}]
+        tbl = Table(data)
+        view = tbl.view(group_by=["a"], columns=["a", "b"], aggregates={"a": "count"})
+        assert view.to_csv() == '"a","a (count)","b"\n,2,4\n1,2,4\n'
 
     def test_to_csv_two(self):
         data = [{"a": 1, "b": 2}, {"a": 1, "b": 2}]
         tbl = Table(data)
         view = tbl.view(group_by=["a"], split_by=["b"])
-        assert view.to_csv() == '"a (Group by 1)","2|a","2|b"\n,2,4\n1,2,4\n'
+        assert view.to_csv() == '"a","2|a (sum)","2|b"\n,2,4\n1,2,4\n'
 
     def test_to_csv_column_only(self):
         data = [{"a": 1, "b": 2}, {"a": 1, "b": 2}]
@@ -870,13 +876,13 @@ class TestToFormat(object):
         data = [{"a": 1, "b": 2}, {"a": 1, "b": 2}]
         tbl = Table(data)
         view = tbl.view(group_by=["a"], columns=[])
-        assert view.to_csv() == '"a (Group by 1)"\n\n1\n'
+        assert view.to_csv() == '"a"\n\n1\n'
 
     def test_to_csv_two_no_columns(self):
         data = [{"a": 1, "b": 2}, {"a": 1, "b": 2}]
         tbl = Table(data)
         view = tbl.view(group_by=["a"], split_by=["b"], columns=[])
-        assert view.to_csv() == '"a (Group by 1)"\n\n1\n'
+        assert view.to_csv() == '"a"\n\n1\n'
 
     def test_to_csv_column_only_no_columns(self):
         data = [{"a": 1, "b": 2}, {"a": 1, "b": 2}]

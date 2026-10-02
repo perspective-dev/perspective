@@ -361,7 +361,8 @@ impl GenericSQLVirtualServerModel {
     }
 
     /// Returns the SQL query to create a table from a view, with the view's
-    /// row path unrolled into `"<column> (Group by <n>)"` key columns.
+    /// row path unrolled into key columns named after their `group_by`
+    /// columns and aggregates of those columns qualified by their aggregate.
     ///
     /// # Arguments
     /// * `view_id` - The identifier of the source view.
@@ -380,46 +381,59 @@ impl GenericSQLVirtualServerModel {
         view_schema: &IndexMap<String, ColumnType>,
         schema: Option<&IndexMap<String, ColumnType>>,
     ) -> GenericSQLResult<String> {
-        let keys: IndexMap<String, String> = config
+        let key_types: IndexMap<&str, ColumnType> = config
             .group_by
             .iter()
             .enumerate()
-            .map(|(i, col)| {
-                (
-                    format!("{} (Group by {})", col, i + 1),
-                    format!("\"__ROW_PATH_{}__\"", i),
-                )
+            .filter_map(|(i, col)| {
+                view_schema
+                    .get(&format!("__ROW_PATH_{}__", i))
+                    .map(|ty| (col.as_str(), *ty))
             })
             .collect();
 
+        let mut selectable: IndexMap<String, (String, Option<ColumnType>)> = config
+            .group_by
+            .iter()
+            .enumerate()
+            .map(|(i, col)| (col.clone(), (format!("\"__ROW_PATH_{}__\"", i), None)))
+            .collect();
+
+        for (name, ty) in view_schema
+            .iter()
+            .filter(|(name, _)| !name.starts_with("__"))
+        {
+            let readable = config.readable_column_path(name, |leaf| {
+                key_types.get(leaf).copied().unwrap_or(ColumnType::String)
+            });
+
+            selectable.insert(readable, (format!("\"{}\"", name), Some(*ty)));
+        }
+
+        let select = |readable: &str, expr: &str| {
+            if expr == format!("\"{}\"", readable) {
+                expr.to_owned()
+            } else {
+                format!("{} AS \"{}\"", expr, readable)
+            }
+        };
+
         let clauses: Vec<String> = match schema {
-            None => keys
+            None => selectable
                 .iter()
-                .map(|(name, path)| format!("{} AS \"{}\"", path, name))
-                .chain(
-                    view_schema
-                        .keys()
-                        .filter(|name| !name.starts_with("__"))
-                        .map(|name| format!("\"{}\"", name)),
-                )
+                .map(|(readable, (expr, _))| select(readable, expr))
                 .collect(),
             Some(schema) => schema
                 .iter()
-                .map(|(name, ty)| {
-                    if let Some(path) = keys.get(name) {
-                        Ok(format!("{} AS \"{}\"", path, name))
-                    } else if let Some(actual) = view_schema.get(name) {
-                        if actual == ty {
-                            Ok(format!("\"{}\"", name))
-                        } else {
-                            Err(GenericSQLError::InvalidConfig(format!(
-                                "Column \"{}\" does not have the type of the View's column",
-                                name
-                            )))
-                        }
-                    } else {
-                        Ok(format!("CAST(NULL AS {}) AS \"{}\"", sql_type(*ty), name))
-                    }
+                .map(|(name, ty)| match selectable.get(name) {
+                    Some((_, Some(actual))) if actual != ty => {
+                        Err(GenericSQLError::InvalidConfig(format!(
+                            "Column \"{}\" does not have the type of the View's column",
+                            name
+                        )))
+                    },
+                    Some((expr, _)) => Ok(select(name, expr)),
+                    None => Ok(format!("CAST(NULL AS {}) AS \"{}\"", sql_type(*ty), name)),
                 })
                 .collect::<GenericSQLResult<Vec<_>>>()?,
         };

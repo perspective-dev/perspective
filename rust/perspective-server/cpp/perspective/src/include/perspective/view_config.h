@@ -110,6 +110,12 @@ public:
 
     std::vector<t_aggspec> get_aggspecs() const;
 
+    /**
+     * @brief The name an aggregate takes in human-readable output, qualified
+     * by its aggregate when its source column is also a `group_by` key.
+     */
+    std::string readable_aggregate_name(const t_aggspec& aggspec) const;
+
     std::vector<std::string> get_columns() const;
 
     std::vector<t_fterm> get_fterm() const;

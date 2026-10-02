@@ -276,7 +276,7 @@ public:
         std::int32_t end_col,
         bool emit_group_by,
         t_arrow_compression compression,
-        bool emit_legacy_row_path_names = true
+        bool machine_column_names = false
     ) const;
 
     /**
@@ -312,7 +312,7 @@ public:
         std::shared_ptr<t_data_slice<CTX_T>> data_slice,
         bool emit_group_b,
         t_arrow_compression compression,
-        bool emit_legacy_row_path_names = true
+        bool machine_column_names = false
     ) const;
 
     /**
@@ -428,7 +428,7 @@ private:
         std::shared_ptr<arrow::RecordBatch>>
     data_slice_to_batches(
         bool emit_group_by, std::shared_ptr<t_data_slice<CTX_T>> data_slice,
-        bool emit_legacy_row_path_names = true
+        bool machine_column_names = false
     ) const;
 
     void _find_hidden_sort(const std::vector<t_sortspec>& sort);

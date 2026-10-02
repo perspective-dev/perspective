@@ -57,9 +57,9 @@ test.describe("Derived table schema is frozen", function () {
         await source.update([{ id: 6, g: "c", s: "Wed", x: 10 }]);
         const child = await derived.view();
         expect(await child.to_json()).toEqual([
-            { "g (Group by 1)": "a", "Mon|x": 1, "Tue|x": 2 },
-            { "g (Group by 1)": "b", "Mon|x": 3, "Tue|x": null },
-            { "g (Group by 1)": "c", "Mon|x": null, "Tue|x": null },
+            { g: "a", "Mon|x": 1, "Tue|x": 2 },
+            { g: "b", "Mon|x": 3, "Tue|x": null },
+            { g: "c", "Mon|x": null, "Tue|x": null },
         ]);
 
         await child.delete();
@@ -77,8 +77,8 @@ test.describe("Derived table schema is frozen", function () {
         expect(await derived.schema()).toEqual(schema);
         const child = await derived.view();
         expect(await child.to_json()).toEqual([
-            { "g (Group by 1)": "a", "Mon|x": 1, "Tue|x": null },
-            { "g (Group by 1)": "b", "Mon|x": 3, "Tue|x": null },
+            { g: "a", "Mon|x": 1, "Tue|x": null },
+            { g: "b", "Mon|x": 3, "Tue|x": null },
         ]);
 
         await child.delete();

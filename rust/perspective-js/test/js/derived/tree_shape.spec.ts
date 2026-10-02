@@ -26,8 +26,8 @@ test.describe("Derived table shape from a group_by view", function () {
 
         const derived = await perspective.table(view);
         expect(await derived.schema()).toEqual({
-            "g (Group by 1)": "string",
-            "h (Group by 2)": "string",
+            g: "string",
+            h: "string",
             x: "float",
             y: "float",
         });
@@ -37,7 +37,7 @@ test.describe("Derived table shape from a group_by view", function () {
         await source.delete();
     });
 
-    test("an aggregate keeps its name when it is also a key", async function () {
+    test("an aggregate of a key is qualified by its aggregate", async function () {
         const source = await make_source();
         const view = await source.view({
             group_by: ["g"],
@@ -47,11 +47,19 @@ test.describe("Derived table shape from a group_by view", function () {
 
         const derived = await perspective.table(view);
         expect(await derived.schema()).toEqual({
-            "g (Group by 1)": "string",
-            g: "integer",
+            g: "string",
+            "g (count)": "integer",
             x: "float",
         });
 
+        const child = await derived.view({ columns: ["g", "g (count)"] });
+        expect(await child.schema()).toEqual({
+            g: "string",
+            "g (count)": "integer",
+        });
+
+        expect(await child.num_rows()).toEqual(await view.num_rows());
+        await child.delete();
         await derived.delete();
         await view.delete();
         await source.delete();
@@ -110,10 +118,8 @@ test.describe("Derived table shape from a group_by view", function () {
         const derived = await perspective.table(view);
         const child = await derived.view();
         const json = await child.to_json();
-        const totals = json.filter((r) => r["g (Group by 1)"] === null);
-        const mids = json.filter(
-            (r) => r["g (Group by 1)"] !== null && r["h (Group by 2)"] === null,
-        );
+        const totals = json.filter((r) => r.g === null);
+        const mids = json.filter((r) => r.g !== null && r.h === null);
 
         expect(totals).toHaveLength(1);
         expect(mids).toHaveLength(3);

@@ -16,8 +16,34 @@ import perspective from "../perspective_client.ts";
 type Columns = Record<string, any[]>;
 type Row = Record<string, any>;
 
-export function key_name(column: string, index: number): string {
-    return `${column} (Group by ${index + 1})`;
+export function key_name(column: string): string {
+    return column;
+}
+
+function aggregate_name(aggregate: any): string {
+    return Array.isArray(aggregate)
+        ? `${aggregate[0]} by ${aggregate[1].join(", ")}`
+        : aggregate;
+}
+
+export function readable_name(
+    name: string,
+    config: any,
+    schema: Record<string, string>,
+): string {
+    const split =
+        (config.split_by ?? []).length > 0 ? name.lastIndexOf("|") : -1;
+    const prefix = split < 0 ? "" : name.slice(0, split + 1);
+    const leaf = split < 0 ? name : name.slice(split + 1);
+    if (!(config.group_by ?? []).includes(leaf)) {
+        return name;
+    }
+
+    const aggregate =
+        config.aggregates?.[leaf] ??
+        (["integer", "float"].includes(schema[leaf]) ? "sum" : "count");
+
+    return `${prefix}${leaf} (${aggregate_name(aggregate)})`;
 }
 
 export function to_rows(columns: Columns): Row[] {
@@ -50,10 +76,22 @@ export function sorted(rows: Row[], names: string[]): string[] {
         .sort();
 }
 
-async function unroll(view: any, config: any): Promise<Row[]> {
+async function unroll(
+    view: any,
+    config: any,
+    schema: Record<string, string>,
+): Promise<Row[]> {
     const columns: Columns = await view.to_columns();
     const paths: any[][] = columns.__ROW_PATH__ ?? [];
     delete columns.__ROW_PATH__;
+    for (const name of Object.keys(columns)) {
+        const readable = readable_name(name, config, schema);
+        if (readable !== name) {
+            columns[readable] = columns[name];
+            delete columns[name];
+        }
+    }
+
     const rows =
         Object.keys(columns).length === 0
             ? paths.map(() => ({}))
@@ -66,7 +104,7 @@ async function unroll(view: any, config: any): Promise<Row[]> {
     return rows.map((row, i) => {
         const out: Row = {};
         group_by.forEach((g, d) => {
-            out[key_name(g, d)] = paths[i][d] ?? null;
+            out[key_name(g)] = paths[i][d] ?? null;
         });
 
         return { ...out, ...row };
@@ -78,13 +116,14 @@ export async function tree_oracle(
     config: any,
     live?: any,
 ): Promise<Row[]> {
+    const schema = await source.schema();
     if (live) {
-        return await unroll(live, config);
+        return await unroll(live, config, schema);
     }
 
     const { sort, group_by_depth, ...rest } = config;
     const view = await source.view(rest);
-    const rows = await unroll(view, config);
+    const rows = await unroll(view, config, schema);
     await view.delete();
     return rows;
 }

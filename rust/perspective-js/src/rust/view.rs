@@ -299,7 +299,7 @@ impl View {
 
         let float32 = opts.float32;
         let mut view_window: ViewWindow = opts.into();
-        view_window.emit_legacy_row_path_names = Some(false);
+        view_window.machine_column_names = Some(true);
         let arrow = self.0.to_arrow(view_window).await?;
         crate::typed_array::decode_and_call(&arrow, float32, &callback).await?;
         Ok(())

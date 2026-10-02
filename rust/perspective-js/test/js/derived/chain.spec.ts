@@ -28,7 +28,7 @@ test.describe("Chained derived tables", function () {
         const v1 = await source.view(TREE);
         const d1 = await perspective.table(v1);
         const config2 = {
-            group_by: ["g (Group by 1)"],
+            group_by: ["g"],
             columns: ["x"],
             aggregates: { x: "sum" },
         };
@@ -46,7 +46,7 @@ test.describe("Chained derived tables", function () {
         });
 
         const c2 = await d2.view({
-            filter: [["g (Group by 1) (Group by 1)", "is not null"]],
+            filter: [["g", "is not null"]],
             columns: ["x"],
         });
 
@@ -137,14 +137,14 @@ test.describe("Chained derived tables", function () {
         const derived = await perspective.table(view);
         const names = await perspective.table(
             [
-                { "g (Group by 1)": "a", label: "Alpha" },
-                { "g (Group by 1)": "b", label: "Beta" },
-                { "g (Group by 1)": "c", label: "Gamma" },
+                { g: "a", label: "Alpha" },
+                { g: "b", label: "Beta" },
+                { g: "c", label: "Gamma" },
             ],
-            { index: "g (Group by 1)" },
+            { index: "g" },
         );
 
-        const joined = await perspective.join(derived, names, "g (Group by 1)");
+        const joined = await perspective.join(derived, names, "g");
 
         const jv = await joined.view();
         const dv = await derived.view();

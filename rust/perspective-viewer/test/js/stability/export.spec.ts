@@ -51,6 +51,6 @@ test.describe("Single-Threaded Engine", () => {
         });
 
         // Superstore as a CSV
-        expect(value).toEqual(821);
+        expect(value).toEqual(808);
     });
 });

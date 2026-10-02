@@ -57,20 +57,20 @@ describeDuckDB("table from view", (getClient) => {
 
         const derived = await client.table(view, { name: "derived_group" });
         expect(await derived.schema()).toEqual({
-            "Region (Group by 1)": "string",
+            Region: "string",
             Sales: "float",
         });
 
         const child = await derived.view({
-            columns: ["Region (Group by 1)", "Sales"],
+            columns: ["Region", "Sales"],
         });
 
         const expected = (await view.to_json()).map((row) => ({
-            "Region (Group by 1)": row.__ROW_PATH__[0] ?? null,
+            Region: row.__ROW_PATH__[0] ?? null,
             Sales: row.Sales,
         }));
 
-        const key = (row) => String(row["Region (Group by 1)"]);
+        const key = (row) => String(row["Region"]);
         const by_key = (a, b) => key(a).localeCompare(key(b));
         expect((await child.to_json()).sort(by_key)).toEqual(
             expected.sort(by_key),
@@ -94,7 +94,7 @@ describeDuckDB("table from view", (getClient) => {
 
         const derived = await client.table(view, { name: "derived_split" });
         expect(await derived.columns()).toEqual([
-            "Category (Group by 1)",
+            "Category",
             "Central|Sales",
             "East|Sales",
             "South|Sales",
@@ -102,7 +102,7 @@ describeDuckDB("table from view", (getClient) => {
         ]);
 
         const child = await derived.view({
-            columns: ["Category (Group by 1)", "West|Sales"],
+            columns: ["Category", "West|Sales"],
             filter: [["West|Sales", ">", 250000]],
         });
 
@@ -112,7 +112,7 @@ describeDuckDB("table from view", (getClient) => {
             .sort();
 
         const actual = (await child.to_json())
-            .map((row) => row["Category (Group by 1)"])
+            .map((row) => row["Category"])
             .sort();
 
         expect(actual).toEqual(expected);
@@ -135,26 +135,52 @@ describeDuckDB("table from view", (getClient) => {
         const derived = await client.table(view, {
             name: "derived_schema",
             schema: {
-                "Category (Group by 1)": "string",
+                Category: "string",
                 "West|Sales": "float",
                 "North|Sales": "float",
             },
         });
 
         expect(await derived.schema()).toEqual({
-            "Category (Group by 1)": "string",
+            Category: "string",
             "West|Sales": "float",
             "North|Sales": "float",
         });
 
         const child = await derived.view({
-            columns: ["Category (Group by 1)", "West|Sales", "North|Sales"],
+            columns: ["Category", "West|Sales", "North|Sales"],
         });
 
         const json = await child.to_json();
         expect(json).toHaveLength(3);
         expect(json.every((row) => row["North|Sales"] === null)).toBe(true);
         expect(json.every((row) => row["West|Sales"] > 0)).toBe(true);
+        await child.delete();
+        await derived.delete();
+        await view.delete();
+    });
+
+    test("an aggregate of a group_by column is qualified", async function () {
+        const client = getClient();
+        const table = await client.open_table("memory.superstore");
+        const view = await table.view({
+            columns: ["Region", "Sales"],
+            group_by: ["Region"],
+            aggregates: { Region: "count", Sales: "sum" },
+        });
+
+        const derived = await client.table(view, { name: "derived_qualified" });
+        expect(await derived.columns()).toEqual([
+            "Region",
+            "Region (count)",
+            "Sales",
+        ]);
+
+        const child = await derived.view({
+            columns: ["Region", "Region (count)"],
+        });
+
+        expect(await child.num_rows()).toEqual(await view.num_rows());
         await child.delete();
         await derived.delete();
         await view.delete();

@@ -382,6 +382,12 @@ public:
     bool node_exists(t_uindex idx) const;
 
     /**
+     * @brief The live node with index `idx`, or null; valid until the tree
+     * next changes shape.
+     */
+    const t_stnode* find_node(t_uindex idx) const;
+
+    /**
      * @brief Call `fn` with every live node in the tree.
      */
     void for_each_node(const std::function<void(const t_stnode&)>& fn) const;
@@ -516,6 +522,15 @@ private:
     );
 
     void capture_dropped(const t_stnode& node);
+
+    void _build_agg_info(
+        const t_dtree_ctx& ctx,
+        const t_gstate& gstate,
+        const t_data_table& expression_master_table
+    );
+
+    t_agg_update_info m_agg_info;
+    const t_data_table* m_agg_info_table = nullptr;
 
     t_uindex m_curidx;
     std::shared_ptr<t_data_table> m_aggregates;

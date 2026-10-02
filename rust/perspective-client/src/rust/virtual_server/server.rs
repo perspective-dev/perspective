@@ -188,6 +188,17 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     .insert(req.view_id.clone(), msg.entity_id.clone());
 
                 let mut config: ViewConfigUpdate = req.config.clone().unwrap_or_default().into();
+                if let Some(group_by) = &config.group_by
+                    && let Some(duplicate) = group_by
+                        .iter()
+                        .enumerate()
+                        .find(|(idx, col)| group_by[..*idx].contains(*col))
+                {
+                    return Err(VirtualServerError::Other(format!(
+                        "Duplicate column `{}` in `group_by`",
+                        duplicate.1
+                    )));
+                }
 
                 // An UNORDERED store has no natural row order to fall back
                 // on, so every window must carry an explicit `order_by`.
@@ -437,7 +448,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     .view_get_data(msg.entity_id.as_str(), config, &schema, &viewport)
                     .await?;
 
-                let rows = cols.render_to_rows(RowPathStyle::PerLevel);
+                let rows = cols.render_to_rows(RowPathStyle::Sidecar);
                 let ndjson_string = rows
                     .iter()
                     .map(serde_json::to_string)

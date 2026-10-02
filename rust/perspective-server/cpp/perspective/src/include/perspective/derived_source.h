@@ -78,9 +78,9 @@ public:
 
     /**
      * @brief Propagate the parent's last step, returning whether the child
-     * changed.
+     * changed, notifying its contexts only when `notify` is set.
      */
-    bool step();
+    bool step(bool notify);
 
     const std::shared_ptr<Table>& child() const;
 
@@ -92,7 +92,15 @@ public:
 protected:
     virtual void resolve(const t_schema& schema) = 0;
 
-    virtual bool take_replaced() = 0;
+    /**
+     * @brief The parent context's storage generation, which advances when
+     * its storage is replaced.
+     */
+    virtual t_uindex storage_generation() const = 0;
+
+    bool take_replaced();
+
+    void init_pct_flags(const t_view_config& config);
 
     virtual void
     collect(bool full, std::vector<t_derived_member>& members) = 0;
@@ -122,8 +130,9 @@ protected:
     std::shared_ptr<Table> m_child;
     std::vector<std::string> m_columns;
     bool m_attached = false;
-    std::vector<bool> m_aliased;
     t_uindex m_generation = 0;
+    bool m_pct_parent = false;
+    bool m_pct_grand = false;
 };
 
 /**

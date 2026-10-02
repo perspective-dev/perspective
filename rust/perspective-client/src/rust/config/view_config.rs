@@ -22,7 +22,7 @@ use super::filters::*;
 use super::sort::*;
 use super::windows::*;
 use crate::proto;
-use crate::proto::columns_update;
+use crate::proto::{ColumnType, columns_update};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq, TS)]
 pub enum GroupRollupMode {
@@ -565,6 +565,35 @@ impl ViewConfig {
 
     pub fn is_aggregated(&self) -> bool {
         !self.group_by.is_empty() || self.group_rollup_mode == GroupRollupMode::Total
+    }
+
+    /// The name a `View` column path takes in human-readable output, with its
+    /// leaf qualified by its aggregate when that column is also a `group_by`
+    /// key of this config.
+    pub fn readable_column_path(
+        &self,
+        path: &str,
+        column_type: impl FnOnce(&str) -> ColumnType,
+    ) -> String {
+        let (prefix, leaf) = match path.rsplit_once('|') {
+            Some((prefix, leaf)) if !self.split_by.is_empty() => (Some(prefix), leaf),
+            _ => (None, path),
+        };
+
+        if !self.group_by.iter().any(|x| x == leaf) {
+            return path.to_owned();
+        }
+
+        let aggregate = self
+            .aggregates
+            .get(leaf)
+            .cloned()
+            .unwrap_or_else(|| Aggregate::default_for(column_type(leaf)));
+
+        match prefix {
+            Some(prefix) => format!("{prefix}|{leaf} ({aggregate})"),
+            None => format!("{leaf} ({aggregate})"),
+        }
     }
 
     pub fn is_column_expression_in_use(&self, name: &str) -> bool {

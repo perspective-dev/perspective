@@ -30,7 +30,7 @@ test.describe("Derived table from a split_by view", function () {
         const derived = await perspective.table(view);
         const paths = await joined_column_paths(view);
         expect(await derived.columns()).toEqual([
-            key_name("g", 0),
+            key_name("g"),
             ...paths.filter((p: string) => p !== "__ROW_PATH__"),
         ]);
 
@@ -85,8 +85,8 @@ test.describe("Derived table from a split_by view", function () {
         const derived = await perspective.table(view);
         const child = await derived.view();
         expect(await child.to_json()).toEqual([
-            { "g (Group by 1)": "a", "Mon|x": 1, "Tue|x": 2 },
-            { "g (Group by 1)": "b", "Mon|x": 3, "Tue|x": null },
+            { g: "a", "Mon|x": 1, "Tue|x": 2 },
+            { g: "b", "Mon|x": 3, "Tue|x": null },
         ]);
 
         await child.delete();
@@ -117,13 +117,13 @@ test.describe("Derived table from a split_by view", function () {
         await source.remove([2]);
         const child = await derived.view();
         expect(await child.to_json()).toEqual([
-            { "g (Group by 1)": "a", "Mon|x": 1, "Tue|x": null },
-            { "g (Group by 1)": "b", "Mon|x": null, "Tue|x": 3 },
+            { g: "a", "Mon|x": 1, "Tue|x": null },
+            { g: "b", "Mon|x": null, "Tue|x": 3 },
         ]);
 
         await source.remove([1]);
         expect(await child.to_json()).toEqual([
-            { "g (Group by 1)": "b", "Mon|x": null, "Tue|x": 3 },
+            { g: "b", "Mon|x": null, "Tue|x": 3 },
         ]);
 
         await child.delete();

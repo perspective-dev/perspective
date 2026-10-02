@@ -706,19 +706,18 @@ DerivedTableEngine::register_table(
 ) {
     PSP_WRITE_LOCK(m_lock);
     m_view_to_tables.emplace(view_id, table_id);
-    m_table_to_view[table_id] = view_id;
-    m_sources[table_id] = std::move(source);
+    m_tables[table_id] = t_entry{view_id, std::move(source)};
 }
 
 void
 DerivedTableEngine::unregister_table(const t_id& table_id) {
     PSP_WRITE_LOCK(m_lock);
-    auto iter = m_table_to_view.find(table_id);
-    if (iter == m_table_to_view.end()) {
+    auto iter = m_tables.find(table_id);
+    if (iter == m_tables.end()) {
         return;
     }
 
-    auto range = m_view_to_tables.equal_range(iter->second);
+    auto range = m_view_to_tables.equal_range(iter->second.m_view_id);
     for (auto it = range.first; it != range.second; ++it) {
         if (it->second == table_id) {
             m_view_to_tables.erase(it);
@@ -726,15 +725,8 @@ DerivedTableEngine::unregister_table(const t_id& table_id) {
         }
     }
 
-    m_sources.at(table_id)->detach();
-    m_sources.erase(table_id);
-    m_table_to_view.erase(table_id);
-}
-
-bool
-DerivedTableEngine::is_derived_table(const t_id& table_id) const {
-    PSP_READ_LOCK(m_lock);
-    return m_table_to_view.find(table_id) != m_table_to_view.end();
+    iter->second.m_source->detach();
+    m_tables.erase(iter);
 }
 
 bool
@@ -743,10 +735,15 @@ DerivedTableEngine::has_dependents(const t_id& view_id) const {
     return m_view_to_tables.find(view_id) != m_view_to_tables.end();
 }
 
-DerivedTableEngine::t_id
-DerivedTableEngine::get_view_id(const t_id& table_id) const {
+std::optional<DerivedTableEngine::t_id>
+DerivedTableEngine::parent_view_of(const t_id& table_id) const {
     PSP_READ_LOCK(m_lock);
-    return m_table_to_view.at(table_id);
+    auto iter = m_tables.find(table_id);
+    if (iter == m_tables.end()) {
+        return std::nullopt;
+    }
+
+    return iter->second.m_view_id;
 }
 
 std::vector<
@@ -756,7 +753,7 @@ DerivedTableEngine::get_dependents(const t_id& view_id) const {
     std::vector<std::pair<t_id, std::shared_ptr<t_derived_source>>> rval;
     auto range = m_view_to_tables.equal_range(view_id);
     for (auto it = range.first; it != range.second; ++it) {
-        rval.emplace_back(it->second, m_sources.at(it->second));
+        rval.emplace_back(it->second, m_tables.at(it->second).m_source);
     }
 
     return rval;
@@ -2884,7 +2881,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 break;
             }
 
-            if (m_derived_engine.is_derived_table(req.entity_id())) {
+            if (m_resources.get_table(req.entity_id())->is_derived()) {
                 proto::Response resp;
                 *resp.mutable_server_error()->mutable_message() =
                     "Cannot update a read-only derived table";
@@ -2933,7 +2930,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 break;
             }
 
-            if (m_derived_engine.is_derived_table(req.entity_id())) {
+            if (m_resources.get_table(req.entity_id())->is_derived()) {
                 proto::Response resp;
                 *resp.mutable_server_error()->mutable_message() =
                     "Cannot update a read-only derived table";
@@ -2980,7 +2977,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 break;
             }
 
-            if (m_derived_engine.is_derived_table(req.entity_id())) {
+            if (m_resources.get_table(req.entity_id())->is_derived()) {
                 proto::Response resp;
                 *resp.mutable_server_error()->mutable_message() =
                     "Cannot update a read-only derived table";
@@ -3693,9 +3690,6 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
 
             proto::Response resp;
             auto* arrow = resp.mutable_view_to_arrow_resp()->mutable_arrow();
-            bool legacy_names = r.viewport().has_emit_legacy_row_path_names()
-                ? r.viewport().emit_legacy_row_path_names()
-                : true;
             *arrow = *view->to_arrow(
                 dims.start_row,
                 dims.end_row,
@@ -3703,7 +3697,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 dims.end_col,
                 true,
                 parse_arrow_compression(r.compression()),
-                legacy_names
+                r.viewport().machine_column_names()
             );
 
             push_resp(std::move(resp));
@@ -3866,17 +3860,13 @@ ProtoServer::_poll() {
         _process_table_unchecked(table, table_id, resp_envs);
     }
 
+    // Derived children stepped above are dirty too by now; take the full
+    // set before clearing so the join engine sees every changed source.
+    auto changed = m_resources.get_dirty_tables();
     m_resources.mark_all_tables_clean();
 
-    // Build the set of dirty source table IDs so we can tell the join
-    // engine which side(s) changed, allowing it to skip rebuilding the
-    // right-side index when only the left table was updated.
     tsl::hopscotch_set<ServerResources::t_id> dirty_ids;
-    for (auto& [_, table_id] : tables) {
-        dirty_ids.insert(table_id);
-    }
-
-    for (const auto& table_id : _take_derived_updated()) {
+    for (auto& [_, table_id] : changed) {
         dirty_ids.insert(table_id);
     }
 
@@ -3995,11 +3985,12 @@ ProtoServer::_notify_table(
         }
     }
 
-    for (const auto& view_id : m_resources.get_view_ids(table_id)) {
+    for (const auto& view_id : view_ids) {
         for (auto& [child_id, source] :
              m_derived_engine.get_dependents(view_id)) {
-            if (source->step()) {
-                _mark_derived_updated(child_id);
+            bool notify = !m_resources.get_view_ids(child_id).empty();
+            if (source->step(notify)) {
+                m_resources.mark_table_dirty(child_id);
                 auto child = source->child();
                 _notify_table(child, child_id, 0, outs);
             }
@@ -4075,10 +4066,8 @@ ProtoServer::make_derived_table(
 ServerResources::t_id
 ProtoServer::_root_table_id(const ServerResources::t_id& table_id) {
     ServerResources::t_id id = table_id;
-    while (m_derived_engine.is_derived_table(id)) {
-        id = m_resources.get_table_id_for_view(
-            m_derived_engine.get_view_id(id)
-        );
+    while (auto view_id = m_derived_engine.parent_view_of(id)) {
+        id = m_resources.get_table_id_for_view(*view_id);
     }
 
     return id;
@@ -4099,24 +4088,6 @@ ProtoServer::_process_table_unchecked(
     table->get_pool()->_process([this, &table_, &table_id, &outs](auto port_id) {
         _notify_table(table_, table_id, port_id, outs);
     });
-}
-
-void
-ProtoServer::_mark_derived_updated(const ServerResources::t_id& table_id) {
-#ifdef PSP_PARALLEL_FOR
-    std::lock_guard<std::mutex> guard(m_derived_updated_lock);
-#endif
-    m_derived_updated.insert(table_id);
-}
-
-tsl::hopscotch_set<ServerResources::t_id>
-ProtoServer::_take_derived_updated() {
-#ifdef PSP_PARALLEL_FOR
-    std::lock_guard<std::mutex> guard(m_derived_updated_lock);
-#endif
-    tsl::hopscotch_set<ServerResources::t_id> rval;
-    std::swap(rval, m_derived_updated);
-    return rval;
 }
 
 void

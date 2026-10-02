@@ -45,7 +45,7 @@ test.describe("Views on a derived table", function () {
             };
 
             const child_config = {
-                group_by: ["g (Group by 1)"],
+                group_by: ["g"],
                 columns: ["x", "y"],
                 aggregates: { x: "sum", y: "mean" },
             };
@@ -92,7 +92,7 @@ test.describe("Views on a derived table", function () {
 
         const derived = await perspective.table(view);
         const child = await derived.view({
-            group_by: ["g (Group by 1)"],
+            group_by: ["g"],
             columns: ["x"],
             aggregates: { x: "sum" },
         });
@@ -190,8 +190,8 @@ test.describe("Views on a derived table", function () {
 
         const derived = await perspective.table(view);
         const child = await derived.view({
-            group_by: ["p (Group by 1)"],
-            split_by: ["d (Group by 2)"],
+            group_by: ["p"],
+            split_by: ["d"],
             columns: ["chg"],
             aggregates: { chg: "sum" },
             group_rollup_mode: "flat",
@@ -199,8 +199,8 @@ test.describe("Views on a derived table", function () {
                 chg: {
                     column: "pnl",
                     aggregate: "diff",
-                    partition_by: ["p (Group by 1)"],
-                    order_by: ["d (Group by 2)", "asc"],
+                    partition_by: ["p"],
+                    order_by: ["d", "asc"],
                 },
             },
         });
@@ -244,7 +244,7 @@ test.describe("Views on a derived table", function () {
         await source.update([{ id: 0, x: 1000 }]);
         await expect.poll(() => deltas.length).toEqual(1);
         expect(deltas[0]).toHaveLength(1);
-        expect(deltas[0][0]["g (Group by 1)"]).toEqual("a");
+        expect(deltas[0][0]["g"]).toEqual("a");
         await source.update([{ id: 1, x: 2000 }]);
         await expect.poll(() => deltas.length).toEqual(2);
         await child.delete();

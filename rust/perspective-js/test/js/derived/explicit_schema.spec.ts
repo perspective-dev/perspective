@@ -23,7 +23,7 @@ const CONFIG = {
 };
 
 const SCHEMA = {
-    "g (Group by 1)": "string",
+    g: "string",
     "Mon|x": "integer",
     "Tue|x": "integer",
     "Wed|x": "integer",
@@ -47,12 +47,12 @@ test.describe("Derived table with an explicit schema", function () {
         expect(await derived.schema()).toEqual(SCHEMA);
         const child = await derived.view();
         expect(await child.to_json()).toEqual([
-            { "g (Group by 1)": "a", "Mon|x": 1, "Tue|x": 2, "Wed|x": null },
+            { g: "a", "Mon|x": 1, "Tue|x": 2, "Wed|x": null },
         ]);
 
         await source.update([{ id: 3, g: "a", s: "Wed", x: 3 }]);
         expect(await child.to_json()).toEqual([
-            { "g (Group by 1)": "a", "Mon|x": 1, "Tue|x": 2, "Wed|x": 3 },
+            { g: "a", "Mon|x": 1, "Tue|x": 2, "Wed|x": 3 },
         ]);
 
         await child.delete();
@@ -65,13 +65,11 @@ test.describe("Derived table with an explicit schema", function () {
         const source = await make();
         const view = await source.view(CONFIG);
         const derived = await perspective.table(view, {
-            schema: { "g (Group by 1)": "string", "Tue|x": "integer" },
+            schema: { g: "string", "Tue|x": "integer" },
         });
 
         const child = await derived.view();
-        expect(await child.to_json()).toEqual([
-            { "g (Group by 1)": "a", "Tue|x": 2 },
-        ]);
+        expect(await child.to_json()).toEqual([{ g: "a", "Tue|x": 2 }]);
 
         await child.delete();
         await derived.delete();

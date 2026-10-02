@@ -62,11 +62,14 @@ An unpivoted `View` yields a `Table` with the `View`'s own columns, including
 `View`'s `columns`, and its `limit` is inherited as well.
 
 A pivoted `View` yields the table you see on screen. Each `group_by` column
-becomes a typed key column named `"<column> (Group by <n>)"`, and each data
-column takes the name `View::column_paths` gives it:
+becomes a typed key column of the same name, and each data column takes the
+name `View::column_paths` gives it. A column that is both a `group_by` key and
+one of the `View`'s `columns` would collide with itself, so that aggregate is
+qualified by its aggregate, as in `"Region (count)"` or
+`"Sales (weighted mean by Weight)"`; the key is always the bare column name:
 
 ```
-Region (Group by 1),Central|Sales,East|Sales,South|Sales,West|Sales
+Region,Central|Sales,East|Sales,South|Sales,West|Sales
 Furniture,163797.16,208291.20,117298.68,252612.74
 Office Supplies,167026.41,205516.05,125651.31,220853.25
 ```
@@ -112,7 +115,7 @@ Declare the columns up front to accept values that have not arrived yet:
 ```javascript
 const derived = await client.table(view, {
     schema: {
-        "Region (Group by 1)": "string",
+        "Region": "string",
         "Mon|Sales": "float",
         "Tue|Sales": "float",
         "Wed|Sales": "float",
@@ -127,7 +130,7 @@ const derived = await client.table(view, {
 derived = client.table(
     view,
     schema={
-        "Region (Group by 1)": "string",
+        "Region": "string",
         "Mon|Sales": float,
         "Tue|Sales": float,
         "Wed|Sales": float,
@@ -141,7 +144,7 @@ derived = client.table(
 ```rust
 let derived = client.table(TableData::View(view), TableInitOptions {
     schema: Some(IndexMap::from([
-        ("Region (Group by 1)".into(), ColumnType::String),
+        ("Region".into(), ColumnType::String),
         ("Mon|Sales".into(), ColumnType::Float),
     ])),
     ..TableInitOptions::default()
@@ -220,8 +223,8 @@ const daily = await table.view({
 
 const derived = await client.table(daily);
 const change = await derived.view({
-    group_by: ["Portfolio (Group by 1)"],
-    split_by: ["Date (Group by 2)"],
+    group_by: ["Portfolio"],
+    split_by: ["Date"],
     columns: ["change"],
     aggregates: { change: "sum" },
     group_rollup_mode: "flat",
@@ -229,8 +232,8 @@ const change = await derived.view({
         change: {
             column: "PnL",
             aggregate: "diff",
-            partition_by: ["Portfolio (Group by 1)"],
-            order_by: ["Date (Group by 2)", "asc"],
+            partition_by: ["Portfolio"],
+            order_by: ["Date", "asc"],
         },
     },
 });
@@ -249,8 +252,8 @@ daily = table.view(
 
 derived = client.table(daily)
 change = derived.view(
-    group_by=["Portfolio (Group by 1)"],
-    split_by=["Date (Group by 2)"],
+    group_by=["Portfolio"],
+    split_by=["Date"],
     columns=["change"],
     aggregates={"change": "sum"},
     group_rollup_mode="flat",
@@ -258,8 +261,8 @@ change = derived.view(
         "change": {
             "column": "PnL",
             "aggregate": "diff",
-            "partition_by": ["Portfolio (Group by 1)"],
-            "order_by": ["Date (Group by 2)", "asc"],
+            "partition_by": ["Portfolio"],
+            "order_by": ["Date", "asc"],
         }
     },
 )

@@ -559,7 +559,7 @@ jobs:
                   path: rust/perspective-python/perspective/widget/static
 
             - name: Python Build Pyodide
-              run: pnpm install && pnpm run build
+              run: pnpm install && node tools/scripts/install_emsdk.mjs && pnpm run build
               env:
                   PSP_PYODIDE: 1
                   PACKAGE: "python"

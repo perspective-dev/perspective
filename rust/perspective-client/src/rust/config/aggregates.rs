@@ -15,13 +15,23 @@ use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::proto::view_config;
+use crate::proto::{ColumnType, view_config};
 
 #[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize, TS)]
 #[serde(untagged)]
 pub enum Aggregate {
     SingleAggregate(String),
     MultiAggregate(String, Vec<String>),
+}
+
+impl Aggregate {
+    /// The aggregate a column of this type takes when `aggregates` names none.
+    pub fn default_for(column_type: ColumnType) -> Self {
+        match column_type {
+            ColumnType::Integer | ColumnType::Float => Aggregate::SingleAggregate("sum".into()),
+            _ => Aggregate::SingleAggregate("count".into()),
+        }
+    }
 }
 
 impl From<&'static str> for Aggregate {

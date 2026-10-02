@@ -21,16 +21,22 @@
 namespace perspective {
 
 namespace {
-
     std::int64_t
     wide_key(t_uindex depth, t_uindex idx) {
         return (static_cast<std::int64_t>(depth) << 40)
             | static_cast<std::int64_t>(idx);
     }
 
-    std::string
-    key_column_name(const std::string& pivot, t_uindex depth) {
-        return pivot + " (Group by " + std::to_string(depth + 1) + ")";
+    void
+    check_unique(const std::vector<std::string>& names) {
+        tsl::hopscotch_set<std::string> seen;
+        for (const auto& name : names) {
+            if (!seen.insert(name).second) {
+                PSP_COMPLAIN_AND_ABORT(
+                    "Duplicate column '" + name + "' in derived table schema"
+                );
+            }
+        }
     }
 
     t_dtype
@@ -56,6 +62,14 @@ namespace {
     is_pct(const t_aggspec& spec) {
         return spec.agg() == AGGTYPE_PCT_SUM_PARENT
             || spec.agg() == AGGTYPE_PCT_SUM_GRAND_TOTAL;
+    }
+
+    /// Whether `extract_aggregate` returns the stored aggregate unchanged,
+    /// so a child may read the aggtable column in place.
+    bool
+    identity_extract(const t_aggspec& spec, t_dtype stored_dtype) {
+        return !is_pct(spec) && spec.agg() != AGGTYPE_ABS_SUM
+            && stored_dtype != DTYPE_F64PAIR;
     }
 
     t_dtype
@@ -106,6 +120,35 @@ namespace {
         return path;
     }
 
+    /// Root-to-node paths of live tree nodes under a caller-chosen key
+    /// that must identify the tree as well as the node when several trees
+    /// share an index space; a reference is valid until the next `get`.
+    class t_path_cache {
+    public:
+        const std::vector<t_tscalar>&
+        get(const t_stree& tree, std::int64_t key, t_uindex idx) {
+            auto iter = m_paths.find(key);
+            if (iter == m_paths.end()) {
+                iter = m_paths.emplace(key, node_path(tree, idx)).first;
+            }
+
+            return iter->second;
+        }
+
+        void
+        erase(std::int64_t key) {
+            m_paths.erase(key);
+        }
+
+        void
+        clear() {
+            m_paths.clear();
+        }
+
+    private:
+        tsl::hopscotch_map<std::int64_t, std::vector<t_tscalar>> m_paths;
+    };
+
     /**
      * @brief Add the nodes whose `pct sum` values move with a touched node.
      */
@@ -120,7 +163,6 @@ namespace {
             tree.for_each_node([&touched](const t_stnode& node) {
                 touched.insert(node.m_idx);
             });
-
             return;
         }
 
@@ -162,7 +204,6 @@ namespace {
         widen_pct(tree, pct_parent, pct_grand, touched);
         return touched;
     }
-
 } // namespace
 
 std::string
@@ -206,6 +247,23 @@ t_derived_source::bound_row(const t_tscalar& pkey) const {
     return static_cast<t_index>(iter->second);
 }
 
+bool
+t_derived_source::take_replaced() {
+    t_uindex generation = storage_generation();
+    bool replaced = generation != m_generation;
+    m_generation = generation;
+    return replaced;
+}
+
+void
+t_derived_source::init_pct_flags(const t_view_config& config) {
+    for (const auto& spec : config.get_aggspecs()) {
+        m_pct_parent = m_pct_parent || spec.agg() == AGGTYPE_PCT_SUM_PARENT;
+        m_pct_grand =
+            m_pct_grand || spec.agg() == AGGTYPE_PCT_SUM_GRAND_TOTAL;
+    }
+}
+
 void
 t_derived_source::attach(const std::shared_ptr<Table>& child) {
     m_child = child;
@@ -214,11 +272,11 @@ t_derived_source::attach(const std::shared_ptr<Table>& child) {
     resolve(schema);
     take_replaced();
     m_attached = false;
-    step();
+    step(false);
 }
 
 bool
-t_derived_source::step() {
+t_derived_source::step(bool notify) {
 #ifdef PSP_PARALLEL_FOR
     PSP_WRITE_LOCK(*m_child->get_pool()->get_lock());
 #endif
@@ -233,20 +291,23 @@ t_derived_source::step() {
     collect(full, members);
 
     std::shared_ptr<t_data_table> master = gnode->get_table_sptr();
+    const t_schema& schema = master->get_schema();
+    t_uindex num_columns = m_columns.size();
     if (full) {
-        m_aliased.assign(m_columns.size(), false);
-        for (t_uindex cidx = 0; cidx < m_columns.size(); ++cidx) {
+        for (t_uindex cidx = 0; cidx < num_columns; ++cidx) {
             auto column = alias_column(cidx);
             if (column
-                && column->get_dtype()
-                    == master->get_schema().get_dtype(m_columns[cidx])) {
+                && column->get_dtype() == schema.get_dtype(m_columns[cidx])) {
                 gnode->set_derived_alias(m_columns[cidx], std::move(column));
-                m_aliased[cidx] = true;
             }
         }
     }
 
-    const t_schema& schema = master->get_schema();
+    std::vector<bool> aliased(num_columns);
+    for (t_uindex cidx = 0; cidx < num_columns; ++cidx) {
+        aliased[cidx] = gnode->is_derived_alias(m_columns[cidx]);
+    }
+
     t_uindex size = members.size();
     auto flattened = std::make_shared<t_data_table>(schema);
     flattened->init();
@@ -260,18 +321,25 @@ t_derived_source::step() {
     t_column* pkey_col = flattened->_get_column("psp_pkey");
     t_column* okey_col = flattened->_get_column("psp_okey");
     t_column* op_col = flattened->_get_column("psp_op");
-    std::vector<t_column*> columns(m_columns.size());
-    for (t_uindex cidx = 0; cidx < m_columns.size(); ++cidx) {
-        columns[cidx] = full && m_aliased[cidx]
-            ? nullptr
-            : flattened->_get_column(m_columns[cidx]);
+    const t_column* master_okey = master->_get_const_column("psp_okey");
+    t_column* prev_okey = prev_state->_get_column("psp_okey");
+    std::vector<t_column*> columns(num_columns);
+    std::vector<const t_column*> master_cols(num_columns);
+    std::vector<t_column*> prev_cols(num_columns);
+    for (t_uindex cidx = 0; cidx < num_columns; ++cidx) {
+        const std::string& name = m_columns[cidx];
+        columns[cidx] =
+            full && aliased[cidx] ? nullptr : flattened->_get_column(name);
+        master_cols[cidx] = master->_get_const_column(name);
+        prev_cols[cidx] = prev_state->_get_column(name);
     }
 
     std::vector<t_uindex> rows(size);
+    std::vector<t_index> bound(size);
     t_uindex widx = 0;
     for (const t_derived_member& member : members) {
-        t_index bound = bound_row(member.m_pkey);
-        if (member.m_deleted && bound < 0) {
+        t_index bound_idx = bound_row(member.m_pkey);
+        if (member.m_deleted && bound_idx < 0) {
             continue;
         }
 
@@ -282,31 +350,26 @@ t_derived_source::step() {
         );
 
         rows[widx] =
-            member.m_deleted ? static_cast<t_uindex>(bound) : member.m_row;
+            member.m_deleted ? static_cast<t_uindex>(bound_idx) : member.m_row;
+        bound[widx] = bound_idx;
 
-        if (bound >= 0) {
-            const t_column* okey = master->_get_const_column("psp_okey");
-            if (okey->is_valid(bound)) {
-                prev_state->_get_column("psp_okey")->set_scalar(
-                    widx, okey->get_scalar(bound)
-                );
+        if (bound_idx >= 0) {
+            if (master_okey->is_valid(bound_idx)) {
+                prev_okey->set_scalar(widx, master_okey->get_scalar(bound_idx));
             }
 
-            for (t_uindex cidx = 0; cidx < m_columns.size(); ++cidx) {
+            for (t_uindex cidx = 0; cidx < num_columns; ++cidx) {
                 t_tscalar value;
-                if (!m_aliased[cidx] || !previous(member, cidx, value)) {
-                    const t_column* src =
-                        master->_get_const_column(m_columns[cidx]);
-                    if (!src->is_valid(bound)) {
+                if (!aliased[cidx] || !previous(member, cidx, value)) {
+                    if (!master_cols[cidx]->is_valid(bound_idx)) {
                         continue;
                     }
 
-                    value = src->get_scalar(bound);
+                    value = master_cols[cidx]->get_scalar(bound_idx);
                 }
 
                 if (value.is_valid() && !value.is_none()) {
-                    prev_state->_get_column(m_columns[cidx])
-                        ->set_scalar(widx, value);
+                    prev_cols[cidx]->set_scalar(widx, value);
                 }
             }
         }
@@ -322,12 +385,15 @@ t_derived_source::step() {
         flattened->set_size(widx);
         prev_state->set_size(widx);
         rows.resize(widx);
+        bound.resize(widx);
     }
 
     t_derived_step derived_step;
     derived_step.m_flattened = flattened;
     derived_step.m_prev_state = prev_state;
     derived_step.m_rows = std::move(rows);
+    derived_step.m_bound = std::move(bound);
+    derived_step.m_notify = notify;
     return gnode->process_derived(derived_step);
 }
 
@@ -344,12 +410,7 @@ public:
         auto config = m_view->get_view_config();
         m_num_pivots = config->get_row_pivots().size();
         m_num_visible = config->get_columns().size();
-        for (const auto& spec : config->get_aggspecs()) {
-            m_pct_parent =
-                m_pct_parent || spec.agg() == AGGTYPE_PCT_SUM_PARENT;
-            m_pct_grand =
-                m_pct_grand || spec.agg() == AGGTYPE_PCT_SUM_GRAND_TOTAL;
-        }
+        init_pct_flags(*config);
     }
 
     t_schema
@@ -360,16 +421,17 @@ public:
         std::vector<t_dtype> types;
         const auto pivots = config->get_row_pivots();
         for (t_uindex depth = 0; depth < pivots.size(); ++depth) {
-            names.push_back(key_column_name(pivots[depth], depth));
+            names.push_back(pivots[depth]);
             types.push_back(pivot_dtype(parent_schema, *config, pivots[depth]));
         }
 
         const auto aggspecs = config->get_aggspecs();
         for (t_uindex aggnum = 0; aggnum < m_num_visible; ++aggnum) {
-            names.push_back(aggspecs[aggnum].name());
+            names.push_back(config->readable_aggregate_name(aggspecs[aggnum]));
             types.push_back(aggregate_dtype(*tree(), aggspecs[aggnum]));
         }
 
+        check_unique(names);
         return {names, types};
     }
 
@@ -390,33 +452,35 @@ protected:
         const auto pivots = config->get_row_pivots();
         const auto aggspecs = config->get_aggspecs();
         m_roles.assign(m_columns.size(), {ROLE_NONE, 0});
+        m_agg_names.assign(m_columns.size(), "");
         for (t_uindex cidx = 0; cidx < m_columns.size(); ++cidx) {
             for (t_uindex aggnum = 0; aggnum < m_num_visible; ++aggnum) {
-                if (aggspecs[aggnum].name() == m_columns[cidx]) {
+                if (config->readable_aggregate_name(aggspecs[aggnum])
+                    == m_columns[cidx]) {
                     m_roles[cidx] = {ROLE_AGGREGATE, aggnum};
+                    m_agg_names[cidx] = aggspecs[aggnum].name();
                 }
             }
 
             for (t_uindex depth = 0; depth < pivots.size(); ++depth) {
-                if (key_column_name(pivots[depth], depth) == m_columns[cidx]) {
+                if (pivots[depth] == m_columns[cidx]) {
                     m_roles[cidx] = {ROLE_KEY, depth};
                 }
             }
         }
     }
 
-    bool
-    take_replaced() override {
-        t_uindex generation = m_view->get_context()->get_storage_generation();
-        bool replaced = generation != m_generation;
-        m_generation = generation;
-        return replaced;
+    t_uindex
+    storage_generation() const override {
+        return m_view->get_context()->get_storage_generation();
     }
 
     void
     collect(bool full, std::vector<t_derived_member>& members) override {
         t_stree* tr = tree();
+        snapshot_aggregates(*tr);
         if (full) {
+            m_paths.clear();
             tr->remove_capture(m_capture);
             m_capture = std::make_shared<t_stree_capture>();
             tr->add_capture(m_capture);
@@ -425,13 +489,13 @@ protected:
                     members.push_back(member(*tr, node));
                 }
             });
-
             return;
         }
 
         t_stree_capture capture;
         std::swap(capture, *m_capture);
         for (const auto& dropped : capture.m_dropped) {
+            m_paths.erase(static_cast<std::int64_t>(dropped.m_idx));
             if (!selected(dropped.m_depth)) {
                 continue;
             }
@@ -449,12 +513,15 @@ protected:
 
         for (t_uindex idx :
              touched_nodes(*tr, capture, m_pct_parent, m_pct_grand)) {
-            if (tr->node_exists(idx) && selected(tr->get_depth(idx))) {
-                members.push_back(member(*tr, idx));
-                auto changed = capture.m_changed.find(idx);
-                if (changed != capture.m_changed.end()) {
-                    members.back().m_cells = changed->second;
-                }
+            const t_stnode* node = tr->find_node(idx);
+            if (node == nullptr || !selected(node->m_depth)) {
+                continue;
+            }
+
+            members.push_back(member(*tr, *node));
+            auto changed = capture.m_changed.find(idx);
+            if (changed != capture.m_changed.end()) {
+                members.back().m_cells = changed->second;
             }
         }
     }
@@ -467,15 +534,8 @@ protected:
         }
 
         const auto aggspecs = m_view->get_view_config()->get_aggspecs();
-        if (is_pct(aggspecs[role.second])) {
-            return nullptr;
-        }
-
-        auto column = tree()->get_aggtable()->get_column(
-            aggspecs[role.second].name()
-        );
-
-        if (column->get_dtype() == DTYPE_F64PAIR) {
+        auto column = tree()->get_aggtable()->get_column(m_agg_names[cidx]);
+        if (!identity_extract(aggspecs[role.second], column->get_dtype())) {
             return nullptr;
         }
 
@@ -519,10 +579,13 @@ protected:
                     }
                 } break;
                 case ROLE_AGGREGATE: {
+                    const t_column* direct = m_direct[cidx];
                     put_scalar(
                         columns[cidx],
                         idx,
-                        tr->get_aggregate(member.m_handle, role.second)
+                        direct != nullptr
+                            ? direct->get_scalar(member.m_row)
+                            : tr->get_aggregate(member.m_handle, role.second)
                     );
                 } break;
                 case ROLE_NONE: {
@@ -554,28 +617,37 @@ private:
         return true;
     }
 
+    void
+    snapshot_aggregates(const t_stree& tr) {
+        const auto aggspecs = m_view->get_view_config()->get_aggspecs();
+        auto aggtable = tr.get_aggtable();
+        m_direct.assign(m_columns.size(), nullptr);
+        for (t_uindex cidx = 0; cidx < m_columns.size(); ++cidx) {
+            const auto& role = m_roles[cidx];
+            if (role.first != ROLE_AGGREGATE) {
+                continue;
+            }
+
+            const t_column* column =
+                aggtable->_get_const_column(m_agg_names[cidx]);
+            if (identity_extract(aggspecs[role.second], column->get_dtype())) {
+                m_direct[cidx] = column;
+            }
+        }
+    }
+
     t_derived_member
-    member(const t_stree& tr, const t_stnode& node) const {
+    member(const t_stree& tr, const t_stnode& node) {
         t_derived_member out;
         out.m_pkey.set(static_cast<std::int64_t>(node.m_idx));
         out.m_row = node.m_aggidx;
         out.m_handle = node.m_idx;
-        if (node.m_depth == 1) {
-            out.m_path.push_back(node.m_value);
-        } else if (node.m_depth > 1) {
-            out.m_path = node_path(tr, node.m_idx);
+        if (node.m_depth > 0) {
+            out.m_path = m_paths.get(
+                tr, static_cast<std::int64_t>(node.m_idx), node.m_idx
+            );
         }
 
-        return out;
-    }
-
-    t_derived_member
-    member(const t_stree& tr, t_uindex idx) const {
-        t_derived_member out;
-        out.m_pkey.set(static_cast<std::int64_t>(idx));
-        out.m_row = tr.get_aggidx(idx);
-        out.m_handle = idx;
-        out.m_path = node_path(tr, idx);
         return out;
     }
 
@@ -583,9 +655,10 @@ private:
     std::shared_ptr<Table> m_parent;
     t_uindex m_num_pivots = 0;
     t_uindex m_num_visible = 0;
-    bool m_pct_parent = false;
-    bool m_pct_grand = false;
     std::vector<std::pair<t_role, t_uindex>> m_roles;
+    std::vector<std::string> m_agg_names;
+    std::vector<const t_column*> m_direct;
+    t_path_cache m_paths;
     std::shared_ptr<t_stree_capture> m_capture;
 };
 
@@ -605,12 +678,7 @@ public:
         m_num_row_pivots = config->get_row_pivots().size();
         m_num_column_pivots = config->get_column_pivots().size();
         m_num_visible = config->get_columns().size();
-        for (const auto& spec : config->get_aggspecs()) {
-            m_pct_parent =
-                m_pct_parent || spec.agg() == AGGTYPE_PCT_SUM_PARENT;
-            m_pct_grand =
-                m_pct_grand || spec.agg() == AGGTYPE_PCT_SUM_GRAND_TOTAL;
-        }
+        init_pct_flags(*config);
     }
 
     t_schema
@@ -621,13 +689,14 @@ public:
         std::vector<t_dtype> types;
         const auto pivots = key_pivots();
         for (t_uindex depth = 0; depth < pivots.size(); ++depth) {
-            names.push_back(key_column_name(pivots[depth], depth));
+            names.push_back(pivots[depth]);
             types.push_back(pivot_dtype(parent_schema, *config, pivots[depth]));
         }
 
         const auto aggspecs = config->get_aggspecs();
         const t_stree* tr = trees().back();
-        tsl::hopscotch_set<std::string> seen(names.begin(), names.end());
+        const tsl::hopscotch_set<std::string> keys(names.begin(), names.end());
+        tsl::hopscotch_set<std::string> seen;
         for (const auto& path : m_view->column_names()) {
             if (path.empty() || !column_selected(path.size() - 1)) {
                 continue;
@@ -644,7 +713,14 @@ public:
                     name += path[pidx].to_string() + "|";
                 }
 
-                name += aggregate;
+                name += config->readable_aggregate_name(aggspecs[aggnum]);
+                if (keys.count(name) > 0) {
+                    PSP_COMPLAIN_AND_ABORT(
+                        "Duplicate column '" + name
+                        + "' in derived table schema"
+                    );
+                }
+
                 if (seen.insert(name).second) {
                     names.push_back(name);
                     types.push_back(aggregate_dtype(*tr, aggspecs[aggnum]));
@@ -671,13 +747,22 @@ public:
 protected:
     void
     resolve(const t_schema& schema) override {
+        const auto config = m_view->get_view_config();
+        const auto aggspecs = config->get_aggspecs();
         const auto pivots = key_pivots();
         m_key_columns.assign(pivots.size(), -1);
         m_cell_columns.clear();
+        m_cell_names.clear();
+        for (t_uindex aggnum = 0; aggnum < m_num_visible; ++aggnum) {
+            m_cell_names.push_back(
+                config->readable_aggregate_name(aggspecs[aggnum])
+            );
+        }
+
         for (t_uindex cidx = 0; cidx < m_columns.size(); ++cidx) {
             bool is_key = false;
             for (t_uindex depth = 0; depth < pivots.size(); ++depth) {
-                if (key_column_name(pivots[depth], depth) == m_columns[cidx]) {
+                if (pivots[depth] == m_columns[cidx]) {
                     m_key_columns[depth] = static_cast<t_index>(cidx);
                     is_key = true;
                 }
@@ -689,12 +774,9 @@ protected:
         }
     }
 
-    bool
-    take_replaced() override {
-        t_uindex generation = m_view->get_context()->get_storage_generation();
-        bool replaced = generation != m_generation;
-        m_generation = generation;
-        return replaced;
+    t_uindex
+    storage_generation() const override {
+        return m_view->get_context()->get_storage_generation();
     }
 
     void
@@ -703,11 +785,12 @@ protected:
             m_free_rows.clear();
             m_freed_rows.clear();
             m_next_row = 0;
+            m_paths.clear();
+            m_cell_index.clear();
         } else {
             m_free_rows.insert(
                 m_free_rows.end(), m_freed_rows.begin(), m_freed_rows.end()
             );
-
             m_freed_rows.clear();
         }
 
@@ -727,13 +810,13 @@ protected:
                 tr->for_each_node([&](const t_stnode& node) {
                     add_node(*tr, depth, node.m_idx, members, index);
                 });
-
                 continue;
             }
 
             t_stree_capture capture;
             std::swap(capture, *m_captures[depth]);
             for (const auto& dropped : capture.m_dropped) {
+                forget_node(all.size(), dropped.m_idx);
                 add_dropped(*tr, depth, dropped, members, index);
             }
 
@@ -771,6 +854,8 @@ protected:
     }
 
 private:
+    using t_cell_index = std::vector<std::pair<t_uindex, t_uindex>>;
+
     std::vector<t_stree*>
     trees() const {
         return m_view->get_context()->get_trees();
@@ -819,6 +904,14 @@ private:
         return m_next_row++;
     }
 
+    void
+    forget_node(t_uindex num_depths, t_uindex idx) {
+        for (t_uindex depth = 0; depth < num_depths; ++depth) {
+            m_paths.erase(wide_key(depth, idx));
+            m_cell_index.erase(wide_key(depth, idx));
+        }
+    }
+
     t_derived_member&
     ensure_row(
         const t_stree& tr,
@@ -828,7 +921,6 @@ private:
         tsl::hopscotch_map<std::int64_t, t_uindex>& index
     ) {
         std::int64_t key = wide_key(depth, ridx);
-
         auto iter = index.find(key);
         if (iter != index.end()) {
             return members[iter->second];
@@ -838,7 +930,7 @@ private:
         out.m_pkey.set(key);
         out.m_handle = ridx;
         out.m_depth = depth;
-        out.m_path = node_path(tr, ridx);
+        out.m_path = m_paths.get(tr, key, ridx);
         t_index bound = bound_row(out.m_pkey);
         out.m_row = bound >= 0 ? static_cast<t_uindex>(bound) : allocate_row();
         index[key] = members.size();
@@ -846,25 +938,37 @@ private:
         return members.back();
     }
 
-    void
-    add_cells(
-        t_derived_member& row,
-        const std::vector<t_tscalar>& path,
-        t_uindex depth,
-        const std::function<t_tscalar(t_uindex)>& value
-    ) const {
+    t_cell_index
+    resolve_cells(const std::vector<t_tscalar>& path, t_uindex depth) const {
         std::string prefix;
         for (t_uindex pidx = depth; pidx < path.size(); ++pidx) {
             prefix += path[pidx].to_string() + "|";
         }
 
-        const auto aggspecs = m_view->get_view_config()->get_aggspecs();
+        t_cell_index cells;
         for (t_uindex aggnum = 0; aggnum < m_num_visible; ++aggnum) {
-            auto iter = m_cell_columns.find(prefix + aggspecs[aggnum].name());
+            auto iter = m_cell_columns.find(prefix + m_cell_names[aggnum]);
             if (iter != m_cell_columns.end()) {
-                row.m_cells.emplace_back(iter->second, value(aggnum));
+                cells.emplace_back(aggnum, iter->second);
             }
         }
+
+        return cells;
+    }
+
+    const t_cell_index&
+    cells_for(const t_stree& tr, t_uindex depth, t_uindex idx) {
+        std::int64_t key = wide_key(depth, idx);
+        auto iter = m_cell_index.find(key);
+        if (iter == m_cell_index.end()) {
+            iter = m_cell_index
+                       .emplace(
+                           key, resolve_cells(m_paths.get(tr, key, idx), depth)
+                       )
+                       .first;
+        }
+
+        return iter->second;
     }
 
     void
@@ -890,9 +994,9 @@ private:
             return;
         }
 
-        add_cells(row, node_path(tr, idx), depth, [&tr, idx](t_uindex aggnum) {
-            return tr.get_aggregate(idx, aggnum);
-        });
+        for (const auto& [aggnum, cidx] : cells_for(tr, depth, idx)) {
+            row.m_cells.emplace_back(cidx, tr.get_aggregate(idx, aggnum));
+        }
     }
 
     void
@@ -910,7 +1014,6 @@ private:
         if (dropped.m_depth == depth) {
             t_derived_member out;
             out.m_pkey.set(wide_key(depth, dropped.m_idx));
-
             out.m_deleted = true;
             t_index bound = bound_row(out.m_pkey);
             if (bound >= 0) {
@@ -928,7 +1031,6 @@ private:
         std::vector<t_tscalar> row_path(
             dropped.m_path.begin(), dropped.m_path.begin() + depth
         );
-
         std::reverse(row_path.begin(), row_path.end());
         t_index ridx = depth == 0 ? 0 : tr.resolve_path(0, row_path);
         if (ridx == INVALID_INDEX || !tr.node_exists(ridx)) {
@@ -938,8 +1040,9 @@ private:
         t_derived_member& row = ensure_row(
             tr, depth, static_cast<t_uindex>(ridx), members, index
         );
-
-        add_cells(row, dropped.m_path, depth, [](t_uindex) { return mknone(); });
+        for (const auto& [aggnum, cidx] : resolve_cells(dropped.m_path, depth)) {
+            row.m_cells.emplace_back(cidx, mknone());
+        }
     }
 
     std::shared_ptr<View<t_ctx2>> m_view;
@@ -948,10 +1051,11 @@ private:
     t_uindex m_num_row_pivots = 0;
     t_uindex m_num_column_pivots = 0;
     t_uindex m_num_visible = 0;
-    bool m_pct_parent = false;
-    bool m_pct_grand = false;
     std::vector<t_index> m_key_columns;
+    std::vector<std::string> m_cell_names;
     tsl::hopscotch_map<std::string, t_uindex> m_cell_columns;
+    tsl::hopscotch_map<std::int64_t, t_cell_index> m_cell_index;
+    t_path_cache m_paths;
     std::vector<t_uindex> m_free_rows;
     std::vector<t_uindex> m_freed_rows;
     t_uindex m_next_row = 0;
@@ -959,7 +1063,6 @@ private:
 };
 
 namespace {
-
     bool
     flat_has_member(
         const t_ctx0& ctx, const t_gstate::t_mapping&, const t_tscalar& pkey
@@ -1011,7 +1114,6 @@ namespace {
 
         return pkeys;
     }
-
 } // namespace
 
 /**
@@ -1072,12 +1174,9 @@ protected:
     void
     resolve(const t_schema& schema) override {}
 
-    bool
-    take_replaced() override {
-        t_uindex generation = m_view->get_context()->get_storage_generation();
-        bool replaced = generation != m_generation;
-        m_generation = generation;
-        return replaced;
+    t_uindex
+    storage_generation() const override {
+        return m_view->get_context()->get_storage_generation();
     }
 
     void
@@ -1127,7 +1226,6 @@ protected:
             bool removed =
                 *(op_col->get_nth<std::uint8_t>(idx)) == OP_DELETE
                 || !flat_has_member(ctx, mapping, pkey);
-
             add_member(mapping, pkey, removed, members);
             members.back().m_handle = idx;
         }
@@ -1169,7 +1267,6 @@ protected:
         out = source->is_valid(member.m_handle)
             ? source->get_scalar(member.m_handle)
             : mknone();
-
         return true;
     }
 

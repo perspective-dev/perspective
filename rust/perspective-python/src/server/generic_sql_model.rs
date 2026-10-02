@@ -264,7 +264,7 @@ impl From<PyViewPort> for ViewPort {
             start_col: value.start_col,
             end_row: value.end_row,
             end_col: value.end_col,
-            emit_legacy_row_path_names: None,
+            machine_column_names: None,
         }
     }
 }

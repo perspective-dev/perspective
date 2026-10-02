@@ -116,7 +116,7 @@ test.describe("Derived table soak", function () {
                     group_rollup_mode,
                 },
                 {
-                    group_by: ["h (Group by 2)"],
+                    group_by: ["h"],
                     columns: ["x", "y"],
                     aggregates: AGGS,
                 },
@@ -135,7 +135,7 @@ test.describe("Derived table soak", function () {
                         split_rollup_mode,
                     },
                     {
-                        group_by: ["g (Group by 1)"],
+                        group_by: ["g"],
                         columns: ["Mon|x", "Wed|x"],
                         aggregates: { "Mon|x": "sum", "Wed|x": "mean" },
                     },

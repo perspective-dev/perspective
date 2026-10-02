@@ -1065,7 +1065,7 @@ class TestPolarsCombinedOperations:
         view = table.view(group_by=["Region"], columns=[])
         csv = view.to_csv()
         assert [line for line in csv.splitlines() if line] == [
-            "__ROW_PATH_0__",
+            "Region",
             "null",
             '"Central"',
             '"East"',

@@ -30,6 +30,7 @@
 #include <tsl/ordered_map.h>
 #include <perspective/parallel_for.h>
 #include <chrono>
+#include <functional>
 
 #ifdef PSP_PARALLEL_FOR
 #include <thread>
@@ -65,6 +66,8 @@ struct PERSPECTIVE_EXPORT t_derived_step {
     std::shared_ptr<t_data_table> m_flattened;
     std::shared_ptr<t_data_table> m_prev_state;
     std::vector<t_uindex> m_rows;
+    std::vector<t_index> m_bound;
+    bool m_notify = true;
 };
 
 /**
@@ -359,6 +362,18 @@ protected:
         const std::shared_ptr<t_data_table>& flattened,
         const std::shared_ptr<t_data_table>& state_table,
         const std::vector<t_rlookup>& lookup
+    );
+
+    /**
+     * @brief Mask out deleted rows, commit through `commit` if given, then
+     * run windows and expressions, returning the table to notify with.
+     */
+    std::shared_ptr<t_data_table> _finish_step(
+        const std::shared_ptr<t_data_table>& flattened,
+        const t_mask& existed_mask,
+        const std::vector<t_rlookup>& row_lookup,
+        const std::function<void(const std::shared_ptr<t_data_table>&)>&
+            commit
     );
 
     /**

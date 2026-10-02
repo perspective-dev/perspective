@@ -1166,7 +1166,7 @@ class TestDuckDBCoerceTypes:
         view = table.view(group_by=["enum"], columns=[])
         csv = view.to_csv()
         assert [line for line in csv.splitlines() if line] == [
-            "__ROW_PATH_0__",
+            "enum",
             "null",
             '"happy"',
             '"sad"',
@@ -1196,21 +1196,37 @@ class TestDuckDBTableFromView:
 
         derived = client.table(view, name="py_derived_group")
         assert derived.schema() == {
-            "Region (Group by 1)": "string",
+            "Region": "string",
             "Sales": "float",
         }
 
-        child = derived.view(columns=["Region (Group by 1)", "Sales"])
+        child = derived.view(columns=["Region", "Sales"])
         expected = sorted(
             (str(row["__ROW_PATH__"][0]) if row["__ROW_PATH__"] else "None", row["Sales"])
             for row in view.to_json()
         )
 
         actual = sorted(
-            (str(row["Region (Group by 1)"]), row["Sales"]) for row in child.to_json()
+            (str(row["Region"]), row["Sales"]) for row in child.to_json()
         )
 
         assert actual == expected
+        child.delete()
+        derived.delete()
+        view.delete()
+
+    def test_group_by_view_qualifies_key_aggregate(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Region", "Sales"],
+            group_by=["Region"],
+            aggregates={"Region": "count", "Sales": "sum"},
+        )
+
+        derived = client.table(view, name="py_derived_qualified")
+        assert derived.columns() == ["Region", "Region (count)", "Sales"]
+        child = derived.view(columns=["Region", "Region (count)"])
+        assert child.num_rows() == view.num_rows()
         child.delete()
         derived.delete()
         view.delete()
@@ -1229,20 +1245,20 @@ class TestDuckDBTableFromView:
             view,
             name="py_derived_schema",
             schema={
-                "Category (Group by 1)": "string",
+                "Category": "string",
                 "West|Sales": "float",
                 "North|Sales": "float",
             },
         )
 
         assert derived.columns() == [
-            "Category (Group by 1)",
+            "Category",
             "West|Sales",
             "North|Sales",
         ]
 
         child = derived.view(
-            columns=["Category (Group by 1)", "West|Sales", "North|Sales"]
+            columns=["Category", "West|Sales", "North|Sales"]
         )
 
         rows = child.to_json()

@@ -35,7 +35,7 @@ def _unrolled(view, group_by):
     out = []
     for i, path in enumerate(paths):
         row = {
-            "{} (Group by {})".format(g, d + 1): (path[d] if d < len(path) else None)
+            g: (path[d] if d < len(path) else None)
             for d, g in enumerate(group_by)
         }
 
@@ -72,7 +72,7 @@ class TestDerivedTable(object):
 
         derived = client.table(view)
         assert derived.schema() == {
-            "g (Group by 1)": "string",
+            "g": "string",
             "x": "float",
             "y": "float",
         }
@@ -116,10 +116,10 @@ class TestDerivedTable(object):
         )
 
         derived = client.table(
-            view, schema={"g (Group by 1)": "string", "Tue|x": "float", "Wed|x": "float"}
+            view, schema={"g": "string", "Tue|x": "float", "Wed|x": "float"}
         )
 
-        assert derived.columns() == ["g (Group by 1)", "Tue|x", "Wed|x"]
+        assert derived.columns() == ["g", "Tue|x", "Wed|x"]
         child = derived.view()
         assert all(v is None for v in child.to_columns()["Wed|x"])
         table.update([{"id": 100, "g": "a", "s": "Wed", "x": 7.0, "y": 1}])

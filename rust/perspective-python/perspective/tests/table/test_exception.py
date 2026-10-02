@@ -41,6 +41,14 @@ class TestException(object):
 
         assert str(ex.value) == "Abort(): Invalid column 'b' found in View group_by.\n"
 
+    def test_exception_duplicate_group_by(self):
+        tbl = Table({"a": [1, 2, 3]})
+
+        with raises(PerspectiveError) as ex:
+            tbl.view(group_by=["a", "a"])
+
+        assert str(ex.value) == "Abort(): Duplicate column 'a' found in View group_by.\n"
+
     def test_exception_from_core_catch_generic(self):
         tbl = Table({"a": [1, 2, 3]})
         # `PerspectiveCppError` should inherit from `Exception`

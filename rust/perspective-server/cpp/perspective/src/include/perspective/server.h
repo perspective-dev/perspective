@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <tsl/hopscotch_set.h>
 #include <utility>
 #include <perspective/table.h>
@@ -162,7 +163,7 @@ namespace server {
             t_uindex end_col,
             bool emit_group_by = true,
             t_arrow_compression compression = t_arrow_compression::LZ4,
-            bool emit_legacy_row_path_names = true
+            bool machine_column_names = false
         ) const = 0;
 
         [[nodiscard]]
@@ -296,7 +297,7 @@ namespace server {
             t_uindex end_col,
             bool emit_group_by = true,
             t_arrow_compression compression = t_arrow_compression::LZ4,
-            bool emit_legacy_row_path_names = true
+            bool machine_column_names = false
         ) const override {
             return m_view->to_arrow(
                 start_row,
@@ -305,7 +306,7 @@ namespace server {
                 end_col,
                 emit_group_by,
                 compression,
-                emit_legacy_row_path_names
+                machine_column_names
             );
         }
 
@@ -537,22 +538,25 @@ namespace server {
 
         void unregister_table(const t_id& table_id);
 
-        bool is_derived_table(const t_id& table_id) const;
-
         bool has_dependents(const t_id& view_id) const;
 
         /**
-         * @brief The id of the `View` that `table_id` is derived from.
+         * @brief The id of the `View` that `table_id` is derived from, if
+         * it is derived at all.
          */
-        t_id get_view_id(const t_id& table_id) const;
+        std::optional<t_id> parent_view_of(const t_id& table_id) const;
 
         std::vector<std::pair<t_id, std::shared_ptr<t_derived_source>>>
         get_dependents(const t_id& view_id) const;
 
     private:
+        struct t_entry {
+            t_id m_view_id;
+            std::shared_ptr<t_derived_source> m_source;
+        };
+
         std::multimap<t_id, t_id> m_view_to_tables;
-        tsl::hopscotch_map<t_id, t_id> m_table_to_view;
-        tsl::hopscotch_map<t_id, std::shared_ptr<t_derived_source>> m_sources;
+        tsl::hopscotch_map<t_id, t_entry> m_tables;
 
 #ifdef PSP_PARALLEL_FOR
         mutable std::shared_mutex m_lock;
@@ -744,10 +748,6 @@ namespace server {
         ServerResources::t_id
         _root_table_id(const ServerResources::t_id& table_id);
 
-        void _mark_derived_updated(const ServerResources::t_id& table_id);
-
-        tsl::hopscotch_set<ServerResources::t_id> _take_derived_updated();
-
         /**
          * @brief Create the read-only `Table` for a `from_view` request,
          * returning an error message on failure.
@@ -774,10 +774,6 @@ namespace server {
         ServerResources m_resources;
         JoinEngine m_join_engine;
         DerivedTableEngine m_derived_engine;
-        tsl::hopscotch_set<ServerResources::t_id> m_derived_updated;
-#ifdef PSP_PARALLEL_FOR
-        std::mutex m_derived_updated_lock;
-#endif
         t_computed_expression_parser m_computed_expression_parser;
     };
 

@@ -1125,30 +1125,23 @@ t_stree::mark_zero_desc() {
 }
 
 void
-t_stree::update_aggs_from_static(
+t_stree::_build_agg_info(
     const t_dtree_ctx& ctx,
     const t_gstate& gstate,
     const t_data_table& expression_master_table
 ) {
-    const t_data_table& src_aggtable = ctx.get_aggtable();
-
-    t_agg_update_info agg_update_info;
-    t_schema aggschema = m_aggregates->get_schema();
-
+    t_agg_update_info& info = m_agg_info;
+    info = t_agg_update_info();
+    const t_schema& aggschema = m_aggregates->get_schema();
     const t_schema& expression_schema = expression_master_table.get_schema();
     const t_schema& master_schema = gstate.get_table()->get_schema();
 
+    info.m_src.assign(aggschema.m_columns.size(), nullptr);
     for (const auto& colname : aggschema.m_columns) {
-        agg_update_info.m_src.push_back(
-            src_aggtable._get_const_column(colname)
-        );
-        agg_update_info.m_dst.push_back(m_aggregates->_get_column(colname)
-        );
-        agg_update_info.m_aggspecs.push_back(ctx.get_aggspec(colname));
+        info.m_dst.push_back(m_aggregates->_get_column(colname));
+        info.m_aggspecs.push_back(ctx.get_aggspec(colname));
 
-        const auto& dependencies =
-            agg_update_info.m_aggspecs.back().get_dependencies();
-
+        const auto& dependencies = info.m_aggspecs.back().get_dependencies();
         bool numeric_source = true;
         if (!dependencies.empty()) {
             const std::string& dep = dependencies[0].name();
@@ -1161,18 +1154,18 @@ t_stree::update_aggs_from_static(
             }
         }
 
-        agg_update_info.m_numeric_source.push_back(numeric_source);
+        info.m_numeric_source.push_back(numeric_source);
     }
 
     std::map<std::string, t_uindex> valid_positions;
-    for (t_uindex idx = 0; idx < agg_update_info.m_aggspecs.size(); ++idx) {
-        const t_aggspec& spec = agg_update_info.m_aggspecs[idx];
+    for (t_uindex idx = 0; idx < info.m_aggspecs.size(); ++idx) {
+        const t_aggspec& spec = info.m_aggspecs[idx];
         if (spec.agg() == AGGTYPE_VALID_COUNT) {
             valid_positions[spec.name()] = idx;
         }
     }
 
-    for (const auto& spec : agg_update_info.m_aggspecs) {
+    for (const auto& spec : info.m_aggspecs) {
         t_uindex valid_idx = static_cast<t_uindex>(-1);
         if (aggtype_wants_valid_count(spec.agg())
             && !spec.get_dependencies().empty()) {
@@ -1184,18 +1177,18 @@ t_stree::update_aggs_from_static(
             }
         }
 
-        agg_update_info.m_valid_idx.push_back(valid_idx);
+        info.m_valid_idx.push_back(valid_idx);
     }
 
     auto is_col_scaled_aggregate = [&](int col_idx) -> bool {
-        int agg_type = agg_update_info.m_aggspecs[col_idx].agg();
+        int agg_type = info.m_aggspecs[col_idx].agg();
 
         return agg_type == AGGTYPE_SCALED_DIV || agg_type == AGGTYPE_SCALED_ADD
             || agg_type == AGGTYPE_SCALED_MUL;
     };
 
     size_t col_cnt = aggschema.m_columns.size();
-    auto& cols_topo_sorted = agg_update_info.m_dst_topo_sorted;
+    auto& cols_topo_sorted = info.m_dst_topo_sorted;
     cols_topo_sorted.clear();
     cols_topo_sorted.reserve(col_cnt);
 
@@ -1205,7 +1198,7 @@ t_stree::update_aggs_from_static(
     tsl::hopscotch_set<t_column*> dst_visited;
     auto push_column = [&](size_t idx) {
         if (enable_fix_double_calculation) {
-            t_column* dst = agg_update_info.m_dst[idx];
+            t_column* dst = info.m_dst[idx];
             if (dst_visited.find(dst) != dst_visited.end()) {
                 return;
             }
@@ -1219,7 +1212,7 @@ t_stree::update_aggs_from_static(
         // This does not handle case where scaled aggregate depends on other
         // scaled aggregate ( not sure if that is possible )
         for (size_t i = 0; i < col_cnt; ++i) {
-            if (agg_update_info.m_aggspecs[i].agg() == AGGTYPE_VALID_COUNT) {
+            if (info.m_aggspecs[i].agg() == AGGTYPE_VALID_COUNT) {
                 push_column(i);
             }
         }
@@ -1239,6 +1232,25 @@ t_stree::update_aggs_from_static(
             push_column(i);
         }
     }
+}
+
+void
+t_stree::update_aggs_from_static(
+    const t_dtree_ctx& ctx,
+    const t_gstate& gstate,
+    const t_data_table& expression_master_table
+) {
+    if (m_agg_info_table != m_aggregates.get()) {
+        _build_agg_info(ctx, gstate, expression_master_table);
+        m_agg_info_table = m_aggregates.get();
+    }
+
+    const t_data_table& src_aggtable = ctx.get_aggtable();
+    const t_schema& aggschema = m_aggregates->get_schema();
+    for (t_uindex idx = 0; idx < aggschema.m_columns.size(); ++idx) {
+        m_agg_info.m_src[idx] =
+            src_aggtable._get_const_column(aggschema.m_columns[idx]);
+    }
 
     for (const auto& r : m_tree_unification_records) {
         if (!node_exists(r.m_sptidx)) {
@@ -1247,7 +1259,7 @@ t_stree::update_aggs_from_static(
 
         update_agg_table(
             r.m_sptidx,
-            agg_update_info,
+            m_agg_info,
             r.m_daggidx,
             r.m_saggidx,
             r.m_nstrands,
@@ -2875,6 +2887,13 @@ t_stree::remove_capture(const std::shared_ptr<t_stree_capture>& capture) {
 bool
 t_stree::node_exists(t_uindex idx) const {
     return m_nodes->get<by_idx>().find(idx) != m_nodes->get<by_idx>().end();
+}
+
+const t_stnode*
+t_stree::find_node(t_uindex idx) const {
+    const auto& nodes = m_nodes->get<by_idx>();
+    auto iter = nodes.find(idx);
+    return iter == nodes.end() ? nullptr : &*iter;
 }
 
 void

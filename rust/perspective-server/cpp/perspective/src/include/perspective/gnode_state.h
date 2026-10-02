@@ -321,6 +321,8 @@ protected:
     void drop_aliases();
 
     void resize_owned(t_uindex extent);
+
+    void _refresh_alias_mask();
     bool has_pkey(t_tscalar pkey) const;
     t_dtype get_pkey_dtype() const;
 
@@ -340,6 +342,7 @@ private:
     t_mapping m_mapping;
     t_free_items m_free;
     tsl::hopscotch_set<std::string> m_aliased;
+    std::vector<bool> m_alias_mask;
     t_symtable m_symtable;
     std::shared_ptr<t_column> m_pkcol;
     std::shared_ptr<t_column> m_opcol;

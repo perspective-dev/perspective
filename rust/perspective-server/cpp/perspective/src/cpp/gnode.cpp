@@ -662,18 +662,35 @@ t_gnode::_process_table(t_uindex port_id) {
     t_mask existed_mask =
         _compute_transitions(flattened, get_table_sptr(), row_lookup);
 
+    result.m_flattened_data_table = _finish_step(
+        flattened,
+        existed_mask,
+        row_lookup,
+        [this](const std::shared_ptr<t_data_table>& masked) {
+            m_gstate->update_master_table(masked);
+        }
+    );
+    result.m_should_notify_userspace = true;
+    return result;
+}
+
+std::shared_ptr<t_data_table>
+t_gnode::_finish_step(
+    const std::shared_ptr<t_data_table>& flattened,
+    const t_mask& existed_mask,
+    const std::vector<t_rlookup>& row_lookup,
+    const std::function<void(const std::shared_ptr<t_data_table>&)>& commit
+) {
     /**
-     * After all columns have been processed (transitional tables written into),
-     * `flattened` contains the accumulated state
-     * of the dataset that updates the master table on `m_gstate`, including
-     * added rows, updated in-place rows, and rows to be removed.
+     * `flattened` contains the accumulated state of the dataset that updates
+     * the master table on `m_gstate`, including added rows, updated in-place
+     * rows, and rows to be removed.
      *
      * `existed_mask` is a bitset marked true for `OP_INSERT`, and false for
      * `OP_DELETE`. If there are any `OP_DELETE`s, the next step returns a
      * new `t_data_table` with the deleted rows masked out.
      */
     std::shared_ptr<t_data_table> flattened_masked;
-
     if (existed_mask.count() == flattened->size()) {
         flattened_masked = flattened;
     } else {
@@ -682,14 +699,9 @@ t_gnode::_process_table(t_uindex port_id) {
 
     PSP_GNODE_VERIFY_TABLE(flattened_masked);
 
-#ifdef PSP_GNODE_VERIFY
-    {
-        auto updated_table = get_table();
-        PSP_GNODE_VERIFY_TABLE(updated_table);
+    if (commit) {
+        commit(flattened_masked);
     }
-#endif
-
-    m_gstate->update_master_table(flattened_masked);
 
 #ifdef PSP_GNODE_VERIFY
     {
@@ -703,22 +715,18 @@ t_gnode::_process_table(t_uindex port_id) {
     } else {
         std::vector<t_rlookup> masked_lookup;
         masked_lookup.reserve(flattened_masked->size());
-        for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
+        for (t_uindex idx = 0, end = flattened->num_rows(); idx < end; ++idx) {
             if (existed_mask.get(idx)) {
                 masked_lookup.push_back(row_lookup[idx]);
             }
         }
+
         _process_windows(flattened_masked, masked_lookup);
     }
 
     m_oports[PSP_PORT_FLATTENED]->set_table(flattened_masked);
-
     _compute_expressions(get_table_sptr(), flattened_masked);
-
-    result.m_flattened_data_table = flattened_masked;
-    result.m_should_notify_userspace = true;
-
-    return result;
+    return flattened_masked;
 }
 
 template <>
@@ -908,8 +916,11 @@ t_gnode::process_derived(const t_derived_step& step) {
     std::vector<t_rlookup> row_lookup(flattened_num_rows);
     std::vector<t_rlookup> identity_lookup(flattened_num_rows);
     for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
-        row_lookup[idx] = m_gstate->lookup(pkey_col->get_scalar(idx));
-        identity_lookup[idx] = t_rlookup(idx, row_lookup[idx].m_exists);
+        bool exists = step.m_bound[idx] >= 0;
+        row_lookup[idx] = t_rlookup(
+            exists ? static_cast<t_uindex>(step.m_bound[idx]) : 0, exists
+        );
+        identity_lookup[idx] = t_rlookup(idx, exists);
     }
 
     _take_reset_removes(pkey_col, flattened_num_rows);
@@ -917,7 +928,7 @@ t_gnode::process_derived(const t_derived_step& step) {
     if (m_gstate->mapping_size() == 0) {
         m_gstate->commit_derived(flattened, step.m_rows);
         m_oports[PSP_PORT_FLATTENED]->set_table(flattened);
-        if (!m_contexts.empty()) {
+        if (step.m_notify && !m_contexts.empty()) {
             _compute_expressions(flattened);
             _update_contexts_from_state(m_gstate->get_pkeyed_table());
         }
@@ -926,30 +937,17 @@ t_gnode::process_derived(const t_derived_step& step) {
         return true;
     }
 
-    t_mask existed_mask =
-        _compute_transitions(flattened, step.m_prev_state, identity_lookup);
-
-    m_gstate->commit_derived(flattened, step.m_rows);
-
-    std::shared_ptr<t_data_table> flattened_masked;
-    if (existed_mask.count() == flattened->size()) {
-        flattened_masked = flattened;
-        _process_windows(flattened_masked, row_lookup);
-    } else {
-        flattened_masked = flattened->clone(existed_mask);
-        std::vector<t_rlookup> masked_lookup;
-        masked_lookup.reserve(flattened_masked->size());
-        for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
-            if (existed_mask.get(idx)) {
-                masked_lookup.push_back(row_lookup[idx]);
-            }
-        }
-
-        _process_windows(flattened_masked, masked_lookup);
+    if (!step.m_notify) {
+        m_gstate->commit_derived(flattened, step.m_rows);
+        release_outputs();
+        return true;
     }
 
-    m_oports[PSP_PORT_FLATTENED]->set_table(flattened_masked);
-    _compute_expressions(get_table_sptr(), flattened_masked);
+    t_mask existed_mask =
+        _compute_transitions(flattened, step.m_prev_state, identity_lookup);
+    m_gstate->commit_derived(flattened, step.m_rows);
+    auto flattened_masked =
+        _finish_step(flattened, existed_mask, row_lookup, nullptr);
     notify_contexts(flattened_masked);
     return true;
 }

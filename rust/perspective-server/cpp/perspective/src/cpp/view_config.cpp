@@ -136,10 +136,18 @@ t_view_config::validate(const std::shared_ptr<t_schema>& schema) {
         }
     }
 
+    std::unordered_set<std::string> row_pivots;
     for (const std::string& col : m_row_pivots) {
         if (!schema->has_column(col) && expression_aliases.count(col) == 0) {
             std::stringstream ss;
             ss << "Invalid column '" << col << "' found in View group_by."
+               << '\n';
+            PSP_COMPLAIN_AND_ABORT(ss.str());
+        }
+
+        if (!row_pivots.insert(col).second) {
+            std::stringstream ss;
+            ss << "Duplicate column '" << col << "' found in View group_by."
                << '\n';
             PSP_COMPLAIN_AND_ABORT(ss.str());
         }
@@ -275,6 +283,34 @@ std::vector<std::string>
 t_view_config::get_column_pivots() const {
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
     return m_column_pivots;
+}
+
+std::string
+t_view_config::readable_aggregate_name(const t_aggspec& aggspec) const {
+    const std::string& name = aggspec.name();
+    bool is_key = !m_column_only
+        && std::find(m_row_pivots.begin(), m_row_pivots.end(), name)
+            != m_row_pivots.end();
+    if (!is_key) {
+        return name;
+    }
+
+    const auto& spelled = m_aggregates.find(name);
+    if (spelled != m_aggregates.end() && !spelled->second.empty()) {
+        std::string qualified = name + " (" + spelled->second.at(0);
+        if (spelled->second.size() > 1) {
+            qualified += " by " + spelled->second.at(1);
+        }
+
+        return qualified + ")";
+    }
+
+    std::string qualified = name + " (" + aggspec.agg_str();
+    if (aggtype_takes_argument(aggspec.agg())) {
+        qualified += " by " + aggspec.get_dependencies().at(1).name();
+    }
+
+    return qualified + ")";
 }
 
 std::vector<t_aggspec>

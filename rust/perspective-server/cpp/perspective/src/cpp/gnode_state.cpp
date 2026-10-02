@@ -87,15 +87,10 @@ t_gstate::erase(const t_tscalar& pkey) {
     }
 
     t_uindex idx = iter->second;
-    if (m_aliased.empty()) {
-        for (auto* c : m_table->get_columns()) {
-            c->clear(idx);
-        }
-    } else {
-        for (const auto& name : m_table->get_schema().m_columns) {
-            if (!is_aliased(name)) {
-                m_table->_get_column(name)->clear(idx);
-            }
+    auto columns = m_table->get_columns();
+    for (t_uindex cidx = 0; cidx < columns.size(); ++cidx) {
+        if (m_alias_mask.empty() || !m_alias_mask[cidx]) {
+            columns[cidx]->clear(idx);
         }
     }
 
@@ -309,9 +304,13 @@ t_gstate::commit_derived(
             int idx
         ) {
             const std::string& column_name = master_schema.m_columns[idx];
+            if (!m_alias_mask.empty() && m_alias_mask[idx]) {
+                return;
+            }
+
             const t_column* flattened_column =
                 flattened->_get_const_column_safe(column_name);
-            if (!flattened_column || is_aliased(column_name)) {
+            if (!flattened_column) {
                 return;
             }
 
@@ -330,6 +329,21 @@ void
 t_gstate::set_alias(const std::string& name, std::shared_ptr<t_column> column) {
     m_table->set_column(name, std::move(column));
     m_aliased.insert(name);
+    _refresh_alias_mask();
+}
+
+void
+t_gstate::_refresh_alias_mask() {
+    if (m_aliased.empty()) {
+        m_alias_mask.clear();
+        return;
+    }
+
+    const auto& columns = m_table->get_schema().m_columns;
+    m_alias_mask.assign(columns.size(), false);
+    for (t_uindex cidx = 0; cidx < columns.size(); ++cidx) {
+        m_alias_mask[cidx] = is_aliased(columns[cidx]);
+    }
 }
 
 bool
@@ -351,6 +365,7 @@ t_gstate::drop_aliases() {
     }
 
     m_aliased.clear();
+    m_alias_mask.clear();
 }
 
 void
@@ -366,11 +381,11 @@ t_gstate::resize_owned(t_uindex extent) {
         );
     }
 
-    for (const auto& name : m_table->get_schema().m_columns) {
-        if (!is_aliased(name)) {
-            t_column* column = m_table->_get_column(name);
-            column->reserve(capacity);
-            column->set_size(extent);
+    auto columns = m_table->get_columns();
+    for (t_uindex cidx = 0; cidx < columns.size(); ++cidx) {
+        if (m_alias_mask.empty() || !m_alias_mask[cidx]) {
+            columns[cidx]->reserve(capacity);
+            columns[cidx]->set_size(extent);
         }
     }
 

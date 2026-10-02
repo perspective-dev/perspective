@@ -946,7 +946,7 @@ class TestPostgresCoerceTypes:
         view = table.view(group_by=["enum"], columns=[])
         csv = view.to_csv()
         assert [line for line in csv.splitlines() if line] == [
-            "__ROW_PATH_0__",
+            "enum",
             "null",
             '"happy"',
             '"sad"',
