@@ -13,6 +13,7 @@
 import { test, expect } from "@perspective-dev/test";
 import perspective from "../perspective_client";
 import * as common from "./common.js";
+import { joined_column_paths } from "../column_paths.js";
 
 const NUMERIC_TYPES = [
     "i8",
@@ -224,7 +225,7 @@ function validate_binary_operations(output, expressions, operator) {
                         expect(await view.to_columns()).toEqual({
                             __ROW_PATH__: [[], [null], [1], [2], [3], [4]],
                             a: [295, 220, 10, 15, 20, 30],
-                            b: [10, 0, 1, 2, 3, 4],
+                            b: [10, null, 1, 2, 3, 4],
                             '"a"': [295, 220, 10, 15, 20, 30],
                         });
                         await view.delete();
@@ -243,7 +244,7 @@ function validate_binary_operations(output, expressions, operator) {
                         expressions,
                     });
 
-                    const col_names = await view.column_paths();
+                    const col_names = await joined_column_paths(view);
 
                     for (const expr of expressions) {
                         expect(col_names.includes(expr)).toBe(true);
@@ -266,7 +267,7 @@ function validate_binary_operations(output, expressions, operator) {
                         expressions,
                     });
 
-                    const col_names = await view.column_paths();
+                    const col_names = await joined_column_paths(view);
 
                     for (const expr of expressions) {
                         expect(col_names.includes(expr)).toBe(true);
@@ -287,7 +288,7 @@ function validate_binary_operations(output, expressions, operator) {
                         expressions,
                     });
 
-                    const col_names = await view.column_paths();
+                    const col_names = await joined_column_paths(view);
 
                     for (const expr of expressions) {
                         expect(col_names.includes(expr)).toBe(true);
@@ -308,7 +309,7 @@ function validate_binary_operations(output, expressions, operator) {
                         expressions,
                     });
 
-                    const col_names = await view.column_paths();
+                    const col_names = await joined_column_paths(view);
 
                     for (const expr of expressions) {
                         expect(col_names.includes(expr)).toBe(true);
@@ -330,7 +331,7 @@ function validate_binary_operations(output, expressions, operator) {
                         expressions,
                     });
 
-                    const col_names = await view.column_paths();
+                    const col_names = await joined_column_paths(view);
 
                     for (const expr of expressions) {
                         expect(col_names.includes(expr)).toBe(true);
@@ -352,7 +353,7 @@ function validate_binary_operations(output, expressions, operator) {
                         expressions,
                     });
 
-                    const col_names = await view.column_paths();
+                    const col_names = await joined_column_paths(view);
 
                     for (const expr of expressions) {
                         expect(col_names.includes(expr)).toBe(true);
@@ -371,7 +372,7 @@ function validate_binary_operations(output, expressions, operator) {
                         expressions,
                     });
 
-                    const col_names = await view.column_paths();
+                    const col_names = await joined_column_paths(view);
 
                     for (const expr of expressions) {
                         expect(col_names.includes(expr)).toBe(true);
@@ -392,7 +393,7 @@ function validate_binary_operations(output, expressions, operator) {
                             expressions,
                         });
 
-                        const col_names = await view.column_paths();
+                        const col_names = await joined_column_paths(view);
 
                         for (const expr of expressions) {
                             expect(col_names.includes(expr)).toBe(true);

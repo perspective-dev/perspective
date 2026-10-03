@@ -43,7 +43,8 @@ t_pool::t_pool() : m_sleep(0) { m_run.clear(); }
 t_pool::t_pool() :
 // : m_update_delegate(empty_callback())
 #ifdef PSP_PARALLEL_FOR
-    m_lock(new std::shared_mutex()),
+    m_lock_owner(std::make_shared<std::shared_mutex>()),
+    m_lock(m_lock_owner.get()),
 #endif
     m_sleep(0) {
     m_run.clear();
@@ -55,11 +56,7 @@ t_pool::t_pool() : m_sleep(0) { m_run.clear(); }
 
 #endif
 
-t_pool::~t_pool() {
-#ifdef PSP_PARALLEL_FOR
-    delete m_lock;
-#endif
-}
+t_pool::~t_pool() {}
 
 void
 t_pool::init() {
@@ -148,6 +145,22 @@ t_pool::send(t_uindex gnode_id, t_uindex port_id, const t_data_table& table) {
 std::shared_mutex*
 t_pool::get_lock() const {
     return m_lock;
+}
+
+std::mutex&
+t_pool::get_process_lock() {
+    return m_process_lock;
+}
+
+void
+t_pool::adopt_lock(const t_pool& other) {
+    m_lock_owner = other.m_lock_owner;
+    m_lock = m_lock_owner.get();
+    for (auto* node : m_gnodes) {
+        if (node != nullptr) {
+            node->set_lock(m_lock);
+        }
+    }
 }
 #endif
 

@@ -818,6 +818,39 @@ Table::from_schema(
     return tbl;
 }
 
+std::shared_ptr<Table>
+Table::make_derived(
+    const t_schema& schema,
+    t_dtype pkey_dtype,
+    const std::string& index,
+    std::uint32_t limit
+) {
+    auto pool = std::make_shared<t_pool>();
+    pool->init();
+
+    t_data_table data_table(schema);
+    data_table.init();
+    data_table.add_column("psp_pkey", pkey_dtype, true);
+    data_table.add_column("psp_okey", pkey_dtype, true);
+    data_table.add_column("psp_op", DTYPE_UINT8, false);
+
+    auto tbl = std::make_shared<Table>(
+        pool, schema.columns(), schema.types(), limit, index
+    );
+
+    tbl->m_derived = true;
+    tbl->set_gnode(tbl->make_gnode(data_table.get_schema()));
+    pool->register_gnode(tbl->m_gnode.get());
+    tbl->m_gnode->remove_input_port(0);
+    tbl->m_init = true;
+    return tbl;
+}
+
+bool
+Table::is_derived() const {
+    return m_derived;
+}
+
 void
 Table::update_arrow(const std::string_view& data, std::uint32_t port_id) {
     apachearrow::ArrowLoader arrow_loader;

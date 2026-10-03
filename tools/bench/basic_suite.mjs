@@ -23,6 +23,17 @@ const __dirname = url.fileURLToPath(new URL(".", import.meta.url)).slice(0, -1);
 const _require = createRequire(import.meta.url);
 
 /**
+ * Hide Memory64 from the client's feature probe so every version loads wasm32.
+ */
+if (process.env.PSP_BENCH_WASM32) {
+    const validate = WebAssembly.validate;
+    WebAssembly.validate = (bytes) =>
+        bytes.length === 13 && bytes[11] === 0x04 && bytes[12] === 0x01
+            ? false
+            : validate(bytes);
+}
+
+/**
  * We use the `dependencies` of this package for the benchmark candidate
  * module list, so that we only need specify the dependencies and benchmark
  * candidates in one place.
@@ -72,5 +83,7 @@ perspective_bench.suite(
         await all_benchmarks.to_data_suite(client, metadata);
         await all_benchmarks.join_suite(client, metadata);
         await all_benchmarks.window_suite(client, metadata);
+        await all_benchmarks.table_view_suite(client, metadata);
+        await all_benchmarks.update_view_suite(client, metadata);
     },
 );

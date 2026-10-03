@@ -38,11 +38,22 @@ public:
     ~t_ctx0();
 #include <perspective/context_common_decls.h>
 
-    t_tscalar get_column_name(t_index idx);
+    t_tscalar get_column_name(t_index idx) const;
 
     std::vector<std::string> get_column_names() const;
 
     const tsl::hopscotch_set<t_tscalar>& get_delta_pkeys() const;
+
+    /**
+     * @brief Whether the row keyed `pkey` currently passes this context's
+     * filter.
+     */
+    bool has_pkey(t_tscalar pkey) const;
+
+    /**
+     * @brief The keys of every row currently passing this context's filter.
+     */
+    std::vector<t_tscalar> get_member_pkeys() const;
 
     void sort_by();
     std::vector<t_sortspec> get_sort_by() const;

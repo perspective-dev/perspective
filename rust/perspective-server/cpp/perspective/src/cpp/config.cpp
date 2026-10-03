@@ -229,7 +229,7 @@ t_config::setup(
             case AGGTYPE_MAX:
             case AGGTYPE_MAX_BY:
             case AGGTYPE_MIN_BY:
-            case AGGTYPE_SUM_NOT_NULL:
+            case AGGTYPE_SUM_OR_ZERO:
             case AGGTYPE_SUM_ABS:
             case AGGTYPE_ABS_SUM:
             case AGGTYPE_GMV:
@@ -302,10 +302,11 @@ t_config::get_num_columns() const {
     return m_detail_columns.size();
 }
 
-std::string
+const std::string&
 t_config::col_at(t_uindex idx) const {
+    static const std::string empty;
     if (idx >= m_detail_columns.size()) {
-        return "";
+        return empty;
     }
     return m_detail_columns[idx];
 }

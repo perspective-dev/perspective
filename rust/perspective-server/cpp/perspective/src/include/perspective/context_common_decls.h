@@ -32,7 +32,6 @@ void notify(const t_data_table& flattened, bool is_registration);
 
 void notify(
     const t_data_table& flattened,
-    const t_data_table& delta,
     const t_data_table& prev,
     const t_data_table& current,
     const t_data_table& transitions,
@@ -125,7 +124,6 @@ void compute_expressions(
     const std::shared_ptr<t_data_table>& master,
     const t_gstate::t_mapping& pkey_map,
     const std::shared_ptr<t_data_table>& flattened,
-    const std::shared_ptr<t_data_table>& delta,
     const std::shared_ptr<t_data_table>& prev,
     const std::shared_ptr<t_data_table>& current,
     const std::shared_ptr<t_data_table>& transitions,

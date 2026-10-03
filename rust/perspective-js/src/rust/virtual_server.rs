@@ -183,6 +183,12 @@ export interface VirtualServerHandler {
         tableId: string,
         data: string | Uint8Array,
     ): void | Promise<void>;
+    viewMakeTable?(
+        viewId: string,
+        tableId: string,
+        config: ViewConfig,
+        schema?: Record<string, ColumnType>,
+    ): void | Promise<void>;
 }
 "#;
 
@@ -541,6 +547,55 @@ impl VirtualServerHandler for JsServerHandler {
                 .as_f64()
                 .map(|x| x as u32)
                 .ok_or_else(|| JsError(JsValue::from_str("tableMakePort must return a number")))
+        })
+    }
+
+    fn view_make_table(
+        &mut self,
+        view_id: &str,
+        table_id: &str,
+        config: &perspective_client::config::ViewConfig,
+        schema: Option<&IndexMap<String, ColumnType>>,
+    ) -> HandlerFuture<Result<(), Self::Error>> {
+        let has_method = Reflect::get(&self.0, &JsValue::from_str("viewMakeTable"))
+            .map(|val| !val.is_undefined())
+            .unwrap_or(false);
+
+        if !has_method {
+            return Box::pin(async {
+                Err(JsError(JsValue::from_str("viewMakeTable not implemented")))
+            });
+        }
+
+        let handler = self.0.clone();
+        let view_id = view_id.to_string();
+        let table_id = table_id.to_string();
+        let config_value = JsValue::from_serde_ext(config);
+        let schema_value = schema.map(|schema| {
+            let object = Object::new();
+            for (name, ty) in schema {
+                let _ = Reflect::set(
+                    &object,
+                    &JsValue::from_str(name),
+                    &JsValue::from_str(&ty.to_string()),
+                );
+            }
+
+            JsValue::from(object)
+        });
+
+        Box::pin(async move {
+            let this = JsServerHandler(handler);
+            let args = Array::new();
+            args.push(&JsValue::from_str(&view_id));
+            args.push(&JsValue::from_str(&table_id));
+            args.push(&config_value?);
+            if let Some(schema_value) = schema_value {
+                args.push(&schema_value);
+            }
+
+            this.call_method_js_async("viewMakeTable", &args).await?;
+            Ok(())
         })
     }
 

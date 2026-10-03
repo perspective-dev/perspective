@@ -539,6 +539,7 @@ set(SOURCE_FILES
     ${PSP_CPP_SRC}/src/cpp/vocab.cpp
     ${PSP_CPP_SRC}/src/cpp/arrow_csv.cpp
     ${PSP_CPP_SRC}/src/cpp/join_engine.cpp
+    ${PSP_CPP_SRC}/src/cpp/derived_source.cpp
     ${PSP_CPP_SRC}/src/cpp/server.cpp
     ${PSP_CPP_SRC}/src/cpp/binding_api.cpp
 )
@@ -598,7 +599,6 @@ else()
 # -s MEMORY_GROWTH_GEOMETRIC_CAP=536870912 \
 
     set(PSP_FILESYSTEM_FLAGS "-s NO_FILESYSTEM=1 ")
-    set(PSP_CLOSURE_FLAGS "--closure=1 ")
 
     # On-disk tables in the browser are backed by OPFS via emscripten's WasmFS.
     if(PSP_WASM_OPFS)
@@ -607,7 +607,6 @@ else()
 
     set(PSP_WASM_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \
         --no-entry \
-        ${PSP_CLOSURE_FLAGS} \
         ${PSP_FILESYSTEM_FLAGS} \
         -s ALLOW_MEMORY_GROWTH=1 \
         -s MODULARIZE=1 \

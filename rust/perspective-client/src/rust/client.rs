@@ -540,9 +540,14 @@ impl Client {
     /// [`Client`] connects to, where the data is stored and all calculation
     /// occurs.
     ///
+    /// When instantiated with a [`View`] of this [`Client`], the resulting
+    /// [`Table`] is _derived_: it is read-only, its rows are the [`View`]'s
+    /// output, and the engine keeps it current as the [`View`]'s source is
+    /// updated.
+    ///
     /// # Arguments
     ///
-    /// - `arg` - Either _schema_ or initialization _data_.
+    /// - `arg` - Either _schema_, initialization _data_, or a [`View`].
     /// - `options` - Optional configuration which provides one of:
     ///     - `limit` - The max number of rows the resulting [`Table`] can
     ///       store.
@@ -555,6 +560,8 @@ impl Client {
     ///       `"json"`, `"columns"`, `"csv"` or `"arrow"`. This overrides
     ///       language-specific type dispatch behavior, which allows stringified
     ///       and byte array alternative inputs.
+    ///     - `schema` - The columns of a [`Table`] derived from a [`View`], in
+    ///       place of the ones inferred from it.
     ///
     /// # Examples
     ///
@@ -575,6 +582,7 @@ impl Client {
         };
 
         if let TableData::View(view) = &input {
+            let request_options: TableOptions = options.clone().into();
             let mut options = options;
             let source_index = view.source.as_ref().and_then(|x| x.options.index.clone());
             if let (None, Some(index)) = (&options.index, &source_index) {
@@ -588,6 +596,18 @@ impl Client {
 
             if options.index.is_none() && options.limit.is_none() {
                 options.limit = view.source.as_ref().and_then(|x| x.options.limit);
+            }
+
+            if view.client() == self {
+                let data = TableData::View(view.clone());
+                self.crate_table_inner(data, request_options, entity_id.clone())
+                    .await?;
+
+                return Ok(Table::new(entity_id, self.clone(), options.into()));
+            }
+
+            if options.schema.is_some() {
+                return Err(ClientError::BadTableOptions);
             }
 
             let window = ViewWindow::default();
@@ -697,6 +717,7 @@ impl Client {
                 limit: None,
                 page_to_disk: None,
                 list_flatten: None,
+                schema: None,
             })),
             resp => Err(resp.into()),
         }
@@ -743,6 +764,7 @@ impl Client {
                 limit: info.limit,
                 page_to_disk: None,
                 list_flatten: None,
+                schema: None,
             };
 
             let client = self.clone();

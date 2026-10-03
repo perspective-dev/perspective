@@ -3,11 +3,10 @@
         "plugin": "Datagrid",
         "columns_config": {
             "color": {
+                "bg_color": "linear-gradient(to right, #ff0000 0%, #ffff00 10%, #00ff00 20%, #00ffff 30%, #0000ff 40%, #000080 50%, #0000ff 60%, #00ffff 70%, #00ff00 80%, #ffff00 90%, #ff0000 100%)",
                 "bg_gradient": 251.04,
-                "neg_bg_color": "#ffa38f",
                 "bg_mode": "gradient",
-                "fg_mode": "disabled",
-                "pos_bg_color": "#346ead"
+                "fg_mode": "disabled"
             }
         },
         "plugin_config": {
@@ -40,6 +39,11 @@
         },
         "aggregates": {
             "New Column 1": "any"
+        },
+        "columns_config": {
+            "color": {
+                "gradient": "linear-gradient(to right, #ff0000 0%, #ffff00 10%, #00ff00 20%, #00ffff 30%, #0000ff 40%, #000080 50%, #0000ff 60%, #00ffff 70%, #00ff00 80%, #ffff00 90%, #ff0000 100%)"
+            }
         }
     },
     {
@@ -56,7 +60,12 @@
             "y": "bucket(-floor(\"index\" / 80), 3)",
             "x": "bucket(-\"index\" % 80, 3)"
         },
-        "aggregates": {}
+        "aggregates": {},
+        "columns_config": {
+            "color": {
+                "gradient": "linear-gradient(to right, #ff0000 0%, #ffff00 10%, #00ff00 20%, #00ffff 30%, #0000ff 40%, #000080 50%, #0000ff 60%, #00ffff 70%, #00ff00 80%, #ffff00 90%, #ff0000 100%)"
+            }
+        }
     },
     {
         "plugin": "Y Bar",
@@ -78,11 +87,10 @@
         "plugin": "Datagrid",
         "columns_config": {
             "color": {
+                "bg_color": "linear-gradient(to right, #ff0000 0%, #ffff00 10%, #00ff00 20%, #00ffff 30%, #0000ff 40%, #000080 50%, #0000ff 60%, #00ffff 70%, #00ff00 80%, #ffff00 90%, #ff0000 100%)",
                 "bg_gradient": 2463.68,
-                "neg_bg_color": "#ffa38f",
                 "bg_mode": "gradient",
-                "fg_mode": "disabled",
-                "pos_bg_color": "#307bb0"
+                "fg_mode": "disabled"
             }
         },
         "group_rollup_mode": "flat",
@@ -117,7 +125,9 @@
             "y": "floor(\"index\" / 80)",
             "New Column 2": "-floor(\"index\" / 80) * 20 - \"color\""
         },
-        "aggregates": { "New Column 2": "avg" }
+        "aggregates": {
+            "New Column 2": "avg"
+        }
     },
     {
         "plugin": "X/Y Scatter",
@@ -133,7 +143,15 @@
             "x": "-\"index\" % 80",
             "y": "floor(\"index\" / 80)"
         },
-        "aggregates": { "x": "avg", "New Column 2": "avg" }
+        "aggregates": {
+            "x": "avg",
+            "New Column 2": "avg"
+        },
+        "columns_config": {
+            "color": {
+                "gradient": "linear-gradient(to right, #ff0000 0%, #ffff00 10%, #00ff00 20%, #00ffff 30%, #0000ff 40%, #000080 50%, #0000ff 60%, #00ffff 70%, #00ff00 80%, #ffff00 90%, #ff0000 100%)"
+            }
+        }
     },
     {
         "plugin": "Datagrid",
@@ -165,6 +183,11 @@
         "aggregates": {
             "y": "any",
             "x": "any"
+        },
+        "columns_config": {
+            "color": {
+                "gradient": "linear-gradient(to right, #00007f 0%, #0000ff 12.5%, #007fff 25%, #00ffff 37.5%, #7fff7f 50%, #ffff00 62.5%, #ff7f00 75%, #ff0000 87.5%, #7f0000 100%)"
+            }
         }
     }
 ]

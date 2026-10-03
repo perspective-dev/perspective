@@ -15,6 +15,7 @@ use std::rc::Rc;
 use crate::config::PluginStaticConfig;
 use crate::renderer::limits::RenderLimits;
 use crate::renderer::plugin_config::ColumnConfigMap;
+use crate::renderer::state::RenderError;
 use crate::utils::PtrEqRc;
 
 /// Value-semantic snapshot of the renderer state read by components.
@@ -55,6 +56,9 @@ pub struct RendererProps {
     /// Snapshot of the active plugin's `columns_config` bucket, re-read by
     /// `Renderer::to_props` on `columns_config_changed` and `plugin_changed`.
     pub columns_config: PtrEqRc<ColumnConfigMap>,
+
+    /// The failure of the last draw, which stands until the next commit.
+    pub render_error: Option<RenderError>,
 }
 
 impl RendererProps {

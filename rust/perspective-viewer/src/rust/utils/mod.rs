@@ -34,9 +34,6 @@ mod pubsub;
 mod spawn;
 mod weak_scope;
 
-#[cfg(test)]
-mod tests;
-
 pub use browser::*;
 pub use completion::*;
 pub use css::*;

@@ -32,6 +32,10 @@ void
 t_aggregate::init() {
     switch (m_aggtype) {
         case AGGTYPE_SUM:
+        case AGGTYPE_SUM_OR_ZERO:
+        case AGGTYPE_SUM_ABS:
+        case AGGTYPE_ABS_SUM:
+        case AGGTYPE_VALID_COUNT:
         case AGGTYPE_PCT_SUM_PARENT:
         case AGGTYPE_PCT_SUM_GRAND_TOTAL: {
             switch (m_icolumns[0]->get_dtype()) {

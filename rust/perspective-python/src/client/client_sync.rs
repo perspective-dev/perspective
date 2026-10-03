@@ -157,6 +157,8 @@ impl Client {
     ///       `"json"`, `"columns"`, `"csv"` or `"arrow"`. This overrides
     ///       language-specific type dispatch behavior, which allows stringified
     ///       and byte array alternative inputs.
+    ///     - `schema` - The columns of a [`Table`] derived from a `View`, in
+    ///       place of the ones inferred from it.
     ///
     /// # Python Examples
     ///
@@ -166,7 +168,7 @@ impl Client {
     /// table = client.table("x,y\n1,2\n3,4")
     /// ```
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (input, limit=None, index=None, name=None, format=None, page_to_disk=None, list_flatten=None))]
+    #[pyo3(signature = (input, limit=None, index=None, name=None, format=None, page_to_disk=None, list_flatten=None, schema=None))]
     pub fn table(
         &self,
         py: Python<'_>,
@@ -177,6 +179,7 @@ impl Client {
         format: Option<Py<PyString>>,
         page_to_disk: Option<bool>,
         list_flatten: Option<Py<PyString>>,
+        schema: Option<Py<PyDict>>,
     ) -> PyResult<Table> {
         Ok(Table(
             self.0
@@ -188,6 +191,7 @@ impl Client {
                     format,
                     page_to_disk,
                     list_flatten,
+                    schema,
                 )
                 .py_block_on(py)?,
         ))
@@ -579,17 +583,22 @@ impl View {
         ))
     }
 
-    /// Returns an array of strings containing the column paths of the [`View`]
-    /// without any of the source columns.
+    /// Returns this [`View`]'s column header area for `window`, transposed as
+    /// `area[level][column]`.
     ///
     /// A column path shows the columns that a given cell belongs to after
-    /// pivots are applied.
+    /// pivots are applied. The area is rectangular with one level per
+    /// `split_by` plus one: a column's split values occupy the leading levels
+    /// and its name always occupies the last, so a subtotal or grand total
+    /// under `split_rollup_mode: "rollup"` reads `None` at the levels it does
+    /// not pivot on. Values keep their column's type - a `datetime` split value
+    /// is epoch milliseconds, not text - so formatting them is the caller's
+    /// choice.
+    ///
+    /// `window` slices the *column* axis; the number of levels does not depend
+    /// on it.
     #[pyo3(signature = (**window))]
-    pub fn column_paths(
-        &self,
-        py: Python<'_>,
-        window: Option<Py<PyDict>>,
-    ) -> PyResult<Vec<String>> {
+    pub fn column_paths(&self, py: Python<'_>, window: Option<Py<PyDict>>) -> PyResult<Py<PyAny>> {
         self.0.column_paths(window).py_block_on(py)
     }
 

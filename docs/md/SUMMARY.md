@@ -35,6 +35,7 @@
         - [`expressions`](./explanation/view/config/expressions.md)
         - [Window Columns](./explanation/view/config/windows.md)
     - [Advanced View Operations](./explanation/view/advanced.md)
+- [Derived `Table`s](./explanation/derived_table.md)
 - [`Join`](./explanation/join.md)
     - [Join Types](./explanation/join/join_types.md)
     - [Join Options](./explanation/join/options.md)

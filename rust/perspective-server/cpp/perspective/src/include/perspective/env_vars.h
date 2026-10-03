@@ -92,6 +92,22 @@ struct PERSPECTIVE_EXPORT t_env {
         return rv;
     }
 
+    /// Read-once developer toggle: the sum family reports an exact zero
+    /// instead of null for a group with no valid values.
+    static inline bool
+    sum_empty_zero() {
+        static const bool rv = std::getenv("PSP_SUM_EMPTY_ZERO") != 0;
+        return rv;
+    }
+
+    /// Read-once developer toggle: force every sum-family aggregate onto
+    /// the full re-reduce path.
+    static inline bool
+    force_reaggregate() {
+        static const bool rv = std::getenv("PSP_FORCE_REAGGREGATE") != 0;
+        return rv;
+    }
+
     static inline bool
     log_data_nsparse_strands() {
         static const bool rv = std::getenv("PSP_LOG_DATA_NSPARSE_STRANDS") != 0;

@@ -87,15 +87,18 @@ pub struct SessionMetadataState {
 impl SessionMetadata {
     /// Creates a new `SessionMetadata` from a `JsPerspectiveTable`.
     pub(super) async fn from_table(table: &perspective_client::Table) -> ApiResult<Self> {
-        let features = table.get_features().await?.clone();
-        let column_names = table.columns().await?;
-        let table_schema = table.schema().await?;
-        let edit_port = table.make_port().await? as f64;
+        let (features, column_names, table_schema, edit_port) = futures::join!(
+            table.get_features(),
+            table.columns(),
+            table.schema(),
+            table.make_port()
+        );
+
         Ok(Self(Some(SessionMetadataState {
-            features,
-            column_names,
-            table_schema,
-            edit_port,
+            features: features?,
+            column_names: column_names?,
+            table_schema: table_schema?,
+            edit_port: edit_port? as f64,
             ..SessionMetadataState::default()
         })))
     }

@@ -299,6 +299,7 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
             split_by: true,
             sort: true,
             expressions: true,
+            view_derivations: true,
             window_aggregates: {
                 // `ema` is recursive and has no SQL window translation.
                 integer: WINDOW_AGGREGATES,
@@ -483,6 +484,23 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
         }
 
         return { expression_schema, expression_errors };
+    }
+
+    async viewMakeTable(
+        viewId: string,
+        tableId: string,
+        config: ViewConfig,
+        schema?: Record<string, ColumnType>,
+    ) {
+        const query = this.sqlBuilder.viewMakeTable(
+            viewId,
+            tableId,
+            config,
+            await this.tableSchema(viewId),
+            schema,
+        );
+
+        await runQuery(this.db, query);
     }
 
     async viewDelete(viewId: string) {

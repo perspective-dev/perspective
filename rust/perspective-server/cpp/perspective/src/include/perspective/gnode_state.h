@@ -101,6 +101,23 @@ public:
     void init_from_table(const std::shared_ptr<t_data_table>& source);
 
     /**
+     * @brief Apply `flattened` to the master table at the row indices its
+     * source dictates.
+     */
+    void commit_derived(
+        const std::shared_ptr<t_data_table>& flattened,
+        const std::vector<t_uindex>& rows
+    );
+
+    /**
+     * @brief Replace the master column `name` with a column owned by another
+     * table, which this state then only reads.
+     */
+    void set_alias(const std::string& name, std::shared_ptr<t_column> column);
+
+    bool is_aliased(const std::string& name) const;
+
+    /**
      * @brief Given a column in the master data table and the corresponding
      * column in the `flattened` data table, fill the master column with data
      * from the flattened column.
@@ -300,6 +317,12 @@ protected:
     t_mask get_cpp_mask() const;
 
     void _mark_deleted(t_uindex idx);
+
+    void drop_aliases();
+
+    void resize_owned(t_uindex extent);
+
+    void _refresh_alias_mask();
     bool has_pkey(t_tscalar pkey) const;
     t_dtype get_pkey_dtype() const;
 
@@ -318,6 +341,8 @@ private:
     std::shared_ptr<t_data_table> m_table;
     t_mapping m_mapping;
     t_free_items m_free;
+    tsl::hopscotch_set<std::string> m_aliased;
+    std::vector<bool> m_alias_mask;
     t_symtable m_symtable;
     std::shared_ptr<t_column> m_pkcol;
     std::shared_ptr<t_column> m_opcol;

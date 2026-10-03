@@ -842,6 +842,17 @@ function validate_typed_array(typed_array, column_data) {
             await table.delete();
         });
 
+        test("View constructor should reject a duplicate group_by column", async function () {
+            const table = await perspective.table(int_float_string_data);
+            await expect(
+                table.view({ group_by: ["string", "string"] }),
+            ).rejects.toThrow(
+                "Abort(): Duplicate column 'string' found in View group_by.\n",
+            );
+
+            await table.delete();
+        });
+
         test("Table constructor should throw an exception on await", async function () {
             let error;
             try {
@@ -961,7 +972,7 @@ function validate_typed_array(typed_array, column_data) {
                 group_by: ["z"],
                 columns: ["x"],
             });
-            var answer = `"z (Group by 1)","x"\n,10\nfalse,6\ntrue,4\n`;
+            var answer = `"z","x"\n,10\nfalse,6\ntrue,4\n`;
             let result = await view.to_csv();
             expect(result).toEqual(answer);
             view.delete();
@@ -975,7 +986,7 @@ function validate_typed_array(typed_array, column_data) {
                 split_by: ["y"],
                 columns: ["x"],
             });
-            var answer = `"z (Group by 1)","a|x","b|x","c|x","d|x"\n,1,2,3,4\nfalse,,2,,4\ntrue,1,,3,\n`;
+            var answer = `"z","a|x","b|x","c|x","d|x"\n,1,2,3,4\nfalse,,2,,4\ntrue,1,,3,\n`;
             let result = await view.to_csv();
             expect(result).toEqual(answer);
             view.delete();

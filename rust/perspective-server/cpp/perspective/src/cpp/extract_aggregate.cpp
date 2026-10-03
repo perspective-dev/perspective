@@ -27,6 +27,12 @@ extract_aggregate(
         case AGGTYPE_PCT_SUM_PARENT: {
             t_tscalar cv = aggcol->get_scalar(ridx);
 
+            if (!cv.is_valid()) {
+                t_tscalar ret;
+                ret.set(t_none());
+                return ret;
+            }
+
             if (pridx == INVALID_INDEX) {
                 return mktscalar<double>(100.0);
             }
@@ -42,6 +48,13 @@ extract_aggregate(
         } break;
         case AGGTYPE_PCT_SUM_GRAND_TOTAL: {
             t_tscalar cv = aggcol->get_scalar(ridx);
+
+            if (!cv.is_valid()) {
+                t_tscalar ret;
+                ret.set(t_none());
+                return ret;
+            }
+
             double pv = aggcol->get_scalar(ROOT_AGGIDX).to_double();
             t_tscalar ret;
             if (pv == 0) {
@@ -51,11 +64,14 @@ extract_aggregate(
             }
             return ret;
         } break;
+        case AGGTYPE_ABS_SUM: {
+            return aggcol->get_scalar(ridx).abs();
+        } break;
         case AGGTYPE_SUM:
         case AGGTYPE_SUM_ABS:
-        case AGGTYPE_ABS_SUM:
         case AGGTYPE_GMV:
-        case AGGTYPE_SUM_NOT_NULL:
+        case AGGTYPE_SUM_OR_ZERO:
+        case AGGTYPE_VALID_COUNT:
         case AGGTYPE_MUL:
         case AGGTYPE_COUNT:
         case AGGTYPE_ANY:

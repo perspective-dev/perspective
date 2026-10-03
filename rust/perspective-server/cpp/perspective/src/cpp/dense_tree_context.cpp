@@ -34,6 +34,15 @@ t_dtree_ctx::t_dtree_ctx(
 
     m_aggspecs.emplace_back("psp_strand_count_sum", AGGTYPE_SUM, depvec);
 
+    for (const auto& colname : m_strand_deltas->get_schema().m_columns) {
+        if (colname.rfind("psp_valid_", 0) != 0) {
+            continue;
+        }
+
+        std::vector<t_dep> valid_dep = {t_dep(colname, DEPTYPE_COLUMN)};
+        m_aggspecs.emplace_back(colname, AGGTYPE_VALID_COUNT, valid_dep);
+    }
+
     t_uindex aggidx = 0;
     for (const auto& spec : m_aggspecs) {
         m_aggspecmap[spec.name()] = aggidx;
@@ -86,7 +95,10 @@ t_dtree_ctx::build_aggregates() {
         std::vector<std::shared_ptr<const t_column>> icolumns;
         icolumns.reserve(deps.size());
         for (const auto& d : deps) {
-            icolumns.push_back(tbl->get_const_column(d.name()));
+            icolumns.push_back(tbl->get_const_column(
+                aggspec.agg() == AGGTYPE_SUM_ABS ? abs_strand_colname(d.name())
+                                                 : d.name()
+            ));
         }
 
         auto output_col = m_aggregates->get_column(aggspec.name());

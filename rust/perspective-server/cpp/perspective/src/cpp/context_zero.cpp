@@ -93,7 +93,6 @@ t_ctx0::step_end() {
 void
 t_ctx0::notify(
     const t_data_table& flattened,
-    const t_data_table& delta,
     const t_data_table& prev,
     const t_data_table& curr,
     const t_data_table& transitions,
@@ -497,14 +496,10 @@ t_ctx0::reset_sortby() {
 }
 
 t_tscalar
-t_ctx0::get_column_name(t_index idx) {
-    std::string empty;
-
-    if (idx >= get_column_count()) {
-        return m_symtable.get_interned_tscalar(empty.c_str());
-    }
-
-    return m_symtable.get_interned_tscalar(m_config.col_at(idx).c_str());
+t_ctx0::get_column_name(t_index idx) const {
+    t_tscalar rval;
+    rval.set(idx < get_column_count() ? m_config.col_at(idx).c_str() : "");
+    return rval;
 }
 
 std::vector<t_tscalar>
@@ -559,8 +554,19 @@ t_ctx0::get_sort_by() const {
     return m_traversal->get_sort_by();
 }
 
+bool
+t_ctx0::has_pkey(t_tscalar pkey) const {
+    return m_traversal->get_row_idx(pkey) >= 0;
+}
+
+std::vector<t_tscalar>
+t_ctx0::get_member_pkeys() const {
+    return m_traversal->get_pkeys();
+}
+
 void
 t_ctx0::reset(bool reset_expressions) {
+    ++m_storage_generation;
     m_traversal->reset();
     m_deltas = std::make_shared<t_zcdeltas>();
     m_has_delta = false;
@@ -783,7 +789,6 @@ t_ctx0::compute_expressions(
     const std::shared_ptr<t_data_table>& master,
     const t_gstate::t_mapping& pkey_map,
     const std::shared_ptr<t_data_table>& flattened,
-    const std::shared_ptr<t_data_table>& delta,
     const std::shared_ptr<t_data_table>& prev,
     const std::shared_ptr<t_data_table>& current,
     const std::shared_ptr<t_data_table>& transitions,
@@ -824,16 +829,6 @@ t_ctx0::compute_expressions(
             regex_mapping
         );
 
-        // delta: for each numerical column, the numerical delta between the
-        // previous value and the current value in the row.
-        expr->compute(
-            delta,
-            pkey_map,
-            m_expression_tables->m_delta,
-            expression_vocab,
-            regex_mapping
-        );
-
         // prev: the values of the updated rows before this update was applied
         expr->compute(
             prev,
@@ -863,7 +858,6 @@ t_ctx0::compute_expressions(
         m_expression_tables->m_flattened,
         m_expression_tables->m_prev,
         m_expression_tables->m_current,
-        m_expression_tables->m_delta,
         flattened,
         existed
     );

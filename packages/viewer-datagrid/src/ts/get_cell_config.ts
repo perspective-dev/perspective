@@ -63,16 +63,21 @@ export default async function getCellConfig(
     };
 
     let column_filters: Filter[] = [];
-    if (column_paths) {
-        const split_by_values = column_paths.split("|");
-        result.column_names = [split_by_values[split_by.length]];
+    if (column_paths && col_idx !== undefined) {
+        const area = (await _view.column_paths({
+            start_col: col_idx,
+            end_col: col_idx + 1,
+        })) as (Scalar | undefined)[][];
+
+        result.column_names = [String(area[area.length - 1]?.[0] ?? "")];
         column_filters = split_by
             .map((pivot, index): Filter | undefined => {
-                const pivot_value = split_by_values[index];
-                return pivot_value ? [pivot, "==", pivot_value] : undefined;
+                const pivot_value = area[index]?.[0];
+                return pivot_value === null || pivot_value === undefined
+                    ? undefined
+                    : [pivot, "==", pivot_value];
             })
-            .filter((x): x is Filter => x !== undefined)
-            .filter(([, , value]) => !isMetaColumn(value as string));
+            .filter((x): x is Filter => x !== undefined);
     }
 
     const filter = _config.filter.concat(row_filters).concat(column_filters);

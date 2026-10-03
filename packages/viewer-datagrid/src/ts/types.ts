@@ -28,7 +28,11 @@ import type {
 } from "@perspective-dev/viewer";
 
 import type { RegularTableElement } from "regular-table";
-import type { CellMetadata, DataResponse } from "regular-table/dist/esm/types";
+import type {
+    CellMetadata,
+    CellScalar,
+    DataResponse,
+} from "regular-table/dist/esm/types";
 import type { GradientStopRgb } from "./color_utils.js";
 
 // Re-export types from regular-table for use throughout the codebase
@@ -50,6 +54,12 @@ export function get_psp_type(
 }
 
 // Edit mode for the datagrid
+
+/**
+ * Where in the `ViewConfig` a column being configured appears, which is a
+ * different axis from its plugin column slot.
+ */
+export type ColumnRole = "column" | "group_by" | "split_by";
 
 /**
  * Datagrid cell interaction mode (`plugin_config.edit_mode`):
@@ -480,7 +490,15 @@ export interface DatagridModel {
     _default_bg_color_stops: GradientStopRgb[];
 
     _series_palette: string[];
+
+    /// The joined identity key of each loaded column, read positionally out of
+    /// the data payload it keys - never parsed for structure, which is what
+    /// `_column_path_area` carries.
     _column_paths: string[];
+
+    /// `View.column_paths`' transposed area, `[level][absolute column]` and
+    /// sparse in the column axis exactly as `_column_paths` is.
+    _column_path_area: (CellScalar | null)[][];
     _column_types: ColumnType[];
     _is_editable: boolean[];
     _edit_mode: EditMode;

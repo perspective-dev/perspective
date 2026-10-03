@@ -20,9 +20,7 @@ import "zx/globals";
 
 const pkg = getWorkspacePackageJson();
 
-const emscripten = process.env.PSP_PYODIDE
-    ? pkg.pyodide_emscripten
-    : pkg.emscripten;
+const emscripten = pkg.emscripten;
 
 dotenv.config({ path: "./.perspectiverc", quiet: true });
 

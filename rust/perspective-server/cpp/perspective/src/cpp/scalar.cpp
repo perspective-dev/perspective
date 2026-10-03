@@ -806,16 +806,16 @@ t_tscalar::negate() const {
         } break;
 
         case DTYPE_UINT64: {
-            rval.set(~m_data.m_uint64);
+            rval.set(-static_cast<std::int64_t>(m_data.m_uint64));
         } break;
         case DTYPE_UINT32: {
-            rval.set(~m_data.m_uint32);
+            rval.set(-static_cast<std::int64_t>(m_data.m_uint32));
         } break;
         case DTYPE_UINT16: {
-            rval.set(~m_data.m_uint16);
+            rval.set(-static_cast<std::int64_t>(m_data.m_uint16));
         } break;
         case DTYPE_UINT8: {
-            rval.set(~m_data.m_uint8);
+            rval.set(-static_cast<std::int64_t>(m_data.m_uint8));
         } break;
 
         case DTYPE_FLOAT64: {
@@ -940,16 +940,28 @@ t_tscalar::difference(const t_tscalar& other) const {
         } break;
 
         case DTYPE_UINT64: {
-            rval.set(m_data.m_uint64 - other.m_data.m_uint64);
+            rval.set(
+                static_cast<std::int64_t>(m_data.m_uint64)
+                - static_cast<std::int64_t>(other.m_data.m_uint64)
+            );
         } break;
         case DTYPE_UINT32: {
-            rval.set(m_data.m_uint32 - other.m_data.m_uint32);
+            rval.set(
+                static_cast<std::int64_t>(m_data.m_uint32)
+                - static_cast<std::int64_t>(other.m_data.m_uint32)
+            );
         } break;
         case DTYPE_UINT16: {
-            rval.set(m_data.m_uint16 - other.m_data.m_uint16);
+            rval.set(
+                static_cast<std::int64_t>(m_data.m_uint16)
+                - static_cast<std::int64_t>(other.m_data.m_uint16)
+            );
         } break;
         case DTYPE_UINT8: {
-            rval.set(m_data.m_uint8 - other.m_data.m_uint8);
+            rval.set(
+                static_cast<std::int64_t>(m_data.m_uint8)
+                - static_cast<std::int64_t>(other.m_data.m_uint8)
+            );
         } break;
 
         case DTYPE_FLOAT64: {

@@ -37,9 +37,7 @@ use crate::js::*;
 use crate::presentation::*;
 use crate::queries::*;
 use crate::root::Root;
-use crate::session::{
-    BindPlan, Disposal, MissingTable, OpKind, ResetOptions, StepOutcome, TableLoadState,
-};
+use crate::session::{BindPlan, Disposal, MissingTable, OpKind, ResetOptions, TableLoadState};
 use crate::tasks::*;
 use crate::utils::*;
 use crate::workspace::{Panel, PanelId, Workspace};
@@ -697,13 +695,13 @@ impl PerspectiveViewerElement {
                         },
                         Ok(Some(Discard::Unclaimed(panel))) => {
                             eject_panel(panel, Disposal::Reject).await?;
-                            Ok(StepOutcome::Done)
+                            Ok(None)
                         },
                         Ok(Some(Discard::Evicted(panel))) => {
                             eject_panel(panel, Disposal::Resolve).await?;
                             Err(ApiError::new(CREATE_REQUIRES_TABLE))
                         },
-                        Ok(None) => Ok(StepOutcome::Done),
+                        Ok(None) => Ok(None),
                     }
                 })
             }
@@ -1025,6 +1023,7 @@ impl PerspectiveViewerElement {
                         && presentation.is_visible()
                         && !panel.renderer.is_plugin_activated()?
                         && panel.session.get_error().is_none()
+                        && panel.renderer.failure().is_none()
                         && matches!(panel.session.has_table(), Some(TableLoadState::Loaded))
                     {
                         set_panel_paused(&panel.session, &panel.renderer, &presentation, true)
@@ -1319,12 +1318,12 @@ impl PerspectiveViewerElement {
         };
 
         let reset_effect = self.workspace.effects().guard();
-        let reset = panel.session.submit(OpKind::Restore { fields: None }, {
+        let reset = panel.session.submit(OpKind::Restore { update: None }, {
             let session = panel.session.clone();
             move |_ctx| {
                 Box::pin(async move {
                     session.reset(ResetOptions::default()).await?;
-                    Ok(StepOutcome::Done)
+                    Ok(None)
                 })
             }
         });
@@ -1876,7 +1875,7 @@ impl PerspectiveViewerElement {
                 // alone must repaint nothing.
                 let stale = theme.as_ref().is_none_or(|x| !available.contains(x));
                 if (stale || theme == previous) && theme != active {
-                    panel.renderer.set_theme(active.clone());
+                    submit_theme(&panel.session, &panel.renderer, active.clone());
                     if panel.renderer.needs_restyle() {
                         panel.renderer.restyle_all().await?;
                     }

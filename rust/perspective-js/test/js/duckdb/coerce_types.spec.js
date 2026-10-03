@@ -139,7 +139,7 @@ describeDuckDB("coerce_types", (getClient) => {
         const view = await table.view({ group_by: ["enum"], columns: [] });
         const csv = await view.to_csv();
         expect(csv.split("\n").filter((x) => x.length > 0)).toEqual([
-            "__ROW_PATH_0__",
+            "enum",
             "null",
             '"happy"',
             '"sad"',

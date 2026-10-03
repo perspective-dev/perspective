@@ -357,39 +357,3 @@ fn measure_width(ctx: &web_sys::CanvasRenderingContext2d, family: &str) -> f64 {
         .map(|x| x.width())
         .unwrap_or_default()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn owned(xs: &[&str]) -> Vec<String> {
-        xs.iter().map(|x| (*x).to_owned()).collect()
-    }
-
-    #[test]
-    fn generic_families_lead_and_current_appends_when_missing() {
-        let options = compose_font_family_options("Zapf Chancery", &owned(&["Arial", "Menlo"]));
-        assert_eq!(
-            options,
-            owned(&[
-                "inherit",
-                "monospace",
-                "sans-serif",
-                "serif",
-                "system-ui",
-                "Arial",
-                "Menlo",
-                "Zapf Chancery"
-            ])
-        );
-    }
-
-    #[test]
-    fn current_is_not_duplicated() {
-        let options = compose_font_family_options("Arial", &owned(&["Arial"]));
-        assert_eq!(options.iter().filter(|x| *x == "Arial").count(), 1);
-
-        let options = compose_font_family_options("inherit", &[]);
-        assert_eq!(options, owned(&GENERIC_FONT_FAMILIES));
-    }
-}

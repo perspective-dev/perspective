@@ -20,7 +20,7 @@ class TestViewColumnPaths:
         tbl = client.table(superstore)
         view = tbl.view()
         paths = view.column_paths()
-        assert paths == [
+        assert paths == [[
             "index",
             "Row ID",
             "Order ID",
@@ -41,7 +41,7 @@ class TestViewColumnPaths:
             "Quantity",
             "Discount",
             "Profit",
-        ]
+        ]]
 
         view.delete()
         tbl.delete()
@@ -51,9 +51,8 @@ class TestViewColumnPaths:
         view = tbl.view(group_by=["State"], columns=["Sales"], split_by=["Ship Mode"])
         paths = view.column_paths()
         assert paths == [
-            "First Class|Sales",
-            "Second Class|Sales",
-            "Standard Class|Sales",
+            ["First Class", "Second Class", "Standard Class"],
+            ["Sales", "Sales", "Sales"],
         ]
 
         view.delete()
@@ -64,15 +63,16 @@ class TestViewColumnPaths:
         view = tbl.view(group_by=["State"], columns=["Sales"], split_by=["Ship Mode"])
         paths = view.column_paths(start_col=1)
         assert paths == [
-            "Second Class|Sales",
-            "Standard Class|Sales",
+            ["Second Class", "Standard Class"],
+            ["Sales", "Sales"],
         ]
 
         view.delete()
         view = tbl.view(group_by=["State"], columns=["Sales"], split_by=["Ship Mode"])
         paths = view.column_paths(start_col=1, end_col=2)
         assert paths == [
-            "Second Class|Sales",
+            ["Second Class"],
+            ["Sales"],
         ]
 
         view.delete()
@@ -80,7 +80,8 @@ class TestViewColumnPaths:
         view = tbl.view(group_by=["State"], columns=["Sales"], split_by=["Ship Mode"])
         paths = view.column_paths(end_col=1)
         assert paths == [
-            "First Class|Sales",
+            ["First Class"],
+            ["Sales"],
         ]
 
         view.delete()

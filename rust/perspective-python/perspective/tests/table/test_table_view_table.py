@@ -56,15 +56,15 @@ class TestView(object):
         assert dimms["num_view_rows"] == 3
         assert dimms["num_view_columns"] == 3
         assert view2.schema() == {
-            "a (Group by 1)": "integer",
             "a": "integer",
+            "a (sum)": "integer",
             "b": "integer",
         }
 
         assert view2.to_records() == [
-            {"a (Group by 1)": None, "a": 4, "b": 6},
-            {"a (Group by 1)": 1, "a": 1, "b": 2},
-            {"a (Group by 1)": 3, "a": 3, "b": 4},
+            {"a": None, "a (sum)": 4, "b": 6},
+            {"a": 1, "a (sum)": 1, "b": 2},
+            {"a": 3, "a (sum)": 3, "b": 4},
         ]
 
     def test_view_two(self):
@@ -77,33 +77,33 @@ class TestView(object):
         assert dimms["num_view_rows"] == 3
         assert dimms["num_view_columns"] == 5
         assert view2.schema() == {
-            "a (Group by 1)": "integer",
-            "2|a": "integer",
+            "a": "integer",
+            "2|a (sum)": "integer",
             "2|b": "integer",
-            "4|a": "integer",
+            "4|a (sum)": "integer",
             "4|b": "integer",
         }
 
         assert view2.to_records() == [
             {
-                "a (Group by 1)": None,
-                "2|a": 1,
+                "a": None,
+                "2|a (sum)": 1,
                 "2|b": 2,
-                "4|a": 3,
+                "4|a (sum)": 3,
                 "4|b": 4,
             },
             {
-                "a (Group by 1)": 1,
-                "2|a": 1,
+                "a": 1,
+                "2|a (sum)": 1,
                 "2|b": 2,
-                "4|a": None,
+                "4|a (sum)": None,
                 "4|b": None,
             },
             {
-                "a (Group by 1)": 3,
-                "2|a": None,
+                "a": 3,
+                "2|a (sum)": None,
                 "2|b": None,
-                "4|a": 3,
+                "4|a (sum)": 3,
                 "4|b": 4,
             },
         ]

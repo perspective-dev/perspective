@@ -12,6 +12,7 @@
 
 import { test, expect } from "@perspective-dev/test";
 import { describeDuckDB } from "./setup.js";
+import { joined_column_paths } from "../column_paths.js";
 
 describeDuckDB("view", (getClient) => {
     test("num_rows()", async function () {
@@ -84,7 +85,7 @@ describeDuckDB("view", (getClient) => {
         const view = await table.view({
             columns: ["Sales", "Profit", "State"],
         });
-        const paths = await view.column_paths();
+        const paths = await joined_column_paths(view);
         expect(paths).toEqual(["Sales", "Profit", "State"]);
         await view.delete();
     });

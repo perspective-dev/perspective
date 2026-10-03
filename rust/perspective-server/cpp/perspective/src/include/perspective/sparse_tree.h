@@ -31,6 +31,8 @@ SUPPRESS_WARNINGS_VC(4503)
 #include <perspective/sym_table.h>
 #include <perspective/data_table.h>
 #include <perspective/dense_tree.h>
+#include <tsl/hopscotch_map.h>
+#include <functional>
 #include <vector>
 #include <algorithm>
 #include <deque>
@@ -66,6 +68,19 @@ struct by_idx_lfidx {};
 
 PERSPECTIVE_EXPORT t_tscalar get_dominant(std::vector<t_tscalar>& values);
 
+/// How one aggschema column is populated during a strand build.
+enum t_strand_col_kind : std::uint8_t {
+    STRAND_COL_VALUE,
+    STRAND_COL_ABS,
+    STRAND_COL_VALID,
+    STRAND_COL_COUNT
+};
+
+struct t_strand_col {
+    t_strand_col_kind m_kind;
+    std::string m_source;
+};
+
 struct t_build_strand_table_metadata {
     t_schema m_flattened_schema;
     t_schema m_strand_schema;
@@ -73,6 +88,10 @@ struct t_build_strand_table_metadata {
     t_uindex m_npivotlike;
     std::vector<std::string> m_pivot_like_columns;
     t_uindex m_pivsize;
+
+    /// One entry per `m_aggschema` column, classifying how the strand
+    /// builders populate it.
+    std::vector<t_strand_col> m_agg_cols;
 };
 
 typedef multi_index_container<
@@ -134,10 +153,38 @@ typedef t_idxpkey::index<by_idx_pkey>::type::iterator iter_by_idx_pkey;
 
 typedef std::pair<iter_by_idx_pkey, iter_by_idx_pkey> t_by_idx_pkey_ipair;
 
+/**
+ * @brief A node removed from a `t_stree`, with its path and last aggregates.
+ */
+struct PERSPECTIVE_EXPORT t_stree_dropped {
+    t_uindex m_idx;
+    t_uindex m_aggidx;
+    t_depth m_depth;
+    std::vector<t_tscalar> m_path;
+    std::vector<t_tscalar> m_aggregates;
+};
+
+/**
+ * @brief The node changes a `t_stree` recorded for a derived table.
+ */
+struct PERSPECTIVE_EXPORT t_stree_capture {
+    tsl::hopscotch_map<t_uindex, std::vector<std::pair<t_uindex, t_tscalar>>>
+        m_changed;
+    std::vector<t_uindex> m_created;
+    std::vector<t_stree_dropped> m_dropped;
+};
+
 struct PERSPECTIVE_EXPORT t_agg_update_info {
     std::vector<const t_column*> m_src;
     std::vector<t_column*> m_dst;
     std::vector<t_aggspec> m_aggspecs;
+
+    /// Whether each aggregate's source column has a numeric dtype.
+    std::vector<bool> m_numeric_source;
+
+    /// Each aggregate's index into its source's `AGGTYPE_VALID_COUNT`
+    /// column, or `t_uindex(-1)` when it has none.
+    std::vector<t_uindex> m_valid_idx;
 
     std::vector<t_uindex> m_dst_topo_sorted;
 };
@@ -185,13 +232,12 @@ public:
         t_op op,
         t_uindex idx,
         t_uindex npivots,
-        t_uindex strand_count_idx,
-        t_uindex aggcolsize,
+        const std::vector<t_strand_col>& agg_kinds,
         bool force_current_row,
         const std::vector<const t_column*>& piv_ccols,
         const std::vector<const t_column*>& piv_tcols,
         const std::vector<const t_column*>& agg_ccols,
-        const std::vector<const t_column*>& agg_dcols,
+        const std::vector<const t_column*>& agg_pcols,
         std::vector<t_column*>& piv_scols,
         std::vector<t_column*>& agg_acols,
         t_column* agg_scountspar,
@@ -205,8 +251,7 @@ public:
         t_tscalar pkey,
         t_uindex idx,
         t_uindex npivots,
-        t_uindex strand_count_idx,
-        t_uindex aggcolsize,
+        const std::vector<t_strand_col>& agg_kinds,
         const std::vector<const t_column*>& piv_pcols,
         const std::vector<const t_column*>& agg_pcols,
         std::vector<t_column*>& piv_scols,
@@ -220,7 +265,6 @@ public:
     std::pair<std::shared_ptr<t_data_table>, std::shared_ptr<t_data_table>>
     build_strand_table(
         const t_data_table& flattened,
-        const t_data_table& delta,
         const t_data_table& prev,
         const t_data_table& current,
         const t_data_table& transitions,
@@ -326,6 +370,27 @@ public:
     void clear_deltas();
 
     const std::shared_ptr<t_tcdeltas>& get_deltas() const;
+
+    /**
+     * @brief Record this tree's node changes into `capture` until it is
+     * removed.
+     */
+    void add_capture(const std::shared_ptr<t_stree_capture>& capture);
+
+    void remove_capture(const std::shared_ptr<t_stree_capture>& capture);
+
+    bool node_exists(t_uindex idx) const;
+
+    /**
+     * @brief The live node with index `idx`, or null; valid until the tree
+     * next changes shape.
+     */
+    const t_stnode* find_node(t_uindex idx) const;
+
+    /**
+     * @brief Call `fn` with every live node in the tree.
+     */
+    void for_each_node(const std::function<void(const t_stnode&)>& fn) const;
 
     void clear();
 
@@ -452,6 +517,21 @@ private:
     std::shared_ptr<t_treenodes> m_nodes;
     std::shared_ptr<t_idxpkey> m_idxpkey;
     std::shared_ptr<t_idxleaf> m_idxleaf;
+    void capture_change(
+        t_uindex nidx, t_uindex aggnum, const t_tscalar& old_value
+    );
+
+    void capture_dropped(const t_stnode& node);
+
+    void _build_agg_info(
+        const t_dtree_ctx& ctx,
+        const t_gstate& gstate,
+        const t_data_table& expression_master_table
+    );
+
+    t_agg_update_info m_agg_info;
+    const t_data_table* m_agg_info_table = nullptr;
+
     t_uindex m_curidx;
     std::shared_ptr<t_data_table> m_aggregates;
     std::vector<t_aggspec> m_aggspecs;
@@ -467,6 +547,7 @@ private:
     std::vector<bool> m_features;
     t_symtable m_symtable;
     bool m_has_delta;
+    std::vector<std::shared_ptr<t_stree_capture>> m_captures;
     std::string m_grand_agg_str;
 
     // Used by AGGTYPE_GMV under split_by. For t_ctx1 (group_by only) the

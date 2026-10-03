@@ -19,6 +19,7 @@ import duckdb
 
 from perspective import Client
 from perspective.virtual_servers.duckdb import DuckDBVirtualServer
+from perspective.tests.column_paths import joined_column_paths
 
 _SUPERSTORE_LOCAL = os.path.join(
     os.path.dirname(__file__),
@@ -227,7 +228,7 @@ class TestDuckDBView:
     def test_column_paths(self, client):
         table = client.open_table("memory.superstore")
         view = table.view(columns=["Sales", "Profit", "State"])
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert paths == ["Sales", "Profit", "State"]
         view.delete()
 
@@ -362,7 +363,7 @@ class TestDuckDBSplitBy:
             aggregates={"Sales": "sum"},
         )
 
-        column_paths = view.column_paths()
+        column_paths = joined_column_paths(view)
         assert column_paths == [
             "Central|Sales",
             "East|Sales",
@@ -409,7 +410,7 @@ class TestDuckDBSplitBy:
             columns=["Sales"],
             split_by=["Category"],
         )
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert any("Furniture" in c for c in paths)
         assert any("Office Supplies" in c for c in paths)
         assert any("Technology" in c for c in paths)
@@ -905,7 +906,7 @@ class TestDuckDBCombinedOperations:
             aggregates={"Sales": "sum"},
         )
 
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert paths == [
             "Central|Sales",
             "East|Sales",
@@ -957,7 +958,7 @@ class TestDuckDBCombinedOperations:
             filter=[["Quantity", ">", 3]],
         )
 
-        paths = view.column_paths()
+        paths = joined_column_paths(view)
         assert paths == [
             "Central|Sales",
             "East|Sales",
@@ -1165,7 +1166,7 @@ class TestDuckDBCoerceTypes:
         view = table.view(group_by=["enum"], columns=[])
         csv = view.to_csv()
         assert [line for line in csv.splitlines() if line] == [
-            "__ROW_PATH_0__",
+            "enum",
             "null",
             '"happy"',
             '"sad"',
@@ -1183,4 +1184,97 @@ class TestDuckDBCoerceTypes:
         )
         assert view.to_json() == []
         assert view.to_columns() == {"tiny": []}
+        view.delete()
+
+
+class TestDuckDBTableFromView:
+    def test_group_by_view_unrolls_row_path(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Sales"], group_by=["Region"], aggregates={"Sales": "sum"}
+        )
+
+        derived = client.table(view, name="py_derived_group")
+        assert derived.schema() == {
+            "Region": "string",
+            "Sales": "float",
+        }
+
+        child = derived.view(columns=["Region", "Sales"])
+        expected = sorted(
+            (str(row["__ROW_PATH__"][0]) if row["__ROW_PATH__"] else "None", row["Sales"])
+            for row in view.to_json()
+        )
+
+        actual = sorted(
+            (str(row["Region"]), row["Sales"]) for row in child.to_json()
+        )
+
+        assert actual == expected
+        child.delete()
+        derived.delete()
+        view.delete()
+
+    def test_group_by_view_qualifies_key_aggregate(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Region", "Sales"],
+            group_by=["Region"],
+            aggregates={"Region": "count", "Sales": "sum"},
+        )
+
+        derived = client.table(view, name="py_derived_qualified")
+        assert derived.columns() == ["Region", "Region (count)", "Sales"]
+        child = derived.view(columns=["Region", "Region (count)"])
+        assert child.num_rows() == view.num_rows()
+        child.delete()
+        derived.delete()
+        view.delete()
+
+    def test_explicit_schema(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Sales"],
+            group_by=["Category"],
+            split_by=["Region"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+
+        derived = client.table(
+            view,
+            name="py_derived_schema",
+            schema={
+                "Category": "string",
+                "West|Sales": "float",
+                "North|Sales": "float",
+            },
+        )
+
+        assert derived.columns() == [
+            "Category",
+            "West|Sales",
+            "North|Sales",
+        ]
+
+        child = derived.view(
+            columns=["Category", "West|Sales", "North|Sales"]
+        )
+
+        rows = child.to_json()
+        assert len(rows) == 3
+        assert all(row["North|Sales"] is None for row in rows)
+        child.delete()
+        derived.delete()
+        view.delete()
+
+    def test_rejects_mismatched_type(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Sales"], group_by=["Region"], aggregates={"Sales": "sum"}
+        )
+
+        with pytest.raises(Exception):
+            client.table(view, schema={"Sales": "string"})
+
         view.delete()

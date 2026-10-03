@@ -12,6 +12,7 @@
 
 import { test, expect } from "@perspective-dev/test";
 import perspective from "./perspective_client";
+import { joined_column_paths } from "./column_paths.js";
 
 var data = [
     { x: 1, y: "a", z: true },
@@ -151,7 +152,7 @@ const std = (nums) => {
                     y: "last",
                 },
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["y", "z"]);
             const answer = [
                 { __ROW_PATH__: [], y: "c", z: true },
@@ -219,7 +220,7 @@ const std = (nums) => {
                     x: "count",
                 },
             });
-            const paths = await view.column_paths();
+            const paths = await joined_column_paths(view);
             expect(paths).toEqual(["y", "z"]);
             const answer = [
                 { __ROW_PATH__: [], y: 4, z: 4 },
@@ -1544,7 +1545,7 @@ const std = (nums) => {
                 __ROW_PATH__: [[]],
                 x: [""],
                 y: [0],
-                index: [0],
+                index: [null],
             });
 
             await table.update({

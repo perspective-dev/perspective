@@ -106,6 +106,30 @@ test.describe("Number format defaults", () => {
         await expect(sig.locator("input.parameter-max")).toHaveValue("5");
     });
 
+    test("choosing percent style serializes its fraction digits", async ({
+        page,
+    }) => {
+        const view = new PageView(page);
+        await view.restore({
+            settings: true,
+            plugin: "Debug Styled",
+            columns: ["Sales"],
+        });
+
+        await openStyleTab(view, "Sales");
+        await field(view, "style").locator("select").selectOption("Percent");
+        const config = (await view.save()) as any;
+        expect(config.columns_config).toEqual({
+            Sales: {
+                number_format: {
+                    style: "percent",
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                },
+            },
+        });
+    });
+
     test("unrelated edits serialize sparsely under an override", async ({
         page,
     }) => {

@@ -592,7 +592,6 @@ t_ctx2::notify(const t_data_table& flattened, bool /* is_registration */) {
 void
 t_ctx2::notify(
     const t_data_table& flattened,
-    const t_data_table& delta,
     const t_data_table& prev,
     const t_data_table& current,
     const t_data_table& transitions,
@@ -610,7 +609,6 @@ t_ctx2::notify(
                 m_config.get_sortby_pairs(),
                 m_sortby,
                 flattened,
-                delta,
                 prev,
                 current,
                 transitions,
@@ -628,7 +626,6 @@ t_ctx2::notify(
                 m_config.get_sortby_pairs(),
                 m_column_sortby,
                 flattened,
-                delta,
                 prev,
                 current,
                 transitions,
@@ -646,7 +643,6 @@ t_ctx2::notify(
                 m_config.get_sortby_pairs(),
                 std::vector<t_sortspec>(),
                 flattened,
-                delta,
                 prev,
                 current,
                 transitions,
@@ -1181,6 +1177,7 @@ t_ctx2::get_rows_changed() {
 
 void
 t_ctx2::reset(bool reset_expressions) {
+    ++m_storage_generation;
     for (t_uindex treeidx = 0, tree_loop_end = m_trees.size();
          treeidx < tree_loop_end;
          ++treeidx) {
@@ -1343,7 +1340,6 @@ t_ctx2::compute_expressions(
     const std::shared_ptr<t_data_table>& master,
     const t_gstate::t_mapping& pkey_map,
     const std::shared_ptr<t_data_table>& flattened,
-    const std::shared_ptr<t_data_table>& delta,
     const std::shared_ptr<t_data_table>& prev,
     const std::shared_ptr<t_data_table>& current,
     const std::shared_ptr<t_data_table>& transitions,
@@ -1384,16 +1380,6 @@ t_ctx2::compute_expressions(
             regex_mapping
         );
 
-        // delta: for each numerical column, the numerical delta between the
-        // previous value and the current value in the row.
-        expr->compute(
-            delta,
-            pkey_map,
-            m_expression_tables->m_delta,
-            expression_vocab,
-            regex_mapping
-        );
-
         // prev: the values of the updated rows before this update was applied
         expr->compute(
             prev,
@@ -1423,7 +1409,6 @@ t_ctx2::compute_expressions(
         m_expression_tables->m_flattened,
         m_expression_tables->m_prev,
         m_expression_tables->m_current,
-        m_expression_tables->m_delta,
         flattened,
         existed
     );

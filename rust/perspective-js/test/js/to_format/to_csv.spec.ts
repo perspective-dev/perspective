@@ -47,8 +47,25 @@ test.describe("to_csv", () => {
         ]);
         const view = await table.view({ group_by: ["y"] });
         const csv = await view.to_csv();
+        expect(csv).toEqual('"y","x","y (count)"\n,6,3\n"a",3,2\n"b",3,1\n');
+        view.delete();
+        table.delete();
+    });
+
+    test("1-sided view qualifies an aggregate of its key", async () => {
+        const table = await perspective.table([
+            { x: 1, y: "a" },
+            { x: 2, y: "a" },
+            { x: 3, y: "b" },
+        ]);
+        const view = await table.view({
+            group_by: ["y"],
+            columns: ["y", "x"],
+            aggregates: { y: "distinct count" },
+        });
+        const csv = await view.to_csv();
         expect(csv).toEqual(
-            '"y (Group by 1)","x","y"\n,6,3\n"a",3,2\n"b",3,1\n',
+            '"y","y (distinct count)","x"\n,2,6\n"a",1,3\n"b",1,3\n',
         );
         view.delete();
         table.delete();

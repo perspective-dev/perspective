@@ -184,7 +184,6 @@ public:
         const std::shared_ptr<t_data_table>& expr_flattened,
         const std::shared_ptr<t_data_table>& expr_prev,
         const std::shared_ptr<t_data_table>& expr_current,
-        const std::shared_ptr<t_data_table>& expr_delta,
         const std::shared_ptr<t_data_table>& flattened,
         const std::shared_ptr<t_data_table>& existed
     );
@@ -286,9 +285,7 @@ private:
         const t_gstate::t_mapping& pkey_map,
         const std::shared_ptr<t_data_table>& expr_master,
         const std::shared_ptr<t_data_table>& expr_flattened,
-        const std::shared_ptr<t_data_table>& expr_prev,
         const std::shared_ptr<t_data_table>& expr_current,
-        const std::shared_ptr<t_data_table>& expr_delta,
         const std::shared_ptr<t_data_table>& flattened
     ) const;
 

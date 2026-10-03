@@ -406,6 +406,7 @@ impl MainPanel {
                     on_reset={ctx.props().on_reset.clone()}
                     {on_new_panel}
                     session_props={ctx.props().session_props.clone()}
+                    render_error={ctx.props().renderer_props.render_error.clone()}
                     presentation_props={ctx.props().presentation_props.clone()}
                     is_settings_open={ctx.props().is_settings_open}
                     update_count={ctx.props().update_count}

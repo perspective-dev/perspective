@@ -485,8 +485,7 @@ test.describe("with_typed_arrays()", () => {
             });
 
             expect(names).toContain("__ROW_PATH_0__");
-            // Should NOT contain the legacy "category (Group by 1)" naming
-            expect(names).not.toContain("category (Group by 1)");
+            expect(names).not.toContain("category (count)");
             await view.delete();
             await table.delete();
         });
@@ -547,8 +546,8 @@ test.describe("with_typed_arrays()", () => {
 
             expect(names).toContain("__ROW_PATH_0__");
             expect(names).toContain("__ROW_PATH_1__");
-            expect(names).not.toContain("region (Group by 1)");
-            expect(names).not.toContain("country (Group by 2)");
+            expect(names).not.toContain("region (count)");
+            expect(names).not.toContain("country (count)");
             await view.delete();
             await table.delete();
         });
@@ -586,10 +585,7 @@ test.describe("with_typed_arrays()", () => {
             await table.delete();
         });
 
-        test("regular to_arrow still uses legacy naming by default", async () => {
-            // Sanity check: `to_arrow` (not with_typed_arrays) should
-            // still use legacy "colname (Group by N)" naming for backwards
-            // compatibility. `with_typed_arrays` forces the new naming.
+        test("regular to_arrow uses readable names by default", async () => {
             const table = await perspective.table({
                 category: ["a", "b"],
                 value: [1, 2],
@@ -600,10 +596,13 @@ test.describe("with_typed_arrays()", () => {
             });
 
             const arrow = await view.to_arrow();
-            // The Arrow IPC bytes should contain the legacy name.
-            const bytes = new Uint8Array(arrow);
-            const text = new TextDecoder().decode(bytes);
-            expect(text.includes("(Group by 1)")).toBe(true);
+            const table2 = await perspective.table(arrow);
+            expect(await table2.columns()).toEqual([
+                "category",
+                "category (count)",
+                "value",
+            ]);
+            await table2.delete();
             await view.delete();
             await table.delete();
         });

@@ -93,7 +93,6 @@ t_gnode::t_gnode(
         m_input_schema,
         m_output_schema,
         m_output_schema,
-        m_output_schema,
         trans_schema,
         existed_schema
     };
@@ -336,6 +335,253 @@ t_gnode::_process_mask_existed_rows(t_process_state& process_state) {
     return mask;
 }
 
+void
+t_gnode::_take_reset_removes(
+    const t_column* pkey_col, t_uindex flattened_num_rows
+) {
+    if (!m_reset_pending) {
+        return;
+    }
+
+    m_reset_pending = false;
+    if (!m_reset_pkeys) {
+        return;
+    }
+
+    tsl::hopscotch_set<t_tscalar> incoming;
+    incoming.reserve(flattened_num_rows);
+    for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
+        incoming.insert(pkey_col->get_scalar(idx));
+    }
+
+    const t_column* stash_col = m_reset_pkeys->_get_column("psp_pkey");
+    const t_uindex stash_size = m_reset_pkeys->size();
+    t_column* removed_col = nullptr;
+    for (t_uindex idx = 0; idx < stash_size; ++idx) {
+        t_tscalar pkey = stash_col->get_scalar(idx);
+        if (!incoming.contains(pkey)) {
+            removed_col = append_removed_pkey(
+                m_removed_pkeys,
+                removed_col,
+                stash_col->get_dtype(),
+                stash_size,
+                pkey
+            );
+        }
+    }
+
+    m_reset_pkeys = nullptr;
+}
+
+t_mask
+t_gnode::_compute_transitions(
+    const std::shared_ptr<t_data_table>& flattened,
+    const std::shared_ptr<t_data_table>& state_table,
+    const std::vector<t_rlookup>& lookup
+) {
+    t_uindex flattened_num_rows = flattened->num_rows();
+
+    // Use `t_process_state` to manage intermediate structures
+    t_process_state _process_state;
+
+    _process_state.m_state_data_table = state_table;
+    _process_state.m_flattened_data_table = flattened;
+    _process_state.m_lookup = lookup;
+
+    // Get data tables for process state
+    _process_state.m_prev_data_table = m_oports[PSP_PORT_PREV]->get_table();
+    _process_state.m_current_data_table =
+        m_oports[PSP_PORT_CURRENT]->get_table();
+    _process_state.m_transitions_data_table =
+        m_oports[PSP_PORT_TRANSITIONS]->get_table();
+    _process_state.m_existed_data_table =
+        m_oports[PSP_PORT_EXISTED]->get_table();
+
+    _process_state.clear_transitional_data_tables();
+
+    // And re-reserved for the amount of data in `flattened`
+    _process_state.reserve_transitional_data_tables(flattened_num_rows);
+
+    t_mask existed_mask = _process_mask_existed_rows(_process_state);
+    auto mask_count = existed_mask.count();
+
+    // mask_count = flattened_num_rows - number of rows that were removed
+    _process_state.set_size_transitional_data_tables(mask_count);
+
+    // Only real columns from the gstate table here
+    const std::vector<std::string>& column_names =
+        get_output_schema().m_columns;
+    t_uindex ncols = column_names.size();
+
+    parallel_for(
+        int(ncols),
+        [&_process_state, &column_names, this](int colidx) {
+            const std::string& cname = column_names[colidx];
+            auto* fcolumn =
+                _process_state.m_flattened_data_table->_get_column(cname);
+            auto* scolumn =
+                _process_state.m_state_data_table->_get_column(cname);
+            auto* pcolumn =
+                _process_state.m_prev_data_table->_get_column(cname);
+            auto* ccolumn =
+                _process_state.m_current_data_table->_get_column(cname);
+            auto* tcolumn =
+                _process_state.m_transitions_data_table->_get_column(cname);
+
+            t_dtype col_dtype = fcolumn->get_dtype();
+
+            switch (col_dtype) {
+                case DTYPE_INT64: {
+                    _process_column<std::int64_t>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_INT32: {
+                    _process_column<std::int32_t>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_INT16: {
+                    _process_column<std::int16_t>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_INT8: {
+                    _process_column<std::int8_t>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_UINT64: {
+                    _process_column<std::uint64_t>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_UINT32: {
+                    _process_column<std::uint32_t>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_UINT16: {
+                    _process_column<std::uint16_t>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_UINT8: {
+                    _process_column<std::uint8_t>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_FLOAT64: {
+                    _process_column<double>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_FLOAT32: {
+                    _process_column<float>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_BOOL: {
+                    _process_column<std::uint8_t>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_TIME: {
+                    _process_column<std::int64_t>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_DATE: {
+                    _process_column<std::uint32_t>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_STR: {
+                    _process_column<std::string>(
+                        fcolumn,
+                        scolumn,
+                        pcolumn,
+                        ccolumn,
+                        tcolumn,
+                        _process_state
+                    );
+                } break;
+                case DTYPE_OBJECT:
+                default: {
+                    PSP_COMPLAIN_AND_ABORT("Unsupported column dtype");
+                }
+            }
+        }
+    );
+
+    return existed_mask;
+}
+
 t_process_table_result
 t_gnode::_process_table(t_uindex port_id) {
     m_was_updated = false;
@@ -387,35 +633,7 @@ t_gnode::_process_table(t_uindex port_id) {
         row_lookup[idx] = m_gstate->lookup(pkey);
     }
 
-    if (m_reset_pending) {
-        m_reset_pending = false;
-        if (m_reset_pkeys) {
-            tsl::hopscotch_set<t_tscalar> incoming;
-            incoming.reserve(flattened_num_rows);
-            for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
-                incoming.insert(pkey_col->get_scalar(idx));
-            }
-
-            const t_column* stash_col =
-                m_reset_pkeys->_get_column("psp_pkey");
-            const t_uindex stash_size = m_reset_pkeys->size();
-            t_column* removed_col = nullptr;
-            for (t_uindex idx = 0; idx < stash_size; ++idx) {
-                t_tscalar pkey = stash_col->get_scalar(idx);
-                if (!incoming.contains(pkey)) {
-                    removed_col = append_removed_pkey(
-                        m_removed_pkeys,
-                        removed_col,
-                        stash_col->get_dtype(),
-                        stash_size,
-                        pkey
-                    );
-                }
-            }
-
-            m_reset_pkeys = nullptr;
-        }
-    }
+    _take_reset_removes(pkey_col, flattened_num_rows);
 
     // first update - master table is empty
     if (m_gstate->mapping_size() == 0) {
@@ -441,243 +659,50 @@ t_gnode::_process_table(t_uindex port_id) {
 
     input_port->release_or_clear();
 
-    // Use `t_process_state` to manage intermediate structures
-    t_process_state _process_state;
+    t_mask existed_mask =
+        _compute_transitions(flattened, get_table_sptr(), row_lookup);
 
-    _process_state.m_state_data_table = get_table_sptr();
-    _process_state.m_flattened_data_table = flattened;
-    _process_state.m_lookup = row_lookup;
-
-    // Get data tables for process state
-    _process_state.m_delta_data_table = m_oports[PSP_PORT_DELTA]->get_table();
-    _process_state.m_prev_data_table = m_oports[PSP_PORT_PREV]->get_table();
-    _process_state.m_current_data_table =
-        m_oports[PSP_PORT_CURRENT]->get_table();
-    _process_state.m_transitions_data_table =
-        m_oports[PSP_PORT_TRANSITIONS]->get_table();
-    _process_state.m_existed_data_table =
-        m_oports[PSP_PORT_EXISTED]->get_table();
-
-    // Clear delta, prev, current, transitions, existed on EACH call.
-    _process_state.clear_transitional_data_tables();
-
-    // And re-reserved for the amount of data in `flattened`
-    _process_state.reserve_transitional_data_tables(flattened_num_rows);
-
-    t_mask existed_mask = _process_mask_existed_rows(_process_state);
-    auto mask_count = existed_mask.count();
-
-    // mask_count = flattened_num_rows - number of rows that were removed
-    _process_state.set_size_transitional_data_tables(mask_count);
-
-    // Only real columns from the gstate table here
-    const std::vector<std::string>& column_names =
-        get_output_schema().m_columns;
-    t_uindex ncols = column_names.size();
-
-    parallel_for(
-        int(ncols),
-        [&_process_state, &column_names, this](int colidx) {
-            const std::string& cname = column_names[colidx];
-            auto* fcolumn =
-                _process_state.m_flattened_data_table->_get_column(cname);
-            auto* scolumn =
-                _process_state.m_state_data_table->_get_column(cname);
-            auto* dcolumn =
-                _process_state.m_delta_data_table->_get_column(cname);
-            auto* pcolumn =
-                _process_state.m_prev_data_table->_get_column(cname);
-            auto* ccolumn =
-                _process_state.m_current_data_table->_get_column(cname);
-            auto* tcolumn =
-                _process_state.m_transitions_data_table->_get_column(cname);
-
-            t_dtype col_dtype = fcolumn->get_dtype();
-
-            switch (col_dtype) {
-                case DTYPE_INT64: {
-                    _process_column<std::int64_t>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_INT32: {
-                    _process_column<std::int32_t>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_INT16: {
-                    _process_column<std::int16_t>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_INT8: {
-                    _process_column<std::int8_t>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_UINT64: {
-                    _process_column<std::uint64_t>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_UINT32: {
-                    _process_column<std::uint32_t>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_UINT16: {
-                    _process_column<std::uint16_t>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_UINT8: {
-                    _process_column<std::uint8_t>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_FLOAT64: {
-                    _process_column<double>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_FLOAT32: {
-                    _process_column<float>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_BOOL: {
-                    _process_column<std::uint8_t>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_TIME: {
-                    _process_column<std::int64_t>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_DATE: {
-                    _process_column<std::uint32_t>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_STR: {
-                    _process_column<std::string>(
-                        fcolumn,
-                        scolumn,
-                        dcolumn,
-                        pcolumn,
-                        ccolumn,
-                        tcolumn,
-                        _process_state
-                    );
-                } break;
-                case DTYPE_OBJECT:
-                default: {
-                    PSP_COMPLAIN_AND_ABORT("Unsupported column dtype");
-                }
-            }
+    result.m_flattened_data_table = _finish_step(
+        flattened,
+        existed_mask,
+        row_lookup,
+        [this](const std::shared_ptr<t_data_table>& masked) {
+            m_gstate->update_master_table(masked);
         }
     );
+    result.m_should_notify_userspace = true;
+    return result;
+}
 
+std::shared_ptr<t_data_table>
+t_gnode::_finish_step(
+    const std::shared_ptr<t_data_table>& flattened,
+    const t_mask& existed_mask,
+    const std::vector<t_rlookup>& row_lookup,
+    const std::function<void(const std::shared_ptr<t_data_table>&)>& commit
+) {
     /**
-     * After all columns have been processed (transitional tables written into),
-     * `_process_state.m_flattened_data_table` contains the accumulated state
-     * of the dataset that updates the master table on `m_gstate`, including
-     * added rows, updated in-place rows, and rows to be removed.
+     * `flattened` contains the accumulated state of the dataset that updates
+     * the master table on `m_gstate`, including added rows, updated in-place
+     * rows, and rows to be removed.
      *
      * `existed_mask` is a bitset marked true for `OP_INSERT`, and false for
      * `OP_DELETE`. If there are any `OP_DELETE`s, the next step returns a
      * new `t_data_table` with the deleted rows masked out.
      */
     std::shared_ptr<t_data_table> flattened_masked;
-
-    if (existed_mask.count() == _process_state.m_flattened_data_table->size()) {
-        flattened_masked = _process_state.m_flattened_data_table;
+    if (existed_mask.count() == flattened->size()) {
+        flattened_masked = flattened;
     } else {
-        flattened_masked =
-            _process_state.m_flattened_data_table->clone(existed_mask);
+        flattened_masked = flattened->clone(existed_mask);
     }
 
     PSP_GNODE_VERIFY_TABLE(flattened_masked);
 
+    if (commit) {
+        commit(flattened_masked);
+    }
+
 #ifdef PSP_GNODE_VERIFY
     {
         auto updated_table = get_table();
@@ -685,36 +710,23 @@ t_gnode::_process_table(t_uindex port_id) {
     }
 #endif
 
-    m_gstate->update_master_table(flattened_masked);
-
-#ifdef PSP_GNODE_VERIFY
-    {
-        auto updated_table = get_table();
-        PSP_GNODE_VERIFY_TABLE(updated_table);
-    }
-#endif
-
-    if (flattened_masked.get() == _process_state.m_flattened_data_table.get()) {
+    if (flattened_masked.get() == flattened.get()) {
         _process_windows(flattened_masked, row_lookup);
     } else {
         std::vector<t_rlookup> masked_lookup;
         masked_lookup.reserve(flattened_masked->size());
-        for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
+        for (t_uindex idx = 0, end = flattened->num_rows(); idx < end; ++idx) {
             if (existed_mask.get(idx)) {
                 masked_lookup.push_back(row_lookup[idx]);
             }
         }
+
         _process_windows(flattened_masked, masked_lookup);
     }
 
     m_oports[PSP_PORT_FLATTENED]->set_table(flattened_masked);
-
     _compute_expressions(get_table_sptr(), flattened_masked);
-
-    result.m_flattened_data_table = flattened_masked;
-    result.m_should_notify_userspace = true;
-
-    return result;
+    return flattened_masked;
 }
 
 template <>
@@ -722,7 +734,6 @@ void
 t_gnode::_process_column<std::string>(
     const t_column* fcolumn,
     const t_column* scolumn,
-    t_column* dcolumn,
     t_column* pcolumn,
     t_column* ccolumn,
     t_column* tcolumn,
@@ -749,7 +760,9 @@ t_gnode::_process_column<std::string>(
                 const auto* cur_value = fcolumn->get_nth<const char>(idx);
                 std::string curs(cur_value);
 
-                bool cur_valid = fcolumn->is_valid(idx);
+                t_status cur_status = *(fcolumn->get_nth_status(idx));
+                bool cur_valid = cur_status == STATUS_VALID;
+                bool cur_cleared = cur_status == STATUS_CLEAR;
 
                 if (row_pre_existed) {
                     prev_value = scolumn->get_nth<const char>(rlookup.m_idx);
@@ -783,15 +796,13 @@ t_gnode::_process_column<std::string>(
 
                 if (cur_valid) {
                     ccolumn->set_nth<const char*>(added_count, cur_value);
-                }
-
-                if (!cur_valid && prev_valid) {
+                    ccolumn->set_valid(added_count, true);
+                } else if (prev_valid && !cur_cleared) {
                     ccolumn->set_nth<const char*>(added_count, prev_value);
+                    ccolumn->set_valid(added_count, true);
+                } else {
+                    ccolumn->clear(added_count);
                 }
-
-                ccolumn->set_valid(
-                    added_count, cur_valid ? cur_valid : prev_valid
-                );
 
                 tcolumn->set_nth<std::uint8_t>(idx, trans);
             } break;
@@ -865,6 +876,80 @@ t_gnode::init_bulk(const std::shared_ptr<t_data_table>& data_table) {
     // notified.
     _compute_expressions(data_table);
     _update_contexts_from_state(m_gstate->get_pkeyed_table());
+}
+
+void
+t_gnode::set_derived_alias(
+    const std::string& name, std::shared_ptr<t_column> column
+) {
+    m_gstate->set_alias(name, std::move(column));
+}
+
+bool
+t_gnode::is_derived_alias(const std::string& name) const {
+    return m_gstate->is_aliased(name);
+}
+
+bool
+t_gnode::process_derived(const t_derived_step& step) {
+    PSP_TRACE_SENTINEL();
+    PSP_VERBOSE_ASSERT(m_init, "Cannot `process_derived` on an uninited gnode.");
+    m_was_updated = false;
+    m_removed_pkeys = nullptr;
+
+    const std::shared_ptr<t_data_table>& flattened = step.m_flattened;
+    t_uindex flattened_num_rows = flattened->num_rows();
+    if (flattened_num_rows == 0) {
+        if (!m_reset_pending) {
+            return false;
+        }
+
+        m_reset_pending = false;
+        m_removed_pkeys = std::move(m_reset_pkeys);
+        m_reset_pkeys = nullptr;
+        m_was_updated = true;
+        return true;
+    }
+
+    m_was_updated = true;
+    t_column* pkey_col = flattened->_get_column("psp_pkey");
+    std::vector<t_rlookup> row_lookup(flattened_num_rows);
+    std::vector<t_rlookup> identity_lookup(flattened_num_rows);
+    for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
+        bool exists = step.m_bound[idx] >= 0;
+        row_lookup[idx] = t_rlookup(
+            exists ? static_cast<t_uindex>(step.m_bound[idx]) : 0, exists
+        );
+        identity_lookup[idx] = t_rlookup(idx, exists);
+    }
+
+    _take_reset_removes(pkey_col, flattened_num_rows);
+
+    if (m_gstate->mapping_size() == 0) {
+        m_gstate->commit_derived(flattened, step.m_rows);
+        m_oports[PSP_PORT_FLATTENED]->set_table(flattened);
+        if (step.m_notify && !m_contexts.empty()) {
+            _compute_expressions(flattened);
+            _update_contexts_from_state(m_gstate->get_pkeyed_table());
+        }
+
+        release_outputs();
+        return true;
+    }
+
+    if (!step.m_notify) {
+        m_gstate->commit_derived(flattened, step.m_rows);
+        release_outputs();
+        return true;
+    }
+
+    t_mask existed_mask =
+        _compute_transitions(flattened, step.m_prev_state, identity_lookup);
+    m_gstate->commit_derived(flattened, step.m_rows);
+    auto flattened_masked =
+        _finish_step(flattened, existed_mask, row_lookup, nullptr);
+    notify_contexts(flattened_masked);
+    return true;
 }
 
 bool
@@ -1091,7 +1176,6 @@ t_gnode::notify_context<t_ctxunit>(
 ) {
     auto* ctx = ctxh.get<t_ctxunit>();
 
-    std::shared_ptr<t_data_table> delta = m_oports[PSP_PORT_DELTA]->get_table();
     std::shared_ptr<t_data_table> prev = m_oports[PSP_PORT_PREV]->get_table();
     std::shared_ptr<t_data_table> current =
         m_oports[PSP_PORT_CURRENT]->get_table();
@@ -1104,9 +1188,7 @@ t_gnode::notify_context<t_ctxunit>(
     // pass the tables as const references - the destructors for all of the
     // joined tables will be called after this function finishes executing,
     // as the contexts do not retain a reference to these tables.
-    ctx->notify(
-        *(flattened), *(delta), *(prev), *(current), *(transitions), existed
-    );
+    ctx->notify(*(flattened), *(prev), *(current), *(transitions), existed);
 
     ctx->step_end();
 }
@@ -1406,7 +1488,6 @@ t_gnode::_process_windows(
     t_uindex n_old = flattened->size();
     t_uindex n_new = n_old + extra.size();
 
-    std::shared_ptr<t_data_table> delta = m_oports[PSP_PORT_DELTA]->get_table();
     std::shared_ptr<t_data_table> prev = m_oports[PSP_PORT_PREV]->get_table();
     std::shared_ptr<t_data_table> current =
         m_oports[PSP_PORT_CURRENT]->get_table();
@@ -1416,7 +1497,6 @@ t_gnode::_process_windows(
         m_oports[PSP_PORT_EXISTED]->get_table();
 
     flattened->extend(n_new);
-    delta->extend(n_new);
     prev->extend(n_new);
     current->extend(n_new);
     transitions->extend(n_new);
@@ -1461,7 +1541,6 @@ t_gnode::_process_windows(
     copy_plans.push_back(plan_table(flattened));
     copy_plans.push_back(plan_table(prev));
     copy_plans.push_back(plan_table(current));
-    std::vector<t_wcol> delta_plan = plan_table(delta);
     std::vector<t_wcol> transitions_plan = plan_table(transitions);
     t_column* existed_col = existed->get_column("psp_existed").get();
     t_column* widened_col = existed->get_column("psp_widened").get();
@@ -1497,20 +1576,6 @@ t_gnode::_process_windows(
                         wcol.m_col->clear(row);
                         break;
                 }
-            }
-        }
-
-        for (const auto& wcol : delta_plan) {
-            switch (wcol.m_kind) {
-                case t_wcol_kind::PKEY:
-                    wcol.m_col->set_scalar(row, pkey);
-                    break;
-                case t_wcol_kind::OP:
-                    wcol.m_col->set_nth<std::uint8_t>(row, OP_INSERT);
-                    break;
-                default:
-                    wcol.m_col->clear(row);
-                    break;
             }
         }
 
@@ -1675,7 +1740,6 @@ t_gnode::_compute_expressions(
     const std::shared_ptr<t_data_table>& master,
     const std::shared_ptr<t_data_table>& flattened
 ) {
-    std::shared_ptr<t_data_table> delta = m_oports[PSP_PORT_DELTA]->get_table();
     std::shared_ptr<t_data_table> prev = m_oports[PSP_PORT_PREV]->get_table();
     std::shared_ptr<t_data_table> current =
         m_oports[PSP_PORT_CURRENT]->get_table();
@@ -1697,7 +1761,6 @@ t_gnode::_compute_expressions(
                     master,
                     m_gstate->get_pkey_map(),
                     flattened,
-                    delta,
                     prev,
                     current,
                     transitions,
@@ -1712,7 +1775,6 @@ t_gnode::_compute_expressions(
                     master,
                     m_gstate->get_pkey_map(),
                     flattened,
-                    delta,
                     prev,
                     current,
                     transitions,
@@ -1727,7 +1789,6 @@ t_gnode::_compute_expressions(
                     master,
                     m_gstate->get_pkey_map(),
                     flattened,
-                    delta,
                     prev,
                     current,
                     transitions,
@@ -1742,7 +1803,6 @@ t_gnode::_compute_expressions(
                     master,
                     m_gstate->get_pkey_map(),
                     flattened,
-                    delta,
                     prev,
                     current,
                     transitions,

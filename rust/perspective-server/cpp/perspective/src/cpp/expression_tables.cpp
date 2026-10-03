@@ -58,9 +58,6 @@ t_expression_tables::t_expression_tables(
     m_current = std::make_shared<t_data_table>(
         "", "", schema, DEFAULT_EMPTY_CAPACITY, BACKING_STORE_MEMORY
     );
-    m_delta = std::make_shared<t_data_table>(
-        "", "", schema, DEFAULT_EMPTY_CAPACITY, BACKING_STORE_MEMORY
-    );
     m_transitions = std::make_shared<t_data_table>(
         "", "", transitions_schema, DEFAULT_EMPTY_CAPACITY, BACKING_STORE_MEMORY
     );
@@ -69,7 +66,6 @@ t_expression_tables::t_expression_tables(
     m_flattened->init();
     m_prev->init();
     m_current->init();
-    m_delta->init();
     m_transitions->init();
 }
 
@@ -128,8 +124,8 @@ t_expression_tables::calculate_transitions(
                 t_tscalar prev_value = prev_column.get_scalar(ridx);
                 t_tscalar curr_value = current_column.get_scalar(ridx);
 
-                bool prev_valid = prev_column.is_valid(ridx);
-                bool curr_valid = current_column.is_valid(ridx);
+                bool prev_valid = prev_value.is_valid();
+                bool curr_valid = curr_value.is_valid();
                 bool prev_curr_eq =
                     prev_valid && curr_valid && (prev_value == curr_value);
 
@@ -144,15 +140,15 @@ t_expression_tables::calculate_transitions(
                         // Row existed before, and the current value is
                         // the same as the previous value.
                         transition = VALUE_TRANSITION_EQ_TT;
+                    } else if (!prev_valid && curr_valid) {
+                        // Previous value was a null, new value is valid.
+                        transition = VALUE_TRANSITION_NEQ_FT;
+                    } else if (prev_valid && !curr_valid) {
+                        transition = VALUE_TRANSITION_NEQ_TF;
                     } else {
-                        if (!prev_valid && curr_valid) {
-                            // Previous value was a null, new value is valid.
-                            transition = VALUE_TRANSITION_NEQ_FT;
-                        } else {
-                            // Previous value was not null, new value is
-                            // not null, and previous value != new value
-                            transition = VALUE_TRANSITION_NEQ_TT;
-                        }
+                        // Previous value was not null, new value is
+                        // not null, and previous value != new value
+                        transition = VALUE_TRANSITION_NEQ_TT;
                     }
                 } else {
                     // Row did not exist before and was added
@@ -170,7 +166,6 @@ t_expression_tables::reserve_transitional_table_size(t_uindex size) const {
     m_flattened->reserve(size);
     m_prev->reserve(size);
     m_current->reserve(size);
-    m_delta->reserve(size);
     m_transitions->reserve(size);
 }
 
@@ -179,7 +174,6 @@ t_expression_tables::set_transitional_table_size(t_uindex size) const {
     m_flattened->set_size(size);
     m_prev->set_size(size);
     m_current->set_size(size);
-    m_delta->set_size(size);
     m_transitions->set_size(size);
 }
 
@@ -188,7 +182,6 @@ t_expression_tables::clear_transitional_tables() const {
     m_flattened->clear();
     m_prev->clear();
     m_current->clear();
-    m_delta->clear();
     m_transitions->clear();
 }
 
@@ -198,7 +191,6 @@ t_expression_tables::reset() const {
     m_flattened->reset();
     m_prev->reset();
     m_current->reset();
-    m_delta->reset();
     m_transitions->reset();
 }
 

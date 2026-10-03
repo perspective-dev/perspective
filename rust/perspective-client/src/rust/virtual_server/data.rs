@@ -33,7 +33,7 @@ use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use indexmap::IndexMap;
 use serde::Serialize;
 
-use crate::config::{GroupRollupMode, Scalar, ViewConfig};
+use crate::config::{ColumnType, GroupRollupMode, Scalar, ViewConfig};
 
 /// An Arrow column builder, used during the population phase of
 /// [`VirtualDataSlice`].
@@ -93,16 +93,15 @@ pub enum VirtualDataCell {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RowPathStyle {
-    /// Legacy: emit a single `__ROW_PATH__` sidecar (per-row nested
-    /// array in `render_to_rows`, array-of-arrays in
-    /// `render_to_columns_json`). `__ROW_PATH_N__` per-level columns
-    /// are filtered out. Matches the native engine's `to_json` /
-    /// `to_columns` shape.
+    /// Emit a single `__ROW_PATH__` sidecar (per-row nested array in
+    /// `render_to_rows`, array-of-arrays in `render_to_columns_json`) and
+    /// filter out the `__ROW_PATH_N__` per-level columns, matching the native
+    /// engine's `to_json`, `to_columns` and `to_ndjson` shapes.
     Sidecar,
 
-    /// Native: emit per-level `__ROW_PATH_0__`, `__ROW_PATH_1__`, …
-    /// columns directly. No `__ROW_PATH__` sidecar. Matches the native
-    /// engine's Arrow IPC, CSV, and NDJSON shapes.
+    /// Emit one column per `group_by` level named after its column, with an
+    /// aggregate of a `group_by` column qualified by its aggregate, matching
+    /// the native engine's `to_csv` shape.
     PerLevel,
 }
 
@@ -317,6 +316,35 @@ fn cast_to_int64(array: &ArrayRef) -> Result<Vec<i64>, Box<dyn Error>> {
 }
 
 /// Extracts a single cell from a *coerced* Arrow array as a [`Scalar`].
+fn column_type_of(data_type: &DataType) -> ColumnType {
+    match data_type {
+        DataType::Boolean => ColumnType::Boolean,
+        DataType::Int8
+        | DataType::Int16
+        | DataType::Int32
+        | DataType::Int64
+        | DataType::UInt8
+        | DataType::UInt16
+        | DataType::UInt32
+        | DataType::UInt64 => ColumnType::Integer,
+        DataType::Float16
+        | DataType::Float32
+        | DataType::Float64
+        | DataType::Decimal128(..)
+        | DataType::Decimal256(..) => ColumnType::Float,
+        DataType::Date32 | DataType::Date64 => ColumnType::Date,
+        DataType::Timestamp(..) => ColumnType::Datetime,
+        _ => ColumnType::String,
+    }
+}
+
+fn row_path_level(name: &str) -> Option<usize> {
+    name.strip_prefix("__ROW_PATH_")?
+        .strip_suffix("__")?
+        .parse()
+        .ok()
+}
+
 fn extract_scalar(array: &ArrayRef, row_idx: usize) -> Scalar {
     if array.is_null(row_idx) {
         return Scalar::Null;
@@ -641,7 +669,7 @@ impl VirtualDataSlice {
     /// viewer-charts to drive its categorical/numeric axis resolvers
     /// and tree-hierarchy walkers) see them inline — matching the
     /// native `perspective-server`'s `to_arrow` output when
-    /// `emit_legacy_row_path_names: false`.
+    /// `machine_column_names: true`.
     pub fn from_arrow_ipc(&mut self, ipc: &[u8]) -> Result<(), Box<dyn Error>> {
         let cursor = std::io::Cursor::new(ipc);
         let (ipc_schema, batches) = if &ipc[0..6] == "ARROW1".as_bytes() {
@@ -821,10 +849,9 @@ impl VirtualDataSlice {
     /// Converts the columnar data to a row-oriented representation for JSON
     /// serialization.
     ///
-    /// `style` selects between the legacy `__ROW_PATH__` sidecar
-    /// (`Sidecar`, used by `to_json`) and the native per-level
-    /// `__ROW_PATH_N__` columns (`PerLevel`, used by `to_csv` /
-    /// `to_ndjson`). See [`RowPathStyle`] for the deprecation plan.
+    /// `style` selects between the `__ROW_PATH__` sidecar (`Sidecar`, used
+    /// by `to_json` and `to_ndjson`) and one readable key column per
+    /// `group_by` level (`PerLevel`, used by `to_csv`), see [`RowPathStyle`].
     pub(crate) fn render_to_rows(
         &mut self,
         style: RowPathStyle,
@@ -839,6 +866,51 @@ impl VirtualDataSlice {
                 .fields()
                 .iter()
                 .any(|x| x.name().starts_with("__ROW_PATH_"));
+
+        let key_types: IndexMap<&str, ColumnType> = self
+            .config
+            .group_by
+            .iter()
+            .enumerate()
+            .map(|(level, col)| {
+                let column_type = schema
+                    .field_with_name(&format!("__ROW_PATH_{}__", level))
+                    .ok()
+                    .map(|field| column_type_of(field.data_type()))
+                    .or_else(|| {
+                        self.row_path
+                            .as_ref()?
+                            .iter()
+                            .find_map(|path| match path.get(level) {
+                                Some(Scalar::Float(_)) => Some(ColumnType::Float),
+                                Some(Scalar::Bool(_)) => Some(ColumnType::Boolean),
+                                Some(Scalar::String(_)) => Some(ColumnType::String),
+                                _ => None,
+                            })
+                    })
+                    .unwrap_or(ColumnType::String);
+
+                (col.as_str(), column_type)
+            })
+            .collect();
+
+        let names: Vec<String> = schema
+            .fields()
+            .iter()
+            .map(|field| {
+                let name = field.name();
+                if style != RowPathStyle::PerLevel {
+                    return name.clone();
+                }
+
+                match row_path_level(name).and_then(|level| self.config.group_by.get(level)) {
+                    Some(key) => key.clone(),
+                    None => self.config.readable_column_path(name, |leaf| {
+                        key_types.get(leaf).copied().unwrap_or(ColumnType::String)
+                    }),
+                }
+            })
+            .collect();
 
         (0..num_rows)
             .map(|row_idx| {
@@ -857,16 +929,13 @@ impl VirtualDataSlice {
                     && let Some(ref rp) = self.row_path
                     && row_idx < rp.len()
                 {
-                    for level in 0..self.config.group_by.len() {
-                        row.insert(
-                            format!("__ROW_PATH_{}__", level),
-                            match rp[row_idx].get(level) {
-                                Some(Scalar::String(x)) => VirtualDataCell::String(Some(x.clone())),
-                                Some(Scalar::Float(x)) => VirtualDataCell::Float(Some(*x)),
-                                Some(Scalar::Bool(x)) => VirtualDataCell::Boolean(Some(*x)),
-                                Some(Scalar::Null) | None => VirtualDataCell::String(None),
-                            },
-                        );
+                    for (level, key) in self.config.group_by.iter().enumerate() {
+                        row.insert(key.clone(), match rp[row_idx].get(level) {
+                            Some(Scalar::String(x)) => VirtualDataCell::String(Some(x.clone())),
+                            Some(Scalar::Float(x)) => VirtualDataCell::Float(Some(*x)),
+                            Some(Scalar::Bool(x)) => VirtualDataCell::Boolean(Some(*x)),
+                            Some(Scalar::Null) | None => VirtualDataCell::String(None),
+                        });
                     }
                 }
 
@@ -948,7 +1017,7 @@ impl VirtualDataSlice {
                             },
                         }
                     };
-                    row.insert(field.name().clone(), cell);
+                    row.insert(names[col_idx].clone(), cell);
                 }
 
                 row

@@ -20,6 +20,20 @@ packages:
     - "examples/*"
     - "docs"
 
+overrides:
+    "@perspective-dev/client@4.0.0>@perspective-dev/server": "4.0.0"
+    "@perspective-dev/client@4.1.0>@perspective-dev/server": "4.1.0"
+    "@perspective-dev/client@4.2.0>@perspective-dev/server": "4.2.0"
+    "@perspective-dev/client@4.3.0>@perspective-dev/server": "4.3.0"
+    "@perspective-dev/client@4.4.0>@perspective-dev/server": "4.4.0"
+    "@perspective-dev/client@4.5.0>@perspective-dev/server": "4.5.0"
+    "@perspective-dev/client@5.0.0>@perspective-dev/server": "5.0.0"
+    "@perspective-dev/client@5.1.0>@perspective-dev/server": "5.1.0"
+    "@perspective-dev/client@5.2.0>@perspective-dev/server": "5.2.0"
+    "@perspective-dev/client@5.3.0>@perspective-dev/server": "5.3.0"
+    "@perspective-dev/client@5.4.0>@perspective-dev/server": "5.4.0"
+    "@perspective-dev/client@5.5.0>@perspective-dev/server": "5.5.0"
+
 allowBuilds:
     "@fortawesome/fontawesome-free": true
     aws-sdk: true

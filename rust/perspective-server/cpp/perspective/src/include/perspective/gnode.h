@@ -30,6 +30,7 @@
 #include <tsl/ordered_map.h>
 #include <perspective/parallel_for.h>
 #include <chrono>
+#include <functional>
 
 #ifdef PSP_PARALLEL_FOR
 #include <thread>
@@ -57,6 +58,17 @@ class t_ctx_grouped_pkey;
 #else
 #define PSP_GNODE_VERIFY_TABLE(X)
 #endif
+
+/**
+ * @brief The rows a derived table's source touched in one step.
+ */
+struct PERSPECTIVE_EXPORT t_derived_step {
+    std::shared_ptr<t_data_table> m_flattened;
+    std::shared_ptr<t_data_table> m_prev_state;
+    std::vector<t_uindex> m_rows;
+    std::vector<t_index> m_bound;
+    bool m_notify = true;
+};
 
 /**
  * @brief The struct returned from `_process_table`, which contains a
@@ -111,6 +123,21 @@ public:
      * @param fragments
      */
     void send(t_uindex port_id, const t_data_table& fragments);
+
+    /**
+     * @brief Apply one step of a derived table dictated by its source, with
+     * the caller holding the pool's write lock.
+     */
+    bool process_derived(const t_derived_step& step);
+
+    /**
+     * @brief Make the derived master column `name` read `column`, which
+     * another table owns.
+     */
+    void
+    set_derived_alias(const std::string& name, std::shared_ptr<t_column> column);
+
+    bool is_derived_alias(const std::string& name) const;
 
     /**
      * @brief Bulk-initialize an empty gnode directly from `data_table`,
@@ -320,6 +347,36 @@ protected:
     t_mask _process_mask_existed_rows(t_process_state& process_state);
 
     /**
+     * @brief Fill the transitional output tables by diffing `flattened`
+     * against `state_table` at the rows given by `lookup`.
+     */
+    /**
+     * @brief Consume a pending reset, reporting stashed keys absent from
+     * `pkey_col` as removed.
+     */
+    void _take_reset_removes(
+        const t_column* pkey_col, t_uindex flattened_num_rows
+    );
+
+    t_mask _compute_transitions(
+        const std::shared_ptr<t_data_table>& flattened,
+        const std::shared_ptr<t_data_table>& state_table,
+        const std::vector<t_rlookup>& lookup
+    );
+
+    /**
+     * @brief Mask out deleted rows, commit through `commit` if given, then
+     * run windows and expressions, returning the table to notify with.
+     */
+    std::shared_ptr<t_data_table> _finish_step(
+        const std::shared_ptr<t_data_table>& flattened,
+        const t_mask& existed_mask,
+        const std::vector<t_rlookup>& row_lookup,
+        const std::function<void(const std::shared_ptr<t_data_table>&)>&
+            commit
+    );
+
+    /**
      * @brief Given a flattened column, the master column from `m_gstate`, and
      * all transitional columns containing metadata, process and calculate
      * transitional values.
@@ -327,7 +384,6 @@ protected:
      * @tparam DATA_T
      * @param fcolumn
      * @param scolumn
-     * @param dcolumn
      * @param pcolumn
      * @param ccolumn
      * @param tcolumn
@@ -337,7 +393,6 @@ protected:
     void _process_column(
         const t_column* fcolumn,
         const t_column* scolumn,
-        t_column* dcolumn,
         t_column* pcolumn,
         t_column* ccolumn,
         t_column* tcolumn,
@@ -457,7 +512,6 @@ t_gnode::notify_context(
     CTX_T* ctx = ctxh.get<CTX_T>();
 
     // Tables from the gnode which do not have the expressions applied yet
-    std::shared_ptr<t_data_table> delta = m_oports[PSP_PORT_DELTA]->get_table();
     std::shared_ptr<t_data_table> prev = m_oports[PSP_PORT_PREV]->get_table();
     std::shared_ptr<t_data_table> current =
         m_oports[PSP_PORT_CURRENT]->get_table();
@@ -479,7 +533,6 @@ t_gnode::notify_context(
 
         auto joined_flattened =
             flattened->join(ctx_expression_tables->m_flattened);
-        auto joined_delta = delta->join(ctx_expression_tables->m_delta);
         auto joined_prev = prev->join(ctx_expression_tables->m_prev);
         auto joined_current = current->join(ctx_expression_tables->m_current);
         auto joined_transitions =
@@ -490,14 +543,13 @@ t_gnode::notify_context(
         // as the contexts do not retain a reference to these tables.
         ctx->notify(
             *joined_flattened,
-            *joined_delta,
             *joined_prev,
             *joined_current,
             *joined_transitions,
             existed
         );
     } else {
-        ctx->notify(*flattened, *delta, *prev, *current, *transitions, existed);
+        ctx->notify(*flattened, *prev, *current, *transitions, existed);
     }
 
     ctx->step_end();
@@ -566,7 +618,6 @@ template <>
 void t_gnode::_process_column<std::string>(
     const t_column* fcolumn,
     const t_column* scolumn,
-    t_column* dcolumn,
     t_column* pcolumn,
     t_column* ccolumn,
     t_column* tcolumn,
@@ -578,7 +629,6 @@ void
 t_gnode::_process_column(
     const t_column* fcolumn,
     const t_column* scolumn,
-    t_column* dcolumn,
     t_column* pcolumn,
     t_column* ccolumn,
     t_column* tcolumn,
@@ -602,7 +652,10 @@ t_gnode::_process_column(
                 bool prev_valid = false;
 
                 DATA_T cur_value = *(fcolumn->get_nth<DATA_T>(idx));
-                bool cur_valid = fcolumn->is_valid(idx);
+
+                t_status cur_status = *(fcolumn->get_nth_status(idx));
+                bool cur_valid = cur_status == STATUS_VALID;
+                bool cur_cleared = cur_status == STATUS_CLEAR;
 
                 if (row_pre_existed) {
                     prev_value = *(scolumn->get_nth<DATA_T>(rlookup.m_idx));
@@ -623,36 +676,18 @@ t_gnode::_process_column(
                     prev_pkey_eq
                 );
 
-                // Mirrors `t_gstate::update_master_column`: an invalid cell
-                // is an explicit null if CLEAR (removes this row's
-                // contribution from additive aggregates), and a no-op if
-                // INVALID (column omitted from a partial update). A slot's
-                // raw bits are unspecified when its validity flag is false,
-                // so only the valid side of a transition may be read (#1256).
-                DATA_T delta_value;
-                if (cur_valid) {
-                    delta_value =
-                        cur_value - (prev_valid ? prev_value : DATA_T(0));
-                } else if (fcolumn->is_cleared(idx) && prev_valid) {
-                    SUPPRESS_WARNINGS_VC(4146)
-                    delta_value = -prev_value;
-                    RESTORE_WARNINGS_VC()
-                } else {
-                    delta_value = DATA_T(0);
-                }
-
-                dcolumn->set_nth<DATA_T>(added_count, delta_value);
-                dcolumn->set_valid(added_count, true);
-
                 pcolumn->set_nth<DATA_T>(added_count, prev_value);
                 pcolumn->set_valid(added_count, prev_valid);
 
-                ccolumn->set_nth<DATA_T>(
-                    added_count, cur_valid ? cur_value : prev_value
-                );
-                ccolumn->set_valid(
-                    added_count, cur_valid ? cur_valid : prev_valid
-                );
+                if (cur_valid) {
+                    ccolumn->set_nth<DATA_T>(added_count, cur_value);
+                    ccolumn->set_valid(added_count, true);
+                } else if (prev_valid && !cur_cleared) {
+                    ccolumn->set_nth<DATA_T>(added_count, prev_value);
+                    ccolumn->set_valid(added_count, true);
+                } else {
+                    ccolumn->clear(added_count);
+                }
 
                 tcolumn->set_nth<std::uint8_t>(idx, trans);
             } break;
@@ -667,13 +702,6 @@ t_gnode::_process_column(
 
                     ccolumn->set_nth<DATA_T>(added_count, prev_value);
                     ccolumn->set_valid(added_count, prev_valid);
-
-                    SUPPRESS_WARNINGS_VC(4146)
-                    dcolumn->set_nth<DATA_T>(
-                        added_count, prev_valid ? -prev_value : DATA_T(0)
-                    );
-                    RESTORE_WARNINGS_VC()
-                    dcolumn->set_valid(added_count, true);
 
                     tcolumn->set_nth<std::uint8_t>(
                         added_count, VALUE_TRANSITION_NEQ_TDF

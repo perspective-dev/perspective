@@ -15,12 +15,15 @@
 #include "perspective/base.h"
 #include "perspective/exports.h"
 #include "perspective/join_engine.h"
+#include "perspective/derived_source.h"
 #include "perspective/raw_types.h"
 #include "perspective/schema.h"
 #include "perspective/view.h"
 #include "perspective/view_config.h"
 #include <cstdint>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <tsl/hopscotch_set.h>
 #include <utility>
 #include <perspective/table.h>
@@ -160,7 +163,7 @@ namespace server {
             t_uindex end_col,
             bool emit_group_by = true,
             t_arrow_compression compression = t_arrow_compression::LZ4,
-            bool emit_legacy_row_path_names = true
+            bool machine_column_names = false
         ) const = 0;
 
         [[nodiscard]]
@@ -226,11 +229,12 @@ namespace server {
         virtual std::uint32_t sides() const = 0;
 
         [[nodiscard]]
-        virtual std::vector<std::vector<std::string>> column_paths() const = 0;
+        virtual std::shared_ptr<t_derived_source>
+        make_derived_source(const std::shared_ptr<Table>& parent) const = 0;
 
         [[nodiscard]]
-        virtual std::vector<std::vector<std::string>>
-        column_paths_range(t_uindex start_col, t_uindex end_col) const = 0;
+        virtual std::vector<std::vector<t_tscalar>>
+        column_paths(t_uindex start_col, t_uindex end_col) const = 0;
 
         [[nodiscard]]
         virtual std::map<std::string, std::string>
@@ -293,7 +297,7 @@ namespace server {
             t_uindex end_col,
             bool emit_group_by = true,
             t_arrow_compression compression = t_arrow_compression::LZ4,
-            bool emit_legacy_row_path_names = true
+            bool machine_column_names = false
         ) const override {
             return m_view->to_arrow(
                 start_row,
@@ -302,7 +306,7 @@ namespace server {
                 end_col,
                 emit_group_by,
                 compression,
-                emit_legacy_row_path_names
+                machine_column_names
             );
         }
 
@@ -426,42 +430,16 @@ namespace server {
         }
 
         [[nodiscard]]
-        std::vector<std::vector<std::string>>
-        column_paths() const override {
-            std::vector<std::vector<std::string>> out;
-            std::vector<std::vector<t_tscalar>> column_paths =
-                m_view->column_paths();
-
-            for (const auto& path : column_paths) {
-                std::vector<std::string> path_str;
-                path_str.reserve(path.size());
-                for (const auto& scalar : path) {
-                    path_str.push_back(scalar.to_string());
-                }
-                out.push_back(path_str);
-            }
-
-            return out;
+        std::shared_ptr<t_derived_source>
+        make_derived_source(const std::shared_ptr<Table>& parent
+        ) const override {
+            return perspective::make_derived_source(m_view, parent);
         }
 
         [[nodiscard]]
-        std::vector<std::vector<std::string>>
-        column_paths_range(t_uindex start_col, t_uindex end_col)
-            const override {
-            std::vector<std::vector<std::string>> out;
-            std::vector<std::vector<t_tscalar>> column_paths =
-                m_view->column_paths_range(start_col, end_col);
-
-            for (const auto& path : column_paths) {
-                std::vector<std::string> path_str;
-                path_str.reserve(path.size());
-                for (const auto& scalar : path) {
-                    path_str.push_back(scalar.to_string());
-                }
-                out.push_back(path_str);
-            }
-
-            return out;
+        std::vector<std::vector<t_tscalar>>
+        column_paths(t_uindex start_col, t_uindex end_col) const override {
+            return m_view->column_paths(start_col, end_col);
         }
 
         [[nodiscard]]
@@ -545,6 +523,46 @@ namespace server {
      * @brief ServerResources is a container for all the resources that the
      * server requires.
      */
+    /**
+     * @brief The `Table`s derived from `View`s, and the sources feeding them.
+     */
+    class PERSPECTIVE_EXPORT DerivedTableEngine {
+    public:
+        using t_id = std::string;
+
+        void register_table(
+            const t_id& view_id,
+            const t_id& table_id,
+            std::shared_ptr<t_derived_source> source
+        );
+
+        void unregister_table(const t_id& table_id);
+
+        bool has_dependents(const t_id& view_id) const;
+
+        /**
+         * @brief The id of the `View` that `table_id` is derived from, if
+         * it is derived at all.
+         */
+        std::optional<t_id> parent_view_of(const t_id& table_id) const;
+
+        std::vector<std::pair<t_id, std::shared_ptr<t_derived_source>>>
+        get_dependents(const t_id& view_id) const;
+
+    private:
+        struct t_entry {
+            t_id m_view_id;
+            std::shared_ptr<t_derived_source> m_source;
+        };
+
+        std::multimap<t_id, t_id> m_view_to_tables;
+        tsl::hopscotch_map<t_id, t_entry> m_tables;
+
+#ifdef PSP_PARALLEL_FOR
+        mutable std::shared_mutex m_lock;
+#endif
+    };
+
     class PERSPECTIVE_EXPORT ServerResources {
     public:
         using t_id = std::string;
@@ -712,6 +730,36 @@ namespace server {
             std::vector<ProtoServerResp<Response>>& outs
         );
 
+        /**
+         * @brief Emit the `on_update` and `on_remove` responses owed by the
+         * views of a table that just stepped, then step its derived tables.
+         */
+        void _notify_table(
+            std::shared_ptr<Table>& table,
+            const ServerResources::t_id& table_id,
+            t_uindex port_id,
+            std::vector<ProtoServerResp<Response>>& outs
+        );
+
+        /**
+         * @brief The id of the non-derived table at the root of `table_id`'s
+         * chain of derived tables.
+         */
+        ServerResources::t_id
+        _root_table_id(const ServerResources::t_id& table_id);
+
+        /**
+         * @brief Create the read-only `Table` for a `from_view` request,
+         * returning an error message on failure.
+         */
+        std::string make_derived_table(
+            const proto::MakeTableReq& req,
+            const ServerResources::t_id& table_id,
+            bool has_identity_options,
+            std::vector<ProtoServerResp<Response>>& outs,
+            std::shared_ptr<Table>& table
+        );
+
         void _process_table_unchecked(
             std::shared_ptr<Table>& table,
             const ServerResources::t_id& table_id,
@@ -725,6 +773,7 @@ namespace server {
         std::atomic<long long> m_cpu_time;
         ServerResources m_resources;
         JoinEngine m_join_engine;
+        DerivedTableEngine m_derived_engine;
         t_computed_expression_parser m_computed_expression_parser;
     };
 

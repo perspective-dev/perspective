@@ -10,33 +10,23 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use std::cell::*;
-use std::rc::*;
+import { test, expect } from "@perspective-dev/test";
+import perspective from "../perspective_client.ts";
+import { expect_flat_parity } from "./oracle.ts";
+import { SCHEMA, rows } from "./fixtures.ts";
 
-use wasm_bindgen_futures::spawn_local;
-use wasm_bindgen_test::*;
-
-use crate::utils::*;
-
-#[wasm_bindgen_test]
-async fn test_request_animation_frame_async() {
-    // Merely test that this Promise resolves at all ..
-    request_animation_frame().await;
-}
-
-#[wasm_bindgen_test]
-async fn test_async_in_correct_order() {
-    let cell = Rc::new(RefCell::new(vec![]));
-    spawn_local({
-        clone!(cell);
-        async move {
-            request_animation_frame().await;
-            cell.borrow_mut().push("1");
-        }
+test.describe("Derived table from a limit table's view", function () {
+    test("wrap-around overwrites in place", async function () {
+        const source = await perspective.table(SCHEMA, { limit: 5 });
+        const view = await source.view();
+        const derived = await perspective.table(view);
+        await source.update(rows(4));
+        await expect_flat_parity(view, derived);
+        await source.update(rows(4, 4));
+        expect(await derived.size()).toEqual(5);
+        await expect_flat_parity(view, derived);
+        await derived.delete();
+        await view.delete();
+        await source.delete();
     });
-
-    request_animation_frame().await;
-    cell.borrow_mut().push("2");
-    request_animation_frame().await;
-    assert_eq!(vec!["2", "1"], *cell.borrow());
-}
+});

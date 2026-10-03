@@ -22,7 +22,7 @@ use super::plugin_tab::PluginTab;
 use crate::components::debug_panel::DebugPanel;
 use crate::config::{PluginStaticConfig, PluginUpdate};
 use crate::presentation::{ColumnLocator, ColumnSettingsTarget, OpenColumnSettings, Presentation};
-use crate::queries::classify_column;
+use crate::queries::{classify_column, is_pivot_column};
 use crate::renderer::*;
 use crate::session::column_defaults_update::*;
 use crate::session::*;
@@ -166,8 +166,7 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
 
                     let used = config.columns.iter().any(|maybe_col| {
                         maybe_col.as_ref().map(|col| col == n).unwrap_or_default()
-                    }) || config.group_by.iter().any(|col| col == n)
-                        || config.split_by.iter().any(|col| col == n)
+                    }) || is_pivot_column(n, config)
                         || config.filter.iter().any(|col| col.column() == n)
                         || config.sort.iter().any(|col| &col.0 == n);
                     (used && props.renderer.can_render_column_styles()).then_some(locator)
@@ -193,7 +192,7 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
         let session_metadata = props.metadata.clone();
         let view_config = props.view_config.clone();
         Callback::from(move |plugin_name: String| {
-            if session.is_errored() {
+            if session.is_errored() || renderer.failure().is_some() {
                 return;
             }
             // Pure resolve — the swap itself is committed inside the locked

@@ -50,6 +50,9 @@ pub struct StatusBarProps {
     /// `has_table_cells`, `error` from session_props; `selected_theme`,
     /// `available_themes` from presentation_props.
     pub session_props: SessionProps,
+
+    /// The failure of the active panel's last draw.
+    pub render_error: Option<RenderError>,
     pub presentation_props: PresentationProps,
 
     /// Derived from root: `settings_open && has_table_loaded`.  Used
@@ -207,6 +210,7 @@ impl Component for StatusBar {
             },
             StatusBarMsg::ResetTheme => {
                 update_theme(
+                    &ctx.props().session,
                     &ctx.props().renderer,
                     &ctx.props().presentation,
                     &ctx.props().workspace,
@@ -216,6 +220,7 @@ impl Component for StatusBar {
             },
             StatusBarMsg::SetTheme(theme_name) => {
                 update_theme(
+                    &ctx.props().session,
                     &ctx.props().renderer,
                     &ctx.props().presentation,
                     &ctx.props().workspace,
@@ -261,7 +266,8 @@ impl Component for StatusBar {
         } = ctx.props();
 
         let has_table = ctx.props().session_props.has_table.clone();
-        let is_errored = ctx.props().session_props.is_errored();
+        let is_errored =
+            ctx.props().session_props.is_errored() || ctx.props().render_error.is_some();
         let is_settings_open = ctx.props().is_settings_open;
 
         let mut is_updating_class_name = classes!();
@@ -374,6 +380,7 @@ impl Component for StatusBar {
                             {session}
                             update_count={ctx.props().update_count}
                             session_props={ctx.props().session_props.clone()}
+                            render_error={ctx.props().render_error.clone()}
                         />
                         if is_panel_bar {
                             <div id="panel-bar" class="section">

@@ -13,6 +13,12 @@
 import { PRIVATE_PLUGIN_SYMBOL } from "../types.js";
 import { isMetaColumn } from "../model/meta_columns.js";
 import { reconcile_column_widths } from "../model/column_overrides.js";
+import {
+    column_name,
+    split_levels,
+    write_area,
+    write_flat_area,
+} from "../model/column_path_area.js";
 import { format_cell } from "./format_cell.js";
 import {
     ColumnHeaderLabels,
@@ -118,25 +124,35 @@ export function createDataListener(
             }
 
             if (changed_cols) {
-                const [a, b] = await Promise.all([
+                const is_pivoted = this._config.split_by.length > 0;
+                const [a, b, area] = await Promise.all([
                     this._view.schema(),
                     this._view.expression_schema(),
+                    is_pivoted
+                        ? this._view.column_paths({
+                              start_col: x0,
+                              end_col: x1,
+                          })
+                        : Promise.resolve(null),
                 ]);
+
+                if (area === null) {
+                    write_flat_area(
+                        this._column_path_area,
+                        new_col_paths,
+                        new_window.start_col!,
+                    );
+                } else {
+                    write_area(
+                        this._column_path_area,
+                        area as (CellScalar | null)[][],
+                        new_window.start_col!,
+                    );
+                }
 
                 this._schema = { ...(a as Schema), ...(b as Schema) };
                 for (let i = 0; i < new_col_paths.length; i++) {
-                    const column_path_parts = new_col_paths[i].split("|");
-
-                    // Subtotal/total columns (`split_rollup_mode: "rollup"`)
-                    // have fewer than `split_by.length` levels - the column
-                    // name is always the last part.
-                    const column =
-                        column_path_parts[
-                            Math.min(
-                                this._config.split_by.length,
-                                column_path_parts.length - 1,
-                            )
-                        ];
+                    const column = column_name(this, i + new_window.start_col!);
 
                     this._is_editable[i + new_window.start_col!] =
                         !!this._table_schema[column];
@@ -215,15 +231,10 @@ export function createDataListener(
             ++ipath
         ) {
             const path = this._column_paths[ipath];
-            const path_parts = path.split("|");
-            const n_split_levels = path_parts.length - 1;
+            const name = column_name(this, ipath);
+            const levels = split_levels(this, ipath);
+            const n_split_levels = levels.length;
 
-            // Under `split_rollup_mode: "rollup"`, grand-total and subtotal
-            // columns have fewer than `split_by.length` levels. Pad between
-            // the split levels and the trailing column name so the name
-            // always lands at index `split_by.length` - every downstream
-            // `column_header` consumer indexes it there.
-            //
             // Pads are zero-width spaces repeated by group depth, NOT `""`:
             // regular-table merges header cells on bare value equality
             // across the whole row, so a plain `""` pad would merge with an
@@ -235,19 +246,20 @@ export function createDataListener(
             // inside a group and never across one. The grand-total group has
             // no real levels, so its entire header stack is pads (rendering
             // blank).
-            if (path_parts.length < this._config.split_by.length + 1) {
-                const column_name = path_parts.pop() as string;
-                const pad = "\u200b".repeat(path_parts.length + 1);
+            const path_parts: (string | ColumnHeaderLabel)[] = levels.slice(
+                0,
+            ) as (string | ColumnHeaderLabel)[];
+
+            if (n_split_levels < this._config.split_by.length) {
+                const pad = "\u200b".repeat(n_split_levels + 1);
                 while (path_parts.length < this._config.split_by.length) {
                     path_parts.push(pad);
                 }
-
-                path_parts.push(column_name);
             }
 
+            path_parts.push(name);
             const column = columns[path] || new Array(y1 - y0).fill(null);
-            const column_config =
-                columns_config[path_parts[this._config.split_by.length]];
+            const column_config = columns_config[name];
 
             const wrap =
                 (column_config?.word_wrap ?? this._word_wrap) &&
@@ -266,7 +278,7 @@ export function createDataListener(
 
                     const cell = format_cell.call(
                         this,
-                        path_parts[this._config.split_by.length],
+                        name,
                         x,
                         columns_config,
                     ) as string | HTMLElement;
@@ -280,7 +292,7 @@ export function createDataListener(
             for (let level = 0; level < n_split_levels; level++) {
                 header[level] = header_labels.format(
                     this,
-                    path_parts,
+                    levels,
                     level,
                     columns_config,
                 );

@@ -395,6 +395,8 @@ impl Component for ColumnSelector {
             <ScrollPanelItem key="config_selector" {size_hint}>
                 <ConfigSelector
                     onselect={onselect.clone()}
+                    on_open_expr_panel={ctx.props().on_open_expr_panel.clone()}
+                    selected_column={ctx.props().selected_column.clone()}
                     ondragenter={ctx.link().callback(|()| Redraw)}
                     view_config={ctx.props().view_config.clone()}
                     drag_column={ctx.props().drag_column.clone()}

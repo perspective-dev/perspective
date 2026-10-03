@@ -10,45 +10,14 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColumnType } from "@perspective-dev/client";
 import { format_cell } from "./format_cell.js";
 import type { DatagridModel, ResolvedColumnsConfig } from "../types.js";
+import type { CellScalar } from "regular-table/dist/esm/types.js";
 
 /**
  * A formatted `split_by` column header label.
  */
 export type ColumnHeaderLabel = { toString(): string };
-
-const DATE_RE =
-    /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?)?$/;
-
-/**
- * Recover one `split_by` level's typed value from its column path text, or
- * `undefined` when that text cannot be recovered exactly.
- */
-export function parse_split_value(
-    type: ColumnType | undefined,
-    text: string,
-): number | undefined {
-    if (type === "integer") {
-        const value = Number(text);
-        return /^-?\d+$/.test(text) && Number.isSafeInteger(value)
-            ? value
-            : undefined;
-    }
-
-    if (type === "date" || type === "datetime") {
-        const match = DATE_RE.exec(text);
-        if (!match) {
-            return undefined;
-        }
-
-        const [, y, mo, d, h = "0", mi = "0", s = "0", ms = "0"] = match;
-        return Date.UTC(+y, +mo - 1, +d, +h, +mi, +s, +ms.padEnd(3, "0"));
-    }
-
-    return undefined;
-}
 
 /**
  * Formats `split_by` column path levels with their source column's
@@ -60,21 +29,13 @@ export class ColumnHeaderLabels {
 
     format(
         model: DatagridModel,
-        path_parts: string[],
+        levels: (CellScalar | null)[],
         level: number,
         plugins: ResolvedColumnsConfig,
     ): string | ColumnHeaderLabel {
         const column = model._config.split_by[level];
-        const text = path_parts[level];
-        const type = (model._table_schema[column] ||
-            model._schema[column] ||
-            model._window_schema?.[column]) as ColumnType | undefined;
-
-        const value = parse_split_value(type, text);
-        if (value === undefined) {
-            return text;
-        }
-
+        const value = levels[level];
+        const text = value === null || value === undefined ? "" : String(value);
         const formatted = format_cell.call(model, column, value, plugins, true);
 
         if (typeof formatted !== "string") {
@@ -86,7 +47,7 @@ export class ColumnHeaderLabels {
             this._labels.clear();
         }
 
-        const key = JSON.stringify([path_parts.slice(0, level + 1), formatted]);
+        const key = JSON.stringify([levels.slice(0, level + 1), formatted]);
         let label = this._labels.get(key);
         if (label === undefined) {
             label = { toString: () => formatted };

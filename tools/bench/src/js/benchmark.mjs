@@ -160,8 +160,13 @@ async function benchmark_node_version(version, benchmarks_table) {
     const suite_path = path.join(process.argv[1]);
     let stats = [];
     const worker = cp.fork(suite_path, {
-        execArgv: ["--expose-gc", "--experimental-wasm-memory64"],
-        env: { BENCH_FLAG: "1" },
+        execArgv: ["--expose-gc"],
+        env: {
+            BENCH_FLAG: "1",
+            ...(process.env.PSP_BENCH_WASM32 && {
+                PSP_BENCH_WASM32: process.env.PSP_BENCH_WASM32,
+            }),
+        },
     });
 
     let cont;

@@ -15,7 +15,7 @@ use perspective_js::utils::ApiError;
 use web_sys::*;
 use yew::prelude::*;
 
-use crate::renderer::Renderer;
+use crate::renderer::{RenderError, Renderer};
 use crate::session::{Session, SessionProps, TableLoadState};
 use crate::tasks::apply_and_render;
 use crate::utils::*;
@@ -32,6 +32,7 @@ pub struct StatusIndicatorProps {
     /// TODO(texodus): remove this
     pub update_count: u32,
     pub session_props: SessionProps,
+    pub render_error: Option<RenderError>,
 }
 
 /// An indicator component which displays the current status of the perspective
@@ -47,6 +48,8 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
             err.kind(),
             err.is_reconnect(),
         )
+    } else if let Some(RenderError(err)) = &props.render_error {
+        StatusIconState::Errored(err.message(), err.stacktrace(), err.kind(), true)
     } else if !has_table_cells
         && matches!(props.session_props.has_table, Some(TableLoadState::Loading))
     {
@@ -76,6 +79,10 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
         async move |_: MouseEvent, (session, renderer, state)| {
             match &state {
                 StatusIconState::Errored(..) => {
+                    if renderer.failure().is_some() {
+                        session.reset_failed_config().await?;
+                    }
+
                     session.reconnect().await?;
                     apply_and_render(session, renderer, ViewConfigUpdate::default())?.await?;
                 },

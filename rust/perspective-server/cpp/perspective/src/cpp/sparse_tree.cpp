@@ -91,6 +91,28 @@ t_stree::t_stree(
     m_num_row_pivots_in_tree(pivots.size()) {
     const auto& g_agg_str = cfg.get_grand_agg_str();
     m_grand_agg_str = g_agg_str.empty() ? "Grand Aggregate" : g_agg_str;
+
+    std::set<std::string> valid_sources;
+    for (const auto& spec : aggspecs) {
+        if (!aggtype_wants_valid_count(spec.agg())) {
+            continue;
+        }
+
+        const auto& dependencies = spec.get_dependencies();
+        if (dependencies.empty()) {
+            continue;
+        }
+
+        const std::string& source = dependencies[0].name();
+        if (!valid_sources.insert(source).second) {
+            continue;
+        }
+
+        std::vector<t_dep> valid_dep = {t_dep(source, DEPTYPE_COLUMN)};
+        m_aggspecs.emplace_back(
+            valid_strand_colname(source), AGGTYPE_VALID_COUNT, valid_dep
+        );
+    }
 }
 
 void
@@ -148,7 +170,9 @@ t_stree::init() {
 
         for (const auto& ci : cinfo) {
             columns.push_back(ci.m_name);
-            dtypes.push_back(ci.m_type);
+            dtypes.push_back(
+                spec.agg() == AGGTYPE_VALID_COUNT ? DTYPE_INT32 : ci.m_type
+            );
         }
     }
 
@@ -188,19 +212,50 @@ t_stree::get_sortby_value(t_index idx) const {
     return iter->m_sort_value;
 }
 
+namespace {
+
+/// The strand delta dtype for a source column, signed for unsigned sources.
+t_dtype
+strand_value_dtype(t_dtype dtype) {
+    switch (dtype) {
+        case DTYPE_UINT64:
+        case DTYPE_UINT32:
+        case DTYPE_UINT16:
+        case DTYPE_UINT8: {
+            return DTYPE_INT64;
+        }
+        default: {
+            return dtype;
+        }
+    }
+}
+
+/// The per-row value a transformed strand column derives from a row image.
+t_tscalar
+strand_image(t_strand_col_kind kind, const t_tscalar& value) {
+    if (kind == STRAND_COL_ABS) {
+        return value.abs();
+    }
+
+    t_tscalar rval;
+    rval.set(std::int8_t(value.is_valid() ? 1 : 0));
+    return rval;
+}
+
+} // namespace
+
 void
 t_stree::build_strand_table_phase_1(
     t_tscalar pkey,
     t_op op,
     t_uindex idx,
     t_uindex npivots,
-    t_uindex strand_count_idx,
-    t_uindex aggcolsize,
+    const std::vector<t_strand_col>& agg_kinds,
     bool force_current_row,
     const std::vector<const t_column*>& piv_ccols,
     const std::vector<const t_column*>& piv_tcols,
     const std::vector<const t_column*>& agg_ccols,
-    const std::vector<const t_column*>& agg_dcols,
+    const std::vector<const t_column*>& agg_pcols,
     std::vector<t_column*>& piv_scols,
     std::vector<t_column*>& agg_acols,
     t_column* agg_scount,
@@ -250,15 +305,50 @@ t_stree::build_strand_table_phase_1(
     // "strand_count_idx" (the number of strands in the table), if the pivot
     // has changed OR force_current_row is true, then use the aggregate
     // from `current`, else use the `delta`.
-    for (t_uindex aggidx = 0; aggidx < aggcolsize; ++aggidx) {
-        if (aggidx != strand_count_idx) {
-            if (pivots_neq || force_current_row) {
-                agg_acols[aggidx]->push_back(agg_ccols[aggidx]->get_scalar(idx)
+    for (t_uindex aggidx = 0, agg_loop_end = agg_kinds.size();
+         aggidx < agg_loop_end;
+         ++aggidx) {
+        const t_strand_col& strand_col = agg_kinds[aggidx];
+        switch (strand_col.m_kind) {
+            case STRAND_COL_COUNT:
+                break;
+            case STRAND_COL_ABS:
+            case STRAND_COL_VALID: {
+                t_tscalar prev_image = strand_image(
+                    strand_col.m_kind, agg_pcols[aggidx]->get_scalar(idx)
                 );
-            } else {
-                agg_acols[aggidx]->push_back(agg_dcols[aggidx]->get_scalar(idx)
-                );
-            }
+
+                if (op == OP_DELETE) {
+                    agg_acols[aggidx]->push_back(prev_image.negate());
+                } else {
+                    t_tscalar cur_image = strand_image(
+                        strand_col.m_kind, agg_ccols[aggidx]->get_scalar(idx)
+                    );
+
+                    agg_acols[aggidx]->push_back(
+                        pivots_neq || force_current_row
+                            ? cur_image
+                            : cur_image.difference(prev_image)
+                    );
+                }
+            } break;
+            case STRAND_COL_VALUE: {
+                if (op == OP_DELETE) {
+                    agg_acols[aggidx]->push_back(
+                        agg_pcols[aggidx]->get_scalar(idx).negate()
+                    );
+                } else if (pivots_neq || force_current_row) {
+                    agg_acols[aggidx]->push_back(
+                        agg_ccols[aggidx]->get_scalar(idx)
+                    );
+                } else {
+                    agg_acols[aggidx]->push_back(
+                        agg_ccols[aggidx]->get_scalar(idx).difference(
+                            agg_pcols[aggidx]->get_scalar(idx)
+                        )
+                    );
+                }
+            } break;
         }
     }
 
@@ -286,8 +376,7 @@ t_stree::build_strand_table_phase_2(
     t_tscalar pkey,
     t_uindex idx,
     t_uindex npivots,
-    t_uindex strand_count_idx,
-    t_uindex aggcolsize,
+    const std::vector<t_strand_col>& agg_kinds,
     const std::vector<const t_column*>& piv_pcols,
     const std::vector<const t_column*>& agg_pcols,
     std::vector<t_column*>& piv_scols,
@@ -310,12 +399,20 @@ t_stree::build_strand_table_phase_2(
         piv_scols[pidx]->push_back(piv_pcols[pidx]->get_scalar(idx));
     }
 
-    for (t_uindex aggidx = 0; aggidx < aggcolsize; ++aggidx) {
-        if (aggidx != strand_count_idx) {
-            agg_acols[aggidx]->push_back(
-                agg_pcols[aggidx]->get_scalar(idx).negate()
-            );
+    for (t_uindex aggidx = 0, agg_loop_end = agg_kinds.size();
+         aggidx < agg_loop_end;
+         ++aggidx) {
+        const t_strand_col& strand_col = agg_kinds[aggidx];
+        if (strand_col.m_kind == STRAND_COL_COUNT) {
+            continue;
         }
+
+        t_tscalar prev_value = agg_pcols[aggidx]->get_scalar(idx);
+        agg_acols[aggidx]->push_back(
+            strand_col.m_kind == STRAND_COL_VALUE
+                ? prev_value.negate()
+                : strand_image(strand_col.m_kind, prev_value).negate()
+        );
     }
 
     agg_scount->push_back<std::int8_t>(std::int8_t(-1));
@@ -382,11 +479,43 @@ t_stree::build_strand_table_metadata(
 
     for (const auto& aggcol : aggcolset) {
         metadata.m_aggschema.add_column(
-            aggcol, metadata.m_flattened_schema.get_dtype(aggcol)
+            aggcol,
+            strand_value_dtype(metadata.m_flattened_schema.get_dtype(aggcol))
         );
+        metadata.m_agg_cols.push_back({STRAND_COL_VALUE, aggcol});
+    }
+
+    std::set<std::string> abs_sources;
+    std::set<std::string> valid_sources;
+    for (const auto& aggspec : aggspecs) {
+        const auto& dependencies = aggspec.get_dependencies();
+        if (dependencies.empty()) {
+            continue;
+        }
+
+        const std::string& source = dependencies[0].name();
+        if (aggspec.agg() == AGGTYPE_SUM_ABS
+            && abs_sources.insert(source).second) {
+            metadata.m_aggschema.add_column(
+                abs_strand_colname(source),
+                strand_value_dtype(
+                    metadata.m_flattened_schema.get_dtype(source)
+                )
+            );
+            metadata.m_agg_cols.push_back({STRAND_COL_ABS, source});
+        }
+
+        if (aggtype_wants_valid_count(aggspec.agg())
+            && valid_sources.insert(source).second) {
+            metadata.m_aggschema.add_column(
+                valid_strand_colname(source), DTYPE_INT8
+            );
+            metadata.m_agg_cols.push_back({STRAND_COL_VALID, source});
+        }
     }
 
     metadata.m_aggschema.add_column("psp_strand_count", DTYPE_INT8);
+    metadata.m_agg_cols.push_back({STRAND_COL_COUNT, ""});
     return metadata;
 }
 
@@ -407,7 +536,6 @@ t_stree::build_strand_table_metadata(
 std::pair<std::shared_ptr<t_data_table>, std::shared_ptr<t_data_table>>
 t_stree::build_strand_table(
     const t_data_table& flattened,
-    const t_data_table& delta,
     const t_data_table& prev,
     const t_data_table& current,
     const t_data_table& transitions,
@@ -457,22 +585,26 @@ t_stree::build_strand_table(
     t_uindex aggcolsize = metadata.m_aggschema.m_columns.size();
     std::vector<const t_column*> agg_ccols(aggcolsize);
     std::vector<const t_column*> agg_pcols(aggcolsize);
-    std::vector<const t_column*> agg_dcols(aggcolsize);
     std::vector<t_column*> agg_acols(aggcolsize);
-
-    t_uindex strand_count_idx = 0;
 
     for (t_uindex aggidx = 0; aggidx < aggcolsize; ++aggidx) {
         const std::string& aggcol = metadata.m_aggschema.m_columns[aggidx];
-        if (aggcol == "psp_strand_count") {
-            agg_dcols[aggidx] = nullptr;
-            agg_ccols[aggidx] = nullptr;
-            agg_pcols[aggidx] = nullptr;
-            strand_count_idx = aggidx;
-        } else {
-            agg_dcols[aggidx] = delta._get_const_column(aggcol);
-            agg_ccols[aggidx] = current._get_const_column(aggcol);
-            agg_pcols[aggidx] = prev._get_const_column(aggcol);
+        const t_strand_col& strand_col = metadata.m_agg_cols[aggidx];
+        switch (strand_col.m_kind) {
+            case STRAND_COL_COUNT: {
+                agg_ccols[aggidx] = nullptr;
+                agg_pcols[aggidx] = nullptr;
+            } break;
+            case STRAND_COL_ABS:
+            case STRAND_COL_VALID: {
+                agg_ccols[aggidx] =
+                    current._get_const_column(strand_col.m_source);
+                agg_pcols[aggidx] = prev._get_const_column(strand_col.m_source);
+            } break;
+            case STRAND_COL_VALUE: {
+                agg_ccols[aggidx] = current._get_const_column(aggcol);
+                agg_pcols[aggidx] = prev._get_const_column(aggcol);
+            } break;
         }
 
         agg_acols[aggidx] = aggs->_get_column(aggcol);
@@ -515,13 +647,12 @@ t_stree::build_strand_table(
                     op,
                     idx,
                     metadata.m_pivsize,
-                    strand_count_idx,
-                    aggcolsize,
+                    metadata.m_agg_cols,
                     true,
                     piv_ccols,
                     piv_tcols,
                     agg_ccols,
-                    agg_dcols,
+                    agg_pcols,
                     piv_scols,
                     agg_acols,
                     agg_scount,
@@ -536,8 +667,7 @@ t_stree::build_strand_table(
                     pkey,
                     idx,
                     metadata.m_pivsize,
-                    strand_count_idx,
-                    aggcolsize,
+                    metadata.m_agg_cols,
                     piv_pcols,
                     agg_pcols,
                     piv_scols,
@@ -554,13 +684,12 @@ t_stree::build_strand_table(
                     op,
                     idx,
                     metadata.m_pivsize,
-                    strand_count_idx,
-                    aggcolsize,
+                    metadata.m_agg_cols,
                     false,
                     piv_ccols,
                     piv_tcols,
                     agg_ccols,
-                    agg_dcols,
+                    agg_pcols,
                     piv_scols,
                     agg_acols,
                     agg_scount,
@@ -578,8 +707,7 @@ t_stree::build_strand_table(
                     pkey,
                     idx,
                     metadata.m_pivsize,
-                    strand_count_idx,
-                    aggcolsize,
+                    metadata.m_agg_cols,
                     piv_pcols,
                     agg_pcols,
                     piv_scols,
@@ -608,13 +736,12 @@ t_stree::build_strand_table(
                 op,
                 idx,
                 metadata.m_pivsize,
-                strand_count_idx,
-                aggcolsize,
+                metadata.m_agg_cols,
                 false,
                 piv_ccols,
                 piv_tcols,
                 agg_ccols,
-                agg_dcols,
+                agg_pcols,
                 piv_scols,
                 agg_acols,
                 agg_scount,
@@ -634,8 +761,7 @@ t_stree::build_strand_table(
                 pkey,
                 idx,
                 metadata.m_pivsize,
-                strand_count_idx,
-                aggcolsize,
+                metadata.m_agg_cols,
                 piv_pcols,
                 agg_pcols,
                 piv_scols,
@@ -712,11 +838,20 @@ t_stree::build_strand_table(
     t_uindex strand_count_idx = 0;
     for (t_uindex aggidx = 0; aggidx < aggcolsize; ++aggidx) {
         const std::string& aggcol = metadata.m_aggschema.m_columns[aggidx];
-        if (aggcol == "psp_strand_count") {
-            agg_fcols[aggidx] = nullptr;
-            strand_count_idx = aggidx;
-        } else {
-            agg_fcols[aggidx] = flattened._get_const_column(aggcol);
+        const t_strand_col& strand_col = metadata.m_agg_cols[aggidx];
+        switch (strand_col.m_kind) {
+            case STRAND_COL_COUNT: {
+                agg_fcols[aggidx] = nullptr;
+                strand_count_idx = aggidx;
+            } break;
+            case STRAND_COL_ABS:
+            case STRAND_COL_VALID: {
+                agg_fcols[aggidx] =
+                    flattened._get_const_column(strand_col.m_source);
+            } break;
+            case STRAND_COL_VALUE: {
+                agg_fcols[aggidx] = flattened._get_const_column(aggcol);
+            } break;
         }
 
         agg_acols[aggidx] = aggs->_get_column(aggcol);
@@ -771,8 +906,13 @@ t_stree::build_strand_table(
                 spkey->push_back(pkey);
                 ++insert_count;
             } else if (aggidx - 1 != strand_count_idx) {
+                t_tscalar value = agg_fcols[aggidx - 1]->get_scalar(idx);
+                const t_strand_col& strand_col =
+                    metadata.m_agg_cols[aggidx - 1];
                 agg_acols[aggidx - 1]->push_back(
-                    agg_fcols[aggidx - 1]->get_scalar(idx)
+                    strand_col.m_kind == STRAND_COL_VALUE
+                        ? value
+                        : strand_image(strand_col.m_kind, value)
                 );
             }
         }
@@ -912,6 +1052,9 @@ t_stree::update_shape_from_static(const t_dtree_ctx& ctx) {
             );
 
             m_newids.insert(sptidx);
+            for (const auto& capture : m_captures) {
+                capture->m_created.push_back(sptidx);
+            }
 
             if (ndepth == dtree.last_level()) {
                 m_newleaves.insert(sptidx);
@@ -982,34 +1125,70 @@ t_stree::mark_zero_desc() {
 }
 
 void
-t_stree::update_aggs_from_static(
+t_stree::_build_agg_info(
     const t_dtree_ctx& ctx,
     const t_gstate& gstate,
     const t_data_table& expression_master_table
 ) {
-    const t_data_table& src_aggtable = ctx.get_aggtable();
+    t_agg_update_info& info = m_agg_info;
+    info = t_agg_update_info();
+    const t_schema& aggschema = m_aggregates->get_schema();
+    const t_schema& expression_schema = expression_master_table.get_schema();
+    const t_schema& master_schema = gstate.get_table()->get_schema();
 
-    t_agg_update_info agg_update_info;
-    t_schema aggschema = m_aggregates->get_schema();
-
+    info.m_src.assign(aggschema.m_columns.size(), nullptr);
     for (const auto& colname : aggschema.m_columns) {
-        agg_update_info.m_src.push_back(
-            src_aggtable._get_const_column(colname)
-        );
-        agg_update_info.m_dst.push_back(m_aggregates->_get_column(colname)
-        );
-        agg_update_info.m_aggspecs.push_back(ctx.get_aggspec(colname));
+        info.m_dst.push_back(m_aggregates->_get_column(colname));
+        info.m_aggspecs.push_back(ctx.get_aggspec(colname));
+
+        const auto& dependencies = info.m_aggspecs.back().get_dependencies();
+        bool numeric_source = true;
+        if (!dependencies.empty()) {
+            const std::string& dep = dependencies[0].name();
+            if (expression_schema.has_column(dep)) {
+                numeric_source =
+                    is_numeric_type(expression_schema.get_dtype(dep));
+            } else if (master_schema.has_column(dep)) {
+                numeric_source =
+                    is_numeric_type(master_schema.get_dtype(dep));
+            }
+        }
+
+        info.m_numeric_source.push_back(numeric_source);
+    }
+
+    std::map<std::string, t_uindex> valid_positions;
+    for (t_uindex idx = 0; idx < info.m_aggspecs.size(); ++idx) {
+        const t_aggspec& spec = info.m_aggspecs[idx];
+        if (spec.agg() == AGGTYPE_VALID_COUNT) {
+            valid_positions[spec.name()] = idx;
+        }
+    }
+
+    for (const auto& spec : info.m_aggspecs) {
+        t_uindex valid_idx = static_cast<t_uindex>(-1);
+        if (aggtype_wants_valid_count(spec.agg())
+            && !spec.get_dependencies().empty()) {
+            auto iter = valid_positions.find(
+                valid_strand_colname(spec.get_dependencies()[0].name())
+            );
+            if (iter != valid_positions.end()) {
+                valid_idx = iter->second;
+            }
+        }
+
+        info.m_valid_idx.push_back(valid_idx);
     }
 
     auto is_col_scaled_aggregate = [&](int col_idx) -> bool {
-        int agg_type = agg_update_info.m_aggspecs[col_idx].agg();
+        int agg_type = info.m_aggspecs[col_idx].agg();
 
         return agg_type == AGGTYPE_SCALED_DIV || agg_type == AGGTYPE_SCALED_ADD
             || agg_type == AGGTYPE_SCALED_MUL;
     };
 
     size_t col_cnt = aggschema.m_columns.size();
-    auto& cols_topo_sorted = agg_update_info.m_dst_topo_sorted;
+    auto& cols_topo_sorted = info.m_dst_topo_sorted;
     cols_topo_sorted.clear();
     cols_topo_sorted.reserve(col_cnt);
 
@@ -1019,7 +1198,7 @@ t_stree::update_aggs_from_static(
     tsl::hopscotch_set<t_column*> dst_visited;
     auto push_column = [&](size_t idx) {
         if (enable_fix_double_calculation) {
-            t_column* dst = agg_update_info.m_dst[idx];
+            t_column* dst = info.m_dst[idx];
             if (dst_visited.find(dst) != dst_visited.end()) {
                 return;
             }
@@ -1032,6 +1211,11 @@ t_stree::update_aggs_from_static(
         // Move scaled agg columns to the end
         // This does not handle case where scaled aggregate depends on other
         // scaled aggregate ( not sure if that is possible )
+        for (size_t i = 0; i < col_cnt; ++i) {
+            if (info.m_aggspecs[i].agg() == AGGTYPE_VALID_COUNT) {
+                push_column(i);
+            }
+        }
         for (size_t i = 0; i < col_cnt; ++i) {
             if (!is_col_scaled_aggregate(i)) {
                 push_column(i);
@@ -1048,6 +1232,25 @@ t_stree::update_aggs_from_static(
             push_column(i);
         }
     }
+}
+
+void
+t_stree::update_aggs_from_static(
+    const t_dtree_ctx& ctx,
+    const t_gstate& gstate,
+    const t_data_table& expression_master_table
+) {
+    if (m_agg_info_table != m_aggregates.get()) {
+        _build_agg_info(ctx, gstate, expression_master_table);
+        m_agg_info_table = m_aggregates.get();
+    }
+
+    const t_data_table& src_aggtable = ctx.get_aggtable();
+    const t_schema& aggschema = m_aggregates->get_schema();
+    for (t_uindex idx = 0; idx < aggschema.m_columns.size(); ++idx) {
+        m_agg_info.m_src[idx] =
+            src_aggtable._get_const_column(aggschema.m_columns[idx]);
+    }
 
     for (const auto& r : m_tree_unification_records) {
         if (!node_exists(r.m_sptidx)) {
@@ -1056,7 +1259,7 @@ t_stree::update_aggs_from_static(
 
         update_agg_table(
             r.m_sptidx,
-            agg_update_info,
+            m_agg_info,
             r.m_daggidx,
             r.m_saggidx,
             r.m_nstrands,
@@ -1137,7 +1340,7 @@ t_stree::update_agg_table(
     const t_gstate& gstate,
     const t_data_table& expression_master_table
 ) {
-    const t_schema& expression_schema = expression_master_table.get_schema();
+    bool is_new = m_newids.find(nidx) != m_newids.end();
 
     for (t_uindex idx : info.m_dst_topo_sorted) {
         const t_column* src = info.m_src[idx];
@@ -1145,19 +1348,16 @@ t_stree::update_agg_table(
         const t_aggspec& spec = info.m_aggspecs[idx];
         t_tscalar new_value = mknone();
         t_tscalar old_value = mknone();
-        auto is_expr =
-            expression_schema.has_column(spec.get_dependencies()[0].name());
 
         switch (spec.agg()) {
-            case AGGTYPE_PCT_SUM_PARENT:
-            case AGGTYPE_PCT_SUM_GRAND_TOTAL:
-            case AGGTYPE_SUM: {
+            case AGGTYPE_SUM_OR_ZERO: {
                 t_tscalar src_scalar = src->get_scalar(src_ridx);
                 t_tscalar dst_scalar = dst->get_scalar(dst_ridx);
                 old_value.set(dst_scalar);
 
                 // is_nan returns false for non-float types
-                if (is_expr || old_value.is_nan()) {
+                if (t_env::force_reaggregate() || !info.m_numeric_source[idx]
+                    || old_value.is_nan()) {
 
                     // if we previously had a NaN, add can't make it finite
                     // again; recalculate entire sum in case it is now finite
@@ -1193,6 +1393,16 @@ t_stree::update_agg_table(
                     );
                 } else {
                     new_value.set(dst_scalar.add(src_scalar));
+                }
+
+                t_uindex valid_idx = info.m_valid_idx[idx];
+                if (valid_idx != static_cast<t_uindex>(-1)) {
+                    t_tscalar count =
+                        info.m_dst[valid_idx]->get_scalar(dst_ridx);
+                    if (!count.is_valid() || count.to_double() == 0) {
+                        new_value.set(std::uint64_t(0));
+                        new_value.m_type = dst->get_dtype();
+                    }
                 }
 
                 dst->set_scalar(dst_ridx, new_value);
@@ -1763,94 +1973,84 @@ t_stree::update_agg_table(
             case AGGTYPE_UDF_REDUCER: {
                 // these will be filled in later
             } break;
-            case AGGTYPE_SUM_NOT_NULL: {
-                old_value.set(dst->get_scalar(dst_ridx));
-                auto pkeys = get_pkeys(nidx);
+            case AGGTYPE_VALID_COUNT: {
+                t_tscalar src_scalar = src->get_scalar(src_ridx);
+                std::int64_t count = 0;
+                if (!is_new) {
+                    t_tscalar dst_scalar = dst->get_scalar(dst_ridx);
+                    if (dst_scalar.is_valid()) {
+                        count =
+                            static_cast<std::int64_t>(dst_scalar.to_double());
+                    }
+                }
 
-                new_value.set(
-                    reduce_from_gstate<
-                        std::function<t_tscalar(std::vector<t_tscalar>&)>>(
-                        gstate,
-                        expression_master_table,
-                        spec.get_dependencies()[0].name(),
-                        pkeys,
-                        [](std::vector<t_tscalar>& values) {
-                            if (values.empty()) {
-                                return mknone();
-                            }
+                if (src_scalar.is_valid()) {
+                    count += static_cast<std::int64_t>(src_scalar.to_double());
+                }
 
-                            t_tscalar rval;
-                            rval.set(std::uint64_t(0));
-                            rval.m_type = values[0].m_type;
+                new_value.set(static_cast<std::int32_t>(count));
+                dst->set_scalar(dst_ridx, new_value);
+            } break;
+            case AGGTYPE_PCT_SUM_PARENT:
+            case AGGTYPE_PCT_SUM_GRAND_TOTAL:
+            case AGGTYPE_ABS_SUM:
+            case AGGTYPE_SUM_ABS:
+            case AGGTYPE_SUM: {
+                t_tscalar src_scalar = src->get_scalar(src_ridx);
+                t_tscalar dst_scalar = dst->get_scalar(dst_ridx);
+                old_value.set(dst_scalar);
 
-                            for (const auto& v : values) {
-                                if (v.is_nan()) {
-                                    continue;
+                bool abs_values = spec.agg() == AGGTYPE_SUM_ABS;
+
+                // is_nan returns false for non-float types
+                if (t_env::force_reaggregate() || !info.m_numeric_source[idx]
+                    || old_value.is_nan()) {
+                    auto pkeys = get_pkeys(nidx);
+                    new_value.set(
+                        reduce_from_gstate<
+                            std::function<t_tscalar(std::vector<t_tscalar>&)>>(
+                            gstate,
+                            expression_master_table,
+                            spec.get_dependencies()[0].name(),
+                            pkeys,
+                            [abs_values](std::vector<t_tscalar>& values) {
+                                t_tscalar rval;
+                                rval.clear();
+                                for (const auto& v : values) {
+                                    if (v.is_nan()) {
+                                        continue;
+                                    }
+
+                                    rval = rval.add(abs_values ? v.abs() : v);
                                 }
-                                rval = rval.add(v);
-                            }
 
-                            return rval;
+                                return rval;
+                            }
+                        )
+                    );
+                } else {
+                    new_value.set(dst_scalar.add(src_scalar));
+                }
+
+                t_uindex valid_idx = info.m_valid_idx[idx];
+                if (valid_idx != static_cast<t_uindex>(-1)) {
+                    t_tscalar count =
+                        info.m_dst[valid_idx]->get_scalar(dst_ridx);
+                    if (!count.is_valid() || count.to_double() == 0) {
+                        if (t_env::sum_empty_zero()) {
+                            new_value.set(std::uint64_t(0));
+                            new_value.m_type = dst->get_dtype();
+                        } else {
+                            new_value.clear();
+                            new_value.m_type = dst->get_dtype();
                         }
-                    )
-                );
-                dst->set_scalar(dst_ridx, new_value);
-            } break;
-            case AGGTYPE_SUM_ABS: {
-                old_value.set(dst->get_scalar(dst_ridx));
-                auto pkeys = get_pkeys(nidx);
-
-                new_value.set(
-                    reduce_from_gstate<
-                        std::function<t_tscalar(std::vector<t_tscalar>&)>>(
-                        gstate,
-                        expression_master_table,
-                        spec.get_dependencies()[0].name(),
-                        pkeys,
-                        [](std::vector<t_tscalar>& values) {
-                            if (values.empty()) {
-                                return mknone();
-                            }
-
-                            t_tscalar rval;
-                            rval.set(std::uint64_t(0));
-                            rval.m_type = values[0].m_type;
-                            for (const auto& v : values) {
-                                rval = rval.add(v.abs());
-                            }
-                            return rval;
-                        }
-                    )
-                );
+                    }
+                }
 
                 dst->set_scalar(dst_ridx, new_value);
             } break;
-            case AGGTYPE_ABS_SUM: {
-                old_value.set(dst->get_scalar(dst_ridx));
-                auto pkeys = get_pkeys(nidx);
-                new_value.set(
-                    reduce_from_gstate<
-                        std::function<t_tscalar(std::vector<t_tscalar>&)>>(
-                        gstate,
-                        expression_master_table,
-                        spec.get_dependencies()[0].name(),
-                        pkeys,
-                        [](std::vector<t_tscalar>& values) {
-                            if (values.empty()) {
-                                return mknone();
-                            }
-                            t_tscalar rval;
-                            rval.set(std::uint64_t(0));
-                            rval.m_type = values[0].m_type;
-                            for (const auto& v : values) {
-                                rval = rval.add(v);
-                            }
-                            return rval.abs();
-                        }
-                    )
-                );
-                dst->set_scalar(dst_ridx, new_value);
-            } break;
+
+
             case AGGTYPE_GMV: {
                 // The user-facing rule is "leaf = sum, parent = sum over
                 // immediate row children of |raw sum of child subtree|".
@@ -2109,12 +2309,23 @@ t_stree::update_agg_table(
             }
         } // end switch
 
+        if (spec.agg() == AGGTYPE_VALID_COUNT) {
+            continue;
+        }
+
         bool val_neq = old_value != new_value;
 
-        m_has_delta = m_has_delta || val_neq;
+        m_has_delta = m_has_delta || val_neq || is_new;
         bool deltas_enabled = m_features.at(CTX_FEAT_DELTA);
-        if (deltas_enabled && val_neq) {
-            m_deltas->insert(t_tcdelta(nidx, idx, old_value, new_value));
+        if (deltas_enabled && (val_neq || is_new)) {
+            m_deltas->insert(t_tcdelta(
+                nidx, idx, is_new ? mknone() : old_value, new_value
+            ));
+        }
+
+        if (!m_captures.empty()
+            && (val_neq || old_value.is_valid() != dst->is_valid(dst_ridx))) {
+            capture_change(nidx, idx, old_value);
         }
 
     } // end for
@@ -2280,6 +2491,9 @@ t_stree::drop_zero_strands() {
             leaves.push_back(iter->m_idx);
         }
         node_ids.push_back(iter->m_aggidx);
+        if (!m_captures.empty()) {
+            capture_dropped(*iter);
+        }
     }
 
     clear_aggregates(node_ids);
@@ -2655,6 +2869,73 @@ t_stree::set_alerts_enabled(bool enabled_state) {
 void
 t_stree::set_deltas_enabled(bool enabled_state) {
     m_features[CTX_FEAT_DELTA] = enabled_state;
+}
+
+void
+t_stree::add_capture(const std::shared_ptr<t_stree_capture>& capture) {
+    m_captures.push_back(capture);
+}
+
+void
+t_stree::remove_capture(const std::shared_ptr<t_stree_capture>& capture) {
+    m_captures.erase(
+        std::remove(m_captures.begin(), m_captures.end(), capture),
+        m_captures.end()
+    );
+}
+
+bool
+t_stree::node_exists(t_uindex idx) const {
+    return m_nodes->get<by_idx>().find(idx) != m_nodes->get<by_idx>().end();
+}
+
+const t_stnode*
+t_stree::find_node(t_uindex idx) const {
+    const auto& nodes = m_nodes->get<by_idx>();
+    auto iter = nodes.find(idx);
+    return iter == nodes.end() ? nullptr : &*iter;
+}
+
+void
+t_stree::for_each_node(const std::function<void(const t_stnode&)>& fn) const {
+    for (const auto& node : m_nodes->get<by_idx>()) {
+        fn(node);
+    }
+}
+
+void
+t_stree::capture_change(
+    t_uindex nidx, t_uindex aggnum, const t_tscalar& old_value
+) {
+    for (const auto& capture : m_captures) {
+        auto& cells = capture->m_changed[nidx];
+        bool seen = false;
+        for (const auto& cell : cells) {
+            seen = seen || cell.first == aggnum;
+        }
+
+        if (!seen) {
+            cells.emplace_back(aggnum, old_value);
+        }
+    }
+}
+
+void
+t_stree::capture_dropped(const t_stnode& node) {
+    t_stree_dropped dropped;
+    dropped.m_idx = node.m_idx;
+    dropped.m_aggidx = node.m_aggidx;
+    dropped.m_depth = node.m_depth;
+    get_path(node.m_idx, dropped.m_path);
+    std::reverse(dropped.m_path.begin(), dropped.m_path.end());
+    dropped.m_aggregates.reserve(m_aggcols.size());
+    for (t_uindex aggnum = 0; aggnum < m_aggcols.size(); ++aggnum) {
+        dropped.m_aggregates.push_back(get_aggregate(node.m_idx, aggnum));
+    }
+
+    for (const auto& capture : m_captures) {
+        capture->m_dropped.push_back(dropped);
+    }
 }
 
 void

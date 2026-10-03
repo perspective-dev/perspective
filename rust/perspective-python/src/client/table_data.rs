@@ -19,7 +19,10 @@ use pyo3::types::{PyAny, PyAnyMethods, PyDict, PyList, PyString, PyType};
 use super::update_data::UpdateDataExt;
 use crate::py_err::ResultTClientErrorExt;
 
-fn psp_type_from_py_type(_py: Python<'_>, val: Bound<'_, PyAny>) -> PyResult<ColumnType> {
+pub(crate) fn psp_type_from_py_type(
+    _py: Python<'_>,
+    val: Bound<'_, PyAny>,
+) -> PyResult<ColumnType> {
     if let Ok(pystr) = val.cast::<PyString>() {
         ColumnType::try_from(pystr.to_string_lossy().as_ref()).into_pyerr()
     } else if let Ok(val) = val.cast::<PyType>() {

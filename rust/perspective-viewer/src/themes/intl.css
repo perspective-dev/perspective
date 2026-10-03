@@ -74,6 +74,8 @@ perspective-viewer {
 
     /* Column Settings */
     --psp-label--color--content: "Color";
+    --psp-label--palette--content: "Palette";
+    --psp-label--gradient--content: "Gradient";
     --psp-label--timezone--content: "Timezone";
     --psp-label--date-style--content: "Date Style";
     --psp-label--time-style--content: "Time Style";

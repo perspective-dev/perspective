@@ -132,21 +132,14 @@ public:
     ) const;
 
     /**
-     * @brief The aggregated column names of this View, showing the columns that
-     * have been composed through the addition of a pivot as they appear in the
-     * view.
-     *
-     * If the view is pivoted, "__ROW_PATH__" will be prepended to the front of
-     * the vector because it is part of the column path.
+     * @brief The rectangular column header area for `[start_col, end_col)`,
+     * transposed as `area[level][col]`, split values left-aligned and the
+     * column name always on the last of `m_column_pivots.size() + 1` levels.
      *
      * @return std::vector<std::vector<t_tscalar>>>
      */
-    std::vector<std::vector<t_tscalar>> column_paths() const;
-
     std::vector<std::vector<t_tscalar>>
-    column_paths_range(t_uindex start_col, t_uindex end_col) const;
-
-    std::vector<std::vector<std::string>> column_paths_string() const;
+    column_paths(t_uindex start_col, t_uindex end_col) const;
 
     /**
      * @brief
@@ -283,7 +276,7 @@ public:
         std::int32_t end_col,
         bool emit_group_by,
         t_arrow_compression compression,
-        bool emit_legacy_row_path_names = true
+        bool machine_column_names = false
     ) const;
 
     /**
@@ -319,7 +312,7 @@ public:
         std::shared_ptr<t_data_slice<CTX_T>> data_slice,
         bool emit_group_b,
         t_arrow_compression compression,
-        bool emit_legacy_row_path_names = true
+        bool machine_column_names = false
     ) const;
 
     /**
@@ -435,7 +428,7 @@ private:
         std::shared_ptr<arrow::RecordBatch>>
     data_slice_to_batches(
         bool emit_group_by, std::shared_ptr<t_data_slice<CTX_T>> data_slice,
-        bool emit_legacy_row_path_names = true
+        bool machine_column_names = false
     ) const;
 
     void _find_hidden_sort(const std::vector<t_sortspec>& sort);

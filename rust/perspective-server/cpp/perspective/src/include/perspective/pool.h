@@ -57,6 +57,18 @@ public:
 
 #ifdef PSP_PARALLEL_FOR
     std::shared_mutex* get_lock() const;
+
+    /**
+     * @brief Share `other`'s lock, so the two pools' tables are read and
+     * written under one mutex.
+     */
+    void adopt_lock(const t_pool& other);
+
+    /**
+     * @brief The mutex serializing this pool's `_process` together with the
+     * notification that follows it.
+     */
+    std::mutex& get_process_lock();
 #endif
 
     /**
@@ -109,7 +121,9 @@ protected:
 
 private:
 #ifdef PSP_PARALLEL_FOR
+    std::shared_ptr<std::shared_mutex> m_lock_owner;
     std::shared_mutex* m_lock;
+    std::mutex m_process_lock;
 #endif
     std::vector<t_gnode*> m_gnodes;
     std::atomic_flag m_run;

@@ -138,10 +138,10 @@ Deviating from this specific version of Emscripten specified in the project's
 `package.json` can introduce various errors that are extremely difficult to
 debug.
 
-To install a specific version of Emscripten (e.g. `4.0.9`):
+To install a specific version of Emscripten (e.g. `5.0.3`):
 
 ```bash
-./emsdk install 4.0.9
+./emsdk install 5.0.3
 ```
 
 Set `PSP_SKIP_EMSDK_INSTALL=1` to prevent `pnpm install` from downloading the
@@ -168,8 +168,7 @@ this within a virtual environment.
 
 To build for [Pyodide](https://pyodide.org/), select
 `perspective-python (pyodide)` in `pnpm run setup` and install the pinned
-Pyodide distribution with `pnpm run install_pyodide`. Pyodide builds use the
-separate `pyodide_emscripten` version pinned in `package.json`.
+Pyodide distribution with `pnpm run install_pyodide`.
 
 ### `perspective-jupyterlab`
 
@@ -288,9 +287,9 @@ tests are run with `PACKAGE=jupyterlab pnpm run test --jupyter`.
 
 Many UI tests compare against screenshot and DOM snapshots, which live in
 `tools/test/dist/snapshots` and are not checked in to this repository. CI
-fetches them from a separate snapshots repository. To regenerate
-snapshots locally after an intentional rendering change, or to generate them
-for the first time from a known-passing (in CI) build you've checked out:
+fetches them from a separate snapshots repository. To regenerate snapshots
+locally after an intentional rendering change, or to generate them for the first
+time from a known-passing (in CI) build you've checked out:
 
 ```bash
 pnpm run test --update-snapshots
@@ -309,6 +308,10 @@ are forwarded to `pytest`.
 
 With `rust` selected, `pnpm run test` runs `cargo test` for the `perspective`
 and `perspective-client` crates.
+
+`perspective-viewer` and `perspective-js` deliberately carry no Rust unit tests;
+their behavior is tested through the Playwright suites, against the public
+JavaScript API.
 
 ## Lint
 

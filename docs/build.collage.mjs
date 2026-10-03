@@ -24,7 +24,7 @@ const COLLAGE_GAP = 2;
 
 const COLLAGE_BG = { light: "#ffffff", dark: "#242526" };
 
-const COLLAGE_SEED = 0x5eed;
+const COLLAGE_SEED = 0xdeadbeef;
 
 function shuffled(items, seed) {
     let state = seed;
@@ -55,27 +55,33 @@ function pngSize(file) {
     }
 }
 
+/// Pick the column count whose natural tile aspect lands closest to filling the
+/// frame, then stretch the rows so the grid covers it exactly.
 function bestFitGrid(count, aspect, width, height) {
     let best;
     for (let cols = 1; cols <= count; cols++) {
         const rows = Math.ceil(count / cols);
         const tileWidth = Math.floor((width - (cols - 1) * COLLAGE_GAP) / cols);
+        if (tileWidth <= 0) {
+            break;
+        }
 
-        const tileHeight = Math.round(tileWidth / aspect);
-        const contentHeight = rows * tileHeight + (rows - 1) * COLLAGE_GAP;
-        if (contentHeight <= height && tileHeight > (best?.tileHeight ?? 0)) {
-            best = { cols, rows, tileWidth, tileHeight };
+        const natural =
+            rows * Math.round(tileWidth / aspect) + (rows - 1) * COLLAGE_GAP;
+
+        const drift = Math.abs(natural - height);
+        if (best === undefined || drift < best.drift) {
+            best = { cols, rows, tileWidth, drift };
         }
     }
 
-    return (
-        best ?? {
-            cols: count,
-            rows: 1,
-            tileWidth: Math.floor(height * aspect),
-            tileHeight: height,
-        }
-    );
+    const { cols, rows, tileWidth } = best;
+    return {
+        cols,
+        rows,
+        tileWidth,
+        tileHeight: Math.ceil((height - (rows - 1) * COLLAGE_GAP) / rows),
+    };
 }
 
 export async function collage(page, ids, theme, { out, port }) {
@@ -99,12 +105,12 @@ export async function collage(page, ids, theme, { out, port }) {
         height,
     );
 
-    const tiles = present
-        .map(
-            (id) =>
-                `<img src="http://localhost:${port}/projects/${theme}/${id}.png" />`,
-        )
-        .join("");
+    const cells = cols * rows;
+    const tiles = Array.from(
+        { length: cells },
+        (_, i) =>
+            `<img src="http://localhost:${port}/projects/${theme}/${present[i % present.length]}.png" />`,
+    ).join("");
 
     await page.setViewport({ width: COLLAGE_WIDTH, height });
     await page.setContent(
@@ -113,18 +119,17 @@ export async function collage(page, ids, theme, { out, port }) {
             .collage {
                 width: ${COLLAGE_WIDTH}px;
                 height: ${height}px;
-                display: flex;
-                flex-wrap: wrap;
-                align-content: center;
-                justify-content: center;
+                display: grid;
+                grid-template-columns: repeat(${cols}, 1fr);
+                grid-auto-rows: ${tileHeight}px;
                 gap: ${COLLAGE_GAP}px;
                 overflow: hidden;
             }
             .collage img {
-                width: ${tileWidth}px;
+                width: 100%;
                 height: ${tileHeight}px;
-                /* The tile box shares the screenshots' aspect, so \`cover\`
-                   only absorbs the sub-pixel rounding — no visible crop. */
+                /* Rows are stretched to fill the frame exactly, so \`cover\`
+                   absorbs the difference from the screenshots' own aspect. */
                 object-fit: cover;
                 display: block;
             }
@@ -134,9 +139,9 @@ export async function collage(page, ids, theme, { out, port }) {
     );
 
     const tiles_found = await page.$$eval(".collage img", (x) => x.length);
-    if (tiles_found !== present.length) {
+    if (tiles_found !== cells) {
         throw new Error(
-            `collage page has ${tiles_found} tiles, expected ${present.length}`,
+            `collage page has ${tiles_found} tiles, expected ${cells}`,
         );
     }
 
@@ -159,8 +164,8 @@ export async function collage(page, ids, theme, { out, port }) {
 
     fs.writeFileSync(path.join(dir, COLLAGE), await page.screenshot());
     console.log(
-        `Collage (${theme}): ${present.length} thumbnails, ${cols}×${rows} ` +
-            `grid of ${tileWidth}×${tileHeight} tiles, ` +
+        `Collage (${theme}): ${present.length} thumbnails in ${cells} cells, ` +
+            `${cols}×${rows} grid of ${tileWidth}×${tileHeight} tiles, ` +
             `${COLLAGE_WIDTH}×${height}.`,
     );
 }

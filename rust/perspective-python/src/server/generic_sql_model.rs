@@ -150,6 +150,33 @@ impl PyGenericSQLVirtualServerModel {
         })
     }
 
+    #[pyo3(signature = (view_id, table_id, config, view_schema, schema=None))]
+    pub fn view_make_table(
+        &self,
+        view_id: &str,
+        table_id: &str,
+        config: Py<PyAny>,
+        view_schema: Py<PyAny>,
+        schema: Option<Py<PyAny>>,
+    ) -> PyResult<String> {
+        Python::attach(|py| {
+            let config: ViewConfig = pythonize::depythonize(config.bind(py))
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+            let as_dict = |value: &Py<PyAny>| {
+                self.parse_schema(value.cast_bound::<PyDict>(py).map_err(|_| {
+                    PyValueError::new_err("Schema must be a dict mapping column names to types")
+                })?)
+            };
+
+            let view_schema = as_dict(&view_schema)?;
+            let schema = schema.as_ref().map(as_dict).transpose()?;
+            self.inner
+                .view_make_table(view_id, table_id, &config, &view_schema, schema.as_ref())
+                .map_err(|e| PyValueError::new_err(e.to_string()))
+        })
+    }
+
     pub fn view_get_data(
         &self,
         view_id: &str,
@@ -237,7 +264,7 @@ impl From<PyViewPort> for ViewPort {
             start_col: value.start_col,
             end_row: value.end_row,
             end_col: value.end_col,
-            emit_legacy_row_path_names: None,
+            machine_column_names: None,
         }
     }
 }

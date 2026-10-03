@@ -25,6 +25,7 @@ mod plugin_store;
 mod props;
 mod registry;
 mod render_timer;
+mod state;
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -32,7 +33,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use perspective_client::ViewWindow;
-use perspective_js::utils::{ApiFuture, ApiResult, JsValueSerdeExt};
+use perspective_js::utils::{ApiError, ApiFuture, ApiResult, JsValueSerdeExt};
 use wasm_bindgen::prelude::*;
 use web_sys::*;
 use yew::html::ImplicitClone;
@@ -41,16 +42,17 @@ use yew::prelude::*;
 use self::activate::*;
 pub use self::limits::RenderLimits;
 pub use self::plugin_config::{
-    ColumnConfigMap, PluginScopedConfig, ValidatedColumnsConfig, ValidatedPluginConfig,
-    apply_columns_config_to, apply_plugin_config_to,
+    ColumnConfigMap, ColumnRole, PluginScopedConfig, PreparedRenderer, ValidatedColumnsConfig,
+    ValidatedPluginConfig,
 };
 use self::plugin_store::*;
 pub use self::props::RendererProps;
 pub use self::registry::*;
 use self::render_timer::*;
+pub use self::state::{PluginRef, RenderError, RendererState, Staged, StagedEdit};
+use self::state::{RenderOutcome, StagedEdits, project_bucket};
 use crate::config::*;
 use crate::js::plugin::*;
-use crate::session::{PanelCell, PluginRef};
 use crate::utils::*;
 
 /// Minimum geometry delta (px) considered a real size/position change by the
@@ -101,8 +103,13 @@ impl Drop for ContextPin {
 
 /// Immutable state
 pub struct RendererData {
-    /// This panel's committed [`PanelState`].
-    cell: PanelCell,
+    state: RefCell<Rc<RendererState>>,
+    outcome: RefCell<RenderOutcome>,
+
+    /// Injected callback from the root component, fired when a render failure
+    /// is raised or cleared.
+    pub on_render_failure_changed: RefCell<Option<Callback<()>>>,
+    staged: Rc<StagedEdits>,
     plugin_data: RefCell<RendererMutData>,
     draw_lock: DebounceMutex,
     pub plugin_changed: PubSub<JsPerspectiveViewerPlugin>,
@@ -242,10 +249,13 @@ impl Deref for RendererData {
 }
 
 impl Renderer {
-    pub fn new(viewer_elem: &HtmlElement, cell: PanelCell) -> Self {
+    pub fn new(viewer_elem: &HtmlElement) -> Self {
         let draw_lock = DebounceMutex::default();
         Self(Rc::new(RendererData {
-            cell,
+            state: RefCell::default(),
+            outcome: RefCell::default(),
+            on_render_failure_changed: RefCell::default(),
+            staged: Rc::default(),
             plugin_data: RefCell::new(RendererMutData {
                 viewer_elem: viewer_elem.clone(),
                 plugin_store: PluginStore::default(),
@@ -289,16 +299,58 @@ impl Renderer {
         self.0.slot_name.borrow().clone()
     }
 
-    /// Set this panel's theme name. Callers must pass a CONCRETE name —
-    /// resolve "the default" through `Presentation` before calling, never by
-    /// leaving this empty.
-    pub fn set_theme(&self, name: Option<String>) {
-        self.cell.submit_theme(name);
+    /// Write this panel's concrete theme name.
+    pub fn commit_theme(&self, name: Option<String>) {
+        self.swap(self.state().with_theme(name));
     }
 
-    /// Write this panel's theme name NOW.
-    pub fn commit_theme(&self, name: Option<String>) {
-        self.cell.swap(self.cell.state().with_theme(name));
+    /// The committed state, which is what a running step reads.
+    pub fn state(&self) -> Rc<RendererState> {
+        self.0.state.borrow().clone()
+    }
+
+    pub(crate) fn swap(&self, next: RendererState) {
+        *self.0.state.borrow_mut() = Rc::new(next);
+        self.set_outcome(RenderOutcome::Never);
+    }
+
+    /// The failure of the last draw, which stands until the next commit.
+    pub fn failure(&self) -> Option<RenderError> {
+        match &*self.0.outcome.borrow() {
+            RenderOutcome::Failed(error) => Some(error.clone()),
+            _ => None,
+        }
+    }
+
+    /// Record that the draw of the committed state failed.
+    pub fn fail(&self, error: ApiError) -> ApiResult<()> {
+        self.set_outcome(RenderOutcome::Failed(RenderError(error.clone())));
+        Err(error)
+    }
+
+    /// Record that the draw of the committed state landed.
+    pub fn landed(&self) {
+        self.set_outcome(RenderOutcome::Ok);
+    }
+
+    fn set_outcome(&self, next: RenderOutcome) {
+        let was_failed = self.failure().is_some();
+        let is_failed = matches!(next, RenderOutcome::Failed(_));
+        *self.0.outcome.borrow_mut() = next;
+        if was_failed != is_failed
+            && let Some(cb) = self.0.on_render_failure_changed.borrow().as_ref()
+        {
+            cb.emit(());
+        }
+    }
+
+    /// Show `edit` to the UI until the returned guard is dropped.
+    pub fn stage(&self, edit: StagedEdit) -> Staged {
+        self.0.staged.stage(edit)
+    }
+
+    fn projected_bucket(&self, name: &str) -> PluginScopedConfig {
+        project_bucket(self.state().bucket(name), self.0.staged.pending())
     }
 
     /// [`Self::commit_theme`] plus a synchronous [`Self::stamp_theme`].
@@ -310,15 +362,18 @@ impl Renderer {
     /// This panel's theme name, as the UI sees it: the committed theme, or the
     /// latest pending pick.
     pub fn theme(&self) -> Option<String> {
-        self.cell.projected_theme()
-    }
+        let pending = self
+            .0
+            .staged
+            .pending()
+            .into_iter()
+            .filter_map(|edit| match edit {
+                StagedEdit::Theme(theme) => Some(theme),
+                _ => None,
+            })
+            .next_back();
 
-    /// [`Self::set_theme`] plus a synchronous [`Self::stamp_theme`] — the
-    /// shared "stamp-with-commit" head of every per-panel theme mutation
-    /// site.
-    pub fn set_theme_stamped(&self, theme: Option<String>) {
-        self.set_theme(theme);
-        self.stamp_theme(None);
+        pending.unwrap_or_else(|| self.state().theme.clone())
     }
 
     /// Whether the active plugin's captured `--psp-*` CSS is STALE — the
@@ -388,13 +443,12 @@ impl Renderer {
             timer: MovingWindowRenderTimer::default(),
         };
 
-        self.cell.swap(self.cell.state().without_plugins());
+        self.swap(self.state().without_plugins());
         Ok(())
     }
 
     pub fn metadata(&self) -> Rc<PluginStaticConfig> {
-        self.cell
-            .state()
+        self.state()
             .plugin
             .as_ref()
             .map(|plugin| plugin.static_config.clone())
@@ -655,7 +709,7 @@ impl Renderer {
             .cloned()
             .ok_or("No Plugin")?;
 
-        self.cell.swap(self.cell.state().with_plugin(PluginRef {
+        self.swap(self.state().with_plugin(PluginRef {
             idx,
             static_config: config,
         }));
@@ -694,7 +748,7 @@ impl Renderer {
         // Push the newly-activated plugin's stored bucket through
         // `plugin.restore` so the swap immediately reflects any
         // viewer-owned per-column and plugin-level config.
-        let bucket = self.cell.state().bucket(&self.metadata().name);
+        let bucket = self.state().bucket(&self.metadata().name);
         let token = JsValue::from_serde_ext(&bucket.plugin).unwrap_or(JsValue::NULL);
         if let Err(e) = plugin.restore(&token, Some(&bucket.columns)) {
             tracing::warn!("plugin.restore on swap failed: {:?}", e);
@@ -711,11 +765,11 @@ impl Renderer {
 
     /// The COMMITTED panel theme, pending theme edits excluded.
     pub fn committed_theme(&self) -> Option<String> {
-        self.cell.state().chrome.theme.clone()
+        self.state().theme.clone()
     }
 
     fn selected_idx(&self) -> Option<usize> {
-        self.cell.state().plugin.as_ref().map(|plugin| plugin.idx)
+        self.state().plugin.as_ref().map(|plugin| plugin.idx)
     }
 
     pub fn render_timer(&self) -> MovingWindowRenderTimer {
@@ -772,6 +826,7 @@ impl Renderer {
                 is_chart,
                 plugin_config,
                 columns_config,
+                render_error: self.failure(),
             }
         } else {
             RendererProps {
@@ -782,6 +837,7 @@ impl Renderer {
                 is_chart: false,
                 plugin_config: PtrEqRc::default(),
                 columns_config: PtrEqRc::default(),
+                render_error: self.failure(),
             }
         }
     }

@@ -14,9 +14,10 @@ use perspective_client::config::ColumnType;
 use web_sys::*;
 use yew::prelude::*;
 
+use super::expr_edit_button::*;
 use crate::components::dragdrop_list::*;
 use crate::components::type_icon::TypeIcon;
-use crate::presentation::Presentation;
+use crate::presentation::{ColumnSettingsTarget, Presentation};
 use crate::session::*;
 use crate::utils::*;
 
@@ -35,6 +36,14 @@ pub struct PivotColumnProps {
     #[prop_or_default]
     pub metadata: Option<SessionMetadataRc>,
 
+    /// Opens this column's settings, when the host offers them.
+    #[prop_or_default]
+    pub on_open_expr_panel: Option<Callback<ColumnSettingsTarget>>,
+
+    /// Is this column's settings panel open?
+    #[prop_or_default]
+    pub is_editing: bool,
+
     // State
     #[prop_or_default]
     pub opt_session: Option<Session>,
@@ -46,6 +55,8 @@ impl PartialEq for PivotColumnProps {
         self.column == other.column
             && self.action == other.action
             && self.metadata == other.metadata
+            && self.is_editing == other.is_editing
+            && self.on_open_expr_panel.is_some() == other.on_open_expr_panel.is_some()
     }
 }
 
@@ -103,6 +114,15 @@ impl Component for PivotColumn {
                     <span class="drag-handle icon" />
                     <TypeIcon ty={col_type} />
                     <span class="column_name">{ ctx.props().column.clone() }</span>
+                    if let Some(on_open_expr_panel) = &ctx.props().on_open_expr_panel {
+                        <ExprEditButton
+                            name={ctx.props().column.clone()}
+                            {on_open_expr_panel}
+                            is_expression=false
+                            is_disabled=false
+                            is_editing={ctx.props().is_editing}
+                        />
+                    }
                 </div>
             </div>
         }

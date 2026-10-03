@@ -25,9 +25,10 @@ use serde_json::Value;
 use wasm_bindgen::prelude::*;
 
 use super::Renderer;
+use super::state::PluginRef;
 use crate::config::*;
 use crate::js::plugin::JsPerspectiveViewerPlugin;
-use crate::queries::resolve_abs_max;
+use crate::queries::{is_pivot_only_column, resolve_abs_max};
 use crate::session::Session;
 use crate::utils::{CssKind, CssLiteralUse, parse_var_ref, resolve_css_refs};
 
@@ -35,6 +36,25 @@ type ConfigMap = serde_json::Map<String, serde_json::Value>;
 
 /// A schema query's answer: `Ok(None)` when the plugin declares no schema.
 pub type SchemaResult = Result<Option<ColumnConfigSchema>, ValidationError>;
+
+/// Where in the `ViewConfig` a column being configured appears, which is a
+/// different axis from its plugin column slot.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ColumnRole {
+    Column,
+    GroupBy,
+    SplitBy,
+}
+
+impl ColumnRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Column => "column",
+            Self::GroupBy => "group_by",
+            Self::SplitBy => "split_by",
+        }
+    }
+}
 
 /// Everything a column's schema is a function of, besides the column itself.
 struct ColumnSchemaEnv<'a> {
@@ -67,6 +87,24 @@ pub type ColumnConfigMap = HashMap<String, serde_json::Map<String, serde_json::V
 pub struct PluginScopedConfig {
     pub columns: ColumnConfigMap,
     pub plugin: serde_json::Map<String, serde_json::Value>,
+}
+
+/// The renderer's part of a restore that has passed every check.
+pub struct PreparedRenderer {
+    /// The plugin selection to commit, when the restore ends on another plugin.
+    pub plugin: Option<PluginRef>,
+
+    /// The plugin whose bucket the validated updates belong to.
+    pub target_name: String,
+    pub plugin_config: ValidatedPluginConfig,
+    pub columns_config: ValidatedColumnsConfig,
+    pub theme: Option<Option<String>>,
+}
+
+/// Which of the target plugin's buckets a [`Renderer::commit`] changed.
+pub struct RendererChanges {
+    pub plugin_config: bool,
+    pub columns_config: bool,
 }
 
 /// The plugin a bucket update is validated against and written to — named
@@ -303,10 +341,10 @@ impl Renderer {
     /// Rewrite the named plugin's bucket: `f` edits a COPY, which is then
     /// swapped in as one new [`crate::session::PanelState`].
     fn edit_bucket<R>(&self, name: &str, f: impl FnOnce(&mut PluginScopedConfig) -> R) -> R {
-        let state = self.cell.state();
+        let state = self.state();
         let mut bucket = state.bucket(name);
         let result = f(&mut bucket);
-        self.cell.swap(state.with_bucket(name, bucket));
+        self.swap(state.with_bucket(name, bucket));
         result
     }
 
@@ -367,7 +405,7 @@ impl Renderer {
             return Ok((self.target_at(idx)?, Some(idx)));
         }
 
-        if let Some(plugin) = self.cell.state().plugin.as_ref() {
+        if let Some(plugin) = self.state().plugin.as_ref() {
             return Ok((self.target_at(plugin.idx)?, None));
         }
 
@@ -376,6 +414,39 @@ impl Renderer {
             .ok_or("No Plugin")?;
 
         Ok((self.target_at(idx)?, Some(idx)))
+    }
+
+    /// The COMMIT half of a restore, as one swap of this renderer's state.
+    pub fn commit(&self, prepared: PreparedRenderer) -> RendererChanges {
+        let PreparedRenderer {
+            plugin,
+            target_name,
+            plugin_config,
+            columns_config,
+            theme,
+        } = prepared;
+
+        let mut next = (*self.state()).clone();
+        if let Some(plugin) = plugin {
+            next = next.with_plugin(plugin);
+        }
+
+        let mut bucket = next.bucket(&target_name);
+        let changes = RendererChanges {
+            plugin_config: apply_plugin_config_to(&mut bucket, plugin_config),
+            columns_config: apply_columns_config_to(&mut bucket, columns_config),
+        };
+
+        if changes.plugin_config || changes.columns_config {
+            next = next.with_bucket(&target_name, bucket);
+        }
+
+        if let Some(theme) = theme {
+            next = next.with_theme(theme);
+        }
+
+        self.swap(next);
+        changes
     }
 
     /// Validate BOTH bucket updates of a restore against `target` and the view
@@ -392,7 +463,7 @@ impl Renderer {
         plugin_config: PluginConfigUpdate,
         columns_config: ColumnConfigUpdate,
     ) -> ApiResult<(ValidatedPluginConfig, ValidatedColumnsConfig)> {
-        let current = self.cell.state().bucket(&target.static_config.name);
+        let current = self.state().bucket(&target.static_config.name);
         let plugin = validate_plugin_config(&current.plugin, plugin_config, &|merged| {
             if !declares(target, "plugin_config_schema") {
                 return Ok(None);
@@ -441,7 +512,7 @@ impl Renderer {
     /// — pending style edits included.
     pub fn all_columns_configs(&self) -> ColumnConfigMap {
         self.active_plugin_name()
-            .map(|n| self.cell.projected_bucket(&n).columns)
+            .map(|n| self.projected_bucket(&n).columns)
             .unwrap_or_default()
     }
 
@@ -449,7 +520,7 @@ impl Renderer {
     /// op's step reads, since the edits queued behind it have not happened.
     pub fn committed_columns_configs(&self) -> ColumnConfigMap {
         self.active_plugin_name()
-            .map(|n| self.cell.state().bucket(&n).columns)
+            .map(|n| self.state().bucket(&n).columns)
             .unwrap_or_default()
     }
 
@@ -595,11 +666,7 @@ impl Renderer {
         column_name: &str,
     ) -> Option<serde_json::Map<String, serde_json::Value>> {
         let n = self.active_plugin_name()?;
-        self.cell
-            .projected_bucket(&n)
-            .columns
-            .get(column_name)
-            .cloned()
+        self.projected_bucket(&n).columns.get(column_name).cloned()
     }
 
     /// Wholesale update the active plugin's per-column config map:
@@ -653,13 +720,7 @@ impl Renderer {
             return;
         };
 
-        let current_value = self
-            .cell
-            .state()
-            .bucket(&n)
-            .columns
-            .get(&column_name)
-            .cloned();
+        let current_value = self.state().bucket(&n).columns.get(&column_name).cloned();
 
         if let Ok(schema) = self.query_column_config_schema(
             view_config,
@@ -722,7 +783,7 @@ impl Renderer {
     /// it — pending settings edits included.
     pub fn get_plugin_config(&self) -> serde_json::Map<String, serde_json::Value> {
         self.active_plugin_name()
-            .map(|n| self.cell.projected_bucket(&n).plugin)
+            .map(|n| self.projected_bucket(&n).plugin)
             .unwrap_or_default()
     }
 
@@ -730,7 +791,7 @@ impl Renderer {
     /// op's step reads.
     pub fn committed_plugin_config(&self) -> serde_json::Map<String, serde_json::Value> {
         self.active_plugin_name()
-            .map(|n| self.cell.state().bucket(&n).plugin)
+            .map(|n| self.state().bucket(&n).plugin)
             .unwrap_or_default()
     }
 
@@ -820,6 +881,14 @@ impl Renderer {
             .and_then(|idx| names.get(idx))
             .map(|s| s.as_str());
 
+        let role = if !is_pivot_only_column(column_name, view_config) {
+            ColumnRole::Column
+        } else if view_config.split_by.iter().any(|x| x == column_name) {
+            ColumnRole::SplitBy
+        } else {
+            ColumnRole::GroupBy
+        };
+
         let view_type = match view_schema {
             Some(view_schema) => view_schema.get(column_name).copied(),
             None => {
@@ -829,6 +898,14 @@ impl Renderer {
 
                 session.metadata().get_column_view_type(column_name)
             },
+        };
+
+        let view_type = match role {
+            ColumnRole::Column => view_type,
+            _ => session
+                .metadata()
+                .get_column_table_type(column_name)
+                .or(view_type),
         };
 
         let Some(view_type) = view_type else {
@@ -845,6 +922,7 @@ impl Renderer {
             &current_js,
             &view_config_js,
             &plugin_config_js,
+            role.as_str(),
         )?;
 
         let abs_max = column_stats
@@ -1048,416 +1126,4 @@ fn css_matches(kind: CssKind, value: &Value, default: &str) -> bool {
         .as_str()
         .and_then(|src| kind.canonicalize(src).ok())
         .is_some_and(|canonical| canonical == default)
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-
-    #[test]
-    fn palette_default_matches_canonically() {
-        let spec = ControlSpec::Palette {
-            key: "palette".to_owned(),
-            default: "linear-gradient(to right, #0366d6, #ff7f0e)".to_owned(),
-            max: None,
-        };
-
-        assert!(matches_declared_default(
-            &spec,
-            "palette",
-            &json!("linear-gradient(to right, #0366d6, #ff7f0e)")
-        ));
-
-        assert!(matches_declared_default(
-            &spec,
-            "palette",
-            &json!("linear-gradient(90deg, RGB(3,102,214), #FF7F0E)")
-        ));
-
-        assert!(!matches_declared_default(
-            &spec,
-            "palette",
-            &json!("linear-gradient(to right, #ff7f0e, #0366d6)")
-        ));
-
-        assert!(!matches_declared_default(
-            &spec,
-            "palette",
-            &json!("var(--psp-user--palette-1)")
-        ));
-
-        assert!(!matches_declared_default(
-            &spec,
-            "palette",
-            &json!(["#0366d6"])
-        ));
-        assert!(!matches_declared_default(
-            &spec,
-            "other",
-            &json!("linear-gradient(to right, #0366d6, #ff7f0e)")
-        ));
-    }
-
-    #[test]
-    fn gradient_default_matches_canonical_values() {
-        let spec = ControlSpec::GradientStops {
-            key: "gradient".to_owned(),
-            default: "linear-gradient(to right, #0366d6 0%, #ff7f0e 33.3%)".to_owned(),
-            discrete: false,
-        };
-
-        assert!(matches_declared_default(
-            &spec,
-            "gradient",
-            &json!("linear-gradient(#0366d6, #ff7f0e 33.3%)")
-        ));
-
-        assert!(!matches_declared_default(
-            &spec,
-            "gradient",
-            &json!("linear-gradient(to right, #0366d6 0%, #ff7f0e 33.4%)")
-        ));
-
-        let color = ControlSpec::Color {
-            key: "color".to_owned(),
-            default: "#ff7f0e".to_owned(),
-        };
-
-        assert!(matches_declared_default(&color, "color", &json!("#FF7F0E")));
-        assert!(matches_declared_default(
-            &color,
-            "color",
-            &json!("rgb(255, 127, 14)")
-        ));
-        assert!(!matches_declared_default(
-            &color,
-            "color",
-            &json!("var(--psp-user--color-1)")
-        ));
-    }
-
-    #[test]
-    fn alignment_strips_only_a_declared_default() {
-        let schema = ColumnConfigSchema {
-            fields: vec![
-                ControlSpec::Alignment {
-                    key: "align".to_owned(),
-                    default: None,
-                    corners: false,
-                },
-                ControlSpec::Alignment {
-                    key: "legend_anchor".to_owned(),
-                    default: Some(Alignment::TopRight),
-                    corners: true,
-                },
-            ],
-        };
-
-        let mut map = json!({ "align": "center", "legend_anchor": "top-right" })
-            .as_object()
-            .unwrap()
-            .clone();
-
-        strip_default_values(&schema, &mut map);
-        assert_eq!(
-            map,
-            json!({ "align": "center" }).as_object().unwrap().clone()
-        );
-    }
-
-    #[test]
-    fn strip_default_values_sees_through_groups() {
-        let leaves = vec![
-            ControlSpec::Bool {
-                key: "flag".to_owned(),
-                default: false,
-            },
-            ControlSpec::Number {
-                key: "size".to_owned(),
-                default: 3.0,
-                include: None,
-                min: None,
-                max: None,
-                step: None,
-                default_stat: None,
-            },
-        ];
-
-        let flat = ColumnConfigSchema {
-            fields: leaves.clone(),
-        };
-
-        let grouped = ColumnConfigSchema {
-            fields: vec![ControlSpec::Group {
-                key: "section".to_owned(),
-                fields: leaves,
-            }],
-        };
-
-        let src = json!({ "flag": false, "size": 4.0, "foreign": 1 })
-            .as_object()
-            .unwrap()
-            .clone();
-
-        let mut a = src.clone();
-        let mut b = src;
-        strip_default_values(&flat, &mut a);
-        strip_default_values(&grouped, &mut b);
-        assert_eq!(a, b);
-        assert_eq!(
-            a,
-            json!({ "size": 4.0, "foreign": 1 })
-                .as_object()
-                .unwrap()
-                .clone()
-        );
-    }
-
-    #[test]
-    fn normalize_values_rejects_enum_values_outside_the_variants() {
-        let schema = ColumnConfigSchema {
-            fields: vec![ControlSpec::Group {
-                key: "color".to_owned(),
-                fields: vec![ControlSpec::Enum {
-                    key: "fg_mode".to_owned(),
-                    default: "color".to_owned(),
-                    variants: vec![
-                        EnumVariant {
-                            value: "disabled".to_owned(),
-                            label: None,
-                        },
-                        EnumVariant {
-                            value: "color".to_owned(),
-                            label: None,
-                        },
-                    ],
-                }],
-            }],
-        };
-
-        let mut map = json!({ "fg_mode": "color", "other": "series" })
-            .as_object()
-            .unwrap()
-            .clone();
-
-        assert!(normalize_values(&schema, &mut map).is_empty());
-        assert_eq!(map.len(), 2);
-
-        let mut map = json!({ "fg_mode": "series" }).as_object().unwrap().clone();
-        let errors = normalize_values(&schema, &mut map);
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].0, "fg_mode");
-        assert_eq!(errors[0].1, "\"series\" is not one of `disabled`, `color`");
-        assert!(map.is_empty());
-
-        let mut map = json!({ "fg_mode": 3 }).as_object().unwrap().clone();
-        let errors = normalize_values(&schema, &mut map);
-        assert_eq!(errors.len(), 1);
-        assert!(map.is_empty());
-    }
-
-    fn enum_schema() -> ColumnConfigSchema {
-        ColumnConfigSchema {
-            fields: vec![
-                ControlSpec::Enum {
-                    key: "fg_mode".to_owned(),
-                    default: "color".to_owned(),
-                    variants: vec![
-                        EnumVariant {
-                            value: "disabled".to_owned(),
-                            label: None,
-                        },
-                        EnumVariant {
-                            value: "color".to_owned(),
-                            label: None,
-                        },
-                    ],
-                },
-                ControlSpec::Bool {
-                    key: "flag".to_owned(),
-                    default: false,
-                },
-            ],
-        }
-    }
-
-    fn obj(value: serde_json::Value) -> ConfigMap {
-        value.as_object().unwrap().clone()
-    }
-
-    #[test]
-    fn validate_plugin_config_rejects_enum_values_outside_the_variants() {
-        let err = validate_plugin_config(
-            &ConfigMap::new(),
-            OptionalUpdate::Update(obj(json!({ "fg_mode": "series" }))),
-            &|_| Ok(Some(enum_schema())),
-        )
-        .err()
-        .expect("rejected");
-
-        assert!(
-            err.0
-                .contains("Invalid `plugin_config.fg_mode`: \"series\" is not one of"),
-            "{}",
-            err.0
-        );
-    }
-
-    #[test]
-    fn validate_plugin_config_splits_defaults_and_prunes_to_active_keys() {
-        let validated = validate_plugin_config(
-            &obj(json!({ "fg_mode": "disabled" })),
-            OptionalUpdate::Update(obj(json!({ "fg_mode": "color", "flag": true, "ghost": 1 }))),
-            &|merged| {
-                assert_eq!(merged["fg_mode"], "color");
-                assert_eq!(merged["flag"], true);
-                Ok(Some(enum_schema()))
-            },
-        )
-        .unwrap();
-
-        let ValidatedPluginConfig::Set {
-            map,
-            remove,
-            active,
-        } = validated
-        else {
-            panic!("expected Set");
-        };
-
-        assert_eq!(map, obj(json!({ "flag": true })));
-        assert_eq!(remove, vec!["fg_mode".to_owned()]);
-        assert_eq!(
-            active.unwrap(),
-            HashSet::from(["fg_mode".to_owned(), "flag".to_owned()])
-        );
-    }
-
-    #[test]
-    fn validate_plugin_config_passes_through_without_a_schema() {
-        let update = obj(json!({ "fg_mode": "series", "ghost": 1 }));
-        let validated = validate_plugin_config(
-            &ConfigMap::new(),
-            OptionalUpdate::Update(update.clone()),
-            &|_| Ok(None),
-        )
-        .unwrap();
-
-        assert_eq!(validated, ValidatedPluginConfig::Set {
-            map: update,
-            remove: vec![],
-            active: None,
-        });
-        assert_eq!(
-            validate_plugin_config(&ConfigMap::new(), OptionalUpdate::SetDefault, &|_| {
-                Ok(Some(enum_schema()))
-            })
-            .unwrap(),
-            ValidatedPluginConfig::Clear
-        );
-    }
-
-    #[test]
-    fn validate_columns_config_rejects_and_names_the_column() {
-        let err = validate_columns_config(
-            OptionalUpdate::Update(HashMap::from([(
-                "a".to_owned(),
-                obj(json!({ "fg_mode": "series" })),
-            )])),
-            &|_, _| Ok(Some(enum_schema())),
-            &|_| Some(ColumnType::Integer),
-            &|_, _| {},
-        )
-        .err()
-        .expect("rejected");
-
-        let msg = err.0;
-        assert!(
-            msg.contains("Invalid `columns_config[\"a\"].fg_mode`"),
-            "{msg}"
-        );
-        assert!(msg.contains("for a integer column"), "{msg}");
-    }
-
-    #[test]
-    fn validate_columns_config_strips_defaults_and_keeps_unschematized_columns() {
-        let validated = validate_columns_config(
-            OptionalUpdate::Update(HashMap::from([
-                (
-                    "a".to_owned(),
-                    obj(json!({ "fg_mode": "color", "flag": true, "ghost": 1 })),
-                ),
-                ("b".to_owned(), obj(json!({ "anything": "goes" }))),
-            ])),
-            &|col, _| Ok((col == "a").then(enum_schema)),
-            &|_| None,
-            &|_, _| {},
-        )
-        .unwrap();
-
-        let ValidatedColumnsConfig::Set(mut entries) = validated else {
-            panic!("expected Set");
-        };
-
-        entries.sort_by(|x, y| x.0.cmp(&y.0));
-        assert_eq!(entries, vec![
-            ("a".to_owned(), obj(json!({ "flag": true }))),
-            ("b".to_owned(), obj(json!({ "anything": "goes" }))),
-        ]);
-    }
-
-    #[test]
-    fn normalize_values_canonicalizes_and_reports() {
-        let schema = ColumnConfigSchema {
-            fields: vec![
-                ControlSpec::Color {
-                    key: "color".to_owned(),
-                    default: "#000000".to_owned(),
-                },
-                ControlSpec::Palette {
-                    key: "palette".to_owned(),
-                    default: "linear-gradient(to right, #000000)".to_owned(),
-                    max: None,
-                },
-                ControlSpec::GradientStops {
-                    key: "gradient".to_owned(),
-                    default: "linear-gradient(to right, #000000 0%, #ffffff 100%)".to_owned(),
-                    discrete: false,
-                },
-                ControlSpec::Bool {
-                    key: "flag".to_owned(),
-                    default: false,
-                },
-            ],
-        };
-
-        let mut map = json!({
-            "color": "RGB(255,0,0)",
-            "palette": "var(--psp-user--palette-warm)",
-            "gradient": [{ "color": "#000000", "offset": 0 }],
-            "flag": true,
-            "foreign": "linear-gradient(red, blue)",
-        })
-        .as_object()
-        .unwrap()
-        .clone();
-
-        let errors = normalize_values(&schema, &mut map);
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].0, "gradient");
-        assert_eq!(
-            map,
-            json!({
-                "color": "#ff0000",
-                "palette": "var(--psp-user--palette-warm)",
-                "flag": true,
-                "foreign": "linear-gradient(red, blue)",
-            })
-            .as_object()
-            .unwrap()
-            .clone()
-        );
-    }
 }

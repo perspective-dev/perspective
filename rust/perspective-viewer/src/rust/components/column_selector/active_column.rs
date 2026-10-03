@@ -367,9 +367,11 @@ impl Component for ActiveColumn {
                 if is_required {
                     class.push("required");
                 };
+
                 if !is_required {
                     class.push("shift-alt-icon");
                 }
+
                 html! {
                     <div
                         class={outer_classes}
@@ -468,6 +470,14 @@ impl ActiveColumnProps {
     fn get_is_required(&self, idx: usize) -> bool {
         let min_cols = self.renderer.metadata().min_config_columns.unwrap_or(0);
         idx < min_cols
+            && (self
+                .session
+                .get_view_config()
+                .columns
+                .iter()
+                .flatten()
+                .count()
+                == 1)
     }
 
     fn get_aggregate(&self, name: &str) -> Option<Aggregate> {

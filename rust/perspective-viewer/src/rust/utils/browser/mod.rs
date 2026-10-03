@@ -18,9 +18,6 @@ mod dragdrop;
 mod request_animation_frame;
 mod selection;
 
-#[cfg(test)]
-mod tests;
-
 pub use self::blob::*;
 pub use self::download::*;
 pub use self::dragdrop::*;

@@ -24,7 +24,7 @@ use crate::config::{
 };
 use crate::presentation::Presentation;
 use crate::renderer::Renderer;
-use crate::session::{OpKind, ResetOptions, Session, StepOutcome};
+use crate::session::{OpKind, ResetOptions, Session};
 
 /// Reset the viewer's `ViewerConfig` to the default.
 ///
@@ -49,12 +49,12 @@ pub fn reset_all(
     all: bool,
 ) -> ApiFuture<()> {
     presentation.set_open_column_settings(None);
-    let ticket = session.submit(OpKind::Restore { fields: None }, {
+    let ticket = session.submit(OpKind::Restore { update: None }, {
         clone!(session, renderer, presentation);
         move |_ctx| {
             Box::pin(async move {
                 reset_all_step(&session, &renderer, &presentation, all).await?;
-                Ok(StepOutcome::Done)
+                Ok(None)
             })
         }
     });

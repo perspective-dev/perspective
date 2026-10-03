@@ -34,6 +34,10 @@ test.beforeEach(async ({ page }) => {
             chat: {
                 completions: {
                     create: async (request) => {
+                        (window["__REQUESTS__"] ??= []).push(
+                            JSON.parse(JSON.stringify(request)),
+                        );
+
                         const step = script.shift();
                         if (!step) {
                             throw new Error("Fake engine script exhausted");
@@ -271,6 +275,142 @@ test.describe("llm-agent chat panel", () => {
                 .evaluate((x) => x.scrollTop),
         ).toBeLessThan(24);
     });
+
+    test("reasoning streamed under either field name folds into one block", async ({
+        page,
+    }) => {
+        await configure(page, [
+            {
+                stream: [
+                    { role: "assistant" },
+                    { reasoning_content: "th" },
+                    { reasoning: "ink" },
+                    { content: "Hel" },
+                    { content: "lo", reasoning: "" },
+                ],
+            },
+        ]);
+
+        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        const input = page.locator("perspective-viewer #chat_input");
+        await input.fill("Think");
+        await input.press("Enter");
+
+        const message = page.locator(
+            "perspective-viewer .chat-assistant:not(.chat-pending):not(.chat-streaming)",
+        );
+
+        await expect(message).toContainText("Hello");
+        await expect(
+            page.locator("perspective-viewer .chat-reasoning-body"),
+        ).toHaveText("think");
+    });
+
+    test("interleaved tool-call fragments assemble by index and both calls run", async ({
+        page,
+    }) => {
+        const call = (index, fields) => ({
+            tool_calls: [{ index, ...fields }],
+        });
+
+        await configure(page, [
+            {
+                stream: [
+                    call(0, {
+                        id: "c0",
+                        function: { name: "get_schema", arguments: "" },
+                    }),
+                    call(1, {
+                        id: "c1",
+                        function: {
+                            name: "set_view_config",
+                            arguments: '{"config":{"group_by":["Sta',
+                        },
+                    }),
+                    call(1, { function: { arguments: 'te"]}}' } }),
+                ],
+            },
+            { text: "Grouped." },
+        ]);
+
+        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        const input = page.locator("perspective-viewer #chat_input");
+        await input.fill("Group by state");
+        await input.press("Enter");
+
+        await expect(
+            page.locator(
+                "perspective-viewer .chat-assistant:not(.chat-pending):not(.chat-streaming)",
+            ),
+        ).toHaveText("Grouped.", { timeout: 10000 });
+
+        const config = await page.evaluate(async () => {
+            return await document.querySelector("perspective-viewer").save();
+        });
+
+        expect(config.group_by).toEqual(["State"]);
+        const requests = await page.evaluate(() => window["__REQUESTS__"]);
+        const assistant = requests[1].messages.find(
+            (x) => x.role === "assistant",
+        );
+
+        expect(
+            assistant.tool_calls.map((x) => [
+                x.id,
+                x.type,
+                x.function.name,
+                x.function.arguments,
+            ]),
+        ).toEqual([
+            ["c0", "function", "get_schema", ""],
+            [
+                "c1",
+                "function",
+                "set_view_config",
+                '{"config":{"group_by":["State"]}}',
+            ],
+        ]);
+    });
+
+    for (const field of ["reasoning_content", "reasoning"]) {
+        test(`${field} is never sent back to the model`, async ({ page }) => {
+            await configure(page, [
+                {
+                    stream: [
+                        { [field]: "secret thought" },
+                        {
+                            tool_calls: [
+                                {
+                                    index: 0,
+                                    id: "c0",
+                                    function: {
+                                        name: "get_schema",
+                                        arguments: "{}",
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                },
+                { text: "Done." },
+            ]);
+
+            await page.locator("perspective-viewer #chat_tabbar_tab").click();
+            const input = page.locator("perspective-viewer #chat_input");
+            await input.fill("Think then act");
+            await input.press("Enter");
+
+            await expect(
+                page.locator(
+                    "perspective-viewer .chat-assistant:not(.chat-pending):not(.chat-streaming)",
+                ),
+            ).toHaveText("Done.", { timeout: 10000 });
+
+            const requests = await page.evaluate(() => window["__REQUESTS__"]);
+            expect(requests).toHaveLength(2);
+            expect(JSON.stringify(requests[1])).not.toContain("secret thought");
+        });
+    }
 
     test("a failed tool call renders an error chip with the failure in its tooltip", async ({
         page,

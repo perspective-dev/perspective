@@ -81,11 +81,11 @@ min_val, max_val = view.get_min_max("Sales")
 
 ## Describing a View Config
 
-`Table::describe` validates a complete view config against a table and
-reports the schema a `View` built from it would have - without creating one.
-`describe` reports a `view_schema` if and only if `Table::view` with the same
-config would succeed, and the two schemas are equal. It costs no engine
-resources, so it is the right way to check a config before applying it.
+`Table::describe` validates a complete view config against a table and reports
+the schema a `View` built from it would have - without creating one. `describe`
+reports a `view_schema` if and only if `Table::view` with the same config would
+succeed, and the two schemas are equal. It costs no engine resources, so it is
+the right way to check a config before applying it.
 
 <div class="javascript">
 
@@ -130,10 +130,10 @@ else:
 
 ## Expression Validation
 
-`Table::validate_expressions` is a specialization of `Table::describe` over
-a config that selects no columns, so only the expressions are checked. It
-returns which expressions are valid and their inferred types, plus an
-`expression_alias` map echoing the request:
+`Table::validate_expressions` is a specialization of `Table::describe` over a
+config that selects no columns, so only the expressions are checked. It returns
+which expressions are valid and their inferred types, plus an `expression_alias`
+map echoing the request:
 
 <div class="javascript">
 
@@ -265,22 +265,12 @@ view.remove_remove(callback)
 
 </div>
 
-## Flattening a View into a Table
+## Constructing a `Table` from a `View`
 
-A [`Table`] can be constructed on a [`Table::view`] instance, which will return
-a new [`Table`] based on the [`Table::view`]'s dataset, and all future updates
-that affect the [`Table::view`] will be forwarded to the new [`Table`]. This is
-particularly useful for implementing a
-[Client/Server Replicated](../architecture/client_server.md) design, as it
-handles the `View` serialization and `on_update` forwarding for you. This
-pattern is available in JavaScript, Python and Rust.
-
-When the source `Table` has an `index`, and the `View` is unpivoted and includes
-the index column, the new `Table` inherits that `index` and subscribes to the
-source's `on_remove()`, so in-place updates and `remove()` calls on the source
-are mirrored rather than appended. A pivoted `View`, or one which omits the
-index column, produces an unindexed, append-only `Table`. A `limit` is inherited
-the same way. `replace()` and `clear()` on the source are mirrored too.
+A `Table` can be constructed on a `View`, producing a read-only `Table` of that
+`View`'s output which the engine keeps current as the source is updated. See
+[Derived `Table`s](../derived_table.md) for its columns, its constraints and
+what it is good for.
 
 <div class="javascript">
 
@@ -310,7 +300,7 @@ let opts = TableInitOptions::default();
 let data = TableData::Update(UpdateData::Csv("x,y\n1,2\n3,4".into()));
 let table = client.table(data, opts).await?;
 let view = table.view(None).await?;
-let table2 = client.table(TableData::View(view)).await?;
+let table2 = client.table(TableData::View(view), TableInitOptions::default()).await?;
 table.update(data).await?;
 ```
 

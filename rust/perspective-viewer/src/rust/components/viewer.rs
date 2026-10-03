@@ -151,7 +151,7 @@ impl Component for PerspectiveViewer {
         let elem = ctx.props().elem.clone();
         let fonts = FontLoaderProps::new(&elem, ctx.link().callback(|()| PreloadFontsUpdate));
         let empty_session = Session::new();
-        let empty_renderer = Renderer::new(&elem, empty_session.cell());
+        let empty_renderer = Renderer::new(&elem);
         let active_session = ctx
             .props()
             .workspace

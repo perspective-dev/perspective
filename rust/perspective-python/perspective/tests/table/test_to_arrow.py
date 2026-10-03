@@ -164,15 +164,14 @@ class TestToArrow(object):
         arrow = view.to_arrow()
         tbl2 = Table(arrow)
         assert tbl2.schema() == {
-            "a (Group by 1)": "integer",
             "a": "integer",
+            "a (sum)": "integer",
             "b": "integer",
             "c": "integer",
         }
         d = view.to_columns()
-        d["a (Group by 1)"] = [
-            x[0] if len(x) > 0 else None for x in d.pop("__ROW_PATH__")
-        ]
+        d["a (sum)"] = d.pop("a")
+        d["a"] = [x[0] if len(x) > 0 else None for x in d.pop("__ROW_PATH__")]
         assert tbl2.view().to_columns() == d
 
     def test_to_arrow_two_symmetric(self):
@@ -186,24 +185,24 @@ class TestToArrow(object):
         arrow = view.to_arrow()
         tbl2 = Table(arrow)
         assert tbl2.schema() == {
-            "a (Group by 1)": "integer",
-            "hello|a": "integer",
+            "a": "integer",
+            "hello|a (sum)": "integer",
             "hello|b": "integer",
             "hello|c": "integer",
-            "world|a": "integer",
+            "world|a (sum)": "integer",
             "world|b": "integer",
             "world|c": "integer",
-            "hello2|a": "integer",
+            "hello2|a (sum)": "integer",
             "hello2|b": "integer",
             "hello2|c": "integer",
-            "world2|a": "integer",
+            "world2|a (sum)": "integer",
             "world2|b": "integer",
             "world2|c": "integer",
         }
         d = view.to_columns()
-        d["a (Group by 1)"] = [
-            x[0] if len(x) > 0 else None for x in d.pop("__ROW_PATH__")
-        ]
+        for name in [name for name in d if name.endswith("|a")]:
+            d[name + " (sum)"] = d.pop(name)
+        d["a"] = [x[0] if len(x) > 0 else None for x in d.pop("__ROW_PATH__")]
         assert tbl2.view().to_columns() == d
 
     def test_to_arrow_column_only_symmetric(self):
@@ -414,4 +413,4 @@ class TestToArrow(object):
         view2 = table2.view()
         result = view2.to_columns()
 
-        assert result == {"b (Group by 1)": [None, "a", "b"], "a": [2.5, 1.5, 3.5]}
+        assert result == {"b": [None, "a", "b"], "a": [2.5, 1.5, 3.5]}

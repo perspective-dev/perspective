@@ -89,7 +89,7 @@ export function applyGroupHeaderStyles(
             const is_data =
                 metadata.type === "column_header" && metadata.x! >= 0;
             const borders = classify_header_cell({
-                paths: model._column_paths,
+                area: model._column_path_area,
                 split_by_len,
                 x: is_data ? metadata.x : undefined,
                 colspan: td.colSpan || 1,

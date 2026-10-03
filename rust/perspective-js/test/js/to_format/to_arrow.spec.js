@@ -14,6 +14,20 @@ import { test, expect } from "@perspective-dev/test";
 import perspective from "../perspective_client";
 import { STD_DATE, int_float_string_data, pivoted_output } from "./_shared";
 
+const unpivot = (rows) =>
+    rows.map((x) => {
+        x.__ROW_PATH__ = [x.string].filter((x) => x);
+        delete x.string;
+        for (const name of Object.keys(x)) {
+            if (name.endsWith("string (count)")) {
+                x[name.slice(0, -" (count)".length)] = x[name];
+                delete x[name];
+            }
+        }
+
+        return x;
+    });
+
 ((perspective) => {
     test.describe("to_arrow()", function () {
         test("serializes boolean arrays correctly", async function () {
@@ -182,15 +196,7 @@ import { STD_DATE, int_float_string_data, pivoted_output } from "./_shared";
             let view2 = await table2.view();
             let json2 = await view2.to_json();
 
-            expect(json).toEqual(
-                json2.map((x) => {
-                    x.__ROW_PATH__ = [x["string (Group by 1)"]].filter(
-                        (x) => x,
-                    );
-                    delete x["string (Group by 1)"];
-                    return x;
-                }),
-            );
+            expect(json).toEqual(unpivot(json2));
 
             view2.delete();
             table2.delete();
@@ -213,12 +219,62 @@ import { STD_DATE, int_float_string_data, pivoted_output } from "./_shared";
             let result = await view2.to_columns();
 
             expect(result).toEqual({
-                "string (Group by 1)": [null, "a", "b"],
+                string: [null, "a", "b"],
                 float: [2.75, 1.75, 3.75],
-                string: [4, 2, 2],
+                "string (count)": [4, 2, 2],
             });
 
             await view2.delete();
+            await table2.delete();
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Arrow output qualifies an aggregate of a group_by column", async function () {
+            let table = await perspective.table(int_float_string_data);
+            let view = await table.view({
+                group_by: ["string"],
+                columns: ["string", "float"],
+                aggregates: { string: "distinct count", float: "sum" },
+            });
+
+            let readable = await perspective.table(await view.to_arrow());
+            expect(await readable.columns()).toEqual([
+                "string",
+                "string (distinct count)",
+                "float",
+            ]);
+
+            let machine = await perspective.table(
+                await view.to_arrow({ machine_column_names: true }),
+            );
+
+            expect(await machine.columns()).toEqual([
+                "__ROW_PATH_0__",
+                "string",
+                "float",
+            ]);
+
+            await machine.delete();
+            await readable.delete();
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Arrow output names a multi-aggregate of a group_by column", async function () {
+            let table = await perspective.table(int_float_string_data);
+            let view = await table.view({
+                group_by: ["float"],
+                columns: ["float"],
+                aggregates: { float: ["weighted mean", ["int"]] },
+            });
+
+            let table2 = await perspective.table(await view.to_arrow());
+            expect(await table2.columns()).toEqual([
+                "float",
+                "float (weighted mean by int)",
+            ]);
+
             await table2.delete();
             await view.delete();
             await table.delete();
@@ -236,15 +292,7 @@ import { STD_DATE, int_float_string_data, pivoted_output } from "./_shared";
             let view2 = await table2.view();
             let json2 = await view2.to_json();
 
-            expect(json).toEqual(
-                json2.map((x) => {
-                    x.__ROW_PATH__ = [x["string (Group by 1)"]].filter(
-                        (x) => x,
-                    );
-                    delete x["string (Group by 1)"];
-                    return x;
-                }),
-            );
+            expect(json).toEqual(unpivot(json2));
 
             view2.delete();
             table2.delete();
@@ -265,15 +313,7 @@ import { STD_DATE, int_float_string_data, pivoted_output } from "./_shared";
             let view2 = await table2.view();
             let json2 = await view2.to_json();
 
-            expect(json).toEqual(
-                json2.map((x) => {
-                    x.__ROW_PATH__ = [x["string (Group by 1)"]].filter(
-                        (x) => x,
-                    );
-                    delete x["string (Group by 1)"];
-                    return x;
-                }),
-            );
+            expect(json).toEqual(unpivot(json2));
 
             view2.delete();
             table2.delete();
@@ -294,15 +334,7 @@ import { STD_DATE, int_float_string_data, pivoted_output } from "./_shared";
             let view2 = await table2.view();
             let json2 = await view2.to_json();
 
-            expect(json).toEqual(
-                json2.map((x) => {
-                    x.__ROW_PATH__ = [x["string (Group by 1)"]].filter(
-                        (x) => x,
-                    );
-                    delete x["string (Group by 1)"];
-                    return x;
-                }),
-            );
+            expect(json).toEqual(unpivot(json2));
 
             view2.delete();
             table2.delete();
@@ -319,15 +351,7 @@ import { STD_DATE, int_float_string_data, pivoted_output } from "./_shared";
             let view2 = await table2.view();
             let json2 = await view2.to_json();
 
-            expect(json).toEqual(
-                json2.map((x) => {
-                    x.__ROW_PATH__ = [x["string (Group by 1)"]].filter(
-                        (x) => x,
-                    );
-                    delete x["string (Group by 1)"];
-                    return x;
-                }),
-            );
+            expect(json).toEqual(unpivot(json2));
 
             view2.delete();
             table2.delete();
@@ -344,15 +368,7 @@ import { STD_DATE, int_float_string_data, pivoted_output } from "./_shared";
             let view2 = await table2.view();
             let json2 = await view2.to_json();
 
-            expect(json).toEqual(
-                json2.map((x) => {
-                    x.__ROW_PATH__ = [x["string (Group by 1)"]].filter(
-                        (x) => x,
-                    );
-                    delete x["string (Group by 1)"];
-                    return x;
-                }),
-            );
+            expect(json).toEqual(unpivot(json2));
 
             view2.delete();
             table2.delete();
@@ -372,15 +388,7 @@ import { STD_DATE, int_float_string_data, pivoted_output } from "./_shared";
             let view2 = await table2.view();
             let json2 = await view2.to_json();
 
-            expect(json).toEqual(
-                json2.map((x) => {
-                    x.__ROW_PATH__ = [x["string (Group by 1)"]].filter(
-                        (x) => x,
-                    );
-                    delete x["string (Group by 1)"];
-                    return x;
-                }),
-            );
+            expect(json).toEqual(unpivot(json2));
 
             view2.delete();
             table2.delete();
@@ -401,15 +409,7 @@ import { STD_DATE, int_float_string_data, pivoted_output } from "./_shared";
             let view2 = await table2.view();
             let json2 = await view2.to_json();
 
-            expect(json).toEqual(
-                json2.map((x) => {
-                    x.__ROW_PATH__ = [x["string (Group by 1)"]].filter(
-                        (x) => x,
-                    );
-                    delete x["string (Group by 1)"];
-                    return x;
-                }),
-            );
+            expect(json).toEqual(unpivot(json2));
 
             view2.delete();
             table2.delete();
@@ -429,15 +429,7 @@ import { STD_DATE, int_float_string_data, pivoted_output } from "./_shared";
             let view2 = await table2.view();
             let json2 = await view2.to_json();
 
-            expect(json).toEqual(
-                json2.map((x) => {
-                    x.__ROW_PATH__ = [x["string (Group by 1)"]].filter(
-                        (x) => x,
-                    );
-                    delete x["string (Group by 1)"];
-                    return x;
-                }),
-            );
+            expect(json).toEqual(unpivot(json2));
 
             view2.delete();
             table2.delete();
@@ -457,15 +449,7 @@ import { STD_DATE, int_float_string_data, pivoted_output } from "./_shared";
             let view2 = await table2.view();
             let json2 = await view2.to_json();
 
-            expect(json).toEqual(
-                json2.map((x) => {
-                    x.__ROW_PATH__ = [x["string (Group by 1)"]].filter(
-                        (x) => x,
-                    );
-                    delete x["string (Group by 1)"];
-                    return x;
-                }),
-            );
+            expect(json).toEqual(unpivot(json2));
 
             view2.delete();
             table2.delete();

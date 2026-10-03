@@ -555,6 +555,63 @@ test.describe("Global filters: chips + lifecycle", () => {
     });
 });
 
+test.describe("Global filters: shared and restored clauses", () => {
+    test("a clause contributed by two masters renders one chip whose × removes both", async ({
+        page,
+    }) => {
+        await restore(page, {
+            ...TRI_CONFIG,
+            masters: ["one", "two"],
+            active: "one",
+        });
+
+        const m1 = await id_by_title(page, "One");
+        const m2 = await id_by_title(page, "Two");
+        const detail = await id_by_title(page, "Three");
+        const baseline = await num_rows(page, detail);
+        for (const panel of [m1, m2]) {
+            await dispatch_select(page, {
+                panel,
+                selected: true,
+                insertFilters: [["Region", "==", "East"]],
+            });
+        }
+
+        await wait_rows_below(page, detail, baseline);
+        await expect
+            .poll(async () => (await save(page)).global_filters)
+            .toEqual([["Region", "==", "East"]]);
+
+        const chips = page
+            .locator("perspective-viewer")
+            .locator("#global_filter_bar .global-filter-chip");
+
+        await expect(chips).toHaveCount(1);
+        await chips.first().locator(".global-filter-chip-remove").click();
+        await wait_rows(page, detail, baseline);
+        expect((await save(page)).global_filters ?? []).toEqual([]);
+    });
+
+    test("a deselect keeps restored filters", async ({ page }) => {
+        await restore(page, {
+            ...SPLIT_CONFIG,
+            masters: ["one"],
+            global_filters: [["State", "==", "Texas"]],
+        });
+
+        const master = await id_by_title(page, "One");
+        const detail = await id_by_title(page, "Two");
+        const texas_rows = await num_rows(page, detail);
+        expect(texas_rows).toBeLessThan(await num_rows(page, master));
+        await dispatch_select(page, { panel: master, selected: false });
+        await page.waitForTimeout(100);
+        expect(await num_rows(page, detail)).toBe(texas_rows);
+        expect((await save(page)).global_filters).toEqual([
+            ["State", "==", "Texas"],
+        ]);
+    });
+});
+
 test.describe("Global filters: persistence", () => {
     test("masters + filters round-trip; restored masters are immune; the next selection replaces the restored set", async ({
         page,

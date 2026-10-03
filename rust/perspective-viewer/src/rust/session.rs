@@ -39,9 +39,9 @@ use yew::prelude::*;
 use self::metadata::*;
 pub use self::metadata::{MetadataRef, SessionMetadata, SessionMetadataRc};
 use self::op_queue::OpQueue;
-pub use self::op_queue::{EditDelta, OpCtx, OpKind, StepFuture, StepOutcome, Ticket, view_fields};
+pub use self::op_queue::{EditDelta, OpCtx, OpKind, StepFuture, Ticket};
 use self::panel_state::effective;
-pub use self::panel_state::{Binding, OverlayClause, PanelState, PluginRef};
+pub use self::panel_state::{Binding, OverlayClause, PanelState};
 pub use self::props::{SessionProps, TableLoadState};
 pub use self::view_subscription::ViewStats;
 use self::view_subscription::*;
@@ -204,9 +204,6 @@ pub struct SessionData {
     view_sub: Option<ViewSubscription>,
     stats: Option<ViewStats>,
     is_paused: bool,
-
-    /// How the last config-driven run of the committed state went.
-    rendered: Rendered,
 }
 
 /// A panel's state and whether it can still be written.
@@ -264,131 +261,14 @@ impl Deref for ViewConfigRef {
     }
 }
 
-/// The [`crate::renderer::Renderer`]'s handle on its panel's committed
-/// [`PanelState`] — read the current value, or swap in the next one.
-#[derive(Clone)]
-pub struct PanelCell(Session);
-
-impl PanelCell {
-    /// The COMMITTED state — what a running step reads.
-    pub fn state(&self) -> Rc<PanelState> {
-        self.0.borrow().state.clone()
-    }
-
-    /// The theme as the UI sees it: the committed theme, or the latest pending
-    /// pick.
-    pub fn projected_theme(&self) -> Option<String> {
-        let pending = self
-            .0
-            .0
-            .queue
-            .pending_edits()
-            .into_iter()
-            .filter_map(|delta| match delta {
-                EditDelta::Theme(theme) => Some(theme),
-                _ => None,
-            })
-            .next_back();
-
-        pending.unwrap_or_else(|| self.state().chrome.theme.clone())
-    }
-
-    /// The SELECTED plugin's bucket as the UI and `save()` see it: the
-    /// committed bucket with every pending style / settings edit applied, in
-    /// submit order.
-    pub fn projected_bucket(&self, name: &str) -> crate::renderer::PluginScopedConfig {
-        let mut bucket = self.state().bucket(name);
-        for delta in self.0.0.queue.pending_edits() {
-            match delta {
-                EditDelta::PluginField(update) => {
-                    for key in &update.keys {
-                        match update.value.get(key) {
-                            Some(value) => {
-                                bucket.plugin.insert(key.clone(), value.clone());
-                            },
-                            None => {
-                                bucket.plugin.remove(key);
-                            },
-                        }
-                    }
-                },
-                EditDelta::ColumnField { column, update } => {
-                    let entry = bucket.columns.entry(column.clone()).or_default();
-                    for key in &update.keys {
-                        entry.remove(key);
-                    }
-
-                    for (key, value) in update.value {
-                        if update.keys.contains(&key) {
-                            entry.insert(key, value);
-                        }
-                    }
-
-                    if entry.is_empty() {
-                        bucket.columns.remove(&column);
-                    }
-                },
-                EditDelta::PluginConfig(map) => bucket.plugin.extend(map),
-                EditDelta::View(_) | EditDelta::Theme(_) | EditDelta::Title(_) => {},
-            }
-        }
-
-        bucket
-    }
-
-    /// Submit a theme pick — a UI edit, committed by the drain in its turn.
-    pub fn submit_theme(&self, theme: Option<String>) {
-        let cell = self.clone();
-        let _ticket = self.0.submit(
-            OpKind::Edit {
-                delta: EditDelta::Theme(theme.clone()),
-                fields: None,
-            },
-            move |_ctx| {
-                Box::pin(async move {
-                    cell.swap(cell.state().with_theme(theme));
-                    Ok(StepOutcome::Done)
-                })
-            },
-        );
-    }
-
-    /// Submit an op on this panel's queue (see [`Session::submit`]).
-    pub fn submit(&self, kind: OpKind, step: impl FnOnce(OpCtx) -> StepFuture + 'static) -> Ticket {
-        self.0.submit(kind, step)
-    }
-
-    pub fn swap(&self, next: PanelState) {
-        self.0.borrow_mut().swap(next);
-    }
-}
-
-/// The outcome of the last config-driven run.
-#[derive(Clone, Default)]
-pub enum Rendered {
-    #[default]
-    Never,
-    Ok,
-
-    /// The run of THIS state failed.
-    Failed(Rc<PanelState>, TableErrorState),
-}
-
 impl SessionData {
     fn error(&self) -> Option<&TableErrorState> {
-        self.state.lost().or(match &self.rendered {
-            Rendered::Failed(_, error) => Some(error),
-            _ => None,
-        })
+        self.state.lost()
     }
 
     fn clear_errors(&mut self) {
         if self.state.lost().is_some() {
             self.swap(self.state.recovered());
-        }
-
-        if matches!(self.rendered, Rendered::Failed(..)) {
-            self.rendered = Rendered::Never;
         }
     }
 
@@ -567,12 +447,6 @@ impl Session {
         MetadataRef(self.borrow().metadata().clone())
     }
 
-    /// A handle on this panel's committed [`PanelState`] for the panel's
-    /// [`crate::renderer::Renderer`], which owns none of it.
-    pub fn cell(&self) -> PanelCell {
-        PanelCell(self.clone())
-    }
-
     pub(crate) fn metadata_mut(&self) -> MetadataMutRef<'_> {
         std::cell::RefMut::map(self.borrow_mut(), |x| x.metadata_mut())
     }
@@ -601,12 +475,12 @@ impl Session {
         let _ticket = self.submit(
             OpKind::Edit {
                 delta: EditDelta::Title(title.clone()),
-                fields: None,
+                swaps_plugin: false,
             },
             move |_ctx| {
                 Box::pin(async move {
                     session.commit_title(title);
-                    Ok(StepOutcome::Done)
+                    Ok(None)
                 })
             },
         );
@@ -903,7 +777,7 @@ impl Session {
         Some(perspective_js::Table::from(self.borrow().table().cloned()?).into())
     }
 
-    /// Whether the binding is lost OR the last run failed.
+    /// Whether the binding is lost.
     pub(crate) fn is_errored(&self) -> bool {
         self.borrow().error().is_some()
     }
@@ -912,37 +786,14 @@ impl Session {
         self.borrow().error().map(|x| x.0.clone())
     }
 
-    /// The error a config-driven run must not proceed past: a lost binding, or
-    /// a failed run of EXACTLY the state now committed (re-running it would
-    /// only fail again).
-    pub(crate) fn blocking_error(&self) -> Option<ApiError> {
-        let data = self.borrow();
-        if let Some(error) = data.state.lost() {
-            return Some(error.0.clone());
-        }
-
-        match &data.rendered {
-            Rendered::Failed(state, error) if Rc::ptr_eq(state, &data.state) => {
-                Some(error.0.clone())
-            },
-            _ => None,
-        }
-    }
-
-    /// Record that a config-driven run of the committed state is starting (any
-    /// earlier failure is stale) or has landed.
-    pub(crate) fn set_rendered(&self, ok: bool) {
-        self.borrow_mut().rendered = if ok { Rendered::Ok } else { Rendered::Never };
-    }
-
     /// Recover from an error state (the overlay's button) — a writer, so an op
     /// on the queue like any other.
     pub async fn reconnect(&self) -> ApiResult<()> {
         let session = self.clone();
-        self.submit(OpKind::Restore { fields: None }, move |_ctx| {
+        self.submit(OpKind::Restore { update: None }, move |_ctx| {
             Box::pin(async move {
                 session.reconnect_step().await?;
-                Ok(StepOutcome::Done)
+                Ok(None)
             })
         })
         .settle()
@@ -1413,10 +1264,10 @@ impl Session {
                     bound.map(|bound| (bound.table.clone(), bound.metadata.clone())),
                 )
             },
-            BindPlan::Bind { client, table, .. } => {
+            BindPlan::Bind { table, client, .. } => {
                 let metadata = Rc::new(SessionMetadata::from_table(&table).await?);
                 let binding = PreparedBinding::Bind {
-                    client,
+                    client: client.clone(),
                     table: table.clone(),
                     metadata: metadata.clone(),
                 };
@@ -1509,13 +1360,12 @@ impl Session {
         })
     }
 
-    /// The COMMIT half of [`Self::prepare_view`], as ONE swap: `state` with the
-    /// prepared binding, config, description and expression metadata, then
-    /// whatever else of the panel `rest` replaces.
+    /// The COMMIT half of [`Self::prepare_view`], as one swap of this session's
+    /// state.
     pub(crate) fn commit_view(
         &self,
         view: PreparedView,
-        rest: impl FnOnce(PanelState) -> PanelState,
+        title: Option<Option<String>>,
     ) -> BindingEffects {
         let state = self.borrow().state.clone();
         let title_before = state.chrome.title.clone();
@@ -1553,14 +1403,16 @@ impl Session {
             next = next.with_description(Some((view.effective, description)));
         }
 
-        let next = rest(next);
+        let next = match title {
+            Some(title) => next.with_title(title),
+            None => next,
+        };
+
         let title_after = next.chrome.title.clone();
         let bound = next.bound().is_some();
         self.borrow_mut().swap(next);
         let outgoing = if rebinds {
-            let mut data = self.borrow_mut();
-            data.rendered = Rendered::Never;
-            data.view_sub.take()
+            self.borrow_mut().view_sub.take()
         } else {
             None
         };
@@ -1775,41 +1627,24 @@ impl Session {
         Ok(table.view(Some(view_config.into())).await?)
     }
 
-    /// Record a failed pipeline run: error state plus a reconnect affordance
-    /// that resets the config (the error screen's reset button). Replaces
-    /// the old `validate()` error path — the committed config is NOT rolled
-    /// back (I4: it holds exactly what the caller committed; the failure
-    /// belongs to the run).
-    pub async fn set_run_error(&self, err: ApiError) -> ApiResult<()> {
+    /// Reset the config a failed draw could not render, as one queued op.
+    pub async fn reset_failed_config(&self) -> ApiResult<()> {
         let session = self.clone();
-        let poll_loop = LocalPollLoop::new(move |()| {
-            ApiFuture::spawn(session.reset(ResetOptions {
-                config: true,
-                expressions: true,
-                ..ResetOptions::default()
-            }));
-            Ok(JsValue::UNDEFINED)
-        });
+        self.submit(OpKind::Restore { update: None }, move |_ctx| {
+            Box::pin(async move {
+                session
+                    .reset(ResetOptions {
+                        config: true,
+                        expressions: true,
+                        ..ResetOptions::default()
+                    })
+                    .await?;
 
-        let error = TableErrorState(
-            err.clone(),
-            Some(ReconnectCallback::new(move || {
-                clone!(poll_loop);
-                Box::pin(async move {
-                    poll_loop.poll(()).await;
-                    Ok(())
-                })
-            })),
-        );
-
-        let state = self.borrow().state.clone();
-        self.borrow_mut().rendered = Rendered::Failed(state, error);
-
-        if let Some(cb) = self.on_table_errored.borrow().as_ref() {
-            cb.emit(());
-        }
-
-        Err(err)
+                Ok(None)
+            })
+        })
+        .settle()
+        .await
     }
 
     fn update_stats(&self, stats: ViewStats) {
@@ -1920,9 +1755,6 @@ pub(crate) enum BindPlan {
     Keep,
 
     /// Bind `table`.
-    ///
-    /// Boxed: `Table` is a value handle several times the size of every other
-    /// variant here.
     Bind {
         client: Client,
         table: Box<perspective_client::Table>,

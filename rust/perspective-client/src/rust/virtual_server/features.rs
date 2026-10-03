@@ -83,6 +83,12 @@ pub struct Features<'a> {
     #[serde(default)]
     #[ts(optional, as = "Option<_>")]
     pub unordered: bool,
+
+    /// Whether a `Table` can be derived from a `View`, which requires
+    /// [`VirtualServerHandler::view_make_table`](super::VirtualServerHandler::view_make_table).
+    #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
+    pub view_derivations: bool,
 }
 
 /// Specification for a window aggregate.
@@ -159,6 +165,7 @@ impl<'a> From<Features<'a>> for GetFeaturesResp {
             on_update: value.on_update,
             sort: value.sort,
             unordered: value.unordered,
+            view_derivations: value.view_derivations,
             window_aggregates: value
                 .window_aggregates
                 .iter()

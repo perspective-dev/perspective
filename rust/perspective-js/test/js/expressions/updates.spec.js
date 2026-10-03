@@ -508,7 +508,7 @@ const pivot_data = [
             expect(after).toEqual({
                 __ROW_PATH__: [[], ["a"], ["b"], ["c"], ["hello"], ["world"]],
                 'lower("y")': [6, 1, 1, 2, 1, 1],
-                x: [10, 1, 2, 7, 0, 0],
+                x: [10, 1, 2, 7, null, null],
                 y: [6, 1, 1, 2, 1, 1],
             });
             view.delete();

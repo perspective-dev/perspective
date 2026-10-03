@@ -40,7 +40,6 @@ PERSPECTIVE_EXPORT void notify_sparse_tree(
     const std::vector<std::pair<std::string, std::string>>& tree_sortby,
     const std::vector<t_sortspec>& ctx_sortby,
     const t_data_table& flattened,
-    const t_data_table& delta,
     const t_data_table& prev,
     const t_data_table& current,
     const t_data_table& transitions,

@@ -291,7 +291,8 @@ enum t_aggtype {
     AGGTYPE_UDF_REDUCER,
     AGGTYPE_SUM_ABS,
     AGGTYPE_ABS_SUM,
-    AGGTYPE_SUM_NOT_NULL,
+    AGGTYPE_SUM_OR_ZERO,
+    AGGTYPE_VALID_COUNT,
     AGGTYPE_MEAN_BY_COUNT,
     AGGTYPE_IDENTITY,
     AGGTYPE_DISTINCT_COUNT,
@@ -307,6 +308,39 @@ PERSPECTIVE_EXPORT std::optional<t_aggtype>
 maybe_str_to_aggtype(const std::string& str);
 
 PERSPECTIVE_EXPORT t_aggtype str_to_aggtype(const std::string& str);
+
+/// The reserved strand-table column carrying `|current| - |prev|` deltas
+/// for a `sum abs` over `col`.
+inline std::string
+abs_strand_colname(const std::string& col) {
+    return "psp_abs_" + col;
+}
+
+/// The reserved strand-table column carrying validity deltas in
+/// {-1, 0, +1} for `col`.
+inline std::string
+valid_strand_colname(const std::string& col) {
+    return "psp_valid_" + col;
+}
+
+/// Whether an aggregate's empty-group classification is driven by its
+/// source's valid-value count.
+inline bool
+aggtype_wants_valid_count(t_aggtype agg) {
+    switch (agg) {
+        case AGGTYPE_SUM:
+        case AGGTYPE_SUM_OR_ZERO:
+        case AGGTYPE_SUM_ABS:
+        case AGGTYPE_ABS_SUM:
+        case AGGTYPE_PCT_SUM_PARENT:
+        case AGGTYPE_PCT_SUM_GRAND_TOTAL: {
+            return true;
+        }
+        default: {
+            return false;
+        }
+    }
+}
 PERSPECTIVE_EXPORT bool is_implemented_aggtype(t_aggtype agg);
 PERSPECTIVE_EXPORT bool aggtype_takes_argument(t_aggtype agg);
 
@@ -355,7 +389,6 @@ enum t_gnode_type {
 
 enum t_gnode_port {
     PSP_PORT_FLATTENED,   // same schema as iport (pkey,op)
-    PSP_PORT_DELTA,       // same schema as state
     PSP_PORT_PREV,        // same schema as state
     PSP_PORT_CURRENT,     // same schema as state
     PSP_PORT_TRANSITIONS, // same schema as state

@@ -58,6 +58,17 @@ pub enum GenericSQLError {
     UnsupportedOperation(String),
 }
 
+fn sql_type(ty: ColumnType) -> &'static str {
+    match ty {
+        ColumnType::String => "VARCHAR",
+        ColumnType::Integer => "INTEGER",
+        ColumnType::Float => "DOUBLE PRECISION",
+        ColumnType::Boolean => "BOOLEAN",
+        ColumnType::Date => "DATE",
+        ColumnType::Datetime => "TIMESTAMP",
+    }
+}
+
 impl fmt::Display for GenericSQLError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -347,6 +358,94 @@ impl GenericSQLVirtualServerModel {
         let query = ctx.build_query();
         let template = self.0.create_entity.as_deref().unwrap_or("TABLE");
         Ok(format!("CREATE {} {} AS ({})", template, view_id, query))
+    }
+
+    /// Returns the SQL query to create a table from a view, with the view's
+    /// row path unrolled into key columns named after their `group_by`
+    /// columns and aggregates of those columns qualified by their aggregate.
+    ///
+    /// # Arguments
+    /// * `view_id` - The identifier of the source view.
+    /// * `table_id` - The identifier for the new table.
+    /// * `config` - The configuration the view was created with.
+    /// * `view_schema` - The schema of the view's relation.
+    /// * `schema` - The columns of the new table, in place of the view's.
+    ///
+    /// # Returns
+    /// SQL: `CREATE TABLE {table_id} AS (SELECT ... FROM {view_id})`
+    pub fn view_make_table(
+        &self,
+        view_id: &str,
+        table_id: &str,
+        config: &ViewConfig,
+        view_schema: &IndexMap<String, ColumnType>,
+        schema: Option<&IndexMap<String, ColumnType>>,
+    ) -> GenericSQLResult<String> {
+        let key_types: IndexMap<&str, ColumnType> = config
+            .group_by
+            .iter()
+            .enumerate()
+            .filter_map(|(i, col)| {
+                view_schema
+                    .get(&format!("__ROW_PATH_{}__", i))
+                    .map(|ty| (col.as_str(), *ty))
+            })
+            .collect();
+
+        let mut selectable: IndexMap<String, (String, Option<ColumnType>)> = config
+            .group_by
+            .iter()
+            .enumerate()
+            .map(|(i, col)| (col.clone(), (format!("\"__ROW_PATH_{}__\"", i), None)))
+            .collect();
+
+        for (name, ty) in view_schema
+            .iter()
+            .filter(|(name, _)| !name.starts_with("__"))
+        {
+            let readable = config.readable_column_path(name, |leaf| {
+                key_types.get(leaf).copied().unwrap_or(ColumnType::String)
+            });
+
+            selectable.insert(readable, (format!("\"{}\"", name), Some(*ty)));
+        }
+
+        let select = |readable: &str, expr: &str| {
+            if expr == format!("\"{}\"", readable) {
+                expr.to_owned()
+            } else {
+                format!("{} AS \"{}\"", expr, readable)
+            }
+        };
+
+        let clauses: Vec<String> = match schema {
+            None => selectable
+                .iter()
+                .map(|(readable, (expr, _))| select(readable, expr))
+                .collect(),
+            Some(schema) => schema
+                .iter()
+                .map(|(name, ty)| match selectable.get(name) {
+                    Some((_, Some(actual))) if actual != ty => {
+                        Err(GenericSQLError::InvalidConfig(format!(
+                            "Column \"{}\" does not have the type of the View's column",
+                            name
+                        )))
+                    },
+                    Some((expr, _)) => Ok(select(name, expr)),
+                    None => Ok(format!("CAST(NULL AS {}) AS \"{}\"", sql_type(*ty), name)),
+                })
+                .collect::<GenericSQLResult<Vec<_>>>()?,
+        };
+
+        let template = self.0.create_entity.as_deref().unwrap_or("TABLE");
+        Ok(format!(
+            "CREATE {} {} AS (SELECT {} FROM {})",
+            template,
+            table_id,
+            clauses.join(", "),
+            view_id
+        ))
     }
 
     /// Returns the SQL query to fetch data from a view with the given viewport.

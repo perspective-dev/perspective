@@ -48,7 +48,6 @@ struct t_process_state {
 
     std::shared_ptr<t_data_table> m_state_data_table;
     std::shared_ptr<t_data_table> m_flattened_data_table;
-    std::shared_ptr<t_data_table> m_delta_data_table;
     std::shared_ptr<t_data_table> m_prev_data_table;
     std::shared_ptr<t_data_table> m_current_data_table;
     std::shared_ptr<t_data_table> m_transitions_data_table;

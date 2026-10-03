@@ -112,12 +112,13 @@ pub struct ViewWindow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compression: Option<String>,
 
-    /// When `true`, group-by columns use legacy `"colname (Group by N)"`
-    /// naming. When `false`, they use `__ROW_PATH_N__` naming consistent
-    /// with the SQL backend. Defaults to `true` for backwards compatibility.
+    /// When `true`, [`View::to_arrow`] names `group_by` key columns
+    /// `__ROW_PATH_N__` and never qualifies an aggregate, instead of the
+    /// human-readable names a key column and its aggregate would otherwise
+    /// take.
     #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub emit_legacy_row_path_names: Option<bool>,
+    pub machine_column_names: Option<bool>,
 }
 
 impl From<ViewWindow> for ViewPort {
@@ -127,7 +128,7 @@ impl From<ViewWindow> for ViewPort {
             start_col: window.start_col.map(|x| x.floor() as u32),
             end_row: window.end_row.map(|x| x.ceil() as u32),
             end_col: window.end_col.map(|x| x.ceil() as u32),
-            emit_legacy_row_path_names: window.emit_legacy_row_path_names,
+            machine_column_names: window.machine_column_names,
         }
     }
 }
@@ -139,7 +140,7 @@ impl From<ViewPort> for ViewWindow {
             start_col: window.start_col.map(|x| x as f64),
             end_row: window.end_row.map(|x| x as f64),
             end_col: window.end_col.map(|x| x as f64),
-            emit_legacy_row_path_names: window.emit_legacy_row_path_names,
+            machine_column_names: window.machine_column_names,
             ..ViewWindow::default()
         }
     }
@@ -295,6 +296,10 @@ pub(crate) struct ViewSource {
 assert_view_api!(View);
 
 impl View {
+    pub(crate) fn client(&self) -> &Client {
+        &self.client
+    }
+
     pub fn new(name: String, client: Client) -> Self {
         View {
             name,
@@ -319,22 +324,40 @@ impl View {
         }
     }
 
-    /// Returns an array of strings containing the column paths of the [`View`]
-    /// without any of the source columns.
+    /// Returns this [`View`]'s column header area for `window`, transposed as
+    /// `area[level][column]`.
     ///
     /// A column path shows the columns that a given cell belongs to after
-    /// pivots are applied.
-    pub async fn column_paths(&self, window: ColumnWindow) -> ClientResult<Vec<String>> {
+    /// pivots are applied. The area is rectangular with one level per
+    /// `split_by` plus one: a column's split values occupy the leading levels
+    /// and its name always occupies the last, so a subtotal or grand total
+    /// under `split_rollup_mode: "rollup"` reads [`Scalar::Null`] at the levels
+    /// it does not pivot on. Values keep their column's type - a `datetime`
+    /// split value is epoch milliseconds, not text - so formatting them is the
+    /// caller's choice.
+    ///
+    /// `window` slices the *column* axis; the number of levels does not depend
+    /// on it.
+    pub async fn column_paths(
+        &self,
+        window: ColumnWindow,
+    ) -> ClientResult<Vec<Vec<crate::config::Scalar>>> {
         let msg = self.client_message(ClientReq::ViewColumnPathsReq(ViewColumnPathsReq {
             start_col: window.start_col.map(|x| x as u32),
             end_col: window.end_col.map(|x| x as u32),
         }));
 
         match self.client.oneshot(&msg).await? {
-            ClientResp::ViewColumnPathsResp(ViewColumnPathsResp { paths }) => {
-                // Ok(paths.into_iter().map(|x| x.path).collect())
-                Ok(paths)
-            },
+            ClientResp::ViewColumnPathsResp(ViewColumnPathsResp { area }) => Ok(area
+                .into_iter()
+                .map(|level| {
+                    level
+                        .values
+                        .into_iter()
+                        .map(crate::config::Scalar::from)
+                        .collect()
+                })
+                .collect()),
             resp => Err(resp.into()),
         }
     }

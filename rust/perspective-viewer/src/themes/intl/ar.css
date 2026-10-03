@@ -69,6 +69,8 @@ perspective-viewer {
     --psp-label--scroll-lock-alt-toggle--content: "تمرير محاذى";
 
     --psp-label--color--content: "اللون";
+    --psp-label--palette--content: "لوحة الألوان";
+    --psp-label--gradient--content: "تدرج";
     --psp-label--timezone--content: "المنطقة الزمنية";
     --psp-label--date-style--content: "نمط التاريخ";
     --psp-label--time-style--content: "نمط الوقت";
