@@ -106,7 +106,7 @@ impl Component for EmptyRow {
     }
 
     fn destroy(&mut self, ctx: &Context<Self>) {
-        ctx.props().dropdown.hide().unwrap();
+        ctx.props().dropdown.reset();
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
@@ -121,7 +121,7 @@ impl Component for EmptyRow {
                 false
             },
             Blur => {
-                p.dropdown.hide().unwrap();
+                p.dropdown.reset();
                 if let Some(elem) = self.input_ref.cast::<HtmlInputElement>() {
                     elem.set_value("");
                 }
@@ -139,7 +139,7 @@ impl Component for EmptyRow {
             },
             KeyDown(13) => {
                 p.dropdown.item_select();
-                p.dropdown.hide().unwrap();
+                p.dropdown.dismiss();
                 p.set_focused_index.emit(Some(p.index + 1));
                 true
             },

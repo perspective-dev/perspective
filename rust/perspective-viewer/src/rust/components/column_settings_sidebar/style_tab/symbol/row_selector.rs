@@ -38,7 +38,7 @@ pub fn row_selector(props: &RowSelectorProps) -> Html {
     let on_select = {
         clone!(props.dropdown, props.index, props.set_focused_index);
         props.on_select.reform(move |key| {
-            dropdown.hide().unwrap();
+            dropdown.dismiss();
             set_focused_index.emit(Some(index + 1));
             key
         })

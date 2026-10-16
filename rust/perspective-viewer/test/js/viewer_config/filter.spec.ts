@@ -131,4 +131,102 @@ test.describe("Filter Config", () => {
         const contents = await get_contents(page);
         await compareContentsToSnapshot(contents);
     });
+
+    test.describe("string autocomplete", () => {
+        const search = (page) =>
+            page.locator("perspective-viewer input[type=search]");
+
+        const dropdown = (page) => page.locator("perspective-dropdown");
+
+        async function saved_filter(page) {
+            return await page.evaluate(async () => {
+                const viewer = document.querySelector("perspective-viewer");
+                await viewer.flush();
+                return (await viewer.save()).filter;
+            });
+        }
+
+        test.beforeEach(async ({ page }) => {
+            await page.evaluate(async () => {
+                const viewer = document.querySelector("perspective-viewer");
+                const table = await window["__TEST_WORKER__"].table([
+                    { area: "EE" },
+                    { area: "LT" },
+                    { area: "LV" },
+                ]);
+
+                await viewer.load(table);
+                await viewer.restore({
+                    plugin: "Debug",
+                    settings: true,
+                    filter: [["area", "==", ""]],
+                });
+            });
+        });
+
+        test("Enter after typing an exact value keeps it", async ({ page }) => {
+            await search(page).focus();
+            await search(page).pressSequentially("L");
+            await expect(dropdown(page)).toBeVisible();
+            await search(page).pressSequentially("V");
+            await expect(dropdown(page)).toBeHidden();
+            await search(page).press("Enter");
+            expect(await saved_filter(page)).toEqual([["area", "==", "LV"]]);
+            await expect(search(page)).toHaveValue("LV");
+        });
+
+        test("ArrowDown after typing an exact value is a no-op", async ({
+            page,
+        }) => {
+            await search(page).focus();
+            await search(page).pressSequentially("LV");
+            await expect(dropdown(page)).toBeHidden();
+            await search(page).press("ArrowDown");
+            expect(await saved_filter(page)).toEqual([["area", "==", "LV"]]);
+            await expect(search(page)).toHaveValue("LV");
+        });
+
+        test("Enter on a visible list accepts the highlighted suggestion", async ({
+            page,
+        }) => {
+            await search(page).focus();
+            await search(page).pressSequentially("L");
+            const highlighted = await page
+                .locator("perspective-dropdown span.selected")
+                .textContent();
+
+            await search(page).press("Enter");
+            expect(await saved_filter(page)).toEqual([
+                ["area", "==", highlighted],
+            ]);
+
+            await expect(dropdown(page)).toBeHidden();
+        });
+
+        test("Tab dismisses the list without accepting", async ({ page }) => {
+            await search(page).focus();
+            await search(page).pressSequentially("L");
+            await expect(dropdown(page)).toBeVisible();
+            await search(page).press("Tab");
+            await expect(dropdown(page)).toBeHidden();
+            expect(await saved_filter(page)).toEqual([["area", "==", "L"]]);
+        });
+
+        test("in > Enter after an exact last token keeps it", async ({
+            page,
+        }) => {
+            await page.evaluate(async () => {
+                const viewer = document.querySelector("perspective-viewer");
+                await viewer.restore({ filter: [["area", "in", []]] });
+            });
+
+            await search(page).focus();
+            await search(page).pressSequentially("E");
+            await expect(dropdown(page)).toBeVisible();
+            await search(page).pressSequentially("E");
+            await expect(dropdown(page)).toBeHidden();
+            await search(page).press("Enter");
+            expect(await saved_filter(page)).toEqual([["area", "in", ["EE"]]]);
+        });
+    });
 });

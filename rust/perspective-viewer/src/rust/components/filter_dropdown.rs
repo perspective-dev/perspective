@@ -14,7 +14,6 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use perspective_client::clone;
 use web_sys::*;
 use yew::html::ImplicitClone;
 use yew::prelude::*;
@@ -25,12 +24,19 @@ use crate::ui::PortalModal;
 use crate::utils::*;
 use crate::*;
 
-#[derive(Default)]
-struct FilterDropDownState {
+/// The suggestion list while it is on screen, the only state a key may act on.
+struct OpenState {
     values: Vec<String>,
     selected: usize,
-    on_select: Option<Callback<String>>,
-    target: Option<HtmlElement>,
+    on_select: Callback<String>,
+    target: HtmlElement,
+}
+
+#[derive(Default)]
+enum FilterDropDownState {
+    #[default]
+    Hidden,
+    Open(OpenState),
 }
 
 #[derive(Clone)]
@@ -62,7 +68,6 @@ impl FilterDropDownElement {
     }
 
     pub fn reautocomplete(&self) {
-        // Re-open portal with current target
         self.notify.emit(());
     }
 
@@ -78,97 +83,94 @@ impl FilterDropDownElement {
         match current_column {
             Some(filter_col) if filter_col == column => {
                 let values = filter_values(&input, &self.all_values, &exclude);
-                if values.len() == 1 && values[0] == input {
-                    let _ = self.hide();
-                } else {
-                    let mut s = self.state.borrow_mut();
-                    s.values = values;
-                    s.selected = 0;
-                    s.on_select = Some(callback);
-                    if s.target.is_none() {
-                        s.target = Some(target);
-                    }
-
-                    drop(s);
-                    self.notify.emit(());
-                }
+                self.show(values, &input, target, callback);
             },
             _ => {
-                clone!(
-                    self.state,
-                    self.session,
-                    self.all_values,
-                    self.notify,
-                    old_column = self.column
-                );
+                let this = self.clone();
                 ApiFuture::spawn(async move {
                     let fetched =
-                        crate::queries::get_column_values(&session, column.1.clone()).await?;
-                    *all_values.borrow_mut() = Some(fetched);
-                    let values = filter_values(&input, &all_values, &exclude);
-                    let should_hide = values.len() == 1 && values[0] == input;
-
-                    *old_column.borrow_mut() = Some(column);
-                    {
-                        let mut s = state.borrow_mut();
-                        s.on_select = Some(callback);
-                        if should_hide {
-                            let fv = self::filter_values("", &all_values, &exclude);
-                            s.values = fv;
-                            s.target = Some(target);
-                        } else {
-                            s.values = values;
-                            s.target = Some(target);
-                        }
-                        s.selected = 0;
-                    }
-                    if should_hide {
-                        state.borrow_mut().target = None;
-                    }
-
-                    notify.emit(());
+                        crate::queries::get_column_values(&this.session, column.1.clone()).await?;
+                    *this.all_values.borrow_mut() = Some(fetched);
+                    *this.column.borrow_mut() = Some(column);
+                    let values = filter_values(&input, &this.all_values, &exclude);
+                    this.show(values, &input, target, callback);
                     Ok(())
                 });
             },
         }
     }
 
+    /// Open the list, or dismiss it when `input` is its one exact match.
+    fn show(
+        &self,
+        values: Vec<String>,
+        input: &str,
+        target: HtmlElement,
+        on_select: Callback<String>,
+    ) {
+        if values.len() == 1 && values[0] == input {
+            self.dismiss();
+        } else {
+            *self.state.borrow_mut() = FilterDropDownState::Open(OpenState {
+                values,
+                selected: 0,
+                on_select,
+                target,
+            });
+
+            self.notify.emit(());
+        }
+    }
+
+    /// Accept a visible list's highlighted suggestion; a hidden list has none.
     pub fn item_select(&self) {
-        let state = self.state.borrow();
-        if let Some(value) = state.values.get(state.selected)
-            && let Some(ref cb) = state.on_select
-        {
-            cb.emit(value.clone());
+        let selected = match &*self.state.borrow() {
+            FilterDropDownState::Open(open) => open
+                .values
+                .get(open.selected)
+                .map(|value| (value.clone(), open.on_select.clone())),
+            FilterDropDownState::Hidden => None,
+        };
+
+        if let Some((value, on_select)) = selected {
+            on_select.emit(value);
         }
     }
 
     pub fn item_down(&self) {
-        let mut state = self.state.borrow_mut();
-        state.selected += 1;
-        if state.selected >= state.values.len() {
-            state.selected = 0;
-        }
-
-        drop(state);
-        self.notify.emit(());
+        self.step(1);
     }
 
     pub fn item_up(&self) {
-        let mut state = self.state.borrow_mut();
-        if state.selected < 1 {
-            state.selected = state.values.len();
-        }
+        self.step(-1);
+    }
 
-        state.selected -= 1;
-        drop(state);
+    fn step(&self, delta: isize) {
+        let moved = match &mut *self.state.borrow_mut() {
+            FilterDropDownState::Open(open) if !open.values.is_empty() => {
+                let len = open.values.len() as isize;
+                open.selected = (open.selected as isize + delta).rem_euclid(len) as usize;
+                true
+            },
+            _ => false,
+        };
+
+        if moved {
+            self.notify.emit(());
+        }
+    }
+
+    /// Close the list, keeping the column's values for the next keystroke.
+    pub fn dismiss(&self) {
+        *self.state.borrow_mut() = FilterDropDownState::Hidden;
         self.notify.emit(());
     }
 
-    pub fn hide(&self) -> ApiResult<()> {
-        self.state.borrow_mut().target = None;
+    /// Close the list and forget the column so the next focus refetches it.
+    pub fn reset(&self) {
         self.column.borrow_mut().take();
-        self.notify.emit(());
-        Ok(())
+        self.all_values.borrow_mut().take();
+        self.dismiss();
     }
 }
 
@@ -201,35 +203,32 @@ impl Component for FilterDropDownPortal {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let state = ctx.props().element.state.borrow();
-        let target = state.target.clone();
-        let on_close = {
-            let element = ctx.props().element.clone();
-            Callback::from(move |()| {
-                let _ = element.hide();
-            })
+        let element = &ctx.props().element;
+        let state = element.state.borrow();
+        let FilterDropDownState::Open(open) = &*state else {
+            return html! {};
         };
 
-        if target.is_some() {
-            let values = state.values.clone();
-            let selected = state.selected;
-            let on_select = state.on_select.clone();
-            drop(state);
+        let on_close = {
+            let element = element.clone();
+            Callback::from(move |()| element.dismiss())
+        };
 
-            html! {
-                <PortalModal
-                    tag_name="perspective-dropdown"
-                    sheet={StyleSurface::FilterDropdown.sheet()}
-                    {target}
-                    own_focus=false
-                    {on_close}
-                    theme={ctx.props().theme.clone()}
-                >
-                    <FilterDropDownView {values} {selected} {on_select} />
-                </PortalModal>
-            }
-        } else {
-            html! {}
+        html! {
+            <PortalModal
+                tag_name="perspective-dropdown"
+                sheet={StyleSurface::FilterDropdown.sheet()}
+                target={Some(open.target.clone())}
+                own_focus=false
+                {on_close}
+                theme={ctx.props().theme.clone()}
+            >
+                <FilterDropDownView
+                    values={open.values.clone()}
+                    selected={open.selected}
+                    on_select={open.on_select.clone()}
+                />
+            </PortalModal>
         }
     }
 }
@@ -238,7 +237,7 @@ impl Component for FilterDropDownPortal {
 struct FilterDropDownViewProps {
     values: Vec<String>,
     selected: usize,
-    on_select: Option<Callback<String>>,
+    on_select: Callback<String>,
 }
 
 #[function_component]
@@ -249,7 +248,7 @@ fn FilterDropDownView(props: &FilterDropDownViewProps) -> Html {
                     .iter()
                     .enumerate()
                     .map(|(idx, value)| {
-                        let click = props.on_select.as_ref().unwrap().reform({
+                        let click = props.on_select.reform({
                             let value = value.clone();
                             move |_: MouseEvent| value.clone()
                         });

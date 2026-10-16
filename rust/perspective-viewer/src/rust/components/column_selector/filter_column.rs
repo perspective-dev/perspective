@@ -162,13 +162,13 @@ impl Component for FilterColumn {
                 false
             },
             FilterColumnMsg::Close => {
-                ctx.props().filter_dropdown.hide().unwrap();
+                ctx.props().filter_dropdown.reset();
                 false
             },
             FilterColumnMsg::FilterKeyDown(13) => {
                 if ctx.props().is_suggestable() {
                     ctx.props().filter_dropdown.item_select();
-                    ctx.props().filter_dropdown.hide().unwrap();
+                    ctx.props().filter_dropdown.dismiss();
                 }
                 false
             },

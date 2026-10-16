@@ -252,7 +252,7 @@ impl Component for ConfigSelector {
                 false
             },
             ConfigSelectorMsg::Close(index, DragTarget::Filter) => {
-                self.filter_dropdown.hide().unwrap();
+                self.filter_dropdown.reset();
                 let mut filter = ctx.props().view_config.filter.clone();
                 filter.remove(index);
                 let config = ViewConfigUpdate {
