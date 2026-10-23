@@ -173,6 +173,39 @@ export interface VirtualServerHandler {
         config: ViewConfig,
     ): { min: Scalar; max: Scalar } | Promise<{ min: Scalar; max: Scalar }>;
 
+    /**
+     * Expand the row at `rowIndex` of a `"rollup"` mode `group_by` view to
+     * show its children, each collapsed, returning the number of rows shown.
+     * Required when `getFeatures()` declares `expand_collapse`.
+     */
+    viewExpand?(
+        viewId: string,
+        config: ViewConfig,
+        rowIndex: number,
+    ): number | Promise<number>;
+
+    /**
+     * Collapse the row at `rowIndex` of a `"rollup"` mode `group_by` view,
+     * discarding its descendants' expansion, returning the number of rows
+     * hidden. Required when `getFeatures()` declares `expand_collapse`.
+     */
+    viewCollapse?(
+        viewId: string,
+        config: ViewConfig,
+        rowIndex: number,
+    ): number | Promise<number>;
+
+    /**
+     * Expand every row of a `"rollup"` mode `group_by` view whose path is no
+     * longer than `depth` and collapse the rest. Required when
+     * `getFeatures()` declares `expand_collapse`.
+     */
+    viewSetDepth?(
+        viewId: string,
+        config: ViewConfig,
+        depth: number,
+    ): void | Promise<void>;
+
     /** Defaults to no optional features. */
     getFeatures?(): Features | Promise<Features>;
 
@@ -207,6 +240,40 @@ impl JsServerHandler {
             .dyn_ref::<js_sys::Function>()
             .ok_or_else(|| JsError(JsValue::from_str(&format!("{} is not a function", method))))?;
         Ok(func.apply(&self.0, args)?)
+    }
+
+    /// Calls an optional `(viewId, config, n)` tree method, returning its
+    /// numeric result (`0` when it returns nothing).
+    fn call_tree_method(
+        &self,
+        method: &'static str,
+        view_id: &str,
+        config: &perspective_client::config::ViewConfig,
+        arg: u32,
+    ) -> impl Future<Output = Result<u32, JsError>> + 'static {
+        let has_method = Reflect::get(&self.0, &JsValue::from_str(method))
+            .map(|val| !val.is_undefined())
+            .unwrap_or(false);
+
+        let handler = self.0.clone();
+        let view_id = view_id.to_string();
+        let config_value = JsValue::from_serde_ext(config);
+        async move {
+            if !has_method {
+                return Err(JsError(JsValue::from_str(&format!(
+                    "{} not implemented",
+                    method
+                ))));
+            }
+
+            let this = JsServerHandler(handler);
+            let args = Array::new();
+            args.push(&JsValue::from_str(&view_id));
+            args.push(&config_value?);
+            args.push(&JsValue::from(arg));
+            let result = this.call_method_js_async(method, &args).await?;
+            Ok(result.as_f64().map_or(0, |x| x as u32))
+        }
     }
 
     async fn call_method_js_async(&self, method: &str, args: &Array) -> Result<JsValue, JsError> {
@@ -678,6 +745,37 @@ impl VirtualServerHandler for JsServerHandler {
             let min_val = Reflect::get(obj, &JsValue::from_str(wasm_bindgen::intern("min")))?;
             let max_val = Reflect::get(obj, &JsValue::from_str(wasm_bindgen::intern("max")))?;
             Ok((jsvalue_to_scalar(&min_val), jsvalue_to_scalar(&max_val)))
+        })
+    }
+
+    fn view_expand(
+        &mut self,
+        view_id: &str,
+        config: &perspective_client::config::ViewConfig,
+        row_index: u32,
+    ) -> HandlerFuture<Result<u32, Self::Error>> {
+        Box::pin(self.call_tree_method("viewExpand", view_id, config, row_index))
+    }
+
+    fn view_collapse(
+        &mut self,
+        view_id: &str,
+        config: &perspective_client::config::ViewConfig,
+        row_index: u32,
+    ) -> HandlerFuture<Result<u32, Self::Error>> {
+        Box::pin(self.call_tree_method("viewCollapse", view_id, config, row_index))
+    }
+
+    fn view_set_depth(
+        &mut self,
+        view_id: &str,
+        config: &perspective_client::config::ViewConfig,
+        depth: u32,
+    ) -> HandlerFuture<Result<(), Self::Error>> {
+        let fut = self.call_tree_method("viewSetDepth", view_id, config, depth);
+        Box::pin(async move {
+            fut.await?;
+            Ok(())
         })
     }
 

@@ -2237,6 +2237,8 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             features->set_on_update(true);
             features->set_expressions(true);
             features->set_view_derivations(true);
+            features->set_expand_collapse(true);
+            features->set_update(true);
 
             const auto window_agg = [](const char* name,
                                         std::initializer_list<const char*> frames,

@@ -228,6 +228,55 @@ impl PyGenericSQLVirtualServerModel {
             .view_get_min_max(view_id, column_name, &config)
             .map_err(|e| PyValueError::new_err(e.to_string()))
     }
+
+    /// The `UPDATE` expanding the `row_index`-th visible row, whose
+    /// affected-row count is the number of rows shown.
+    pub fn view_expand(
+        &self,
+        view_id: &str,
+        config: Py<PyAny>,
+        row_index: u32,
+    ) -> PyResult<String> {
+        let config: ViewConfig = Python::attach(|py| {
+            pythonize::depythonize(config.bind(py))
+                .map_err(|e| PyValueError::new_err(e.to_string()))
+        })?;
+
+        self.inner
+            .view_expand(view_id, &config, row_index)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// The `UPDATE` collapsing the `row_index`-th visible row, whose
+    /// affected-row count is the number of rows hidden.
+    pub fn view_collapse(
+        &self,
+        view_id: &str,
+        config: Py<PyAny>,
+        row_index: u32,
+    ) -> PyResult<String> {
+        let config: ViewConfig = Python::attach(|py| {
+            pythonize::depythonize(config.bind(py))
+                .map_err(|e| PyValueError::new_err(e.to_string()))
+        })?;
+
+        self.inner
+            .view_collapse(view_id, &config, row_index)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// The `UPDATE` expanding exactly the rows whose path is no longer than
+    /// `depth`.
+    pub fn view_set_depth(&self, view_id: &str, config: Py<PyAny>, depth: u32) -> PyResult<String> {
+        let config: ViewConfig = Python::attach(|py| {
+            pythonize::depythonize(config.bind(py))
+                .map_err(|e| PyValueError::new_err(e.to_string()))
+        })?;
+
+        self.inner
+            .view_set_depth(view_id, &config, depth)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
 }
 
 impl PyGenericSQLVirtualServerModel {

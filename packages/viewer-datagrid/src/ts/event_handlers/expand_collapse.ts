@@ -22,6 +22,11 @@ export async function expandCollapseHandler(
         return;
     }
 
+    if (!model._expand_collapse) {
+        console.warn("Expand/collapse not supported by this server");
+        return;
+    }
+
     const is_collapse = (event.target as Element).classList.contains(
         "psp-tree-label-collapse",
     );

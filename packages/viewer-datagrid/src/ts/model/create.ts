@@ -260,16 +260,23 @@ export async function createModel(
     }
 
     const _panel = this.getAttribute("slot") ?? undefined;
-    const [table_schema, num_rows, schema, expression_schema, _edit_port] =
-        await Promise.all([
-            table.schema(),
-            view.num_rows(),
-            view.schema(),
-            view.expression_schema(),
-            (this.parentElement as HTMLPerspectiveViewerElement).getEditPort({
-                panel: _panel,
-            }),
-        ]);
+    const [
+        table_schema,
+        num_rows,
+        schema,
+        expression_schema,
+        _edit_port,
+        features,
+    ] = await Promise.all([
+        table.schema(),
+        view.num_rows(),
+        view.schema(),
+        view.expression_schema(),
+        (this.parentElement as HTMLPerspectiveViewerElement).getEditPort({
+            panel: _panel,
+        }),
+        table.get_features(),
+    ]);
 
     const _schema: Schema = {
         ...(schema as Schema),
@@ -297,7 +304,13 @@ export async function createModel(
     const _column_types: ColumnType[] = [];
     let _edit_mode: EditMode = this._edit_mode || "READ_ONLY";
 
-    if (_edit_mode === "SELECT_ROW_TREE" && config.group_by.length === 0) {
+    if (_edit_mode === "EDIT" && !features.update) {
+        _edit_mode = "READ_ONLY";
+        this._edit_mode = _edit_mode;
+    } else if (
+        _edit_mode === "SELECT_ROW_TREE" &&
+        config.group_by.length === 0
+    ) {
         _edit_mode = "READ_ONLY";
         this._edit_mode = _edit_mode;
     } else if (
@@ -317,6 +330,8 @@ export async function createModel(
         _edit_port,
         _view: view,
         _table: table,
+        _expand_collapse: !!features.expand_collapse,
+        _update: !!features.update,
         _table_schema,
         _config: config,
         _num_rows: num_rows,

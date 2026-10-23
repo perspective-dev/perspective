@@ -37,6 +37,19 @@ function isSelectRowTreeAvailable(model?: DatagridModel): boolean {
     );
 }
 
+/** Whether `mode` can be entered, given the current model. */
+function isEditModeAvailable(mode: EditMode, model?: DatagridModel): boolean {
+    if (mode === "SELECT_ROW_TREE") {
+        return isSelectRowTreeAvailable(model);
+    }
+
+    if (mode === "EDIT") {
+        return model?._update ?? true;
+    }
+
+    return true;
+}
+
 export function toggle_edit_mode(
     this: DatagridPluginElement,
     mode?: EditMode,
@@ -46,12 +59,11 @@ export function toggle_edit_mode(
         let idx = EDIT_MODES.indexOf(this._edit_mode);
         do {
             idx = (idx + 1) % EDIT_MODES.length;
-        } while (
-            EDIT_MODES[idx] === "SELECT_ROW_TREE" &&
-            !isSelectRowTreeAvailable(this.model)
-        );
+        } while (!isEditModeAvailable(EDIT_MODES[idx], this.model));
 
         mode = EDIT_MODES[idx];
+    } else if (mode === "EDIT" && this.model?._update === false) {
+        mode = "READ_ONLY";
     }
 
     const panel = this.getAttribute("slot") ?? undefined;

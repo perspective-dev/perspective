@@ -122,7 +122,8 @@ function current_config(
 
 /**
  * The Datagrid's plugin-level settings schema, advertising `zebra_color`
- * only while `zebra_rows >= 1`.
+ * only while `zebra_rows >= 1`, and `"EDIT"` only while the server supports
+ * `Table::update`.
  */
 export default function plugin_config_schema(
     this: DatagridPluginElement,
@@ -136,7 +137,9 @@ export default function plugin_config_schema(
         key: "edit_mode" satisfies keyof DatagridPluginConfig,
         default: "READ_ONLY",
         variants: [
-            { value: "EDIT", label: "Edit" },
+            ...(this.model?._update === false
+                ? []
+                : [{ value: "EDIT", label: "Edit" }]),
             { value: "READ_ONLY", label: "Read-only" },
             { value: "SELECT_ROW", label: "Row Select" },
             { value: "SELECT_COLUMN", label: "Column Select" },

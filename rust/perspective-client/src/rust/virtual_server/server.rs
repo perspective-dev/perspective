@@ -20,17 +20,18 @@ use super::data::RowPathStyle;
 use super::error::VirtualServerError;
 use super::generic_sql_model::{column_path_source, sort_column_paths};
 use super::handler::VirtualServerHandler;
-use crate::config::{ViewConfig, ViewConfigUpdate};
+use crate::config::{GroupRollupMode, ViewConfig, ViewConfigUpdate};
 use crate::proto::response::ClientResp;
 use crate::proto::{
     ColumnPathLevel, ColumnType, GetFeaturesResp, GetHostedTablesResp, MakeTableResp, Request,
     Response, Scalar, ServerError, TableDeleteResp, TableDescribeResp, TableMakePortResp,
     TableMakeViewResp, TableOnDeleteResp, TableRemoveDeleteResp, TableSchemaResp, TableSizeResp,
-    ViewColumnPathsResp, ViewDeleteResp, ViewDescription, ViewDimensionsResp,
-    ViewExpressionSchemaResp, ViewGetConfigResp, ViewGetMinMaxResp, ViewOnDeleteResp,
-    ViewOnRemoveResp, ViewOnUpdateResp, ViewRemoveDeleteResp, ViewRemoveOnRemoveResp,
-    ViewRemoveOnUpdateResp, ViewSchemaResp, ViewToArrowResp, ViewToColumnsStringResp,
-    ViewToCsvResp, ViewToNdjsonStringResp, ViewToRowsStringResp, scalar, table_describe_resp,
+    ViewCollapseResp, ViewColumnPathsResp, ViewDeleteResp, ViewDescription, ViewDimensionsResp,
+    ViewExpandResp, ViewExpressionSchemaResp, ViewGetConfigResp, ViewGetMinMaxResp,
+    ViewOnDeleteResp, ViewOnRemoveResp, ViewOnUpdateResp, ViewRemoveDeleteResp,
+    ViewRemoveOnRemoveResp, ViewRemoveOnUpdateResp, ViewSchemaResp, ViewSetDepthResp,
+    ViewToArrowResp, ViewToColumnsStringResp, ViewToCsvResp, ViewToNdjsonStringResp,
+    ViewToRowsStringResp, scalar, table_describe_resp,
 };
 use crate::table::{DescribeError, Description};
 
@@ -165,6 +166,23 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
         } else {
             Ok(self.view_schemas.get(entity_id).cloned().unwrap())
         }
+    }
+
+    /// Whether `view_id` has an expandable row tree, or an error if this
+    /// server cannot expand one.
+    async fn is_expandable(&self, view_id: &str) -> Result<bool, VirtualServerError<T::Error>> {
+        if !self.handler.get_features().await?.expand_collapse {
+            return Err(VirtualServerError::Other(
+                "This data source does not support `expand`, `collapse` or `set_depth`".to_string(),
+            ));
+        }
+
+        let config = self
+            .view_configs
+            .get(view_id)
+            .ok_or_else(|| VirtualServerError::UnknownViewId(view_id.to_string()))?;
+
+        Ok(!config.group_by.is_empty() && config.group_rollup_mode == GroupRollupMode::Rollup)
     }
 
     async fn internal_handle_request(
@@ -572,6 +590,43 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     min: Some(min.into()),
                     max: Some(max.into()),
                 })
+            },
+
+            ViewExpandReq(req) => {
+                let num_changed = if self.is_expandable(&msg.entity_id).await? {
+                    let config = &self.view_configs[&msg.entity_id];
+                    self.handler
+                        .view_expand(&msg.entity_id, config, req.row_index)
+                        .await?
+                } else {
+                    0
+                };
+
+                respond!(msg, ViewExpandResp { num_changed })
+            },
+            ViewCollapseReq(req) => {
+                let num_changed = if self.is_expandable(&msg.entity_id).await? {
+                    let config = &self.view_configs[&msg.entity_id];
+                    self.handler
+                        .view_collapse(&msg.entity_id, config, req.row_index)
+                        .await?
+                } else {
+                    0
+                };
+
+                respond!(msg, ViewCollapseResp { num_changed })
+            },
+            ViewSetDepthReq(req) => {
+                if self.is_expandable(&msg.entity_id).await? {
+                    let config = &self.view_configs[&msg.entity_id];
+                    if req.depth as usize <= config.group_by.len() {
+                        self.handler
+                            .view_set_depth(&msg.entity_id, config, req.depth)
+                            .await?;
+                    }
+                }
+
+                respond!(msg, ViewSetDepthResp {})
             },
 
             TableDeleteReq(_) if self.view_tables.contains(&msg.entity_id) => {

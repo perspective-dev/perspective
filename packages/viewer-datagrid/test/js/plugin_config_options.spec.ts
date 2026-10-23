@@ -485,6 +485,31 @@ test.describe("Datagrid plugin_config text and row options", () => {
         );
     });
 
+    test("plugin_config_schema offers EDIT only while the server supports update", async ({
+        page,
+    }) => {
+        await goto_ready(page);
+        const variants = await page.evaluate(async () => {
+            const datagrid = document.querySelector(
+                "perspective-viewer-datagrid",
+            ) as any;
+
+            const edit_modes = () =>
+                datagrid
+                    .plugin_config_schema({}, {})
+                    .fields.find((f: any) => f.key === "edit_mode")
+                    .variants.map((v: any) => v.value);
+
+            const supported = edit_modes();
+            datagrid.model._update = false;
+            return { supported, unsupported: edit_modes() };
+        });
+
+        expect(variants.supported).toContain("EDIT");
+        expect(variants.unsupported).not.toContain("EDIT");
+        expect(variants.unsupported).toContain("READ_ONLY");
+    });
+
     test("column_menus hides the header edit row while settings are open", async ({
         page,
     }) => {

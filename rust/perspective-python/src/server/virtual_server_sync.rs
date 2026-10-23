@@ -45,6 +45,33 @@ fn py_to_scalar(val: pyo3::Bound<'_, PyAny>) -> PyResult<perspective_client::con
 
 pub struct PyServerHandler(Py<PyAny>);
 
+impl PyServerHandler {
+    /// Calls a `(view_name, config, n)` tree method, returning its integer
+    /// result (`0` when it returns `None`).
+    fn call_tree_method(
+        &self,
+        method: &'static str,
+        view_id: &str,
+        config: &perspective_client::config::ViewConfig,
+        arg: u32,
+    ) -> impl std::future::Future<Output = PyResult<u32>> + Send + 'static {
+        let handler = Python::attach(|py| self.0.clone_ref(py));
+        let view_id = view_id.to_string();
+        let config = config.clone();
+        async move {
+            Python::attach(|py| {
+                let result = handler.call_method1(
+                    py,
+                    method,
+                    (&view_id, pythonize::pythonize(py, &config)?, arg),
+                )?;
+
+                Ok(result.extract::<Option<u32>>(py)?.unwrap_or(0))
+            })
+        }
+    }
+}
+
 impl VirtualServerHandler for PyServerHandler {
     type Error = PyErr;
 
@@ -378,6 +405,37 @@ impl VirtualServerHandler for PyServerHandler {
                 let max = py_to_scalar(tuple.get_item(1)?)?;
                 Ok((min, max))
             })
+        })
+    }
+
+    fn view_expand(
+        &mut self,
+        view_id: &str,
+        config: &perspective_client::config::ViewConfig,
+        row_index: u32,
+    ) -> VirtualServerFuture<'_, Result<u32, Self::Error>> {
+        Box::pin(self.call_tree_method("view_expand", view_id, config, row_index))
+    }
+
+    fn view_collapse(
+        &mut self,
+        view_id: &str,
+        config: &perspective_client::config::ViewConfig,
+        row_index: u32,
+    ) -> VirtualServerFuture<'_, Result<u32, Self::Error>> {
+        Box::pin(self.call_tree_method("view_collapse", view_id, config, row_index))
+    }
+
+    fn view_set_depth(
+        &mut self,
+        view_id: &str,
+        config: &perspective_client::config::ViewConfig,
+        depth: u32,
+    ) -> VirtualServerFuture<'_, Result<(), Self::Error>> {
+        let fut = self.call_tree_method("view_set_depth", view_id, config, depth);
+        Box::pin(async move {
+            fut.await?;
+            Ok(())
         })
     }
 

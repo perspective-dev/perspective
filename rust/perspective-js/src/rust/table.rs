@@ -188,6 +188,14 @@ impl Table {
         Ok(JsValue::from_serde_ext(&schema)?)
     }
 
+    /// Returns the features supported by the server hosting this [`Table`].
+    #[wasm_bindgen(unchecked_return_type = "Features")]
+    pub async fn get_features(&self) -> ApiResult<JsValue> {
+        let features = self.0.get_features().await?;
+        let features = perspective_client::virtual_server::Features::from(&*features);
+        Ok(JsValue::from_serde_ext(&features)?)
+    }
+
     /// Returns the column names of this [`Table`] in "natural" order (the
     /// ordering implied by the input format).
     ///  

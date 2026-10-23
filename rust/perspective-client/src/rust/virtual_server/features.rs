@@ -89,6 +89,18 @@ pub struct Features<'a> {
     #[serde(default)]
     #[ts(optional, as = "Option<_>")]
     pub view_derivations: bool,
+
+    /// Whether `View::expand`, `View::collapse` and `View::set_depth` are
+    /// supported, which requires the handler's `view_expand`,
+    /// `view_collapse` and `view_set_depth`.
+    #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
+    pub expand_collapse: bool,
+
+    /// Whether `Table::update` is supported.
+    #[serde(default)]
+    #[ts(optional, as = "Option<_>")]
+    pub update: bool,
 }
 
 /// Specification for a window aggregate.
@@ -166,6 +178,8 @@ impl<'a> From<Features<'a>> for GetFeaturesResp {
             sort: value.sort,
             unordered: value.unordered,
             view_derivations: value.view_derivations,
+            expand_collapse: value.expand_collapse,
+            update: value.update,
             window_aggregates: value
                 .window_aggregates
                 .iter()
@@ -219,4 +233,80 @@ impl<'a> From<Features<'a>> for GetFeaturesResp {
                 .collect(),
         }
     }
+}
+
+impl From<&GetFeaturesResp> for Features<'static> {
+    fn from(value: &GetFeaturesResp) -> Features<'static> {
+        Features {
+            group_by: value.group_by,
+            group_rollup_mode: value
+                .group_rollup_mode
+                .iter()
+                .filter_map(|x| crate::proto::GroupRollupMode::try_from(*x).ok())
+                .map(Into::into)
+                .collect(),
+            split_by: value.split_by,
+            split_rollup_mode: value
+                .split_rollup_mode
+                .iter()
+                .filter_map(|x| crate::proto::SplitRollupMode::try_from(*x).ok())
+                .map(Into::into)
+                .collect(),
+            filter_ops: by_column_type(&value.filter_ops, |x| {
+                x.options.iter().cloned().map(Cow::Owned).collect()
+            }),
+            aggregates: by_column_type(&value.aggregates, |x| {
+                x.aggregates
+                    .iter()
+                    .map(|agg| {
+                        let name = Cow::Owned(agg.name.clone());
+                        if agg.args.is_empty() {
+                            AggSpec::Single(name)
+                        } else {
+                            AggSpec::Multiple(
+                                name,
+                                agg.args
+                                    .iter()
+                                    .filter_map(|t| ColumnType::try_from(*t).ok())
+                                    .collect(),
+                            )
+                        }
+                    })
+                    .collect()
+            }),
+            sort: value.sort,
+            expressions: value.expressions,
+            window_aggregates: by_column_type(&value.window_aggregates, |x| {
+                x.options
+                    .iter()
+                    .map(|w| WindowAggSpec {
+                        name: Cow::Owned(w.name.clone()),
+                        frames: w.frames.iter().cloned().map(Cow::Owned).collect(),
+                        offset: w.offset,
+                        alpha: w.alpha,
+                        result_type: w.result_type.and_then(|t| ColumnType::try_from(t).ok()),
+                    })
+                    .collect()
+            }),
+            on_update: value.on_update,
+            unordered: value.unordered,
+            view_derivations: value.view_derivations,
+            expand_collapse: value.expand_collapse,
+            update: value.update,
+        }
+    }
+}
+
+/// Re-keys a wire map by [`ColumnType`], in `ColumnType` order.
+fn by_column_type<'a, T: 'a, U>(
+    map: impl IntoIterator<Item = (&'a u32, &'a T)>,
+    f: impl Fn(&T) -> U,
+) -> IndexMap<ColumnType, U> {
+    let mut entries = map
+        .into_iter()
+        .filter_map(|(ty, x)| Some((ColumnType::try_from(*ty as i32).ok()?, f(x))))
+        .collect::<Vec<_>>();
+
+    entries.sort_by_key(|(ty, _)| *ty as i32);
+    entries.into_iter().collect()
 }

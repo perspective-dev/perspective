@@ -175,7 +175,9 @@ class DuckDBVirtualServerHandler(VirtualServerHandler):
 
     def __init__(self, db):
         self.db = db
-        self.sql_builder = perspective.GenericSQLVirtualServerModel({})
+        self.sql_builder = perspective.GenericSQLVirtualServerModel(
+            {"expand_collapse": True}
+        )
 
     def get_features(self):
         return {
@@ -184,6 +186,7 @@ class DuckDBVirtualServerHandler(VirtualServerHandler):
             "sort": True,
             "expressions": True,
             "view_derivations": True,
+            "expand_collapse": True,
             "group_rollup_mode": ["rollup", "flat", "total"],
             "split_rollup_mode": ["flat", "rollup"],
             "filter_ops": {
@@ -232,9 +235,31 @@ class DuckDBVirtualServerHandler(VirtualServerHandler):
         query = self.sql_builder.view_column_size(table_name)
         results = run_query(self.db, query)
         gs = len(config["group_by"])
-        return results[0][0] - (
-            0 if gs == 0 else gs + (1 if len(config["split_by"]) == 0 else 0)
+        return (
+            results[0][0]
+            - (0 if gs == 0 else gs + (1 if len(config["split_by"]) == 0 else 0))
+            - 1
         )
+
+    def view_size(self, view_name):
+        return self._run_count(self.sql_builder.view_size(view_name))
+
+    def view_expand(self, view_name, config, row_index):
+        return self._run_count(
+            self.sql_builder.view_expand(view_name, config, row_index)
+        )
+
+    def view_collapse(self, view_name, config, row_index):
+        return self._run_count(
+            self.sql_builder.view_collapse(view_name, config, row_index)
+        )
+
+    def view_set_depth(self, view_name, config, depth):
+        query = self.sql_builder.view_set_depth(view_name, config, depth)
+        run_query(self.db, query, execute=True)
+
+    def _run_count(self, query):
+        return self.db.execute(" ".join(query.split())).fetchall()[0][0]
 
     def table_size(self, table_name):
         query = self.sql_builder.table_size(table_name)

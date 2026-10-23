@@ -254,6 +254,13 @@ message GetFeaturesResp {
     // Whether a `Table` can be derived from a `View` of this server.
     bool view_derivations = 12;
 
+    // Whether `View::expand`, `View::collapse` and `View::set_depth` are
+    // supported for `group_by` views of this server.
+    bool expand_collapse = 13;
+
+    // Whether `Table::update` is supported for `Table`s of this server.
+    bool update = 14;
+
     message WindowAggregateOptions {
         repeated WindowAggregateArgs options = 1;
     }

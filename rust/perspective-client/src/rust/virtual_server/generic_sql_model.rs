@@ -17,9 +17,6 @@
 
 // TODO(texodus): Missing these features
 //
-// - row expand/collapse in the datagrid needs datamodel support, this is likely
-//   a "collapsed" boolean column in the temp table we `UPDATE`.
-//
 // - `on_update` real-time support will be method which takes sa view name and a
 //   handler and calls the handler when the view needs to be recalculated.
 //
@@ -132,6 +129,12 @@ pub struct GenericSQLVirtualServerModelArgs {
     /// Template wrapping a `SELECT` so the dialect PLANS it and reports its
     /// result columns without executing it; `{}` is the query.
     describe_template: Option<String>,
+
+    /// Whether views carry a `__HIDDEN__` column, `UPDATE`d in place by
+    /// [`GenericSQLVirtualServerModel::view_expand`] and friends, which
+    /// requires `create_entity` be a table whose scan order is its insertion
+    /// order (DuckDB's default).
+    expand_collapse: Option<bool>,
 }
 
 /// Recovers the source column of a pivoted view column name — the longest
@@ -196,6 +199,126 @@ impl GenericSQLVirtualServerModel {
     /// Creates a new `GenericSQLVirtualServerModel` instance.
     pub fn new(args: GenericSQLVirtualServerModelArgs) -> Self {
         Self(args)
+    }
+
+    fn is_expand_collapse(&self) -> bool {
+        self.0.expand_collapse.unwrap_or(false)
+    }
+
+    /// The `WHERE` clause excluding collapsed rows from a view's reads.
+    fn visible_rows_sql(&self) -> &'static str {
+        if self.is_expand_collapse() {
+            " WHERE NOT \"__HIDDEN__\""
+        } else {
+            ""
+        }
+    }
+
+    /// A row's `group_by` path length, derived from its `__GROUPING_ID__`.
+    fn row_depth_sql(&self, config: &ViewConfig, alias: &str) -> String {
+        let levels = config.group_by.len();
+        let whens = (0..=levels)
+            .map(|k| format!("WHEN {} THEN {}", (1u64 << k) - 1, levels - k))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        format!("(CASE {}\"__GROUPING_ID__\" {} END)", alias, whens)
+    }
+
+    fn check_expandable(&self, config: &ViewConfig) -> GenericSQLResult<()> {
+        if !self.is_expand_collapse()
+            || config.group_by.is_empty()
+            || config.group_rollup_mode != GroupRollupMode::Rollup
+        {
+            return Err(GenericSQLError::UnsupportedOperation(
+                "expand/collapse requires `expand_collapse` and a \"rollup\" `group_by` view"
+                    .to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// A one-row relation `r` of the `row_index`-th visible row's `lo` row id,
+    /// `depth`, and the row id `hi` just past its subtree.
+    fn expansion_target_sql(
+        &self,
+        view_id: &str,
+        config: &ViewConfig,
+        row_index: u32,
+    ) -> GenericSQLResult<String> {
+        self.check_expandable(config)?;
+        let row_id = self.0.row_id_expr.as_deref().unwrap_or("rowid");
+        Ok(format!(
+            "(SELECT t.idx AS lo, t.depth AS depth, COALESCE(MIN(n.{row_id}), (SELECT \
+             MAX({row_id}) + 1 FROM {view_id})) AS hi FROM (SELECT {row_id} AS idx, {depth} AS \
+             depth FROM {view_id} WHERE NOT \"__HIDDEN__\" ORDER BY {row_id} LIMIT 1 OFFSET \
+             {row_index}) AS t LEFT JOIN {view_id} AS n ON n.{row_id} > t.idx AND {n_depth} <= \
+             t.depth GROUP BY t.idx, t.depth) AS r",
+            depth = self.row_depth_sql(config, ""),
+            n_depth = self.row_depth_sql(config, "n."),
+        ))
+    }
+
+    /// Returns the `UPDATE` showing the children of the `row_index`-th visible
+    /// row, each collapsed, whose affected-row count is the rows shown.
+    ///
+    /// # Returns
+    /// SQL: `UPDATE {view_id} SET "__HIDDEN__" = FALSE FROM (...) AS r WHERE
+    /// ...`
+    pub fn view_expand(
+        &self,
+        view_id: &str,
+        config: &ViewConfig,
+        row_index: u32,
+    ) -> GenericSQLResult<String> {
+        let row_id = self.0.row_id_expr.as_deref().unwrap_or("rowid");
+        Ok(format!(
+            "UPDATE {view_id} AS v SET \"__HIDDEN__\" = FALSE FROM {target} WHERE v.{row_id} > \
+             r.lo AND v.{row_id} < r.hi AND {depth} = r.depth + 1 AND v.\"__HIDDEN__\"",
+            target = self.expansion_target_sql(view_id, config, row_index)?,
+            depth = self.row_depth_sql(config, "v."),
+        ))
+    }
+
+    /// Returns the `UPDATE` hiding every descendant of the `row_index`-th
+    /// visible row, whose affected-row count is the rows hidden.
+    ///
+    /// # Returns
+    /// SQL: `UPDATE {view_id} SET "__HIDDEN__" = TRUE FROM (...) AS r WHERE
+    /// ...`
+    pub fn view_collapse(
+        &self,
+        view_id: &str,
+        config: &ViewConfig,
+        row_index: u32,
+    ) -> GenericSQLResult<String> {
+        let row_id = self.0.row_id_expr.as_deref().unwrap_or("rowid");
+        Ok(format!(
+            "UPDATE {view_id} AS v SET \"__HIDDEN__\" = TRUE FROM {target} WHERE v.{row_id} > \
+             r.lo AND v.{row_id} < r.hi AND NOT v.\"__HIDDEN__\"",
+            target = self.expansion_target_sql(view_id, config, row_index)?,
+        ))
+    }
+
+    /// Returns the `UPDATE` expanding exactly the rows whose path is no longer
+    /// than `depth`.
+    ///
+    /// # Returns
+    /// SQL: `UPDATE {view_id} SET "__HIDDEN__" = ({depth expr} > {depth + 1})`
+    pub fn view_set_depth(
+        &self,
+        view_id: &str,
+        config: &ViewConfig,
+        depth: u32,
+    ) -> GenericSQLResult<String> {
+        self.check_expandable(config)?;
+        Ok(format!(
+            "UPDATE {} SET \"__HIDDEN__\" = ({} > {})",
+            view_id,
+            self.row_depth_sql(config, ""),
+            depth as u64 + 1
+        ))
     }
 
     /// Returns the SQL query to list all hosted tables.
@@ -355,7 +478,14 @@ impl GenericSQLVirtualServerModel {
         schema: &IndexMap<String, ColumnType>,
     ) -> GenericSQLResult<String> {
         let ctx = ViewQueryContext::new(self, table_id, config, schema)?;
-        let query = ctx.build_query();
+        let mut query = ctx.build_query();
+        if self.is_expand_collapse() {
+            query = format!(
+                "SELECT *, FALSE AS \"__HIDDEN__\" FROM ({}) AS __PSP_EXPAND_SRC__",
+                query
+            );
+        }
+
         let template = self.0.create_entity.as_deref().unwrap_or("TABLE");
         Ok(format!("CREATE {} {} AS ({})", template, view_id, query))
     }
@@ -524,9 +654,10 @@ impl GenericSQLVirtualServerModel {
             .collect();
 
         Ok(format!(
-            "SELECT {} FROM {} {}",
+            "SELECT {} FROM {}{} {}",
             all_columns.join(", "),
             view_id,
+            self.visible_rows_sql(),
             limit_clause
         )
         .trim()
@@ -544,7 +675,7 @@ impl GenericSQLVirtualServerModel {
         Ok(format!("DESCRIBE {}", view_id))
     }
 
-    /// Returns the SQL query to get the row count of a view.
+    /// Returns the SQL query to get the (visible) row count of a view.
     ///
     /// # Arguments
     /// * `view_id` - The identifier of the view.
@@ -552,7 +683,11 @@ impl GenericSQLVirtualServerModel {
     /// # Returns
     /// SQL: `SELECT COUNT(*) FROM {view_id}`
     pub fn view_size(&self, view_id: &str) -> GenericSQLResult<String> {
-        Ok(format!("SELECT COUNT(*) FROM {}", view_id))
+        Ok(format!(
+            "SELECT COUNT(*) FROM {}{}",
+            view_id,
+            self.visible_rows_sql()
+        ))
     }
 
     /// Returns the SQL query to get the min and max values of a column.
