@@ -18,7 +18,14 @@ import * as wasm_module from "../../dist/wasm/perspective-js.js";
 import * as api from "./wasm/browser.ts";
 import { load_wasm_stage_0 } from "./wasm/decompress.ts";
 import { host_supports_memory64 } from "./wasm/features.ts";
+import { MigrateLoader } from "./wasm/migrate.ts";
+import type { MigrateKind, MigrateResult } from "./wasm/migrate.ts";
 export { host_supports_memory64 } from "./wasm/features.ts";
+export type {
+    MigrateKind,
+    MigrateNotice,
+    MigrateResult,
+} from "./wasm/migrate.ts";
 
 export {
     GenericSQLVirtualServerModel,
@@ -46,26 +53,31 @@ export type ServerWasmSource =
     | (() => Promise<ArrayBuffer | Response | WebAssembly.Module>);
 
 /**
- * Engine binaries by bitness. Registering `wasm64` is the opt-in for the
- * Memory64 engine (4GB heap ceiling raised to 16GB, at some engine
- * performance cost) — it is selected whenever the host supports Memory64.
+ * Engine binaries by bitness, and the `perspective-migrate` binary behind
+ * `migrate()`. Registering `wasm64` is the opt-in for the Memory64 engine
+ * (4GB heap ceiling raised to 16GB, at some engine performance cost) — it is
+ * selected whenever the host supports Memory64.
  */
 export interface ServerWasmRegistration {
     wasm32?: ServerWasmSource;
     wasm64?: ServerWasmSource;
+    migrate?: ServerWasmSource;
 }
 
 export interface InitServerOptions {
     disable_stage_0?: boolean;
 }
 
-interface ServerWasmRegistry extends ServerWasmRegistration {
+interface ServerWasmRegistry {
+    wasm32?: ServerWasmSource;
+    wasm64?: ServerWasmSource;
     sole?: ServerWasmSource;
     disable_stage_0: boolean;
 }
 
 let SERVER_REGISTRY: ServerWasmRegistry | undefined;
 let GLOBAL_SERVER_WASM: Promise<ArrayBuffer | WebAssembly.Module> | undefined;
+const MIGRATE = new MigrateLoader();
 
 export async function createMessageHandler(
     handler: psp_virtual.VirtualServerHandler,
@@ -86,7 +98,7 @@ function is_wasm_source(
     );
 }
 
-async function materialize_server_wasm(
+async function materialize_wasm(
     source: ServerWasmSource,
     disable_stage_0: boolean,
 ): Promise<ArrayBuffer | WebAssembly.Module> {
@@ -98,7 +110,7 @@ async function materialize_server_wasm(
     if (typeof Response !== "undefined" && wasm instanceof Response) {
         if (!wasm.ok) {
             throw new Error(
-                `Failed to fetch perspective server wasm (HTTP ${wasm.status} "${wasm.url}")`,
+                `Failed to fetch perspective wasm (HTTP ${wasm.status} "${wasm.url}")`,
             );
         }
 
@@ -119,10 +131,7 @@ async function select_server_wasm(
     registry: ServerWasmRegistry,
 ): Promise<ArrayBuffer | WebAssembly.Module> {
     if (registry.sole !== undefined) {
-        return await materialize_server_wasm(
-            registry.sole,
-            registry.disable_stage_0,
-        );
+        return await materialize_wasm(registry.sole, registry.disable_stage_0);
     }
 
     // A lone `wasm64` registration is an explicit opt-in and is used as-is
@@ -133,7 +142,7 @@ async function select_server_wasm(
         (registry.wasm32 === undefined || host_supports_memory64())
     ) {
         try {
-            return await materialize_server_wasm(
+            return await materialize_wasm(
                 registry.wasm64,
                 registry.disable_stage_0,
             );
@@ -149,10 +158,7 @@ async function select_server_wasm(
         }
     }
 
-    return await materialize_server_wasm(
-        registry.wasm32!,
-        registry.disable_stage_0,
-    );
+    return await materialize_wasm(registry.wasm32!, registry.disable_stage_0);
 }
 
 /**
@@ -168,7 +174,8 @@ async function select_server_wasm(
  * selected wasm64 source fails to load and a wasm32 source is also
  * registered, selection falls back to wasm32 with a console warning.
  *
- * Selection and download are deferred to the first `worker()` call.
+ * Selection and download are deferred to the first `worker()` call. The
+ * `migrate` binary is likewise only downloaded by the first `migrate()` call.
  *
  * # Examples
  *
@@ -180,6 +187,7 @@ async function select_server_wasm(
  * perspective.init_server({
  *     wasm32: () => fetch("perspective-server.wasm"),
  *     wasm64: () => fetch("perspective-server.memory64.wasm"),
+ *     migrate: () => fetch("perspective-migrate-js.wasm"),
  * });
  * ```
  */
@@ -190,8 +198,8 @@ export function init_server(
     const disable_stage_0 =
         typeof options === "boolean" ? options : !!options.disable_stage_0;
 
-    GLOBAL_SERVER_WASM = undefined;
     if (is_wasm_source(wasm)) {
+        GLOBAL_SERVER_WASM = undefined;
         SERVER_REGISTRY = { sole: wasm, disable_stage_0 };
         return;
     }
@@ -200,19 +208,60 @@ export function init_server(
     // can't negatively narrow this branch itself.
     const registration = wasm as ServerWasmRegistration;
     if (
+        registration.wasm32 === undefined &&
+        registration.wasm64 === undefined &&
+        registration.migrate === undefined
+    ) {
+        throw new Error(
+            "init_server requires a wasm source or a {wasm32, wasm64, migrate} registration",
+        );
+    }
+
+    if (
         registration.wasm32 !== undefined ||
         registration.wasm64 !== undefined
     ) {
+        GLOBAL_SERVER_WASM = undefined;
         SERVER_REGISTRY = {
             wasm32: registration.wasm32,
             wasm64: registration.wasm64,
             disable_stage_0,
         };
-    } else {
-        throw new Error(
-            "init_server requires a wasm source or a {wasm32, wasm64} registration",
-        );
     }
+
+    const migrate = registration.migrate;
+    if (migrate !== undefined) {
+        MIGRATE.register(() => materialize_wasm(migrate, disable_stage_0));
+    }
+}
+
+/**
+ * Upgrade a persisted config written by any Perspective release since 2.0.0
+ * to the current schema, using the `migrate` binary registered with
+ * `init_server`.
+ *
+ * # Arguments
+ *
+ * - `kind` - `"view"` for a `ViewConfig`, `"viewer"` for a
+ *   `<perspective-viewer>` `save()` token, or `"workspace"` for a
+ *   `saveWorkspace()` token.
+ * - `config` - The config to upgrade.
+ * - `from_version` - The release which wrote `config`, used only when it has
+ *   no `version` field.
+ *
+ * # Examples
+ *
+ * ```javascript
+ * const { value, notices } = await perspective.migrate("viewer", token);
+ * await viewer.restore(value);
+ * ```
+ */
+export async function migrate<T = Record<string, unknown>>(
+    kind: MigrateKind,
+    config: unknown,
+    from_version?: string,
+): Promise<MigrateResult<T>> {
+    return await MIGRATE.migrate<T>(kind, config, from_version);
 }
 
 let GLOBAL_CLIENT_WASM: Promise<typeof psp>;
@@ -371,6 +420,7 @@ export default {
     worker,
     init_client,
     init_server,
+    migrate,
     host_supports_memory64,
     createMessageHandler,
     getCompiledClientWasm,

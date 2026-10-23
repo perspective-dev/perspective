@@ -19,7 +19,7 @@ use std::rc::Rc;
 use perspective_client::Client;
 use perspective_client::config::Filter;
 
-use crate::config::{DerivedTableConfig, TableRef};
+use crate::config::{DerivedTableConfig, TableRef, UnknownKeys};
 use crate::derived::{DerivedRegistry, DerivedTable};
 use crate::renderer::Renderer;
 use crate::session::{OverlayClause, Session};
@@ -1120,6 +1120,7 @@ impl Workspace {
                     out = TableRef::Derived(Box::new(DerivedTableConfig {
                         table: out,
                         view_config: config.view_config,
+                        unknown: UnknownKeys,
                     }));
                 },
                 None => return TableRef::Name(name.to_owned()),

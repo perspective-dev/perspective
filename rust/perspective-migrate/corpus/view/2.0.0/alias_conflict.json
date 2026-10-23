@@ -1,0 +1,24 @@
+{
+    "kind": "view",
+    "from": "2.0.0",
+    "source": "hand-written",
+    "input": {
+        "row_pivot": [
+            "A"
+        ],
+        "group_by": [
+            "B"
+        ]
+    },
+    "error": {
+        "kind": "Conflict",
+        "step": "view.v2_aliases",
+        "pointer": "",
+        "keys": [
+            "row_pivot",
+            "group_by"
+        ]
+    },
+    "notices": [],
+    "steps": []
+}

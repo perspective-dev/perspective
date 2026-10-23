@@ -42,7 +42,7 @@ const NUMERIC = [
     "abs sum",
     "sum or zero",
     "pct sum parent",
-    "pct sum grand total",
+    "pct sum total",
     "var",
     "stddev",
     ["weighted mean", ["w"]],

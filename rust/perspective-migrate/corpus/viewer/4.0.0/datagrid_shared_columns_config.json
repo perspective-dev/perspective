@@ -1,0 +1,60 @@
+{
+    "kind": "viewer",
+    "source": "hand-written",
+    "input": {
+        "version": "4.0.0",
+        "plugin": "Datagrid",
+        "plugin_config": {
+            "columns": {},
+            "edit_mode": "READ_ONLY",
+            "scroll_lock": false
+        },
+        "columns_config": {
+            "Region": {
+                "symbols": {
+                    "East": "circle"
+                }
+            },
+            "Sales": {
+                "number_fg_mode": "disabled"
+            }
+        },
+        "table": null,
+        "columns": [
+            "Sales"
+        ]
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "Datagrid",
+        "plugin_config": {
+            "edit_mode": "READ_ONLY",
+            "scroll_lock": false
+        },
+        "columns_config": {
+            "Region": {},
+            "Sales": {
+                "fg_mode": "disabled"
+            }
+        },
+        "columns": [
+            "Sales"
+        ]
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "datagrid.chart_keys",
+            "pointer": "/columns_config/Region/symbols",
+            "value": {
+                "East": "circle"
+            }
+        }
+    ],
+    "steps": [
+        "datagrid.chart_keys",
+        "viewer.null_table",
+        "datagrid.size_overrides",
+        "datagrid.mode_renames"
+    ]
+}

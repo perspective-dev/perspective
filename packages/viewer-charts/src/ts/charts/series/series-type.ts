@@ -42,9 +42,7 @@ export interface ColumnChartConfig {
 
     /**
      * Interpolation mode for line / area glyphs. See
-     * {@link InterpolateMode}. Legacy values `true` / `false` are also
-     * accepted by {@link resolveInterpolate} (mapped to `"solid"` /
-     * `"skip"`). Default `"skip"`. No effect on bar / scatter.
+     * {@link InterpolateMode}. Default `"skip"`. No effect on bar / scatter.
      */
     interpolate?: InterpolateMode;
 

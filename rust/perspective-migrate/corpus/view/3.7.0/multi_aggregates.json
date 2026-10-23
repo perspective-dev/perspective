@@ -1,0 +1,53 @@
+{
+    "kind": "view",
+    "from": "3.7.0",
+    "source": "hand-written from v3.7.0:rust/perspective-js/test/js/aggregates.spec.js",
+    "input": {
+        "columns": [
+            "Sales",
+            "Profit"
+        ],
+        "group_by": [
+            "Region"
+        ],
+        "aggregates": {
+            "Sales": [
+                "weighted mean",
+                "Quantity"
+            ],
+            "Profit": [
+                "max by",
+                "Sales"
+            ],
+            "Region": "count"
+        }
+    },
+    "output": {
+        "columns": [
+            "Sales",
+            "Profit"
+        ],
+        "group_by": [
+            "Region"
+        ],
+        "aggregates": {
+            "Sales": [
+                "weighted mean",
+                [
+                    "Quantity"
+                ]
+            ],
+            "Profit": [
+                "max by",
+                [
+                    "Sales"
+                ]
+            ],
+            "Region": "count"
+        }
+    },
+    "notices": [],
+    "steps": [
+        "view.multi_aggregate_args"
+    ]
+}

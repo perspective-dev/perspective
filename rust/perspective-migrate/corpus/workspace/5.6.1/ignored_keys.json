@@ -1,0 +1,83 @@
+{
+    "kind": "workspace",
+    "source": "hand-written",
+    "input": {
+        "version": "5.6.1",
+        "layout": {
+            "type": "tab-layout",
+            "tabs": [
+                "P"
+            ]
+        },
+        "panels": {
+            "P": {
+                "version": "5.6.1",
+                "plugin": "Datagrid",
+                "table": "t",
+                "settings": true
+            }
+        },
+        "derived_tables": {
+            "d": {
+                "table": "t",
+                "group_by": [
+                    "x"
+                ],
+                "bogus": true
+            }
+        },
+        "sizes": [
+            1
+        ]
+    },
+    "output": {
+        "version": "CURRENT",
+        "layout": {
+            "type": "tab-layout",
+            "tabs": [
+                "P"
+            ]
+        },
+        "panels": {
+            "P": {
+                "version": "CURRENT",
+                "plugin": "Datagrid",
+                "table": "t"
+            }
+        },
+        "derived_tables": {
+            "d": {
+                "table": "t",
+                "group_by": [
+                    "x"
+                ]
+            }
+        }
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "viewer.unknown_keys",
+            "pointer": "/panels/P/settings",
+            "value": true
+        },
+        {
+            "kind": "Dropped",
+            "step": "ws.unknown_keys",
+            "pointer": "/sizes",
+            "value": [
+                1
+            ]
+        },
+        {
+            "kind": "Dropped",
+            "step": "ws.unknown_keys",
+            "pointer": "/derived_tables/d/bogus",
+            "value": true
+        }
+    ],
+    "steps": [
+        "viewer.unknown_keys",
+        "ws.unknown_keys"
+    ]
+}

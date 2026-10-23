@@ -33,6 +33,11 @@ struct BundleArgs {
     /// Extra features to build with
     #[arg(long)]
     features: Option<String>,
+
+    /// Omit the `tracing/release_max_level_warn` feature, for crates which do
+    /// not depend on `tracing`.
+    #[arg(long)]
+    no_tracing: bool,
 }
 
 use wasm_bindgen_cli_support::{Bindgen, EncodeInto};
@@ -69,8 +74,12 @@ impl Profile {
 /// defined in the `/.cargo/config.toml` because they would define this build
 /// script's parameters also, and there is no way to reset e.g. the `target`
 /// field to the host platform.
-fn build(pkg: Option<&str>, profile: Profile, features: Vec<String>) {
-    let features = format!("tracing/release_max_level_warn,{}", features.join(","));
+fn build(pkg: Option<&str>, profile: Profile, features: Vec<String>, tracing: bool) {
+    let features = if tracing {
+        format!("tracing/release_max_level_warn,{}", features.join(","))
+    } else {
+        features.join(",")
+    };
 
     // Build RUSTFLAGS including target-specific flags from config.toml and new
     // panic flags These are the flags from .cargo/config.toml for
@@ -256,7 +265,7 @@ fn main() {
         .map(|x| x.to_string())
         .collect();
 
-    build(Some(package.as_str()), profile, features);
+    build(Some(package.as_str()), profile, features, !args.no_tracing);
     bindgen(outdir, args.artifact.as_str(), profile);
     opt(outpath, profile);
 }

@@ -287,8 +287,6 @@ export interface ColumnConfig {
      */
     bg_gradient?: number;
 
-    fixed?: number;
-
     /**
      * Group-by rollup depth override for this column when the view is
      * pivoted in `Rollup` mode.
@@ -391,9 +389,6 @@ export type ResolvedColumnsConfig = Record<string, ResolvedColumnStyle>;
  * `save()`/`restore()` token).
  */
 export interface DatagridPluginConfig {
-    /** Legacy alias for `edit_mode: "EDIT"`. */
-    editable?: boolean;
-
     /**
      * When `true`, the Datagrid keeps its scroll position pinned during
      * data updates instead of following appended rows.
@@ -452,8 +447,6 @@ export interface DatagridPluginConfig {
      * `zebra_rows >= 1`.
      */
     zebra_color?: string;
-
-    column_size_override?: Record<string, number>;
 }
 
 export type Schema = Record<string, ColumnType>;

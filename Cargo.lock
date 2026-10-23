@@ -2011,6 +2011,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "perspective-migrate"
+version = "5.6.1"
+dependencies = [
+ "perspective-client",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "perspective-migrate-js"
+version = "5.6.1"
+dependencies = [
+ "perspective-migrate",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "perspective-python"
 version = "5.6.1"
 dependencies = [
@@ -2024,6 +2044,7 @@ dependencies = [
  "macro_rules_attribute",
  "num_cpus",
  "perspective-client",
+ "perspective-migrate",
  "perspective-server",
  "pollster",
  "pyo3",
@@ -2032,6 +2053,7 @@ dependencies = [
  "python-config-rs",
  "pythonize",
  "serde",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",

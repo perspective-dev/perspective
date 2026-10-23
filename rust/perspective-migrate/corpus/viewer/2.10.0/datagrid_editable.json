@@ -1,0 +1,32 @@
+{
+    "kind": "viewer",
+    "source": "hand-written from v2.10.0:packages/perspective-viewer-datagrid/src/js/plugin/save.js",
+    "input": {
+        "version": "2.10.0",
+        "plugin": "Datagrid",
+        "plugin_config": {
+            "columns": {},
+            "editable": false,
+            "scroll_lock": true
+        },
+        "columns": [
+            "Sales"
+        ]
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "Datagrid",
+        "plugin_config": {
+            "scroll_lock": true,
+            "edit_mode": "READ_ONLY"
+        },
+        "columns": [
+            "Sales"
+        ]
+    },
+    "notices": [],
+    "steps": [
+        "datagrid.edit_mode",
+        "datagrid.size_overrides"
+    ]
+}

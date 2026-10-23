@@ -9,6 +9,7 @@
 perspective-client = { path = "rust/perspective-client" }
 perspective-server = { path = "rust/perspective-server" }
 perspective-js = { path = "rust/perspective-js" }
+perspective-migrate = { path = "rust/perspective-migrate" }
 perspective-python = { path = "rust/perspective-python" }
 perspective-viewer = { path = "rust/perspective-viewer" }
 perspective = { path = "rust/perspective" }

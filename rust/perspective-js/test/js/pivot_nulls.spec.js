@@ -367,9 +367,10 @@ import perspective from "./perspective_client";
                 expect(column).toEqual([4, null, 4]);
             });
 
-            test("sum not null is a legacy alias for sum", async function () {
-                const column = await grouped({ a: "sum not null" }, {}, "a");
-                expect(column).toEqual([4, null, 4]);
+            test("sum not null is not an aggregate", async function () {
+                await expect(
+                    grouped({ a: "sum not null" }, {}, "a"),
+                ).rejects.toThrow();
             });
 
             test("sum or zero still matches sum when a value is present", async function () {
@@ -393,12 +394,8 @@ import perspective from "./perspective_client";
                 expect(column).toEqual([100, null, 100]);
             });
 
-            test("pct sum grand total reports null for an all-null group", async function () {
-                const column = await grouped(
-                    { a: "pct sum grand total" },
-                    {},
-                    "a",
-                );
+            test("pct sum total reports null for an all-null group", async function () {
+                const column = await grouped({ a: "pct sum total" }, {}, "a");
                 expect(column).toEqual([100, null, 100]);
             });
 

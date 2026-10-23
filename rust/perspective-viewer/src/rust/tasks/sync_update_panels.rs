@@ -45,18 +45,18 @@ pub fn sync_update_panels(
     update: JsWorkspaceConfigUpdate,
 ) -> ApiResult<SyncUpdatePanelsResult> {
     let WorkspaceConfigUpdate {
+        version,
         active,
         layout,
-        mut panels,
+        panels,
         derived_tables,
         global_filters,
         masters,
         palette,
+        unknown: UnknownKeys,
     } = update.into_serde_ext()?;
 
-    for panel in panels.iter_mut().flat_map(|panels| panels.values_mut()) {
-        panel.migrate();
-    }
+    let _ = version;
 
     let palette = match palette {
         OptionalUpdate::Missing => None,

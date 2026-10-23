@@ -1,0 +1,31 @@
+{
+    "kind": "viewer",
+    "from": "2.6.0",
+    "source": "hand-written",
+    "input": {
+        "version": "4.5.0",
+        "plugin": "X/Y Scatter",
+        "columns": [
+            "X",
+            "Y",
+            "Color",
+            "Size",
+            "Label",
+            "Tooltip"
+        ]
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "X/Y Scatter",
+        "columns": [
+            "X",
+            "Y",
+            "Color",
+            "Size",
+            "Label",
+            "Tooltip"
+        ]
+    },
+    "notices": [],
+    "steps": []
+}

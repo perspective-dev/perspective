@@ -116,6 +116,16 @@ async function build_rust() {
         "dist/wasm/perspective-js.wasm",
         "dist/wasm/perspective-js.wasm",
     );
+
+    execSync(
+        `PSP_ROOT_DIR=../.. cargo bundle --target=${get_host()} -- perspective_migrate_js ${release_flag} --no-tracing`,
+        INHERIT,
+    );
+
+    await compress(
+        "dist/wasm/perspective-migrate-js.wasm",
+        "dist/wasm/perspective-migrate-js.wasm",
+    );
 }
 
 async function build_web_assets() {

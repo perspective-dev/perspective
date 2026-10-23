@@ -10,11 +10,9 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-mod migrate;
 mod part_format;
 mod simple_format;
 
-pub use migrate::*;
 pub use part_format::*;
 use serde::{Deserialize, Serialize};
 pub use simple_format::*;

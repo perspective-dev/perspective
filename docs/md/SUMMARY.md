@@ -88,6 +88,7 @@
 # Rust
 
 - [Getting Started](./how_to/rust.md)
+- [Migrating saved configs](./how_to/rust/migrate.md)
 
 # Integrations
 

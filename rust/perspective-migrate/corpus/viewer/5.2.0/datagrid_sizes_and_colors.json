@@ -1,0 +1,146 @@
+{
+    "kind": "viewer",
+    "source": "hand-written from v5.2.0:packages/viewer-datagrid/src/ts/types.ts",
+    "input": {
+        "version": "5.2.0",
+        "plugin": "Datagrid",
+        "plugin_config": {
+            "columns": {
+                "Sales": {
+                    "column_size_override": 120
+                },
+                "__ROW_PATH__": {
+                    "column_size_override": 200
+                },
+                "Profit": {}
+            },
+            "edit_mode": "READ_ONLY",
+            "scroll_lock": false
+        },
+        "columns_config": {
+            "Sales": {
+                "number_bg_mode": "gradient",
+                "pos_bg_color": "#00ff00",
+                "neg_bg_color": "red",
+                "bg_gradient": 100
+            },
+            "Profit": {
+                "number_fg_mode": "bar",
+                "pos_fg_color": "#123456"
+            },
+            "Ship Mode": {
+                "string_color_mode": "series",
+                "color": "#ff0000"
+            },
+            "Order Date": {
+                "datetime_color_mode": "background",
+                "color": "rgba(0, 0, 255, 0.5)"
+            },
+            "Region": {
+                "string_color_mode": "foreground",
+                "color": "#00ff00"
+            }
+        },
+        "columns": [
+            "Sales",
+            "Profit",
+            "Ship Mode",
+            "Order Date"
+        ],
+        "group_by": [
+            "Region"
+        ],
+        "split_by": [],
+        "table": "superstore"
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "Datagrid",
+        "plugin_config": {
+            "edit_mode": "READ_ONLY",
+            "scroll_lock": false
+        },
+        "columns_config": {
+            "Sales": {
+                "bg_gradient": 100,
+                "column_size_override": 120,
+                "bg_mode": "gradient",
+                "bg_color": "linear-gradient(to right, #ff0000 0%, #00ff00 100%)"
+            },
+            "Profit": {
+                "fg_mode": "bar"
+            },
+            "Ship Mode": {
+                "bg_mode": "series"
+            },
+            "Order Date": {
+                "bg_mode": "color",
+                "bg_color": "#0000ff"
+            },
+            "Region": {}
+        },
+        "columns": [
+            "Sales",
+            "Profit",
+            "Ship Mode",
+            "Order Date"
+        ],
+        "group_by": [
+            "Region"
+        ],
+        "split_by": [],
+        "table": "superstore"
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "datagrid.size_overrides",
+            "pointer": "/plugin_config/columns/__ROW_PATH__",
+            "value": {
+                "column_size_override": 200
+            }
+        },
+        {
+            "kind": "Approximated",
+            "step": "datagrid.colors",
+            "pointer": "/columns_config/Sales/bg_colors",
+            "reason": "the theme background middle stop is not reconstructed"
+        },
+        {
+            "kind": "Dropped",
+            "step": "datagrid.colors",
+            "pointer": "/columns_config/Profit/fg_colors",
+            "value": "#123456"
+        },
+        {
+            "kind": "Approximated",
+            "step": "datagrid.colors",
+            "pointer": "/columns_config/Order Date/color",
+            "reason": "alpha is unsupported"
+        },
+        {
+            "kind": "Dropped",
+            "step": "datagrid.mode_renames",
+            "pointer": "/columns_config/Ship Mode/color",
+            "value": "#ff0000"
+        },
+        {
+            "kind": "Dropped",
+            "step": "datagrid.role_keys",
+            "pointer": "/columns_config/Region/fg_mode",
+            "value": "color"
+        },
+        {
+            "kind": "Dropped",
+            "step": "datagrid.role_keys",
+            "pointer": "/columns_config/Region/fg_color",
+            "value": "#00ff00"
+        }
+    ],
+    "steps": [
+        "datagrid.size_overrides",
+        "datagrid.colors",
+        "datagrid.mode_renames",
+        "datagrid.role_keys"
+    ]
+}

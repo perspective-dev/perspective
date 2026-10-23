@@ -1,0 +1,72 @@
+{
+    "kind": "viewer",
+    "source": "rust/perspective-viewer/test/js/viewer_config/date_format_migration.spec.ts@f423f05698",
+    "input": {
+        "version": "5.6.1",
+        "plugin": "Debug",
+        "columns_config": {
+            "A": {
+                "date_format": {
+                    "format": "custom",
+                    "timeZone": "UTC",
+                    "second": "disabled",
+                    "minute": "disabled",
+                    "hour": "disabled"
+                }
+            },
+            "B": {
+                "date_format": {
+                    "timeStyle": "disabled"
+                }
+            },
+            "C": {
+                "date_format": {
+                    "dateStyle": "disabled",
+                    "timeStyle": "disabled"
+                }
+            },
+            "D": {
+                "date_format": {
+                    "dateStyle": "long"
+                }
+            }
+        }
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "Debug",
+        "columns_config": {
+            "A": {
+                "date_format": {
+                    "timeZone": "UTC",
+                    "year": "2-digit",
+                    "month": "numeric",
+                    "day": "numeric",
+                    "hour12": true
+                }
+            },
+            "B": {
+                "date_format": {
+                    "dateStyle": "short"
+                }
+            },
+            "C": {
+                "date_format": {
+                    "year": "numeric",
+                    "month": "numeric",
+                    "day": "numeric"
+                }
+            },
+            "D": {
+                "date_format": {
+                    "dateStyle": "long",
+                    "timeStyle": "medium"
+                }
+            }
+        }
+    },
+    "notices": [],
+    "steps": [
+        "style.date_format"
+    ]
+}
