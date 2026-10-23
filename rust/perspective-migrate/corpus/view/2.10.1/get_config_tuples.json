@@ -1,0 +1,44 @@
+{
+    "kind": "view",
+    "from": "2.10.1",
+    "source": "hand-written from v2.10.1:packages/perspective/src/js/perspective.js parse_expression_strings",
+    "input": {
+        "group_by": [],
+        "columns": [
+            "profit"
+        ],
+        "expressions": [
+            [
+                "profit",
+                "//profit\n\"Sales\" - \"Cost\"",
+                "COLUMN0 - COLUMN1",
+                {
+                    "COLUMN0": "Sales",
+                    "COLUMN1": "Cost"
+                }
+            ],
+            [
+                "doubled",
+                "\"Sales\" * 2",
+                "COLUMN0 * 2",
+                {
+                    "COLUMN0": "Sales"
+                }
+            ]
+        ]
+    },
+    "output": {
+        "group_by": [],
+        "columns": [
+            "profit"
+        ],
+        "expressions": {
+            "profit": "\"Sales\" - \"Cost\"",
+            "doubled": "\"Sales\" * 2"
+        }
+    },
+    "notices": [],
+    "steps": [
+        "view.expression_tuples"
+    ]
+}

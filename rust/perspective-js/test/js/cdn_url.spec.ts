@@ -11,7 +11,10 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { test, expect } from "@perspective-dev/test";
-import { resolve_server_wasm_url } from "../../src/ts/wasm/cdn.ts";
+import {
+    resolve_package_wasm_url,
+    resolve_server_wasm_url,
+} from "../../src/ts/wasm/cdn.ts";
 
 test.describe("resolve_server_wasm_url", function () {
     test("preserves exact version tags on jsdelivr URLs", function () {
@@ -99,6 +102,34 @@ test.describe("resolve_server_wasm_url", function () {
             ),
         ).toEqual(
             "https://example.com/server/dist/wasm/perspective-server.wasm",
+        );
+    });
+});
+
+test.describe("resolve_package_wasm_url", function () {
+    test("resolves the client's migrate binary from the viewer bundle", function () {
+        expect(
+            resolve_package_wasm_url(
+                "https://cdn.jsdelivr.net/npm/@perspective-dev/viewer@5.7.0/dist/cdn/perspective-viewer.js",
+                "viewer",
+                "client",
+                "perspective-migrate-js.wasm",
+            ),
+        ).toEqual(
+            "https://cdn.jsdelivr.net/npm/@perspective-dev/client@5.7.0/dist/wasm/perspective-migrate-js.wasm",
+        );
+    });
+
+    test("resolves node_modules layouts to the sibling package", function () {
+        expect(
+            resolve_package_wasm_url(
+                "http://localhost:6598/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js",
+                "viewer",
+                "client",
+                "perspective-migrate-js.wasm",
+            ),
+        ).toEqual(
+            "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-migrate-js.wasm",
         );
     });
 });

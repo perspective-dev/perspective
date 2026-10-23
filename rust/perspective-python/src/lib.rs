@@ -14,6 +14,7 @@
 #![warn(unstable_features)]
 
 mod client;
+mod migrate;
 pub(crate) mod py_async;
 mod py_err;
 mod server;
@@ -77,5 +78,6 @@ fn perspective(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("PerspectiveError", py.get_type::<PyPerspectiveError>())?;
     m.add_function(wrap_pyfunction!(num_cpus, m)?)?;
     m.add_function(wrap_pyfunction!(set_num_cpus, m)?)?;
+    m.add_function(wrap_pyfunction!(migrate::migrate, m)?)?;
     Ok(())
 }

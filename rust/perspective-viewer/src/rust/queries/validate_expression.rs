@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 
 use perspective_client::ExprValidationError;
-use perspective_client::config::ExpressionsDeserde;
+use perspective_client::config::Expressions;
 use perspective_js::utils::ApiError;
 
 use crate::session::Session;
@@ -28,10 +28,10 @@ pub async fn validate_expr(
         .get_table()
         .ok_or_else(|| ApiError::from("No table set"))?;
     let errors = table
-        .validate_expressions(
-            ExpressionsDeserde::Map(HashMap::from_iter([("_".to_string(), expr.to_string())]))
-                .into(),
-        )
+        .validate_expressions(Expressions(HashMap::from_iter([(
+            "_".to_string(),
+            expr.to_string(),
+        )])))
         .await?
         .errors;
 

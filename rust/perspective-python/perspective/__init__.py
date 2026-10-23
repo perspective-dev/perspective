@@ -26,6 +26,7 @@ __all__ = [
     "VirtualServer",
     "num_cpus",
     "set_num_cpus",
+    "migrate",
     "system_info",
 ]
 
@@ -363,6 +364,7 @@ from .perspective import (
     View,  # noqa: F401
     num_cpus,
     set_num_cpus,
+    migrate,
 )
 
 

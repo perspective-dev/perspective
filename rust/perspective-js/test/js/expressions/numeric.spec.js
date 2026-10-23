@@ -241,7 +241,10 @@ function validate_binary_operations(output, expressions, operator) {
                     );
                     const expressions = generate_unary_operations("+");
                     const view = await table.view({
-                        expressions,
+                        expressions: expressions.reduce(
+                            (x, y) => Object.assign(x, { [y]: y }),
+                            {},
+                        ),
                     });
 
                     const col_names = await joined_column_paths(view);
@@ -264,7 +267,10 @@ function validate_binary_operations(output, expressions, operator) {
                     );
                     const expressions = generate_binary_operations("+");
                     const view = await table.view({
-                        expressions,
+                        expressions: expressions.reduce(
+                            (x, y) => Object.assign(x, { [y]: y }),
+                            {},
+                        ),
                     });
 
                     const col_names = await joined_column_paths(view);
@@ -285,7 +291,10 @@ function validate_binary_operations(output, expressions, operator) {
                     );
                     const expressions = generate_binary_operations("-");
                     const view = await table.view({
-                        expressions,
+                        expressions: expressions.reduce(
+                            (x, y) => Object.assign(x, { [y]: y }),
+                            {},
+                        ),
                     });
 
                     const col_names = await joined_column_paths(view);
@@ -306,7 +315,10 @@ function validate_binary_operations(output, expressions, operator) {
                     );
                     const expressions = generate_binary_operations("*");
                     const view = await table.view({
-                        expressions,
+                        expressions: expressions.reduce(
+                            (x, y) => Object.assign(x, { [y]: y }),
+                            {},
+                        ),
                     });
 
                     const col_names = await joined_column_paths(view);
@@ -328,7 +340,10 @@ function validate_binary_operations(output, expressions, operator) {
                     const expressions = generate_binary_operations("/");
 
                     const view = await table.view({
-                        expressions,
+                        expressions: expressions.reduce(
+                            (x, y) => Object.assign(x, { [y]: y }),
+                            {},
+                        ),
                     });
 
                     const col_names = await joined_column_paths(view);
@@ -350,7 +365,10 @@ function validate_binary_operations(output, expressions, operator) {
                     const expressions = generate_binary_operations("%");
 
                     const view = await table.view({
-                        expressions,
+                        expressions: expressions.reduce(
+                            (x, y) => Object.assign(x, { [y]: y }),
+                            {},
+                        ),
                     });
 
                     const col_names = await joined_column_paths(view);
@@ -369,7 +387,10 @@ function validate_binary_operations(output, expressions, operator) {
                     const table = await perspective.table(common.arrow.slice());
                     const expressions = generate_binary_operations("^");
                     const view = await table.view({
-                        expressions,
+                        expressions: expressions.reduce(
+                            (x, y) => Object.assign(x, { [y]: y }),
+                            {},
+                        ),
                     });
 
                     const col_names = await joined_column_paths(view);
@@ -390,7 +411,10 @@ function validate_binary_operations(output, expressions, operator) {
                         const expressions =
                             generate_binary_operations(operator);
                         const view = await table.view({
-                            expressions,
+                            expressions: expressions.reduce(
+                                (x, y) => Object.assign(x, { [y]: y }),
+                                {},
+                            ),
                         });
 
                         const col_names = await joined_column_paths(view);
@@ -648,7 +672,10 @@ function validate_binary_operations(output, expressions, operator) {
                 ];
 
                 const view = await table.view({
-                    expressions,
+                    expressions: expressions.reduce(
+                        (x, y) => Object.assign(x, { [y]: y }),
+                        {},
+                    ),
                 });
 
                 await table.update({
@@ -694,7 +721,10 @@ function validate_binary_operations(output, expressions, operator) {
                 ];
 
                 const view = await table.view({
-                    expressions,
+                    expressions: expressions.reduce(
+                        (x, y) => Object.assign(x, { [y]: y }),
+                        {},
+                    ),
                 });
 
                 await table.update({
@@ -1226,10 +1256,12 @@ function validate_binary_operations(output, expressions, operator) {
                     b: "string",
                 });
 
-                const validated = await table.validate_expressions([
-                    'coalesce("a", "b")',
-                    "coalesce(\"a\", 'fallback')",
-                ]);
+                const validated = await table.validate_expressions(
+                    [
+                        'coalesce("a", "b")',
+                        "coalesce(\"a\", 'fallback')",
+                    ].reduce((x, y) => Object.assign(x, { [y]: y }), {}),
+                );
 
                 expect(validated.expression_schema).toEqual({});
                 expect(validated.errors['coalesce("a", "b")']).toEqual({
@@ -1460,11 +1492,13 @@ function validate_binary_operations(output, expressions, operator) {
 
             test("mand should fail validation for non boolean inputs", async function () {
                 const table = await perspective.table(common.comparison_data);
-                const validated = await table.validate_expressions([
-                    'mand("w", "x", "y")',
-                    "mand(100, 200, 300)",
-                    "mand('a', 'b', 'cdef')",
-                ]);
+                const validated = await table.validate_expressions(
+                    [
+                        'mand("w", "x", "y")',
+                        "mand(100, 200, 300)",
+                        "mand('a', 'b', 'cdef')",
+                    ].reduce((x, y) => Object.assign(x, { [y]: y }), {}),
+                );
 
                 expect(validated.expression_schema).toEqual({});
                 expect(validated.errors['mand("w", "x", "y")']).toEqual({
@@ -1577,11 +1611,13 @@ function validate_binary_operations(output, expressions, operator) {
 
             test("mor should fail validation for non boolean inputs", async function () {
                 const table = await perspective.table(common.comparison_data);
-                const validated = await table.validate_expressions([
-                    'mor("w", "x", "y")',
-                    "mor(100, 200, 300)",
-                    "mor('a', 'b', 'cdef')",
-                ]);
+                const validated = await table.validate_expressions(
+                    [
+                        'mor("w", "x", "y")',
+                        "mor(100, 200, 300)",
+                        "mor('a', 'b', 'cdef')",
+                    ].reduce((x, y) => Object.assign(x, { [y]: y }), {}),
+                );
 
                 expect(validated.expression_schema).toEqual({});
                 expect(validated.errors['mor("w", "x", "y")']).toEqual({

@@ -44,7 +44,7 @@ class PerspectiveTraitlets(HasTraits):
     aggregates = Dict(default_value={}).tag(sync=True)
     sort = List(default_value=[]).tag(sync=True)
     filter = List(default_value=[]).tag(sync=True)
-    expressions = Dict(default_value=[]).tag(sync=True)
+    expressions = Dict(default_value={}).tag(sync=True)
     plugin_config = Dict(default_value={}).tag(sync=True)
     settings = Bool(True).tag(sync=True)
     theme = Unicode("Pro Light", allow_none=True).tag(sync=True)

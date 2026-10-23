@@ -13,30 +13,25 @@ panel visibility, and more. This overloaded feature covers a range of use cases:
 ## Serializing and deserializing the viewer state
 
 To retrieve the entire state as a JSON-ready JavaScript object, use the `save()`
-method. `save()` also supports a few other formats such as `"arraybuffer"` and
-`"string"` (base64, not JSON), which you may choose for size at the expense of
-easy migration/manual-editing.
+method.
 
 ```javascript
-const json_token = await elem.save();
-const string_token = await elem.save("string");
+const token = await elem.save();
 ```
 
-For any format, the serialized token can be restored to any
-`<perspective-viewer>` with a `Table` of identical schema, via the `restore()`
-method. Note that while the data for a token returned from `save()` may differ,
-generally its schema may not, as many other settings depend on column names and
-types.
+The token can be restored to any `<perspective-viewer>` with a `Table` of
+identical schema, via the `restore()` method. Note that while the data for a
+token returned from `save()` may differ, generally its schema may not, as many
+other settings depend on column names and types.
 
 ```javascript
-await elem.restore(json_token);
-await elem.restore(string_token);
+await elem.restore(token);
 ```
 
-As `restore()` dispatches on the token's type, it is important to make sure that
-these types match! A common source of error occurs when passing a
-JSON-stringified token to `restore()`, which will assume base64-encoded msgpack
-when a string token is used.
+`restore()` validates its argument, rejecting for example a key the config
+format does not define; when a rejected token is stamped with another release's
+`version`, the error names that release. Tokens saved by older releases should
+be upgraded first — see [Migrating saved configs](../rust/migrate.md).
 
 ```javascript
 // This will error!
@@ -117,8 +112,8 @@ await elem.restoreWorkspace(workspace_token);
 
 A `saveWorkspace()` token is a `WorkspaceConfig`
 (`{ version, layout, panels, ... }`), not a `ViewerConfig` — passing it to the
-single-panel `restore()` will _not_ restore the layout (its `panels`/`layout`
-keys are ignored).
+single-panel `restore()` is rejected (its `panels`/`layout` keys are not part
+of a `ViewerConfig`).
 
 The `layout` field is the tree arranging the panels into a grid of rows and
 columns or stacks of tabs, naming every panel id exactly once. See
@@ -205,9 +200,10 @@ inherits `timeZone` and `hour12` individually.
 
 Configs saved before 5.7.0 used a `"disabled"` value and a `format: "custom"`
 marker, and a missing preset field meant `short` date or `medium` time.
-`restore()` rewrites these into the current form with the same rendering. A
-hand-written config with no `version` and a missing preset field takes the
-current meaning: `{ dateStyle: "long" }` now shows the date alone.
+`restore()` rejects the removed forms, and restores any other `date_format`
+with its current meaning — `{ dateStyle: "long" }` shows the date alone,
+whatever its `version`. [`perspective-migrate`](../rust/migrate.md) rewrites
+older tokens into the current form with their original rendering.
 
 ## Colors, palettes and gradients
 

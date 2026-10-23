@@ -20,6 +20,11 @@
 import type * as psp from "../../../dist/wasm/perspective-js.d.ts";
 import { load_wasm_stage_0 } from "./decompress.ts";
 import { host_supports_memory64 } from "./features.ts";
+import type { MigrateKind, MigrateResult } from "./migrate.ts";
+
+export { MigrateLoader } from "./migrate.ts";
+export type { MigrateKind, MigrateNotice, MigrateResult } from "./migrate.ts";
+export { resolve_package_wasm_url } from "./cdn.ts";
 
 declare const __PSP_VERSION__: string;
 
@@ -50,6 +55,7 @@ export interface WasmRegistration {
     server?: WasmSource;
     server32?: WasmSource;
     server64?: WasmSource;
+    migrate?: WasmSource;
 }
 
 /**
@@ -74,6 +80,17 @@ export type RuntimeProvider = (
     wasm: ArrayBuffer | WebAssembly.Module,
 ) => Promise<ClientRuntime>;
 
+/**
+ * A loader which runs `perspective-migrate` for `migrate()`.
+ */
+export interface MigrateHost {
+    migrate<T = Record<string, unknown>>(
+        kind: MigrateKind,
+        config: unknown,
+        from_version?: string,
+    ): Promise<MigrateResult<T>>;
+}
+
 type WasmKey = keyof WasmRegistration;
 
 type ServerKey = "server" | "server32" | "server64";
@@ -96,6 +113,8 @@ interface RegistryState {
     client_runtime?: ClientRuntime;
     viewer?: Promise<ClientRuntime>;
     server?: Promise<ArrayBuffer | WebAssembly.Module>;
+    migrate_binary?: Promise<ArrayBuffer | WebAssembly.Module>;
+    migrate?: MigrateHost;
 }
 
 const STATE_KEY = Symbol.for("@perspective-dev/wasm");
@@ -106,6 +125,7 @@ const WASM_KEYS: WasmKey[] = [
     "server",
     "server32",
     "server64",
+    "migrate",
 ];
 
 const SERVER_KEYS: ServerKey[] = ["server", "server32", "server64"];
@@ -325,7 +345,7 @@ export function register(
  * - `wasm` - Binaries by role: `client` (`perspective-js.wasm`), `viewer`
  *   (`perspective-viewer.wasm`, which also backs every `Client`), `server`
  *   (one engine build) or `server32` / `server64` (selected by Memory64
- *   support).
+ *   support), and `migrate` (`perspective-migrate-js.wasm`).
  * - `options` - `disable_stage_0` skips decompression for these sources.
  *
  * # Examples
@@ -468,4 +488,35 @@ export function resolve_server(): Promise<ArrayBuffer | WebAssembly.Module> {
     return s.server.then((wasm) =>
         wasm instanceof WebAssembly.Module ? wasm : wasm.slice(0),
     );
+}
+
+/**
+ * Resolves the extracted `perspective-migrate` binary.
+ */
+export function resolve_migrate(): Promise<ArrayBuffer | WebAssembly.Module> {
+    const s = state();
+    if (s.migrate_binary === undefined) {
+        const entry = s.sources.migrate;
+        if (entry === undefined) {
+            return Promise.reject(
+                new Error(
+                    "Missing perspective-migrate-js.wasm: register `migrate` with init()",
+                ),
+            );
+        }
+
+        s.consumed.add("migrate");
+        s.migrate_binary = materialize(entry);
+    }
+
+    return s.migrate_binary;
+}
+
+/**
+ * The page's one `migrate()` loader, installing `local` if there is none.
+ */
+export function shared_migrate(local: MigrateHost): MigrateHost {
+    const s = state();
+    s.migrate ??= local;
+    return s.migrate;
 }

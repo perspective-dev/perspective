@@ -13,6 +13,7 @@
 import perspective_viewer from "./perspective-viewer.ts";
 import {
     register_default,
+    resolve_package_wasm_url,
     resolve_viewer,
 } from "@perspective-dev/client/registry";
 export * from "./perspective-viewer.ts";
@@ -20,6 +21,15 @@ export * from "./perspective-viewer.ts";
 register_default({
     viewer: () =>
         fetch(new URL("../wasm/perspective-viewer.wasm", import.meta.url)),
+    migrate: () =>
+        fetch(
+            resolve_package_wasm_url(
+                import.meta.url,
+                "viewer",
+                "client",
+                "perspective-migrate-js.wasm",
+            ),
+        ),
 });
 
 await resolve_viewer();

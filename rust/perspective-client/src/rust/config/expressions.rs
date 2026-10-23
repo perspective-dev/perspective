@@ -159,20 +159,38 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::de::value::MapAccessDeserializer;
+use serde::de::{MapAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
-#[derive(Deserialize, Clone, PartialEq, Debug)]
-#[serde(untagged)]
-pub enum ExpressionsDeserde {
-    Array(Vec<String>),
-    Map(HashMap<String, String>),
+#[derive(Serialize, Clone, PartialEq, Debug, Default, TS)]
+pub struct Expressions(pub HashMap<String, String>);
+
+impl<'de> Deserialize<'de> for Expressions {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(ExpressionsVisitor)
+    }
 }
 
-#[derive(Deserialize, Serialize, Clone, PartialEq, Debug, Default, TS)]
-#[serde(from = "ExpressionsDeserde")]
-pub struct Expressions(pub HashMap<String, String>);
+struct ExpressionsVisitor;
+
+impl<'de> Visitor<'de> for ExpressionsVisitor {
+    type Value = Expressions;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str(
+            "an object mapping expression names to expressions (upgrade the legacy array format \
+             with `perspective-migrate`)",
+        )
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+        HashMap::deserialize(MapAccessDeserializer::new(map)).map(Expressions)
+    }
+}
 
 impl std::ops::Deref for Expressions {
     type Target = HashMap<String, String>;
@@ -185,33 +203,6 @@ impl std::ops::Deref for Expressions {
 impl std::ops::DerefMut for Expressions {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
-    }
-}
-
-fn upgrade_legacy_format(expressions: &[String]) -> HashMap<String, String> {
-    tracing::debug!("Legacy `expressions` format: {:?}", expressions);
-    expressions
-        .iter()
-        .map(|s| {
-            if let Some((name, expression)) = s.split_once('\n') {
-                if !expression.is_empty() && name.starts_with("//") {
-                    (name.split_at(2).1.trim().to_owned(), expression.to_owned())
-                } else {
-                    (s.to_owned(), s.to_owned())
-                }
-            } else {
-                (s.to_owned(), s.to_owned())
-            }
-        })
-        .collect::<HashMap<_, _>>()
-}
-
-impl From<ExpressionsDeserde> for Expressions {
-    fn from(value: ExpressionsDeserde) -> Self {
-        match value {
-            ExpressionsDeserde::Array(arr) => Self(upgrade_legacy_format(&arr)),
-            ExpressionsDeserde::Map(map) => Self(map),
-        }
     }
 }
 

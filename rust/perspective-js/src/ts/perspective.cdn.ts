@@ -26,6 +26,8 @@ register_default({
                 "perspective-server.memory64.wasm",
             ),
         ),
+    migrate: () =>
+        fetch(new URL("../wasm/perspective-migrate-js.wasm", import.meta.url)),
 });
 
 export default perspective;

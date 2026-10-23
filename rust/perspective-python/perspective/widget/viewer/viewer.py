@@ -96,8 +96,9 @@ class PerspectiveViewer(PerspectiveTraitlets, object):
             filter (:obj:`list` of :obj:`list` of :obj:`str`): A list of lists,
                 each list containing a column name, a filter comparator, and a
                 value to filter by.
-            expressions (:obj:`list` of :obj:`str`): A list of string
-                expressions which are applied to the view.
+            expressions (:obj:`dict` of :obj:`str` to :obj:`str`): A map of
+                expression column names to the expressions which are applied
+                to the view.
             plugin (:obj:`str`/:obj:`perspective.Plugin`): Which plugin to
                 select by default.
             plugin_config (:obj:`dict`): A configuration for the plugin, i.e.
@@ -115,7 +116,7 @@ class PerspectiveViewer(PerspectiveTraitlets, object):
             ...     group_by=["a"],
             ...     sort=[["b", "desc"]],
             ...     filter=[["a", ">", 1]],
-            ...     expressions=["\"a\" + 100"]
+            ...     expressions={"plus_100": "\"a\" + 100"}
             ... )
         """
 

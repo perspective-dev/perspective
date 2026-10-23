@@ -25,7 +25,7 @@ async function load() {
     const table = worker.table(buffer);
     await viewer.load(table);
     const config = {
-        plugin: "datagrid",
+        plugin: "Datagrid",
     };
     await viewer.restore(config);
 }

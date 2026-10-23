@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 
 use perspective_client::config::{Filter, ViewConfig};
 
-use crate::config::{OptionalUpdate, PanelViewerConfig, ViewerConfigInitial};
+use crate::config::{OptionalUpdate, PanelViewerConfig, UnknownKeys, ViewerConfigInitial};
 use crate::utils::CssKind;
 
 /// A derived `Table`'s definition: the `Table` its source `View` reads, and
@@ -29,6 +29,10 @@ pub struct DerivedTableConfig<T: ts_rs::TS = String> {
 
     #[serde(flatten)]
     pub view_config: ViewConfig,
+
+    #[serde(flatten, skip_serializing)]
+    #[ts(skip)]
+    pub unknown: UnknownKeys,
 }
 
 /// What may occupy a `table` position in a single-panel config: a hosted
@@ -183,7 +187,7 @@ pub struct WorkspaceConfig {
     /// `save()` outputs byte-unstable.
     pub panels: BTreeMap<String, PanelViewerConfig<String, String>>,
 
-    /// Named derived `Table`s, each a `View` of its `parent` promoted to a
+    /// Named derived `Table`s, each a `View` of its `table` promoted to a
     /// `Table`. A `BTreeMap` for the same determinism reason as `panels`.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     #[ts(as = "Option<_>")]
@@ -222,6 +226,12 @@ pub struct WorkspaceConfig {
 /// replaces.
 #[derive(serde::Deserialize, ts_rs::TS)]
 pub struct WorkspaceConfigUpdate {
+    /// The `@perspective-dev/viewer` version a saved workspace was written
+    /// by, named in the error when such a workspace is rejected.
+    #[serde(default)]
+    #[ts(optional)]
+    pub version: Option<String>,
+
     /// The panel to activate with the settings sidebar open, by `panels` key
     /// or existing panel id; `null` closes the sidebar.
     #[serde(default)]
@@ -270,6 +280,10 @@ pub struct WorkspaceConfigUpdate {
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub palette: OptionalUpdate<BTreeMap<String, String>>,
+
+    #[serde(flatten)]
+    #[ts(skip)]
+    pub unknown: UnknownKeys,
 }
 
 /// Validate a restored palette map: each key's `--psp-user--<kind>-`

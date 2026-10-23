@@ -807,17 +807,9 @@ impl Renderer {
     }
 
     fn find_plugin_idx(&self, name: &str) -> Option<usize> {
-        let short_name = make_short_name(name);
         let mut borrowed = self.0.borrow_mut();
         let configs = borrowed.plugin_store.plugin_configs();
-        let short_names: Vec<String> = configs.iter().map(|c| make_short_name(&c.name)).collect();
-        if let Some(i) = short_names.iter().position(|n| n == &short_name) {
-            return Some(i);
-        }
-
-        short_names
-            .iter()
-            .position(|n: &String| n.contains(&short_name))
+        configs.iter().position(|config| config.name == name)
     }
 }
 

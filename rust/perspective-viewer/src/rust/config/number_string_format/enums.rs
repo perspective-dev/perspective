@@ -224,7 +224,7 @@ pub enum Unit {
     FluidOunce,
     #[serde(rename = "foot")]
     Foot,
-    #[serde(rename = "gallob")]
+    #[serde(rename = "gallon")]
     Gallon,
     #[serde(rename = "gigabit")]
     Gigabit,

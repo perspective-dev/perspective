@@ -1,0 +1,90 @@
+{
+    "kind": "view",
+    "source": "hand-written from v2.10.1:packages/perspective/src/js/config/constants.js",
+    "input": {
+        "row_pivot": [
+            "State"
+        ],
+        "col_pivots": [
+            "Category"
+        ],
+        "filters": [
+            [
+                "Sales",
+                ">",
+                100
+            ]
+        ],
+        "sorts": [
+            [
+                "Sales",
+                "desc"
+            ]
+        ],
+        "computed_columns": [],
+        "version": "2.10.1",
+        "split_by_depth": 1,
+        "viewport": {
+            "top": 0,
+            "height": 10
+        },
+        "filter_op": "|"
+    },
+    "output": {
+        "group_by": [
+            "State"
+        ],
+        "split_by": [
+            "Category"
+        ],
+        "filter": [
+            [
+                "Sales",
+                ">",
+                100
+            ]
+        ],
+        "sort": [
+            [
+                "Sales",
+                "desc"
+            ]
+        ],
+        "filter_op": "or"
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "view.v2_aliases",
+            "pointer": "/computed_columns",
+            "value": []
+        },
+        {
+            "kind": "Dropped",
+            "step": "view.v2_aliases",
+            "pointer": "/version",
+            "value": "2.10.1"
+        },
+        {
+            "kind": "Dropped",
+            "step": "view.drop_split_by_depth",
+            "pointer": "/split_by_depth",
+            "value": 1
+        },
+        {
+            "kind": "Dropped",
+            "step": "view.drop_viewport",
+            "pointer": "/viewport",
+            "value": {
+                "top": 0,
+                "height": 10
+            }
+        }
+    ],
+    "steps": [
+        "view.v2_aliases",
+        "view.drop_split_by_depth",
+        "view.drop_viewport",
+        "view.filter_op_symbols"
+    ]
+}

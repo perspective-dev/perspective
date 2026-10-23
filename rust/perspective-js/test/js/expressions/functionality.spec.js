@@ -28,10 +28,12 @@ import { joined_column_paths } from "../column_paths.js";
                 const table = await perspective.table(
                     expressions_common.int_float_data,
                 );
-                const validate = await table.validate_expressions([
-                    'if ("w" > 1) 5;',
-                    'if ("w" > 1) 5',
-                ]);
+                const validate = await table.validate_expressions(
+                    ['if ("w" > 1) 5;', 'if ("w" > 1) 5'].reduce(
+                        (x, y) => Object.assign(x, { [y]: y }),
+                        {},
+                    ),
+                );
 
                 expect(
                     validate.expression_schema['if ("w" > 1) 5;'],
@@ -632,7 +634,12 @@ import { joined_column_paths } from "../column_paths.js";
                 const expressions = [
                     `for (var x := 'abc'; x < 10; x += 1) { var y := "w" + 1; y}`,
                 ];
-                const validate = await table.validate_expressions(expressions);
+                const validate = await table.validate_expressions(
+                    expressions.reduce(
+                        (x, y) => Object.assign(x, { [y]: y }),
+                        {},
+                    ),
+                );
 
                 for (const expr of expressions) {
                     expect(validate.expression_schema[expr]).toBeUndefined();
@@ -818,7 +825,10 @@ import { joined_column_paths } from "../column_paths.js";
             );
             const expressions = ["1", "0", "var x := 1; x", "var x := 0; x"];
             const view = await table.view({
-                expressions,
+                expressions: expressions.reduce(
+                    (x, y) => Object.assign(x, { [y]: y }),
+                    {},
+                ),
             });
 
             const schema = await view.expression_schema();
@@ -1262,7 +1272,9 @@ import { joined_column_paths } from "../column_paths.js";
             );
             const columns = await table.columns();
             const view = await table.view({
-                expressions: columns.map((col) => `"${col}"`),
+                expressions: columns
+                    .map((col) => `"${col}"`)
+                    .reduce((x, y) => Object.assign(x, { [y]: y }), {}),
             });
 
             const schema = await view.schema();
@@ -2101,7 +2113,12 @@ import { joined_column_paths } from "../column_paths.js";
                     expressions[2],
                 ].reduce((x, y) => Object.assign(x, { [y]: y }), {}),
             });
-            const view4 = await table.view({ expressions: expressions });
+            const view4 = await table.view({
+                expressions: expressions.reduce(
+                    (x, y) => Object.assign(x, { [y]: y }),
+                    {},
+                ),
+            });
 
             const schema = await view.schema();
             const schema2 = await view2.schema();
@@ -2739,7 +2756,12 @@ import { joined_column_paths } from "../column_paths.js";
                     `bucket("b", 'M')`,
                     `bucket("b", 's')`,
                 ];
-                const results = await table.validate_expressions(expressions);
+                const results = await table.validate_expressions(
+                    expressions.reduce(
+                        (x, y) => Object.assign(x, { [y]: y }),
+                        {},
+                    ),
+                );
                 expect(results.expression_schema).toEqual({
                     '"a" ^ 2': "float",
                     "sqrt(144)": "float",
@@ -2860,7 +2882,12 @@ import { joined_column_paths } from "../column_paths.js";
                     'min("a", "c")', // invalid,
                     'max(100, "a")', // valid
                 ];
-                const results = await table.validate_expressions(expressions);
+                const results = await table.validate_expressions(
+                    expressions.reduce(
+                        (x, y) => Object.assign(x, { [y]: y }),
+                        {},
+                    ),
+                );
 
                 expect(results.expression_schema).toEqual({
                     '"a" + "d"': "float",
@@ -2894,7 +2921,12 @@ import { joined_column_paths } from "../column_paths.js";
                     'upper("c")', // valid
                     'lower("sdfadsj")', // invalid
                 ];
-                const results = await table.validate_expressions(expressions);
+                const results = await table.validate_expressions(
+                    expressions.reduce(
+                        (x, y) => Object.assign(x, { [y]: y }),
+                        {},
+                    ),
+                );
                 expect(results.expression_schema).toEqual({
                     '"a" + "d"': "float",
                     '"c"': "string",
@@ -2922,7 +2954,12 @@ import { joined_column_paths } from "../column_paths.js";
                     "if (\"c\" == 'a') 123; else 0;", // valid
                     "if (", // invalid
                 ];
-                const results = await table.validate_expressions(expressions);
+                const results = await table.validate_expressions(
+                    expressions.reduce(
+                        (x, y) => Object.assign(x, { [y]: y }),
+                        {},
+                    ),
+                );
                 expect(results.expression_schema).toEqual({
                     '"a" + "d"': "float",
                     "if (\"c\" == 'a') 123; else 0;": "float",
@@ -3296,46 +3333,28 @@ import { joined_column_paths } from "../column_paths.js";
                 table.delete();
             });
 
-            test("Validation works with both input formats", async function () {
+            test("Validation rejects the legacy list input format", async function () {
                 const table = await perspective.table({
                     a: [1, 2, 3, 4],
                     b: [1, 2, 3, 4],
                 });
 
-                const str_exprs = {
-                    x: '"a"',
-                    y: '"b" * 0.5',
-                    c: "'abcdefg'",
-                    d: "true and false",
-                    e: 'float("a") > 2 ? null : 1',
-                    f: "today()",
-                    g: "now()",
-                    h: "length(123)",
-                };
+                const str_exprs = [
+                    '// x\n"a"',
+                    '// y\n"b" * 0.5',
+                    "// c\n'abcdefg'",
+                    "// d\ntrue and false",
+                    '// e\nfloat("a") > 2 ? null : 1',
+                    "// f\ntoday()",
+                    "// g\nnow()",
+                    "// h\nlength(123)",
+                ];
 
-                const dict_exprs = {
-                    x: '"a"',
-                    y: '"b" * 0.5',
-                    c: "'abcdefg'",
-                    d: "true and false",
-                    e: 'float("a") > 2 ? null : 1',
-                    f: "today()",
-                    g: "now()",
-                    h: "length(123)",
-                };
+                await expect(
+                    table.validate_expressions(str_exprs),
+                ).rejects.toThrow();
 
-                let vstrs = await table.validate_expressions(str_exprs);
-                let vdicts = await table.validate_expressions(dict_exprs);
-                expect(vstrs.errors).toEqual(vdicts.errors);
-                expect(vstrs.expression_schema).toEqual(
-                    vdicts.expression_schema,
-                );
-
-                for (let [key, val] of Object.entries(vstrs.expression_alias)) {
-                    let dict_val = vdicts.expression_alias[key];
-                    // let parsed_val = `${dict_val}`;
-                    expect(val).toEqual(dict_val);
-                }
+                await table.delete();
             });
         });
     });

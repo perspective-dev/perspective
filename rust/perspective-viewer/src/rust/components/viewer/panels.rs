@@ -19,6 +19,7 @@
 //! [`Workspace`]: crate::workspace::Workspace
 
 use perspective_js::utils::*;
+use wasm_bindgen::JsValue;
 use yew::prelude::*;
 
 use super::PerspectiveViewer;
@@ -228,7 +229,7 @@ impl PerspectiveViewer {
                     .await?;
 
                 // TODO(texodus): what the ****?
-                let update = ViewerConfigInitial::decode(&config.encode()?)?;
+                let update = ViewerConfigInitial::decode(&JsValue::from_serde_ext(&config.panel)?)?;
                 let client = panel.session.get_client();
                 let new_id = create_panel(
                     &elem,

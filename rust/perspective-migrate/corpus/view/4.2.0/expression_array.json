@@ -1,0 +1,30 @@
+{
+    "kind": "view",
+    "from": "4.2.0",
+    "source": "hand-written",
+    "input": {
+        "expressions": [
+            "//   \n\"Cost\"",
+            "//x\n\"A\"",
+            "1 + 1"
+        ]
+    },
+    "output": {
+        "expressions": {
+            "": "\"Cost\"",
+            "x": "\"A\"",
+            "1 + 1": "1 + 1"
+        }
+    },
+    "notices": [
+        {
+            "kind": "Approximated",
+            "step": "view.expressions_map",
+            "pointer": "/expressions",
+            "reason": "expression columns without `columns` are no longer ordered by the array"
+        }
+    ],
+    "steps": [
+        "view.expressions_map"
+    ]
+}

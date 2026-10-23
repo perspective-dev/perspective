@@ -33,7 +33,7 @@ def randstr(length, input=ascii_letters):
 class TestViewExpression(object):
     def test_table_validate_expressions_empty(self):
         table = Table({"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]})
-        validate = table.validate_expressions([])
+        validate = table.validate_expressions({})
         assert validate["expression_schema"] == {}
         assert validate["expression_alias"] == {}
         assert validate["errors"] == {}
@@ -150,7 +150,7 @@ class TestViewExpression(object):
             "length('abcd')",
         ]
 
-        view = table.view(expressions=expressions)
+        view = table.view(expressions={expr: expr for expr in expressions})
         assert view.expression_schema() == {
             '"a"': "integer",
             '"b" * 0.5': "float",
@@ -178,14 +178,14 @@ class TestViewExpression(object):
             "length('abcd')": [4 for _ in range(4)],
         }
 
-        validated = table.validate_expressions(expressions)
+        validated = table.validate_expressions({expr: expr for expr in expressions})
         for expr in expressions:
             assert validated["expression_alias"][expr] == expr
 
     def test_table_validate_expressions_with_errors(self):
         table = Table({"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]})
         expressions = ['"Sales" + "a"', "datetime()", "string()", "for () {}"]
-        validate = table.validate_expressions(expressions)
+        validate = table.validate_expressions({expr: expr for expr in expressions})
         assert validate["expression_schema"] == {}
         assert validate["expression_alias"] == {expr: expr for expr in expressions}
         assert validate["errors"] == {
@@ -291,13 +291,17 @@ class TestViewExpression(object):
 
             return {
                 "expression_name": expr[0][2:],
-                "expression": "\n".join(expr),
+                "expression": "\n".join(expr[1:]),
                 "output": "".join(concat_result),
             }
 
         expressions = [make_expression(i) for i in range(10)]
 
-        view = table.view(expressions=[expr["expression"] for expr in expressions])
+        view = table.view(
+            expressions={
+                expr["expression_name"]: expr["expression"] for expr in expressions
+            }
+        )
 
         result = view.to_columns()
         schema = view.expression_schema()
@@ -608,9 +612,9 @@ class TestViewExpression(object):
 
         for _ in range(10):
             view = table.view(
-                expressions=[
-                    "var x := 'Eabcdefghijklmn'; var y := '0123456789'; concat(x, y)"
-                ]
+                expressions={
+                    "var x := 'Eabcdefghijklmn'; var y := '0123456789'; concat(x, y)": "var x := 'Eabcdefghijklmn'; var y := '0123456789'; concat(x, y)"
+                }
             )
             assert view.to_columns() == {
                 "a": [1, 2, 3],
@@ -626,7 +630,7 @@ class TestViewExpression(object):
             return [{"a": random()} for _ in range(50)]
 
         table = Table(data())
-        view = table.view(expressions=["123"])
+        view = table.view(expressions={"123": "123"})
 
         for _ in range(5):
             table.update(data())
@@ -640,7 +644,7 @@ class TestViewExpression(object):
             return [{"a": random()} for _ in range(55)]
 
         table = Table(data(), limit=50)
-        view = table.view(expressions=["123"])
+        view = table.view(expressions={"123": "123"})
 
         for _ in range(5):
             table.update(data())
@@ -679,7 +683,7 @@ class TestViewExpression(object):
 
     def test_view_expression_create_no_alias(self):
         table = Table({"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]})
-        view = table.view(expressions=['"a" + "b"'])
+        view = table.view(expressions={'"a" + "b"': '"a" + "b"'})
         assert view.to_columns() == {
             "a": [1, 2, 3, 4],
             "b": [5, 6, 7, 8],
@@ -698,14 +702,13 @@ class TestViewExpression(object):
             == 'Abort(): Value Error - expression "a" cannot overwrite an existing column.'
         )
 
-    def test_legacy_view_duplicate_expression_should_resolve_to_last_alias(self):
+    def test_legacy_view_expression_list_is_rejected(self):
         table = Table({"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]})
-        view = table.view(
-            columns=["abc"],
-            expressions=['//abc\n"a" + "b"', '//abc\n"a" - "b"'],
-        )
-
-        assert view.to_columns() == {"abc": [-4, -4, -4, -4]}
+        with pytest.raises(Exception):
+            table.view(
+                columns=["abc"],
+                expressions=['//abc\n"a" + "b"', '//abc\n"a" - "b"'],
+            )
 
     def test_view_expression_multiple_alias(
         self,
@@ -1754,7 +1757,11 @@ class TestViewExpression(object):
 
     def test_view_expession_multicomment(self):
         table = Table({"a": [1, 2, 3, 4]})
-        view = table.view(expressions=["var x := 1 + 2;\n// def\nx + 100 // cdefghijk"])
+        view = table.view(
+            expressions={
+                "var x := 1 + 2;\n// def\nx + 100 // cdefghijk": "var x := 1 + 2;\n// def\nx + 100 // cdefghijk"
+            }
+        )
         assert view.expression_schema() == {
             "var x := 1 + 2;\n// def\nx + 100 // cdefghijk": "float"
         }
@@ -1976,16 +1983,12 @@ class TestViewExpression(object):
         # XXX: This test was broken because it thought `b` was an integer column.
         table = Table({"a": "string", "b": "string"})
         table.update({"a": data, "b": [str(i) for i in range(1000)]})
-        expressions = [
-            """//w
-            replace('abc-def-hijk', '-', '')""",
-            """//x
-            replace("a", '[0-9]{4}$', "b")""",
-            """//y
-            replace("a", '[a-z]{4}$', "b")""",
-            """//z
-            var x := 'long string, very cool!'; replace("a", '^[0-9]{4}', x)""",
-        ]
+        expressions = {
+            "w": """replace('abc-def-hijk', '-', '')""",
+            "x": """replace("a", '[0-9]{4}$', "b")""",
+            "y": """replace("a", '[a-z]{4}$', "b")""",
+            "z": """var x := 'long string, very cool!'; replace("a", '^[0-9]{4}', x)""",
+        }
 
         validate = table.validate_expressions(expressions)
         assert validate["expression_schema"] == {
@@ -2017,18 +2020,13 @@ class TestViewExpression(object):
 
     def test_view_replace_invalid(self):
         table = Table({"a": "string", "b": "string"})
-        expressions = [
-            """//v
-            replace('abc-def-hijk', '-', 123)""",
-            """//w
-            replace('', '-', today())""",
-            """//x
-            replace("a", '[0-9]{4}$', today())""",
-            """//y
-            replace("a", '[a-z]{4}$', null)""",
-            """//z
-            var x := 123; replace("a", '^[0-9]{4}', x)""",
-        ]
+        expressions = {
+            "v": """replace('abc-def-hijk', '-', 123)""",
+            "w": """replace('', '-', today())""",
+            "x": """replace("a", '[0-9]{4}$', today())""",
+            "y": """replace("a", '[a-z]{4}$', null)""",
+            "z": """var x := 123; replace("a", '^[0-9]{4}', x)""",
+        }
         validate = table.validate_expressions(expressions)
         assert validate["expression_schema"] == {}
 
@@ -2053,16 +2051,12 @@ class TestViewExpression(object):
             )
         table = Table({"a": "string", "b": "string"})
         table.update({"a": data, "b": [str(i) for i in range(1000)]})
-        expressions = [
-            """//w
-            replace_all('abc-def-hijk', '-', '')""",
-            """//x
-            replace_all("a", '[0-9]{4}$', "b")""",
-            """//y
-            replace_all("a", '[a-z]{4}$', "b")""",
-            """//z
-            var x := 'long string, very cool!'; replace_all("a", '^[0-9]{4}', x)""",
-        ]
+        expressions = {
+            "w": """replace_all('abc-def-hijk', '-', '')""",
+            "x": """replace_all("a", '[0-9]{4}$', "b")""",
+            "y": """replace_all("a", '[a-z]{4}$', "b")""",
+            "z": """var x := 'long string, very cool!'; replace_all("a", '^[0-9]{4}', x)""",
+        }
 
         validate = table.validate_expressions(expressions)
         assert validate["expression_schema"] == {
@@ -2095,18 +2089,13 @@ class TestViewExpression(object):
 
     def test_view_replace_invalid_variation(self):
         table = Table({"a": "string", "b": "string"})
-        expressions = [
-            """//v
-            replace_all('abc-def-hijk', '-', 123)""",
-            """//w
-            replace_all('', '-', today())""",
-            """//x
-            replace_all("a", '[0-9]{4}$', today())""",
-            """//y
-            replace_all("a", '[a-z]{4}$', null)""",
-            """//z
-            var x := 123; replace_all("a", '^[0-9]{4}', x)""",
-        ]
+        expressions = {
+            "v": """replace_all('abc-def-hijk', '-', 123)""",
+            "w": """replace_all('', '-', today())""",
+            "x": """replace_all("a", '[0-9]{4}$', today())""",
+            "y": """replace_all("a", '[a-z]{4}$', null)""",
+            "z": """var x := 123; replace_all("a", '^[0-9]{4}', x)""",
+        }
         validate = table.validate_expressions(expressions)
         assert validate["expression_schema"] == {}
 

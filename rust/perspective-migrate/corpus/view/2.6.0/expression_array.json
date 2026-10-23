@@ -1,0 +1,31 @@
+{
+    "kind": "view",
+    "from": "2.6.0",
+    "source": "hand-written",
+    "input": {
+        "columns": [
+            "profit",
+            "Sales"
+        ],
+        "expressions": [
+            "//profit\n\"Sales\" - \"Cost\"",
+            "\"Sales\" * 2",
+            "//   \n\"Cost\""
+        ]
+    },
+    "output": {
+        "columns": [
+            "profit",
+            "Sales"
+        ],
+        "expressions": {
+            "profit": "\"Sales\" - \"Cost\"",
+            "\"Sales\" * 2": "\"Sales\" * 2",
+            "//   \n\"Cost\"": "//   \n\"Cost\""
+        }
+    },
+    "notices": [],
+    "steps": [
+        "view.expressions_map"
+    ]
+}

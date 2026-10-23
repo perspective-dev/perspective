@@ -17,13 +17,17 @@ import * as psp_virtual from "./virtual_server.ts";
 import * as wasm_module from "../../dist/wasm/perspective-js.js";
 import * as api from "./wasm/browser.ts";
 import { host_supports_memory64 } from "./wasm/features.ts";
+import type { MigrateKind, MigrateResult } from "./wasm/migrate.ts";
 import {
     init,
+    MigrateLoader,
     provide_client_glue,
     provide_client_runtime,
     register,
     resolve_client,
+    resolve_migrate,
     resolve_server,
+    shared_migrate,
 } from "./wasm/registry.ts";
 import type { WasmSource } from "./wasm/registry.ts";
 
@@ -35,6 +39,12 @@ export type {
     WasmRegistration,
     WasmSource,
 } from "./wasm/registry.ts";
+
+export type {
+    MigrateKind,
+    MigrateNotice,
+    MigrateResult,
+} from "./wasm/migrate.ts";
 
 export {
     GenericSQLVirtualServerModel,
@@ -62,13 +72,15 @@ export type ServerWasmSource =
     | (() => Promise<ArrayBuffer | Response | WebAssembly.Module>);
 
 /**
- * Engine binaries by bitness. Registering `wasm64` is the opt-in for the
- * Memory64 engine (4GB heap ceiling raised to 16GB, at some engine
- * performance cost) — it is selected whenever the host supports Memory64.
+ * Engine binaries by bitness, and the `perspective-migrate` binary behind
+ * `migrate()`. Registering `wasm64` is the opt-in for the Memory64 engine
+ * (4GB heap ceiling raised to 16GB, at some engine performance cost) — it is
+ * selected whenever the host supports Memory64.
  */
 export interface ServerWasmRegistration {
     wasm32?: ServerWasmSource;
     wasm64?: ServerWasmSource;
+    migrate?: ServerWasmSource;
 }
 
 export interface InitServerOptions {
@@ -85,6 +97,9 @@ provide_client_runtime(async (wasm) => {
     await wasm_module.init();
     return { glue: wasm_module, module };
 });
+
+const MIGRATE = new MigrateLoader();
+MIGRATE.register(resolve_migrate);
 
 function client_glue(): Promise<typeof psp> {
     return resolve_client().then((runtime) => runtime.glue);
@@ -111,8 +126,8 @@ function is_wasm_source(
 
 /**
  * Register the Perspective engine ("server") WebAssembly binary that backs
- * `worker()`; a wrapper over `init()`'s `server` / `server32` / `server64`
- * roles.
+ * `worker()`; a wrapper over `init()`'s `server` / `server32` / `server64` /
+ * `migrate` roles.
  *
  * The single-argument form registers one binary of either bitness (`server`).
  * The object form registers a wasm32 and/or wasm64 (Memory64) binary
@@ -124,7 +139,8 @@ function is_wasm_source(
  * source is also registered, selection falls back to wasm32 with a console
  * warning. Either form replaces any engine binaries registered earlier.
  *
- * Selection and download are deferred to the first `worker()` call.
+ * Selection and download are deferred to the first `worker()` call. The
+ * `migrate` binary is likewise only downloaded by the first `migrate()` call.
  *
  * # Examples
  *
@@ -136,6 +152,7 @@ function is_wasm_source(
  * perspective.init_server({
  *     wasm32: () => fetch("perspective-server.wasm"),
  *     wasm64: () => fetch("perspective-server.memory64.wasm"),
+ *     migrate: () => fetch("perspective-migrate-js.wasm"),
  * });
  * ```
  */
@@ -153,18 +170,52 @@ export function init_server(
 
     // `WebAssembly.Module`'s lib type is structurally empty, so TypeScript
     // can't negatively narrow this branch itself.
-    const { wasm32, wasm64 } = wasm as ServerWasmRegistration;
-    if (wasm32 === undefined && wasm64 === undefined) {
+    const { wasm32, wasm64, migrate } = wasm as ServerWasmRegistration;
+    if (wasm32 === undefined && wasm64 === undefined && migrate === undefined) {
         throw new Error(
-            "init_server requires a wasm source or a {wasm32, wasm64} registration",
+            "init_server requires a wasm source or a {wasm32, wasm64, migrate} registration",
         );
     }
 
-    register(
-        { server32: wasm32, server64: wasm64 },
-        { disable_stage_0 },
-        "replace_server",
-    );
+    if (wasm32 !== undefined || wasm64 !== undefined) {
+        register(
+            { server32: wasm32, server64: wasm64 },
+            { disable_stage_0 },
+            "replace_server",
+        );
+    }
+
+    if (migrate !== undefined) {
+        register({ migrate }, { disable_stage_0 });
+    }
+}
+
+/**
+ * Upgrade a persisted config written by any Perspective release since 2.0.0
+ * to the current schema, using the `migrate` binary registered with `init()`.
+ *
+ * # Arguments
+ *
+ * - `kind` - `"view"` for a `ViewConfig`, `"viewer"` for a
+ *   `<perspective-viewer>` `save()` token, or `"workspace"` for a
+ *   `saveWorkspace()` token.
+ * - `config` - The config to upgrade.
+ * - `from_version` - The release which wrote `config`, used only when it has
+ *   no `version` field.
+ *
+ * # Examples
+ *
+ * ```javascript
+ * const { value, notices } = await perspective.migrate("viewer", token);
+ * await viewer.restore(value);
+ * ```
+ */
+export async function migrate<T = Record<string, unknown>>(
+    kind: MigrateKind,
+    config: unknown,
+    from_version?: string,
+): Promise<MigrateResult<T>> {
+    return await shared_migrate(MIGRATE).migrate<T>(kind, config, from_version);
 }
 
 export type PerspectiveWasm =
@@ -277,6 +328,7 @@ export default {
     init_client,
     init_server,
     make_client,
+    migrate,
     host_supports_memory64,
     createMessageHandler,
     getCompiledClientWasm,
