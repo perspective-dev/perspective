@@ -266,6 +266,24 @@ pub(crate) fn quote_ident(name: &str) -> String {
     name.replace('"', "\"\"")
 }
 
+/// Renders an entity id as a SQL relation, quoted whole unless it is a plain
+/// dotted identifier.
+pub(crate) fn entity_ref(id: &str) -> String {
+    let is_plain = id.split('.').all(|part| {
+        let mut chars = part.chars();
+        chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+    });
+
+    if is_plain {
+        id.to_owned()
+    } else {
+        format!("\"{}\"", quote_ident(id))
+    }
+}
+
 fn quote_literal(value: &str) -> String {
     value.replace('\'', "''")
 }
@@ -327,6 +345,7 @@ impl<'a> ViewQueryContext<'a> {
         config: &'a ViewConfig,
         schema: &IndexMap<String, ColumnType>,
     ) -> Result<Self, GenericSQLError> {
+        let table = &entity_ref(table);
         let expressions = &config.expressions.0;
         let col_name_resolve = |col: &str| -> String {
             expressions

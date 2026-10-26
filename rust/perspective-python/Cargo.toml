@@ -54,10 +54,7 @@ protobuf-src = ["perspective-client/protobuf-src"]
 crate-type = ["cdylib"]
 
 [build-dependencies]
-cmake = "0.1.58"
-num_cpus = "^1.16.0"
 pyo3-build-config = "0.29.0"
-python-config-rs = "0.1.2"
 
 [dependencies]
 perspective-client = { version = "5.6.1" }

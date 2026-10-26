@@ -42,7 +42,9 @@ use crate::config::{
     FilterTerm, GroupRollupMode, Scalar, Sort, SortDir, SplitRollupMode, ViewConfig,
 };
 use crate::proto::{ColumnType, ViewPort};
-use crate::virtual_server::generic_sql_model::table_make_view::{ViewQueryContext, quote_ident};
+use crate::virtual_server::generic_sql_model::table_make_view::{
+    ViewQueryContext, entity_ref, quote_ident,
+};
 
 /// Error type for SQL generation operations.
 #[derive(Debug, Clone)]
@@ -249,6 +251,7 @@ impl GenericSQLVirtualServerModel {
     ) -> GenericSQLResult<String> {
         self.check_expandable(config)?;
         let row_id = self.0.row_id_expr.as_deref().unwrap_or("rowid");
+        let view_id = entity_ref(view_id);
         Ok(format!(
             "(SELECT t.idx AS lo, t.depth AS depth, COALESCE(MIN(n.{row_id}), (SELECT \
              MAX({row_id}) + 1 FROM {view_id})) AS hi FROM (SELECT {row_id} AS idx, {depth} AS \
@@ -274,8 +277,9 @@ impl GenericSQLVirtualServerModel {
     ) -> GenericSQLResult<String> {
         let row_id = self.0.row_id_expr.as_deref().unwrap_or("rowid");
         Ok(format!(
-            "UPDATE {view_id} AS v SET \"__HIDDEN__\" = FALSE FROM {target} WHERE v.{row_id} > \
+            "UPDATE {view_ref} AS v SET \"__HIDDEN__\" = FALSE FROM {target} WHERE v.{row_id} > \
              r.lo AND v.{row_id} < r.hi AND {depth} = r.depth + 1 AND v.\"__HIDDEN__\"",
+            view_ref = entity_ref(view_id),
             target = self.expansion_target_sql(view_id, config, row_index)?,
             depth = self.row_depth_sql(config, "v."),
         ))
@@ -295,8 +299,9 @@ impl GenericSQLVirtualServerModel {
     ) -> GenericSQLResult<String> {
         let row_id = self.0.row_id_expr.as_deref().unwrap_or("rowid");
         Ok(format!(
-            "UPDATE {view_id} AS v SET \"__HIDDEN__\" = TRUE FROM {target} WHERE v.{row_id} > \
+            "UPDATE {view_ref} AS v SET \"__HIDDEN__\" = TRUE FROM {target} WHERE v.{row_id} > \
              r.lo AND v.{row_id} < r.hi AND NOT v.\"__HIDDEN__\"",
+            view_ref = entity_ref(view_id),
             target = self.expansion_target_sql(view_id, config, row_index)?,
         ))
     }
@@ -315,7 +320,7 @@ impl GenericSQLVirtualServerModel {
         self.check_expandable(config)?;
         Ok(format!(
             "UPDATE {} SET \"__HIDDEN__\" = ({} > {})",
-            view_id,
+            entity_ref(view_id),
             self.row_depth_sql(config, ""),
             depth as u64 + 1
         ))
@@ -337,7 +342,7 @@ impl GenericSQLVirtualServerModel {
     /// # Returns
     /// SQL: `DESCRIBE {table_id}`
     pub fn table_schema(&self, table_id: &str) -> GenericSQLResult<String> {
-        Ok(format!("DESCRIBE {}", table_id))
+        Ok(format!("DESCRIBE {}", entity_ref(table_id)))
     }
 
     /// Returns the SQL query to get the row count of a table.
@@ -348,7 +353,7 @@ impl GenericSQLVirtualServerModel {
     /// # Returns
     /// SQL: `SELECT COUNT(*) FROM {table_id}`
     pub fn table_size(&self, table_id: &str) -> GenericSQLResult<String> {
-        Ok(format!("SELECT COUNT(*) FROM {}", table_id))
+        Ok(format!("SELECT COUNT(*) FROM {}", entity_ref(table_id)))
     }
 
     /// Returns the SQL query to get the column count of a view.
@@ -359,7 +364,10 @@ impl GenericSQLVirtualServerModel {
     /// # Returns
     /// SQL: `SELECT COUNT(*) FROM (DESCRIBE {view_id})`
     pub fn view_column_size(&self, view_id: &str) -> GenericSQLResult<String> {
-        Ok(format!("SELECT COUNT(*) FROM (DESCRIBE {})", view_id))
+        Ok(format!(
+            "SELECT COUNT(*) FROM (DESCRIBE {})",
+            entity_ref(view_id)
+        ))
     }
 
     fn describe_wrap(&self, query: &str) -> String {
@@ -400,7 +408,8 @@ impl GenericSQLVirtualServerModel {
 
         Ok(Some(self.describe_wrap(&format!(
             "SELECT {} FROM {}",
-            selects, table_id
+            selects,
+            entity_ref(table_id)
         ))))
     }
 
@@ -413,7 +422,11 @@ impl GenericSQLVirtualServerModel {
         table_id: &str,
         expression: &str,
     ) -> GenericSQLResult<String> {
-        Ok(self.describe_wrap(&format!("SELECT {} FROM {}", expression, table_id)))
+        Ok(self.describe_wrap(&format!(
+            "SELECT {} FROM {}",
+            expression,
+            entity_ref(table_id)
+        )))
     }
 
     /// Returns the SQL query that plans the view `config` would build against
@@ -455,7 +468,7 @@ impl GenericSQLVirtualServerModel {
     /// SQL: `DROP {drop_entity} IF EXISTS {view_id}`
     pub fn view_delete(&self, view_id: &str) -> GenericSQLResult<String> {
         let entity = self.0.drop_entity.as_deref().unwrap_or("TABLE");
-        Ok(format!("DROP {} IF EXISTS {}", entity, view_id))
+        Ok(format!("DROP {} IF EXISTS {}", entity, entity_ref(view_id)))
     }
 
     /// Returns the SQL query to create a view from a table with the given
@@ -487,7 +500,12 @@ impl GenericSQLVirtualServerModel {
         }
 
         let template = self.0.create_entity.as_deref().unwrap_or("TABLE");
-        Ok(format!("CREATE {} {} AS ({})", template, view_id, query))
+        Ok(format!(
+            "CREATE {} {} AS ({})",
+            template,
+            entity_ref(view_id),
+            query
+        ))
     }
 
     /// Returns the SQL query to create a table from a view, with the view's
@@ -572,9 +590,9 @@ impl GenericSQLVirtualServerModel {
         Ok(format!(
             "CREATE {} {} AS (SELECT {} FROM {})",
             template,
-            table_id,
+            entity_ref(table_id),
             clauses.join(", "),
-            view_id
+            entity_ref(view_id)
         ))
     }
 
@@ -656,7 +674,7 @@ impl GenericSQLVirtualServerModel {
         Ok(format!(
             "SELECT {} FROM {}{} {}",
             all_columns.join(", "),
-            view_id,
+            entity_ref(view_id),
             self.visible_rows_sql(),
             limit_clause
         )
@@ -672,7 +690,7 @@ impl GenericSQLVirtualServerModel {
     /// # Returns
     /// SQL: `DESCRIBE {view_id}`
     pub fn view_schema(&self, view_id: &str) -> GenericSQLResult<String> {
-        Ok(format!("DESCRIBE {}", view_id))
+        Ok(format!("DESCRIBE {}", entity_ref(view_id)))
     }
 
     /// Returns the SQL query to get the (visible) row count of a view.
@@ -685,7 +703,7 @@ impl GenericSQLVirtualServerModel {
     pub fn view_size(&self, view_id: &str) -> GenericSQLResult<String> {
         Ok(format!(
             "SELECT COUNT(*) FROM {}{}",
-            view_id,
+            entity_ref(view_id),
             self.visible_rows_sql()
         ))
     }
@@ -718,7 +736,10 @@ impl GenericSQLVirtualServerModel {
         let column_name = quote_ident(column_name);
         Ok(format!(
             "SELECT MIN(\"{}\"), MAX(\"{}\") FROM {}{}",
-            column_name, column_name, view_id, where_clause
+            column_name,
+            column_name,
+            entity_ref(view_id),
+            where_clause
         ))
     }
 

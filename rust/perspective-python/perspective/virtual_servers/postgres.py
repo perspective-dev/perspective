@@ -259,7 +259,8 @@ class PostgresVirtualServerHandler(VirtualServerHandler):
         uniformly for tables, temporary views (which hide in `pg_temp`), and
         expression validation - Postgres has no `DESCRIBE`.
         """
-        cur = run_query(self.db, f"SELECT * FROM {entity_id} LIMIT 0", cursor=True)
+        query = self.sql_builder.expression_describe(entity_id, "*")
+        cur = run_query(self.db, query, cursor=True)
         return [(d.name, d.type_code) for d in cur.description]
 
     def table_schema(self, table_name, config=None):
