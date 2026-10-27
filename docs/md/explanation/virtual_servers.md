@@ -83,3 +83,39 @@ only show controls for supported operations:
 | `filter_ops`  | `dict` | Map of column type to list of supported filter operators    |
 | `aggregates`  | `dict` | Map of column type to list of supported aggregate functions |
 | `on_update`   | `bool` | Whether update callbacks are supported                      |
+| `expand_collapse` | `bool` | Whether `View::expand`, `View::collapse` and `View::set_depth` are supported |
+| `update`      | `bool` | Whether `Table::update` is supported; the datagrid omits its `"EDIT"` mode otherwise |
+
+## Expand and collapse
+
+A `group_by` view in `"rollup"` mode presents its rows as a tree, which
+`View::expand`, `View::collapse` and `View::set_depth` open and close. A virtual
+server which declares `expand_collapse` must implement `view_expand()`,
+`view_collapse()` and `view_set_depth()` (`viewExpand()`, `viewCollapse()` and
+`viewSetDepth()` in JavaScript), which the `VirtualServer` forwards unchanged.
+The handler owns the tree state, ideally in the data store itself, and its
+subsequent `view_size()` and `view_get_data()` calls for that view must honor
+it. Implementations must match the semantics of Perspective's own engine:
+
+- A new view starts fully expanded.
+- `view_expand(view, config, row_index)` shows the direct children of that row,
+  each collapsed, and returns the number of rows shown (`0` if already
+  expanded, or a leaf).
+- `view_collapse(view, config, row_index)` hides every descendant of that row,
+  forgetting their own expansion, and returns the number of rows hidden.
+- `view_set_depth(view, config, depth)` expands exactly the rows whose path is
+  no longer than `depth` and collapses the rest, so the total row and its
+  children are visible after `view_set_depth(..., 0)`.
+
+Row indices are positions in the view as currently expanded. The
+`VirtualServer` answers these requests itself, without calling the handler, for
+views without `group_by` or in `"flat"` or `"total"` mode, and ignores
+`set_depth` deeper than `group_by`.
+
+The bundled DuckDB virtual servers implement this through
+`GenericSQLVirtualServerModel`'s `expand_collapse` option, which adds a hidden
+`__HIDDEN__` column to each view's temporary table and builds the `UPDATE`
+statements for `view_expand()`, `view_collapse()` and `view_set_depth()`. It
+requires a dialect whose views are tables scanned in insertion order, so the
+ClickHouse and PostgreSQL virtual servers, whose views are SQL `VIEW`s, do not
+support expand and collapse.

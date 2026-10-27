@@ -1343,3 +1343,84 @@ class TestDuckDBTableFromView:
             client.table(view, schema={"Sales": "string"})
 
         view.delete()
+
+
+EXPAND_CONFIG = {
+    "columns": ["Sales"],
+    "group_by": ["Region", "State"],
+    "aggregates": {"Sales": "sum"},
+}
+
+
+def row_paths(view):
+    return view.to_columns()["__ROW_PATH__"]
+
+
+class TestDuckDBExpandCollapse:
+    def test_collapse_hides_descendants(self, client):
+        view = client.open_table("memory.superstore").view(**EXPAND_CONFIG)
+        before = row_paths(view)
+        central = len([x for x in before if x[:1] == ["Central"]]) - 1
+        assert view.collapse(1) == central
+        assert view.num_rows() == len(before) - central
+        assert row_paths(view)[:3] == [[], ["Central"], ["East"]]
+        assert view.collapse(1) == 0
+        view.delete()
+
+    def test_expand_restores_children(self, client):
+        view = client.open_table("memory.superstore").view(**EXPAND_CONFIG)
+        before = row_paths(view)
+        central = view.collapse(1)
+        assert view.expand(1) == central
+        assert row_paths(view) == before
+        assert view.expand(1) == 0
+        view.delete()
+
+    def test_expand_shows_children_collapsed(self, client):
+        view = client.open_table("memory.superstore").view(**EXPAND_CONFIG)
+        num_rows = view.num_rows()
+        assert view.collapse(0) == num_rows - 1
+        assert row_paths(view) == [[]]
+        assert view.expand(0) == 4
+        assert row_paths(view) == [[], ["Central"], ["East"], ["South"], ["West"]]
+        view.delete()
+
+    def test_collapse_leaf_is_noop(self, client):
+        view = client.open_table("memory.superstore").view(**EXPAND_CONFIG)
+        num_rows = view.num_rows()
+        assert view.collapse(2) == 0
+        assert view.num_rows() == num_rows
+        view.delete()
+
+    def test_flat_is_not_expandable(self, client):
+        view = client.open_table("memory.superstore").view(
+            group_rollup_mode="flat", **EXPAND_CONFIG
+        )
+
+        num_rows = view.num_rows()
+        assert view.collapse(0) == 0
+        assert view.num_rows() == num_rows
+        view.delete()
+
+    def test_expansion_column_does_not_leak(self, client):
+        view = client.open_table("memory.superstore").view(**EXPAND_CONFIG)
+        view.collapse(1)
+        assert view.schema() == {"Sales": "float"}
+        assert view.num_columns() == 1
+        assert sorted(view.to_columns().keys()) == ["Sales", "__ROW_PATH__"]
+        derived = client.table(view, name="py_derived_expand")
+        assert derived.schema() == {
+            "Region": "string",
+            "State": "string",
+            "Sales": "float",
+        }
+
+        derived.delete()
+        view.delete()
+
+    def test_ungrouped_view_does_not_leak(self, client):
+        view = client.open_table("memory.superstore").view(columns=["Region", "Sales"])
+        assert view.schema() == {"Region": "string", "Sales": "float"}
+        assert view.num_columns() == 2
+        assert sorted(view.to_columns().keys()) == ["Region", "Sales"]
+        view.delete()

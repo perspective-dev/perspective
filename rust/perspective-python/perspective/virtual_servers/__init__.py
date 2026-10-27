@@ -129,6 +129,38 @@ class VirtualServerHandler:
 
         pass
 
+    def view_expand(self, view_name, config, row_index):
+        """
+        [OPTIONAL] Expand the row at `row_index` of a `"rollup"` mode
+        `group_by` temporary table `view_name` to show its children, each
+        collapsed, returning the number of rows shown. Required when
+        `get_features` declares `"expand_collapse": True`; the handler owns
+        this state, which its subsequent `view_size` and `view_get_data`
+        calls must honor.
+        """
+
+        raise NotImplementedError("view_expand")
+
+    def view_collapse(self, view_name, config, row_index):
+        """
+        [OPTIONAL] Collapse the row at `row_index` of a `"rollup"` mode
+        `group_by` temporary table `view_name`, discarding its descendants'
+        expansion, returning the number of rows hidden. Required when
+        `get_features` declares `"expand_collapse": True`.
+        """
+
+        raise NotImplementedError("view_collapse")
+
+    def view_set_depth(self, view_name, config, depth):
+        """
+        [OPTIONAL] Expand every row of a `"rollup"` mode `group_by` temporary
+        table `view_name` whose path is no longer than `depth`, and collapse
+        the rest. Required when `get_features` declares
+        `"expand_collapse": True`.
+        """
+
+        raise NotImplementedError("view_set_depth")
+
     def view_get_data(self, view_name, config, viewport, data):
         """
         Serialize a rectangular slice `viewport` from temporary table

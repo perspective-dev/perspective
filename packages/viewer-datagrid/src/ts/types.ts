@@ -468,6 +468,12 @@ export interface DatagridModel {
     _edit_port: number;
     _view: View;
     _table: Table;
+
+    /** Whether the server supports `expand`, `collapse` and `set_depth`. */
+    _expand_collapse: boolean;
+
+    /** Whether the server supports `Table::update`, required by `"EDIT"`. */
+    _update: boolean;
     _table_schema: Schema;
     _config: ViewerConfig;
     _num_rows: number;

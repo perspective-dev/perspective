@@ -82,6 +82,9 @@ class MyHandler(VirtualServerHandler):
 | `view_schema(view_name, config)` | `table_schema` | Schema of a temporary table, when it differs from its source |
 | `view_size(view_name)` | `table_size` | Row count of a temporary table, when it differs from its source |
 | `view_get_min_max(view_name, column_name, config)` | unsupported | Column bounds as a `(min, max)` tuple — required for gradient and sparkbar column styles |
+| `view_expand(view_name, config, row_index)` | unsupported | Expand a row tree node — required by `expand_collapse`, see [Expand and collapse](../../../explanation/virtual_servers.md#expand-and-collapse) |
+| `view_collapse(view_name, config, row_index)` | unsupported | Collapse a row tree node — required by `expand_collapse` |
+| `view_set_depth(view_name, config, depth)` | unsupported | Expand the row tree to a depth — required by `expand_collapse` |
 
 ## The session factory
 

@@ -290,6 +290,7 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
             column_separator: "|",
             like_escape_clause: "\\",
             regex_fn: "regexp_matches",
+            expand_collapse: true,
         });
     }
 
@@ -300,6 +301,7 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
             sort: true,
             expressions: true,
             view_derivations: true,
+            expand_collapse: true,
             window_aggregates: {
                 // `ema` is recursive and has no SQL window translation.
                 integer: WINDOW_AGGREGATES,
@@ -362,7 +364,36 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
         const count = Number(Object.values(results[0].toJSON())[0]);
         const gs = config.group_by?.length || 0;
         const is_flat = config.group_rollup_mode === "flat";
-        return count - (gs === 0 ? 0 : is_flat ? gs : gs + 1);
+        return count - (gs === 0 ? 0 : is_flat ? gs : gs + 1) - 1;
+    }
+
+    async viewSize(viewId: string) {
+        return await this.runCount(this.sqlBuilder.viewSize(viewId));
+    }
+
+    async viewExpand(viewId: string, config: ViewConfig, rowIndex: number) {
+        return await this.runCount(
+            this.sqlBuilder.viewExpand(viewId, config, rowIndex),
+        );
+    }
+
+    async viewCollapse(viewId: string, config: ViewConfig, rowIndex: number) {
+        return await this.runCount(
+            this.sqlBuilder.viewCollapse(viewId, config, rowIndex),
+        );
+    }
+
+    async viewSetDepth(viewId: string, config: ViewConfig, depth: number) {
+        await runQuery(
+            this.db,
+            this.sqlBuilder.viewSetDepth(viewId, config, depth),
+        );
+    }
+
+    /** The single integer a `COUNT(*)` query or an `UPDATE` returns. */
+    private async runCount(query: string) {
+        const results = await runQuery(this.db, query);
+        return Number(Object.values(results[0].toJSON())[0]);
     }
 
     async tableSize(tableId: string) {

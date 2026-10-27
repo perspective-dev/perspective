@@ -244,6 +244,57 @@ impl GenericSQLVirtualServerModel {
             .view_get_min_max(view_id, column_name, &config)
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
+
+    /// Returns the `UPDATE` expanding the `row_index`-th visible row, whose
+    /// affected-row count is the number of rows shown.
+    #[wasm_bindgen(js_name = "viewExpand")]
+    pub fn view_expand(
+        &self,
+        view_id: &str,
+        config: JsValue,
+        row_index: u32,
+    ) -> Result<String, JsValue> {
+        let config: ViewConfig = serde_wasm_bindgen::from_value(config)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        self.inner
+            .view_expand(view_id, &config, row_index)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// Returns the `UPDATE` collapsing the `row_index`-th visible row, whose
+    /// affected-row count is the number of rows hidden.
+    #[wasm_bindgen(js_name = "viewCollapse")]
+    pub fn view_collapse(
+        &self,
+        view_id: &str,
+        config: JsValue,
+        row_index: u32,
+    ) -> Result<String, JsValue> {
+        let config: ViewConfig = serde_wasm_bindgen::from_value(config)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        self.inner
+            .view_collapse(view_id, &config, row_index)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// Returns the `UPDATE` expanding exactly the rows whose path is no longer
+    /// than `depth`.
+    #[wasm_bindgen(js_name = "viewSetDepth")]
+    pub fn view_set_depth(
+        &self,
+        view_id: &str,
+        config: JsValue,
+        depth: u32,
+    ) -> Result<String, JsValue> {
+        let config: ViewConfig = serde_wasm_bindgen::from_value(config)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        self.inner
+            .view_set_depth(view_id, &config, depth)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
 }
 
 impl GenericSQLVirtualServerModel {
