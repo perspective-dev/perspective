@@ -10,17 +10,17 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Canvas2D, Context2D } from "../charts/canvas-types";
-import { PlotLayout, type PlotRect } from "../layout/plot-layout";
-import { computeNiceTicks, stepTickFormatter } from "../layout/ticks";
-import { getScaledContext } from "./canvas";
+import type { Canvas2D, Context2D } from "../charts/canvas-types.ts";
+import { PlotLayout, type PlotRect } from "../layout/plot-layout.ts";
+import { computeNiceTicks, stepTickFormatter } from "../layout/ticks.ts";
+import { getScaledContext } from "./canvas.ts";
 import {
     drawGridlinesX,
     drawGridlinesY,
     drawXTickRow,
     drawYTickColumn,
-} from "./axis-primitives";
-import type { Theme } from "../theme/theme";
+} from "./axis-primitives.ts";
+import type { Theme } from "../theme/theme.ts";
 import type { DateFormatModifiers } from "@perspective-dev/viewer/column-format";
 
 export interface AxisDomain {

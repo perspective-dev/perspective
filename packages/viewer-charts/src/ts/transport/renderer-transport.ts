@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { Client, View, ViewConfig } from "@perspective-dev/client";
-import type { FacetConfig, PluginConfig } from "../charts/chart";
+import type { FacetConfig, PluginConfig } from "../charts/chart.ts";
 import type {
     ControlMsg,
     ErrorMsg,
@@ -20,19 +20,19 @@ import type {
     LoadAndRenderMsg,
     WorkerEnvelope,
     WorkerMsg,
-} from "./protocol";
+} from "./protocol.ts";
 import {
     PerspectiveSelectDetail,
     type PerspectiveClickDetail,
-} from "../event-detail";
-import { snapshotThemeVars } from "../theme/theme-snapshot";
-import { snapshotFontFaces } from "../utils/font-snapshot";
-import { TILE_SOURCES } from "../map/tile-source";
-import { DomHostSink } from "../interaction/host-sink-dom";
-import { RUNTIME_MODE } from "../config";
+} from "../event-detail.ts";
+import { snapshotThemeVars } from "../theme/theme-snapshot.ts";
+import { snapshotFontFaces } from "../utils/font-snapshot.ts";
+import { TILE_SOURCES } from "../map/tile-source.ts";
+import { DomHostSink } from "../interaction/host-sink-dom.ts";
+import { RUNTIME_MODE } from "../config.ts";
 
 // @ts-ignore — resolved at build time by `@perspective-dev/esbuild-plugin/worker`
-import getWorkerURL from "../worker/renderer.worker.js";
+import getWorkerURL from "../worker/renderer.worker.ts";
 
 /**
  * Module-level shared `Worker` for every `RendererTransport` running

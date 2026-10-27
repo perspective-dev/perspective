@@ -10,9 +10,9 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { sortHandler } from "./sort.js";
-import { expandCollapseHandler } from "./expand_collapse.js";
-import type { RegularTable, DatagridModel } from "../types.js";
+import { sortHandler } from "./sort.ts";
+import { expandCollapseHandler } from "./expand_collapse.ts";
+import type { RegularTable, DatagridModel } from "../types.ts";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 
 export function createMousedownListener(

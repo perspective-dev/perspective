@@ -24,10 +24,10 @@ import perspective from "@perspective-dev/client";
 const SERVER_WASM = ... // "@perspective-dev/server/dist/wasm/perspective-server.wasm"
 const CLIENT_WASM = ... // "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm"
 
-await Promise.all([
-    perspective.init_server(SERVER_WASM),
-    perspective_viewer.init_client(CLIENT_WASM),
-]);
+await perspective_viewer.init({
+    server: SERVER_WASM,
+    viewer: CLIENT_WASM,
+});
 
 // Now Perspective API will work!
 const worker = await perspective.worker();
@@ -40,15 +40,16 @@ The exact syntax will vary slightly depending on the bundler.
 
 `@perspective-dev/server` also ships a WebAssembly Memory64 build of the engine,
 `dist/wasm/perspective-server.memory64.wasm`, which raises the engine's heap
-ceiling from 4GB to 16GB (at some engine performance cost). `init_server`
-accepts both binaries at once — register each as a _thunk_ and only the selected
-binary is ever downloaded. The wasm64 binary is used whenever the browser
-supports Memory64; registering only the wasm32 binary (as above) opts out.
+ceiling from 4GB to 16GB (at some engine performance cost). Register both
+binaries as `server32` and `server64` _thunks_ and only the selected binary is
+ever downloaded. The wasm64 binary is used whenever the browser supports
+Memory64; registering a single `server` binary (as above) opts out.
 
 ```javascript
-perspective.init_server({
-    wasm32: () => fetch(SERVER_WASM),
-    wasm64: () => fetch(SERVER_WASM64),
+await perspective_viewer.init({
+    server32: () => fetch(SERVER_WASM),
+    server64: () => fetch(SERVER_WASM64),
+    viewer: fetch(CLIENT_WASM),
 });
 ```
 
@@ -58,10 +59,10 @@ perspective.init_server({
 import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wasm?url";
 import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm?url";
 
-await Promise.all([
-    perspective.init_server(fetch(SERVER_WASM)),
-    perspective_viewer.init_client(fetch(CLIENT_WASM)),
-]);
+await perspective_viewer.init({
+    server: fetch(SERVER_WASM),
+    viewer: fetch(CLIENT_WASM),
+});
 ```
 
 You'll also need to target `esnext` in your `vite.config.js` in order to run the
@@ -82,10 +83,10 @@ export default defineConfig({
 import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wasm";
 import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm";
 
-await Promise.all([
-    perspective.init_server(fetch(SERVER_WASM)),
-    perspective_viewer.init_client(fetch(CLIENT_WASM)),
-]);
+await perspective_viewer.init({
+    server: fetch(SERVER_WASM),
+    viewer: fetch(CLIENT_WASM),
+});
 ```
 
 ESBuild config JSON to encode this asset as a `file`:
@@ -106,10 +107,10 @@ ESBuild config JSON to encode this asset as a `file`:
 import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wasm";
 import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm";
 
-await Promise.all([
-    perspective.init_server(SERVER_WASM),
-    perspective_viewer.init_client(CLIENT_WASM),
-]);
+await perspective_viewer.init({
+    server: SERVER_WASM,
+    viewer: CLIENT_WASM,
+});
 ```
 
 Webpack config:
@@ -154,16 +155,16 @@ to the ESM builds.
 ### ESBuild
 
 Use the `binary` loader in place of `file`. The imported value is a
-`Uint8Array`, which `init_server()` and `init_client()` accept directly.
+`Uint8Array`, which `init()` accepts directly.
 
 ```javascript
 import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wasm";
 import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm";
 
-await Promise.all([
-    perspective.init_server(SERVER_WASM),
-    perspective_viewer.init_client(CLIENT_WASM),
-]);
+await perspective_viewer.init({
+    server: SERVER_WASM,
+    viewer: CLIENT_WASM,
+});
 ```
 
 ESBuild config JSON to encode this asset as `binary`:
@@ -189,10 +190,10 @@ import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wa
 
 const buffer = async (url) => await (await fetch(url)).arrayBuffer();
 
-await Promise.all([
-    perspective.init_server(await buffer(SERVER_WASM)),
-    perspective_viewer.init_client(await buffer(CLIENT_WASM)),
-]);
+await perspective_viewer.init({
+    server: await buffer(SERVER_WASM),
+    viewer: await buffer(CLIENT_WASM),
+});
 ```
 
 Webpack config:

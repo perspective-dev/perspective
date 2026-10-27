@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { DatagridPluginElement, DatagridPluginConfig } from "../types.js";
+import type { DatagridPluginElement, DatagridPluginConfig } from "../types.ts";
 
 export function save(
     this: DatagridPluginElement,

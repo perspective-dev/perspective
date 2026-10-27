@@ -11,11 +11,11 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { View } from "@perspective-dev/client";
-import { TILE_SOURCES } from "../map/tile-source";
-import type { ColumnDataMap } from "../data/view-reader";
-import type { WebGLContextManager } from "../webgl/context-manager";
-import type { ZoomController } from "../interaction/zoom-controller";
-import type { HostSink } from "../interaction/tooltip-controller";
+import { TILE_SOURCES } from "../map/tile-source.ts";
+import type { ColumnDataMap } from "../data/view-reader.ts";
+import type { WebGLContextManager } from "../webgl/context-manager.ts";
+import type { ZoomController } from "../interaction/zoom-controller.ts";
+import type { HostSink } from "../interaction/tooltip-controller.ts";
 
 export interface ChartImplementation {
     uploadAndRender(

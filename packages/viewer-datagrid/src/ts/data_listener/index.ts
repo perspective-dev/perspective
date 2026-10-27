@@ -10,31 +10,31 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { PRIVATE_PLUGIN_SYMBOL } from "../types.js";
-import { isMetaColumn } from "../model/meta_columns.js";
-import { reconcile_column_widths } from "../model/column_overrides.js";
+import { PRIVATE_PLUGIN_SYMBOL } from "../types.ts";
+import { isMetaColumn } from "../model/meta_columns.ts";
+import { reconcile_column_widths } from "../model/column_overrides.ts";
 import {
     column_name,
     split_levels,
     write_area,
     write_flat_area,
-} from "../model/column_path_area.js";
-import { format_cell } from "./format_cell.js";
+} from "../model/column_path_area.ts";
+import { format_cell } from "./format_cell.ts";
 import {
     ColumnHeaderLabels,
     type ColumnHeaderLabel,
-} from "./format_column_header.js";
+} from "./format_column_header.ts";
 import {
     format_flat_header_row_path,
     format_tree_header,
     format_tree_header_row_path,
-} from "./format_tree_header.js";
+} from "./format_tree_header.ts";
 import type {
     ResolvedColumnsConfig,
     DatagridModel,
     RegularTable,
     Schema,
-} from "../types.js";
+} from "../types.ts";
 import type { CellScalar, DataResponse } from "regular-table/dist/esm/types.js";
 import type { ViewConfig, ViewWindow } from "@perspective-dev/client";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";

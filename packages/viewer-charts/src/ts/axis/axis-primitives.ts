@@ -10,8 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Context2D } from "../charts/canvas-types";
-import type { PlotRect } from "../layout/plot-layout";
+import type { Context2D } from "../charts/canvas-types.ts";
+import type { PlotRect } from "../layout/plot-layout.ts";
 
 export const TICK_SIZE = 5;
 

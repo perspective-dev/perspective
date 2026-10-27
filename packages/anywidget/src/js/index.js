@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import perspective from "@perspective-dev/client";
-import perspective_viewer from "@perspective-dev/viewer";
+import "@perspective-dev/viewer";
 
 import server_wasm from "@perspective-dev/server/dist/wasm/perspective-server.wasm";
 import client_wasm from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm";
@@ -19,10 +19,7 @@ import client_wasm from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wa
 import "@perspective-dev/viewer-datagrid";
 import "@perspective-dev/viewer-charts";
 
-const ready = Promise.all([
-    perspective_viewer.init_client(client_wasm),
-    perspective.init_server(server_wasm),
-]);
+const ready = perspective.init({ viewer: client_wasm, server: server_wasm });
 
 export { ready };
 
@@ -80,15 +77,6 @@ function isEqual(a, b) {
     return true;
 }
 
-async function get_psp_wasm_module() {
-    let elem = customElements.get("perspective-viewer");
-    if (!elem) {
-        await customElements.whenDefined("perspective-viewer");
-        elem = customElements.get("perspective-viewer");
-    }
-    return elem.__wasm_module__;
-}
-
 async function render({ model, el }) {
     await ready;
 
@@ -104,8 +92,7 @@ async function render({ model, el }) {
     el.appendChild(viewer);
 
     const client_id = `${Math.random()}`;
-    const wasm_module = await get_psp_wasm_module();
-    const psp_client = new wasm_module.Client(
+    const psp_client = await perspective.make_client(
         async (binary_msg) => {
             const buffer = binary_msg.slice().buffer;
             model.send({ type: "binary_msg", client_id }, null, [buffer]);

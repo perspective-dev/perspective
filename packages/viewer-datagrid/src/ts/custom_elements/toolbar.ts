@@ -12,8 +12,8 @@
 
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 import TOOLBAR_STYLE from "../../../dist/css/perspective-viewer-datagrid-toolbar.css";
-import { toggle_edit_mode } from "../model/toolbar.js";
-import type { DatagridPluginElement } from "../types.js";
+import { toggle_edit_mode } from "../model/toolbar.ts";
+import type { DatagridPluginElement } from "../types.ts";
 
 const stylesheet = new CSSStyleSheet();
 stylesheet.replaceSync(TOOLBAR_STYLE);

@@ -15,32 +15,32 @@ import "./boot";
 import type { Client, Table, View } from "@perspective-dev/client";
 
 import type * as wasm_module_type from "@perspective-dev/viewer/dist/wasm/perspective-viewer.js";
-import { WebGLContextManager } from "../webgl/context-manager";
-import { ContextPool } from "../webgl/context-pool";
-import { RENDER_CONTEXT_POOL_SIZE } from "../config";
-import { ChartImplementation, type PluginConfig } from "../charts/chart";
-import { ZoomController } from "../interaction/zoom-controller";
+import { WebGLContextManager } from "../webgl/context-manager.ts";
+import { ContextPool } from "../webgl/context-pool.ts";
+import { RENDER_CONTEXT_POOL_SIZE } from "../config.ts";
+import { ChartImplementation, type PluginConfig } from "../charts/chart.ts";
+import { ZoomController } from "../interaction/zoom-controller.ts";
 import {
     applyPan,
     applyWheel,
     type ZoomTarget,
-} from "../interaction/zoom-router";
-import { MessageHostSink } from "../interaction/host-sink-message";
-import { CHART_IMPLS } from "../charts/registry";
-import type { PlotLayout } from "../layout/plot-layout";
+} from "../interaction/zoom-router.ts";
+import { MessageHostSink } from "../interaction/host-sink-message.ts";
+import { CHART_IMPLS } from "../charts/registry.ts";
+import type { PlotLayout } from "../layout/plot-layout.ts";
 import type {
     ControlMsg,
     InitMsg,
     InteractionEvent,
     LoadAndRenderMsg,
     WorkerMsg,
-} from "../transport/protocol";
-import { viewToColumnDataMap } from "../data/view-reader";
-import { TILE_SOURCES, type TileSourceSpec } from "../map/tile-source";
-import { loadFontDeduped } from "./font-loader";
-import { dispatch } from "./dispatch";
-import { installSessionHost } from "./session-host";
-import { deferIfDraining, unregister } from "../render/scheduler";
+} from "../transport/protocol.ts";
+import { viewToColumnDataMap } from "../data/view-reader.ts";
+import { TILE_SOURCES, type TileSourceSpec } from "../map/tile-source.ts";
+import { loadFontDeduped } from "./font-loader.ts";
+import { dispatch } from "./dispatch.ts";
+import { installSessionHost } from "./session-host.ts";
+import { deferIfDraining, unregister } from "../render/scheduler.ts";
 
 /**
  * Sentinel thrown inside the `with_typed_arrays` callback when a newer

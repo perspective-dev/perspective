@@ -11,8 +11,8 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { View, ViewConfig, Filter, Scalar } from "@perspective-dev/client";
-import type { CellConfigResult } from "./types.js";
-import { isMetaColumn } from "./model/meta_columns.js";
+import type { CellConfigResult } from "./types.ts";
+import { isMetaColumn } from "./model/meta_columns.ts";
 
 interface ModelWithViewAndConfig {
     _view: View;

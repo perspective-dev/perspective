@@ -10,32 +10,32 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Canvas2D } from "../canvas-types";
-import { drawFacetTitle } from "../../axis/facet-chrome";
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import type { CartesianChart } from "./cartesian";
-import { PlotLayout } from "../../layout/plot-layout";
+import type { Canvas2D } from "../canvas-types.ts";
+import { drawFacetTitle } from "../../axis/facet-chrome.ts";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { CartesianChart } from "./cartesian.ts";
+import { PlotLayout } from "../../layout/plot-layout.ts";
 import {
     buildFacetGrid,
     bottomRowLayouts,
     leftColumnLayouts,
     type FacetGrid,
-} from "../../layout/facet-grid";
-import { type Theme } from "../../theme/theme";
-import { resolvePalette } from "../../theme/palette";
-import { paletteToStops } from "../../theme/gradient";
+} from "../../layout/facet-grid.ts";
+import { type Theme } from "../../theme/theme.ts";
+import { resolvePalette } from "../../theme/palette.ts";
+import { paletteToStops } from "../../theme/gradient.ts";
 import {
     renderInPlotFrame,
     clearAndSetupFrame,
     withScissor,
-} from "../../webgl/plot-frame";
-import { ensureGradientTexture } from "../../webgl/gradient-texture";
-import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
-import { tooltipStyleOf } from "../../interaction/tooltip-grid";
+} from "../../webgl/plot-frame.ts";
+import { ensureGradientTexture } from "../../webgl/gradient-texture.ts";
+import { renderCanvasTooltip } from "../../interaction/tooltip-controller.ts";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid.ts";
 import {
     renderAxisHoverIndicators,
     type AxisIndicator,
-} from "../../interaction/axis-indicators";
+} from "../../interaction/axis-indicators.ts";
 import {
     computeTicks,
     renderGridlines,
@@ -44,11 +44,11 @@ import {
     renderOuterXAxis,
     renderOuterYAxis,
     type AxisDomain,
-} from "../../axis/numeric-axis";
-import { initCanvas, getScaledContext } from "../../axis/canvas";
-import { computeMapDegreeTicks } from "../../axis/map-ticks";
-import { mercatorToLonLat } from "../../map/mercator";
-import { stepTickFormatter } from "../../layout/ticks";
+} from "../../axis/numeric-axis.ts";
+import { initCanvas, getScaledContext } from "../../axis/canvas.ts";
+import { computeMapDegreeTicks } from "../../axis/map-ticks.ts";
+import { mercatorToLonLat } from "../../map/mercator.ts";
+import { stepTickFormatter } from "../../layout/ticks.ts";
 import {
     type CategoricalDomain,
     type CategoricalLevel,
@@ -56,7 +56,7 @@ import {
     measureCategoricalAxisWidth,
     renderCategoricalXTicks,
     renderCategoricalYTicks,
-} from "../../axis/categorical-axis";
+} from "../../axis/categorical-axis.ts";
 import {
     renderLegend,
     renderLegendAt,
@@ -65,13 +65,13 @@ import {
     legendAutoFit,
     gradientLegendAutoFit,
     type LegendPaintView,
-} from "../../axis/legend";
+} from "../../axis/legend.ts";
 import {
     legendRightGutter,
     legendSidebarWidth,
     resolveLegendMode,
     type LegendAutoFit,
-} from "../../interaction/legend-controller";
+} from "../../interaction/legend-controller.ts";
 
 /**
  * NaN guard: `_xOrigin`/`_yOrigin` start as NaN before the first valid sample.

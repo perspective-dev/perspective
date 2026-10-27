@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { GLContext } from "./gl-context";
+import { GLContext } from "./gl-context.ts";
 
 /**
  * Renderer-scope pool of shared {@link GLContext}s for pooled blit mode.

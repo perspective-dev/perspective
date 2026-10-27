@@ -101,7 +101,7 @@ exports.WorkerPlugin = function WorkerPlugin(options = {}) {
     function setup(build) {
         build.initialOptions.metafile = true;
 
-        build.onResolve({ filter: /\.worker(\.js)?$/ }, (args) => {
+        build.onResolve({ filter: /\.worker(\.[jt]s)?$/ }, (args) => {
             if (args.namespace === "worker-stub") {
                 const baseName = path
                     .basename(args.path)

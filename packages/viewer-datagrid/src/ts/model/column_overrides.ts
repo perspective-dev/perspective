@@ -16,7 +16,7 @@ import type {
     ColumnsConfig,
     DatagridModel,
     DatagridPluginElement,
-} from "../types.js";
+} from "../types.ts";
 
 type LiveOverrides = Record<number, number | undefined>;
 

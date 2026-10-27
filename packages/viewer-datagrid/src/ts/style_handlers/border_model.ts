@@ -28,7 +28,7 @@
 /// One edge of a cell. `miter-start` gaps the corner nearest the axis origin
 /// (top for vertical edges, left for horizontal edges).
 import type { CellScalar } from "regular-table/dist/esm/types.js";
-import type { ColumnPathArea } from "../model/column_path_area.js";
+import type { ColumnPathArea } from "../model/column_path_area.ts";
 
 export type EdgeState =
     | "none"

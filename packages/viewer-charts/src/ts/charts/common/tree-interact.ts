@@ -10,10 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { TreeChartBase } from "./tree-chart";
-import { NULL_NODE, ancestorNames } from "./node-store";
-import { rebuildBreadcrumbs } from "./tree-data";
-import { tooltipStyleOf } from "../../interaction/tooltip-grid";
+import type { TreeChartBase } from "./tree-chart.ts";
+import { NULL_NODE, ancestorNames } from "./node-store.ts";
+import { rebuildBreadcrumbs } from "./tree-data.ts";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid.ts";
 
 /**
  * Common subset of `TreemapChart` / `SunburstChart` reached by the

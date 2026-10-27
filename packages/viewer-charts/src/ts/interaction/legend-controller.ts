@@ -15,9 +15,9 @@ import {
     type LegendAnchor,
     type LegendSizeMode,
     type PluginConfig,
-} from "../charts/chart";
-import type { PlotRect } from "../layout/plot-layout";
-import type { InteractionEvent } from "../transport/protocol";
+} from "../charts/chart.ts";
+import type { PlotRect } from "../layout/plot-layout.ts";
+import type { InteractionEvent } from "../transport/protocol.ts";
 
 /** Minimum legend width for any mode (drag clamp + config clamp). */
 export const LEGEND_MIN_WIDTH = 48;

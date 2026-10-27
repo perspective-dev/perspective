@@ -10,13 +10,13 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { HTMLPerspectiveViewerPluginElement } from "./plugin";
+import type { HTMLPerspectiveViewerPluginElement } from "./plugin.ts";
 import type { PerspectiveViewerElement } from "../../dist/wasm/perspective-viewer.js";
 import type React from "react";
-import type { ViewerConfigUpdate } from "./ts-rs/ViewerConfigUpdate.js";
+import type { ViewerConfigUpdate } from "./ts-rs/ViewerConfigUpdate.ts";
 import type { ColumnType, ViewWindow, Filter } from "@perspective-dev/client";
-import type { ConfigDefaultsOptions } from "./ts-rs/ConfigDefaultsOptions.js";
-import type { ColumnConfigDefaultsOptions } from "./ts-rs/ColumnConfigDefaultsOptions.js";
+import type { ConfigDefaultsOptions } from "./ts-rs/ConfigDefaultsOptions.ts";
+import type { ColumnConfigDefaultsOptions } from "./ts-rs/ColumnConfigDefaultsOptions.ts";
 import type { PerspectiveSelectDetail } from "./select-detail.ts";
 
 export { PerspectiveSelectDetail } from "./select-detail.ts";

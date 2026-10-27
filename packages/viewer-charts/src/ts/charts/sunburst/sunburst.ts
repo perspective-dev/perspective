@@ -10,25 +10,25 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColumnDataMap } from "../../data/view-reader";
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import { TreeChartBase, firstNonMetadataColumn } from "../common/tree-chart";
-import { NULL_NODE } from "../common/node-store";
+import type { ColumnDataMap } from "../../data/view-reader.ts";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import { TreeChartBase, firstNonMetadataColumn } from "../common/tree-chart.ts";
+import { NULL_NODE } from "../common/node-store.ts";
 import {
     processTreeChunk,
     finalizeTree,
     resetTreeState,
-} from "../common/tree-data";
+} from "../common/tree-data.ts";
 import {
     renderSunburstFrame,
     renderSunburstChromeOverlay,
-} from "./sunburst-render";
+} from "./sunburst-render.ts";
 import {
     handleSunburstHover,
     handleSunburstClick,
     dismissSunburstPinnedTooltip,
     type SunburstBreadcrumbRegion,
-} from "./sunburst-interact";
+} from "./sunburst-interact.ts";
 
 export interface SunburstLocations {
     u_center: WebGLUniformLocation | null;
@@ -82,7 +82,7 @@ export class SunburstChart extends TreeChartBase {
     _chromeCacheGen = 0;
 
     //  Faceted state
-    _facetGrid: import("../../layout/facet-grid").FacetGrid | null = null;
+    _facetGrid: import("../../layout/facet-grid.ts").FacetGrid | null = null;
 
     /**
      * Per-facet drill roots — mirrors `TreemapChart._facetDrillRoots`.

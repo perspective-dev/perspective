@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { PlotLayout } from "../layout/plot-layout";
+import type { PlotLayout } from "../layout/plot-layout.ts";
 
 export interface ZoomState {
     scaleX: number;

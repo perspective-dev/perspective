@@ -10,10 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { FacetConfig, PluginConfig } from "../charts/chart";
-import type { PerspectiveClickDetail } from "../event-detail";
-import type { ThemeSnapshot } from "../theme/theme";
-import type { TileSourceSpec } from "../map/tile-source";
+import type { FacetConfig, PluginConfig } from "../charts/chart.ts";
+import type { PerspectiveClickDetail } from "../event-detail.ts";
+import type { ThemeSnapshot } from "../theme/theme.ts";
+import type { TileSourceSpec } from "../map/tile-source.ts";
 import type { ViewConfig } from "@perspective-dev/client";
 
 export type { ThemeSnapshot };

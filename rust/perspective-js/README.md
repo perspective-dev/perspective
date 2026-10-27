@@ -30,9 +30,13 @@ npm install @perspective-dev/client @perspective-dev/server
 
 ```javascript
 import perspective from "@perspective-dev/client";
+import CLIENT_WASM from "@perspective-dev/client/dist/wasm/perspective-js.wasm";
 import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wasm";
 
-await perspective.init_server(fetch(SERVER_WASM));
+await perspective.init({
+    client: fetch(CLIENT_WASM),
+    server: fetch(SERVER_WASM),
+});
 
 const worker = await perspective.worker();
 const table = await worker.table({ region: "string", sales: "float" });

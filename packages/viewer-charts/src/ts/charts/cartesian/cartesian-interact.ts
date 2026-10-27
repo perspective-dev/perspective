@@ -10,9 +10,9 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { CartesianChart } from "./cartesian";
-import { renderCartesianChromeOverlay } from "./cartesian-render";
-import { tooltipStyleOf } from "../../interaction/tooltip-grid";
+import type { CartesianChart } from "./cartesian.ts";
+import { renderCartesianChromeOverlay } from "./cartesian-render.ts";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid.ts";
 
 const TOOLTIP_RADIUS_PX = 24;
 
@@ -173,7 +173,7 @@ function resolveHoverTarget(
     mx: number,
     my: number,
 ): {
-    layout: import("../../layout/plot-layout").PlotLayout | null;
+    layout: import("../../layout/plot-layout.ts").PlotLayout | null;
     facetIdx: number;
 } {
     if (chart._facetGrid) {
@@ -343,7 +343,7 @@ export function showCartesianPinnedTooltip(
 function layoutForIndex(
     chart: CartesianChart,
     pointIdx: number,
-): import("../../layout/plot-layout").PlotLayout | null {
+): import("../../layout/plot-layout.ts").PlotLayout | null {
     if (chart._facetGrid && chart._seriesCapacity > 0) {
         const s = Math.floor(pointIdx / chart._seriesCapacity);
         const cell = chart._facetGrid.cells[s];

@@ -10,14 +10,14 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { PlotLayout } from "../layout/plot-layout";
-import { computeNiceTicks } from "../layout/ticks";
+import type { PlotLayout } from "../layout/plot-layout.ts";
+import { computeNiceTicks } from "../layout/ticks.ts";
 import {
     lonLatToMercator,
     mercatorToLonLat,
     MAX_LAT,
     WORLD_HALF,
-} from "../map/mercator";
+} from "../map/mercator.ts";
 
 export interface MapDegreeTicks {
     xTicks: number[];

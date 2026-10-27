@@ -11,6 +11,9 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 const esbuild = require("esbuild");
+const path = require("path");
+
+const PSP_VERSION = require(path.join(__dirname, "../../package.json")).version;
 
 const CUTOFF_PERCENT = 0.02;
 
@@ -29,6 +32,10 @@ exports.build = async function build(config) {
     const result = await esbuild.build({
         ...DEFAULT_BUILD,
         ...config,
+        define: {
+            __PSP_VERSION__: JSON.stringify(PSP_VERSION),
+            ...config.define,
+        },
     });
 
     if (result.metafile) {

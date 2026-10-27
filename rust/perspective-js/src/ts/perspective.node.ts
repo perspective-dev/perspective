@@ -34,7 +34,7 @@ import * as url from "node:url";
 import { createRequire } from "node:module";
 
 import * as perspective_client from "../../dist/wasm/perspective-js.js";
-import { load_wasm_stage_0 } from "./wasm/decompress.js";
+import { load_wasm_stage_0 } from "./wasm/decompress.ts";
 import { host_supports_memory64 } from "./wasm/features.ts";
 import * as engine from "./wasm/engine.ts";
 

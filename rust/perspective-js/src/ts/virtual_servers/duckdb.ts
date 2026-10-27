@@ -22,6 +22,7 @@
  */
 
 import type * as perspective from "@perspective-dev/client";
+import { client_runtime } from "../wasm/registry.ts";
 import type { ColumnType } from "@perspective-dev/client/dist/esm/ts-rs/ColumnType.d.ts";
 import type { ViewConfig } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfig.d.ts";
 import type {
@@ -272,21 +273,17 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
     private db: duckdb.AsyncDuckDBConnection;
     private sqlBuilder: perspective.GenericSQLVirtualServerModel;
     constructor(db: duckdb.AsyncDuckDBConnection, mod?: typeof perspective) {
-        if (!mod) {
-            if (customElements) {
-                const viewer_class: any =
-                    customElements.get("perspective-viewer");
-                if (viewer_class) {
-                    mod = viewer_class.__wasm_module__;
-                } else {
-                    throw new Error("Missing perspective-client.wasm");
-                }
-            } else {
-            }
+        mod ??= client_runtime()?.glue as unknown as
+            | typeof perspective
+            | undefined;
+        if (mod === undefined) {
+            throw new Error(
+                "perspective-js is not initialized yet: construct a DuckDBHandler once <perspective-viewer> is ready or a Client exists, or pass the wasm module",
+            );
         }
 
         this.db = db;
-        this.sqlBuilder = new mod!.GenericSQLVirtualServerModel({
+        this.sqlBuilder = new mod.GenericSQLVirtualServerModel({
             column_separator: "|",
             like_escape_clause: "\\",
             regex_fn: "regexp_matches",

@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { RegularTableElement } from "regular-table";
-import type { DatagridModel, SortRotationOrder, SortTerm } from "../types.js";
+import type { DatagridModel, SortRotationOrder, SortTerm } from "../types.ts";
 import type { SortDir } from "@perspective-dev/client";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 

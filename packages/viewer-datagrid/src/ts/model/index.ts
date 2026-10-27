@@ -10,10 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-export { PRIVATE_PLUGIN_SYMBOL } from "../types.js";
-export { createModel, readThemeStyle } from "./create.js";
-export { toggle_edit_mode, toggle_scroll_lock } from "./toolbar.js";
+export { PRIVATE_PLUGIN_SYMBOL } from "../types.ts";
+export { createModel, readThemeStyle } from "./create.ts";
+export { toggle_edit_mode, toggle_scroll_lock } from "./toolbar.ts";
 export {
     reconcile_column_widths,
     width_config_delta,
-} from "./column_overrides.js";
+} from "./column_overrides.ts";

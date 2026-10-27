@@ -10,11 +10,11 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { ShaderRegistry } from "./shader-registry";
-import { BufferPool } from "./buffer-pool";
-import { GLContext, type WebGLCanvas } from "./gl-context";
+import { ShaderRegistry } from "./shader-registry.ts";
+import { BufferPool } from "./buffer-pool.ts";
+import { GLContext, type WebGLCanvas } from "./gl-context.ts";
 
-export type { WebGLCanvas } from "./gl-context";
+export type { WebGLCanvas } from "./gl-context.ts";
 
 export interface WebGLContextManagerOptions {
     /**

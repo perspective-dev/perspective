@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { colorsToCss, stopsToCss } from "../theme/gradient";
+import { colorsToCss, stopsToCss } from "../theme/gradient.ts";
 import type { View } from "@perspective-dev/client";
 import type {
     HTMLPerspectiveViewerElement,
@@ -22,27 +22,27 @@ import {
     LEGEND_FIELDS,
     TOOLTIP_FIELDS,
     PluginConfigField,
-} from "./charts";
+} from "./charts.ts";
 import style from "../../css/perspective-viewer-charts.css";
 import {
     DEFAULT_FACET_CONFIG,
     DEFAULT_PLUGIN_CONFIG,
     type FacetConfig,
     type PluginConfig,
-} from "../charts/chart";
+} from "../charts/chart.ts";
 import {
     CHART_DATE_DEFAULTS,
     CHART_DATETIME_DEFAULTS,
     CHART_NUMBER_DEFAULTS,
-} from "./format-defaults";
-import { RawEventForwarder } from "../interaction/raw-event-forwarder";
-import { RendererTransport } from "../transport/renderer-transport";
-import { TILE_SOURCES, type TileSourceSpec } from "../map/tile-source";
-import { RENDER_BLIT_MODE } from "../config";
-import { snapshotThemeVars } from "../theme/theme-snapshot";
-import { resolveThemeFromVars, type Theme } from "../theme/theme";
-import { resolvePalette } from "../theme/palette";
-import { vec3ToHexColor } from "../utils/css";
+} from "./format-defaults.ts";
+import { RawEventForwarder } from "../interaction/raw-event-forwarder.ts";
+import { RendererTransport } from "../transport/renderer-transport.ts";
+import { TILE_SOURCES, type TileSourceSpec } from "../map/tile-source.ts";
+import { RENDER_BLIT_MODE } from "../config.ts";
+import { snapshotThemeVars } from "../theme/theme-snapshot.ts";
+import { resolveThemeFromVars, type Theme } from "../theme/theme.ts";
+import { resolvePalette } from "../theme/palette.ts";
+import { vec3ToHexColor } from "../utils/css.ts";
 
 /**
  * Facet-rendering defaults shared by every chart. Per-chart overrides

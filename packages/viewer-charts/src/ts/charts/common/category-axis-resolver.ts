@@ -10,13 +10,13 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColumnDataMap, ColumnData } from "../../data/view-reader";
+import type { ColumnDataMap, ColumnData } from "../../data/view-reader.ts";
 import type {
     CategoricalDomain,
     CategoricalLevel,
-} from "../../axis/categorical-axis";
-import { buildGroupRuns } from "../../axis/categorical-axis-core";
-import { formatTickValue, formatDateTickValue } from "../../layout/ticks";
+} from "../../axis/categorical-axis.ts";
+import { buildGroupRuns } from "../../axis/categorical-axis-core.ts";
+import { formatTickValue, formatDateTickValue } from "../../layout/ticks.ts";
 import type { DateFormatModifiers } from "@perspective-dev/viewer/column-format";
 
 export interface CategoryAxisResult {

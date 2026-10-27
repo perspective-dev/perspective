@@ -10,10 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { TreemapChart } from "./treemap";
-import { NodeStore, NULL_NODE } from "../common/node-store";
+import type { TreemapChart } from "./treemap.ts";
+import { NodeStore, NULL_NODE } from "../common/node-store.ts";
 
-export type { BreadcrumbRegion } from "../common/tree-chrome";
+export type { BreadcrumbRegion } from "../common/tree-chrome.ts";
 
 export const PADDING_OUTER = 1;
 export const PADDING_LABEL = 14;
@@ -26,7 +26,7 @@ export {
     processTreeChunk as processTreemapChunk,
     finalizeTree as finalizeTreemap,
     rebuildBreadcrumbs,
-} from "../common/tree-data";
+} from "../common/tree-data.ts";
 
 /**
  * Minimum visible rect area (in CSS pixels squared). Subtrees that

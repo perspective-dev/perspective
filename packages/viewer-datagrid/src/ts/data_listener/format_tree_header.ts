@@ -10,13 +10,13 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { PRIVATE_PLUGIN_SYMBOL } from "../types.js";
-import { format_cell } from "./format_cell.js";
+import { PRIVATE_PLUGIN_SYMBOL } from "../types.ts";
+import { format_cell } from "./format_cell.ts";
 import type {
     DatagridModel,
     RegularTable,
     ResolvedColumnsConfig,
-} from "../types.js";
+} from "../types.ts";
 
 type RowHeaderCell = string | HTMLElement | null | { toString(): string };
 

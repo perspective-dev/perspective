@@ -11,10 +11,10 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { RegularTableElement } from "regular-table";
-import type { DatagridModel } from "../types.js";
+import type { DatagridModel } from "../types.ts";
 
-import { CollectedHeaderRow } from "./types.js";
-import { apply_borders, classify_header_cell } from "./border_model.js";
+import { CollectedHeaderRow } from "./types.ts";
+import { apply_borders, classify_header_cell } from "./border_model.ts";
 
 /// The row-header column index whose right edge separates the row-header
 /// region from the data columns. Flat rollup mode has no tree-expander

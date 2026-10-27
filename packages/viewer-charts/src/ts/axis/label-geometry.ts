@@ -17,7 +17,7 @@
  * All rectangles are in CSS pixels, origin top-left, Y-axis pointing down.
  */
 
-import type { Context2D } from "../charts/canvas-types";
+import type { Context2D } from "../charts/canvas-types.ts";
 
 export interface Rect {
     x: number;

@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { PluginConfig } from "../charts/chart";
+import type { PluginConfig } from "../charts/chart.ts";
 
 export type ChartType = "bar" | "line" | "scatter" | "area";
 

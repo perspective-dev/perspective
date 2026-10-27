@@ -11,16 +11,16 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { DateFormatModifiers } from "@perspective-dev/viewer/column-format";
-import type { HeatmapChart } from "./heatmap";
-import type { HeatmapCell } from "./heatmap-build";
-import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
+import type { HeatmapChart } from "./heatmap.ts";
+import type { HeatmapCell } from "./heatmap-build.ts";
+import { renderCanvasTooltip } from "../../interaction/tooltip-controller.ts";
 import {
     renderAxisHoverIndicators,
     type AxisIndicator,
-} from "../../interaction/axis-indicators";
-import { computeNiceTicks, stepTickFormatter } from "../../layout/ticks";
-import { tooltipStyleOf } from "../../interaction/tooltip-grid";
-import type { CategoricalLevel } from "../../axis/categorical-axis";
+} from "../../interaction/axis-indicators.ts";
+import { computeNiceTicks, stepTickFormatter } from "../../layout/ticks.ts";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid.ts";
+import type { CategoricalLevel } from "../../axis/categorical-axis.ts";
 
 /**
  * Find the heatmap cell under `(mx, my)`. O(1) via the prebuilt `cells2D`
@@ -130,7 +130,7 @@ function nearestCategoryIdx(
 }
 
 function hitCell(
-    layout: import("../../layout/plot-layout").PlotLayout,
+    layout: import("../../layout/plot-layout.ts").PlotLayout,
     numX: number,
     numY: number,
     cells2D: (HeatmapCell | null)[],
@@ -219,7 +219,7 @@ export function renderHeatmapTooltip(chart: HeatmapChart): void {
         return;
     }
 
-    let layout: import("../../layout/plot-layout").PlotLayout | null;
+    let layout: import("../../layout/plot-layout.ts").PlotLayout | null;
     let xLevels: CategoricalLevel[];
     let yLevels: CategoricalLevel[];
     let xPositions: Float64Array | null;

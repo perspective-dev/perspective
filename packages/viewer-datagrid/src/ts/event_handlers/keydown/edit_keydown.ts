@@ -10,12 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { focusSelectedCell } from "../../style_handlers/focus.js";
+import { focusSelectedCell } from "../../style_handlers/focus.ts";
 import type {
     RegularTable,
     DatagridModel,
     SelectedPositionMap,
-} from "../../types.js";
+} from "../../types.ts";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 
 type AsyncMoveFunction = (

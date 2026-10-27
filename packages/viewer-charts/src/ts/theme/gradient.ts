@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { parseCSSColorToVec3, vec3ToHexColor } from "../utils/css";
+import { parseCSSColorToVec3, vec3ToHexColor } from "../utils/css.ts";
 
 /**
  * A single stop on a parsed CSS gradient. `offset` ∈ [0, 1].

@@ -10,31 +10,31 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Context2D } from "../canvas-types";
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import type { TreemapChart } from "./treemap";
-import { NULL_NODE } from "../common/node-store";
+import type { Context2D } from "../canvas-types.ts";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { TreemapChart } from "./treemap.ts";
+import { NULL_NODE } from "../common/node-store.ts";
 import {
     squarify,
     collectVisible,
     collectVisibleAppend,
-} from "./treemap-layout";
-import { Theme } from "../../theme/theme";
-import { resolvePalette, type Vec3 } from "../../theme/palette";
-import { type GradientStop } from "../../theme/gradient";
-import { buildFacetGrid } from "../../layout/facet-grid";
-import { legendTreeGutter } from "../../interaction/legend-controller";
-import { leafColor, leafRGBA, luminance } from "../common/leaf-color";
+} from "./treemap-layout.ts";
+import { Theme } from "../../theme/theme.ts";
+import { resolvePalette, type Vec3 } from "../../theme/palette.ts";
+import { type GradientStop } from "../../theme/gradient.ts";
+import { buildFacetGrid } from "../../layout/facet-grid.ts";
+import { legendTreeGutter } from "../../interaction/legend-controller.ts";
+import { leafColor, leafRGBA, luminance } from "../common/leaf-color.ts";
 import treemapVert from "../../shaders/treemap.vert.glsl";
 import treemapFrag from "../../shaders/treemap.frag.glsl";
-import { compileProgram } from "../../webgl/program-cache";
-import { withChromeCache } from "../common/chrome-cache";
-import { wrapLabel } from "../../axis/label-geometry";
+import { compileProgram } from "../../webgl/program-cache.ts";
+import { withChromeCache } from "../common/chrome-cache.ts";
+import { wrapLabel } from "../../axis/label-geometry.ts";
 import {
     renderBreadcrumbs as renderTreeBreadcrumbs,
     renderTreeColorLegend,
     renderTreeTooltip,
-} from "../common/tree-chrome";
+} from "../common/tree-chrome.ts";
 
 type GL = WebGL2RenderingContext | WebGLRenderingContext;
 
@@ -750,7 +750,7 @@ function renderNodeLabel(
 
 function renderBranchLabel(
     ctx: Context2D,
-    store: import("../common/node-store").NodeStore,
+    store: import("../common/node-store.ts").NodeStore,
     nodeId: number,
     w: number,
     h: number,
@@ -835,7 +835,7 @@ function renderBranchLabel(
 
 function renderHoverHighlight(
     ctx: Context2D,
-    store: import("../common/node-store").NodeStore,
+    store: import("../common/node-store.ts").NodeStore,
     nodeId: number,
 ): void {
     ctx.strokeStyle = "rgba(255,255,255,0.9)";

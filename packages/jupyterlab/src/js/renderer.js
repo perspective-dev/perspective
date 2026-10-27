@@ -26,7 +26,7 @@ import { Widget } from "@lumino/widgets";
 // first file-open (see `_update`), so the labextension doesn't load it at
 // startup. Importing the bundle eagerly registers the custom elements
 // (idempotent across bundle copies); `worker()` resolves its wasm from the
-// registered `<perspective-viewer>` element.
+// page-wide registry that the bundle's `init()` populates.
 const runtime = () => import("@perspective-dev/anywidget");
 
 const FACTORY_CSV = "Perspective-CSV";

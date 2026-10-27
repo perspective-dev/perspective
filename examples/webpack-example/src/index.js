@@ -26,10 +26,10 @@ import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wa
 import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm";
 
 console.log(CLIENT_WASM);
-await Promise.all([
-    perspective.init_server(SERVER_WASM),
-    perspective_viewer.init_client(CLIENT_WASM),
-]);
+await perspective_viewer.init({
+    server: SERVER_WASM,
+    viewer: CLIENT_WASM,
+});
 
 const worker = await perspective.worker();
 const viewer = document.createElement("perspective-viewer");

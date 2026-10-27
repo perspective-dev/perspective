@@ -11,9 +11,9 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { RegularTableElement } from "regular-table";
-import type { DatagridModel, SelectedPositionMap } from "../types.js";
-import { ensure_editable_for_focus } from "../event_handlers/edit_focus.js";
-import { CollectedCell } from "./types.js";
+import type { DatagridModel, SelectedPositionMap } from "../types.ts";
+import { ensure_editable_for_focus } from "../event_handlers/edit_focus.ts";
+import { CollectedCell } from "./types.ts";
 
 /**
  * Apply focus style to the selected cell.

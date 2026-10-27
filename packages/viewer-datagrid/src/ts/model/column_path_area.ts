@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { CellScalar } from "regular-table/dist/esm/types.js";
-import type { DatagridModel } from "../types.js";
+import type { DatagridModel } from "../types.ts";
 
 /**
  * A column header area, `[level][absolute column]`, sparse in the column axis.

@@ -14,13 +14,13 @@ import {
     parseColor,
     rgbaToRgb,
     type RGB,
-} from "../../color_utils.js";
+} from "../../color_utils.ts";
 import {
     parse_bg_mode,
     parse_fg_mode,
     type DatagridModel,
     type ResolvedColumnStyle,
-} from "../../types.js";
+} from "../../types.ts";
 
 interface CellMetaWithExtras {
     _is_hidden_by_aggregate_depth?: boolean;

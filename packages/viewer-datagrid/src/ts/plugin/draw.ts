@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { View } from "@perspective-dev/client";
-import type { DatagridPluginElement } from "../types.js";
+import type { DatagridPluginElement } from "../types.ts";
 
 interface DatagridPluginWithActivate extends DatagridPluginElement {
     activate(view: View): Promise<void>;

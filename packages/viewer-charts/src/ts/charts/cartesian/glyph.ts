@@ -10,8 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import type { CartesianChart } from "./cartesian";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { CartesianChart } from "./cartesian.ts";
 
 /**
  * A Glyph is a pluggable renderer for a {@link CartesianChart}. The

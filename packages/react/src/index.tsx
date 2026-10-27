@@ -32,10 +32,10 @@
  * import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wasm";
  * import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm";
  *
- * await Promise.all([
- *     perspective.init_server(fetch(SERVER_WASM)),
- *     perspective_viewer.init_client(fetch(CLIENT_WASM)),
- * ]);
+ * await perspective_viewer.init({
+ *     server: fetch(SERVER_WASM),
+ *     viewer: fetch(CLIENT_WASM),
+ * });
  * ```
  *
  * Then pass a `Table` (or `Client`, or a `Promise` of either) and an optional

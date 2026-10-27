@@ -14,9 +14,9 @@ import {
     parseCssColorList,
     parseCssGradientStrict,
     type GradientStop,
-} from "./gradient";
-import type { Theme } from "./theme";
-import type { Vec3 } from "./palette";
+} from "./gradient.ts";
+import type { Theme } from "./theme.ts";
+import type { Vec3 } from "./palette.ts";
 
 /**
  * Per-column color-scale overrides from the viewer's `columns_config`,

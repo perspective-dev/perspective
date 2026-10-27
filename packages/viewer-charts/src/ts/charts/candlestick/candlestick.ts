@@ -10,30 +10,30 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColumnDataMap } from "../../data/view-reader";
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import { CategoricalYChart } from "../common/categorical-y-chart";
+import type { ColumnDataMap } from "../../data/view-reader.ts";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import { CategoricalYChart } from "../common/categorical-y-chart.ts";
 import {
     buildCandlestickPipeline,
     emptyCandleColumns,
     type CandleColumns,
     type CandleSeriesInfo,
     type NumericCategoryDomain,
-} from "./candlestick-build";
+} from "./candlestick-build.ts";
 import {
     renderCandlestickFrame,
     renderCandlestickChromeOverlay,
     invalidateGlyphBuffers,
     rebuildGlyphBuffers,
     ensureUpDownColors,
-} from "./candlestick-render";
+} from "./candlestick-render.ts";
 import {
     handleCandlestickHover,
     showCandlestickPinnedTooltip,
-} from "./candlestick-interact";
-import { BodyWickGlyph } from "./glyphs/draw-candlesticks";
-import { OHLCGlyph } from "./glyphs/draw-ohlc";
-import { expandDomainInPlace } from "../common/expand-domain";
+} from "./candlestick-interact.ts";
+import { BodyWickGlyph } from "./glyphs/draw-candlesticks.ts";
+import { OHLCGlyph } from "./glyphs/draw-ohlc.ts";
+import { expandDomainInPlace } from "../common/expand-domain.ts";
 
 /**
  * Per-frame memo of the auto-fit Y extent for a {@link CandlestickChart},

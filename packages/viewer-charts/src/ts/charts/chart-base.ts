@@ -22,38 +22,38 @@ import {
     type DateFormatConfig,
     type DateFormatModifiers,
 } from "@perspective-dev/viewer/column-format";
-import type { ColumnDataMap } from "../data/view-reader";
-import { LazyRowFetcher } from "../data/lazy-row";
+import type { ColumnDataMap } from "../data/view-reader.ts";
+import { LazyRowFetcher } from "../data/lazy-row.ts";
 import {
     CHART_DATE_DEFAULTS,
     CHART_DATETIME_DEFAULTS,
     CHART_NUMBER_DEFAULTS,
-} from "../plugin/format-defaults";
-import type { WebGLContextManager } from "../webgl/context-manager";
+} from "../plugin/format-defaults.ts";
+import type { WebGLContextManager } from "../webgl/context-manager.ts";
 import {
     ZoomController,
     type ZoomConfig,
-} from "../interaction/zoom-controller";
+} from "../interaction/zoom-controller.ts";
 import {
     DEFAULT_FACET_CONFIG,
     DEFAULT_PLUGIN_CONFIG,
     type ChartImplementation,
     type FacetConfig,
     type PluginConfig,
-} from "./chart";
+} from "./chart.ts";
 import {
     TooltipController,
     type HostSink,
     type TooltipCallbacks,
     type UserClickPayload,
     type UserSelectPayload,
-} from "../interaction/tooltip-controller";
-import { LegendController } from "../interaction/legend-controller";
-import type { PerspectiveClickDetail } from "../event-detail";
+} from "../interaction/tooltip-controller.ts";
+import { LegendController } from "../interaction/legend-controller.ts";
+import type { PerspectiveClickDetail } from "../event-detail.ts";
 import type { ViewConfig } from "@perspective-dev/client";
-import { resolveThemeFromVars, type Theme } from "../theme/theme";
-import { applyColumnColorOverrides } from "../theme/overrides";
-import { requestRender as scheduleRender } from "../render/scheduler";
+import { resolveThemeFromVars, type Theme } from "../theme/theme.ts";
+import { applyColumnColorOverrides } from "../theme/overrides.ts";
+import { requestRender as scheduleRender } from "../render/scheduler.ts";
 
 /**
  * Fallback formatter applied to numeric tooltip / legend values when the
@@ -380,7 +380,7 @@ export abstract class AbstractChart implements ChartImplementation {
      */
     syncFacetZoomLayouts(
         cells: ReadonlyArray<{
-            layout: import("../layout/plot-layout").PlotLayout;
+            layout: import("../layout/plot-layout.ts").PlotLayout;
         }>,
     ): void {
         const independent = this._facetConfig.zoom_mode === "independent";

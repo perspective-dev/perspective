@@ -15,9 +15,9 @@ import type {
     InitMsg,
     WorkerEnvelope,
     WorkerMsg,
-} from "../transport/protocol";
-import type { WorkerRenderer } from "./renderer.worker";
-import { dispatch } from "./dispatch";
+} from "../transport/protocol.ts";
+import type { WorkerRenderer } from "./renderer.worker.ts";
+import { dispatch } from "./dispatch.ts";
 
 const RENDERERS = new Map<number, WorkerRenderer>();
 

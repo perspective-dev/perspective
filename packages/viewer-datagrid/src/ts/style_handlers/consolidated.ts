@@ -11,22 +11,22 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { RegularTableElement } from "regular-table";
-import { PRIVATE_PLUGIN_SYMBOL } from "../model/index.js";
+import { PRIVATE_PLUGIN_SYMBOL } from "../model/index.ts";
 import type {
     DatagridModel,
     ResolvedColumnsConfig,
     DatagridPluginElement,
     SelectedPositionMap,
-} from "../types.js";
-import { isEditableMode } from "../types.js";
+} from "../types.ts";
+import { isEditableMode } from "../types.ts";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 
-import { applyFocusStyle } from "./focus.js";
-import { applyColumnHeaderStyles } from "./editable.js";
-import { applyGroupHeaderStyles } from "./group_header.js";
-import { applyBodyCellStyles } from "./body.js";
+import { applyFocusStyle } from "./focus.ts";
+import { applyColumnHeaderStyles } from "./editable.ts";
+import { applyGroupHeaderStyles } from "./group_header.ts";
+import { applyBodyCellStyles } from "./body.ts";
 import { CellMetadata } from "regular-table/dist/esm/types.js";
-import { CollectedCell, CollectedHeaderRow } from "./types.js";
+import { CollectedCell, CollectedHeaderRow } from "./types.ts";
 
 /**
  * Consolidated style listener that handles all cell styling in a single pass.

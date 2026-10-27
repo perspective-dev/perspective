@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { FontFaceDescriptor } from "../transport/protocol";
+import type { FontFaceDescriptor } from "../transport/protocol.ts";
 
 /**
  * Worker-scope font registration cache, keyed by `family|src|weight|

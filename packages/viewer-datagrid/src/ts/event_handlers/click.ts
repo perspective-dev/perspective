@@ -10,10 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import * as edit_click from "./click/edit_click.js";
-import * as edit_keydown from "./keydown/edit_keydown.js";
-import type { DatagridModel, SelectedPositionMap } from "../types.js";
-import { isEditableMode } from "../types.js";
+import * as edit_click from "./click/edit_click.ts";
+import * as edit_keydown from "./keydown/edit_keydown.ts";
+import type { DatagridModel, SelectedPositionMap } from "../types.ts";
+import { isEditableMode } from "../types.ts";
 import { RegularTableElement } from "regular-table";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 

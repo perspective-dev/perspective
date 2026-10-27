@@ -10,21 +10,21 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Context2D } from "../charts/canvas-types";
-import { PlotLayout } from "../layout/plot-layout";
+import type { Context2D } from "../charts/canvas-types.ts";
+import { PlotLayout } from "../layout/plot-layout.ts";
 import {
     labelRect,
     rectContained,
     rectsOverlap,
     rotatedLabelsOverlap,
     truncateLabel,
-} from "./label-geometry";
+} from "./label-geometry.ts";
 import {
     type GroupRun,
     positionsInRange,
     runsInRange,
-} from "./categorical-axis-core";
-import type { Theme } from "../theme/theme";
+} from "./categorical-axis-core.ts";
+import type { Theme } from "../theme/theme.ts";
 
 export interface CategoricalLevel {
     labels: string[];

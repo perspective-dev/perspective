@@ -109,8 +109,8 @@ catalogs:
       specifier: '>=3 <4'
       version: 3.6.2
     pro_self_extracting_wasm:
-      specifier: 0.0.10
-      version: 0.0.10
+      specifier: 0.0.11
+      version: 0.0.11
     puppeteer:
       specifier: '>=24'
       version: 24.26.1
@@ -889,7 +889,7 @@ importers:
         version: 2.30.1
       pro_self_extracting_wasm:
         specifier: 'catalog:'
-        version: 0.0.10
+        version: 0.0.11
       superstore-arrow:
         specifier: 'catalog:'
         version: 3.2.0
@@ -932,7 +932,7 @@ importers:
     devDependencies:
       pro_self_extracting_wasm:
         specifier: 'catalog:'
-        version: 0.0.10
+        version: 0.0.11
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -947,7 +947,7 @@ importers:
         version: link:../perspective-js
       pro_self_extracting_wasm:
         specifier: 'catalog:'
-        version: 0.0.10
+        version: 0.0.11
       regular-layout:
         specifier: 'catalog:'
         version: 0.7.0
@@ -4415,8 +4415,8 @@ packages:
   pretty-error@4.0.0:
     resolution: {integrity: sha512-AoJ5YMAcXKYxKhuJGdcvse+Voc6v1RgnsR3nWcYU7q4t6z0Q6T86sv5Zq8VIRbOWWFpvdGE83LtdSMNd+6Y0xw==}
 
-  pro_self_extracting_wasm@0.0.10:
-    resolution: {integrity: sha512-OdywnLsr28/e6vBoSl/3Z8WPufBSAdUWYnrn0msmKqMiaPLt+/0w/xFtp8K4roWm7xtQNeMdn15nk2NfxV368w==}
+  pro_self_extracting_wasm@0.0.11:
+    resolution: {integrity: sha512-8KYD7XaKB66FuwrgJYoDgptSpc82gKog4mMO5SGJ0NT6v1sRH2vFvBTxpvo8DbzNGIM2zG6WcS/4LeUxcPutVw==}
     hasBin: true
 
   pro_self_extracting_wasm@0.0.9:
@@ -9167,7 +9167,7 @@ snapshots:
       lodash: 4.17.21
       renderkid: 3.0.0
 
-  pro_self_extracting_wasm@0.0.10:
+  pro_self_extracting_wasm@0.0.11:
     dependencies:
       leb128: 0.0.5
 

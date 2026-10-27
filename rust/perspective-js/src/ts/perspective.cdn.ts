@@ -13,10 +13,13 @@
 import perspective from "./perspective.browser.ts";
 export * from "./perspective.browser.ts";
 import { resolve_server_wasm_url } from "./wasm/cdn.ts";
+import { register_default } from "./wasm/registry.ts";
 
-perspective.init_server({
-    wasm32: () => fetch(resolve_server_wasm_url(import.meta.url)),
-    wasm64: () =>
+register_default({
+    client: () =>
+        fetch(new URL("../wasm/perspective-js.wasm", import.meta.url)),
+    server32: () => fetch(resolve_server_wasm_url(import.meta.url)),
+    server64: () =>
         fetch(
             resolve_server_wasm_url(
                 import.meta.url,

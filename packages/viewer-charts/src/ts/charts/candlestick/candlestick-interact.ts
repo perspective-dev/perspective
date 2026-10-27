@@ -10,9 +10,9 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { CandlestickChart } from "./candlestick";
-import { renderCandlestickChromeOverlay } from "./candlestick-render";
-import { tooltipStyleOf } from "../../interaction/tooltip-grid";
+import type { CandlestickChart } from "./candlestick.ts";
+import { renderCandlestickChromeOverlay } from "./candlestick-render.ts";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid.ts";
 
 /**
  * Pixels of horizontal slack around the wick centerline so narrow

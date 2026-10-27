@@ -10,10 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { parseCSSColorToVec3 } from "../utils/css";
-import { parseCssGradient, type GradientStop } from "./gradient";
+import { parseCSSColorToVec3 } from "../utils/css.ts";
+import { parseCssGradient, type GradientStop } from "./gradient.ts";
 
-export type { GradientStop } from "./gradient";
+export type { GradientStop } from "./gradient.ts";
 
 function clampOpacity(v: number): number {
     if (!isFinite(v)) {

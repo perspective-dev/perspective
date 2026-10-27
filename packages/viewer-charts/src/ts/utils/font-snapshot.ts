@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { FontFaceDescriptor } from "../transport/protocol";
+import type { FontFaceDescriptor } from "../transport/protocol.ts";
 
 /**
  * Walk every accessible `@font-face` rule in the document and collect a

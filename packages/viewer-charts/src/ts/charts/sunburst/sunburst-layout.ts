@@ -10,8 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { SunburstChart } from "./sunburst";
-import { NULL_NODE, type NodeStore } from "../common/node-store";
+import type { SunburstChart } from "./sunburst.ts";
+import { NULL_NODE, type NodeStore } from "../common/node-store.ts";
 
 /**
  * Minimum arc area (in pixels²) below which a subtree stops being

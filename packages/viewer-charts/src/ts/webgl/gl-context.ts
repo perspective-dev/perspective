@@ -10,8 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { ShaderRegistry } from "./shader-registry";
-import { SHADER_MANIFEST } from "./shader-manifest";
+import { ShaderRegistry } from "./shader-registry.ts";
+import { SHADER_MANIFEST } from "./shader-manifest.ts";
 
 export type WebGLCanvas = HTMLCanvasElement | OffscreenCanvas;
 

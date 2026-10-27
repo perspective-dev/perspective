@@ -10,23 +10,23 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColumnDataMap } from "../../data/view-reader";
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import { TreeChartBase, firstNonMetadataColumn } from "../common/tree-chart";
-import { NULL_NODE } from "../common/node-store";
+import type { ColumnDataMap } from "../../data/view-reader.ts";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import { TreeChartBase, firstNonMetadataColumn } from "../common/tree-chart.ts";
+import { NULL_NODE } from "../common/node-store.ts";
 import {
     type BreadcrumbRegion,
     processTreemapChunk,
     finalizeTreemap,
     resetTreemapState,
-} from "./treemap-layout";
-import { renderTreemapFrame } from "./treemap-render";
+} from "./treemap-layout.ts";
+import { renderTreemapFrame } from "./treemap-render.ts";
 import {
     handleTreemapHover,
     handleTreemapClick,
     handleTreemapDblClick,
     dismissTreemapPinnedTooltip,
-} from "./treemap-interact";
+} from "./treemap-interact.ts";
 
 export interface TreemapLocations {
     u_resolution: WebGLUniformLocation | null;
@@ -73,7 +73,7 @@ export class TreemapChart extends TreeChartBase {
      * shows its full subtree.
      */
     _facetDrillRoots: Map<string, number> = new Map();
-    _facetGrid: import("../../layout/facet-grid").FacetGrid | null = null;
+    _facetGrid: import("../../layout/facet-grid.ts").FacetGrid | null = null;
 
     /** When `false`, branch nodes at relDepth=1 render as a centered
      *  overlay (same style as relDepth=2) and no top-of-rect label

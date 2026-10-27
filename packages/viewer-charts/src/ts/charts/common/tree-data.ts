@@ -37,11 +37,11 @@
  * shared legend.
  */
 
-import type { ColumnDataMap, ColumnData } from "../../data/view-reader";
-import { buildSplitGroups } from "../../data/split-groups";
-import { synthesizeStringLevel } from "./category-axis-resolver";
-import { NULL_NODE } from "./node-store";
-import type { TreeChartBase } from "./tree-chart";
+import type { ColumnDataMap, ColumnData } from "../../data/view-reader.ts";
+import { buildSplitGroups } from "../../data/split-groups.ts";
+import { synthesizeStringLevel } from "./category-axis-resolver.ts";
+import { NULL_NODE } from "./node-store.ts";
+import type { TreeChartBase } from "./tree-chart.ts";
 
 //  Reset
 

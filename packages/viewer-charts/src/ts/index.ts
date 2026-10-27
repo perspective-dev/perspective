@@ -10,13 +10,13 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import CHARTS from "./plugin/charts";
-import { HTMLPerspectiveViewerWebGLPluginElement } from "./plugin/plugin";
+import CHARTS from "./plugin/charts.ts";
+import { HTMLPerspectiveViewerWebGLPluginElement } from "./plugin/plugin.ts";
 
-export type { PerspectiveClickDetail } from "./event-detail";
-export { PerspectiveSelectDetail } from "./event-detail";
-export { registerTileSource } from "./plugin/plugin";
-export { tileSources, type TileSourceSpec } from "./map/tile-source";
+export type { PerspectiveClickDetail } from "./event-detail.ts";
+export { PerspectiveSelectDetail } from "./event-detail.ts";
+export { registerTileSource } from "./plugin/plugin.ts";
+export { tileSources, type TileSourceSpec } from "./map/tile-source.ts";
 
 export function register(...plugin_names: string[]) {
     const plugins = new Set(

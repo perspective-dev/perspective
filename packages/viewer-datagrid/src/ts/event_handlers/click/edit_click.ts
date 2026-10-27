@@ -15,7 +15,7 @@ import {
     type RegularTable,
     type DatagridModel,
     get_psp_type,
-} from "../../types.js";
+} from "../../types.ts";
 
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 

@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Canvas2D, Context2D } from "../canvas-types";
+import type { Canvas2D, Context2D } from "../canvas-types.ts";
 
 export interface ChromeCacheChart {
     _chromeCanvas: Canvas2D | null;

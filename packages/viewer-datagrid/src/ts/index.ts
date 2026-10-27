@@ -11,8 +11,8 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import "regular-table";
-import { HTMLPerspectiveViewerDatagridPluginElement } from "./custom_elements/datagrid.js";
-import { HTMLPerspectiveViewerDatagridToolbarElement } from "./custom_elements/toolbar.js";
+import { HTMLPerspectiveViewerDatagridPluginElement } from "./custom_elements/datagrid.ts";
+import { HTMLPerspectiveViewerDatagridToolbarElement } from "./custom_elements/toolbar.ts";
 
 /******************************************************************************
  *
@@ -51,6 +51,6 @@ async function _register_element(): Promise<void> {
 
 _register_element();
 
-export { PRIVATE_PLUGIN_SYMBOL } from "./types.js";
+export { PRIVATE_PLUGIN_SYMBOL } from "./types.ts";
 export { HTMLPerspectiveViewerDatagridPluginElement };
 export { HTMLPerspectiveViewerDatagridToolbarElement };

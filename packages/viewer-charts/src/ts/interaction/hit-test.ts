@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { SpatialGrid } from "./spatial-grid";
+import { SpatialGrid } from "./spatial-grid.ts";
 
 export interface HitBounds {
     xMin: number;

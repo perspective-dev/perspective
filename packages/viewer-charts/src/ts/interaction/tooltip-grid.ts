@@ -10,8 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Context2D } from "../charts/canvas-types";
-import type { Theme } from "../theme/theme";
+import type { Context2D } from "../charts/canvas-types.ts";
+import type { Theme } from "../theme/theme.ts";
 
 export type TooltipRow = string[];
 

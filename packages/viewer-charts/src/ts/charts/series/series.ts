@@ -10,14 +10,14 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColumnDataMap } from "../../data/view-reader";
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import type { ZoomConfig } from "../../interaction/zoom-controller";
-import type { FacetGrid } from "../../layout/facet-grid";
-import { CategoricalYChart } from "../common/categorical-y-chart";
-import { type PlotRect } from "../../layout/plot-layout";
-import { type AxisDomain } from "../../axis/numeric-axis";
-import type { CategoricalDomain } from "../../axis/categorical-axis";
+import type { ColumnDataMap } from "../../data/view-reader.ts";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { ZoomConfig } from "../../interaction/zoom-controller.ts";
+import type { FacetGrid } from "../../layout/facet-grid.ts";
+import { CategoricalYChart } from "../common/categorical-y-chart.ts";
+import { type PlotRect } from "../../layout/plot-layout.ts";
+import { type AxisDomain } from "../../axis/numeric-axis.ts";
+import type { CategoricalDomain } from "../../axis/categorical-axis.ts";
 import {
     buildSeriesPipeline,
     readBarRecord,
@@ -27,28 +27,28 @@ import {
     type SeriesPipelineResult,
     type BarColumns,
     emptyBarColumns,
-} from "./series-build";
+} from "./series-build.ts";
 import {
     renderBarFrame,
     renderBarChromeOverlay,
     uploadBarInstances,
     invalidateGlyphBuffers,
     rebuildGlyphBuffers,
-} from "./series-render";
+} from "./series-render.ts";
 import {
     handleBarHover,
     handleBarLegendClick,
     showBarPinnedTooltip,
     showBarPinnedTooltipForSample,
-} from "./series-interact";
-import { resolvePalette } from "../../theme/palette";
-import { resolveSeriesColorOverride } from "./series-type";
-import { LineGlyph } from "./glyphs/draw-lines";
-import { ScatterGlyph } from "./glyphs/draw-scatter";
-import { AreaGlyph } from "./glyphs/draw-areas";
-import { createQuadCornerBuffer } from "../../webgl/instanced-attrs";
-import { compileProgram } from "../../webgl/program-cache";
-import { expandDomainInPlace } from "../common/expand-domain";
+} from "./series-interact.ts";
+import { resolvePalette } from "../../theme/palette.ts";
+import { resolveSeriesColorOverride } from "./series-type.ts";
+import { LineGlyph } from "./glyphs/draw-lines.ts";
+import { ScatterGlyph } from "./glyphs/draw-scatter.ts";
+import { AreaGlyph } from "./glyphs/draw-areas.ts";
+import { createQuadCornerBuffer } from "../../webgl/instanced-attrs.ts";
+import { compileProgram } from "../../webgl/program-cache.ts";
+import { expandDomainInPlace } from "../common/expand-domain.ts";
 import barVert from "../../shaders/bar.vert.glsl";
 import barFrag from "../../shaders/bar.frag.glsl";
 
@@ -972,7 +972,7 @@ export function ensurePalette(chart: SeriesChart): boolean {
  */
 function resolvePaletteCached(
     seriesPalette: [number, number, number][],
-    gradientStops: import("../../theme/gradient").GradientStop[],
+    gradientStops: import("../../theme/gradient.ts").GradientStop[],
     seriesLength: number,
 ): [number, number, number][] {
     return resolvePalette(seriesPalette, gradientStops, seriesLength);

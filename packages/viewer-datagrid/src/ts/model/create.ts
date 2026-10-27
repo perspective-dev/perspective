@@ -10,14 +10,14 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { createDataListener } from "../data_listener/index.js";
+import { createDataListener } from "../data_listener/index.ts";
 import {
     blend,
     make_color_record,
     parseColor,
     rgbToHex,
     type RGB,
-} from "../color_utils.js";
+} from "../color_utils.ts";
 import type {
     ColumnType,
     Table,
@@ -30,7 +30,7 @@ import {
     type RegularTable,
     type Schema,
     type EditMode,
-} from "../types.js";
+} from "../types.ts";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 import type { CellScalar } from "regular-table/dist/esm/types";
 

@@ -10,15 +10,15 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Context2D } from "../canvas-types";
-import { PlotLayout } from "../../layout/plot-layout";
-import type { Theme } from "../../theme/theme";
+import type { Context2D } from "../canvas-types.ts";
+import { PlotLayout } from "../../layout/plot-layout.ts";
+import type { Theme } from "../../theme/theme.ts";
 import type {
     CategoricalDomain,
     CategoricalLevel,
-} from "../../axis/categorical-axis";
-import { runsInRange } from "../../axis/categorical-axis-core";
-import { truncateLabel } from "../../axis/label-geometry";
+} from "../../axis/categorical-axis.ts";
+import { runsInRange } from "../../axis/categorical-axis-core.ts";
+import { truncateLabel } from "../../axis/label-geometry.ts";
 
 interface LevelTickLayout {
     size: number; // width in CSS pixels consumed by this level

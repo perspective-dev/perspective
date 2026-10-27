@@ -11,10 +11,10 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { ColumnType } from "@perspective-dev/client";
-import { colorsToCss, rgbToHex, stopsToCss } from "../color_utils.js";
-import { readThemeStyle } from "../model/create.js";
-import { measure_px, parse_align } from "./plugin_config_schema.js";
-import { positive_px } from "./restore.js";
+import { colorsToCss, rgbToHex, stopsToCss } from "../color_utils.ts";
+import { readThemeStyle } from "../model/create.ts";
+import { measure_px, parse_align } from "./plugin_config_schema.ts";
+import { positive_px } from "./restore.ts";
 import {
     bg_modes_for,
     default_bg_mode,
@@ -27,7 +27,7 @@ import {
     type ColumnRole,
     type DatagridPluginElement,
     type FgMode,
-} from "../types.js";
+} from "../types.ts";
 
 interface ViewerConfigLike {
     group_by?: string[];

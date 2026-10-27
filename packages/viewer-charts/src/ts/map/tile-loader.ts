@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { TileSource } from "./tile-source";
+import type { TileSource } from "./tile-source.ts";
 
 /**
  * One in-flight tile fetch. The same key (z/x/y under one source) only

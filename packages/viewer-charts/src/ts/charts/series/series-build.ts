@@ -11,12 +11,12 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { DateFormatModifiers } from "@perspective-dev/viewer/column-format";
-import type { ColumnDataMap } from "../../data/view-reader";
-import { buildSplitGroups } from "../../data/split-groups";
+import type { ColumnDataMap } from "../../data/view-reader.ts";
+import { buildSplitGroups } from "../../data/split-groups.ts";
 import type {
     CategoricalDomain,
     CategoricalLevel,
-} from "../../axis/categorical-axis";
+} from "../../axis/categorical-axis.ts";
 import {
     resolveAxisMode,
     resolveCategoryAxis,
@@ -26,8 +26,8 @@ import {
     type AxisMode,
     type NumericCategoryDomain,
     type ValueCategoryColumn,
-} from "../common/category-axis-resolver";
-import { computeSlotGeometry } from "../common/band-layout";
+} from "../common/category-axis-resolver.ts";
+import { computeSlotGeometry } from "../common/band-layout.ts";
 import {
     resolveChartType,
     resolveStack,
@@ -36,7 +36,7 @@ import {
     type ChartType,
     type ColumnChartConfig,
     type InterpolateMode,
-} from "./series-type";
+} from "./series-type.ts";
 
 const DUAL_Y_RATIO_THRESHOLD = 50;
 
