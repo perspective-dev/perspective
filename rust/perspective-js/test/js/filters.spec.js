@@ -1132,5 +1132,188 @@ const datetime_data_local = [
                 table.delete();
             });
         });
+
+        test.describe("grouped updates with filters that pass null", function () {
+            const SCHEMA = {
+                FieldA: "string",
+                FieldB: "string",
+                FieldC: "string",
+                FieldD: "string",
+                index: "string",
+            };
+
+            const row = (index, a, b) => ({
+                FieldA: [a],
+                FieldB: [b],
+                FieldC: ["C"],
+                FieldD: ["D"],
+                index: [index],
+            });
+
+            test("not in count is stable when new rows are filtered out", async function () {
+                const table = await perspective.table(SCHEMA, {
+                    index: "index",
+                });
+
+                const view = await table.view({
+                    columns: ["FieldA"],
+                    aggregates: { FieldA: "count" },
+                    group_by: ["FieldC"],
+                    filter: [["FieldB", "not in", ["B-1", "B-2"]]],
+                });
+
+                await table.update({
+                    FieldA: ["A-1", "A-2", "A-3"],
+                    FieldB: ["B-1", "B-2", "B-3"],
+                    FieldC: ["C", "C", "C"],
+                    FieldD: ["D", "D", "D"],
+                    index: ["1", "2", "3"],
+                });
+
+                expect(await view.to_columns()).toEqual({
+                    __ROW_PATH__: [[], ["C"]],
+                    FieldA: [1, 1],
+                });
+
+                for (const index of ["4", "5", "6"]) {
+                    await table.update(row(index, "A-2", "B-2"));
+                    expect(await view.to_columns()).toEqual({
+                        __ROW_PATH__: [[], ["C"]],
+                        FieldA: [1, 1],
+                    });
+                }
+
+                view.delete();
+                table.delete();
+            });
+
+            test("not in count increments for a passing new row after filtered-out new rows", async function () {
+                const table = await perspective.table(SCHEMA, {
+                    index: "index",
+                });
+
+                const view = await table.view({
+                    columns: ["FieldA"],
+                    aggregates: { FieldA: "count" },
+                    group_by: ["FieldC"],
+                    filter: [["FieldB", "not in", ["B-1", "B-2"]]],
+                });
+
+                await table.update(row("1", "A-1", "B-3"));
+                await table.update(row("2", "A-2", "B-2"));
+                await table.update(row("3", "A-3", "B-1"));
+                await table.update(row("4", "A-4", "B-4"));
+
+                expect(await view.to_columns()).toEqual({
+                    __ROW_PATH__: [[], ["C"]],
+                    FieldA: [2, 2],
+                });
+
+                view.delete();
+                table.delete();
+            });
+
+            test("not in count decrements when an existing row is filtered out", async function () {
+                const table = await perspective.table(SCHEMA, {
+                    index: "index",
+                });
+
+                const view = await table.view({
+                    columns: ["FieldA"],
+                    aggregates: { FieldA: "count" },
+                    group_by: ["FieldC"],
+                    filter: [["FieldB", "not in", ["B-1", "B-2"]]],
+                });
+
+                await table.update(row("1", "A-1", "B-3"));
+                await table.update(row("2", "A-2", "B-4"));
+                await table.update(row("3", "A-3", "B-2"));
+                await table.update(row("1", "A-1", "B-1"));
+
+                expect(await view.to_columns()).toEqual({
+                    __ROW_PATH__: [[], ["C"]],
+                    FieldA: [1, 1],
+                });
+
+                view.delete();
+                table.delete();
+            });
+
+            test("is null count is stable when new rows are filtered out", async function () {
+                const table = await perspective.table(SCHEMA, {
+                    index: "index",
+                });
+
+                const view = await table.view({
+                    columns: ["FieldA"],
+                    aggregates: { FieldA: "count" },
+                    group_by: ["FieldC"],
+                    filter: [["FieldB", "is null"]],
+                });
+
+                await table.update(row("1", "A-1", null));
+                for (const index of ["2", "3", "4"]) {
+                    await table.update(row(index, "A-2", "B-2"));
+                    expect(await view.to_columns()).toEqual({
+                        __ROW_PATH__: [[], ["C"]],
+                        FieldA: [1, 1],
+                    });
+                }
+
+                view.delete();
+                table.delete();
+            });
+
+            test("!= count is stable when new rows are filtered out", async function () {
+                const table = await perspective.table(SCHEMA, {
+                    index: "index",
+                });
+
+                const view = await table.view({
+                    columns: ["FieldA"],
+                    aggregates: { FieldA: "count" },
+                    group_by: ["FieldC"],
+                    filter: [["FieldB", "!=", "B-2"]],
+                });
+
+                await table.update(row("1", "A-1", "B-3"));
+                for (const index of ["2", "3", "4"]) {
+                    await table.update(row(index, "A-2", "B-2"));
+                    expect(await view.to_columns()).toEqual({
+                        __ROW_PATH__: [[], ["C"]],
+                        FieldA: [1, 1],
+                    });
+                }
+
+                view.delete();
+                table.delete();
+            });
+
+            test("not in count is stable with split_by when new rows are filtered out", async function () {
+                const table = await perspective.table(SCHEMA, {
+                    index: "index",
+                });
+
+                const view = await table.view({
+                    columns: ["FieldA"],
+                    aggregates: { FieldA: "count" },
+                    group_by: ["FieldC"],
+                    split_by: ["FieldD"],
+                    filter: [["FieldB", "not in", ["B-1", "B-2"]]],
+                });
+
+                await table.update(row("1", "A-1", "B-3"));
+                for (const index of ["2", "3", "4"]) {
+                    await table.update(row(index, "A-2", "B-2"));
+                    expect(await view.to_columns()).toEqual({
+                        __ROW_PATH__: [[], ["C"]],
+                        "D|FieldA": [1, 1],
+                    });
+                }
+
+                view.delete();
+                table.delete();
+            });
+        });
     });
 })(perspective);

@@ -268,6 +268,7 @@ public:
         const t_data_table& prev,
         const t_data_table& current,
         const t_data_table& transitions,
+        const t_data_table& existed,
         const std::vector<t_aggspec>& aggspecs,
         const t_config& config
     ) const;

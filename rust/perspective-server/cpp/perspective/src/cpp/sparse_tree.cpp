@@ -528,6 +528,7 @@ t_stree::build_strand_table_metadata(
  * @param prev
  * @param current
  * @param transitions
+ * @param existed
  * @param aggspecs
  * @param config
  * @return std::pair<std::shared_ptr<t_data_table>,
@@ -539,6 +540,7 @@ t_stree::build_strand_table(
     const t_data_table& prev,
     const t_data_table& current,
     const t_data_table& transitions,
+    const t_data_table& existed,
     const std::vector<t_aggspec>& aggspecs,
     const t_config& config
 ) const {
@@ -624,11 +626,13 @@ t_stree::build_strand_table(
 
     bool has_filters = config.has_filters();
     const std::uint8_t* op_base = op_col->get_nth_base<std::uint8_t>();
+    const t_column* existed_col = existed._get_const_column("psp_existed");
 
     if (has_filters) {
         for (t_uindex idx = 0, loop_end = flattened.size(); idx < loop_end;
              ++idx) {
-            bool filter_prev = msk_prev.get(idx);
+            bool filter_prev =
+                msk_prev.get(idx) && *(existed_col->get_nth<bool>(idx));
             bool filter_curr = msk_curr.get(idx);
 
             t_tscalar pkey = pkey_col->get_scalar(idx);
