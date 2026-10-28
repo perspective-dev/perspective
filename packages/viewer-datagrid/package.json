@@ -50,7 +50,8 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/perspective-dev/perspective"
+        "url": "https://github.com/perspective-dev/perspective",
+        "directory": "packages/viewer-datagrid"
     },
     "author": "",
     "license": "Apache-2.0",
