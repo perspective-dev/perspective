@@ -11,9 +11,21 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import perspective_viewer from "./perspective-viewer.ts";
+import { resolve_package_wasm_url } from "@perspective-dev/client/src/ts/wasm/cdn.ts";
 export * from "./perspective-viewer.ts";
 
 const url = new URL("../wasm/perspective-viewer.wasm", import.meta.url);
-await perspective_viewer.init_client(fetch(url));
+await perspective_viewer.init_client({
+    viewer: fetch(url),
+    migrate: () =>
+        fetch(
+            resolve_package_wasm_url(
+                import.meta.url,
+                "viewer",
+                "client",
+                "perspective-migrate-js.wasm",
+            ),
+        ),
+});
 
 export default perspective_viewer;

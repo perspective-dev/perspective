@@ -20,7 +20,7 @@ use serde_json::Value;
 use ts_rs::TS;
 use wasm_bindgen::prelude::*;
 
-use crate::config::{TableRef, migrate_date_formats};
+use crate::config::TableRef;
 use crate::renderer::ColumnConfigMap;
 
 /// The state of an entire `custom_elements::PerspectiveViewerElement` component
@@ -44,8 +44,8 @@ pub struct ViewerConfig<V: TS = String, T: TS = TableRef> {
 #[derive(Debug, Default, Serialize, PartialEq, TS)]
 pub struct PanelViewerConfig<V: TS = String, T: TS = TableRef> {
     /// The `@perspective-dev/viewer` version that wrote this config,
-    /// stamped on save and used to migrate older tokens. Callers do not
-    /// set it.
+    /// stamped on save and named in the error when such a config is rejected.
+    /// Callers do not set it.
     pub version: V,
 
     /// Per-column styling, keyed by column name. The viewer treats the
@@ -129,6 +129,70 @@ pub static API_VERSION: LazyLock<&'static str> = LazyLock::new(|| {
     pkg.version
 });
 
+/// The `version` a raw config, or else one of its workspace panels, was saved
+/// by.
+pub fn saved_version(config: &JsValue) -> Option<String> {
+    let version = |value: &JsValue| {
+        js_sys::Reflect::get(value, &JsValue::from_str("version"))
+            .ok()?
+            .as_string()
+    };
+
+    version(config).or_else(|| {
+        ["panels", "viewers"].into_iter().find_map(|key| {
+            let panels = js_sys::Reflect::get(config, &JsValue::from_str(key)).ok()?;
+            let panels = panels.dyn_into::<js_sys::Object>().ok()?;
+            js_sys::Object::values(&panels)
+                .iter()
+                .find_map(|panel| version(&panel))
+        })
+    })
+}
+
+/// Await `result`, naming the release a config was `saved` by in its error
+/// when that is not this release.
+pub async fn noting_saved_version<T>(
+    saved: Option<String>,
+    result: impl std::future::Future<Output = ApiResult<T>>,
+) -> ApiResult<T> {
+    result.await.map_err(|error| match saved {
+        Some(version) if version != *API_VERSION => ApiError::new(format!(
+            "{error} (this config was saved by {version}, and this is {})",
+            *API_VERSION
+        )),
+        _ => error,
+    })
+}
+
+/// A trailing `#[serde(flatten)]` field which fails deserialization when its
+/// struct is given a key it does not define.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UnknownKeys;
+
+impl<'de> Deserialize<'de> for UnknownKeys {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let keys =
+            std::collections::BTreeMap::<String, serde::de::IgnoredAny>::deserialize(deserializer)?;
+
+        if keys.is_empty() {
+            Ok(Self)
+        } else {
+            let keys = keys
+                .keys()
+                .map(|key| format!("`{key}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            Err(serde::de::Error::custom(format!(
+                "Unknown config keys {keys}"
+            )))
+        }
+    }
+}
+
 impl<V: TS + Serialize, T: TS + Serialize> ViewerConfig<V, T> {
     /// Encode a `ViewerConfig` to a `JsValue` in a supported type.
     pub fn encode(&self) -> ApiResult<JsValue> {
@@ -151,8 +215,8 @@ impl Deref for PluginConfig {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, TS)]
 pub struct ViewerConfigUpdate {
     /// The `@perspective-dev/viewer` version a saved config was written
-    /// by, used to migrate older tokens. Omit it — the viewer stamps
-    /// the current version on save.
+    /// by, named in the error when such a config is rejected. Omit it — the
+    /// viewer stamps the current version on save.
     #[serde(default)]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
@@ -225,26 +289,16 @@ pub struct ViewerConfigUpdate {
 
     #[serde(flatten)]
     pub view_config: ViewConfigUpdate,
+
+    #[serde(flatten, skip_serializing)]
+    #[ts(skip)]
+    pub unknown: UnknownKeys,
 }
 
 impl ViewerConfigUpdate {
-    /// Decode a `JsValue` into a `ViewerConfigUpdate` by auto-detecting format
-    /// from JavaScript type.
+    /// Decode a `JsValue` into a `ViewerConfigUpdate`, rejecting unknown keys.
     pub fn decode(update: &JsValue) -> ApiResult<Self> {
         Ok(update.into_serde_ext()?)
-    }
-
-    /// Rewrite the parts of this config written by an older viewer into their
-    /// current form.
-    pub fn migrate(&mut self) {
-        if let OptionalUpdate::Update(columns) = &mut self.columns_config {
-            let version = match &self.version {
-                OptionalUpdate::Update(version) => Some(version.as_str()),
-                _ => None,
-            };
-
-            migrate_date_formats(version, columns);
-        }
     }
 }
 
@@ -301,20 +355,16 @@ pub struct ViewerConfigInitial {
 
     #[serde(flatten)]
     pub view_config: ViewConfigUpdate,
+
+    #[serde(flatten, skip_serializing)]
+    #[ts(skip)]
+    pub unknown: UnknownKeys,
 }
 
 impl ViewerConfigInitial {
-    /// Decode a `JsValue` by auto-detecting format from JavaScript type.
+    /// Decode a `JsValue`, rejecting unknown keys.
     pub fn decode(config: &JsValue) -> ApiResult<Self> {
         Ok(config.into_serde_ext()?)
-    }
-
-    /// Rewrite the parts of this config written by an older viewer into their
-    /// current form.
-    pub fn migrate(&mut self) {
-        if let Some(columns) = &mut self.columns_config {
-            migrate_date_formats(self.version.as_deref(), columns);
-        }
     }
 
     /// A default-config panel bound to `table` (the "New panel" menus).
@@ -329,6 +379,7 @@ impl ViewerConfigInitial {
             plugin_config: None,
             columns_config: None,
             view_config: ViewConfigUpdate::default(),
+            unknown: UnknownKeys,
         }
     }
 }
@@ -355,6 +406,7 @@ impl From<ViewerConfigInitial> for ViewerConfigUpdate {
             plugin_config: up(value.plugin_config),
             columns_config: up(value.columns_config),
             view_config: value.view_config,
+            unknown: value.unknown,
         }
     }
 }
@@ -388,6 +440,7 @@ impl TryFrom<ViewerConfigUpdate> for ViewerConfigInitial {
             plugin_config,
             columns_config,
             view_config,
+            unknown,
         } = value;
 
         let OptionalUpdate::Update(table) = table else {
@@ -405,6 +458,7 @@ impl TryFrom<ViewerConfigUpdate> for ViewerConfigInitial {
             plugin_config: down(plugin_config),
             columns_config: down(columns_config),
             view_config,
+            unknown,
         })
     }
 }

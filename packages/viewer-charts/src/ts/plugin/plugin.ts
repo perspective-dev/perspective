@@ -951,10 +951,6 @@ export class HTMLPerspectiveViewerWebGLPluginElement
     }
 
     restore(config: any, columns_config?: Record<string, any>) {
-        if (config?.zoom) {
-            this._renderer?.restoreZoom(config.zoom);
-        }
-
         // Merge incoming plugin_config on top of the `chart_type`
         // effective defaults so a partial restore (UI emits only
         // changed fields) keeps untouched defaults in place — and

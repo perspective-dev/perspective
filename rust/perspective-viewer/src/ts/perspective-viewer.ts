@@ -66,7 +66,13 @@ export type * from "./ts-rs/GetClientOptions.d.ts";
 export type * from "./ts-rs/GetViewOptions.d.ts";
 export type * from "./ts-rs/GetViewMode.d.ts";
 
-export { init_client } from "./bootstrap";
-import { init_client } from "./bootstrap";
+export { init_client, migrate } from "./bootstrap";
+export type { ViewerWasmRegistration, ViewerWasmSource } from "./bootstrap";
+export type {
+    MigrateKind,
+    MigrateNotice,
+    MigrateResult,
+} from "@perspective-dev/client/src/ts/wasm/migrate.ts";
+import { init_client, migrate } from "./bootstrap";
 
-export default { init_client };
+export default { init_client, migrate };

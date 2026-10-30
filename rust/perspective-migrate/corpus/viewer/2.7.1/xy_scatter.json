@@ -1,0 +1,71 @@
+{
+    "kind": "viewer",
+    "source": "8041a712eb^:rust/perspective-viewer/test/js/migrate_viewer.spec.ts \"From 2.7.1 - X/Y Scatter\"",
+    "input": {
+        "version": "2.7.1",
+        "plugin": "X/Y Scatter",
+        "plugin_config": {
+            "columns": {
+                "Category": {
+                    "symbols": {
+                        "Furniture": "star"
+                    }
+                }
+            }
+        },
+        "columns": [
+            "Row ID",
+            "City",
+            null,
+            null,
+            "Category"
+        ],
+        "aggregates": {},
+        "expressions": {},
+        "filter": [],
+        "group_by": [],
+        "sort": [],
+        "split_by": [],
+        "title": null
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "X/Y Scatter",
+        "plugin_config": {},
+        "columns": [
+            "Row ID",
+            "City",
+            null,
+            null
+        ],
+        "aggregates": {},
+        "expressions": {},
+        "filter": [],
+        "group_by": [],
+        "sort": [],
+        "split_by": [],
+        "title": null,
+        "columns_config": {}
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "charts.scatter_symbol_slot",
+            "pointer": "/columns/4",
+            "value": "Category"
+        },
+        {
+            "kind": "Dropped",
+            "step": "charts.scatter_symbol_slot",
+            "pointer": "/columns_config/Category/symbols",
+            "value": {
+                "Furniture": "star"
+            }
+        }
+    ],
+    "steps": [
+        "charts.symbols_move",
+        "charts.scatter_symbol_slot",
+        "charts.d3fc_removed"
+    ]
+}

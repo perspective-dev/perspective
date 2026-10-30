@@ -1,0 +1,35 @@
+{
+    "kind": "viewer",
+    "source": "hand-written from 23b5f8f292:packages/viewer-charts/src/ts/map/tile-sources.json",
+    "input": {
+        "version": "5.3.0",
+        "plugin": "Map Scatter",
+        "plugin_config": {
+            "map_tile_provider": "carto-dark-matter"
+        },
+        "columns": [
+            "Lon",
+            "Lat"
+        ]
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "Map Scatter",
+        "plugin_config": {},
+        "columns": [
+            "Lon",
+            "Lat"
+        ]
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "maps.carto_tiles",
+            "pointer": "/plugin_config/map_tile_provider",
+            "value": "carto-dark-matter"
+        }
+    ],
+    "steps": [
+        "maps.carto_tiles"
+    ]
+}

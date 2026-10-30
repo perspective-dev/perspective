@@ -27,6 +27,8 @@ members = [
     "rust/perspective",
     "rust/perspective-client",
     "rust/perspective-js",
+    "rust/perspective-migrate",
+    "rust/perspective-migrate-js",
     "rust/perspective-python",
     "rust/perspective-server",
     "rust/perspective-viewer",
@@ -58,6 +60,7 @@ protobuf-src = { git = "https://github.com/carlocorradini/rust-protobuf-native.g
 perspective-client = { path = "rust/perspective-client" }
 perspective-server = { path = "rust/perspective-server" }
 perspective-js = { path = "rust/perspective-js" }
+perspective-migrate = { path = "rust/perspective-migrate" }
 perspective = { path = "rust/perspective" }
 perspective-viewer = { path = "rust/perspective-viewer" }
 perspective-python = { path = "rust/perspective-python" }

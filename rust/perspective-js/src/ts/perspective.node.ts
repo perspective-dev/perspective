@@ -37,8 +37,15 @@ import * as perspective_client from "../../dist/wasm/perspective-js.js";
 import { load_wasm_stage_0 } from "./wasm/decompress.js";
 import { host_supports_memory64 } from "./wasm/features.ts";
 import * as engine from "./wasm/engine.ts";
+import { MigrateLoader } from "./wasm/migrate.ts";
+import type { MigrateKind, MigrateResult } from "./wasm/migrate.ts";
 
 export { host_supports_memory64 } from "./wasm/features.ts";
+export type {
+    MigrateKind,
+    MigrateNotice,
+    MigrateResult,
+} from "./wasm/migrate.ts";
 import { compile_perspective } from "./wasm/emscripten_api.ts";
 import * as psp_websocket from "./websocket.ts";
 import * as api from "./wasm/browser.ts";
@@ -69,6 +76,36 @@ const uncompressed_client_wasm = await fs
     .then((buffer) => load_wasm_stage_0(buffer.buffer as ArrayBuffer));
 
 await perspective_client.default({ module_or_path: uncompressed_client_wasm });
+
+const MIGRATE = new MigrateLoader();
+MIGRATE.register(async () => {
+    const buffer = await fs.readFile(
+        path.join(__dirname, "../../dist/wasm/perspective-migrate-js.wasm"),
+    );
+
+    return await load_wasm_stage_0(buffer.buffer as ArrayBuffer);
+});
+
+/**
+ * Upgrade a persisted config written by any Perspective release since 2.0.0
+ * to the current schema.
+ *
+ * # Arguments
+ *
+ * - `kind` - `"view"` for a `ViewConfig`, `"viewer"` for a
+ *   `<perspective-viewer>` `save()` token, or `"workspace"` for a
+ *   `saveWorkspace()` token.
+ * - `config` - The config to upgrade.
+ * - `from_version` - The release which wrote `config`, used only when it has
+ *   no `version` field.
+ */
+export async function migrate<T = Record<string, unknown>>(
+    kind: MigrateKind,
+    config: unknown,
+    from_version?: string,
+): Promise<MigrateResult<T>> {
+    return await MIGRATE.migrate<T>(kind, config, from_version);
+}
 
 function make_node_disk_bridge({
     heap,
@@ -543,6 +580,7 @@ export default {
     join,
     websocket,
     worker,
+    migrate,
     host_supports_memory64,
     get_hosted_table_names,
     on_hosted_tables_update,

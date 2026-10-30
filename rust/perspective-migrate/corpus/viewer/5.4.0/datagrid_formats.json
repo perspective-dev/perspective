@@ -1,0 +1,136 @@
+{
+    "kind": "viewer",
+    "source": "hand-written from v5.4.0:packages/viewer-datagrid/src/ts/types.ts",
+    "input": {
+        "version": "5.4.0",
+        "plugin": "datagrid",
+        "plugin_config": {
+            "edit_mode": "READ_ONLY",
+            "scroll_lock": false
+        },
+        "columns_config": {
+            "Order ID": {
+                "format": "bold",
+                "string_color_mode": "none",
+                "color": "#111111"
+            },
+            "Customer Name": {
+                "format": "italics"
+            },
+            "Product Name": {
+                "format": "image"
+            },
+            "Sales": {
+                "number_format": {
+                    "style": "unit",
+                    "unit": "gallob"
+                }
+            },
+            "Order Date": {
+                "date_format": {
+                    "format": "custom",
+                    "year": "2-digit",
+                    "month": "disabled"
+                }
+            },
+            "Ship Date": {
+                "date_format": {
+                    "date_style": "short",
+                    "year": "numeric"
+                }
+            }
+        },
+        "columns": [
+            "Order ID",
+            "Customer Name",
+            "Product Name",
+            "Sales",
+            "Order Date",
+            "Ship Date"
+        ],
+        "group_by": [],
+        "split_by": []
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "Datagrid",
+        "plugin_config": {
+            "edit_mode": "READ_ONLY",
+            "scroll_lock": false
+        },
+        "columns_config": {
+            "Order ID": {
+                "bold": true
+            },
+            "Customer Name": {
+                "italic": true
+            },
+            "Product Name": {},
+            "Sales": {
+                "number_format": {
+                    "style": "unit",
+                    "unit": "gallon"
+                }
+            },
+            "Order Date": {
+                "date_format": {
+                    "year": "2-digit",
+                    "day": "numeric",
+                    "hour": "numeric",
+                    "minute": "numeric",
+                    "second": "numeric",
+                    "hour12": true
+                }
+            },
+            "Ship Date": {
+                "date_format": {
+                    "dateStyle": "short",
+                    "timeStyle": "medium"
+                }
+            }
+        },
+        "columns": [
+            "Order ID",
+            "Customer Name",
+            "Product Name",
+            "Sales",
+            "Order Date",
+            "Ship Date"
+        ],
+        "group_by": [],
+        "split_by": []
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "datagrid.mode_renames",
+            "pointer": "/columns_config/Order ID/color",
+            "value": "#111111"
+        },
+        {
+            "kind": "Dropped",
+            "step": "datagrid.format_flags",
+            "pointer": "/columns_config/Product Name/format",
+            "value": "image"
+        },
+        {
+            "kind": "Dropped",
+            "step": "style.date_format",
+            "pointer": "/columns_config/Ship Date/date_format/date_style",
+            "value": "short"
+        },
+        {
+            "kind": "Dropped",
+            "step": "style.date_format",
+            "pointer": "/columns_config/Ship Date/date_format/year",
+            "value": "numeric"
+        }
+    ],
+    "steps": [
+        "datagrid.mode_renames",
+        "datagrid.format_flags",
+        "viewer.plugin_names",
+        "style.date_format",
+        "style.unit_gallon"
+    ]
+}

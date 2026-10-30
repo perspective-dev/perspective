@@ -237,8 +237,6 @@ a given column accepts depends on its type — see
 | `pct sum parent` | The group's `sum` as a percentage of its parent row's, `0`–`100`; `100` at the root, and `null` when the parent's sum is `0` | `float` |
 | `pct sum total` | The group's `sum` as a percentage of the grand total, `0`–`100` | `float` |
 
-`sum not null` is accepted as a legacy alias for `sum`.
-
 A numeric aggregate widens to the input's numeric class — `integer` columns
 accumulate as `integer`, `float` columns as `float`.
 
@@ -390,10 +388,8 @@ anywhere an aggregate is, and each group refers to one function:
 | `last` | `last_value` |
 | `high` | `high_water_mark` |
 | `low` | `low_water_mark` |
-| `pct sum total` | `pct sum grand total`, `pct_sum_grand_total` |
 | `var` | `variance` |
 | `stddev` | `standard deviation` |
-| `sum` | `sum not null`, `sum_not_null` (legacy name) |
 
 Most multi-word aggregates also answer to a snake_case spelling —
 `sum_or_zero`, `sum_abs`, `abs_sum`, `weighted_mean`, `distinct_leaf`,

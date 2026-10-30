@@ -1,0 +1,31 @@
+{
+    "kind": "viewer",
+    "source": "hand-written",
+    "input": {
+        "version": "4.0.0",
+        "plugin": "My Plugin",
+        "plugin_config": [
+            1,
+            2
+        ]
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "My Plugin",
+        "plugin_config": {}
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "viewer.plugin_config_object",
+            "pointer": "/plugin_config",
+            "value": [
+                1,
+                2
+            ]
+        }
+    ],
+    "steps": [
+        "viewer.plugin_config_object"
+    ]
+}

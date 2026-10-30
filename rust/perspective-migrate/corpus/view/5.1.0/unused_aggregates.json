@@ -1,0 +1,62 @@
+{
+    "kind": "view",
+    "from": "5.1.0",
+    "source": "hand-written",
+    "input": {
+        "columns": [
+            "Sales"
+        ],
+        "aggregates": {
+            "Sales": "sum",
+            "Profit": "py_agg",
+            "Quantity": "weighted mean",
+            "Discount": [
+                "weighted mean",
+                []
+            ],
+            "Cost": "not an aggregate",
+            "Margin": "avg"
+        }
+    },
+    "output": {
+        "columns": [
+            "Sales"
+        ],
+        "aggregates": {
+            "Sales": "sum",
+            "Margin": "avg"
+        }
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "view.prune_unused_aggregates",
+            "pointer": "/aggregates/Profit",
+            "value": "py_agg"
+        },
+        {
+            "kind": "Dropped",
+            "step": "view.prune_unused_aggregates",
+            "pointer": "/aggregates/Quantity",
+            "value": "weighted mean"
+        },
+        {
+            "kind": "Dropped",
+            "step": "view.prune_unused_aggregates",
+            "pointer": "/aggregates/Discount",
+            "value": [
+                "weighted mean",
+                []
+            ]
+        },
+        {
+            "kind": "Dropped",
+            "step": "view.prune_unused_aggregates",
+            "pointer": "/aggregates/Cost",
+            "value": "not an aggregate"
+        }
+    ],
+    "steps": [
+        "view.prune_unused_aggregates"
+    ]
+}

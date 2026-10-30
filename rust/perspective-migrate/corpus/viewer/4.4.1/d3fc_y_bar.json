@@ -1,0 +1,117 @@
+{
+    "kind": "viewer",
+    "source": "hand-written from v4.4.1:packages/viewer-d3fc/src/ts/types.ts Settings",
+    "input": {
+        "version": "4.4.1",
+        "plugin": "Y Bar",
+        "plugin_config": {
+            "legend": {
+                "left": "100px",
+                "top": "20px"
+            },
+            "zoom": {
+                "k": 2,
+                "x": 0,
+                "y": 0
+            },
+            "splitMainValues": [
+                "Profit"
+            ],
+            "hideKeys": []
+        },
+        "columns_config": {
+            "Sales": {
+                "number_fg_mode": "bar",
+                "number_format": {
+                    "style": "currency",
+                    "currency": "USD"
+                }
+            }
+        },
+        "columns": [
+            "Sales",
+            "Profit"
+        ],
+        "group_by": [
+            "Region"
+        ],
+        "split_by": [],
+        "filter": [],
+        "sort": [],
+        "expressions": {},
+        "aggregates": {},
+        "title": "Sales",
+        "table": "superstore",
+        "settings": true,
+        "theme": "Pro Dark"
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "Y Bar",
+        "plugin_config": {},
+        "columns_config": {
+            "Sales": {
+                "number_format": {
+                    "style": "currency",
+                    "currency": "USD"
+                }
+            },
+            "Profit": {
+                "alt_axis": true
+            }
+        },
+        "columns": [
+            "Sales",
+            "Profit"
+        ],
+        "group_by": [
+            "Region"
+        ],
+        "split_by": [],
+        "filter": [],
+        "sort": [],
+        "expressions": {},
+        "aggregates": {},
+        "title": "Sales",
+        "table": "superstore",
+        "settings": true,
+        "theme": "Pro Dark"
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "charts.d3fc_removed",
+            "pointer": "/plugin_config/legend",
+            "value": {
+                "left": "100px",
+                "top": "20px"
+            }
+        },
+        {
+            "kind": "Dropped",
+            "step": "charts.d3fc_removed",
+            "pointer": "/plugin_config/zoom",
+            "value": {
+                "k": 2,
+                "x": 0,
+                "y": 0
+            }
+        },
+        {
+            "kind": "Dropped",
+            "step": "charts.d3fc_removed",
+            "pointer": "/plugin_config/hideKeys",
+            "value": []
+        },
+        {
+            "kind": "Dropped",
+            "step": "charts.d3fc_removed",
+            "pointer": "/columns_config/Sales/number_fg_mode",
+            "value": "bar"
+        }
+    ],
+    "steps": [
+        "charts.alt_axis",
+        "charts.d3fc_removed"
+    ]
+}

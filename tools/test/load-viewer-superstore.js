@@ -25,14 +25,11 @@ async function load() {
     const table = worker.table(csv, { name: "load-viewer-superstore" });
     await viewer.load(table);
     const config = {
-        plugin: "datagrid",
+        plugin: "Datagrid",
         group_by: ["Region", "State"],
         split_by: ["Category", "Sub-Category"],
         columns: ["Sales", "Profit"],
-        master: false,
-        name: "Sales Report",
         table: "load-viewer-superstore",
-        linked: false,
         title: "Sales Report 2",
     };
     await viewer.restore(config);

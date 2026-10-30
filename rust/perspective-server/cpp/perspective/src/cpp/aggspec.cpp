@@ -186,7 +186,7 @@ t_aggspec::agg_str() const {
             return "or";
         } break;
         case AGGTYPE_LAST_VALUE: {
-            return "last value";
+            return "last";
         }
         case AGGTYPE_MAX_BY: {
             return "max by";
@@ -201,13 +201,13 @@ t_aggspec::agg_str() const {
             return "min";
         }
         case AGGTYPE_HIGH_WATER_MARK: {
-            return "high water mark";
+            return "high";
         }
         case AGGTYPE_LOW_WATER_MARK: {
-            return "low water mark";
+            return "low";
         }
         case AGGTYPE_HIGH_MINUS_LOW: {
-            return "high minuslow";
+            return "high minus low";
         } break;
         case AGGTYPE_UDF_COMBINER: {
             std::stringstream ss;
@@ -242,7 +242,7 @@ t_aggspec::agg_str() const {
             return "pct sum parent";
         }
         case AGGTYPE_PCT_SUM_GRAND_TOTAL: {
-            return "pct sum grand total";
+            return "pct sum total";
         }
         case AGGTYPE_VARIANCE: {
             return "variance";

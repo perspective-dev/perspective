@@ -163,15 +163,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-#[derive(Deserialize, Clone, PartialEq, Debug)]
-#[serde(untagged)]
-pub enum ExpressionsDeserde {
-    Array(Vec<String>),
-    Map(HashMap<String, String>),
-}
-
 #[derive(Deserialize, Serialize, Clone, PartialEq, Debug, Default, TS)]
-#[serde(from = "ExpressionsDeserde")]
 pub struct Expressions(pub HashMap<String, String>);
 
 impl std::ops::Deref for Expressions {
@@ -185,33 +177,6 @@ impl std::ops::Deref for Expressions {
 impl std::ops::DerefMut for Expressions {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
-    }
-}
-
-fn upgrade_legacy_format(expressions: &[String]) -> HashMap<String, String> {
-    tracing::debug!("Legacy `expressions` format: {:?}", expressions);
-    expressions
-        .iter()
-        .map(|s| {
-            if let Some((name, expression)) = s.split_once('\n') {
-                if !expression.is_empty() && name.starts_with("//") {
-                    (name.split_at(2).1.trim().to_owned(), expression.to_owned())
-                } else {
-                    (s.to_owned(), s.to_owned())
-                }
-            } else {
-                (s.to_owned(), s.to_owned())
-            }
-        })
-        .collect::<HashMap<_, _>>()
-}
-
-impl From<ExpressionsDeserde> for Expressions {
-    fn from(value: ExpressionsDeserde) -> Self {
-        match value {
-            ExpressionsDeserde::Array(arr) => Self(upgrade_legacy_format(&arr)),
-            ExpressionsDeserde::Map(map) => Self(map),
-        }
     }
 }
 

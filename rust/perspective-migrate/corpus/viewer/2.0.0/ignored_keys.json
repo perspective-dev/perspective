@@ -1,0 +1,66 @@
+{
+    "kind": "viewer",
+    "from": "2.0.0",
+    "source": "8041a712eb^:rust/perspective-viewer/test/js/migrate_viewer.spec.ts \"Bucket by year\"",
+    "input": {
+        "plugin": "Datagrid",
+        "row-pivots": [
+            "State"
+        ],
+        "computed-columns": [],
+        "selectable": null,
+        "editable": null,
+        "group_by": [],
+        "columns": [
+            "Sales"
+        ],
+        "plugin_config": {},
+        "name": "Old"
+    },
+    "output": {
+        "plugin": "Datagrid",
+        "group_by": [],
+        "columns": [
+            "Sales"
+        ],
+        "plugin_config": {},
+        "version": "CURRENT"
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "viewer.unknown_keys",
+            "pointer": "/row-pivots",
+            "value": [
+                "State"
+            ]
+        },
+        {
+            "kind": "Dropped",
+            "step": "viewer.unknown_keys",
+            "pointer": "/computed-columns",
+            "value": []
+        },
+        {
+            "kind": "Dropped",
+            "step": "viewer.unknown_keys",
+            "pointer": "/selectable",
+            "value": null
+        },
+        {
+            "kind": "Dropped",
+            "step": "viewer.unknown_keys",
+            "pointer": "/editable",
+            "value": null
+        },
+        {
+            "kind": "Dropped",
+            "step": "viewer.unknown_keys",
+            "pointer": "/name",
+            "value": "Old"
+        }
+    ],
+    "steps": [
+        "viewer.unknown_keys"
+    ]
+}

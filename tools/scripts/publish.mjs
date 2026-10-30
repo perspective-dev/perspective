@@ -96,6 +96,11 @@ async function publish_release_assets(releases) {
         );
 
         execSync(
+            `cargo publish --config .cargo/release.toml -p perspective-migrate --allow-dirty --no-verify`,
+            SH_ENV,
+        );
+
+        execSync(
             `cargo publish --config .cargo/release.toml -p perspective-python --allow-dirty --no-verify`,
             SH_ENV,
         );

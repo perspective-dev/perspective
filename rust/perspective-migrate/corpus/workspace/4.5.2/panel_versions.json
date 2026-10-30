@@ -1,0 +1,85 @@
+{
+    "kind": "workspace",
+    "source": "hand-written",
+    "input": {
+        "detail": {
+            "main": {
+                "type": "tab-area",
+                "widgets": [
+                    "P",
+                    "Q"
+                ],
+                "currentIndex": 1
+            }
+        },
+        "viewers": {
+            "P": {
+                "version": "4.5.2",
+                "plugin": "Map Scatter",
+                "table": "t",
+                "columns": [
+                    "Lon",
+                    "Lat",
+                    "Color",
+                    "Size",
+                    "Label",
+                    "Tooltip"
+                ]
+            },
+            "Q": {
+                "plugin": "Map Scatter",
+                "table": "t",
+                "columns": [
+                    "Lon",
+                    "Lat",
+                    "Color",
+                    "Size",
+                    "Tooltip"
+                ]
+            }
+        }
+    },
+    "output": {
+        "layout": {
+            "type": "tab-layout",
+            "tabs": [
+                "P",
+                "Q"
+            ],
+            "selected": 1
+        },
+        "panels": {
+            "P": {
+                "version": "CURRENT",
+                "plugin": "Map Scatter",
+                "table": "t",
+                "columns": [
+                    "Lon",
+                    "Lat",
+                    "Color",
+                    "Size",
+                    "Label",
+                    "Tooltip"
+                ]
+            },
+            "Q": {
+                "plugin": "Map Scatter",
+                "table": "t",
+                "columns": [
+                    "Lon",
+                    "Lat",
+                    "Color",
+                    "Size",
+                    null,
+                    "Tooltip"
+                ]
+            }
+        },
+        "version": "CURRENT"
+    },
+    "notices": [],
+    "steps": [
+        "maps.label_slot",
+        "ws.regular_layout"
+    ]
+}

@@ -1,0 +1,93 @@
+{
+    "kind": "viewer",
+    "source": "hand-written from v4.4.1:packages/viewer-openlayers/src/js/views/base-map.js",
+    "input": {
+        "version": "4.4.1",
+        "plugin": "Map Scatter",
+        "plugin_config": {
+            "center": [
+                -8226000,
+                4970000
+            ],
+            "zoom": 10
+        },
+        "columns_config": {
+            "Count": {
+                "number_format": {
+                    "maximumFractionDigits": 0
+                }
+            },
+            "Name": {
+                "string_color_mode": "foreground"
+            }
+        },
+        "columns": [
+            "Lon",
+            "Lat",
+            "Count",
+            "Size",
+            "Name"
+        ],
+        "group_by": [],
+        "split_by": [],
+        "filter": [],
+        "sort": [],
+        "expressions": {},
+        "aggregates": {},
+        "title": null
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "Map Scatter",
+        "plugin_config": {},
+        "columns_config": {
+            "Count": {
+                "number_format": {
+                    "maximumFractionDigits": 0
+                }
+            }
+        },
+        "columns": [
+            "Lon",
+            "Lat",
+            "Count",
+            "Size",
+            null,
+            "Name"
+        ],
+        "group_by": [],
+        "split_by": [],
+        "filter": [],
+        "sort": [],
+        "expressions": {},
+        "aggregates": {},
+        "title": null
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "maps.openlayers_removed",
+            "pointer": "/plugin_config/center",
+            "value": [
+                -8226000,
+                4970000
+            ]
+        },
+        {
+            "kind": "Dropped",
+            "step": "maps.openlayers_removed",
+            "pointer": "/plugin_config/zoom",
+            "value": 10
+        },
+        {
+            "kind": "Dropped",
+            "step": "maps.openlayers_removed",
+            "pointer": "/columns_config/Name/string_color_mode",
+            "value": "foreground"
+        }
+    ],
+    "steps": [
+        "maps.label_slot",
+        "maps.openlayers_removed"
+    ]
+}
