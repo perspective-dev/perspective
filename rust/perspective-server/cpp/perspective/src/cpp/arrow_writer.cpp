@@ -79,16 +79,18 @@ get_scalar<bool>(t_tscalar& t) {
 // }
 
 
-std::shared_ptr<std::string>
-column_to_arrow_ipc(
-    const t_column& col, const std::string& name, t_uindex nrows
+static void
+column_to_arrow(
+    const t_column& col,
+    const std::string& name,
+    t_uindex nrows,
+    std::shared_ptr<arrow::Field>& field,
+    std::shared_ptr<arrow::Array>& array
 ) {
     t_get_data_extents extents{
         0, static_cast<t_index>(nrows), 0, 1
     };
     auto get = [&col](t_uindex ridx) { return col.get_scalar(ridx); };
-    std::shared_ptr<arrow::Field> field;
-    std::shared_ptr<arrow::Array> array;
     switch (col.get_dtype()) {
         case DTYPE_INT8: {
             field = arrow::field(name, arrow::int8());
@@ -178,11 +180,13 @@ column_to_arrow_ipc(
             PSP_COMPLAIN_AND_ABORT(ss.str());
         }
     }
+}
 
-    auto schema = arrow::schema({field});
-    auto batch = arrow::RecordBatch::Make(
-        schema, static_cast<std::int64_t>(nrows), {array}
-    );
+static std::shared_ptr<std::string>
+batch_to_ipc(
+    const std::shared_ptr<arrow::Schema>& schema,
+    const std::shared_ptr<arrow::RecordBatch>& batch
+) {
     arrow::Result<std::shared_ptr<arrow::ResizableBuffer>> allocated =
         arrow::AllocateResizableBuffer(0);
     if (!allocated.ok()) {
@@ -202,6 +206,43 @@ column_to_arrow_ipc(
     PSP_CHECK_ARROW_STATUS(writer->Close());
     PSP_CHECK_ARROW_STATUS(sink.Close());
     return std::make_shared<std::string>(buffer->ToString());
+}
+
+std::shared_ptr<std::string>
+column_to_arrow_ipc(
+    const t_column& col, const std::string& name, t_uindex nrows
+) {
+    std::shared_ptr<arrow::Field> field;
+    std::shared_ptr<arrow::Array> array;
+    column_to_arrow(col, name, nrows, field, array);
+    auto schema = arrow::schema({field});
+    auto batch = arrow::RecordBatch::Make(
+        schema, static_cast<std::int64_t>(nrows), {array}
+    );
+    return batch_to_ipc(schema, batch);
+}
+
+std::shared_ptr<std::string>
+table_to_arrow_ipc(const t_data_table& table) {
+    const auto nrows = table.size();
+    const auto& names = table.get_schema().columns();
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow::Array>> arrays;
+    fields.reserve(names.size());
+    arrays.reserve(names.size());
+    for (const auto& name : names) {
+        std::shared_ptr<arrow::Field> field;
+        std::shared_ptr<arrow::Array> array;
+        column_to_arrow(*table.get_const_column(name), name, nrows, field, array);
+        fields.push_back(field);
+        arrays.push_back(array);
+    }
+
+    auto schema = arrow::schema(fields);
+    auto batch = arrow::RecordBatch::Make(
+        schema, static_cast<std::int64_t>(nrows), arrays
+    );
+    return batch_to_ipc(schema, batch);
 }
 
 } // namespace perspective::apachearrow

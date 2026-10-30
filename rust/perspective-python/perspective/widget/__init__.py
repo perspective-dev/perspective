@@ -152,8 +152,8 @@ class PerspectiveWidget(anywidget.AnyWidget, PerspectiveViewer):
 
         # Keyword Arguments
 
-        -   `index` (`str`): A column name to be used as the primary key.
-            Ignored if `server` is True.
+        -   `index` (`str`|`list[str]`): A column name, or a list of column
+            names, to be used as the primary key. Ignored if `server` is True.
         -   `binding_mode` (`str`): "client-server" or "server"
         -   `limit` (`int`): A upper limit on the number of rows in the Table.
             Cannot be set at the same time as `index`, ignored if `server`

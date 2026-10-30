@@ -45,6 +45,21 @@ test.describe("WebSocketManager", function () {
         await table.delete();
     });
 
+    test("reports a composite index through `open_table`", async () => {
+        const data = [{ x: 1, y: "a" }];
+        const table = await perspective.table(data, {
+            name: "composite",
+            index: ["x", "y"],
+        });
+
+        const client = await perspective.websocket(`ws://localhost:${port}`);
+        const client_table = await client.open_table("composite");
+        expect(await client_table.get_index()).toEqual(["x", "y"]);
+        await client.terminate();
+        await new Promise((x) => setTimeout(x, 10));
+        await table.delete();
+    });
+
     test("Throws an exception when the server is detached", async () => {
         const data = [{ x: 1 }];
         const _table = await perspective.table(data, { name: "test2" });

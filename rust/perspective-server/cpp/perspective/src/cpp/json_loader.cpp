@@ -700,12 +700,13 @@ void
 JsonLoader::init(
     std::string_view data,
     t_json_format format,
-    const std::string& index,
+    const std::vector<std::string>& index,
     const t_schema* existing,
     t_list_flatten mode
 ) {
     m_format = format;
     m_mode = mode;
+    m_index = index;
     if (format == JSON_FORMAT_NDJSON) {
         m_stream = rapidjson::StringStream(data.data());
         m_document.ParseStream<rapidjson::kParseStopWhenDoneFlag>(m_stream);
@@ -749,6 +750,15 @@ JsonLoader::init(
         m_names = existing->columns();
         m_types = existing->types();
         m_is_implicit = index.empty();
+        if (index.size() > 1) {
+            m_codec.emplace(t_pkey_codec::from_schema(*existing, index));
+            t_schema scratch_schema(index, m_codec->dtypes());
+            m_index_scratch = std::make_unique<t_data_table>(scratch_schema);
+            m_index_scratch->init();
+            m_index_scratch->extend(1);
+            m_index_seen.assign(index.size(), false);
+        }
+
         return;
     }
 
@@ -777,15 +787,17 @@ JsonLoader::init(
 }
 
 std::optional<std::string>
-JsonLoader::repeated_index(const std::string& index) const {
+JsonLoader::repeated_index(const std::vector<std::string>& index) const {
     if (!m_expands) {
         return std::nullopt;
     }
 
     // An index this payload does not carry cannot be established as
     // per-element, so it is treated as repeated.
-    if (!index.empty() && m_per_element.count(index) == 0) {
-        return index;
+    for (const auto& name : index) {
+        if (m_per_element.count(name) == 0) {
+            return name;
+        }
     }
 
     const std::string implicit{"__INDEX__"};
@@ -802,7 +814,7 @@ JsonLoader::repeated_index(const std::string& index) const {
 std::uint32_t
 JsonLoader::fill_table(
     t_data_table& tbl,
-    const std::string& index,
+    const std::vector<std::string>& index,
     std::uint32_t offset,
     bool is_update
 ) {
@@ -830,7 +842,7 @@ JsonLoader::fill_table(
 static void
 infer_record(
     const rapidjson::Value& record,
-    const std::string& index,
+    const std::vector<std::string>& index,
     std::set<std::string>& seen,
     std::set<std::string>& known,
     std::vector<std::string>& names,
@@ -863,7 +875,7 @@ infer_record(
     for (const auto& col : record.GetObj()) {
         path.assign(col.name.GetString());
         for_each_leaf(path, col.value, mode, [&](const auto& name, const auto& leaf, bool) {
-            if (name == index) {
+            if (std::find(index.begin(), index.end(), name) != index.end()) {
                 is_implicit = false;
             }
 
@@ -930,7 +942,7 @@ JsonLoader::resolve_column(
 }
 
 void
-JsonLoader::infer_rows(const std::string& index) {
+JsonLoader::infer_rows(const std::vector<std::string>& index) {
     std::set<std::string> seen;
     std::set<std::string> known;
     std::set<std::string> literal;
@@ -962,7 +974,7 @@ JsonLoader::infer_rows(const std::string& index) {
 }
 
 void
-JsonLoader::infer_ndjson(const std::string& index) {
+JsonLoader::infer_ndjson(const std::vector<std::string>& index) {
     // Only the first record is available without consuming the stream; later
     // records grow the schema during the fill instead.
     std::set<std::string> seen;
@@ -988,7 +1000,7 @@ JsonLoader::infer_ndjson(const std::string& index) {
 }
 
 void
-JsonLoader::infer_cols(const std::string& index) {
+JsonLoader::infer_cols(const std::vector<std::string>& index) {
     // https://github.com/Tencent/rapidjson/issues/1994
     for (const auto& it : m_document.GetObj()) {
         if (!it.value.IsArray()) {
@@ -999,7 +1011,8 @@ JsonLoader::infer_cols(const std::string& index) {
             PSP_COMPLAIN_AND_ABORT("Can't create table from empty columns")
         }
 
-        if (it.name.GetString() == index) {
+        if (std::find(index.begin(), index.end(), it.name.GetString())
+            != index.end()) {
             m_is_implicit = false;
         }
 
@@ -1094,10 +1107,146 @@ fill_cell(
     fill_column_json(tbl.get_column(name), ii, cell, is_update);
 }
 
+bool
+JsonLoader::is_single_index(std::string_view name) const {
+    return m_index.size() == 1 && m_index[0] == name;
+}
+
+void
+JsonLoader::begin_row() {
+    m_row_has_pkey = false;
+    std::fill(m_index_seen.begin(), m_index_seen.end(), false);
+}
+
+void
+JsonLoader::note_column(std::string_view name) {
+    if (!m_codec) {
+        return;
+    }
+
+    for (std::size_t i = 0; i < m_index.size(); ++i) {
+        if (m_index[i] == name) {
+            m_index_seen[i] = true;
+            return;
+        }
+    }
+}
+
+void
+JsonLoader::fill_pkey_cell(
+    t_data_table& tbl,
+    const std::shared_ptr<t_column>& pkey_col,
+    t_uindex ii,
+    const rapidjson::Value& cell,
+    bool is_update
+) {
+    if (!m_codec) {
+        fill_cell(tbl, pkey_col, "psp_pkey", ii, cell, is_update);
+        return;
+    }
+
+    if (!cell.IsArray() || cell.Size() != m_index.size()) {
+        std::stringstream ss;
+        ss << "`__INDEX__` for a composite index must be an array of "
+           << m_index.size() << " values at index " << ii << std::endl;
+        PSP_COMPLAIN_AND_ABORT(ss.str());
+    }
+
+    std::vector<t_tscalar> key;
+    key.reserve(m_index.size());
+    for (std::size_t i = 0; i < m_index.size(); ++i) {
+        auto col = m_index_scratch->get_column(m_index[i]);
+        auto promote = fill_column_json(col, 0, cell[i], true);
+        if (promote) {
+            std::stringstream ss;
+            ss << "Cannot append value of type " << dtype_to_str(*promote)
+               << " to column \"" << m_index[i] << "\" of type "
+               << dtype_to_str(col->get_dtype()) << " at index " << ii
+               << std::endl;
+            PSP_COMPLAIN_AND_ABORT(ss.str());
+        }
+
+        key.push_back(col->get_scalar(0));
+    }
+
+    std::string buf;
+    m_codec->encode(key, buf);
+    pkey_col->set_nth<const char*>(ii, buf.c_str());
+    m_row_has_pkey = true;
+}
+
+void
+JsonLoader::finish_row(
+    t_data_table& tbl, const std::shared_ptr<t_column>& pkey_col, t_uindex ii
+) {
+    if (!m_codec || m_row_has_pkey) {
+        return;
+    }
+
+    for (std::size_t i = 0; i < m_index.size(); ++i) {
+        if (!m_index_seen[i]) {
+            std::stringstream ss;
+            ss << "Update is missing index column `" << m_index[i] << "`\n";
+            PSP_COMPLAIN_AND_ABORT(ss.str());
+        }
+    }
+
+    if (m_index_cols.empty()) {
+        for (const auto& name : m_index) {
+            m_index_cols.push_back(tbl.get_column(name));
+        }
+    }
+
+    std::vector<const t_column*> cols;
+    cols.reserve(m_index_cols.size());
+    for (const auto& col : m_index_cols) {
+        cols.push_back(col.get());
+    }
+
+    std::string buf;
+    m_codec->encode(cols, ii, buf);
+    pkey_col->set_nth<const char*>(ii, buf.c_str());
+}
+
+void
+JsonLoader::finish_cols(
+    t_data_table& tbl,
+    const std::shared_ptr<t_column>& pkey_col,
+    t_uindex nrows,
+    bool has_index_member,
+    const std::vector<std::string>& col_names
+) {
+    if (!m_codec || has_index_member) {
+        return;
+    }
+
+    for (const auto& name : m_index) {
+        if (std::find(col_names.begin(), col_names.end(), name)
+            == col_names.end()) {
+            std::stringstream ss;
+            ss << "Update is missing index column `" << name << "`\n";
+            PSP_COMPLAIN_AND_ABORT(ss.str());
+        }
+    }
+
+    std::vector<std::shared_ptr<t_column>> owned;
+    std::vector<const t_column*> cols;
+    for (const auto& name : m_index) {
+        owned.push_back(tbl.get_column(name));
+        cols.push_back(owned.back().get());
+    }
+
+    std::string buf;
+    for (t_uindex ridx = 0; ridx < nrows; ++ridx) {
+        m_codec->encode(cols, ridx, buf);
+        pkey_col->set_nth<const char*>(ridx, buf.c_str());
+    }
+}
+
 std::uint32_t
 JsonLoader::fill_rows(
     t_data_table& tbl,
-    const std::string& index,
+    const std::vector<std::string>& index,
     std::uint32_t offset,
     bool is_update
 ) {
@@ -1112,6 +1261,7 @@ JsonLoader::fill_rows(
     t_uindex ii = 0;
     for (const auto& row : m_document.GetArray()) {
         bool nested = false;
+        begin_row();
         if (m_is_implicit && is_update) {
             psp_pkey_col->set_nth<std::uint32_t>(ii, (ii + offset));
         }
@@ -1124,10 +1274,7 @@ JsonLoader::fill_rows(
 
             const auto name = key_name(it.name);
             if (is_update && name == "__INDEX__") {
-                fill_cell(
-                    tbl, psp_pkey_col, "psp_pkey", ii, it.value, is_update
-                );
-
+                fill_pkey_cell(tbl, psp_pkey_col, ii, it.value, is_update);
                 continue;
             }
 
@@ -1137,7 +1284,8 @@ JsonLoader::fill_rows(
             }
 
             fill_cell(tbl, col, name, ii, it.value, is_update);
-            if (!m_is_implicit && index == name) {
+            note_column(name);
+            if (is_single_index(name)) {
                 fill_column_json(psp_pkey_col, ii, it.value, is_update);
                 if (psp_okey_col) {
                     fill_column_json(psp_okey_col, ii, it.value, is_update);
@@ -1151,6 +1299,7 @@ JsonLoader::fill_rows(
                 psp_okey_col->set_nth<std::int32_t>(ii, ii);
             }
 
+            finish_row(tbl, psp_pkey_col, ii);
             ii++;
             continue;
         }
@@ -1168,6 +1317,7 @@ JsonLoader::fill_rows(
         }
 
         for (t_uindex k = 0; k < width; ++k) {
+        begin_row();
         if (m_is_implicit && is_update) {
             psp_pkey_col->set_nth<std::uint32_t>(ii, (ii + offset));
         }
@@ -1180,10 +1330,7 @@ JsonLoader::fill_rows(
             const auto sub = child_slot(k, child_width, stride, m_mode);
             if (is_update
                 && std::string_view{it.name.GetString()} == "__INDEX__") {
-                fill_cell(
-                    tbl, psp_pkey_col, "psp_pkey", ii, it.value, is_update
-                );
-
+                fill_pkey_cell(tbl, psp_pkey_col, ii, it.value, is_update);
                 continue;
             }
 
@@ -1201,7 +1348,8 @@ JsonLoader::fill_rows(
                     }
 
                     fill_cell(tbl, col, name, ii, v, is_update);
-                    if (!m_is_implicit && index == name) {
+                    note_column(name);
+                    if (is_single_index(name)) {
                         fill_column_json(psp_pkey_col, ii, v, is_update);
                         if (psp_okey_col) {
                             fill_column_json(psp_okey_col, ii, v, is_update);
@@ -1216,6 +1364,7 @@ JsonLoader::fill_rows(
             psp_okey_col->set_nth<std::int32_t>(ii, ii);
         }
 
+        finish_row(tbl, psp_pkey_col, ii);
         ii++;
         }
     }
@@ -1226,7 +1375,7 @@ JsonLoader::fill_rows(
 std::uint32_t
 JsonLoader::fill_cols(
     t_data_table& tbl,
-    const std::string& index,
+    const std::vector<std::string>& index,
     std::uint32_t offset,
     bool is_update
 ) {
@@ -1260,6 +1409,8 @@ JsonLoader::fill_cols(
     const auto psp_okey_col = is_update ? nullptr : tbl.get_column("psp_okey");
     const bool implicit_pkey_from_offset = m_is_implicit && is_update
         && !m_document.GetObj().HasMember("__INDEX__");
+    const bool has_index_member =
+        is_update && m_document.GetObj().HasMember("__INDEX__");
 
     tbl.extend(nrows);
     bool expands = false;
@@ -1279,7 +1430,7 @@ JsonLoader::fill_cols(
             }
 
             if (is_pkey_column[c]) {
-                fill_cell(tbl, psp_pkey_col, "psp_pkey", r, cell, is_update);
+                fill_pkey_cell(tbl, psp_pkey_col, r, cell, is_update);
                 continue;
             }
 
@@ -1289,7 +1440,7 @@ JsonLoader::fill_cols(
             }
 
             fill_cell(tbl, col, col_names[c], r, cell, is_update);
-            if (!m_is_implicit && index == col_names[c]) {
+            if (is_single_index(col_names[c])) {
                 fill_column_json(psp_pkey_col, r, cell, is_update);
                 if (psp_okey_col) {
                     fill_column_json(psp_okey_col, r, cell, is_update);
@@ -1306,6 +1457,7 @@ JsonLoader::fill_cols(
             }
         }
 
+        finish_cols(tbl, psp_pkey_col, nrows, has_index_member, col_names);
         return nrows;
     }
 
@@ -1370,10 +1522,7 @@ JsonLoader::fill_cols(
             for (t_uindex k = 0; k < row_width[r]; ++k) {
                 const auto ii = row_start[r] + k;
                 if (is_pkey_column[c]) {
-                    fill_cell(
-                        tbl, psp_pkey_col, "psp_pkey", ii, cell, is_update
-                    );
-
+                    fill_pkey_cell(tbl, psp_pkey_col, ii, cell, is_update);
                     continue;
                 }
 
@@ -1403,7 +1552,8 @@ JsonLoader::fill_cols(
                         }
 
                         fill_cell(tbl, col, name, ii, v, is_update);
-                        if (!m_is_implicit && index == name) {
+                        note_column(name);
+                        if (is_single_index(name)) {
                             fill_column_json(psp_pkey_col, ii, v, is_update);
                             if (psp_okey_col) {
                                 fill_column_json(
@@ -1424,13 +1574,14 @@ JsonLoader::fill_cols(
         }
     }
 
+    finish_cols(tbl, psp_pkey_col, size, has_index_member, col_names);
     return size;
 }
 
 std::uint32_t
 JsonLoader::fill_ndjson(
     t_data_table& tbl,
-    const std::string& index,
+    const std::vector<std::string>& index,
     std::uint32_t offset,
     bool is_update
 ) {
@@ -1451,6 +1602,7 @@ JsonLoader::fill_ndjson(
 
         if (!nested) {
             tbl.extend(ii + 1);
+            begin_row();
             if (m_is_implicit && is_update) {
                 psp_pkey_col->set_nth<std::uint32_t>(ii, (ii + offset));
             }
@@ -1458,10 +1610,7 @@ JsonLoader::fill_ndjson(
             for (const auto& it : m_document.GetObj()) {
                 const auto name = key_name(it.name);
                 if (is_update && name == "__INDEX__") {
-                    fill_cell(
-                        tbl, psp_pkey_col, "psp_pkey", ii, it.value, is_update
-                    );
-
+                    fill_pkey_cell(tbl, psp_pkey_col, ii, it.value, is_update);
                     continue;
                 }
 
@@ -1471,7 +1620,8 @@ JsonLoader::fill_ndjson(
                 }
 
                 fill_cell(tbl, col, name, ii, it.value, is_update);
-                if (!m_is_implicit && index == name) {
+                note_column(name);
+                if (is_single_index(name)) {
                     fill_column_json(psp_pkey_col, ii, it.value, is_update);
                     if (psp_okey_col) {
                         fill_column_json(psp_okey_col, ii, it.value, is_update);
@@ -1484,6 +1634,7 @@ JsonLoader::fill_ndjson(
                 psp_okey_col->set_nth<std::int32_t>(ii, ii);
             }
 
+            finish_row(tbl, psp_pkey_col, ii);
             ii++;
             m_document.ParseStream<rapidjson::kParseStopWhenDoneFlag>(m_stream);
             if (m_document.HasParseError()) {
@@ -1503,6 +1654,7 @@ JsonLoader::fill_ndjson(
         }
 
         for (t_uindex k = 0; k < width; ++k) {
+        begin_row();
         if (m_is_implicit && is_update) {
             psp_pkey_col->set_nth<std::uint32_t>(ii, (ii + offset));
         }
@@ -1515,10 +1667,7 @@ JsonLoader::fill_ndjson(
             const auto sub = child_slot(k, child_width, stride, m_mode);
             if (is_update
                 && std::string_view{it.name.GetString()} == "__INDEX__") {
-                fill_cell(
-                    tbl, psp_pkey_col, "psp_pkey", ii, it.value, is_update
-                );
-
+                fill_pkey_cell(tbl, psp_pkey_col, ii, it.value, is_update);
                 continue;
             }
 
@@ -1536,7 +1685,8 @@ JsonLoader::fill_ndjson(
                 }
 
                 fill_cell(tbl, col, name, ii, v, is_update);
-                if (!m_is_implicit && index == name) {
+                note_column(name);
+                if (is_single_index(name)) {
                     fill_column_json(psp_pkey_col, ii, v, is_update);
                     if (psp_okey_col) {
                         fill_column_json(psp_okey_col, ii, v, is_update);
@@ -1551,6 +1701,7 @@ JsonLoader::fill_ndjson(
             psp_okey_col->set_nth<std::int32_t>(ii, ii);
         }
 
+        finish_row(tbl, psp_pkey_col, ii);
         ii++;
         }
 

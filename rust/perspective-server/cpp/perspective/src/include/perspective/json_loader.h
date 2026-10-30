@@ -21,6 +21,7 @@
 #include <rapidjson/document.h>
 #include <perspective/schema.h>
 #include <perspective/data_table.h>
+#include <perspective/pkey_codec.h>
 #include <memory>
 #include <optional>
 #include <set>
@@ -60,7 +61,7 @@ namespace json {
         void init(
             std::string_view data,
             t_json_format format,
-            const std::string& index,
+            const std::vector<std::string>& index,
             const t_schema* existing,
             t_list_flatten mode
         );
@@ -72,14 +73,14 @@ namespace json {
 
         bool empty() const;
 
-        std::optional<std::string> repeated_index(const std::string& index
-        ) const;
+        std::optional<std::string>
+        repeated_index(const std::vector<std::string>& index) const;
 
         void release();
 
         std::uint32_t fill_table(
             t_data_table& tbl,
-            const std::string& index,
+            const std::vector<std::string>& index,
             std::uint32_t offset,
             bool is_update
         );
@@ -92,16 +93,42 @@ namespace json {
             bool is_update
         );
 
-        void infer_rows(const std::string& index);
-        void infer_cols(const std::string& index);
-        void infer_ndjson(const std::string& index);
+        void infer_rows(const std::vector<std::string>& index);
+        void infer_cols(const std::vector<std::string>& index);
+        void infer_ndjson(const std::vector<std::string>& index);
 
-        std::uint32_t
-        fill_rows(t_data_table&, const std::string&, std::uint32_t, bool);
-        std::uint32_t
-        fill_cols(t_data_table&, const std::string&, std::uint32_t, bool);
-        std::uint32_t
-        fill_ndjson(t_data_table&, const std::string&, std::uint32_t, bool);
+        std::uint32_t fill_rows(
+            t_data_table&, const std::vector<std::string>&, std::uint32_t, bool
+        );
+        std::uint32_t fill_cols(
+            t_data_table&, const std::vector<std::string>&, std::uint32_t, bool
+        );
+        std::uint32_t fill_ndjson(
+            t_data_table&, const std::vector<std::string>&, std::uint32_t, bool
+        );
+
+        bool is_single_index(std::string_view name) const;
+        void begin_row();
+        void note_column(std::string_view name);
+        void fill_pkey_cell(
+            t_data_table& tbl,
+            const std::shared_ptr<t_column>& pkey_col,
+            t_uindex ii,
+            const rapidjson::Value& cell,
+            bool is_update
+        );
+        void finish_row(
+            t_data_table& tbl,
+            const std::shared_ptr<t_column>& pkey_col,
+            t_uindex ii
+        );
+        void finish_cols(
+            t_data_table& tbl,
+            const std::shared_ptr<t_column>& pkey_col,
+            t_uindex nrows,
+            bool has_index_member,
+            const std::vector<std::string>& col_names
+        );
 
         rapidjson::Document m_document;
         rapidjson::StringStream m_stream{nullptr};
@@ -115,6 +142,13 @@ namespace json {
         bool m_expands{false};
         bool m_is_implicit{true};
         bool m_empty{false};
+
+        std::vector<std::string> m_index;
+        std::optional<t_pkey_codec> m_codec;
+        std::unique_ptr<t_data_table> m_index_scratch;
+        std::vector<std::shared_ptr<t_column>> m_index_cols;
+        std::vector<bool> m_index_seen;
+        bool m_row_has_pkey{false};
     };
 
 } // namespace json

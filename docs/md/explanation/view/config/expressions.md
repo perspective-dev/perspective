@@ -166,7 +166,7 @@ to the nearest multiple of 10.
 | `max(a, b, ...)`          | Maximum of inputs                                     |
 | `random()`                | Random float between 0.0 and 1.0                      |
 | `col(name)`               | Look up a column by string name at runtime            |
-| `vlookup(col, key)`       | Look up a value in another column by row key          |
+| `vlookup(col, key, ...)`  | Look up a value in another column by row key, one key argument per `index` column |
 
 ## See also
 

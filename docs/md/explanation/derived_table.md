@@ -58,8 +58,8 @@ let totals = client.table(TableData::View(view), TableInitOptions::default()).aw
 
 An unpivoted `View` yields a `Table` with the `View`'s own columns, including
 `expressions` and window columns, and one row for every row passing its
-`filter`. The source's `index` is inherited when the index column is among the
-`View`'s `columns`, and its `limit` is inherited as well.
+`filter`. The source's `index` is inherited when every index column is among
+the `View`'s `columns`, and its `limit` is inherited as well.
 
 A pivoted `View` yields the table you see on screen. Each `group_by` column
 becomes a typed key column of the same name, and each data column takes the name
@@ -346,7 +346,7 @@ changes several behaviors for code written against the old implementation:
 - A row updated out of the source `View`'s `filter` is removed, where the copy
   retained it with stale values.
 - Updates arrive in the same cycle as the source rather than eventually.
-- A `View` which omits its source's index column is keyed by row identity, so
-  updates apply in place rather than appending.
+- A `View` which omits any of its source's index columns is keyed by row
+  identity, so updates apply in place rather than appending.
 - A pivoted `View` yields named key columns and only the rows the `View`
   displays, where the copy appended its changed rows on every update.

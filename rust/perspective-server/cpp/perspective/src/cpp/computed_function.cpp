@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 #include <perspective/computed_function.h>
+#include <perspective/pkey_codec.h>
 #include <perspective/gnode_state.h>
 #include <perspective/column.h>
 #include <cmath>
@@ -2290,12 +2291,14 @@ col::operator()(t_parameter_list parameters) {
 vlookup::vlookup(
     t_expression_vocab& expression_vocab,
     bool is_type_validator,
+    const t_pkey_mapping& pkey_map,
     const std::shared_ptr<t_data_table>& source_table,
     t_uindex& row_idx
 ) :
-    exprtk::igeneric_function<t_tscalar>("TT"),
+    exprtk::igeneric_function<t_tscalar>("TT*"),
     m_expression_vocab(expression_vocab),
     m_is_type_validator(is_type_validator),
+    m_pkey_map(pkey_map),
     m_source_table(source_table),
     m_row_idx(row_idx) {}
 vlookup::~vlookup() = default;
@@ -2311,19 +2314,50 @@ vlookup::operator()(t_parameter_list parameters) {
 
     column_name.set(column_gt_view());
     t_dtype column_name_dtype = column_name.get_dtype();
-
-    t_generic_type& index_gt = parameters[1];
-    t_scalar_view index_gt_view(index_gt);
-    t_tscalar index;
-
-    index.set(index_gt_view());
-
-    auto pkey_col = m_source_table->get_const_column("psp_pkey");
-
-    if (column_name_dtype != DTYPE_STR
-        || index.get_dtype() != pkey_col->get_dtype()) {
+    if (column_name_dtype != DTYPE_STR) {
         rval.m_status = STATUS_CLEAR;
         return rval;
+    }
+
+    auto pkey_col = m_source_table->get_const_column("psp_pkey");
+    const auto& codec = m_source_table->get_pkey_codec();
+    t_tscalar index;
+    std::string encoded;
+    if (codec) {
+        if (parameters.size() != 1 + codec->arity()) {
+            rval.m_status = STATUS_CLEAR;
+            return rval;
+        }
+
+        std::vector<t_tscalar> key;
+        key.reserve(codec->arity());
+        for (std::size_t i = 0; i < codec->arity(); ++i) {
+            t_scalar_view key_view(parameters[i + 1]);
+            t_tscalar part;
+            part.set(key_view());
+            const bool want_str = codec->dtypes()[i] == DTYPE_STR;
+            if (part.is_valid() && want_str != (part.get_dtype() == DTYPE_STR)) {
+                rval.m_status = STATUS_CLEAR;
+                return rval;
+            }
+
+            key.push_back(part);
+        }
+
+        codec->encode(key, encoded);
+        index.set(encoded.c_str());
+    } else {
+        if (parameters.size() != 2) {
+            rval.m_status = STATUS_CLEAR;
+            return rval;
+        }
+
+        t_scalar_view index_gt_view(parameters[1]);
+        index.set(index_gt_view());
+        if (index.get_dtype() != pkey_col->get_dtype()) {
+            rval.m_status = STATUS_CLEAR;
+            return rval;
+        }
     }
 
     if (!column_name.is_valid()) {
@@ -2339,6 +2373,16 @@ vlookup::operator()(t_parameter_list parameters) {
 
     if (m_is_type_validator) {
         rval.m_status = STATUS_VALID;
+        rval.m_type = col->get_dtype();
+        return rval;
+    }
+
+    if (codec) {
+        const auto it = m_pkey_map.find(index);
+        if (it != m_pkey_map.end()) {
+            rval.set(col->get_scalar(it->second));
+        }
+
         rval.m_type = col->get_dtype();
         return rval;
     }

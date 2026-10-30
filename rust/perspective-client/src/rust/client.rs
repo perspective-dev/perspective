@@ -29,7 +29,7 @@ use crate::proto::{
     HostedTable, JoinType, MakeJoinTableReq, MakeTableReq, RemoveHostedTablesUpdateReq, Request,
     Response, ServerError, ServerSystemInfoReq,
 };
-use crate::table::{JoinOptions, Table, TableInitOptions, TableOptions, ViewBinding};
+use crate::table::{JoinOptions, Table, TableIndex, TableInitOptions, TableOptions, ViewBinding};
 use crate::table_data::{TableData, UpdateData};
 use crate::table_ref::TableRef;
 use crate::utils::*;
@@ -576,6 +576,11 @@ impl Client {
     /// # Ok(()) }
     /// ```
     pub async fn table(&self, input: TableData, options: TableInitOptions) -> ClientResult<Table> {
+        let mut options = options;
+        if let Some(index) = options.index.take() {
+            options.index = Some(index.normalize()?);
+        }
+
         let entity_id = match options.name.clone() {
             Some(x) => x.to_owned(),
             None => randid(),
@@ -588,7 +593,11 @@ impl Client {
             if let (None, Some(index)) = (&options.index, &source_index) {
                 let config = view.get_config().await?;
                 let is_flat = config.group_by.is_empty() && config.split_by.is_empty();
-                let has_index = config.columns.iter().flatten().any(|x| x == index);
+                let has_index = index
+                    .columns()
+                    .iter()
+                    .all(|column| config.columns.iter().flatten().any(|x| x == column));
+
                 if is_flat && has_index {
                     options.index = Some(index.clone());
                 }
@@ -713,7 +722,7 @@ impl Client {
         let client = self.clone();
         match self.oneshot(&msg).await? {
             ClientResp::MakeJoinTableResp(_) => Ok(Table::new(entity_id, client, TableOptions {
-                index: Some(on.to_owned()),
+                index: Some(TableIndex::Column(on.to_owned())),
                 limit: None,
                 page_to_disk: None,
                 list_flatten: None,
@@ -760,7 +769,7 @@ impl Client {
         // TODO fix this - name is repeated 2x
         if let Some(info) = infos.into_iter().find(|i| i.entity_id == entity_id) {
             let options = TableOptions {
-                index: info.index,
+                index: TableIndex::from_columns(info.index),
                 limit: info.limit,
                 page_to_disk: None,
                 list_flatten: None,

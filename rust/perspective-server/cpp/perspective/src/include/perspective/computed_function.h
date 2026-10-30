@@ -232,6 +232,7 @@ namespace computed_function {
         vlookup(
             t_expression_vocab& expression_vocab,
             bool is_type_validator,
+            const t_pkey_mapping& pkey_map,
             const std::shared_ptr<t_data_table>& source_table,
             t_uindex& row_idx
         );
@@ -241,6 +242,7 @@ namespace computed_function {
     private:
         t_expression_vocab& m_expression_vocab;
         bool m_is_type_validator;
+        const t_pkey_mapping& m_pkey_map;
         const std::shared_ptr<t_data_table>& m_source_table;
         t_uindex& m_row_idx;
     };

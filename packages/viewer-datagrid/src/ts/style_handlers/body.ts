@@ -103,6 +103,14 @@ interface StyleMemo {
     value: unknown;
 }
 
+function same_key(a: unknown, b: unknown): boolean {
+    if (Array.isArray(a) && Array.isArray(b)) {
+        return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+
+    return a === b;
+}
+
 function row_header_depth(row_header: unknown[] | undefined): number {
     if (!row_header) {
         return 0;
@@ -302,7 +310,7 @@ export function applyBodyCellStyles(
             const id = model._ids[(metadata.y ?? 0) - (metadata.y0 ?? 0)];
             let key_match = true;
             for (let i = 0; i < selectedId.length; i++) {
-                if (selectedId[i] !== id[i]) {
+                if (!same_key(selectedId[i], id[i])) {
                     key_match = false;
                     break;
                 }

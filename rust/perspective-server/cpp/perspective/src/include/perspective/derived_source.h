@@ -12,6 +12,7 @@
 
 #pragma once
 #include <perspective/first.h>
+#include <perspective/pkey_codec.h>
 #include <perspective/base.h>
 #include <perspective/exports.h>
 #include <perspective/scalar.h>
@@ -67,7 +68,12 @@ public:
 
     virtual t_dtype pkey_dtype() const = 0;
 
-    virtual std::string index() const;
+    virtual std::vector<std::string> index() const;
+
+    /**
+     * @brief The parent's composite key codec, or null.
+     */
+    virtual std::shared_ptr<const t_pkey_codec> pkey_codec() const;
 
     virtual std::uint32_t limit() const;
 

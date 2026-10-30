@@ -87,7 +87,7 @@ const TS_VIRTUAL_SERVER_HANDLER: &'static str = r#"
  */
 export interface VirtualHostedTable {
     name: string;
-    index?: string;
+    index?: string | string[];
     limit?: number;
 }
 
@@ -326,7 +326,7 @@ impl VirtualServerHandler for JsServerHandler {
                 if let Some(s) = item.as_string() {
                     tables.push(HostedTable {
                         entity_id: s,
-                        index: None,
+                        index: Vec::new(),
                         limit: None,
                     });
                 } else if item.is_object() {
@@ -335,7 +335,19 @@ impl VirtualServerHandler for JsServerHandler {
                         .ok_or_else(|| JsError(JsValue::from_str("name must be a string")))?;
                     let index = Reflect::get(&item, &JsValue::from_str("index"))
                         .ok()
-                        .and_then(|v| v.as_string());
+                        .map(|v| {
+                            if let Some(s) = v.as_string() {
+                                vec![s]
+                            } else if Array::is_array(&v) {
+                                Array::from(&v)
+                                    .iter()
+                                    .filter_map(|x| x.as_string())
+                                    .collect()
+                            } else {
+                                Vec::new()
+                            }
+                        })
+                        .unwrap_or_default();
                     let limit = Reflect::get(&item, &JsValue::from_str("limit"))
                         .ok()
                         .and_then(|v| v.as_f64().map(|x| x as u32));

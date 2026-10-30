@@ -55,6 +55,7 @@ View<CTX_T>::View(
     m_name(std::move(name)),
     m_separator(std::move(separator)),
     m_view_config(std::move(std::move(view_config))) {
+    m_pkey_codec = m_table->get_pkey_codec();
     m_row_pivots = m_view_config->get_row_pivots();
     m_column_pivots = m_view_config->get_column_pivots();
     m_aggregates = m_view_config->get_aggspecs();
@@ -1857,7 +1858,7 @@ View<CTX_T>::write_row_path(
             // Question: Why are the row paths reversed?
             for (auto entry = row_path.size(); entry > 0; entry--) {
                 const t_tscalar& scalar = row_path[entry - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_id_entry(scalar, is_formatted, writer);
             }
 
             writer.EndArray();
@@ -1907,6 +1908,43 @@ View<CTX_T>::write_column(
 
 template <typename CTX_T>
 void
+View<CTX_T>::write_pkey(
+    const t_tscalar& scalar,
+    bool is_formatted,
+    rapidjson::Writer<rapidjson::StringBuffer>& writer
+) const {
+    if (!m_pkey_codec || !scalar.is_valid()
+        || scalar.get_dtype() != DTYPE_STR) {
+        write_scalar(scalar, is_formatted, writer);
+        return;
+    }
+
+    std::vector<std::string> storage;
+    const auto values = m_pkey_codec->decode(scalar.get_char_ptr(), storage);
+    writer.StartArray();
+    for (const auto& value : values) {
+        write_scalar(value, is_formatted, writer);
+    }
+
+    writer.EndArray();
+}
+
+template <typename CTX_T>
+void
+View<CTX_T>::write_id_entry(
+    const t_tscalar& scalar,
+    bool is_formatted,
+    rapidjson::Writer<rapidjson::StringBuffer>& writer
+) const {
+    if (m_column_only) {
+        write_pkey(scalar, is_formatted, writer);
+    } else {
+        write_scalar(scalar, is_formatted, writer);
+    }
+}
+
+template <typename CTX_T>
+void
 View<CTX_T>::write_index_column(
     t_uindex start_row,
     t_uindex end_row,
@@ -1925,7 +1963,7 @@ View<CTX_T>::write_index_column(
         for (auto i = keys.size(); i > 0; --i) {
             auto scalar = keys[i - 1];
 
-            write_scalar(scalar, is_formatted, writer);
+            write_pkey(scalar, is_formatted, writer);
         }
 
         writer.EndArray();
@@ -1993,7 +2031,7 @@ View<T>::to_rows(
                 writer.Key("__ID__");
                 writer.StartArray();
                 if (!keys.empty()) {
-                    write_scalar(keys[0], is_formatted, writer);
+                    write_pkey(keys[0], is_formatted, writer);
                 }
                 writer.EndArray();
             }
@@ -2004,7 +2042,7 @@ View<T>::to_rows(
                 writer.StartArray();
                 for (auto i = keys.size(); i > 0; --i) {
                     auto scalar = keys[i - 1];
-                    write_scalar(scalar, is_formatted, writer);
+                    write_pkey(scalar, is_formatted, writer);
                 }
 
                 writer.EndArray();
@@ -2076,7 +2114,7 @@ View<t_ctx1>::to_rows(
         const auto row_path = get_row_path(r);
         for (auto entry = row_path.size(); entry > 0; entry--) {
             const t_tscalar& scalar = row_path[entry - 1];
-            write_scalar(scalar, is_formatted, writer);
+            write_id_entry(scalar, is_formatted, writer);
         }
 
         writer.EndArray();
@@ -2086,7 +2124,7 @@ View<t_ctx1>::to_rows(
             writer.StartArray();
             for (auto entry = row_path.size(); entry > 0; entry--) {
                 const t_tscalar& scalar = row_path[entry - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_id_entry(scalar, is_formatted, writer);
             }
 
             writer.EndArray();
@@ -2098,7 +2136,7 @@ View<t_ctx1>::to_rows(
             writer.StartArray();
             for (auto i = keys.size(); i > 0; --i) {
                 auto scalar = keys[i - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_pkey(scalar, is_formatted, writer);
             }
 
             writer.EndArray();
@@ -2170,7 +2208,7 @@ View<t_ctx2>::to_rows(
             writer.StartArray();
             for (auto entry = row_path.size(); entry > 0; entry--) {
                 const t_tscalar& scalar = row_path[entry - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_id_entry(scalar, is_formatted, writer);
             }
 
             writer.EndArray();
@@ -2181,7 +2219,7 @@ View<t_ctx2>::to_rows(
             writer.StartArray();
             for (auto entry = row_path.size(); entry > 0; entry--) {
                 const t_tscalar& scalar = row_path[entry - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_id_entry(scalar, is_formatted, writer);
             }
 
             writer.EndArray();
@@ -2193,7 +2231,7 @@ View<t_ctx2>::to_rows(
             writer.StartArray();
             for (auto i = keys.size(); i > 0; --i) {
                 auto scalar = keys[i - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_pkey(scalar, is_formatted, writer);
             }
 
             writer.EndArray();
@@ -2331,7 +2369,7 @@ View<T>::to_ndjson(
                 writer.Key("__ID__");
                 writer.StartArray();
                 if (!keys.empty()) {
-                    write_scalar(keys[0], is_formatted, writer);
+                    write_pkey(keys[0], is_formatted, writer);
                 }
                 writer.EndArray();
             }
@@ -2342,7 +2380,7 @@ View<T>::to_ndjson(
                 writer.StartArray();
                 for (auto i = keys.size(); i > 0; --i) {
                     auto scalar = keys[i - 1];
-                    write_scalar(scalar, is_formatted, writer);
+                    write_pkey(scalar, is_formatted, writer);
                 }
 
                 writer.EndArray();
@@ -2417,7 +2455,7 @@ View<t_ctx1>::to_ndjson(
         const auto row_path = get_row_path(r);
         for (auto entry = row_path.size(); entry > 0; entry--) {
             const t_tscalar& scalar = row_path[entry - 1];
-            write_scalar(scalar, is_formatted, writer);
+            write_id_entry(scalar, is_formatted, writer);
         }
 
         writer.EndArray();
@@ -2427,7 +2465,7 @@ View<t_ctx1>::to_ndjson(
             writer.StartArray();
             for (auto entry = row_path.size(); entry > 0; entry--) {
                 const t_tscalar& scalar = row_path[entry - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_id_entry(scalar, is_formatted, writer);
             }
 
             writer.EndArray();
@@ -2439,7 +2477,7 @@ View<t_ctx1>::to_ndjson(
             writer.StartArray();
             for (auto i = keys.size(); i > 0; --i) {
                 auto scalar = keys[i - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_pkey(scalar, is_formatted, writer);
             }
 
             writer.EndArray();
@@ -2515,7 +2553,7 @@ View<t_ctx2>::to_ndjson(
             writer.StartArray();
             for (auto entry = row_path.size(); entry > 0; entry--) {
                 const t_tscalar& scalar = row_path[entry - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_id_entry(scalar, is_formatted, writer);
             }
 
             writer.EndArray();
@@ -2526,7 +2564,7 @@ View<t_ctx2>::to_ndjson(
             writer.StartArray();
             for (auto entry = row_path.size(); entry > 0; entry--) {
                 const t_tscalar& scalar = row_path[entry - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_id_entry(scalar, is_formatted, writer);
             }
 
             writer.EndArray();
@@ -2538,7 +2576,7 @@ View<t_ctx2>::to_ndjson(
             writer.StartArray();
             for (auto i = keys.size(); i > 0; --i) {
                 auto scalar = keys[i - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_pkey(scalar, is_formatted, writer);
             }
 
             writer.EndArray();
@@ -2620,7 +2658,7 @@ View<T>::to_columns(
             const auto keys = m_ctx->get_pkeys(vec);
             writer.StartArray();
             if (!keys.empty()) {
-                write_scalar(keys[0], is_formatted, writer);
+                write_pkey(keys[0], is_formatted, writer);
             }
             writer.EndArray();
         }
@@ -2667,7 +2705,7 @@ View<t_ctx1>::to_columns(
             const auto row_path = m_ctx->get_row_path(r);
             for (auto entry = row_path.size(); entry > 0; entry--) {
                 const t_tscalar& scalar = row_path[entry - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_id_entry(scalar, is_formatted, writer);
             }
 
             writer.EndArray();
@@ -2741,7 +2779,7 @@ View<t_ctx2>::to_columns(
             const auto row_path = m_ctx->get_row_path(r);
             for (auto entry = row_path.size(); entry > 0; entry--) {
                 const t_tscalar& scalar = row_path[entry - 1];
-                write_scalar(scalar, is_formatted, writer);
+                write_id_entry(scalar, is_formatted, writer);
             }
 
             writer.EndArray();

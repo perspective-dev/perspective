@@ -257,12 +257,20 @@ void
 ArrowLoader::fill_table(
     t_data_table& tbl,
     const t_schema& input_schema,
-    const std::string& index,
+    const std::vector<std::string>& index,
     std::uint32_t offset,
     bool is_update
 ) {
     bool implicit_index = false;
     const auto& arrow_fields = fields();
+    if (index.size() > 1
+        && std::find(m_names.begin(), m_names.end(), "__INDEX__")
+            != m_names.end()) {
+        PSP_COMPLAIN_AND_ABORT(
+            "`__INDEX__` is not supported for a Table with a composite "
+            "index; include the index columns instead.\n"
+        );
+    }
 
     parallel_for(int(m_names.size()), [&](int cidx) {
         auto name = m_names[cidx];
@@ -304,16 +312,16 @@ ArrowLoader::fill_table(
                 key_col->set_nth<std::uint32_t>(ridx, (ridx + offset));
                 okey_col->set_nth<std::uint32_t>(ridx, (ridx + offset));
             }
-        } else {
-            if (!input_schema.has_column(index)) {
+        } else if (index.size() == 1) {
+            if (!input_schema.has_column(index[0])) {
                 std::stringstream ss;
-                ss << "Specified index `" << index
+                ss << "Specified index `" << index[0]
                    << "` is invalid as it does not appear in the Table.\n";
                 PSP_COMPLAIN_AND_ABORT(ss.str());
             }
 
-            tbl.clone_column(index, "psp_pkey");
-            tbl.clone_column(index, "psp_okey");
+            tbl.clone_column(index[0], "psp_pkey");
+            tbl.clone_column(index[0], "psp_okey");
         }
     }
 }
@@ -1129,7 +1137,7 @@ ArrowLoader::row_count() const {
 }
 
 std::optional<std::string>
-ArrowLoader::repeated_index(const std::string& index) const {
+ArrowLoader::repeated_index(const std::vector<std::string>& index) const {
     if (!m_expanded) {
         return std::nullopt;
     }
@@ -1140,8 +1148,10 @@ ArrowLoader::repeated_index(const std::string& index) const {
             && m_normalized->per_element[std::distance(m_names.begin(), it)];
     };
 
-    if (!index.empty() && !is_per_element(index)) {
-        return index;
+    for (const auto& name : index) {
+        if (!is_per_element(name)) {
+            return name;
+        }
     }
 
     const std::string implicit{"__INDEX__"};

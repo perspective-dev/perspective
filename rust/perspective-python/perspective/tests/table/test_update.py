@@ -14,7 +14,7 @@ import numpy as np
 import pyarrow as pa
 import pandas as pd
 from datetime import date, datetime
-from pytest import mark
+from pytest import mark, raises
 import perspective as psp
 
 client = psp.Server().new_local_client()
@@ -22,6 +22,39 @@ Table = client.table
 
 
 class TestUpdate(object):
+    def test_update_composite_index_in_place(self):
+        tbl = Table(
+            [
+                {"name": "AAPL", "sector": "Tech", "price": 1},
+                {"name": "MSFT", "sector": "Tech", "price": 2},
+            ],
+            index=["name", "sector"],
+        )
+        tbl.update([{"name": "AAPL", "sector": "Tech", "price": 10}])
+        tbl.update({"name": ["MSFT"], "sector": ["Hardware"], "price": [4]})
+        assert tbl.size() == 3
+        assert tbl.view().to_records() == [
+            {"name": "AAPL", "sector": "Tech", "price": 10},
+            {"name": "MSFT", "sector": "Hardware", "price": 4},
+            {"name": "MSFT", "sector": "Tech", "price": 2},
+        ]
+
+    def test_update_composite_index_by_index_array(self):
+        tbl = Table(
+            [{"name": "AAPL", "sector": "Tech", "price": 1}],
+            index=["name", "sector"],
+        )
+        tbl.update([{"__INDEX__": ["AAPL", "Tech"], "price": 7}])
+        assert tbl.view().to_records() == [{"name": "AAPL", "sector": "Tech", "price": 7}]
+
+    def test_update_composite_index_missing_column_raises(self):
+        tbl = Table(
+            [{"name": "AAPL", "sector": "Tech", "price": 1}],
+            index=["name", "sector"],
+        )
+        with raises(Exception, match="missing index column `sector`"):
+            tbl.update([{"name": "AAPL", "price": 7}])
+
     def test_update_with_missing_or_null_values(self):
         tbl = Table({"a": "string", "b": "string"}, index="a")
         tbl.update([{"a": "1", "b": "2"}, {"a": "3", "b": "4"}])

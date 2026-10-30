@@ -299,7 +299,7 @@ JoinEngine::make_join_table(
     }
 
     t_schema merged_schema(merged_columns, merged_types);
-    auto join_table = Table::from_schema("", merged_schema);
+    auto join_table = Table::from_schema({}, merged_schema);
     return {join_table, ""};
 }
 

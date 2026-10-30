@@ -358,9 +358,10 @@ impl Client {
     /// - `options` - Optional configuration which provides one of:
     ///     - `limit` - The max number of rows the resulting [`Table`] can
     ///       store.
-    ///     - `index` - The column name to use as an _index_ column. If this
-    ///       `Table` is being instantiated by _data_, this column name must be
-    ///       present in the data.
+    ///     - `index` - The column name, or an array of column names, to use as
+    ///       an _index_. If this `Table` is being instantiated by _data_, these
+    ///       column names must be present in the data. An array keys rows by
+    ///       the combination of the columns' values.
     ///     - `name` - The name of the table. This will be generated if it is
     ///       not provided.
     ///     - `format` - The explicit format of the input data, can be one of
@@ -397,6 +398,12 @@ impl Client {
     ///
     /// ```javascript
     /// const table = await client.table(data, { index: "Row ID" });
+    /// ```
+    ///
+    /// Create a table with a composite `index`:
+    ///
+    /// ```javascript
+    /// const table = await client.table(data, { index: ["name", "sector"] });
     /// ```
     #[wasm_bindgen]
     pub async fn table(

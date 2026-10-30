@@ -67,6 +67,14 @@ data.set_index("datetime")
 table = perspective.table(data, index="index")
 ```
 
+A `pandas.MultiIndex` arrives as one column per level, named after the level,
+so a composite `index` keyed by those columns preserves it:
+
+```python
+data = data.set_index(["name", "sector"])
+table = perspective.table(data, index=["name", "sector"])
+```
+
 ## Time Zone Handling
 
 When parsing `"datetime"` strings, times without an explicit timezone offset are

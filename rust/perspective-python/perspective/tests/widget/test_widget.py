@@ -73,6 +73,12 @@ class TestWidget:
         widget = PerspectiveWidget({"a": "integer"}, index="a")
         assert widget.table.get_index() == "a"
 
+    def test_widget_schema_with_composite_index(self):
+        widget = PerspectiveWidget({"a": "integer", "b": "string"}, index=["a", "b"])
+        assert widget.table.get_index() == ["a", "b"]
+        load_msg = widget._make_load_message()
+        assert load_msg.to_columns()["data"]["options"] == {"index": ["a", "b"]}
+
     def test_widget_schema_with_limit(self):
         widget = PerspectiveWidget({"a": "integer"}, limit=5)
         assert widget.table.get_limit() == 5

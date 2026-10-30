@@ -517,6 +517,7 @@ set(SOURCE_FILES
     ${PSP_CPP_SRC}/src/cpp/none.cpp
     ${PSP_CPP_SRC}/src/cpp/path.cpp
     ${PSP_CPP_SRC}/src/cpp/pivot.cpp
+    ${PSP_CPP_SRC}/src/cpp/pkey_codec.cpp
     ${PSP_CPP_SRC}/src/cpp/pool.cpp
     ${PSP_CPP_SRC}/src/cpp/port.cpp
     ${PSP_CPP_SRC}/src/cpp/process_state.cpp

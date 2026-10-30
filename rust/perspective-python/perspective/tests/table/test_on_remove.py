@@ -44,6 +44,23 @@ class TestOnRemove(object):
         assert removed_indices(calls[0]) == [{"y": "b"}, {"y": "c"}]
         view.remove_remove(cid)
 
+    def test_on_remove_composite_index(self):
+        tbl = Table(
+            [
+                {"name": "AAPL", "sector": "Tech", "price": 1},
+                {"name": "MSFT", "sector": "Tech", "price": 2},
+            ],
+            index=["name", "sector"],
+        )
+        view = tbl.view()
+        calls = []
+        cid = view.on_remove(lambda port_id, indices: calls.append(indices))
+        tbl.remove([["MSFT", "Tech"]])
+        assert len(calls) == 1
+        assert removed_indices(calls[0]) == [{"name": "MSFT", "sector": "Tech"}]
+        assert tbl.size() == 1
+        view.remove_remove(cid)
+
     def test_on_remove_ignores_unknown_and_update(self):
         tbl = Table(data, index="x")
         view = tbl.view()

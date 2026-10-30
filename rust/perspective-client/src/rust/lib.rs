@@ -56,7 +56,7 @@ pub use crate::proto::JoinType;
 pub use crate::session::{ProxySession, Session};
 pub use crate::table::{
     DeleteOptions, DescribeError, DescribeVerdict, Description, ExprValidationResult, JoinOptions,
-    Table, TableInitOptions, TableReadFormat, UpdateOptions,
+    Table, TableIndex, TableInitOptions, TableReadFormat, UpdateOptions,
 };
 pub use crate::table_data::{TableData, UpdateData};
 pub use crate::table_ref::TableRef;
@@ -76,7 +76,7 @@ impl From<&str> for HostedTable {
     fn from(entity_id: &str) -> Self {
         HostedTable {
             entity_id: entity_id.to_string(),
-            index: None,
+            index: Vec::new(),
             limit: None,
         }
     }

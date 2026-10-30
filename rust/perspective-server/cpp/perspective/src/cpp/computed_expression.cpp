@@ -849,7 +849,7 @@ t_computed_function_store::t_computed_function_store(
         computed_function::col(vocab, is_type_validator, source_table, row_idx)
     ),
     m_vlookup_fn(computed_function::vlookup(
-        vocab, is_type_validator, source_table, row_idx
+        vocab, is_type_validator, pkey_map, source_table, row_idx
     )) {}
 
 void

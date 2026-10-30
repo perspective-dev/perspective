@@ -148,9 +148,9 @@ impl Client {
     /// - `options` - Optional configuration which provides one of:
     ///     - `limit` - The max number of rows the resulting [`Table`] can
     ///       store.
-    ///     - `index` - The column name to use as an _index_ column. If this
-    ///       `Table` is being instantiated by _data_, this column name must be
-    ///       present in the data.
+    ///     - `index` - The column name, or list of column names, to use as an
+    ///       _index_. If this `Table` is being instantiated by _data_, this
+    ///       column name must be present in the data.
     ///     - `name` - The name of the table. This will be generated if it is
     ///       not provided.
     ///     - `format` - The explicit format of the input data, can be one of
@@ -174,7 +174,7 @@ impl Client {
         py: Python<'_>,
         input: Py<PyAny>,
         limit: Option<u32>,
-        index: Option<Py<PyString>>,
+        index: Option<Py<PyAny>>,
         name: Option<Py<PyString>>,
         format: Option<Py<PyString>>,
         page_to_disk: Option<bool>,
@@ -328,16 +328,17 @@ impl Table {
         ))
     }
 
-    /// Returns the name of the index column for the table.
+    /// Returns the name of the index column for the table, or the list of
+    /// index column names for a composite index.
     ///
     /// # Python Examples
     ///
     /// ```python
     /// table = perspective.table("x,y\n1,2\n3,4", index="x");
-    /// index = client.get_index()
+    /// index = table.get_index()
     /// ```
-    pub fn get_index(&self) -> Option<String> {
-        self.0.get_index()
+    pub fn get_index(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        self.0.get_index(py)
     }
 
     /// Get a copy of the [`Client`] this [`Table`] came from.

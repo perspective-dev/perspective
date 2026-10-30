@@ -40,6 +40,7 @@ struct t_flatten_record {
 };
 
 class t_data_table;
+class t_pkey_codec;
 
 class PERSPECTIVE_EXPORT t_tabular {};
 
@@ -133,6 +134,16 @@ public:
     std::shared_ptr<t_data_table> flatten() const;
 
     bool is_pkey_table() const;
+
+    void
+    set_pkey_codec(std::shared_ptr<const t_pkey_codec> codec) {
+        m_pkey_codec = std::move(codec);
+    }
+
+    const std::shared_ptr<const t_pkey_codec>&
+    get_pkey_codec() const {
+        return m_pkey_codec;
+    }
     bool is_same_shape(t_data_table& tbl) const;
 
     void pprint() const;
@@ -270,6 +281,7 @@ private:
     t_backing_store m_backing_store;
     bool m_init;
     std::vector<std::shared_ptr<t_column>> m_columns;
+    std::shared_ptr<const t_pkey_codec> m_pkey_codec;
 };
 
 PERSPECTIVE_EXPORT bool

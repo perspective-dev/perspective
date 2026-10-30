@@ -206,9 +206,14 @@ namespace {
     }
 } // namespace
 
-std::string
+std::vector<std::string>
 t_derived_source::index() const {
-    return "";
+    return {};
+}
+
+std::shared_ptr<const t_pkey_codec>
+t_derived_source::pkey_codec() const {
+    return nullptr;
 }
 
 std::uint32_t
@@ -1154,15 +1159,23 @@ public:
         );
     }
 
-    std::string
+    std::vector<std::string>
     index() const override {
-        const std::string& index = m_parent->get_index();
+        const auto& index = m_parent->get_index();
         const auto columns = m_view->get_view_config()->get_columns();
-        if (std::find(columns.begin(), columns.end(), index) == columns.end()) {
-            return "";
+        for (const auto& name : index) {
+            if (std::find(columns.begin(), columns.end(), name)
+                == columns.end()) {
+                return {};
+            }
         }
 
         return index;
+    }
+
+    std::shared_ptr<const t_pkey_codec>
+    pkey_codec() const override {
+        return m_parent->get_pkey_codec();
     }
 
     std::uint32_t
