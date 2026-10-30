@@ -999,7 +999,8 @@ Table::make_derived(
     t_dtype pkey_dtype,
     const std::vector<std::string>& index,
     std::uint32_t limit,
-    std::shared_ptr<const t_pkey_codec> pkey_codec
+    std::shared_ptr<const t_pkey_codec> pkey_codec,
+    t_backing_store backing_store
 ) {
     auto pool = std::make_shared<t_pool>();
     pool->init();
@@ -1011,7 +1012,7 @@ Table::make_derived(
     data_table.add_column("psp_op", DTYPE_UINT8, false);
 
     auto tbl = std::make_shared<Table>(
-        pool, schema.columns(), schema.types(), limit, index
+        pool, schema.columns(), schema.types(), limit, index, backing_store
     );
 
     tbl->m_derived = true;

@@ -423,6 +423,54 @@ class TestTableArrowExpandedIndex(object):
         }
 
 
+class TestTableArrowSchemaListFlatten(object):
+    def test_schema_table_stringify_keeps_a_sibling_index_usable(self):
+        tbl = Table(
+            {"id": "integer", "y": "string"},
+            index="id",
+            list_flatten="stringify",
+        )
+
+        tbl.update(
+            arrow_bytes(
+                pa.table(
+                    {
+                        "id": pa.array([1, 2], type=pa.int64()),
+                        "y": pa.array(
+                            [[10, 20], [30]], type=pa.list_(pa.int64())
+                        ),
+                    }
+                )
+            )
+        )
+
+        assert tbl.view().to_columns() == {
+            "id": [1, 2],
+            "y": ["[10,20]", "[30]"],
+        }
+
+    def test_schema_table_cartesian_persists_across_update(self):
+        tbl = Table(
+            {"a": "integer", "b": "integer"}, list_flatten="cartesian"
+        )
+
+        tbl.update(
+            arrow_bytes(
+                pa.table(
+                    {
+                        "a": pa.array([[1, 2]], type=pa.list_(pa.int64())),
+                        "b": pa.array([[3, 4, 5]], type=pa.list_(pa.int64())),
+                    }
+                )
+            )
+        )
+
+        assert tbl.view().to_columns() == {
+            "a": [1, 1, 1, 2, 2, 2],
+            "b": [3, 4, 5, 3, 4, 5],
+        }
+
+
 class TestTableArrowGather(object):
     """The expansion is deferred into the `t_column` write rather than
     materialized in Arrow, so these stress the gather paths specifically."""

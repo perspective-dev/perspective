@@ -30,6 +30,8 @@ __all__ = ["PerspectiveWidget"]
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 
+_TABLE_OPTIONS = ("name", "format", "page_to_disk", "list_flatten")
+
 __doc__ = """
 `PerspectiveWidget` is a JupyterLab widget that implements the same API as
 `<perspective-viewer>`, allowing for fast, intuitive
@@ -158,8 +160,9 @@ class PerspectiveWidget(anywidget.AnyWidget, PerspectiveViewer):
         -   `limit` (`int`): A upper limit on the number of rows in the Table.
             Cannot be set at the same time as `index`, ignored if `server`
             is True.
-        -   `kwargs` (`dict`): configuration options for the `PerspectiveViewer`,
-            and `Table` constructor if `data` is a dataset.
+        -   `name`, `format`, `page_to_disk`, `list_flatten`: `Table`
+            constructor options, used when `data` is a dataset.
+        -   `kwargs` (`dict`): configuration options for the `PerspectiveViewer`.
 
         # Examples
 
@@ -179,6 +182,9 @@ class PerspectiveWidget(anywidget.AnyWidget, PerspectiveViewer):
 
         if index is not None and limit is not None:
             raise TypeError("Index and Limit cannot be set at the same time!")
+
+        table_options = {key: kwargs.pop(key, None) for key in _TABLE_OPTIONS}
+        table_options = {k: v for k, v in table_options.items() if v is not None}
 
         # Parse the dataset we pass in - if it's Pandas, preserve pivots
         # if isinstance(data, pandas.DataFrame) or isinstance(data, pandas.Series):
@@ -203,11 +209,12 @@ class PerspectiveWidget(anywidget.AnyWidget, PerspectiveViewer):
         # If an empty dataset is provided, don't call `load()` and wait
         # for the user to call `load()`.
         if data is None:
-            if index is not None or limit is not None:
+            if index is not None or limit is not None or table_options:
                 raise TypeError(
-                    "Cannot initialize PerspectiveWidget `index` or `limit` without a Table, data, or schema!"
+                    "Cannot initialize PerspectiveWidget `index`, `limit` or `Table` options without a Table, data, or schema!"
                 )
         else:
+            self._options.update(table_options)
             if index is not None:
                 self._options.update({"index": index})
 

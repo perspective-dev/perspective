@@ -138,6 +138,7 @@ namespace json {
         t_list_flatten m_mode{LIST_FLATTEN_ZIP};
 
         std::set<std::string> m_per_element;
+        std::set<std::string> m_expansions;
         std::vector<t_uindex> m_child_widths;
         bool m_expands{false};
         bool m_is_implicit{true};

@@ -341,6 +341,52 @@ test.describe("Arrow nested columns", function () {
             ).rejects.toThrow(/`batch`/);
         });
 
+        test("Stringify keeps a sibling index usable on a schema table", async function () {
+            const table = await perspective.table(
+                { id: "integer", y: "string" },
+                { index: "id", list_flatten: "stringify" },
+            );
+
+            await table.update(
+                ipc({
+                    id: arrow.vectorFromArray([1, 2], int32()),
+                    y: arrow.vectorFromArray([[10, 20], [30]], list(int32())),
+                }),
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                id: [1, 2],
+                y: ["[10,20]", "[30]"],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Cartesian persists across update on a schema table", async function () {
+            const table = await perspective.table(
+                { a: "integer", b: "integer" },
+                { list_flatten: "cartesian" },
+            );
+
+            await table.update(
+                ipc({
+                    a: arrow.vectorFromArray([[1, 2]], list(int32())),
+                    b: arrow.vectorFromArray([[3, 4, 5]], list(int32())),
+                }),
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                a: [1, 1, 1, 2, 2, 2],
+                b: [3, 4, 5, 3, 4, 5],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
         test("Rejects any index under a multi-list cartesian", async function () {
             await expect(
                 perspective.table(

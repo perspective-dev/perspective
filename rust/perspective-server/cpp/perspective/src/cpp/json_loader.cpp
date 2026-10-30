@@ -417,6 +417,11 @@ fill_column_json(
 static const char FLATTEN_SEPARATOR = '.';
 
 /**
+ * The `array_path` of a leaf not reached through any array.
+ */
+static constexpr std::size_t NO_ARRAY = std::string::npos;
+
+/**
  * Visit every scalar beneath `value`, naming it by its dotted path from
  * `prefix`. An object contributes its leaves rather than itself, because
  * Perspective's column model is flat; an empty object contributes nothing.
@@ -430,20 +435,20 @@ for_each_leaf(
     const rapidjson::Value& value,
     t_list_flatten mode,
     F&& fn,
-    bool through_array = false
+    std::size_t array_path = NO_ARRAY
 ) {
     if (mode != LIST_FLATTEN_STRINGIFY && value.IsArray()) {
         // Inference only needs one element to learn the leaves' types; any
         // path a later element introduces is grown into by `resolve_column`.
         if (!value.Empty()) {
-            for_each_leaf(prefix, value[0], mode, fn, true);
+            for_each_leaf(prefix, value[0], mode, fn, prefix.size());
         }
 
         return;
     }
 
     if (!value.IsObject()) {
-        fn(static_cast<const std::string&>(prefix), value, through_array);
+        fn(static_cast<const std::string&>(prefix), value, array_path);
         return;
     }
 
@@ -451,8 +456,25 @@ for_each_leaf(
     for (const auto& child : value.GetObj()) {
         prefix += FLATTEN_SEPARATOR;
         prefix += child.name.GetString();
-        for_each_leaf(prefix, child.value, mode, fn, through_array);
+        for_each_leaf(prefix, child.value, mode, fn, array_path);
         prefix.resize(len);
+    }
+}
+
+/**
+ * Record a leaf reached through an array as per-element, and the innermost
+ * array it was reached through as an expansion point.
+ */
+static void
+note_expansion(
+    const std::string& name,
+    std::size_t array_path,
+    std::set<std::string>& per_element,
+    std::set<std::string>& expansions
+) {
+    if (array_path != NO_ARRAY) {
+        per_element.insert(name);
+        expansions.insert(name.substr(0, array_path));
     }
 }
 
@@ -779,7 +801,7 @@ JsonLoader::init(
     }
 
     m_expands = !m_per_element.empty();
-    if (mode == LIST_FLATTEN_CARTESIAN && m_per_element.size() > 1) {
+    if (mode == LIST_FLATTEN_CARTESIAN && m_expansions.size() > 1) {
         // A product repeats every factor against the others' dimensions, so
         // with more than one expansion point nothing varies per row.
         m_per_element.clear();
@@ -851,6 +873,7 @@ infer_record(
     std::set<std::string>& literal,
     std::set<std::string>& descended,
     std::set<std::string>& per_element,
+    std::set<std::string>& expansions,
     t_list_flatten mode
 ) {
     std::string path;
@@ -861,12 +884,10 @@ infer_record(
             path,
             col.value,
             mode,
-            [&](const auto& name, const auto&, bool through_array) {
+            [&](const auto& name, const auto&, std::size_t array_path) {
                 seen.insert(name);
                 (name.size() == top ? literal : descended).insert(name);
-                if (through_array) {
-                    per_element.insert(name);
-                }
+                note_expansion(name, array_path, per_element, expansions);
             }
         );
     }
@@ -874,7 +895,7 @@ infer_record(
     // https://github.com/Tencent/rapidjson/issues/1994
     for (const auto& col : record.GetObj()) {
         path.assign(col.name.GetString());
-        for_each_leaf(path, col.value, mode, [&](const auto& name, const auto& leaf, bool) {
+        for_each_leaf(path, col.value, mode, [&](const auto& name, const auto& leaf, std::size_t) {
             if (std::find(index.begin(), index.end(), name) != index.end()) {
                 is_implicit = false;
             }
@@ -959,6 +980,7 @@ JsonLoader::infer_rows(const std::vector<std::string>& index) {
             literal,
             descended,
             m_per_element,
+            m_expansions,
             m_mode
         );
 
@@ -992,6 +1014,7 @@ JsonLoader::infer_ndjson(const std::vector<std::string>& index) {
         literal,
         descended,
         m_per_element,
+        m_expansions,
         m_mode
     );
 
@@ -1031,10 +1054,10 @@ JsonLoader::infer_cols(const std::vector<std::string>& index) {
                 path,
                 cell,
                 m_mode,
-                [&](const auto& name, const auto& v, bool through_array) {
-                    if (through_array) {
-                        m_per_element.insert(name);
-                    }
+                [&](const auto& name, const auto& v, std::size_t array_path) {
+                    note_expansion(
+                        name, array_path, m_per_element, m_expansions
+                    );
 
                     if (known.count(name) > 0) {
                         return;

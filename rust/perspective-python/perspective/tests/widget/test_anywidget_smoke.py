@@ -107,3 +107,28 @@ class TestAnyWidgetSmoke:
     def test_deferred_load_without_data(self):
         widget = PerspectiveWidget(None, group_by=["a"])
         assert widget.group_by == ["a"]
+
+    def test_forwards_list_flatten_with_index(self):
+        widget = PerspectiveWidget(
+            {"id": [1, 2], "y": [[10, 20], [30]]},
+            index="id",
+            list_flatten="stringify",
+        )
+
+        assert widget.table.get_index() == "id"
+        assert widget.table.view().to_columns() == {
+            "id": [1, 2],
+            "y": ["[10,20]", "[30]"],
+        }
+
+    def test_forwards_page_to_disk_and_name(self):
+        widget = PerspectiveWidget(
+            {"a": [1, 2, 3]}, page_to_disk=True, name="forwarded"
+        )
+
+        assert widget.table.get_name() == "forwarded"
+        assert widget.table.view().to_columns() == {"a": [1, 2, 3]}
+
+    def test_table_options_without_data(self):
+        with pytest.raises(TypeError):
+            PerspectiveWidget(None, list_flatten="stringify")

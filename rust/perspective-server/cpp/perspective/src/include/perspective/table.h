@@ -299,7 +299,8 @@ public:
         t_dtype pkey_dtype,
         const std::vector<std::string>& index,
         std::uint32_t limit,
-        std::shared_ptr<const t_pkey_codec> pkey_codec
+        std::shared_ptr<const t_pkey_codec> pkey_codec,
+        t_backing_store backing_store = BACKING_STORE_MEMORY
     );
 
     bool is_derived() const;

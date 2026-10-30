@@ -298,7 +298,7 @@ t_derived_source::step(bool notify) {
     std::shared_ptr<t_data_table> master = gnode->get_table_sptr();
     const t_schema& schema = master->get_schema();
     t_uindex num_columns = m_columns.size();
-    if (full) {
+    if (full && m_child->get_backing_store() == BACKING_STORE_MEMORY) {
         for (t_uindex cidx = 0; cidx < num_columns; ++cidx) {
             auto column = alias_column(cidx);
             if (column
