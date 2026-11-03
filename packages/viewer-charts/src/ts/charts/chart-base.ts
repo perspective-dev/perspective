@@ -37,6 +37,7 @@ import {
 import {
     DEFAULT_FACET_CONFIG,
     DEFAULT_PLUGIN_CONFIG,
+    facetLayout,
     type ChartImplementation,
     type FacetConfig,
     type PluginConfig,
@@ -664,7 +665,7 @@ export abstract class AbstractChart implements ChartImplementation {
         this._pluginConfig = { ...cfg };
         this._facetConfig = {
             ...this._facetConfig,
-            facet_mode: cfg.facet_mode,
+            facet_mode: facetLayout(cfg.facet_mode),
             zoom_mode: cfg.facet_zoom_mode,
         };
 

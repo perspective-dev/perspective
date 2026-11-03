@@ -131,6 +131,29 @@ test.describe("facet_mode", () => {
         expect(await calibratePlotBaseline(page)).not.toEqual(overlayPixels);
     });
 
+    test("Y Bar grid refits the value axis after an overlay build", async ({
+        page,
+    }) => {
+        await restoreChart(page, {
+            plugin: "Y Bar",
+            columns: ["Sales"],
+            group_by: ["Region"],
+            split_by: ["Category"],
+            plugin_config: { facet_mode: "grid" },
+        } as never);
+        await waitOneFrame(page);
+        await waitOneFrame(page);
+
+        const gridPixels = await calibratePlotBaseline(page);
+
+        await setFacetMode(page, "overlay");
+        expect(await calibratePlotBaseline(page)).not.toEqual(gridPixels);
+
+        await setFacetMode(page, "grid");
+        expect(await savedPluginConfig(page)).toEqual({ facet_mode: "grid" });
+        expect(await calibratePlotBaseline(page)).toEqual(gridPixels);
+    });
+
     test("X Bar grid mode facets horizontally", async ({ page }) => {
         await restoreChart(page, {
             plugin: "X Bar",

@@ -530,12 +530,12 @@ export function renderBarFrame(
     chart._facetGrid = null;
 
     const hasLegend = chart._series.length > 1;
-    const hasCatLabel = chart._groupBy.length > 0;
+    const hasCatLabel = chart._effectiveGroupBy.length > 0;
 
     const provisionalDomain: CategoricalDomain = {
         levels: chart._rowPaths,
         numRows: chart._numCategories,
-        levelLabels: chart._groupBy.slice(),
+        levelLabels: chart._effectiveGroupBy.slice(),
         positions: groupedCategoryPositions(chart),
     };
 
@@ -924,7 +924,7 @@ function renderFacetedBarFrame(
         visRightMax,
     } = ctx;
 
-    const hasCatLabel = chart._groupBy.length > 0;
+    const hasCatLabel = chart._effectiveGroupBy.length > 0;
     const valueCatDomain = chart._leftValueCategoryDomain;
     const valueCatActive =
         chart._leftValueAxisMode === "category" &&
@@ -1067,7 +1067,7 @@ function renderFacetedBarFrame(
     chart._lastXDomain = {
         levels: chart._rowPaths,
         numRows: chart._numCategories,
-        levelLabels: chart._groupBy.slice(),
+        levelLabels: chart._effectiveGroupBy.slice(),
         positions: groupedCategoryPositions(chart),
     };
     chart._lastYDomain = {
@@ -1262,7 +1262,7 @@ function renderFacetedBarChromeOverlay(chart: SeriesChart): void {
     const theme = chart._resolveTheme();
     const dpr = chart._glManager?.dpr ?? 1;
     const horizontal = chart._isHorizontal;
-    const hasCatLabel = chart._groupBy.length > 0;
+    const hasCatLabel = chart._effectiveGroupBy.length > 0;
     const numericCat =
         chart._categoryAxisMode === "numeric" &&
         chart._numericCategoryDomain !== null &&
@@ -1623,7 +1623,7 @@ function renderBarLegend(chart: SeriesChart): void {
 
     const layout = chart._lastLayout;
     const floating = mode === "floating";
-    const title = chart._splitBy.join(" / ") || "Legend";
+    const title = seriesLegendTitle(chart);
     const box = floating
         ? chart._legend.floatingBox(
               cfg,
@@ -1672,6 +1672,14 @@ function renderBarLegend(chart: SeriesChart): void {
             hidden: chart._hiddenSeries.has(series[i].seriesId),
         }),
     );
+}
+
+function seriesLegendTitle(chart: SeriesChart): string {
+    const dims = chart._lastGroupBySplit
+        ? [...chart._splitBy, chart._groupBy[chart._groupBy.length - 1]]
+        : chart._splitBy;
+
+    return dims.join(" / ") || "Legend";
 }
 
 function renderBarTooltipCanvas(chart: SeriesChart): void {

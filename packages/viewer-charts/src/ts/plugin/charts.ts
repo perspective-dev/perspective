@@ -45,6 +45,13 @@ export interface ChartTypeConfig {
     applicable_plugin_fields: readonly PluginConfigField[];
 
     /**
+     * The `facet_mode` variants this chart type offers; the two
+     * `last_group_by_*` modes need the series band pipeline, so only
+     * the series family lists them. Defaults to {@link FACET_MODES}.
+     */
+    facet_modes?: readonly PluginConfig["facet_mode"][];
+
+    /**
      * What `group_by` DRAWS in this chart, e.g. `"X Axis"` for the
      * Y-series charts. Omitted where the field has no visual role of
      * its own and is a plain aggregation key — the X/Y and map charts,
@@ -139,6 +146,17 @@ const SERIES_FIELDS: readonly PluginConfigField[] = [
 // `facet_mode` to "overlay" — grid faceting is the opt-in. Cartesian
 // charts keep the global "grid" default from `DEFAULT_PLUGIN_CONFIG`.
 const SERIES_DEFAULTS: Partial<PluginConfig> = { facet_mode: "overlay" };
+
+export const FACET_MODES: readonly PluginConfig["facet_mode"][] = [
+    "grid",
+    "overlay",
+];
+
+const SERIES_FACET_MODES: readonly PluginConfig["facet_mode"][] = [
+    ...FACET_MODES,
+    "last_group_by_grid",
+    "last_group_by_overlay",
+];
 
 // Bar / area series glyphs grow from the zero baseline, so the value
 // axis must enclose 0 to render correctly. Line / scatter glyphs have
@@ -247,6 +265,7 @@ function make(
             | "max_columns"
             | "default_chart_type"
             | "plugin_field_defaults"
+            | "facet_modes"
             | "group_by_role"
             | "split_by_role"
             | "connects_row_order"
@@ -268,6 +287,9 @@ function make(
         ...(overrides?.plugin_field_defaults
             ? { plugin_field_defaults: overrides.plugin_field_defaults }
             : {}),
+        ...(overrides?.facet_modes
+            ? { facet_modes: overrides.facet_modes }
+            : {}),
         ...(overrides?.group_by_role
             ? { group_by_role: overrides.group_by_role }
             : {}),
@@ -283,8 +305,16 @@ function make(
 const FIN_NAMES = ["Open", "Close", "High", "Low", "Tooltip"];
 const HIER_NAMES = ["Size", "Color", "Tooltip"];
 
-const SERIES_Y_ROLES = { group_by_role: "X Axis", split_by_role: "Series" };
-const SERIES_X_ROLES = { group_by_role: "Y Axis", split_by_role: "Series" };
+const SERIES_Y_ROLES = {
+    group_by_role: "X Axis",
+    split_by_role: "Series",
+    facet_modes: SERIES_FACET_MODES,
+};
+const SERIES_X_ROLES = {
+    group_by_role: "Y Axis",
+    split_by_role: "Series",
+    facet_modes: SERIES_FACET_MODES,
+};
 const CART_ROLES = {};
 const HIER_ROLES = { group_by_role: "Hierarchy", split_by_role: "Facets" };
 const HEATMAP_ROLES = { group_by_role: "X Axis", split_by_role: "Y Axis" };

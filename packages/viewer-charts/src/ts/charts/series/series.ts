@@ -18,6 +18,7 @@ import { CategoricalYChart } from "../common/categorical-y-chart.ts";
 import { type PlotRect } from "../../layout/plot-layout.ts";
 import { type AxisDomain } from "../../axis/numeric-axis.ts";
 import type { CategoricalDomain } from "../../axis/categorical-axis.ts";
+import type { PluginConfig } from "../chart.ts";
 import {
     buildSeriesPipeline,
     readBarRecord,
@@ -49,6 +50,12 @@ import { AreaGlyph } from "./glyphs/draw-areas.ts";
 import { createQuadCornerBuffer } from "../../webgl/instanced-attrs.ts";
 import { compileProgram } from "../../webgl/program-cache.ts";
 import { expandDomainInPlace } from "../common/expand-domain.ts";
+import {
+    createLastGroupBySplitScratch,
+    lastGroupBySplit,
+    type LastGroupBySplit,
+    type LastGroupBySplitScratch,
+} from "../../data/last-group-by-split.ts";
 import barVert from "../../shaders/bar.vert.glsl";
 import barFrag from "../../shaders/bar.frag.glsl";
 
@@ -145,6 +152,13 @@ export class SeriesChart extends CategoricalYChart {
     _aggregates: string[] = [];
     _splitPrefixes: string[] = [];
     _series: SeriesInfo[] = [];
+
+    _effectiveGroupBy: string[] = [];
+
+    _lastGroupBySplit: LastGroupBySplit | null = null;
+
+    _lastGroupByScratch: LastGroupBySplitScratch =
+        createLastGroupBySplitScratch();
 
     /**
      * Whether the CURRENT build's geometry was produced for facet-grid
@@ -534,6 +548,26 @@ export class SeriesChart extends CategoricalYChart {
                 ? [this._categoryPositions[b.catIdx] ?? null]
                 : this._rowPaths.map((level) => level.labels[b.catIdx] ?? null);
         const splitKey = this._splitPrefixes[b.splitIdx] ?? "";
+        const last = this._lastGroupBySplit;
+        if (last) {
+            const entry = last.prefixes.get(splitKey);
+            const V = last.values.length;
+            const row = entry
+                ? last.sourceRow[(b.catIdx + this._rowOffset) * V + entry.value]
+                : -1;
+
+            groupByValues.push(entry ? last.values[entry.value] : null);
+            await this.emitClickAndSelect({
+                rowIdx: row >= 0 ? row : null,
+                columnName: this._aggregates[b.aggIdx],
+                groupByValues,
+                splitByValues:
+                    entry && entry.facet !== "" ? entry.facet.split("|") : [],
+            });
+
+            return;
+        }
+
         const splitByValues =
             this._splitBy.length > 0 && splitKey !== ""
                 ? splitKey.split("|")
@@ -592,15 +626,39 @@ export class SeriesChart extends CategoricalYChart {
             this._cornerBuffer = createQuadCornerBuffer(gl);
         }
 
+        const levelTypes = this._groupBy.map(
+            (name) => this._groupByTypes[name] ?? "string",
+        );
+        const lastSplit =
+            this._pluginConfig.facet_mode === "last_group_by_grid" ||
+            this._pluginConfig.facet_mode === "last_group_by_overlay"
+                ? lastGroupBySplit(
+                      columns,
+                      endRow,
+                      this._groupBy,
+                      levelTypes,
+                      this._columnDateModifiers.get(
+                          this._groupBy[this._groupBy.length - 1],
+                      ),
+                      this._lastGroupByScratch,
+                  )
+                : null;
+
+        this._lastGroupBySplit = lastSplit;
+        this._effectiveGroupBy = lastSplit?.groupBy ?? this._groupBy;
+        const splitBy = lastSplit
+            ? [...this._splitBy, this._groupBy[this._groupBy.length - 1]]
+            : this._splitBy;
+
         const facetSplits =
-            this._splitBy.length > 0 && this._facetConfig.facet_mode === "grid";
+            splitBy.length > 0 && this._facetConfig.facet_mode === "grid";
 
         const result = buildSeriesPipeline({
-            columns,
-            numRows: endRow,
+            columns: lastSplit?.columns ?? columns,
+            numRows: lastSplit?.numRows ?? endRow,
             columnSlots: this._columnSlots,
-            groupBy: this._groupBy,
-            splitBy: this._splitBy,
+            groupBy: this._effectiveGroupBy,
+            splitBy,
             groupByTypes: this._groupByTypes,
             dateModifiers: this._columnDateModifiers,
             columnsConfig: this._columnsConfig,
@@ -793,6 +851,14 @@ export class SeriesChart extends CategoricalYChart {
 
         this._glManager = glManager;
         renderBarFrame(this, glManager);
+    }
+
+    override setPluginConfig(cfg: PluginConfig): void {
+        if (cfg.facet_mode !== this._pluginConfig.facet_mode) {
+            this.resetExpandedDomain();
+        }
+
+        super.setPluginConfig(cfg);
     }
 
     override resetExpandedDomain(): void {
