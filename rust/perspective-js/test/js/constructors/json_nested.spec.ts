@@ -265,6 +265,32 @@ test.describe("JSON nested columns", function () {
                 await table.delete();
             });
 
+            test("encodes objects as JSON when configured", async function () {
+                const { data, options } = shape([
+                    { id: 1, s: { a: 1, b: "x" } },
+                    { id: 2, s: null },
+                ]);
+
+                const table = await perspective.table(data, {
+                    ...options,
+                    struct_flatten: "stringify",
+                });
+
+                expect(await table.schema()).toEqual({
+                    id: "integer",
+                    s: "string",
+                });
+
+                const view = await table.view();
+                expect(await view.to_columns()).toEqual({
+                    id: [1, 2],
+                    s: ['{"a":1,"b":"x"}', null],
+                });
+
+                await view.delete();
+                await table.delete();
+            });
+
             test("encodes arrays as JSON when configured", async function () {
                 const { data, options } = shape([
                     { x: 1, y: [10, 20] },

@@ -30,7 +30,7 @@ __all__ = ["PerspectiveWidget"]
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 
-_TABLE_OPTIONS = ("name", "format", "page_to_disk", "list_flatten")
+_TABLE_OPTIONS = ("name", "format", "page_to_disk", "list_flatten", "struct_flatten")
 
 __doc__ = """
 `PerspectiveWidget` is a JupyterLab widget that implements the same API as
@@ -160,8 +160,9 @@ class PerspectiveWidget(anywidget.AnyWidget, PerspectiveViewer):
         -   `limit` (`int`): A upper limit on the number of rows in the Table.
             Cannot be set at the same time as `index`, ignored if `server`
             is True.
-        -   `name`, `format`, `page_to_disk`, `list_flatten`: `Table`
-            constructor options, used when `data` is a dataset.
+        -   `name`, `format`, `page_to_disk`, `list_flatten`,
+            `struct_flatten`: `Table` constructor options, used when `data`
+            is a dataset.
         -   `kwargs` (`dict`): configuration options for the `PerspectiveViewer`.
 
         # Examples

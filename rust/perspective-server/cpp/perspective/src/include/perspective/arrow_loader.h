@@ -45,11 +45,13 @@ namespace apachearrow {
          *
          * @param ptr
          * @param mode - how `LIST` columns are ingested.
+         * @param struct_mode - how `STRUCT` and `MAP` columns are ingested.
          */
         void initialize(
             const std::uint8_t* ptr,
             std::uint32_t,
-            t_list_flatten mode = LIST_FLATTEN_ZIP
+            t_list_flatten mode = LIST_FLATTEN_ZIP,
+            t_struct_flatten struct_mode = STRUCT_FLATTEN_PIVOT
         );
 
         /**

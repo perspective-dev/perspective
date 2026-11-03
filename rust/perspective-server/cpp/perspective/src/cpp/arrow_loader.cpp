@@ -29,6 +29,8 @@
 #include <type_traits>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
+#include <arrow/util/float16.h>
+#include <cmath>
 
 namespace perspective::apachearrow {
 
@@ -197,7 +199,8 @@ convert_type(const std::string& src) {
     if (src == "null") {
         return DTYPE_STR;
     }
-    if (src == "list") {
+    if (src == "list" || src == "large_list" || src == "struct"
+        || src == "map") {
         return DTYPE_STR;
     }
     std::stringstream ss;
@@ -208,7 +211,10 @@ convert_type(const std::string& src) {
 
 void
 ArrowLoader::initialize(
-    const std::uint8_t* ptr, const uint32_t length, t_list_flatten mode
+    const std::uint8_t* ptr,
+    const uint32_t length,
+    t_list_flatten mode,
+    t_struct_flatten struct_mode
 ) {
     if (std::memcmp("ARROW1", (const void*)ptr, 6) == 0) {
         load_file(ptr, length, m_table);
@@ -221,10 +227,10 @@ ArrowLoader::initialize(
         PSP_COMPLAIN_AND_ABORT(validation.ToString());
     }
 
-    if (!normalize_table_is_noop(*m_table, mode)) {
-        m_expanded = normalize_table_expands(*m_table, mode);
+    if (!normalize_table_is_noop(*m_table, mode, struct_mode)) {
+        m_expanded = normalize_table_expands(*m_table, mode, struct_mode);
         m_normalized = std::make_unique<t_normalized_table>(
-            normalize_table(m_table, mode)
+            normalize_table(m_table, mode, struct_mode)
         );
     }
 
@@ -385,116 +391,171 @@ iter_col_copy(
     }
 }
 
-void
-copy_string_list(
-    std::shared_ptr<arrow::ListArray>& list,
-    const std::shared_ptr<t_column>& dest,
-    const int64_t num_rows
+/**
+ * Write element `i` of `array` as JSON, recursing into nested values.
+ */
+static void
+write_json(
+    rapidjson::Writer<rapidjson::StringBuffer>& writer,
+    const arrow::Array& array,
+    std::int64_t i
 ) {
-    const auto typed_data =
-        std::static_pointer_cast<::arrow::StringArray>(list->values());
-
-    // the raw bytes of the strings.
-    const uint8_t* raw_data = typed_data->value_data()->data();
-    // col_offsets are the column level offsets, so each element is the boundary
-    // of a row.
-    const auto* col_offsets = list->raw_value_offsets();
-    // these are the offset locations of the strings within the raw data.
-    // each element is the boundary of a string.
-    const auto* string_offsets = typed_data->raw_value_offsets();
-
-    for (uint32_t i = 0; i < num_rows; i++) {
-        rapidjson::StringBuffer s;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(s);
-        writer.StartArray();
-        auto row_array_length = col_offsets[i + 1] - col_offsets[i];
-        for (uint32_t j = 0; j < row_array_length; j++) {
-            const auto elem_location = col_offsets[i] + j;
-            const auto start_loc = string_offsets[elem_location];
-            const auto string_len =
-                string_offsets[elem_location + 1] - start_loc;
-            writer.String((const char*)raw_data + start_loc, string_len);
-        }
-        writer.EndArray();
-        dest->set_nth(i, s.GetString());
+    if (!array.IsValid(i)) {
+        writer.Null();
+        return;
     }
-}
 
-template <typename T>
-void
-copy_integer_list(
-    std::shared_ptr<arrow::ListArray>& list,
-    const std::shared_ptr<t_column>& dest,
-    const int64_t num_rows
-) {
-    const auto typed_data = std::static_pointer_cast<T>(list->values());
-    const auto* array_offsets = list->raw_value_offsets();
-    const auto* raw_values = typed_data->raw_values();
-    for (uint32_t i = 0; i < num_rows; i++) {
-        rapidjson::StringBuffer s;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(s);
-        writer.StartArray();
-        const auto row_array_length = array_offsets[i + 1] - array_offsets[i];
-        for (uint32_t j = 0; j < row_array_length; j++) {
-            const auto elem_location = array_offsets[i] + j;
-            const auto elem = raw_values[elem_location];
-            if constexpr (std::is_unsigned_v<typename T::value_type>) {
-                writer.Uint64(elem);
+    switch (array.type_id()) {
+        case arrow::Type::BOOL: {
+            writer.Bool(static_cast<const arrow::BooleanArray&>(array).Value(i));
+        } break;
+        case arrow::Type::INT8: {
+            writer.Int64(static_cast<const arrow::Int8Array&>(array).Value(i));
+        } break;
+        case arrow::Type::INT16: {
+            writer.Int64(static_cast<const arrow::Int16Array&>(array).Value(i));
+        } break;
+        case arrow::Type::INT32: {
+            writer.Int64(static_cast<const arrow::Int32Array&>(array).Value(i));
+        } break;
+        case arrow::Type::INT64: {
+            writer.Int64(static_cast<const arrow::Int64Array&>(array).Value(i));
+        } break;
+        case arrow::Type::UINT8: {
+            writer.Uint64(static_cast<const arrow::UInt8Array&>(array).Value(i));
+        } break;
+        case arrow::Type::UINT16: {
+            writer.Uint64(static_cast<const arrow::UInt16Array&>(array).Value(i)
+            );
+        } break;
+        case arrow::Type::UINT32: {
+            writer.Uint64(static_cast<const arrow::UInt32Array&>(array).Value(i)
+            );
+        } break;
+        case arrow::Type::UINT64: {
+            writer.Uint64(static_cast<const arrow::UInt64Array&>(array).Value(i)
+            );
+        } break;
+        case arrow::Type::HALF_FLOAT: {
+            const auto bits =
+                static_cast<const arrow::HalfFloatArray&>(array).Value(i);
+            writer.Double(arrow::util::Float16::FromBits(bits).ToFloat());
+        } break;
+        case arrow::Type::FLOAT: {
+            const double v =
+                static_cast<const arrow::FloatArray&>(array).Value(i);
+            if (std::isfinite(v)) {
+                writer.Double(v);
             } else {
-                writer.Int64(elem);
+                writer.Null();
             }
-        }
-        writer.EndArray();
-        dest->set_nth(i, s.GetString());
-    }
-}
+        } break;
+        case arrow::Type::DOUBLE: {
+            const double v =
+                static_cast<const arrow::DoubleArray&>(array).Value(i);
+            if (std::isfinite(v)) {
+                writer.Double(v);
+            } else {
+                writer.Null();
+            }
+        } break;
+        case arrow::Type::STRING: {
+            const auto view =
+                static_cast<const arrow::StringArray&>(array).GetView(i);
+            writer.String(
+                view.data(), static_cast<rapidjson::SizeType>(view.size())
+            );
+        } break;
+        case arrow::Type::LARGE_STRING: {
+            const auto view =
+                static_cast<const arrow::LargeStringArray&>(array).GetView(i);
+            writer.String(
+                view.data(), static_cast<rapidjson::SizeType>(view.size())
+            );
+        } break;
+        case arrow::Type::DICTIONARY: {
+            const auto& dict = static_cast<const arrow::DictionaryArray&>(array);
+            write_json(writer, *dict.dictionary(), dict.GetValueIndex(i));
+        } break;
+        case arrow::Type::LIST: {
+            const auto& list = static_cast<const arrow::ListArray&>(array);
+            const auto& values = *list.values();
+            writer.StartArray();
+            for (auto e = list.value_offset(i); e < list.value_offset(i + 1);
+                 ++e) {
+                write_json(writer, values, e);
+            }
 
-void
-copy_bool_list(
-    std::shared_ptr<arrow::ListArray>& list,
-    const std::shared_ptr<t_column>& dest,
-    const int64_t num_rows
-) {
-    const auto typed_data =
-        std::static_pointer_cast<arrow::BooleanArray>(list->values());
-    const auto* array_offsets = list->raw_value_offsets();
-    for (uint32_t i = 0; i < num_rows; i++) {
-        rapidjson::StringBuffer s;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(s);
-        writer.StartArray();
-        const auto row_array_length = array_offsets[i + 1] - array_offsets[i];
-        for (uint32_t j = 0; j < row_array_length; j++) {
-            const auto elem_location = array_offsets[i] + j;
-            const auto elem = typed_data->Value(elem_location);
-            writer.Bool(elem);
-        }
-        writer.EndArray();
-        dest->set_nth(i, s.GetString());
-    }
-}
+            writer.EndArray();
+        } break;
+        case arrow::Type::LARGE_LIST: {
+            const auto& list = static_cast<const arrow::LargeListArray&>(array);
+            const auto& values = *list.values();
+            writer.StartArray();
+            for (auto e = list.value_offset(i); e < list.value_offset(i + 1);
+                 ++e) {
+                write_json(writer, values, e);
+            }
 
-template <typename T>
-void
-copy_float_list(
-    std::shared_ptr<arrow::ListArray>& list,
-    const std::shared_ptr<t_column>& dest,
-    const int64_t num_rows
-) {
-    const auto typed_data = std::static_pointer_cast<T>(list->values());
-    const auto* array_offsets = list->raw_value_offsets();
-    const auto* raw_values = typed_data->raw_values();
-    for (uint32_t i = 0; i < num_rows; i++) {
-        rapidjson::StringBuffer s;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(s);
-        writer.StartArray();
-        const auto row_array_length = array_offsets[i + 1] - array_offsets[i];
-        for (uint32_t j = 0; j < row_array_length; j++) {
-            const auto elem_location = array_offsets[i] + j;
-            const auto elem = raw_values[elem_location];
-            writer.Double(elem);
+            writer.EndArray();
+        } break;
+        case arrow::Type::STRUCT: {
+            const auto& strct = static_cast<const arrow::StructArray&>(array);
+            const auto& fields = strct.struct_type()->fields();
+            writer.StartObject();
+            for (int c = 0; c < strct.num_fields(); ++c) {
+                const auto& name = fields[c]->name();
+                writer.Key(
+                    name.data(), static_cast<rapidjson::SizeType>(name.size())
+                );
+
+                write_json(writer, *strct.field(c), i);
+            }
+
+            writer.EndObject();
+        } break;
+        case arrow::Type::MAP: {
+            const auto& map = static_cast<const arrow::MapArray&>(array);
+            const auto& entries =
+                static_cast<const arrow::StructArray&>(*map.values());
+            const auto& keys = *entries.field(0);
+            const auto& items = *entries.field(1);
+            writer.StartObject();
+            for (auto e = map.value_offset(i); e < map.value_offset(i + 1);
+                 ++e) {
+                if (keys.type_id() == arrow::Type::STRING) {
+                    const auto view =
+                        static_cast<const arrow::StringArray&>(keys).GetView(e);
+                    writer.Key(
+                        view.data(),
+                        static_cast<rapidjson::SizeType>(view.size())
+                    );
+                } else if (keys.type_id() == arrow::Type::LARGE_STRING) {
+                    const auto view =
+                        static_cast<const arrow::LargeStringArray&>(keys)
+                            .GetView(e);
+                    writer.Key(
+                        view.data(),
+                        static_cast<rapidjson::SizeType>(view.size())
+                    );
+                } else {
+                    rapidjson::StringBuffer key;
+                    rapidjson::Writer<rapidjson::StringBuffer> key_writer(key);
+                    write_json(key_writer, keys, e);
+                    writer.Key(key.GetString(), key.GetSize());
+                }
+
+                write_json(writer, items, e);
+            }
+
+            writer.EndObject();
+        } break;
+        default: {
+            std::stringstream ss;
+            ss << "Cannot stringify Arrow value of type `"
+               << array.type()->ToString() << "`\n";
+            PSP_COMPLAIN_AND_ABORT(ss.str());
         }
-        writer.EndArray();
-        dest->set_nth(i, s.GetString());
     }
 }
 
@@ -508,61 +569,25 @@ copy_array_impl(
     const GATHER& gather
 ) {
     switch (src->type()->id()) {
-        case arrow::ListType::type_id: {
-            if constexpr (!GATHER::is_identity) {
-                PSP_COMPLAIN_AND_ABORT(
-                    "Cannot expand rows of a stringified list column\n"
-                );
-            }
+        case arrow::Type::LIST:
+        case arrow::Type::LARGE_LIST:
+        case arrow::Type::STRUCT:
+        case arrow::Type::MAP: {
+            rapidjson::StringBuffer buffer;
+            for (std::int64_t i = 0; i < len; ++i) {
+                if (gather.is_null(i)) {
+                    continue;
+                }
 
-            auto list = std::static_pointer_cast<::arrow::ListArray>(src);
+                const auto row = gather[i];
+                if (!src->IsValid(row)) {
+                    continue;
+                }
 
-            switch (list->value_type()->id()) {
-                case arrow::BooleanType::type_id: {
-                    copy_bool_list(list, dest, len);
-                } break;
-                case arrow::HalfFloatType::type_id: {
-                    copy_float_list<arrow::HalfFloatArray>(list, dest, len);
-                } break;
-                case arrow::FloatType::type_id: {
-                    copy_float_list<arrow::FloatArray>(list, dest, len);
-                } break;
-                case arrow::DoubleType::type_id: {
-                    copy_float_list<arrow::DoubleArray>(list, dest, len);
-                } break;
-                case ::arrow::Int8Type::type_id: {
-                    copy_integer_list<arrow::Int8Array>(list, dest, len);
-                } break;
-                case ::arrow::Int16Type::type_id: {
-                    copy_integer_list<arrow::Int16Array>(list, dest, len);
-                } break;
-                case ::arrow::Int32Type::type_id: {
-                    copy_integer_list<arrow::Int32Array>(list, dest, len);
-                } break;
-                case ::arrow::Int64Type::type_id: {
-                    copy_integer_list<arrow::Int64Array>(list, dest, len);
-                } break;
-                case ::arrow::UInt8Type::type_id: {
-                    copy_integer_list<arrow::UInt8Array>(list, dest, len);
-                } break;
-                case ::arrow::UInt16Type::type_id: {
-                    copy_integer_list<arrow::UInt16Array>(list, dest, len);
-                } break;
-                case ::arrow::UInt32Type::type_id: {
-                    copy_integer_list<arrow::UInt32Array>(list, dest, len);
-                } break;
-                case ::arrow::UInt64Type::type_id: {
-                    copy_integer_list<arrow::UInt64Array>(list, dest, len);
-                } break;
-                case ::arrow::StringType::type_id: {
-                    copy_string_list(list, dest, len);
-                } break;
-                default:
-                    auto val = list->value_type();
-                    std::stringstream ss;
-                    ss << "Given Unsupported type '" << *val << "'.\n";
-                    auto cc = ss.str();
-                    PSP_COMPLAIN_AND_ABORT(cc);
+                buffer.Clear();
+                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                write_json(writer, *src, row);
+                dest->set_nth(offset + i, buffer.GetString());
             }
         } break;
         case arrow::DictionaryType::type_id: {

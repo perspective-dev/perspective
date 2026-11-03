@@ -726,6 +726,7 @@ impl Client {
                 limit: None,
                 page_to_disk: None,
                 list_flatten: None,
+                struct_flatten: None,
                 schema: None,
             })),
             resp => Err(resp.into()),
@@ -773,6 +774,7 @@ impl Client {
                 limit: info.limit,
                 page_to_disk: None,
                 list_flatten: None,
+                struct_flatten: None,
                 schema: None,
             };
 

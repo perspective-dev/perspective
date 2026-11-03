@@ -373,6 +373,20 @@ class TestTableArrowExpandedIndex(object):
         with pytest.raises(psp.PerspectiveError, match=r"`batch`"):
             Table(self.orders([1, 2], [1.5, 2.5]), index="batch")
 
+    def test_index_on_a_sibling_is_rejected_from_a_zero_row_arrow(self):
+        with pytest.raises(psp.PerspectiveError, match=r"`batch`"):
+            Table(self.orders([], []).slice(0, 0), index="batch")
+
+    def test_index_from_the_list_is_accepted_from_a_zero_row_arrow(self):
+        tbl = Table(self.orders([], []).slice(0, 0), index="orders.id")
+        assert tbl.size() == 0
+        tbl.update(arrow_bytes(self.orders([1, 2], [1.5, 2.5])))
+        assert tbl.view().to_columns() == {
+            "batch": [1, 1],
+            "orders.id": [1, 2],
+            "orders.price": [1.5, 2.5],
+        }
+
     def test_index_on_a_list_column_itself_is_allowed(self):
         data = pa.table(
             {
@@ -581,3 +595,361 @@ class TestTableArrowFlatUnaffected(object):
         )
 
         assert tbl.view().to_columns() == {"a": [1, 2], "b": [10, 99]}
+
+
+class TestTableArrowMap(object):
+    map_type = pa.map_(pa.string(), pa.int64())
+
+    def test_map_pivots_to_dotted_columns(self):
+        data = pa.table(
+            {
+                "id": pa.array([1, 2], type=pa.int64()),
+                "m": pa.array([[("a", 1), ("b", 2)], [("b", 3)]], type=self.map_type),
+            }
+        )
+
+        tbl = Table(data)
+        assert tbl.schema() == {
+            "id": "integer",
+            "m.a": "integer",
+            "m.b": "integer",
+        }
+
+        assert tbl.view().to_columns() == {
+            "id": [1, 2],
+            "m.a": [1, None],
+            "m.b": [2, 3],
+        }
+
+    def test_empty_and_null_maps_yield_nulls(self):
+        data = pa.table(
+            {"m": pa.array([[("a", 1)], [], None], type=self.map_type)}
+        )
+
+        assert Table(data).view().to_columns() == {"m.a": [1, None, None]}
+
+    def test_null_item_is_a_null_cell(self):
+        data = pa.table(
+            {"m": pa.array([[("a", None)], [("a", 2)]], type=self.map_type)}
+        )
+
+        assert Table(data).view().to_columns() == {"m.a": [None, 2]}
+
+    def test_duplicate_key_in_a_row_last_wins(self):
+        data = pa.table(
+            {"m": pa.array([[("a", 1), ("a", 2)]], type=self.map_type)}
+        )
+
+        assert Table(data).view().to_columns() == {"m.a": [2]}
+
+    def test_map_of_struct_pivots_both(self):
+        item = pa.struct([("a", pa.int64()), ("b", pa.float64())])
+        data = pa.table(
+            {
+                "m": pa.array(
+                    [[("x", {"a": 1, "b": 1.5})]],
+                    type=pa.map_(pa.string(), item),
+                )
+            }
+        )
+
+        assert Table(data).view().to_columns() == {"m.x.a": [1], "m.x.b": [1.5]}
+
+    def test_map_of_list_follows_list_flatten(self):
+        data = pa.table(
+            {
+                "id": pa.array([1], type=pa.int64()),
+                "m": pa.array(
+                    [[("x", [1, 2])]],
+                    type=pa.map_(pa.string(), pa.list_(pa.int64())),
+                ),
+            }
+        )
+
+        assert Table(data).view().to_columns() == {"id": [1, 1], "m.x": [1, 2]}
+        assert Table(data, list_flatten="stringify").view().to_columns() == {
+            "id": [1],
+            "m.x": ["[1,2]"],
+        }
+
+    def test_map_of_lists_zips_as_siblings(self):
+        item = pa.list_(pa.int64())
+        data = pa.table(
+            {
+                "m": pa.array(
+                    [[("x", [1, 2]), ("y", [3, 4])], [("x", [5])]],
+                    type=pa.map_(pa.string(), item),
+                )
+            }
+        )
+
+        assert Table(data).view().to_columns() == {
+            "m.x": [1, 2, 5],
+            "m.y": [3, 4, None],
+        }
+
+        ragged = pa.table(
+            {
+                "m": pa.array(
+                    [[("x", [1, 2]), ("y", [3])]],
+                    type=pa.map_(pa.string(), item),
+                )
+            }
+        )
+
+        with pytest.raises(psp.PerspectiveError, match=r"`m\.x`"):
+            Table(ragged)
+
+        assert Table(ragged, list_flatten="cartesian").view().to_columns() == {
+            "m.x": [1, 2],
+            "m.y": [3, 3],
+        }
+
+    def test_map_of_map_pivots_twice(self):
+        data = pa.table(
+            {
+                "m": pa.array(
+                    [[("x", [("y", 1)])]],
+                    type=pa.map_(pa.string(), self.map_type),
+                )
+            }
+        )
+
+        assert Table(data).view().to_columns() == {"m.x.y": [1]}
+
+    def test_map_under_struct(self):
+        data = pa.table(
+            {
+                "s": pa.array(
+                    [{"m": [("a", 1)]}],
+                    type=pa.struct([("m", self.map_type)]),
+                )
+            }
+        )
+
+        assert Table(data).view().to_columns() == {"s.m.a": [1]}
+
+    def test_list_of_maps_explodes_then_pivots(self):
+        data = pa.table(
+            {
+                "id": pa.array([1], type=pa.int64()),
+                "m": pa.array(
+                    [[[("a", 1)], [("b", 2)]]], type=pa.list_(self.map_type)
+                ),
+            }
+        )
+
+        assert Table(data).view().to_columns() == {
+            "id": [1, 1],
+            "m.a": [1, None],
+            "m.b": [None, 2],
+        }
+
+    def test_multi_chunk_unions_keys(self):
+        data = pa.concat_tables(
+            [
+                pa.table({"m": pa.array([[("a", 1)]], type=self.map_type)}),
+                pa.table({"m": pa.array([[("b", 2)]], type=self.map_type)}),
+            ]
+        )
+
+        assert data.column("m").num_chunks == 2
+        assert Table(data).view().to_columns() == {
+            "m.a": [1, None],
+            "m.b": [None, 2],
+        }
+
+    def test_sliced_input(self):
+        data = pa.table(
+            {"m": pa.array([[("a", 1)], [("b", 2)], None], type=self.map_type)}
+        ).slice(1)
+
+        assert Table(data).view().to_columns() == {"m.b": [2, None]}
+
+    def test_dictionary_keys_pivot_like_strings(self):
+        keys = pa.array(["a", "b", "a"]).dictionary_encode()
+        items = pa.array([1, 2, 3], type=pa.int64())
+        data = pa.table({"m": pa.MapArray.from_arrays([0, 2, 3], keys, items)})
+        assert Table(data).view().to_columns() == {
+            "m.a": [1, 3],
+            "m.b": [2, None],
+        }
+
+    def test_non_string_keys_are_rejected(self):
+        data = pa.table(
+            {"m": pa.array([[(1, "x")]], type=pa.map_(pa.int32(), pa.string()))}
+        )
+
+        with pytest.raises(psp.PerspectiveError, match=r"`m`"):
+            Table(data)
+
+    def test_schema_table_update_matches_keys(self):
+        tbl = Table(
+            {"id": "integer", "m.a": "integer", "m.b": "integer"}, index="id"
+        )
+
+        def batch(entries):
+            return arrow_bytes(
+                pa.table(
+                    {
+                        "id": pa.array([1], type=pa.int64()),
+                        "m": pa.array([entries], type=self.map_type),
+                    }
+                )
+            )
+
+        tbl.update(batch([("a", 1), ("b", 2)]))
+        tbl.update(batch([("a", 10)]))
+        assert tbl.view().to_columns() == {"id": [1], "m.a": [10], "m.b": [2]}
+        tbl.update(batch([("c", 5)]))
+        assert tbl.view().to_columns() == {"id": [1], "m.a": [10], "m.b": [2]}
+
+    def test_columns_follow_first_appearance(self):
+        data = pa.table(
+            {"m": pa.array([[("b", 1), ("a", 2)], [("c", 3)]], type=self.map_type)}
+        )
+
+        assert Table(data).columns() == ["m.b", "m.a", "m.c"]
+
+    def test_key_colliding_with_a_literal_column_is_rejected(self):
+        data = pa.table(
+            {
+                "m.a": pa.array([1], type=pa.int64()),
+                "m": pa.array([[("a", 2)]], type=self.map_type),
+            }
+        )
+
+        with pytest.raises(psp.PerspectiveError, match=r"`m\.a`"):
+            Table(data)
+
+    def test_index_on_a_pivoted_key(self):
+        data = pa.table(
+            {
+                "m": pa.array(
+                    [[("id", 1), ("v", 10)], [("id", 2), ("v", 20)]],
+                    type=self.map_type,
+                )
+            }
+        )
+
+        tbl = Table(data, index="m.id")
+        tbl.update(
+            arrow_bytes(
+                pa.table(
+                    {"m": pa.array([[("id", 2), ("v", 99)]], type=self.map_type)}
+                )
+            )
+        )
+
+        assert tbl.view().to_columns() == {"m.id": [1, 2], "m.v": [10, 99]}
+
+
+class TestTableArrowStructStringify(object):
+    def test_struct_is_json_text(self):
+        data = pa.table(
+            {
+                "s": pa.array(
+                    [{"a": 1, "b": "x"}, None, {"a": None, "b": "y"}],
+                    type=pa.struct([("a", pa.int64()), ("b", pa.string())]),
+                )
+            }
+        )
+
+        tbl = Table(data, struct_flatten="stringify")
+        assert tbl.schema() == {"s": "string"}
+        assert tbl.view().to_columns() == {
+            "s": ['{"a":1,"b":"x"}', None, '{"a":null,"b":"y"}']
+        }
+
+    def test_map_is_json_text(self):
+        data = pa.table(
+            {
+                "m": pa.array(
+                    [[("a", 1), ("b", 2)], [], None],
+                    type=pa.map_(pa.string(), pa.int64()),
+                )
+            }
+        )
+
+        assert Table(data, struct_flatten="stringify").view().to_columns() == {
+            "m": ['{"a":1,"b":2}', "{}", None]
+        }
+
+    def test_map_keys_are_coerced_to_text(self):
+        data = pa.table(
+            {"m": pa.array([[(1, "x")]], type=pa.map_(pa.int32(), pa.string()))}
+        )
+
+        assert Table(data, struct_flatten="stringify").view().to_columns() == {
+            "m": ['{"1":"x"}']
+        }
+
+    def test_outer_struct_wins_over_list_flatten(self):
+        data = pa.table(
+            {
+                "s": pa.array(
+                    [{"a": 1, "tags": ["x", "y"]}],
+                    type=pa.struct(
+                        [("a", pa.int64()), ("tags", pa.list_(pa.string()))]
+                    ),
+                )
+            }
+        )
+
+        assert Table(data, struct_flatten="stringify").view().to_columns() == {
+            "s": ['{"a":1,"tags":["x","y"]}']
+        }
+
+    def test_list_of_struct_explodes_then_stringifies(self):
+        data = pa.table(
+            {
+                "id": pa.array([1], type=pa.int64()),
+                "l": pa.array(
+                    [[{"a": 1}, {"a": 2}]],
+                    type=pa.list_(pa.struct([("a", pa.int64())])),
+                ),
+            }
+        )
+
+        assert Table(data, struct_flatten="stringify").view().to_columns() == {
+            "id": [1, 1],
+            "l": ['{"a":1}', '{"a":2}'],
+        }
+
+        tbl = Table(data, struct_flatten="stringify", list_flatten="stringify")
+        assert tbl.view().to_columns() == {"id": [1], "l": ['[{"a":1},{"a":2}]']}
+
+    def test_json_object_is_json_text(self):
+        tbl = Table([{"s": {"a": 1, "b": "x"}}], struct_flatten="stringify")
+        assert tbl.schema() == {"s": "string"}
+        assert tbl.view().to_columns() == {"s": ['{"a":1,"b":"x"}']}
+
+    def test_mode_persists_across_update_on_a_schema_table(self):
+        tbl = Table({"s": "string"}, struct_flatten="stringify")
+        tbl.update(
+            arrow_bytes(
+                pa.table(
+                    {
+                        "s": pa.array(
+                            [{"a": 1}], type=pa.struct([("a", pa.int64())])
+                        )
+                    }
+                )
+            )
+        )
+
+        tbl.update([{"s": {"a": 2}}])
+        assert tbl.view().to_columns() == {"s": ['{"a":1}', '{"a":2}']}
+
+    def test_default_pivots(self):
+        data = pa.table(
+            {
+                "s": pa.array(
+                    [{"a": 1}], type=pa.struct([("a", pa.int64())])
+                )
+            }
+        )
+
+        assert Table(data, struct_flatten="pivot").view().to_columns() == {
+            "s.a": [1]
+        }
