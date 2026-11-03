@@ -26,7 +26,6 @@ on:
             - README.md
             - binder/
             - docs/
-            - examples/
             - rust/perspective-python/README.md
     pull_request:
         branches:
@@ -119,7 +118,9 @@ jobs:
                       rust/perspective-client/src/
                       rust/perspective-client/docs/
                       rust/perspective-js/src/ts/
+                      rust/perspective-js/dist/ts-rs/
                       rust/perspective-viewer/src/ts/
+                      rust/perspective-viewer/dist/ts-rs/
                       rust/perspective-python/LICENSE_THIRDPARTY_cargo.yml
 
     # ,-,---.       .    .   ,-_/              .---.               .
@@ -943,6 +944,9 @@ jobs:
               with:
                   name: perspective-server-wasm64-dist
                   path: rust/perspective-server/dist/wasm
+
+            - name: Consumer checks
+              run: pnpm run test:consumers
 
             - name: Run Tests
               id: run_tests

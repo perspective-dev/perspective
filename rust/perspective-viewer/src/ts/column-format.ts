@@ -21,10 +21,10 @@
  * straight into the respective constructors.
  */
 
-import type { CustomNumberFormatConfig } from "./ts-rs/CustomNumberFormatConfig.ts";
-import type { NumberFormatStyle } from "./ts-rs/NumberFormatStyle.ts";
-import type { Notation } from "./ts-rs/Notation.ts";
-import type { DatetimeFormat } from "./ts-rs/DatetimeFormat.ts";
+import type { CustomNumberFormatConfig } from "../../dist/ts-rs/CustomNumberFormatConfig.d.ts";
+import type { NumberFormatStyle } from "../../dist/ts-rs/NumberFormatStyle.d.ts";
+import type { Notation } from "../../dist/ts-rs/Notation.d.ts";
+import type { DatetimeFormat } from "../../dist/ts-rs/DatetimeFormat.d.ts";
 
 /**
  * A numeric column's `number_format` (`columns_config` value), exactly as

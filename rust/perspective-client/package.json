@@ -5,7 +5,7 @@
     "private": true,
     "repository": {
         "type": "git",
-        "url": "https://github.com/perspective-dev/perspective",
+        "url": "git+https://github.com/perspective-dev/perspective.git",
         "directory": "rust/perspective-client"
     },
     "type": "module",

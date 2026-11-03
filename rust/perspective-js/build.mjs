@@ -23,6 +23,22 @@ const IS_DEBUG =
 
 const IS_FAST = !IS_DEBUG && !!process.env.PSP_FAST;
 
+/**
+ * Links `wasm/registry.ts` as the published `dist/esm/wasm/registry.js` module
+ * instead of inlining a copy.
+ */
+function RegistryExternal() {
+    return {
+        name: "registry-external",
+        setup(build) {
+            build.onResolve({ filter: /\/wasm\/registry\.ts$/ }, (args) => ({
+                path: args.path.replace(/\.ts$/, ".js"),
+                external: true,
+            }));
+        },
+    };
+}
+
 const BUILD = [
     {
         entryPoints: ["src/ts/perspective-server.worker.ts"],
@@ -56,10 +72,16 @@ const BUILD = [
     //     "Bundler friendly": true,
     // },
     {
+        entryPoints: ["src/ts/wasm/registry.ts"],
+        format: "esm",
+        target: "es2022",
+        outfile: "dist/esm/wasm/registry.js",
+    },
+    {
         entryPoints: ["src/ts/perspective.browser.ts"],
         format: "esm",
         target: "es2022",
-        plugins: [PerspectiveEsbuildPlugin()],
+        plugins: [PerspectiveEsbuildPlugin(), RegistryExternal()],
         outfile: "dist/esm/perspective.js",
     },
     // Node.js build
@@ -84,14 +106,14 @@ const BUILD = [
         entryPoints: ["src/ts/virtual_servers/duckdb.ts"],
         format: "esm",
         target: "es2022",
-        plugins: [PerspectiveEsbuildPlugin()],
+        plugins: [PerspectiveEsbuildPlugin(), RegistryExternal()],
         outfile: "dist/esm/virtual_servers/duckdb.js",
     },
     {
         entryPoints: ["src/ts/virtual_servers/clickhouse.ts"],
         format: "esm",
         target: "es2022",
-        plugins: [PerspectiveEsbuildPlugin()],
+        plugins: [PerspectiveEsbuildPlugin(), RegistryExternal()],
         outfile: "dist/esm/virtual_servers/clickhouse.js",
     },
 ];

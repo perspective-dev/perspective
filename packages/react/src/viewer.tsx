@@ -13,7 +13,7 @@
 import * as React from "react";
 import type * as psp from "@perspective-dev/client";
 import type * as pspViewer from "@perspective-dev/viewer";
-import { usePspListener } from "./utils";
+import { usePspListener } from "./utils.tsx";
 
 function PerspectiveViewerImpl(props: PerspectiveViewerProps) {
     const [viewer, setViewer] =

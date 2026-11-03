@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-export type * from "../../dist/wasm/perspective-js.d.ts";
+export type * from "./public_types.ts";
 import type * as psp from "../../dist/wasm/perspective-js.d.ts";
 export type * from "./virtual_server.ts";
 import * as psp_virtual from "./virtual_server.ts";

@@ -1,17 +1,9 @@
 {
+    "extends": "../../tsconfig.base.json",
     "compilerOptions": {
-        "module": "ESNext",
-        "target": "ESNext",
-        "declaration": true,
-        "emitDeclarationOnly": true,
         "outDir": "./dist/esm",
         "rootDir": "./src/ts",
-        "moduleResolution": "bundler",
-        "allowImportingTsExtensions": true,
-        "skipLibCheck": true,
         "resolveJsonModule": true,
-        "strict": true,
-        "noImplicitAny": true,
         "esModuleInterop": true
     },
     "include": ["./src/ts/**/*", "./types.d.ts", "./index.d.ts"]

@@ -31,9 +31,11 @@
  * @module perspective-viewer
  */
 
+/// <reference lib="esnext.disposable" preserve="true" />
+
 import "regular-layout";
 
-export { IPerspectiveViewerPlugin } from "./plugin.ts";
+export type { IPerspectiveViewerPlugin } from "./plugin.ts";
 export { HTMLPerspectiveViewerPluginElement } from "./plugin.ts";
 export { providers } from "./providers.ts";
 export type { AgentProviderPreset } from "./providers.ts";
@@ -48,23 +50,23 @@ export type { NumberFormatConfig, DateFormatConfig } from "./column-format.ts";
 
 export type * from "./extensions.ts";
 export { PerspectiveSelectDetail } from "./select-detail.ts";
-export type * from "./ts-rs/ViewerConfigUpdate.ts";
-export type * from "./ts-rs/ViewerConfig.ts";
-export type * from "./ts-rs/WorkspaceConfigUpdate.ts";
-export type * from "./ts-rs/WorkspaceConfig.ts";
-export type * from "./ts-rs/Filter.ts";
-export type * from "./ts-rs/FilterTerm.ts";
-export type * from "./ts-rs/FilterReducer.ts";
-export type * from "./ts-rs/PluginStaticConfig.ts";
-export type * from "./ts-rs/ExportMethod.ts";
-export type * from "./ts-rs/PanelOptions.ts";
-export type * from "./ts-rs/SaveWorkspaceOptions.ts";
-export type * from "./ts-rs/ClientOptions.ts";
-export type * from "./ts-rs/ExportOptions.ts";
-export type * from "./ts-rs/GetTableOptions.ts";
-export type * from "./ts-rs/GetClientOptions.ts";
-export type * from "./ts-rs/GetViewOptions.ts";
-export type * from "./ts-rs/GetViewMode.ts";
+export type * from "../../dist/ts-rs/ViewerConfigUpdate.d.ts";
+export type * from "../../dist/ts-rs/ViewerConfig.d.ts";
+export type * from "../../dist/ts-rs/WorkspaceConfigUpdate.d.ts";
+export type * from "../../dist/ts-rs/WorkspaceConfig.d.ts";
+export type * from "../../dist/ts-rs/Filter.d.ts";
+export type * from "../../dist/ts-rs/FilterTerm.d.ts";
+export type * from "../../dist/ts-rs/FilterReducer.d.ts";
+export type * from "../../dist/ts-rs/PluginStaticConfig.d.ts";
+export type * from "../../dist/ts-rs/ExportMethod.d.ts";
+export type * from "../../dist/ts-rs/PanelOptions.d.ts";
+export type * from "../../dist/ts-rs/SaveWorkspaceOptions.d.ts";
+export type * from "../../dist/ts-rs/ClientOptions.d.ts";
+export type * from "../../dist/ts-rs/ExportOptions.d.ts";
+export type * from "../../dist/ts-rs/GetTableOptions.d.ts";
+export type * from "../../dist/ts-rs/GetClientOptions.d.ts";
+export type * from "../../dist/ts-rs/GetViewOptions.d.ts";
+export type * from "../../dist/ts-rs/GetViewMode.d.ts";
 
 export { init, init_client } from "./bootstrap.ts";
 export type {

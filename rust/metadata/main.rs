@@ -29,6 +29,7 @@
 use std::error::Error;
 use std::fmt::Write;
 use std::fs;
+use std::path::Path;
 
 use perspective_client::config::*;
 use perspective_client::virtual_server::Features;
@@ -46,8 +47,43 @@ use perspective_viewer::config::{
 };
 use ts_rs::TS;
 
+/// Replaces every ts-rs `.ts` module under `dir` with a `.d.ts` declaration
+/// that imports its siblings as `.d.ts`.
+fn into_declarations(dir: &Path) -> Result<(), Box<dyn Error>> {
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            into_declarations(&path)?;
+            continue;
+        }
+
+        let Some(stem) = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| name.strip_suffix(".ts"))
+            .filter(|stem| !stem.ends_with(".d"))
+        else {
+            continue;
+        };
+
+        let declaration = fs::read_to_string(&path)?
+            .lines()
+            .map(|line| match line.strip_suffix(".ts\";") {
+                Some(head) if line.starts_with("import type ") => format!("{head}.d.ts\";"),
+                _ => line.to_owned(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        fs::write(dir.join(format!("{stem}.d.ts")), declaration + "\n")?;
+        fs::remove_file(&path)?;
+    }
+
+    Ok(())
+}
+
 pub fn generate_type_bindings_viewer() -> Result<(), Box<dyn Error>> {
-    let path = std::env::current_dir()?.join("../perspective-viewer/src/ts/ts-rs");
+    let path = std::env::current_dir()?.join("../perspective-viewer/dist/ts-rs");
 
     // The directory is 100% generated: wipe before export so types removed
     // from the export graph cannot linger as stale orphans (the
@@ -85,7 +121,7 @@ pub fn generate_type_bindings_viewer() -> Result<(), Box<dyn Error>> {
     NumberFormatStyle::export_all_to(&path)?;
     Notation::export_all_to(&path)?;
     DatetimeFormat::export_all_to(&path)?;
-    Ok(())
+    into_declarations(&path)
 }
 
 fn generate_exprtk_docs() -> Result<(), Box<dyn Error>> {
@@ -106,7 +142,12 @@ fn generate_exprtk_docs() -> Result<(), Box<dyn Error>> {
 
 #[doc(hidden)]
 pub fn generate_type_bindings_js() -> Result<(), Box<dyn Error>> {
-    let path = std::env::current_dir()?.join("../perspective-js/src/ts/ts-rs");
+    let path = std::env::current_dir()?.join("../perspective-js/dist/ts-rs");
+    if path.exists() {
+        fs::remove_dir_all(&path)?;
+    }
+
+    fs::create_dir_all(&path)?;
     ColumnType::export_all_to(&path)?;
     ColumnWindow::export_all_to(&path)?;
     DeleteOptions::export_all_to(&path)?;
@@ -123,7 +164,7 @@ pub fn generate_type_bindings_js() -> Result<(), Box<dyn Error>> {
     ViewConfigUpdate::export_all_to(&path)?;
     ViewWindow::export_all_to(&path)?;
     ViewWindow::export_all_to(&path)?;
-    Ok(())
+    into_declarations(&path)
 }
 
 #[doc(hidden)]

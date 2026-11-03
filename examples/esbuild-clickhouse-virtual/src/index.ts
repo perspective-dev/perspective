@@ -24,7 +24,7 @@ import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wa
 // @ts-ignore
 import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm";
 
-import { ClickhouseHandler } from "@perspective-dev/client/src/ts/virtual_servers/clickhouse.ts";
+import { ClickhouseHandler } from "@perspective-dev/client/virtual_servers/clickhouse";
 import { createClient } from "@clickhouse/client-web";
 
 await perspective_viewer.init({

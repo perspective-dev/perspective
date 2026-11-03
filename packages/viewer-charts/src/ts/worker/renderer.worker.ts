@@ -29,7 +29,6 @@ import { MessageHostSink } from "../interaction/host-sink-message.ts";
 import { CHART_IMPLS } from "../charts/registry.ts";
 import type { PlotLayout } from "../layout/plot-layout.ts";
 import type {
-    ControlMsg,
     InitMsg,
     InteractionEvent,
     LoadAndRenderMsg,
@@ -38,7 +37,6 @@ import type {
 import { viewToColumnDataMap } from "../data/view-reader.ts";
 import { TILE_SOURCES, type TileSourceSpec } from "../map/tile-source.ts";
 import { loadFontDeduped } from "./font-loader.ts";
-import { dispatch } from "./dispatch.ts";
 import { installSessionHost } from "./session-host.ts";
 import { deferIfDraining, unregister } from "../render/scheduler.ts";
 
@@ -56,13 +54,6 @@ class StaleGenerationError extends Error {
     }
 }
 
-/**
- * Renderer state. One per host element. In worker mode it lives in
- * the worker; in in-process mode (host loads this module via dynamic
- * `import(workerURL)`) it lives on the main thread. The class itself
- * doesn't care — both modes drive it through a `MessagePort` of
- * `ControlMsg`s.
- */
 /**
  * Resolve a chart tag to its impl class via the lazy registry. Eager
  * tags microtask-resolve; map tags trigger a dynamic `import()` that
@@ -82,8 +73,7 @@ async function resolveChartImpl(
 /**
  * Renderer-scope shared context pool for pooled blit mode. Lazily
  * created on first use so non-blit / non-pooled scopes never allocate
- * one. One per renderer scope (the worker, or the main thread in
- * in-process mode) — `WorkerRenderer`s in the same scope share its K
+ * one. One per renderer worker — its `WorkerRenderer`s share its K
  * contexts.
  */
 let CONTEXT_POOL: ContextPool | null = null;
@@ -407,7 +397,7 @@ export class WorkerRenderer {
     resize(cssWidth: number, cssHeight: number, dpr: number): void {
         // `glManager.resize` would set `canvas.width = N`, which the
         // spec mandates clears the drawing buffer immediately. In
-        // direct / in-process modes the GL canvas IS the host's
+        // direct mode the GL canvas IS the host's
         // visible canvas, so a clear at message-receipt time
         // followed by a paint on the next RAF leaves one full
         // compositor cycle between them displaying an empty buffer
@@ -847,12 +837,7 @@ export class WorkerRenderer {
 }
 
 /**
- * Detect whether this module is loaded in a Web Worker scope.
- */
-const IS_WORKER_SCOPE = typeof (globalThis as any).importScripts === "function";
-
-/**
- * Worker-mode bootstrap: receives the host's `InitMsg`, instantiates
+ * Bootstrap: receives the host's `InitMsg`, instantiates
  * wasm, registers fonts, opens a `Client` against the host's
  * `ProxySession`, and constructs a {@link WorkerRenderer} bound to the
  * supplied control port (which in worker scope is `self`).
@@ -861,10 +846,6 @@ async function bootstrapWorker(
     msg: InitMsg,
     host: MessagePort,
 ): Promise<WorkerRenderer> {
-    if (!msg.clientWorkerURL || !msg.clientWasm || !msg.proxyPort) {
-        throw new Error("Init error");
-    }
-
     const module = (await import(
         msg.clientWorkerURL.toString()
     )) as typeof wasm_module_type;
@@ -906,52 +887,4 @@ async function bootstrapWorker(
     return renderer;
 }
 
-/**
- * In-process bootstrap. Used when the host loads this same module via
- * `await import(workerURL)` to run the renderer on the main thread —
- * skips the wasm / font / proxy-port plumbing because the host already
- * owns a live `Client` and the document's `FontFaceSet` is the active
- * one.
- */
-export async function bootstrapInProcess(opts: {
-    msg: InitMsg;
-    client: Client;
-    controlPort: MessagePort;
-}): Promise<WorkerRenderer> {
-    const view = opts.client.__unsafe_open_view(opts.msg.viewName);
-    const table = opts.msg.tableName
-        ? await opts.client.open_table(opts.msg.tableName)
-        : null;
-    const ImplClass = await resolveChartImpl(opts.msg.chartTag);
-    const renderer = new WorkerRenderer(
-        opts.msg,
-        opts.client,
-        view,
-        table,
-        opts.controlPort,
-        ImplClass,
-    );
-
-    // Listen for control messages on the same port so the host's
-    // `RendererTransport` shape doesn't need to branch.
-    opts.controlPort.addEventListener("message", (e: MessageEvent) => {
-        const ctrl = e.data as ControlMsg;
-        if (ctrl?.kind === "init") {
-            return;
-        }
-
-        dispatch(renderer, ctrl);
-    });
-
-    opts.controlPort.start();
-
-    renderer.post({ kind: "ready" });
-    return renderer;
-}
-
-// Worker scope only: install the shared message handler . The same module is
-// dynamic-imported on the main thread (in-process mode) where this branch is
-// skipped.
-if (IS_WORKER_SCOPE) {
-    installSessionHost(bootstrapWorker);
-}
+installSessionHost(bootstrapWorker);

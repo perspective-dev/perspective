@@ -31,10 +31,10 @@ import type * as perspective from "../../dist/wasm/perspective-js.js";
  * @module virtual_server
  */
 
-// `Features` must re-export from the wasm `.d.ts` (NOT "./ts-rs/Features.ts")
-// - `perspective.browser.ts` star-exports both this module and the wasm
-// `.d.ts`, and star exports of the same name only merge when they resolve to
-// the same declaration.
+// `Features` must re-export the same `dist/ts-rs/Features.d.ts` declaration
+// as `public_types.ts` - `perspective.browser.ts` star-exports both modules,
+// and star exports of the same name only merge when they resolve to the same
+// declaration.
 export type {
     VirtualServerHandler,
     VirtualHostedTable,

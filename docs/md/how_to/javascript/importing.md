@@ -36,6 +36,13 @@ const viewer = document.createElement("perspective-viewer");
 
 The exact syntax will vary slightly depending on the bundler.
 
+`@perspective-dev/client`, `@perspective-dev/viewer` and the virtual server
+handlers share one page-wide registry of these binaries, published as the
+internal `@perspective-dev/client/registry` module, so a bundler links it once.
+Every Perspective package on a page must be the same release: `init()` throws
+if packages from another release have also loaded, for example when a
+dependency pins a different `@perspective-dev/client` version than your app.
+
 ### Memory64 (wasm64)
 
 `@perspective-dev/server` also ships a WebAssembly Memory64 build of the engine,

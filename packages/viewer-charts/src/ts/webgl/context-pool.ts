@@ -28,9 +28,8 @@ import { GLContext } from "./gl-context.ts";
  * Pooling applies to blit mode only: direct mode renders into the host's
  * transferred visible canvas, which is permanently 1:1 with a context.
  *
- * One pool per renderer scope (the worker, or the main thread in
- * in-process mode). Contexts are created lazily on first `acquire` and
- * live until renderer-scope teardown — like the contexts they replace,
+ * One pool per renderer worker. Contexts are created lazily on first
+ * `acquire` and live until worker teardown — like the contexts they replace,
  * they are not refcounted, because a shared context outlives any single
  * borrowing renderer.
  */

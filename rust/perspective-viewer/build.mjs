@@ -75,7 +75,10 @@ export async function build_all() {
         {
             entryPoints: ["src/ts/perspective-viewer.ts"],
             format: "esm",
-            external: ["*.wasm"],
+            minify: false,
+            minifySyntax: !process.env.PSP_DEBUG,
+            minifyIdentifiers: !process.env.PSP_DEBUG,
+            external: ["*.wasm", "@perspective-dev/client/registry"],
             outdir: "dist/esm",
             plugins: [
                 WorkerPlugin({

@@ -24,7 +24,7 @@ import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wa
 // @ts-ignore
 import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm";
 
-import { DuckDBHandler } from "@perspective-dev/client/dist/esm/virtual_servers/duckdb.js";
+import { DuckDBHandler } from "@perspective-dev/client/virtual_servers/duckdb";
 import * as duckdb from "@duckdb/duckdb-wasm";
 
 // @ts-ignore

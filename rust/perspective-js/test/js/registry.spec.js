@@ -184,19 +184,18 @@ test.describe("wasm registry", () => {
         );
     });
 
-    test("a registry from another version rejects this one", async ({
+    test("another version on the page imports, then rejects init()", async ({
         page,
     }) => {
         const result = await in_page(page, async ({ urls }) => {
-            globalThis[Symbol.for("@perspective-dev/wasm")] = {
-                version: "0.0.0",
-                sources: {},
-                consumed: new Set(),
-            };
+            globalThis[Symbol.for("@perspective-dev/wasm")] = new Map([
+                ["0.0.0", { sources: {}, consumed: new Set() }],
+            ]);
 
+            const perspective = await import(urls.esm);
             try {
-                await import(urls.esm);
-                return "imported";
+                await perspective.init({ server: fetch(urls.wasm32) });
+                return "initialized";
             } catch (e) {
                 return e.message;
             }
@@ -205,6 +204,45 @@ test.describe("wasm registry", () => {
         test.expect(result).toContain(
             "cannot share a page with Perspective 0.0.0",
         );
+    });
+
+    test("another version on the page leaves this version's worker() working", async ({
+        page,
+    }) => {
+        const result = await in_page(page, async ({ urls }) => {
+            globalThis[Symbol.for("@perspective-dev/wasm")] = new Map([
+                ["0.0.0", { sources: {}, consumed: new Set() }],
+            ]);
+
+            const perspective = await import(urls.cdn);
+            const client = await perspective.worker();
+            const table = await client.table({ x: [1, 2, 3] });
+            return await table.size();
+        });
+
+        test.expect(result).toEqual(3);
+    });
+
+    test("the ESM build links the published registry module", async ({
+        page,
+    }) => {
+        const result = await in_page(page, async ({ urls }) => {
+            const registry_url = urls.esm.replace(
+                "perspective.js",
+                "wasm/registry.js",
+            );
+
+            const text = async (url) => await (await fetch(url)).text();
+            return {
+                esm: (await text(urls.esm)).includes("cannot share a page"),
+                registry: (await text(registry_url)).includes(
+                    "cannot share a page",
+                ),
+                cdn: (await text(urls.cdn)).includes("cannot share a page"),
+            };
+        });
+
+        test.expect(result).toEqual({ esm: false, registry: true, cdn: true });
     });
 
     test("make_client() Clients load into the viewer", async ({ page }) => {

@@ -14,9 +14,12 @@ import type * as wasm_module_type from "../../dist/wasm/perspective-viewer.js";
 import {
     init as registry_init,
     provide_viewer_runtime,
-} from "@perspective-dev/client/src/ts/wasm/registry.ts";
-import type { ClientRuntime } from "@perspective-dev/client/src/ts/wasm/registry.ts";
-import type { InitOptions, WasmRegistration } from "@perspective-dev/client";
+} from "@perspective-dev/client/registry";
+import type {
+    ClientRuntime,
+    InitOptions,
+    WasmRegistration,
+} from "@perspective-dev/client/registry";
 
 // @ts-ignore
 import * as worker_url from "./perspective-viewer.worker.ts";
@@ -26,7 +29,7 @@ export type {
     WasmBinary,
     WasmRegistration,
     WasmSource,
-} from "@perspective-dev/client";
+} from "@perspective-dev/client/registry";
 
 /**
  * Register Perspective's WebAssembly binaries for this page; the same function
@@ -45,7 +48,9 @@ provide_viewer_runtime(async (wasm) => {
     // @ts-ignore
     const url = await worker_url.getWorkerURL();
     const [glue, module] = await Promise.all([
-        GLUE_OVERRIDE === undefined ? import(url) : GLUE_OVERRIDE,
+        GLUE_OVERRIDE === undefined
+            ? import(/* webpackIgnore: true */ /* @vite-ignore */ url)
+            : GLUE_OVERRIDE,
         wasm instanceof WebAssembly.Module ? wasm : WebAssembly.compile(wasm),
     ]);
 

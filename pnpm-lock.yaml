@@ -10,8 +10,8 @@ catalogs:
       specifier: ^1.12.0
       version: 1.17.0
     '@duckdb/duckdb-wasm':
-      specifier: 1.33.1-dev18.0
-      version: 1.33.1-dev18.0
+      specifier: ^1.32.0
+      version: 1.32.0
     '@fontsource/roboto-mono':
       specifier: 4.5.10
       version: 4.5.10
@@ -24,6 +24,9 @@ catalogs:
     '@playwright/test':
       specifier: '=1.62.0'
       version: 1.62.0
+    '@types/emscripten':
+      specifier: ^1.39.10
+      version: 1.41.6
     '@types/node':
       specifier: '>=22'
       version: 24.9.1
@@ -249,7 +252,7 @@ importers:
     dependencies:
       '@duckdb/duckdb-wasm':
         specifier: 'catalog:'
-        version: 1.33.1-dev18.0
+        version: 1.32.0
       '@perspective-dev/client':
         specifier: workspace:^
         version: link:../rust/perspective-js
@@ -281,6 +284,37 @@ importers:
       lightningcss:
         specifier: 'catalog:'
         version: 1.33.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  examples/bundler-test:
+    dependencies:
+      '@clickhouse/client-web':
+        specifier: 'catalog:'
+        version: 1.17.0
+      '@duckdb/duckdb-wasm':
+        specifier: 'catalog:'
+        version: 1.32.0
+      '@perspective-dev/client':
+        specifier: workspace:^
+        version: link:../../rust/perspective-js
+      '@perspective-dev/react':
+        specifier: workspace:^
+        version: link:../../packages/react
+      '@perspective-dev/viewer':
+        specifier: workspace:^
+        version: link:../../rust/perspective-viewer
+      '@perspective-dev/viewer-charts':
+        specifier: workspace:^
+        version: link:../../packages/viewer-charts
+      '@perspective-dev/viewer-datagrid':
+        specifier: workspace:^
+        version: link:../../packages/viewer-datagrid
+    devDependencies:
+      '@types/emscripten':
+        specifier: 'catalog:'
+        version: 1.41.6
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -338,7 +372,7 @@ importers:
     dependencies:
       '@duckdb/duckdb-wasm':
         specifier: 'catalog:'
-        version: 1.33.1-dev18.0
+        version: 1.32.0
       '@perspective-dev/client':
         specifier: workspace:^
         version: link:../../rust/perspective-js
@@ -853,7 +887,7 @@ importers:
         version: 1.17.0
       '@duckdb/duckdb-wasm':
         specifier: 'catalog:'
-        version: 1.33.1-dev18.0
+        version: 1.32.0
       '@perspective-dev/esbuild-plugin':
         specifier: workspace:^
         version: link:../../tools/esbuild-plugin
@@ -1219,8 +1253,8 @@ packages:
     resolution: {integrity: sha512-dBVuXR082gk3jsFp7Rd/JI4kytwGHecnCoTtXFb7DB6CNHp4rg5k1bhg0nWdLGLnOV71lmDzGQaLMy8iPLY0pw==}
     engines: {node: '>=10.0.0'}
 
-  '@duckdb/duckdb-wasm@1.33.1-dev18.0':
-    resolution: {integrity: sha512-BVF+CYmOsrMRY8rnJa0USmC5PujPs2eZovQrSEeHs85J/MZ9mSblhzDih9BPu4MgwUxK9dYbYxKkBIJ4jv3EKw==}
+  '@duckdb/duckdb-wasm@1.32.0':
+    resolution: {integrity: sha512-IewXTNYEjsZCPE9weUWgtjGxUlMRo7qhX0GF6tq/KjK8bnY+RAl4cyUdYUfcdzbyb4b9ZxPC+FOsCcxgaKFWMg==}
 
   '@esbuild/aix-ppc64@0.25.11':
     resolution: {integrity: sha512-Xt1dOL13m8u0WE8iplx9Ibbm+hFAO0GsU2P34UNoDGvZYkY8ifSiy6Zuc1lYxfG7svWE2fzqCUmFp5HCn51gJg==}
@@ -2303,6 +2337,9 @@ packages:
 
   '@types/command-line-usage@5.0.4':
     resolution: {integrity: sha512-BwR5KP3Es/CSht0xqBcUXS3qCAUVXwpRKsV2+arxeb65atasuXG9LykC9Ab10Cw3s2raH92ZqOeILaQbsB2ACg==}
+
+  '@types/emscripten@1.41.6':
+    resolution: {integrity: sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==}
 
   '@types/eslint-scope@3.7.7':
     resolution: {integrity: sha512-MzMFlSLBqNF2gcHWO0G1vP/YQyfvrxZ0bF+u7mzUdZ1/xK4A4sru+nraZz5i3iEIk1l1uyicaDVTB4QbbEkAYg==}
@@ -5362,10 +5399,9 @@ snapshots:
 
   '@discoveryjs/json-ext@0.5.7': {}
 
-  '@duckdb/duckdb-wasm@1.33.1-dev18.0':
+  '@duckdb/duckdb-wasm@1.32.0':
     dependencies:
       apache-arrow: 17.0.0
-      qs: 6.15.0
 
   '@esbuild/aix-ppc64@0.25.11':
     optional: true
@@ -6903,6 +6939,8 @@ snapshots:
   '@types/command-line-args@5.2.3': {}
 
   '@types/command-line-usage@5.0.4': {}
+
+  '@types/emscripten@1.41.6': {}
 
   '@types/eslint-scope@3.7.7':
     dependencies:

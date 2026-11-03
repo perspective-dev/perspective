@@ -11,16 +11,6 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 /**
- * Renderer mode. `"worker"` runs the chart code in a Web Worker (off
- * the main thread, gets parallelism but pays a postMessage hop on
- * every interaction). `"inprocess"` dynamic-imports the same worker
- * module on the main thread so the bundle stays single-copy without
- * the worker boundary. The two paths share a `MessageChannel`-shaped
- * control protocol — only the handle around it differs.
- */
-export const RUNTIME_MODE: "worker" | "inprocess" = "worker";
-
-/**
  * Build-time toggle between the two GL-canvas display strategies.
  *
  * - `"direct"` — host transfers `.webgl-canvas` to the renderer via

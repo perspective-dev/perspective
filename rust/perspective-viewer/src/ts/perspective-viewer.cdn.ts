@@ -14,7 +14,7 @@ import perspective_viewer from "./perspective-viewer.ts";
 import {
     register_default,
     resolve_viewer,
-} from "@perspective-dev/client/src/ts/wasm/registry.ts";
+} from "@perspective-dev/client/registry";
 export * from "./perspective-viewer.ts";
 
 register_default({

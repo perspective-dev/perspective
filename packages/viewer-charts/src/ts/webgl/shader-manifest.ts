@@ -33,8 +33,6 @@ import treemapFrag from "../shaders/treemap.frag.glsl";
 import densitySplatVert from "../shaders/density-splat.vert.glsl";
 import densitySplatFrag from "../shaders/density-splat.frag.glsl";
 import densityExtremeFrag from "../shaders/density-extreme.frag.glsl";
-import densityMrtVert from "../shaders/density-mrt.vert.glsl";
-import densityMrtFrag from "../shaders/density-mrt.frag.glsl";
 import densityResolveVert from "../shaders/density-resolve.vert.glsl";
 import densityResolveFrag from "../shaders/density-resolve.frag.glsl";
 import tileVert from "../shaders/tile.vert.glsl";
@@ -108,41 +106,3 @@ export const SHADER_MANIFEST: readonly ShaderSpec[] = [
     // plugin tag activates.
     { name: "map-tile", vert: tileVert, frag: tileFrag },
 ];
-
-// Re-export each shader source so glyph modules can import their
-// source from the manifest rather than from `../shaders/*.glsl`
-// directly. This keeps the manifest's vert/frag fields and the
-// `getOrCreate` call sites pointing at exactly the same string
-// constants — module dedup ensures reference identity, so cache
-// hits work even on the lazy path.
-export {
-    barVert,
-    barFrag,
-    lineVert,
-    lineFrag,
-    scatterVert,
-    scatterFrag,
-    areaVert,
-    areaFrag,
-    lineUniformVert,
-    lineUniformFrag,
-    yScatterVert,
-    yScatterFrag,
-    candlestickBodyVert,
-    candlestickBodyFrag,
-    heatmapVert,
-    heatmapFrag,
-    sunburstArcVert,
-    sunburstArcFrag,
-    treemapVert,
-    treemapFrag,
-    densitySplatVert,
-    densitySplatFrag,
-    densityExtremeFrag,
-    densityMrtVert,
-    densityMrtFrag,
-    densityResolveVert,
-    densityResolveFrag,
-    tileVert,
-    tileFrag,
-};

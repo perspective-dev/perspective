@@ -69,4 +69,4 @@
  * @module
  */
 
-export * from "./viewer";
+export * from "./viewer.tsx";

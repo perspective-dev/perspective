@@ -13,10 +13,10 @@
 import type { HTMLPerspectiveViewerPluginElement } from "./plugin.ts";
 import type { PerspectiveViewerElement } from "../../dist/wasm/perspective-viewer.js";
 import type React from "react";
-import type { ViewerConfigUpdate } from "./ts-rs/ViewerConfigUpdate.ts";
+import type { ViewerConfigUpdate } from "../../dist/ts-rs/ViewerConfigUpdate.d.ts";
 import type { ColumnType, ViewWindow, Filter } from "@perspective-dev/client";
-import type { ConfigDefaultsOptions } from "./ts-rs/ConfigDefaultsOptions.ts";
-import type { ColumnConfigDefaultsOptions } from "./ts-rs/ColumnConfigDefaultsOptions.ts";
+import type { ConfigDefaultsOptions } from "../../dist/ts-rs/ConfigDefaultsOptions.d.ts";
+import type { ColumnConfigDefaultsOptions } from "../../dist/ts-rs/ColumnConfigDefaultsOptions.d.ts";
 import type { PerspectiveSelectDetail } from "./select-detail.ts";
 
 export { PerspectiveSelectDetail } from "./select-detail.ts";

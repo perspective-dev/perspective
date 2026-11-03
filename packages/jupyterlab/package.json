@@ -4,7 +4,7 @@
     "description": "JupyterLab file renderers for the Perspective library (CSV, JSON, Arrow). The PerspectiveWidget itself ships via the perspective-python wheel using anywidget.",
     "repository": {
         "type": "git",
-        "url": "https://github.com/perspective-dev/perspective",
+        "url": "git+https://github.com/perspective-dev/perspective.git",
         "directory": "packages/jupyterlab"
     },
     "keywords": [

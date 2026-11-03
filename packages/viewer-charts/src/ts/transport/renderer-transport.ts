@@ -29,7 +29,6 @@ import { snapshotThemeVars } from "../theme/theme-snapshot.ts";
 import { snapshotFontFaces } from "../utils/font-snapshot.ts";
 import { TILE_SOURCES } from "../map/tile-source.ts";
 import { DomHostSink } from "../interaction/host-sink-dom.ts";
-import { RUNTIME_MODE } from "../config.ts";
 
 // @ts-ignore — resolved at build time by `@perspective-dev/esbuild-plugin/worker`
 import getWorkerURL from "../worker/renderer.worker.ts";
@@ -47,9 +46,6 @@ import getWorkerURL from "../worker/renderer.worker.ts";
  * with N (each session retains its own WebGL context, buffer pool,
  * chart impl, view, client); the browser's ~16-context-per-worker
  * cap is the new ceiling on simultaneous worker-mode charts.
- *
- * In-process mode bypasses this entirely — each transport gets its
- * own `MessageChannel` + in-thread `WorkerRenderer`.
  */
 let SHARED_WORKER: Promise<Worker> | null = null;
 
@@ -116,21 +112,7 @@ interface PendingRenderRequest {
 }
 
 /**
- * Unified host-side driver for the chart renderer. Owns one of two
- * handle shapes:
- *
- *  - **Worker mode**: a real `Worker` running the same module. The
- *    handle posts `ControlMsg`s over `Worker.postMessage`.
- *  - **In-process mode**: a `MessageChannel` whose `port2` is owned
- *    by an in-thread `WorkerRenderer` instantiated via
- *    `await import(workerURL)`. Same module bytes, different host.
- *
- * Both modes go through the same control channel, the same
- * `ProxySession` proxy port, and the same `OffscreenCanvas` transfer
- * — `MessageChannel` and `transferControlToOffscreen` work in-realm
- * just as well as cross-thread. The only branching is at construction
- * (handle creation) and bootstrap (worker scope sets up its own
- * `Client`; in-process reuses the host's).
+ * Host-side driver for one chart's `WorkerRenderer` session in the shared renderer `Worker`.
  */
 export class RendererTransport {
     private _handle: RendererHandle | null = null;
@@ -291,35 +273,25 @@ export class RendererTransport {
         renderBlitMode: "blit" | "direct";
     }): Promise<void> {
         this._hostGlCanvas = opts.gl;
-        const workerURL: string = await getWorkerURL();
 
-        // Worker mode: bridge the worker's fresh `Client` (instantiated
-        // in `bootstrapWorker` from `clientWasm` + `clientWorkerURL`)
-        // back to the host's real `Client` via a `ProxySession` over a
+        // Bridge the worker's fresh `Client` (instantiated in
+        // `bootstrapWorker` from `clientWasm` + `clientWorkerURL`) back
+        // to the host's real `Client` via a `ProxySession` over a
         // dedicated `MessageChannel`.
-        //
-        // In-process mode skips this entirely — `bootstrapInProcess`
-        // is handed the host's `Client` directly, so there's no
-        // worker-side `Client` to bridge. The proxy port would just
-        // dangle.
-        if (RUNTIME_MODE === "worker") {
-            this._proxyChannel = new MessageChannel();
-            this._proxySession = (this._client as any).new_proxy_session(
-                (bytes: Uint8Array) => {
-                    const buf = bytes.slice().buffer;
-                    this._proxyChannel!.port1.postMessage(buf, [buf]);
-                },
-            );
+        const proxyChannel = new MessageChannel();
+        this._proxyChannel = proxyChannel;
+        this._proxySession = (this._client as any).new_proxy_session(
+            (bytes: Uint8Array) => {
+                const buf = bytes.slice().buffer;
+                proxyChannel.port1.postMessage(buf, [buf]);
+            },
+        );
 
-            this._proxyChannel.port1.addEventListener(
-                "message",
-                (e: MessageEvent) => {
-                    this._proxySession.handle_request(new Uint8Array(e.data));
-                },
-            );
+        proxyChannel.port1.addEventListener("message", (e: MessageEvent) => {
+            this._proxySession.handle_request(new Uint8Array(e.data));
+        });
 
-            this._proxyChannel.port1.start();
-        }
+        proxyChannel.port1.start();
 
         // Blit mode keeps the visible `.webgl-canvas` main-thread with
         // a 2D context — the renderer paints into its own internal
@@ -349,29 +321,18 @@ export class RendererTransport {
         const dpr = window.devicePixelRatio || 1;
         const themeVars = snapshotThemeVars(opts.gl);
 
-        // Worker mode forwards `@font-face` rules so the worker's
-        // separate `FontFaceSet` can resolve `ctx.font` family names.
-        // In-process mode shares `document.fonts` with the host —
-        // omit the descriptors entirely.
-        const fontFaces = RUNTIME_MODE === "worker" ? snapshotFontFaces() : [];
-        const clientWasm =
-            RUNTIME_MODE === "worker" ? this._clientWasm : undefined;
-
-        const clientWorkerURL =
-            RUNTIME_MODE === "worker" ? this._clientWorkerURL : undefined;
-
-        const proxyPort =
-            RUNTIME_MODE === "worker" ? this._proxyChannel!.port2 : undefined;
-
+        // Forward `@font-face` rules so the worker's separate
+        // `FontFaceSet` can resolve `ctx.font` family names.
+        const fontFaces = snapshotFontFaces();
         const initMsg: InitMsg = {
             kind: "init",
             renderMode: opts.renderBlitMode,
             glCanvas: glOC,
             gridlinesCanvas: gridlinesOC,
             chromeCanvas: chromeOC,
-            proxyPort,
-            clientWorkerURL,
-            clientWasm,
+            proxyPort: proxyChannel.port2,
+            clientWorkerURL: this._clientWorkerURL,
+            clientWasm: this._clientWasm,
             chartTag: this._chartTag,
             viewName: this._view.__unsafe_get_name(),
             tableName: this._tableName,
@@ -396,112 +357,52 @@ export class RendererTransport {
             cssHeight: rect.height,
             dpr,
         };
-        this._handle = await this._createHandle(workerURL, initMsg);
+        this._handle = await this._createHandle();
         this._handle.addMessageListener((msg) =>
             this._handleRendererMsg(msg as WorkerMsg),
         );
 
-        if (RUNTIME_MODE === "worker") {
-            // Worker mode: the bootstrap is triggered by posting the
-            // init message into the worker's scope (which the
-            // `if (IS_WORKER_SCOPE)` block in `renderer.worker.ts`
-            // listens for). All three canvases are omitted in blit mode
-            // (the renderer allocates its own offscreens and ships
-            // composited frames) — only include the transferred
-            // surfaces present on this mode's init message.
-            const transfer: Transferable[] = [this._proxyChannel!.port2];
-            if (chromeOC) {
-                transfer.unshift(chromeOC);
-            }
-
-            if (gridlinesOC) {
-                transfer.unshift(gridlinesOC);
-            }
-
-            if (glOC) {
-                transfer.unshift(glOC);
-            }
-
-            this._handle.post(initMsg, transfer);
+        // The bootstrap is triggered by posting the init message into
+        // the worker's session host. All three canvases are omitted in
+        // blit mode (the renderer allocates its own offscreens and
+        // ships composited frames) — only include the transferred
+        // surfaces present on this mode's init message.
+        const transfer: Transferable[] = [proxyChannel.port2];
+        if (chromeOC) {
+            transfer.unshift(chromeOC);
         }
 
-        // In-process mode: the handle's `_createHandle` already kicked
-        // off `bootstrapInProcess` with the init msg directly, no
-        // postMessage needed.
+        if (gridlinesOC) {
+            transfer.unshift(gridlinesOC);
+        }
 
+        if (glOC) {
+            transfer.unshift(glOC);
+        }
+
+        this._handle.post(initMsg, transfer);
         await this._ready;
     }
 
     /**
-     * Construct the underlying transport. Worker mode wraps the
-     * module-shared `Worker` (lazy, page-singleton) and tags every
-     * message with a unique `sessionId`. In-process mode pairs a
-     * `MessageChannel` with a dynamically-imported
-     * {@link bootstrapInProcess}.
+     * Opens a session on the module-shared renderer `Worker`.
      */
-    private async _createHandle(
-        workerURL: string,
-        initMsg: InitMsg,
-    ): Promise<RendererHandle> {
-        if (RUNTIME_MODE === "worker") {
-            const w = await getSharedWorker();
-            const sessionId = ++NEXT_SESSION_ID;
-            return {
-                post: (msg, transfer) =>
-                    w.postMessage({ sessionId, msg }, transfer),
-                addMessageListener: (cb) => {
-                    HOST_LISTENERS.set(sessionId, cb);
-                },
-                terminate: () => {
-                    HOST_LISTENERS.delete(sessionId);
-                    // Don't terminate the underlying worker — other
-                    // sessions may still be live. Worker-side
-                    // `WorkerRenderer` cleanup is driven by the
-                    // `destroy` ControlMsg posted by the transport
-                    // before reaching here.
-                },
-            };
-        }
-
-        // In-process: instantiate the renderer on this thread by
-        // dynamic-importing the same module the worker uses. The Blob
-        // URL (or file URL in debug builds) loads as ESM, so module
-        // dedup means only one copy of the chart code lives in
-        // memory regardless of how many host elements use this mode.
-        // `@vite-ignore` is harmless under esbuild (esbuild's parser
-        // ignores it); some downstream bundlers honor it to suppress
-        // a static-import warning on the dynamic URL.
-        //
-        // Hand the host's already-bound `Client` to the renderer via
-        // `bootstrapInProcess` — option B. The dynamically-imported
-        // module has its own copy of the perspective-viewer
-        // wasm-bindgen JS, but that copy stays unused: we never
-        // construct `new Client(...)` inside it; we only ever call
-        // methods on the host-supplied instance.
-        const mod: any = await import(/* @vite-ignore */ workerURL);
-        const channel = new MessageChannel();
-        await mod.bootstrapInProcess({
-            msg: initMsg,
-            client: this._client,
-            controlPort: channel.port2,
-        });
-
+    private async _createHandle(): Promise<RendererHandle> {
+        const w = await getSharedWorker();
+        const sessionId = ++NEXT_SESSION_ID;
         return {
-            post: (msg, transfer) => channel.port1.postMessage(msg, transfer),
+            post: (msg, transfer) =>
+                w.postMessage({ sessionId, msg }, transfer),
             addMessageListener: (cb) => {
-                // `addEventListener("message", …)` does NOT auto-start
-                // a `MessagePort` — only setting `onmessage` does.
-                // Without this explicit `start()` the renderer's
-                // `{ kind: "ready" }` would queue on `port1` forever
-                // and `init()` would hang on `await this._ready`.
-                channel.port1.addEventListener("message", (e: MessageEvent) =>
-                    cb(e.data),
-                );
-                channel.port1.start();
+                HOST_LISTENERS.set(sessionId, cb);
             },
             terminate: () => {
-                channel.port1.close();
-                channel.port2.close();
+                HOST_LISTENERS.delete(sessionId);
+                // Don't terminate the underlying worker — other
+                // sessions may still be live. Worker-side
+                // `WorkerRenderer` cleanup is driven by the
+                // `destroy` ControlMsg posted by the transport
+                // before reaching here.
             },
         };
     }

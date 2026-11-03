@@ -32,14 +32,12 @@
             "default": "./dist/esm/perspective-viewer-datagrid.js"
         },
         "./dist/*": "./dist/*",
-        "./src/*": "./src/*",
         "./package.json": "./package.json"
     },
     "type": "module",
     "types": "dist/esm/index.d.ts",
     "files": [
-        "dist/**/*",
-        "src/**/*"
+        "dist/**/*"
     ],
     "scripts": {
         "build": "node ./build.mjs",
@@ -50,7 +48,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/perspective-dev/perspective",
+        "url": "git+https://github.com/perspective-dev/perspective.git",
         "directory": "packages/viewer-datagrid"
     },
     "author": "",

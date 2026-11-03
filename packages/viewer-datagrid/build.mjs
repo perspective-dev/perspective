@@ -14,7 +14,7 @@ import { NodeModulesExternal } from "@perspective-dev/esbuild-plugin/external.js
 import { build } from "@perspective-dev/esbuild-plugin/build.js";
 import { bundle as bundleCss } from "lightningcss";
 import * as fs from "node:fs";
-import { inlineUrlVisitor } from "@perspective-dev/viewer/tools.mjs";
+import { inlineUrlVisitor } from "../../rust/perspective-viewer/tools.mjs";
 
 import "zx/globals";
 

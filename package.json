@@ -2,7 +2,7 @@
     "private": true,
     "repository": {
         "type": "git",
-        "url": "https://github.com/perspective-dev/perspective"
+        "url": "git+https://github.com/perspective-dev/perspective.git"
     },
     "version": "5.6.1",
     "changelog": {
@@ -77,6 +77,7 @@
         "test": "node tools/scripts/test.mjs",
         "test:jupyter": "pnpm run --recursive --filter @perspective-dev/jupyterlab test:jupyter",
         "test_js": "node tools/scripts/test_js.mjs",
+        "test:consumers": "node tools/scripts/test_consumers.mjs",
         "test_python": "node tools/scripts/test_python.mjs",
         "clean": "node tools/scripts/clean.mjs",
         "prepush": "node tools/scripts/prepush.mjs && pnpm run lint",

@@ -204,15 +204,13 @@ export async function captureFrames(
             let cachedCanvas: HTMLCanvasElement | null = null;
 
             // Sampler canvas: the visible `.webgl-canvas` may have
-            // any of three context modes:
+            // either of two context modes:
             //   - blit mode: 2D context (host blits worker bitmaps
             //     onto it). `getImageData` works directly.
             //   - direct mode: `transferControlToOffscreen` —
             //     placeholder for the worker's WebGL OffscreenCanvas.
             //     Host has *no* context on this canvas;
             //     `getImageData` impossible.
-            //   - in-process mode: WebGL context owned by main
-            //     thread. `getContext("2d")` returns null.
             const sampler = document.createElement("canvas");
             const samplerCtx = sampler.getContext("2d", {
                 willReadFrequently: true,
@@ -551,10 +549,9 @@ export async function captureFramesAllViewers(
             // inside the loop. Same rationale as in `captureFrames`:
             // routing the read through a 2D sampler via `drawImage`
             // works whether the source canvas is in blit mode (2D
-            // context), direct mode (`transferControlToOffscreen`
-            // placeholder), or in-process mode (WebGL on main
-            // thread). `getImageData` directly on the source canvas
-            // would fail in two of those three modes.
+            // context) or direct mode (`transferControlToOffscreen`
+            // placeholder). `getImageData` directly on the source
+            // canvas would fail in direct mode.
             const sampler = document.createElement("canvas");
             const samplerCtx = sampler.getContext("2d");
             if (!samplerCtx) {

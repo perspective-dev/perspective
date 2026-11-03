@@ -10,6 +10,13 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+/**
+ * The page-wide WebAssembly registry shared by Perspective's packages, an
+ * internal contract between them rather than a public API.
+ *
+ * @module
+ */
+
 import type * as psp from "../../../dist/wasm/perspective-js.d.ts";
 import { load_wasm_stage_0 } from "./decompress.ts";
 import { host_supports_memory64 } from "./features.ts";
@@ -80,7 +87,6 @@ interface Entry {
 }
 
 interface RegistryState {
-    version: string;
     sources: Partial<Record<WasmKey, Entry>>;
     consumed: Set<WasmKey>;
     client_provider?: RuntimeProvider;
@@ -108,27 +114,33 @@ function is_server_key(key: WasmKey): key is ServerKey {
     return (SERVER_KEYS as WasmKey[]).includes(key);
 }
 
-function state(): RegistryState {
+function states(): Map<string, RegistryState> {
     const global = globalThis as any;
-    const existing: RegistryState | undefined = global[STATE_KEY];
-    if (existing === undefined) {
-        const created: RegistryState = {
-            version: __PSP_VERSION__,
-            sources: {},
-            consumed: new Set(),
-        };
+    global[STATE_KEY] ??= new Map();
+    return global[STATE_KEY];
+}
 
-        global[STATE_KEY] = created;
-        return created;
+function state(): RegistryState {
+    const all = states();
+    let s = all.get(__PSP_VERSION__);
+    if (s === undefined) {
+        s = { sources: {}, consumed: new Set() };
+        all.set(__PSP_VERSION__, s);
     }
 
-    if (existing.version !== __PSP_VERSION__) {
+    return s;
+}
+
+function assert_single_version() {
+    const others = [...states().keys()].filter(
+        (version) => version !== __PSP_VERSION__,
+    );
+
+    if (others.length > 0) {
         throw new Error(
-            `Perspective ${__PSP_VERSION__} cannot share a page with Perspective ${existing.version}`,
+            `Perspective ${__PSP_VERSION__} cannot share a page with Perspective ${others.join(", ")}`,
         );
     }
-
-    return existing;
 }
 
 async function materialize({
@@ -216,6 +228,10 @@ export function register(
     options: InitOptions = {},
     mode: RegisterMode = "user",
 ) {
+    if (mode !== "default") {
+        assert_single_version();
+    }
+
     const s = state();
     const unknown = Object.keys(wasm).filter(
         (key) => !WASM_KEYS.includes(key as WasmKey),
@@ -301,7 +317,8 @@ export function register(
 
 /**
  * Register Perspective's WebAssembly binaries for this page, shared by every
- * copy of `@perspective-dev/client` and `@perspective-dev/viewer`.
+ * copy of `@perspective-dev/client` and `@perspective-dev/viewer`, throwing if
+ * another Perspective version has loaded on this page.
  *
  * # Arguments
  *
@@ -410,7 +427,7 @@ export function resolve_client(): Promise<ClientRuntime> {
  * The runtime backing every `Client`, if it has finished initializing.
  */
 export function client_runtime(): ClientRuntime | undefined {
-    return (globalThis as any)[STATE_KEY]?.client_runtime;
+    return (globalThis as any)[STATE_KEY]?.get(__PSP_VERSION__)?.client_runtime;
 }
 
 /**
