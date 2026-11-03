@@ -67,6 +67,66 @@ impl TableReadFormat {
     }
 }
 
+/// The column, or columns in key order, a [`Table`] is keyed by.
+///
+/// When serialized, a single column is a `string` and a composite key is an
+/// array of `string`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(untagged)]
+pub enum TableIndex {
+    Column(String),
+    Columns(Vec<String>),
+}
+
+impl TableIndex {
+    /// The index columns in key order.
+    pub fn columns(&self) -> &[String] {
+        match self {
+            TableIndex::Column(column) => std::slice::from_ref(column),
+            TableIndex::Columns(columns) => columns,
+        }
+    }
+
+    /// Fold a single-column list into [`TableIndex::Column`] and reject an
+    /// empty one.
+    pub fn normalize(self) -> ClientResult<Self> {
+        match self {
+            TableIndex::Columns(columns) if columns.is_empty() => Err(ClientError::BadTableOptions),
+            TableIndex::Columns(mut columns) if columns.len() == 1 => {
+                Ok(TableIndex::Column(columns.remove(0)))
+            },
+            index => Ok(index),
+        }
+    }
+
+    /// The normalized index for a list of columns, `None` when empty.
+    pub fn from_columns(mut columns: Vec<String>) -> Option<Self> {
+        match columns.len() {
+            0 => None,
+            1 => Some(TableIndex::Column(columns.remove(0))),
+            _ => Some(TableIndex::Columns(columns)),
+        }
+    }
+}
+
+impl From<&str> for TableIndex {
+    fn from(value: &str) -> Self {
+        TableIndex::Column(value.to_string())
+    }
+}
+
+impl From<String> for TableIndex {
+    fn from(value: String) -> Self {
+        TableIndex::Column(value)
+    }
+}
+
+impl From<Vec<String>> for TableIndex {
+    fn from(value: Vec<String>) -> Self {
+        TableIndex::Columns(value)
+    }
+}
+
 /// Options which impact the behavior of [`Client::table`], as well as
 /// subsequent calls to [`Table::update`].
 #[derive(Clone, Debug, Default, Serialize, Deserialize, TS)]
@@ -79,13 +139,14 @@ pub struct TableInitOptions {
     #[ts(optional)]
     pub format: Option<TableReadFormat>,
 
-    /// This [`Table`] should use the column named by the `index` parameter as
-    /// the `index`, which causes [`Table::update`] and [`Client::table`] input
-    /// to either insert or update existing rows based on `index` column
-    /// value equality.
+    /// This [`Table`] should use the column, or columns, named by the `index`
+    /// parameter as the `index`, which causes [`Table::update`] and
+    /// [`Client::table`] input to either insert or update existing rows based
+    /// on `index` column value equality. A list of columns keys rows by the
+    /// combination of their values, in list order.
     #[serde(default)]
     #[ts(optional)]
-    pub index: Option<String>,
+    pub index: Option<TableIndex>,
 
     /// This [`Table`] should be limited to `limit` rows, after which the
     /// _earliest_ rows will be overwritten (where _earliest_ is defined as
@@ -150,8 +211,15 @@ impl TryFrom<TableOptions> for MakeTableOptions {
                     ..
                 } => Err(ClientError::BadTableOptions)?,
                 TableOptions {
-                    index: Some(index), ..
+                    index: Some(TableIndex::Column(index)),
+                    ..
                 } => Some(MakeTableType::MakeIndexTable(index)),
+                TableOptions {
+                    index: Some(TableIndex::Columns(columns)),
+                    ..
+                } => Some(MakeTableType::MakeCompositeIndexTable(IndexColumns {
+                    columns,
+                })),
                 TableOptions {
                     limit: Some(limit), ..
                 } => Some(MakeTableType::MakeLimitTable(limit)),
@@ -163,7 +231,7 @@ impl TryFrom<TableOptions> for MakeTableOptions {
 
 #[derive(Clone, Debug)]
 pub(crate) struct TableOptions {
-    pub index: Option<String>,
+    pub index: Option<TableIndex>,
     pub limit: Option<u32>,
     pub page_to_disk: Option<bool>,
     pub list_flatten: Option<crate::proto::ListFlatten>,
@@ -428,7 +496,7 @@ impl Table {
     /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
     /// # let client: Client = todo!();
     /// let options = TableInitOptions {
-    ///     index: Some("x".to_string()),
+    ///     index: Some("x".into()),
     ///     ..TableInitOptions::default()
     /// };
     /// let data = TableData::Update(UpdateData::Csv("x,y\n1,2\n3,4".into()));
@@ -436,8 +504,8 @@ impl Table {
     /// let index = table.get_index();
     /// # Ok(()) }
     /// ```
-    pub fn get_index(&self) -> Option<String> {
-        self.options.index.as_ref().map(|index| index.to_owned())
+    pub fn get_index(&self) -> Option<TableIndex> {
+        self.options.index.clone()
     }
 
     /// Returns the user-specified row limit for this table.

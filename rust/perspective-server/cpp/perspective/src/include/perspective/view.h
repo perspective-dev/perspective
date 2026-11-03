@@ -191,6 +191,25 @@ public:
     ) const;
 
     /**
+     * @brief Write a primary key, decoding a composite key into an array.
+     */
+    void write_pkey(
+        const t_tscalar& scalar,
+        bool is_formatted,
+        rapidjson::Writer<rapidjson::StringBuffer>& writer
+    ) const;
+
+    /**
+     * @brief Write one `__ID__` row path entry, which is a primary key on a
+     * column-only view.
+     */
+    void write_id_entry(
+        const t_tscalar& scalar,
+        bool is_formatted,
+        rapidjson::Writer<rapidjson::StringBuffer>& writer
+    ) const;
+
+    /**
      * @brief Returns shared pointer to a t_data_slice object, which
      * contains the underlying slice of data as well as the metadata
      * required to interface with it.
@@ -435,6 +454,7 @@ private:
 
     std::shared_ptr<Table> m_table;
     std::shared_ptr<CTX_T> m_ctx;
+    std::shared_ptr<const t_pkey_codec> m_pkey_codec;
     std::string m_name;
     std::string m_separator;
 

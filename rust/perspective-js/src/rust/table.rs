@@ -81,11 +81,16 @@ impl Table {
     ///
     /// ```javascript
     /// const table = await client.table("x,y\n1,2\n3,4", { index: "x" });
-    /// const index = table.get_index(); // "x"
+    /// const index = await table.get_index(); // "x"
+    /// const table2 = await client.table(data, { index: ["x", "y"] });
+    /// const index2 = await table2.get_index(); // ["x", "y"]
     /// ```
-    #[wasm_bindgen]
-    pub async fn get_index(&self) -> Option<String> {
-        self.0.get_index()
+    #[wasm_bindgen(unchecked_return_type = "string | string[] | undefined")]
+    pub async fn get_index(&self) -> ApiResult<JsValue> {
+        match self.0.get_index() {
+            None => Ok(JsValue::UNDEFINED),
+            Some(index) => Ok(JsValue::from_serde_ext(&index)?),
+        }
     }
 
     /// Get a copy of the [`Client`] this [`Table`] came from.
@@ -250,12 +255,14 @@ impl Table {
     /// # Arguments
     ///
     /// - `indices` - A list of `index` column values for rows that should be
-    ///   removed.
+    ///   removed. For a composite `index`, each entry is an array of the index
+    ///   column values in key order.
     ///
     /// # JavaScript Examples
     ///
     /// ```javascript
     /// await table.remove([1, 2, 3]);
+    /// await composite_table.remove([["AAPL", "Tech"], ["MSFT", "Tech"]]);
     /// ```
     #[wasm_bindgen]
     pub async fn remove(&self, value: &JsValue, options: Option<JsUpdateOptions>) -> ApiResult<()> {

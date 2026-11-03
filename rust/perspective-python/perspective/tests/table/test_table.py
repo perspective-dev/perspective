@@ -14,6 +14,7 @@ from datetime import date, datetime
 import perspective
 from pytest import mark, raises
 import pytest
+import pandas as pd
 import perspective as psp
 
 client = psp.Server().new_local_client()
@@ -522,6 +523,60 @@ class TestTable:
     def test_table_get_index_none(self):
         tbl = Table({"a": ["", "a", None, "b"], "b": [4, 3, 2, 1]})
         assert tbl.get_index() is None
+
+    # composite index
+
+    def test_table_composite_index(self):
+        data = [
+            {"name": "AAPL", "sector": "Tech", "price": 1},
+            {"name": "MSFT", "sector": "Tech", "price": 2},
+            {"name": "AAPL", "sector": "Hardware", "price": 3},
+        ]
+        tbl = Table(data, index=["name", "sector"])
+        assert tbl.get_index() == ["name", "sector"]
+        assert tbl.size() == 3
+        assert tbl.view().to_records() == [
+            {"name": "AAPL", "sector": "Hardware", "price": 3},
+            {"name": "AAPL", "sector": "Tech", "price": 1},
+            {"name": "MSFT", "sector": "Tech", "price": 2},
+        ]
+
+    def test_table_composite_index_dedupes(self):
+        data = [
+            {"name": "AAPL", "sector": "Tech", "price": 1},
+            {"name": "AAPL", "sector": "Tech", "price": 9},
+        ]
+        tbl = Table(data, index=["name", "sector"])
+        assert tbl.size() == 1
+        assert tbl.view().to_records() == [{"name": "AAPL", "sector": "Tech", "price": 9}]
+
+    def test_table_composite_index_single_column_list(self):
+        tbl = Table({"a": [1, 2], "b": [3, 4]}, index=["a"])
+        assert tbl.get_index() == "a"
+
+    def test_table_composite_index_empty_raises(self):
+        with raises(Exception):
+            Table({"a": [1, 2], "b": [3, 4]}, index=[])
+
+    def test_table_composite_index_unknown_column_raises(self):
+        with raises(Exception):
+            Table({"a": [1, 2], "b": [3, 4]}, index=["a", "c"])
+
+    def test_table_composite_index_ids(self):
+        tbl = Table({"a": ["x", "x"], "b": [2, 1]}, index=["a", "b"])
+        assert tbl.view().to_records(id=True) == [
+            {"__ID__": [["x", 1]], "a": "x", "b": 1},
+            {"__ID__": [["x", 2]], "a": "x", "b": 2},
+        ]
+
+    def test_table_composite_index_from_pandas_multiindex(self):
+        df = pd.DataFrame(
+            {"name": ["AAPL", "MSFT"], "sector": ["Tech", "Tech"], "price": [1, 2]}
+        ).set_index(["name", "sector"])
+        tbl = Table(df, index=["name", "sector"])
+        assert tbl.get_index() == ["name", "sector"]
+        tbl.update([{"name": "AAPL", "sector": "Tech", "price": 5}])
+        assert tbl.view().to_columns()["price"] == [5, 2]
 
     # limit
 

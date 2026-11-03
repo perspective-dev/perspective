@@ -236,8 +236,8 @@ tables across clients.
 
 Register a callback to be notified whenever rows are removed from the underlying
 `Table` by `remove()`, which requires an `index`. The callback receives the
-`port_id` and the removed `index` column values as an Apache Arrow of a single
-column named after the index. It fires once per update step, only for rows which
+`port_id` and the removed `index` column values as an Apache Arrow with one
+column per index column, named after that column. It fires once per update step, only for rows which
 existed before that step; `replace()` reports the keys it does not re-supply,
 and `clear()` reports every key:
 

@@ -21,6 +21,7 @@
 #include <perspective/data_table.h>
 #include <perspective/arrow_normalize.h>
 #include <perspective/json_loader.h>
+#include <perspective/pkey_codec.h>
 
 namespace perspective {
 
@@ -46,8 +47,9 @@ public:
      * @param data_types
      * @param limit - an upper bound on the number of rows in the Table
      * (optional).
-     * @param index - a string column name to be used as a primary key. If not
-     * explicitly set, a primary key will be generated.
+     * @param index - the column names forming the primary key, which is
+     * generated when empty and encoded into one `DTYPE_STR` key when there
+     * is more than one.
      * @param op
      */
     Table(
@@ -55,7 +57,7 @@ public:
         std::vector<std::string> column_names,
         std::vector<t_dtype> data_types,
         std::uint32_t limit,
-        std::string index,
+        std::vector<std::string> index,
         t_backing_store backing_store = BACKING_STORE_MEMORY,
         apachearrow::t_list_flatten list_flatten =
             apachearrow::LIST_FLATTEN_ZIP
@@ -211,8 +213,23 @@ public:
     const std::vector<t_dtype>& get_data_types() const;
     std::uint32_t get_offset() const;
     std::uint32_t get_limit() const;
-    const std::string& get_index() const;
+    const std::vector<std::string>& get_index() const;
     t_backing_store get_backing_store() const;
+
+    /**
+     * @brief Whether this `Table` is keyed by more than one column.
+     */
+    bool is_composite_index() const;
+
+    /**
+     * @brief The dtype of `psp_pkey` for this `Table`'s index given `schema`.
+     */
+    t_dtype pkey_dtype(const t_schema& schema) const;
+
+    /**
+     * @brief The codec for a composite key, or null for other indexes.
+     */
+    const std::shared_ptr<const t_pkey_codec>& get_pkey_codec() const;
 
     // Setters
     void set_column_names(const std::vector<std::string>& column_names);
@@ -230,7 +247,7 @@ public:
     // void update_cols(const std::string_view& data) const;
 
     static std::shared_ptr<Table> from_csv(
-        const std::string& index,
+        const std::vector<std::string>& index,
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
@@ -239,7 +256,7 @@ public:
     );
 
     static std::shared_ptr<Table> from_cols(
-        const std::string& index,
+        const std::vector<std::string>& index,
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
@@ -248,7 +265,7 @@ public:
     );
 
     static std::shared_ptr<Table> from_rows(
-        const std::string& index,
+        const std::vector<std::string>& index,
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
@@ -257,7 +274,7 @@ public:
     );
 
     static std::shared_ptr<Table> from_ndjson(
-        const std::string& index,
+        const std::vector<std::string>& index,
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
@@ -266,7 +283,7 @@ public:
     );
 
     static std::shared_ptr<Table> from_schema(
-        const std::string& index,
+        const std::vector<std::string>& index,
         const t_schema& schema,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
@@ -280,14 +297,15 @@ public:
     static std::shared_ptr<Table> make_derived(
         const t_schema& schema,
         t_dtype pkey_dtype,
-        const std::string& index,
-        std::uint32_t limit
+        const std::vector<std::string>& index,
+        std::uint32_t limit,
+        std::shared_ptr<const t_pkey_codec> pkey_codec
     );
 
     bool is_derived() const;
 
     static std::shared_ptr<Table> from_arrow(
-        const std::string& index,
+        const std::vector<std::string>& index,
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
@@ -299,7 +317,7 @@ public:
         const std::vector<std::string>& column_names,
         const std::vector<t_dtype>& data_types,
         std::uint32_t limit,
-        const std::string& index,
+        const std::vector<std::string>& index,
         const std::string_view& data,
         t_backing_store backing_store = BACKING_STORE_MEMORY,
         apachearrow::t_list_flatten list_flatten =
@@ -313,7 +331,7 @@ private:
      */
     static std::shared_ptr<Table> from_json_loader(
         json::JsonLoader& loader,
-        const std::string& index,
+        const std::vector<std::string>& index,
         std::string&& data,
         std::uint32_t limit,
         t_backing_store backing_store,
@@ -371,11 +389,10 @@ private:
     const t_uindex m_limit;
 
     /**
-     * @brief The name of a column that should be used as the Table's primary
-     * key.
-     *
+     * @brief The columns that form the Table's primary key.
      */
-    const std::string m_index;
+    const std::vector<std::string> m_index;
+    std::shared_ptr<const t_pkey_codec> m_pkey_codec;
     bool m_gnode_set;
     bool m_derived = false;
     const t_backing_store m_backing_store;

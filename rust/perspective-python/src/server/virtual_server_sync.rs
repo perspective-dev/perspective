@@ -105,13 +105,22 @@ impl VirtualServerHandler for PyServerHandler {
                         Ok::<_, PyErr>(if x.is_instance_of::<PyString>() {
                             HostedTable {
                                 entity_id: x.to_string(),
-                                index: None,
+                                index: Vec::new(),
                                 limit: None,
                             }
                         } else {
                             HostedTable {
                                 entity_id: x.get_item("name")?.to_string(),
-                                index: x.get_item("index").ok().and_then(|x| x.extract().ok()),
+                                index: x
+                                    .get_item("index")
+                                    .ok()
+                                    .and_then(|x| {
+                                        x.extract::<String>()
+                                            .map(|s| vec![s])
+                                            .or_else(|_| x.extract::<Vec<String>>())
+                                            .ok()
+                                    })
+                                    .unwrap_or_default(),
                                 limit: x.get_item("limit").ok().and_then(|x| x.extract().ok()),
                             }
                         })

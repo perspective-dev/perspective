@@ -17,6 +17,7 @@
 #include "perspective/data_table.h"
 #include "perspective/raw_types.h"
 #include "perspective/json_loader.h"
+#include "perspective/pkey_codec.h"
 #include "perspective/schema.h"
 #include "rapidjson/document.h"
 #include <chrono>
@@ -24,6 +25,7 @@
 #include <memory>
 #include <optional>
 #include <perspective/table.h>
+#include <set>
 #include <rapidjson/writer.h>
 #include <sstream>
 #include <string>
@@ -40,7 +42,7 @@ Table::Table(
     std::vector<std::string> column_names,
     std::vector<t_dtype> data_types,
     std::uint32_t limit,
-    std::string index,
+    std::vector<std::string> index,
     t_backing_store backing_store,
     apachearrow::t_list_flatten list_flatten
 ) :
@@ -57,6 +59,124 @@ Table::Table(
     m_list_flatten(list_flatten) {
 
     validate_columns(m_column_names);
+    if (is_composite_index()) {
+        t_schema schema(m_column_names, m_data_types);
+        m_pkey_codec = std::make_shared<const t_pkey_codec>(
+            t_pkey_codec::from_schema(schema, m_index)
+        );
+    }
+}
+
+static t_schema
+index_schema(
+    const t_schema& output_schema, const std::vector<std::string>& index
+) {
+    std::vector<t_dtype> types;
+    types.reserve(index.size());
+    for (const auto& name : index) {
+        types.push_back(output_schema.get_dtype(name));
+    }
+
+    return {index, types};
+}
+
+static void
+fill_index_cell(
+    const std::shared_ptr<t_column>& col,
+    const std::string& name,
+    t_uindex ii,
+    const rapidjson::Value& cell
+) {
+    auto promote = json::fill_column_json(col, ii, cell, true);
+    if (promote) {
+        std::stringstream ss;
+        ss << "Cannot append value of type " << dtype_to_str(*promote)
+           << " to column \"" << name << "\" of type "
+           << dtype_to_str(col->get_dtype()) << " at index " << ii
+           << std::endl;
+        PSP_COMPLAIN_AND_ABORT(ss.str());
+    }
+}
+
+static void
+fill_composite_remove_table(
+    t_data_table& data_table,
+    const std::vector<std::string>& index,
+    const rapidjson::Document& document
+) {
+    std::vector<std::shared_ptr<t_column>> cols;
+    cols.reserve(index.size());
+    for (const auto& name : index) {
+        cols.push_back(data_table.get_column(name));
+    }
+
+    if (document.IsArray()) {
+        data_table.extend(document.Size());
+        t_uindex ii = 0;
+        for (const auto& row : document.GetArray()) {
+            if (!row.IsArray() || row.Size() != index.size()) {
+                std::stringstream ss;
+                ss << "Composite index expects an array of " << index.size()
+                   << " values at index " << ii << std::endl;
+                PSP_COMPLAIN_AND_ABORT(ss.str());
+            }
+
+            for (std::size_t i = 0; i < index.size(); ++i) {
+                fill_index_cell(cols[i], index[i], ii, row[i]);
+            }
+
+            ii++;
+        }
+
+        return;
+    }
+
+    if (!document.IsObject()) {
+        PSP_COMPLAIN_AND_ABORT("Cannot remove fish!\n")
+    }
+
+    t_uindex nrows = 0;
+    for (std::size_t i = 0; i < index.size(); ++i) {
+        const auto& name = index[i];
+        if (!document.HasMember(name.c_str())
+            || !document[name.c_str()].IsArray()) {
+            std::stringstream ss;
+            ss << "Remove is missing index column `" << name << "`\n";
+            PSP_COMPLAIN_AND_ABORT(ss.str());
+        }
+
+        const auto& cells = document[name.c_str()];
+        if (i == 0) {
+            nrows = cells.Size();
+            data_table.extend(nrows);
+        } else if (cells.Size() != nrows) {
+            std::stringstream ss;
+            ss << "Index column `" << name << "` has " << cells.Size()
+               << " values but expected " << nrows << std::endl;
+            PSP_COMPLAIN_AND_ABORT(ss.str());
+        }
+
+        t_uindex ii = 0;
+        for (const auto& cell : cells.GetArray()) {
+            fill_index_cell(cols[i], name, ii, cell);
+            ii++;
+        }
+    }
+}
+
+static void
+require_index_columns(
+    const std::vector<std::string>& names,
+    const std::vector<std::string>& index,
+    const char* verb
+) {
+    for (const auto& name : index) {
+        if (std::find(names.begin(), names.end(), name) == names.end()) {
+            std::stringstream ss;
+            ss << verb << " is missing index column `" << name << "`\n";
+            PSP_COMPLAIN_AND_ABORT(ss.str());
+        }
+    }
 }
 
 void
@@ -214,6 +334,7 @@ Table::make_gnode(const t_schema& in_schema) {
     auto gnode =
         std::make_shared<t_gnode>(in_schema, out_schema, m_backing_store);
     gnode->init();
+    gnode->get_table_sptr()->set_pkey_codec(m_pkey_codec);
     return gnode;
 }
 
@@ -287,10 +408,33 @@ Table::get_data_types() const {
     return m_data_types;
 }
 
-const std::string&
+const std::vector<std::string>&
 Table::get_index() const {
     PSP_VERBOSE_ASSERT(m_init, "touching uninited object");
     return m_index;
+}
+
+bool
+Table::is_composite_index() const {
+    return m_index.size() > 1;
+}
+
+t_dtype
+Table::pkey_dtype(const t_schema& schema) const {
+    if (m_index.empty()) {
+        return DTYPE_INT32;
+    }
+
+    if (m_index.size() == 1) {
+        return schema.get_dtype(m_index[0]);
+    }
+
+    return DTYPE_STR;
+}
+
+const std::shared_ptr<const t_pkey_codec>&
+Table::get_pkey_codec() const {
+    return m_pkey_codec;
 }
 
 std::uint32_t
@@ -384,7 +528,15 @@ Table::update_csv(const std::string_view& data, std::uint32_t port_id) {
     t_data_table data_table(get_schema());
     data_table.init();
     data_table.extend(row_count);
+    if (is_composite_index()) {
+        require_index_columns(arrow_loader.names(), m_index, "Update");
+    }
+
     arrow_loader.fill_table(data_table, get_schema(), m_index, m_offset, true);
+    if (is_composite_index()) {
+        fill_pkey_from_index(data_table, m_index, *m_pkey_codec, true, true);
+    }
+
     process_op_column(data_table, t_op::OP_INSERT);
     calculate_offset(row_count);
     m_pool->send(get_gnode()->get_id(), port_id, data_table);
@@ -392,7 +544,7 @@ Table::update_csv(const std::string_view& data, std::uint32_t port_id) {
 
 std::shared_ptr<Table>
 Table::from_csv(
-    const std::string& index,
+    const std::vector<std::string>& index,
     std::string&& data,
     std::uint32_t limit,
     t_backing_store backing_store,
@@ -433,6 +585,16 @@ Table::from_csv(
         auto loader = std::move(arrow_loader);
         data_table->extend(row_count);
         loader.fill_table(*data_table, input_schema, index, 0, false);
+    }
+
+    if (index.size() > 1) {
+        fill_pkey_from_index(
+            *data_table,
+            index,
+            t_pkey_codec::from_schema(data_table->get_schema(), index),
+            false,
+            true
+        );
     }
 
     auto pool = std::make_shared<t_pool>();
@@ -477,9 +639,19 @@ Table::remove_rows(const std::string_view& data) {
     }
 
     const t_schema& output_schema = get_gnode()->get_output_schema();
+    if (is_composite_index()) {
+        t_data_table data_table(index_schema(output_schema, m_index));
+        data_table.init();
+        fill_composite_remove_table(data_table, m_index, document);
+        fill_pkey_from_index(data_table, m_index, *m_pkey_codec, true, true);
+        process_op_column(data_table, OP_DELETE);
+        m_pool->send(get_gnode()->get_id(), 0, data_table);
+        return;
+    }
 
-    std::vector<std::string> column_names{m_index};
-    std::vector<t_dtype> data_types{output_schema.get_dtype(m_index)};
+    const std::string& index = m_index[0];
+    std::vector<std::string> column_names{index};
+    std::vector<t_dtype> data_types{output_schema.get_dtype(index)};
 
     t_schema schema(column_names, data_types);
 
@@ -488,33 +660,20 @@ Table::remove_rows(const std::string_view& data) {
     data_table.init();
     data_table.extend(document.Size());
 
-    data_table.add_column("psp_pkey", schema.get_dtype(m_index), true);
+    data_table.add_column("psp_pkey", schema.get_dtype(index), true);
 
     const auto& psp_pkey_col = data_table.get_column("psp_pkey");
 
     // 3.) Fill table
     t_uindex ii = 0;
-    auto col = data_table.get_column(m_index);
+    auto col = data_table.get_column(index);
     for (const auto& cell : document.GetArray()) {
-        auto promote = json::fill_column_json(col, ii, cell, true);
-        if (promote) {
-            std::stringstream ss;
-            ss << "Cannot append value of type " << dtype_to_str(*promote)
-               << " to column \"" << m_index << "\" of type " << dtype_to_str(col->get_dtype())
-               << " at index " << ii
-               << std::endl;
-            PSP_COMPLAIN_AND_ABORT(ss.str());
-        }
-
-        // if (!is_implicit && m_index == col_name) {
+        fill_index_cell(col, index, ii, cell);
         json::fill_column_json(psp_pkey_col, ii, cell, true);
-        // }
-
         ii++;
     }
 
     data_table.clone_column("psp_pkey", "psp_okey");
-    // calculate_offset(data_table.size());
     process_op_column(data_table, OP_DELETE);
     m_pool->send(get_gnode()->get_id(), 0, data_table);
 }
@@ -524,18 +683,29 @@ Table::remove_cols(const std::string_view& data) {
     // 1.) Infer schema
     rapidjson::Document document;
     document.Parse(data.data());
-    if (!document.IsArray()) {
-        PSP_COMPLAIN_AND_ABORT("Cannot remove fish!\n")
-    }
-
     if (m_index.empty()) {
         PSP_COMPLAIN_AND_ABORT("Cannot remove from unindexed Table\n")
     }
 
     const t_schema& output_schema = get_gnode()->get_output_schema();
+    if (is_composite_index()) {
+        t_data_table data_table(index_schema(output_schema, m_index));
+        data_table.init();
+        fill_composite_remove_table(data_table, m_index, document);
+        fill_pkey_from_index(data_table, m_index, *m_pkey_codec, true, true);
+        calculate_offset(data_table.size());
+        process_op_column(data_table, OP_DELETE);
+        m_pool->send(get_gnode()->get_id(), 0, data_table);
+        return;
+    }
 
-    std::vector<std::string> column_names{m_index};
-    std::vector<t_dtype> data_types{output_schema.get_dtype(m_index)};
+    if (!document.IsArray()) {
+        PSP_COMPLAIN_AND_ABORT("Cannot remove fish!\n")
+    }
+
+    const std::string& index = m_index[0];
+    std::vector<std::string> column_names{index};
+    std::vector<t_dtype> data_types{output_schema.get_dtype(index)};
 
     t_schema schema(column_names, data_types);
 
@@ -544,31 +714,19 @@ Table::remove_cols(const std::string_view& data) {
     data_table.init();
     data_table.extend(document.Size());
 
-    data_table.add_column("psp_pkey", schema.get_dtype(m_index), true);
-    data_table.add_column("psp_okey", schema.get_dtype(m_index), true);
+    data_table.add_column("psp_pkey", schema.get_dtype(index), true);
+    data_table.add_column("psp_okey", schema.get_dtype(index), true);
 
     const auto& psp_pkey_col = data_table.get_column("psp_pkey");
     const auto& psp_okey_col = data_table.get_column("psp_okey");
 
     // 3.) Fill table
     t_uindex ii = 0;
-    auto col = data_table.get_column(m_index);
+    auto col = data_table.get_column(index);
     for (const auto& cell : document.GetArray()) {
-        auto promote = json::fill_column_json(col, ii, cell, true);
-        if (promote) {
-            std::stringstream ss;
-            ss << "Cannot append value of type " << dtype_to_str(*promote)
-               << " to column \"" << m_index << "\" of type " << dtype_to_str(col->get_dtype())
-               << " at index " << ii
-               << std::endl;
-            PSP_COMPLAIN_AND_ABORT(ss.str());
-        }
-
-        // if (!is_implicit && m_index == col_name) {
+        fill_index_cell(col, index, ii, cell);
         json::fill_column_json(psp_pkey_col, ii, cell, true);
         json::fill_column_json(psp_okey_col, ii, cell, true);
-        // }
-
         ii++;
     }
 
@@ -592,19 +750,25 @@ Table::remove_arrow(const std::string_view& data) {
     );
 
     const auto names = arrow_loader.names();
-    if (std::find(names.begin(), names.end(), m_index) == names.end()) {
-        std::stringstream ss;
-        ss << "Cannot remove: Arrow is missing index column `" << m_index
-           << "`\n";
-        PSP_COMPLAIN_AND_ABORT(ss.str());
+    for (const auto& name : m_index) {
+        if (std::find(names.begin(), names.end(), name) == names.end()) {
+            std::stringstream ss;
+            ss << "Cannot remove: Arrow is missing index column `" << name
+               << "`\n";
+            PSP_COMPLAIN_AND_ABORT(ss.str());
+        }
     }
 
     const t_schema& output_schema = get_gnode()->get_output_schema();
-    t_schema schema({m_index}, {output_schema.get_dtype(m_index)});
+    t_schema schema = index_schema(output_schema, m_index);
     t_data_table data_table(schema);
     data_table.init();
     data_table.extend(arrow_loader.row_count());
     arrow_loader.fill_table(data_table, schema, m_index, m_offset, true);
+    if (is_composite_index()) {
+        fill_pkey_from_index(data_table, m_index, *m_pkey_codec, true, true);
+    }
+
     process_op_column(data_table, OP_DELETE);
     m_pool->send(get_gnode()->get_id(), 0, data_table);
 }
@@ -612,7 +776,7 @@ Table::remove_arrow(const std::string_view& data) {
 std::shared_ptr<Table>
 Table::from_json_loader(
     json::JsonLoader& loader,
-    const std::string& index,
+    const std::vector<std::string>& index,
     std::string&& data,
     std::uint32_t limit,
     t_backing_store backing_store,
@@ -628,13 +792,24 @@ Table::from_json_loader(
     t_schema schema(loader.names(), loader.types());
     auto data_table = std::make_unique<t_data_table>(schema);
     data_table->init();
-    const auto pkey_dtype =
-        loader.is_implicit() ? DTYPE_INT32 : schema.get_dtype(index);
+    t_dtype pkey_dtype = DTYPE_INT32;
+    if (!loader.is_implicit()) {
+        pkey_dtype = index.size() == 1 ? schema.get_dtype(index[0]) : DTYPE_STR;
+    }
 
     data_table->add_column("psp_pkey", pkey_dtype, true);
     data_table->add_column("psp_okey", pkey_dtype, true);
 
     const auto nrows = loader.fill_table(*data_table, index, 0, false);
+    if (!loader.is_implicit() && index.size() > 1) {
+        fill_pkey_from_index(
+            *data_table,
+            index,
+            t_pkey_codec::from_schema(data_table->get_schema(), index),
+            false,
+            true
+        );
+    }
 
     // `names`/`types` may have grown during the fill -- an ndjson record can
     // introduce a column -- so the Table's column list is read back from the
@@ -687,11 +862,7 @@ Table::update_json(
 
     t_data_table data_table(table_schema);
     data_table.init();
-    data_table.add_column(
-        "psp_pkey",
-        m_index.empty() ? DTYPE_INT32 : table_schema.get_dtype(m_index),
-        true
-    );
+    data_table.add_column("psp_pkey", pkey_dtype(table_schema), true);
 
     const auto size = loader.fill_table(data_table, m_index, m_offset, true);
     data_table.clone_column("psp_pkey", "psp_okey");
@@ -708,7 +879,7 @@ Table::update_cols(const std::string_view& data, std::uint32_t port_id) {
 
 std::shared_ptr<Table>
 Table::from_cols(
-    const std::string& index,
+    const std::vector<std::string>& index,
     std::string&& data,
     std::uint32_t limit,
     t_backing_store backing_store,
@@ -736,7 +907,7 @@ Table::update_rows(const std::string_view& data, std::uint32_t port_id) {
 
 std::shared_ptr<Table>
 Table::from_rows(
-    const std::string& index,
+    const std::vector<std::string>& index,
     std::string&& data,
     std::uint32_t limit,
     t_backing_store backing_store,
@@ -758,7 +929,7 @@ Table::update_ndjson(const std::string_view& data, std::uint32_t port_id) {
 
 std::shared_ptr<Table>
 Table::from_ndjson(
-    const std::string& index,
+    const std::vector<std::string>& index,
     std::string&& data,
     std::uint32_t limit,
     t_backing_store backing_store,
@@ -775,7 +946,7 @@ Table::from_ndjson(
 
 std::shared_ptr<Table>
 Table::from_schema(
-    const std::string& index,
+    const std::vector<std::string>& index,
     const t_schema& schema,
     std::uint32_t limit,
     t_backing_store backing_store,
@@ -787,20 +958,24 @@ Table::from_schema(
     t_data_table data_table(schema);
     data_table.init();
 
-    // TODO check for implicit index;
-    if (index.empty()) {
-        data_table.add_column("psp_pkey", DTYPE_INT32, true);
-        data_table.add_column("psp_okey", DTYPE_INT32, true);
-    } else {
-        if (!schema.has_column(index)) {
+    for (const auto& name : index) {
+        if (!schema.has_column(name)) {
             std::stringstream ss;
-            ss << "Specified index `" << index
+            ss << "Specified index `" << name
                << "` does not appear in the Table." << '\n';
             PSP_COMPLAIN_AND_ABORT(ss.str());
         }
+    }
 
-        data_table.clone_column(index, "psp_pkey");
-        data_table.clone_column(index, "psp_okey");
+    if (index.empty()) {
+        data_table.add_column("psp_pkey", DTYPE_INT32, true);
+        data_table.add_column("psp_okey", DTYPE_INT32, true);
+    } else if (index.size() == 1) {
+        data_table.clone_column(index[0], "psp_pkey");
+        data_table.clone_column(index[0], "psp_okey");
+    } else {
+        data_table.add_column("psp_pkey", DTYPE_STR, true);
+        data_table.add_column("psp_okey", DTYPE_STR, true);
     }
 
     auto tbl = std::make_shared<Table>(
@@ -822,8 +997,9 @@ std::shared_ptr<Table>
 Table::make_derived(
     const t_schema& schema,
     t_dtype pkey_dtype,
-    const std::string& index,
-    std::uint32_t limit
+    const std::vector<std::string>& index,
+    std::uint32_t limit,
+    std::shared_ptr<const t_pkey_codec> pkey_codec
 ) {
     auto pool = std::make_shared<t_pool>();
     pool->init();
@@ -839,6 +1015,10 @@ Table::make_derived(
     );
 
     tbl->m_derived = true;
+    if (!tbl->m_pkey_codec) {
+        tbl->m_pkey_codec = std::move(pkey_codec);
+    }
+
     tbl->set_gnode(tbl->make_gnode(data_table.get_schema()));
     pool->register_gnode(tbl->m_gnode.get());
     tbl->m_gnode->remove_input_port(0);
@@ -874,18 +1054,35 @@ Table::update_arrow(const std::string_view& data, std::uint32_t port_id) {
     auto input_schema = this->get_schema();
 
     auto arrow_names = arrow_loader.names();
-    if (std::find(arrow_names.begin(), arrow_names.end(), "__INDEX__")
-        != arrow_names.end()) {
+    const bool has_index_column =
+        std::find(arrow_names.begin(), arrow_names.end(), "__INDEX__")
+        != arrow_names.end();
+
+    if (has_index_column) {
+        if (is_composite_index()) {
+            PSP_COMPLAIN_AND_ABORT(
+                "`__INDEX__` is not supported for Arrow updates of a Table "
+                "with a composite index; include the index columns instead.\n"
+            );
+        }
+
         if (m_index.empty()) {
             input_schema.add_column("__INDEX__", DTYPE_INT32);
         } else {
             input_schema.add_column(
-                "__INDEX__", input_schema.get_dtype(m_index)
+                "__INDEX__", input_schema.get_dtype(m_index[0])
             );
         }
     }
 
+    if (is_composite_index()) {
+        require_index_columns(arrow_names, m_index, "Update");
+    }
+
     arrow_loader.fill_table(data_table, input_schema, m_index, m_offset, true);
+    if (is_composite_index()) {
+        fill_pkey_from_index(data_table, m_index, *m_pkey_codec, true, true);
+    }
 
     process_op_column(data_table, t_op::OP_INSERT);
     calculate_offset(row_count);
@@ -894,7 +1091,7 @@ Table::update_arrow(const std::string_view& data, std::uint32_t port_id) {
 
 std::shared_ptr<Table>
 Table::from_arrow(
-    const std::string& index,
+    const std::vector<std::string>& index,
     std::string&& data,
     std::uint32_t limit,
     t_backing_store backing_store,
@@ -948,6 +1145,16 @@ Table::from_arrow(
         loader.fill_table(*data_table, input_schema, index, 0, false);
     }
 
+    if (index.size() > 1) {
+        fill_pkey_from_index(
+            *data_table,
+            index,
+            t_pkey_codec::from_schema(data_table->get_schema(), index),
+            false,
+            true
+        );
+    }
+
     // Make Table
     auto pool = std::make_shared<t_pool>();
     pool->init();
@@ -966,7 +1173,7 @@ Table::make_table(
     const std::vector<std::string>& column_names,
     const std::vector<t_dtype>& data_types,
     std::uint32_t limit,
-    const std::string& index,
+    const std::vector<std::string>& index,
     const std::string_view& data,
     t_backing_store backing_store,
     apachearrow::t_list_flatten list_flatten
@@ -1003,14 +1210,18 @@ Table::make_table(
 
 void
 Table::validate_columns(const std::vector<std::string>& column_names) {
-    if (!m_index.empty()) {
-        // Check if index is valid after getting column names
-        bool explicit_index =
-            std::find(column_names.begin(), column_names.end(), m_index)
-            != column_names.end();
-        if (!explicit_index) {
+    std::set<std::string> seen;
+    for (const auto& name : m_index) {
+        if (std::find(column_names.begin(), column_names.end(), name)
+            == column_names.end()) {
             PSP_COMPLAIN_AND_ABORT(
-                "Specified index `" + m_index + "` does not exist in dataset."
+                "Specified index `" + name + "` does not exist in dataset."
+            );
+        }
+
+        if (!seen.insert(name).second) {
+            PSP_COMPLAIN_AND_ABORT(
+                "Specified index column `" + name + "` is repeated."
             );
         }
     }

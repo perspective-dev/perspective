@@ -2,9 +2,10 @@
 
 <div class="warning">`limit` cannot be used in conjunction with `index`.</div>
 
-Initializing a `Table` with an `index` tells Perspective to treat a column as
-the primary key, allowing in-place updates of rows. Only a single column (of any
-type) can be used as an `index`. Indexed `Table` instances allow:
+Initializing a `Table` with an `index` tells Perspective to treat a column, or
+a combination of columns, as the primary key, allowing in-place updates of
+rows. A column of any type can be used as an `index`. Indexed `Table` instances
+allow:
 
 -   In-place _updates_ whenever a new row shares an `index` values with an
     existing row
@@ -32,6 +33,52 @@ indexed_table = perspective.Table(data, index="a");
 ```
 
 </div>
+
+### Composite index
+
+A list of column names keys each row by the combination of those columns'
+values, in list order. A list of one column is the same as naming that column
+directly, and an empty list is an error.
+
+<div class="javascript">
+
+JavaScript:
+
+```javascript
+const table = await perspective.table(data, { index: ["name", "sector"] });
+await table.update([{ name: "AAPL", sector: "Tech", price: 1 }]);
+await table.remove([["AAPL", "Tech"]]);
+await table.get_index(); // ["name", "sector"]
+```
+
+</div>
+<div class="python">
+
+Python
+
+```python
+table = perspective.table(data, index=["name", "sector"])
+table.update([{"name": "AAPL", "sector": "Tech", "price": 1}])
+table.remove([["AAPL", "Tech"]])
+table.get_index()  # ["name", "sector"]
+```
+
+</div>
+
+A composite index differs from a single-column index in a few ways:
+
+-   Every `update()` row must supply every index column, and an update which
+    omits one is rejected. A partial update may still omit any other column.
+-   `remove()` takes a list of keys, each a list of the index column values in
+    index order, or an Arrow with one column per index column.
+-   The `__INDEX__` column of an `update()`, and the `__ID__` and `__INDEX__`
+    columns of a `View`, carry each key as a list of the index column values.
+    `__INDEX__` is not supported in Arrow updates of a composite-indexed
+    `Table`; include the index columns instead.
+-   A `View` with no `sort` orders rows by the index columns in index order,
+    with each column ordered by its own type and `null` first.
+-   `vlookup("column", key1, key2, ...)` takes one key argument per index
+    column.
 
 Initializing a `Table` with a `limit` sets the total number of rows the `Table`
 is allowed to have. When the `Table` is updated, and the resulting size of the

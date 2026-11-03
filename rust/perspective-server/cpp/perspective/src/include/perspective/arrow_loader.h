@@ -61,10 +61,10 @@ namespace apachearrow {
          * the identical value on every row of the group and would silently
          * collide.
          *
-         * @param index - the explicit index column, or empty for none.
+         * @param index - the explicit index columns, or empty for none.
          */
-        std::optional<std::string> repeated_index(const std::string& index
-        ) const;
+        std::optional<std::string>
+        repeated_index(const std::vector<std::string>& index) const;
 
         /**
          * @brief Initialize the arrow loader with a CSV.
@@ -92,7 +92,7 @@ namespace apachearrow {
         void fill_table(
             t_data_table& tbl,
             const t_schema& input_schema,
-            const std::string& index,
+            const std::vector<std::string>& index,
             std::uint32_t offset,
             bool is_update
         );

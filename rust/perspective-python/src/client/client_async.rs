@@ -21,12 +21,12 @@ use perspective_client::config::{ColumnType, ViewConfigUpdate};
 use perspective_client::proto::ListFlatten;
 use perspective_client::{
     Client, ColumnWindow, DeleteOptions, DescribeVerdict, OnRemoveData, OnUpdateData, OnUpdateMode,
-    OnUpdateOptions, Table, TableData, TableInitOptions, TableReadFormat, TableRef, UpdateData,
-    UpdateOptions, View, ViewWindow, assert_table_api, assert_view_api, asyncfn,
+    OnUpdateOptions, Table, TableData, TableIndex, TableInitOptions, TableReadFormat, TableRef,
+    UpdateData, UpdateOptions, View, ViewWindow, assert_table_api, assert_view_api, asyncfn,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyBytes, PyDict, PyString};
+use pyo3::types::{PyAny, PyBytes, PyDict, PyList, PyString};
 use pythonize::depythonize;
 
 use super::pandas::arrow_to_pandas;
@@ -209,7 +209,7 @@ impl AsyncClient {
         &self,
         input: Py<PyAny>,
         limit: Option<u32>,
-        index: Option<Py<PyString>>,
+        index: Option<Py<PyAny>>,
         name: Option<Py<PyString>>,
         format: Option<Py<PyString>>,
         page_to_disk: Option<bool>,
@@ -233,7 +233,7 @@ impl AsyncClient {
             match (limit, index) {
                 (None, None) => {},
                 (None, Some(index)) => {
-                    options.index = Some(index.extract::<String>(py)?);
+                    options.index = Some(parse_index(index.bind(py))?);
                 },
                 (Some(limit), None) => options.limit = Some(limit),
                 (Some(_), Some(_)) => {
@@ -426,10 +426,35 @@ pub struct AsyncTable {
 
 assert_table_api!(AsyncTable);
 
+pub(crate) fn parse_index(index: &Bound<'_, PyAny>) -> PyResult<TableIndex> {
+    if let Ok(column) = index.extract::<String>() {
+        return Ok(TableIndex::Column(column));
+    }
+
+    let columns = index
+        .extract::<Vec<String>>()
+        .map_err(|_| PyValueError::new_err("`index` must be a str or a list of str"))?;
+
+    Ok(TableIndex::Columns(columns))
+}
+
+pub(crate) fn index_to_py(
+    py: Python<'_>,
+    index: Option<TableIndex>,
+) -> PyResult<Option<Py<PyAny>>> {
+    Ok(match index {
+        None => None,
+        Some(TableIndex::Column(column)) => Some(PyString::new(py, &column).into_any().unbind()),
+        Some(TableIndex::Columns(columns)) => Some(PyList::new(py, columns)?.into_any().unbind()),
+    })
+}
+
 #[pymethods]
 impl AsyncTable {
-    pub fn get_index(&self) -> Option<String> {
-        self.table.get_index()
+    /// Returns the index column name, or the list of index column names for
+    /// a composite index.
+    pub fn get_index(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        index_to_py(py, self.table.get_index())
     }
 
     /// Get a copy of the [`Client`] this [`Table`] came from.

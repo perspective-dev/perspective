@@ -2499,8 +2499,8 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     v->set_entity_id(name);
                     const auto tbl = m_resources.get_table(name);
 
-                    if (!tbl->get_index().empty()) {
-                        v->set_index(tbl->get_index());
+                    for (const auto& name : tbl->get_index()) {
+                        v->add_index(name);
                     }
 
                     if (tbl->get_limit() != std::numeric_limits<int>::max()) {
@@ -2538,7 +2538,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 break;
             }
 
-            std::string index;
+            std::vector<std::string> index;
             std::uint32_t limit = std::numeric_limits<int>::max();
             bool has_limit = false;
             std::string make_error;
@@ -2550,7 +2550,14 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                     break;
                 }
                 case proto::MakeTableReq_MakeTableOptions::kMakeIndexTable: {
-                    index = r.options().make_index_table();
+                    index.push_back(r.options().make_index_table());
+                    break;
+                }
+                case proto::MakeTableReq_MakeTableOptions::
+                    kMakeCompositeIndexTable: {
+                    const auto& columns =
+                        r.options().make_composite_index_table().columns();
+                    index.assign(columns.begin(), columns.end());
                     break;
                 }
                 case proto::MakeTableReq_MakeTableOptions::
@@ -3943,6 +3950,44 @@ ProtoServer::_poll() {
     return resp_envs;
 }
 
+static std::shared_ptr<std::string>
+removed_keys_to_arrow(
+    const std::shared_ptr<Table>& table,
+    const std::shared_ptr<t_data_table>& removed
+) {
+    const auto& index = table->get_index();
+    const auto pkey = removed->get_const_column("psp_pkey");
+    if (index.size() == 1) {
+        return apachearrow::column_to_arrow_ipc(
+            *pkey, index[0], removed->size()
+        );
+    }
+
+    const auto& codec = *table->get_pkey_codec();
+    t_schema schema(index, codec.dtypes());
+    t_data_table keys(schema);
+    keys.init();
+    keys.extend(removed->size());
+    std::vector<std::shared_ptr<t_column>> cols;
+    cols.reserve(index.size());
+    for (const auto& name : index) {
+        cols.push_back(keys.get_column(name));
+    }
+
+    std::vector<std::string> storage;
+    for (t_uindex ridx = 0; ridx < removed->size(); ++ridx) {
+        const auto key = pkey->get_scalar(ridx);
+        const auto values = codec.decode(
+            key.is_valid() ? key.get_char_ptr() : nullptr, storage
+        );
+        for (std::size_t i = 0; i < values.size(); ++i) {
+            cols[i]->set_scalar(ridx, values[i]);
+        }
+    }
+
+    return apachearrow::table_to_arrow_ipc(keys);
+}
+
 void
 ProtoServer::_notify_table(
     std::shared_ptr<Table>& table,
@@ -3966,11 +4011,7 @@ ProtoServer::_notify_table(
         if (has_removes) {
             auto remove_subs = m_resources.get_view_on_remove_sub(view_id);
             if (!remove_subs.empty() && !removed_indices) {
-                removed_indices = apachearrow::column_to_arrow_ipc(
-                    *removed->get_const_column("psp_pkey"),
-                    table->get_index(),
-                    removed->size()
-                );
+                removed_indices = removed_keys_to_arrow(table, removed);
             }
 
             for (auto& subscription : remove_subs) {
@@ -4072,7 +4113,11 @@ ProtoServer::make_derived_table(
     }
 
     table = Table::make_derived(
-        schema, source->pkey_dtype(), source->index(), source->limit()
+        schema,
+        source->pkey_dtype(),
+        source->index(),
+        source->limit(),
+        source->pkey_codec()
     );
 
 #ifdef PSP_PARALLEL_FOR

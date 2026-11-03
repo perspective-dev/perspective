@@ -298,7 +298,7 @@ message GetHostedTablesResp {
 
 message HostedTable {
     string entity_id = 1;
-    optional string index = 2;
+    repeated string index = 2;
     optional uint32 limit = 3;
 }
 
@@ -382,6 +382,11 @@ message ViewGetConfigResp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// The columns of a composite `index`, in key order.
+message IndexColumns {
+    repeated string columns = 1;
+}
+
 // `Client::table`.
 message MakeTableReq {
     MakeTableData data = 1;
@@ -390,6 +395,7 @@ message MakeTableReq {
         oneof make_table_type {
             string make_index_table = 1;
             uint32 make_limit_table = 2;
+            IndexColumns make_composite_index_table = 6;
         };
 
         // Back this Table's canonical data with the on-disk storage backend

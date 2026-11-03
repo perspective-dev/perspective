@@ -67,6 +67,11 @@ namespace apachearrow {
     );
 
     /**
+     * @brief Serialize every column of `table` as one Arrow IPC stream.
+     */
+    std::shared_ptr<std::string> table_to_arrow_ipc(const t_data_table& table);
+
+    /**
      * @brief Build an `arrow::Array` from a column typed as `DTYPE_BOOL.`
      *
      * @param data
