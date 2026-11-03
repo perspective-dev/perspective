@@ -10,21 +10,21 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { CartesianChart } from "../cartesian/cartesian";
-import { PointGlyph } from "../cartesian/glyphs/points";
-import { LineGlyph } from "../cartesian/glyphs/lines";
-import { DensityGlyph } from "../cartesian/glyphs/density";
-import type { Glyph } from "../cartesian/glyph";
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import type { PlotLayout } from "../../layout/plot-layout";
-import type { Theme } from "../../theme/theme";
-import type { Canvas2D, Context2D } from "../canvas-types";
-import type { ZoomConfig } from "../../interaction/zoom-controller";
-import type { PluginConfig } from "../chart";
-import { TileLayer } from "../../map/tile-layer";
-import { TILE_SOURCES } from "../../map/tile-source";
-import { lonLatToMercator } from "../../map/mercator";
-import { getScaledContext } from "../../axis/canvas";
+import { CartesianChart } from "../cartesian/cartesian.ts";
+import { PointGlyph } from "../cartesian/glyphs/points.ts";
+import { LineGlyph } from "../cartesian/glyphs/lines.ts";
+import { DensityGlyph } from "../cartesian/glyphs/density.ts";
+import type { Glyph } from "../cartesian/glyph.ts";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { PlotLayout } from "../../layout/plot-layout.ts";
+import type { Theme } from "../../theme/theme.ts";
+import type { Canvas2D, Context2D } from "../canvas-types.ts";
+import type { ZoomConfig } from "../../interaction/zoom-controller.ts";
+import type { PluginConfig } from "../chart.ts";
+import { TileLayer } from "../../map/tile-layer.ts";
+import { TILE_SOURCES } from "../../map/tile-source.ts";
+import { lonLatToMercator } from "../../map/mercator.ts";
+import { getScaledContext } from "../../axis/canvas.ts";
 
 /**
  * Map-mode base for cartesian charts. Reuses the entire cartesian

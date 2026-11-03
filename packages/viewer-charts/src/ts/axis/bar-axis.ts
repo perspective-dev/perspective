@@ -10,23 +10,23 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Canvas2D, Context2D } from "../charts/canvas-types";
-import { PlotLayout } from "../layout/plot-layout";
-import { stepTickFormatter } from "../layout/ticks";
-import { initCanvas } from "./canvas";
+import type { Canvas2D, Context2D } from "../charts/canvas-types.ts";
+import { PlotLayout } from "../layout/plot-layout.ts";
+import { stepTickFormatter } from "../layout/ticks.ts";
+import { initCanvas } from "./canvas.ts";
 import {
     renderCategoricalXTicks,
     renderCategoricalYTicks,
     type CategoricalDomain,
-} from "./categorical-axis";
+} from "./categorical-axis.ts";
 import {
     drawGridlinesX,
     drawGridlinesY,
     drawXTickRow,
     drawYTickColumn,
-} from "./axis-primitives";
-import type { AxisDomain } from "./numeric-axis";
-import type { Theme } from "../theme/theme";
+} from "./axis-primitives.ts";
+import type { AxisDomain } from "./numeric-axis.ts";
+import type { Theme } from "../theme/theme.ts";
 
 function tickFormatter(
     domain: AxisDomain,

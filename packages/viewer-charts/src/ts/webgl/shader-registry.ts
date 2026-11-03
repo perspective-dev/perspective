@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ShaderSpec } from "./shader-manifest";
+import type { ShaderSpec } from "./shader-manifest.ts";
 
 type GL = WebGL2RenderingContext | WebGLRenderingContext;
 

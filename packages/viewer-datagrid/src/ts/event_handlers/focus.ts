@@ -10,18 +10,18 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { write_cell } from "./click/edit_click.js";
+import { write_cell } from "./click/edit_click.ts";
 import {
     release_cell_editable,
     ensure_editable_for_focus,
-} from "./edit_focus.js";
+} from "./edit_focus.ts";
 import type {
     RegularTable,
     DatagridModel,
     SelectedPosition,
     SelectedPositionMap,
-} from "../types.js";
-import { isEditableMode } from "../types.js";
+} from "../types.ts";
+import { isEditableMode } from "../types.ts";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 
 export function createFocusoutListener(

@@ -10,10 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { AbstractChart } from "../chart-base";
-import type { ColumnDataMap } from "../../data/view-reader";
-import { NodeStore, NULL_NODE } from "./node-store";
-import { LazyTooltip } from "../../interaction/lazy-tooltip";
+import { AbstractChart } from "../chart-base.ts";
+import type { ColumnDataMap } from "../../data/view-reader.ts";
+import { NodeStore, NULL_NODE } from "./node-store.ts";
+import { LazyTooltip } from "../../interaction/lazy-tooltip.ts";
 
 /**
  * Sentinel fallback for the Size slot when the user hasn't picked one:

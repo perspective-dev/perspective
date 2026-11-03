@@ -10,15 +10,31 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-export type * from "../../dist/wasm/perspective-js.d.ts";
+export type * from "./public_types.ts";
 import type * as psp from "../../dist/wasm/perspective-js.d.ts";
 export type * from "./virtual_server.ts";
 import * as psp_virtual from "./virtual_server.ts";
 import * as wasm_module from "../../dist/wasm/perspective-js.js";
 import * as api from "./wasm/browser.ts";
-import { load_wasm_stage_0 } from "./wasm/decompress.ts";
 import { host_supports_memory64 } from "./wasm/features.ts";
+import {
+    init,
+    provide_client_glue,
+    provide_client_runtime,
+    register,
+    resolve_client,
+    resolve_server,
+} from "./wasm/registry.ts";
+import type { WasmSource } from "./wasm/registry.ts";
+
 export { host_supports_memory64 } from "./wasm/features.ts";
+export { init } from "./wasm/registry.ts";
+export type {
+    InitOptions,
+    WasmBinary,
+    WasmRegistration,
+    WasmSource,
+} from "./wasm/registry.ts";
 
 export {
     GenericSQLVirtualServerModel,
@@ -59,18 +75,25 @@ export interface InitServerOptions {
     disable_stage_0?: boolean;
 }
 
-interface ServerWasmRegistry extends ServerWasmRegistration {
-    sole?: ServerWasmSource;
-    disable_stage_0: boolean;
-}
+provide_client_runtime(async (wasm) => {
+    const module =
+        wasm instanceof WebAssembly.Module
+            ? wasm
+            : await WebAssembly.compile(wasm);
 
-let SERVER_REGISTRY: ServerWasmRegistry | undefined;
-let GLOBAL_SERVER_WASM: Promise<ArrayBuffer | WebAssembly.Module> | undefined;
+    await wasm_module.default({ module_or_path: module });
+    await wasm_module.init();
+    return { glue: wasm_module, module };
+});
+
+function client_glue(): Promise<typeof psp> {
+    return resolve_client().then((runtime) => runtime.glue);
+}
 
 export async function createMessageHandler(
     handler: psp_virtual.VirtualServerHandler,
 ) {
-    return psp_virtual.createMessageHandler(await get_client(), handler);
+    return psp_virtual.createMessageHandler(await client_glue(), handler);
 }
 
 function is_wasm_source(
@@ -86,87 +109,20 @@ function is_wasm_source(
     );
 }
 
-async function materialize_server_wasm(
-    source: ServerWasmSource,
-    disable_stage_0: boolean,
-): Promise<ArrayBuffer | WebAssembly.Module> {
-    let wasm = typeof source === "function" ? await source() : await source;
-    if (wasm instanceof Uint8Array) {
-        wasm = wasm.buffer as ArrayBuffer;
-    }
-
-    if (typeof Response !== "undefined" && wasm instanceof Response) {
-        if (!wasm.ok) {
-            throw new Error(
-                `Failed to fetch perspective server wasm (HTTP ${wasm.status} "${wasm.url}")`,
-            );
-        }
-
-        if (disable_stage_0) {
-            return await wasm.arrayBuffer();
-        }
-    }
-
-    if (disable_stage_0) {
-        return wasm as ArrayBuffer | WebAssembly.Module;
-    }
-
-    const bytes = await load_wasm_stage_0(wasm);
-    return bytes.buffer as ArrayBuffer;
-}
-
-async function select_server_wasm(
-    registry: ServerWasmRegistry,
-): Promise<ArrayBuffer | WebAssembly.Module> {
-    if (registry.sole !== undefined) {
-        return await materialize_server_wasm(
-            registry.sole,
-            registry.disable_stage_0,
-        );
-    }
-
-    // A lone `wasm64` registration is an explicit opt-in and is used as-is
-    // regardless of the probe (an unsupporting host fails at instantiation,
-    // which is the correct error).
-    if (
-        registry.wasm64 !== undefined &&
-        (registry.wasm32 === undefined || host_supports_memory64())
-    ) {
-        try {
-            return await materialize_server_wasm(
-                registry.wasm64,
-                registry.disable_stage_0,
-            );
-        } catch (e) {
-            if (registry.wasm32 === undefined) {
-                throw e;
-            }
-
-            console.warn(
-                "Memory64 perspective server wasm failed to load, falling back to wasm32",
-                e,
-            );
-        }
-    }
-
-    return await materialize_server_wasm(
-        registry.wasm32!,
-        registry.disable_stage_0,
-    );
-}
-
 /**
  * Register the Perspective engine ("server") WebAssembly binary that backs
- * `worker()`.
+ * `worker()`; a wrapper over `init()`'s `server` / `server32` / `server64`
+ * roles.
  *
- * The single-argument form registers one binary of either bitness. The
- * object form registers a wasm32 and/or wasm64 (Memory64) binary; the wasm64
- * binary is preferred whenever the host supports Memory64, raising the
- * engine's heap ceiling from 4GB to 16GB (at some engine performance cost —
- * register only `wasm32` to opt out). Sources registered as thunks are only
- * invoked if selected, so the losing binary is never downloaded; if the
- * selected wasm64 source fails to load and a wasm32 source is also
- * registered, selection falls back to wasm32 with a console warning.
+ * The single-argument form registers one binary of either bitness (`server`).
+ * The object form registers a wasm32 and/or wasm64 (Memory64) binary
+ * (`server32` / `server64`); the wasm64 binary is preferred whenever the host
+ * supports Memory64, raising the engine's heap ceiling from 4GB to 16GB (at
+ * some engine performance cost — register only `wasm32` to opt out). Sources
+ * registered as thunks are only invoked if selected, so the losing binary is
+ * never downloaded; if the selected wasm64 source fails to load and a wasm32
+ * source is also registered, selection falls back to wasm32 with a console
+ * warning. Either form replaces any engine binaries registered earlier.
  *
  * Selection and download are deferred to the first `worker()` call.
  *
@@ -190,56 +146,25 @@ export function init_server(
     const disable_stage_0 =
         typeof options === "boolean" ? options : !!options.disable_stage_0;
 
-    GLOBAL_SERVER_WASM = undefined;
     if (is_wasm_source(wasm)) {
-        SERVER_REGISTRY = { sole: wasm, disable_stage_0 };
+        register({ server: wasm }, { disable_stage_0 }, "replace_server");
         return;
     }
 
     // `WebAssembly.Module`'s lib type is structurally empty, so TypeScript
     // can't negatively narrow this branch itself.
-    const registration = wasm as ServerWasmRegistration;
-    if (
-        registration.wasm32 !== undefined ||
-        registration.wasm64 !== undefined
-    ) {
-        SERVER_REGISTRY = {
-            wasm32: registration.wasm32,
-            wasm64: registration.wasm64,
-            disable_stage_0,
-        };
-    } else {
+    const { wasm32, wasm64 } = wasm as ServerWasmRegistration;
+    if (wasm32 === undefined && wasm64 === undefined) {
         throw new Error(
             "init_server requires a wasm source or a {wasm32, wasm64} registration",
         );
     }
-}
 
-let GLOBAL_CLIENT_WASM: Promise<typeof psp>;
-let GLOBAL_CLIENT_MODULE: Promise<WebAssembly.Module> | undefined;
-
-async function compile_module(wasm: any): Promise<WebAssembly.Module> {
-    if (wasm instanceof WebAssembly.Module) {
-        return wasm;
-    }
-
-    if (typeof Response !== "undefined" && wasm instanceof Response) {
-        return WebAssembly.compileStreaming(wasm);
-    }
-
-    return WebAssembly.compile(wasm);
-}
-
-async function compilerize(
-    wasm: PerspectiveWasm,
-    disable_stage_0: boolean = false,
-) {
-    const wasm_buff = disable_stage_0 ? wasm : await load_wasm_stage_0(wasm);
-    const compiled = await compile_module(wasm_buff);
-    GLOBAL_CLIENT_MODULE = Promise.resolve(compiled);
-    await wasm_module.default({ module_or_path: compiled });
-    await wasm_module.init();
-    return wasm_module;
+    register(
+        { server32: wasm32, server64: wasm64 },
+        { disable_stage_0 },
+        "replace_server",
+    );
 }
 
 export type PerspectiveWasm =
@@ -248,40 +173,49 @@ export type PerspectiveWasm =
     | typeof psp
     | Promise<ArrayBuffer | Response | Object>;
 
+function is_client_source(wasm: PerspectiveWasm): boolean {
+    return (
+        wasm instanceof Uint8Array ||
+        wasm instanceof ArrayBuffer ||
+        (typeof Response !== "undefined" && wasm instanceof Response) ||
+        wasm instanceof Promise ||
+        wasm instanceof WebAssembly.Module
+    );
+}
+
+/**
+ * Register the `perspective-js` client WebAssembly binary, or an
+ * already-initialized `perspective-js` module; a wrapper over `init()`'s
+ * `client` role.
+ */
 export function init_client(wasm: PerspectiveWasm, disable_stage_0 = false) {
-    if (wasm instanceof Uint8Array) {
-        GLOBAL_CLIENT_WASM = compilerize(
-            wasm.buffer as ArrayBuffer,
-            disable_stage_0,
-        );
-    } else if (wasm instanceof ArrayBuffer) {
-        GLOBAL_CLIENT_WASM = compilerize(wasm, disable_stage_0);
-    } else if (wasm instanceof Response) {
-        GLOBAL_CLIENT_WASM = compilerize(wasm, disable_stage_0);
-    } else if (wasm instanceof Promise) {
-        GLOBAL_CLIENT_WASM = compilerize(wasm, disable_stage_0);
-    } else if (wasm instanceof Object) {
-        GLOBAL_CLIENT_WASM = Promise.resolve(wasm as typeof psp);
+    if (is_client_source(wasm)) {
+        register({ client: wasm as WasmSource }, { disable_stage_0 });
+    } else {
+        provide_client_glue(wasm as typeof psp);
     }
 }
 
-function get_client() {
-    const viewer_class: any = customElements.get("perspective-viewer");
-    if (viewer_class) {
-        GLOBAL_CLIENT_WASM = Promise.resolve(viewer_class.__wasm_module__);
-        if (
-            GLOBAL_CLIENT_MODULE === undefined &&
-            viewer_class.__wasm_client_module__
-        ) {
-            GLOBAL_CLIENT_MODULE = Promise.resolve(
-                viewer_class.__wasm_client_module__,
-            );
-        }
-    } else if (GLOBAL_CLIENT_WASM === undefined) {
-        throw new Error("Missing perspective-client.wasm");
-    }
-
-    return GLOBAL_CLIENT_WASM;
+/**
+ * Create a `Client` which sends requests through `send_request`; feed its
+ * responses to `client.handle_response()`.
+ *
+ * # Examples
+ *
+ * ```javascript
+ * const client = await perspective.make_client(async (bytes) => {
+ *     socket.send(bytes);
+ * });
+ *
+ * socket.onmessage = (event) => client.handle_response(event.data);
+ * ```
+ */
+export async function make_client(
+    send_request: (buffer: Uint8Array) => Promise<void>,
+    close?: Function,
+) {
+    const { Client } = await client_glue();
+    return new Client(send_request, close);
 }
 
 /**
@@ -290,9 +224,8 @@ function get_client() {
  * `postMessage` to a Worker which can instantiate its own `Client` without
  * re-fetching or re-compiling the wasm binary.
  *
- * Requires that the client wasm has been initialized — typically by a prior
- * call to `init_client(...)`, or implicitly by mounting a `<perspective-viewer>`
- * element. Throws otherwise.
+ * Resolves the `client` (or `viewer`) binary registered with `init()`,
+ * compiling it on first use.
  *
  * # Examples
  *
@@ -302,58 +235,29 @@ function get_client() {
  * ```
  */
 export async function getCompiledClientWasm(): Promise<WebAssembly.Module> {
-    if (GLOBAL_CLIENT_MODULE !== undefined) {
-        return GLOBAL_CLIENT_MODULE;
-    }
-
-    const viewer_class: any = customElements.get("perspective-viewer");
-    if (viewer_class?.__wasm_client_module__) {
-        GLOBAL_CLIENT_MODULE = Promise.resolve(
-            viewer_class.__wasm_client_module__,
+    const { module } = await resolve_client();
+    if (module === undefined) {
+        throw new Error(
+            "perspective-js was initialized from a pre-initialized module, so its compiled `WebAssembly.Module` is unavailable",
         );
-        return GLOBAL_CLIENT_MODULE;
     }
 
-    throw new Error(
-        "perspective-js client wasm has not been compiled yet — call " +
-            "`init_client(...)` or `perspective.worker()` before " +
-            "`getCompiledClientWasm()`.",
-    );
+    return module;
 }
-
-function get_server() {
-    if (SERVER_REGISTRY === undefined) {
-        throw new Error("Missing perspective-server.wasm");
-    }
-
-    if (GLOBAL_SERVER_WASM === undefined) {
-        GLOBAL_SERVER_WASM = select_server_wasm(SERVER_REGISTRY);
-    }
-
-    return GLOBAL_SERVER_WASM.then((x) =>
-        x instanceof WebAssembly.Module ? x : x.slice(0),
-    );
-}
-
-let GLOBAL_WORKER: undefined | (() => Promise<Worker>) = undefined;
 
 // `WorkerPlugin` resolves this import to a stub that exports
 // `getPerspectiveWorkerURL(): Promise<string>`.
-import { initialize as initializePerspectiveWorker } from "../../src/ts/perspective-server.worker.js";
+import { initialize as initializePerspectiveWorker } from "../../src/ts/perspective-server.worker.ts";
 
 async function get_worker(): Promise<Worker | MessagePort> {
-    if (GLOBAL_WORKER === undefined) {
-        return await initializePerspectiveWorker({
-            type: "module",
-            name: "perspective-server",
-        });
-    }
-
-    return GLOBAL_WORKER();
+    return await initializePerspectiveWorker({
+        type: "module",
+        name: "perspective-server",
+    });
 }
 
 export async function websocket(url: string | URL) {
-    return await api.websocket(get_client(), url);
+    return await api.websocket(client_glue(), url);
 }
 
 export async function worker(
@@ -363,14 +267,16 @@ export async function worker(
         worker = get_worker();
     }
 
-    return await api.worker(get_client(), get_server(), worker);
+    return await api.worker(client_glue(), resolve_server(), worker);
 }
 
 export default {
+    init,
     websocket,
     worker,
     init_client,
     init_server,
+    make_client,
     host_supports_memory64,
     createMessageHandler,
     getCompiledClientWasm,

@@ -15,7 +15,7 @@ import type {
     DatagridModel,
     DatagridPluginElement,
     EditMode,
-} from "../types.js";
+} from "../types.ts";
 
 export const EDIT_MODES: readonly EditMode[] = [
     "READ_ONLY",

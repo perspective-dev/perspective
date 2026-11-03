@@ -400,7 +400,7 @@ checksum = "ef987d17b0a113becdd19d3d0022d04d7ef41f9efe4f3fb63ac44ba61df3ade9"
 dependencies = [
  "camino",
  "cargo-platform",
- "semver 1.0.27",
+ "semver",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
@@ -2017,19 +2017,16 @@ dependencies = [
  "async-lock",
  "bytes",
  "chrono",
- "cmake",
  "extend",
  "futures",
  "indexmap 2.14.0",
  "macro_rules_attribute",
- "num_cpus",
  "perspective-client",
  "perspective-server",
  "pollster",
  "pyo3",
  "pyo3-async-runtimes",
  "pyo3-build-config",
- "python-config-rs",
  "pythonize",
  "serde",
  "tokio",
@@ -2452,15 +2449,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "python-config-rs"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24336969a51336e6d27256c81456d25f6b533952c60ef495b33e3288461b9484"
-dependencies = [
- "semver 0.9.0",
-]
-
-[[package]]
 name = "pythonize"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2673,7 +2661,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
 dependencies = [
- "semver 1.0.27",
+ "semver",
 ]
 
 [[package]]
@@ -2715,15 +2703,6 @@ checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
 
 [[package]]
 name = "semver"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
-dependencies = [
- "semver-parser",
-]
-
-[[package]]
-name = "semver"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
@@ -2731,12 +2710,6 @@ dependencies = [
  "serde",
  "serde_core",
 ]
-
-[[package]]
-name = "semver-parser"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
@@ -3694,7 +3667,7 @@ dependencies = [
  "bitflags",
  "hashbrown 0.15.5",
  "indexmap 2.14.0",
- "semver 1.0.27",
+ "semver",
  "serde",
 ]
 

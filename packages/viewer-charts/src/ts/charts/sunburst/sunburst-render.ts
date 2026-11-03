@@ -10,31 +10,31 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Context2D } from "../canvas-types";
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import type { SunburstChart } from "./sunburst";
-import { NULL_NODE } from "../common/node-store";
-import { resolvePalette, type Vec3 } from "../../theme/palette";
-import { type GradientStop } from "../../theme/gradient";
-import { leafColor, leafRGBA, luminance } from "../common/leaf-color";
+import type { Context2D } from "../canvas-types.ts";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { SunburstChart } from "./sunburst.ts";
+import { NULL_NODE } from "../common/node-store.ts";
+import { resolvePalette, type Vec3 } from "../../theme/palette.ts";
+import { type GradientStop } from "../../theme/gradient.ts";
+import { leafColor, leafRGBA, luminance } from "../common/leaf-color.ts";
 import arcVert from "../../shaders/sunburst-arc.vert.glsl";
 import arcFrag from "../../shaders/sunburst-arc.frag.glsl";
-import { getInstancing } from "../../webgl/instanced-attrs";
-import { compileProgram } from "../../webgl/program-cache";
+import { getInstancing } from "../../webgl/instanced-attrs.ts";
+import { compileProgram } from "../../webgl/program-cache.ts";
 import {
     partitionSunburst,
     collectVisibleArcs,
     collectVisibleArcsAppend,
     INNER_RING_PX,
-} from "./sunburst-layout";
-import { buildFacetGrid } from "../../layout/facet-grid";
-import { legendTreeGutter } from "../../interaction/legend-controller";
-import { withChromeCache } from "../common/chrome-cache";
+} from "./sunburst-layout.ts";
+import { buildFacetGrid } from "../../layout/facet-grid.ts";
+import { legendTreeGutter } from "../../interaction/legend-controller.ts";
+import { withChromeCache } from "../common/chrome-cache.ts";
 import {
     renderBreadcrumbs as renderTreeBreadcrumbs,
     renderTreeColorLegend,
     renderTreeTooltip,
-} from "../common/tree-chrome";
+} from "../common/tree-chrome.ts";
 
 /**
  * Triangle-strip template resolution. `N_STEPS` angular samples × 2

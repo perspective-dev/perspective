@@ -10,13 +10,13 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { WebGLContextManager } from "../../../webgl/context-manager";
-import type { CartesianChart } from "../cartesian";
-import type { Glyph } from "../glyph";
-import { bindGradientTexture } from "../../../webgl/gradient-texture";
-import { colorRangePivot } from "../../../theme/gradient";
-import { compileProgram } from "../../../webgl/program-cache";
-import { buildPointRowTooltipLines } from "../tooltip-lines";
+import type { WebGLContextManager } from "../../../webgl/context-manager.ts";
+import type { CartesianChart } from "../cartesian.ts";
+import type { Glyph } from "../glyph.ts";
+import { bindGradientTexture } from "../../../webgl/gradient-texture.ts";
+import { colorRangePivot } from "../../../theme/gradient.ts";
+import { compileProgram } from "../../../webgl/program-cache.ts";
+import { buildPointRowTooltipLines } from "../tooltip-lines.ts";
 import scatterVert from "../../../shaders/scatter.vert.glsl";
 import scatterFrag from "../../../shaders/scatter.frag.glsl";
 

@@ -55,12 +55,6 @@ use wasm_bindgen::prelude::*;
             });
         }
 
-        Object.defineProperty(x, '__wasm_module__', {
-            get() {
-                return psp;
-            },
-        });
-
         customElements.define(name, x);
     }
 "#)]

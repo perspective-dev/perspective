@@ -15,17 +15,17 @@ import {
     readThemeStyle,
     reconcile_column_widths,
     width_config_delta,
-} from "../model/index.js";
-import { activate } from "../plugin/activate.js";
-import { restore, sync_wrap_lines } from "../plugin/restore.js";
-import { save } from "../plugin/save.js";
-import { draw } from "../plugin/draw.js";
+} from "../model/index.ts";
+import { activate } from "../plugin/activate.ts";
+import { restore, sync_wrap_lines } from "../plugin/restore.ts";
+import { save } from "../plugin/save.ts";
+import { draw } from "../plugin/draw.ts";
 import column_config_schema, {
     ColumnConfigSchema,
-} from "../plugin/column_config_schema.js";
-import plugin_config_schema from "../plugin/plugin_config_schema.js";
+} from "../plugin/column_config_schema.ts";
+import plugin_config_schema from "../plugin/plugin_config_schema.ts";
 import datagridStyles from "../../../dist/css/perspective-viewer-datagrid.css";
-import { format_raw } from "../data_listener/format_cell.js";
+import { format_raw } from "../data_listener/format_cell.ts";
 
 import type { ColumnWindow, View, ViewWindow } from "@perspective-dev/client";
 import type {
@@ -42,10 +42,10 @@ import type {
     ResolvedColumnsConfig,
     Align,
     ColumnRole,
-} from "../types.js";
+} from "../types.ts";
 import { RegularTableElement } from "regular-table";
 import type { CellScalar } from "regular-table/dist/esm/types.js";
-import { isMetaColumn } from "../model/meta_columns.js";
+import { isMetaColumn } from "../model/meta_columns.ts";
 
 /**
  * The custom element class for this plugin.  The interface methods for this

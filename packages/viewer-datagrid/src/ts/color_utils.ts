@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColorRecord } from "./types.js";
+import type { ColorRecord } from "./types.ts";
 
 /** 8-bit sRGB color as `[r, g, b]` with each channel in `[0, 255]`. */
 export type RGB = [number, number, number];

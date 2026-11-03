@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-export type * from "../../dist/wasm/perspective-js.d.ts";
+export type * from "./public_types.ts";
 export type * from "./virtual_server.ts";
 
 import WebSocket, { WebSocketServer as HttpWebSocketServer } from "ws";
@@ -34,11 +34,17 @@ import * as url from "node:url";
 import { createRequire } from "node:module";
 
 import * as perspective_client from "../../dist/wasm/perspective-js.js";
-import { load_wasm_stage_0 } from "./wasm/decompress.js";
+import { load_wasm_stage_0 } from "./wasm/decompress.ts";
 import { host_supports_memory64 } from "./wasm/features.ts";
 import * as engine from "./wasm/engine.ts";
 
 export { host_supports_memory64 } from "./wasm/features.ts";
+export type {
+    InitOptions,
+    WasmBinary,
+    WasmRegistration,
+    WasmSource,
+} from "./wasm/registry.ts";
 import { compile_perspective } from "./wasm/emscripten_api.ts";
 import * as psp_websocket from "./websocket.ts";
 import * as api from "./wasm/browser.ts";
@@ -361,7 +367,7 @@ function buffer_to_arraybuffer(
  */
 export class WebSocketServer {
     _server: http.Server | any; // stoppable has no type ...
-    _wss: HttpWebSocketServer;
+    private _wss: HttpWebSocketServer;
     constructor({ port = 8080, assets = ["./"], server = undefined } = {}) {
         const perspective_server =
             typeof server === "undefined" ? SYNC_SERVER : server;

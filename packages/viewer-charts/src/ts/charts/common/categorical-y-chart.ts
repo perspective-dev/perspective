@@ -10,14 +10,14 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { PlotLayout } from "../../layout/plot-layout";
-import type { AxisDomain } from "../../axis/numeric-axis";
+import type { PlotLayout } from "../../layout/plot-layout.ts";
+import type { AxisDomain } from "../../axis/numeric-axis.ts";
 import type {
     CategoricalDomain,
     CategoricalLevel,
-} from "../../axis/categorical-axis";
-import type { ZoomConfig } from "../../interaction/zoom-controller";
-import { AbstractChart } from "../chart-base";
+} from "../../axis/categorical-axis.ts";
+import type { ZoomConfig } from "../../interaction/zoom-controller.ts";
+import { AbstractChart } from "../chart-base.ts";
 
 /**
  * Common base for charts with a categorical X axis, a numeric Y (value)

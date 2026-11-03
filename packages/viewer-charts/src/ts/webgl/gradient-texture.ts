@@ -10,8 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { buildGradientLUT, type GradientStop } from "../theme/gradient";
-import type { WebGLContextManager } from "./context-manager";
+import { buildGradientLUT, type GradientStop } from "../theme/gradient.ts";
+import type { WebGLContextManager } from "./context-manager.ts";
 
 const LUT_SIZE = 256;
 

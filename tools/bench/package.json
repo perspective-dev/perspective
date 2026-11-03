@@ -11,7 +11,8 @@
     "bin": "perspective-bench",
     "repository": {
         "type": "git",
-        "url": "https://github.com/perspective-dev/perspective/packages/bench"
+        "url": "git+https://github.com/perspective-dev/perspective.git",
+        "directory": "tools/bench"
     },
     "scripts": {
         "bench_js": "node basic_suite.mjs",

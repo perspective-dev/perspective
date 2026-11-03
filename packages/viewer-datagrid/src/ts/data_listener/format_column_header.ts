@@ -10,8 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { format_cell } from "./format_cell.js";
-import type { DatagridModel, ResolvedColumnsConfig } from "../types.js";
+import { format_cell } from "./format_cell.ts";
+import type { DatagridModel, ResolvedColumnsConfig } from "../types.ts";
 import type { CellScalar } from "regular-table/dist/esm/types.js";
 
 /**

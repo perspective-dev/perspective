@@ -10,7 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { parseCssColorList, parseCssColorStrict } from "../../theme/gradient";
+import {
+    parseCssColorList,
+    parseCssColorStrict,
+} from "../../theme/gradient.ts";
 
 export type ChartType = "bar" | "line" | "scatter" | "area";
 

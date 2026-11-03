@@ -25,10 +25,14 @@
     "homepage": "https://perspective-dev.github.io",
     "repository": {
         "type": "git",
-        "url": "https://github.com/perspective-dev/perspective"
+        "url": "git+https://github.com/perspective-dev/perspective.git",
+        "directory": "packages/react"
     },
     "license": "Apache-2.0",
     "sideEffects": false,
+    "files": [
+        "dist/**/*"
+    ],
     "exports": {
         ".": {
             "types": "./dist/esm/index.d.ts",

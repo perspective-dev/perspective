@@ -10,13 +10,13 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { mixRgb, parseColor, rgbToHex } from "../color_utils.js";
+import { mixRgb, parseColor, rgbToHex } from "../color_utils.ts";
 import type {
     Align,
     DatagridPluginConfig,
     DatagridPluginElement,
-} from "../types.js";
-import type { ColumnConfigSchema } from "./column_config_schema.js";
+} from "../types.ts";
+import type { ColumnConfigSchema } from "./column_config_schema.ts";
 
 type ControlSpec = Record<string, unknown> & { kind: string };
 

@@ -10,34 +10,34 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import type { HeatmapChart } from "./heatmap";
-import { PlotLayout } from "../../layout/plot-layout";
-import { drawFacetTitle } from "../../axis/facet-chrome";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { HeatmapChart } from "./heatmap.ts";
+import { PlotLayout } from "../../layout/plot-layout.ts";
+import { drawFacetTitle } from "../../axis/facet-chrome.ts";
 import {
     renderInPlotFrame,
     clearAndSetupFrame,
     withScissor,
-} from "../../webgl/plot-frame";
-import { getInstancing } from "../../webgl/instanced-attrs";
-import { compileProgram } from "../../webgl/program-cache";
-import { initCanvas } from "../../axis/canvas";
-import { buildFacetGrid } from "../../layout/facet-grid";
+} from "../../webgl/plot-frame.ts";
+import { getInstancing } from "../../webgl/instanced-attrs.ts";
+import { compileProgram } from "../../webgl/program-cache.ts";
+import { initCanvas } from "../../axis/canvas.ts";
+import { buildFacetGrid } from "../../layout/facet-grid.ts";
 import {
     measureCategoricalAxisHeight,
     renderCategoricalXTicks,
     type CategoricalDomain,
-} from "../../axis/categorical-axis";
+} from "../../axis/categorical-axis.ts";
 import {
     measureCategoricalAxisWidth,
     renderCategoricalYTicks,
     type CategoricalYAxisOptions,
-} from "./heatmap-y-axis";
+} from "./heatmap-y-axis.ts";
 import {
     drawNumericCategoryX,
     drawNumericCategoryY,
-} from "../../axis/bar-axis";
-import { computeNiceTicks } from "../../layout/ticks";
+} from "../../axis/bar-axis.ts";
+import { computeNiceTicks } from "../../layout/ticks.ts";
 
 // The heatmap's Y-axis column names end with the (single, externally
 // enforced) aggregate name. That leaf column is a redundant constant and
@@ -52,20 +52,20 @@ import {
     renderLegend,
     renderLegendAt,
     type LegendPaintView,
-} from "../../axis/legend";
+} from "../../axis/legend.ts";
 import {
     legendRightGutter,
     resolveLegendMode,
     legendSidebarWidth,
-} from "../../interaction/legend-controller";
+} from "../../interaction/legend-controller.ts";
 import heatmapVert from "../../shaders/heatmap.vert.glsl";
 import heatmapFrag from "../../shaders/heatmap.frag.glsl";
-import { colorValueToT } from "../../theme/gradient";
+import { colorValueToT } from "../../theme/gradient.ts";
 import {
     bindGradientTexture,
     ensureGradientTexture,
-} from "../../webgl/gradient-texture";
-import { renderHeatmapTooltip } from "./heatmap-interact";
+} from "../../webgl/gradient-texture.ts";
+import { renderHeatmapTooltip } from "./heatmap-interact.ts";
 
 export interface HeatmapLocations {
     u_projection: WebGLUniformLocation | null;

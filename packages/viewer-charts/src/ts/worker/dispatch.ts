@@ -10,14 +10,11 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ControlMsg } from "../transport/protocol";
-import type { WorkerRenderer } from "./renderer.worker";
+import type { ControlMsg } from "../transport/protocol.ts";
+import type { WorkerRenderer } from "./renderer.worker.ts";
 
 /**
- * Stateless control-message dispatcher. The renderer instance is
- * supplied by the caller so worker mode (one global instance) and
- * in-process mode (one instance per host element) share the same
- * routing logic.
+ * Stateless control-message dispatcher for the `WorkerRenderer` the caller supplies.
  */
 export function dispatch(r: WorkerRenderer, msg: ControlMsg): void {
     switch (msg.kind) {

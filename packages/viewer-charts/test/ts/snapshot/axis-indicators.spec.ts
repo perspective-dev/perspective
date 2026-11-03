@@ -61,7 +61,7 @@ test.describe("Axis hover indicators", () => {
             group_by: ["Order Date"],
             columns_config: {
                 "Order Date": {
-                    date_format: { dateStyle: "full", timeStyle: "disabled" },
+                    date_format: { dateStyle: "full" },
                 },
             },
         } as never);

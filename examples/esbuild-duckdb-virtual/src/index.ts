@@ -24,18 +24,16 @@ import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wa
 // @ts-ignore
 import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm";
 
-import { DuckDBHandler } from "@perspective-dev/client/dist/esm/virtual_servers/duckdb.js";
+import { DuckDBHandler } from "@perspective-dev/client/virtual_servers/duckdb";
 import * as duckdb from "@duckdb/duckdb-wasm";
 
 // @ts-ignore
 import SUPERSTORE_ARROW from "superstore-arrow/superstore.lz4.arrow";
 
-await Promise.all([
-    // @ts-ignore
-    perspective.init_server(fetch(SERVER_WASM)),
-    // @ts-ignore
-    perspective_viewer.init_client(fetch(CLIENT_WASM)),
-]);
+await perspective_viewer.init({
+    server: fetch(SERVER_WASM),
+    viewer: fetch(CLIENT_WASM),
+});
 
 async function initializeDuckDB() {
     const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
@@ -74,7 +72,6 @@ async function loadSampleData(db: duckdb.AsyncDuckDBConnection) {
 }
 
 const db = await initializeDuckDB();
-await perspective.init_client(fetch(CLIENT_WASM));
 await loadSampleData(db);
 const server = perspective.createMessageHandler(new DuckDBHandler(db));
 const client = await perspective.worker(server);

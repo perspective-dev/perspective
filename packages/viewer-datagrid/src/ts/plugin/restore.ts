@@ -14,21 +14,21 @@ import {
     EDIT_MODES,
     toggle_edit_mode,
     toggle_scroll_lock,
-} from "../model/toolbar.js";
-import { PRIVATE_PLUGIN_SYMBOL } from "../model/index.js";
+} from "../model/toolbar.ts";
+import { PRIVATE_PLUGIN_SYMBOL } from "../model/index.ts";
 import {
     css_font_family,
     measure_px,
     parse_align,
     wrap_lines,
-} from "./plugin_config_schema.js";
+} from "./plugin_config_schema.ts";
 import {
     make_color_record,
     parseCssColorList,
     parseCssGradientStops,
     rgbToHex,
     type GradientStopRgb,
-} from "../color_utils.js";
+} from "../color_utils.ts";
 import type {
     ColumnConfig,
     ColorRecord,
@@ -37,7 +37,7 @@ import type {
     EditMode,
     ResolvedColumnStyle,
     ResolvedColumnsConfig,
-} from "../types.js";
+} from "../types.ts";
 
 interface RestoreToken {
     edit_mode?: EditMode;

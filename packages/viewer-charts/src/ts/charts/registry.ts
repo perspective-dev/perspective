@@ -10,13 +10,17 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { ScatterChart, LineChart, DensityChart } from "./cartesian/cartesian";
-import { TreemapChart } from "./treemap/treemap";
-import { SunburstChart } from "./sunburst/sunburst";
-import { SeriesChart, XBarChart } from "./series/series";
-import { HeatmapChart } from "./heatmap/heatmap";
-import { CandlestickChart } from "./candlestick/candlestick";
-import type { ChartImplementation } from "./chart";
+import {
+    ScatterChart,
+    LineChart,
+    DensityChart,
+} from "./cartesian/cartesian.ts";
+import { TreemapChart } from "./treemap/treemap.ts";
+import { SunburstChart } from "./sunburst/sunburst.ts";
+import { SeriesChart, XBarChart } from "./series/series.ts";
+import { HeatmapChart } from "./heatmap/heatmap.ts";
+import { CandlestickChart } from "./candlestick/candlestick.ts";
+import type { ChartImplementation } from "./chart.ts";
 
 type ChartImplCtor = new () => ChartImplementation;
 
@@ -59,7 +63,7 @@ export const CHART_IMPLS: Record<string, () => Promise<ChartImplCtor>> = {
     // `map/*` (tile fetch, cache, layer, shaders) and `charts/map/*`
     // (MapChart + subclasses) modules into a chunk that loads only
     // when the user activates one of these tags.
-    "map-scatter": async () => (await import("./map/map")).MapScatterChart,
-    "map-line": async () => (await import("./map/map")).MapLineChart,
-    "map-density": async () => (await import("./map/map")).MapDensityChart,
+    "map-scatter": async () => (await import("./map/map.ts")).MapScatterChart,
+    "map-line": async () => (await import("./map/map.ts")).MapLineChart,
+    "map-density": async () => (await import("./map/map.ts")).MapDensityChart,
 };

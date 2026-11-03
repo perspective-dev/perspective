@@ -32,8 +32,8 @@ import type {
     CellMetadata,
     CellScalar,
     DataResponse,
-} from "regular-table/dist/esm/types";
-import type { GradientStopRgb } from "./color_utils.js";
+} from "regular-table/dist/esm/types.js";
+import type { GradientStopRgb } from "./color_utils.ts";
 
 // Re-export types from regular-table for use throughout the codebase
 export type { RegularTableElement as RegularTable };

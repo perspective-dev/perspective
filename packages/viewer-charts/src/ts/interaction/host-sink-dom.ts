@@ -10,14 +10,14 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { CssBounds, HostSink } from "./tooltip-controller";
+import type { CssBounds, HostSink } from "./tooltip-controller.ts";
 import {
     DEFAULT_TOOLTIP_STYLE,
     NUMERIC_RE,
     TOOLTIP_COL_GAP,
     type TooltipContent,
     type TooltipStyle,
-} from "./tooltip-grid";
+} from "./tooltip-grid.ts";
 
 /**
  * Host-side `HostSink` that materializes pinned tooltips as a `<div>`

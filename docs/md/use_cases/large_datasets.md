@@ -47,9 +47,10 @@ to 16GB in browsers which support it. Register both binaries and only the one
 the browser selects is downloaded:
 
 ```javascript
-perspective.init_server({
-    wasm32: () => fetch(SERVER_WASM),
-    wasm64: () => fetch(SERVER_WASM64),
+await perspective_viewer.init({
+    server32: () => fetch(SERVER_WASM),
+    server64: () => fetch(SERVER_WASM64),
+    viewer: fetch(VIEWER_WASM),
 });
 ```
 

@@ -10,11 +10,11 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { WebGLContextManager } from "../../../webgl/context-manager";
-import type { SeriesChart } from "../series";
-import type { SeriesInfo } from "../series-build";
-import type { InterpolateMode } from "../series-type";
-import { compileProgram } from "../../../webgl/program-cache";
+import type { WebGLContextManager } from "../../../webgl/context-manager.ts";
+import type { SeriesChart } from "../series.ts";
+import type { SeriesInfo } from "../series-build.ts";
+import type { InterpolateMode } from "../series-type.ts";
+import { compileProgram } from "../../../webgl/program-cache.ts";
 import areaVert from "../../../shaders/area.vert.glsl";
 import areaFrag from "../../../shaders/area.frag.glsl";
 

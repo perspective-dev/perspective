@@ -47,7 +47,7 @@ import "@perspective-dev/viewer";
 import "@perspective-dev/viewer-datagrid";
 import "@perspective-dev/viewer-charts";
 import * as duckdb from "@duckdb/duckdb-wasm";
-import { DuckDBHandler } from "@perspective-dev/client/dist/esm/virtual_servers/duckdb.js";
+import { DuckDBHandler } from "@perspective-dev/client/virtual_servers/duckdb";
 
 const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
 const worker_url = URL.createObjectURL(

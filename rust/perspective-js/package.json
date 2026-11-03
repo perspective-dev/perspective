@@ -25,7 +25,8 @@
     "homepage": "https://perspective-dev.github.io",
     "repository": {
         "type": "git",
-        "url": "https://github.com/perspective-dev/perspective"
+        "url": "git+https://github.com/perspective-dev/perspective.git",
+        "directory": "rust/perspective-js"
     },
     "type": "module",
     "license": "Apache-2.0",
@@ -53,16 +54,15 @@
             "import": "./dist/esm/virtual_servers/*.js",
             "default": "./dist/esm/virtual_servers/*.js"
         },
+        "./registry": {
+            "types": "./dist/esm/wasm/registry.d.ts",
+            "default": "./dist/esm/wasm/registry.js"
+        },
         "./dist/*": "./dist/*",
-        "./src/*": "./src/*",
-        "./test/*": "./test/*",
-        "./package.json": "./package.json",
-        "./tsconfig.json": "./tsconfig.json"
+        "./package.json": "./package.json"
     },
     "files": [
-        "dist/**/*",
-        "src/**/*",
-        "tsconfig.json"
+        "dist/**/*"
     ],
     "scripts": {
         "build": "node ./build.mjs",
@@ -76,6 +76,21 @@
         "@perspective-dev/server": "workspace:^",
         "stoppable": "catalog:",
         "ws": "catalog:"
+    },
+    "engines": {
+        "node": ">=22"
+    },
+    "peerDependencies": {
+        "@clickhouse/client-web": "^1.12.0",
+        "@duckdb/duckdb-wasm": "^1.30.0"
+    },
+    "peerDependenciesMeta": {
+        "@clickhouse/client-web": {
+            "optional": true
+        },
+        "@duckdb/duckdb-wasm": {
+            "optional": true
+        }
     },
     "devDependencies": {
         "@perspective-dev/esbuild-plugin": "workspace:^",

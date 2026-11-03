@@ -251,8 +251,8 @@ function copyDocsBundle() {
 /**
  * Stub the optional Memory64 engine binary when `@perspective-dev/server`
  * was built without `PSP_WASM64`, so the docs bundle without that compile.
- * The stub throws when imported, which rejects `engines.ts`'s `wasm64`
- * thunk and lets `init_server` fall back to the wasm32 binary at runtime.
+ * The stub throws when imported, which rejects `engines.ts`'s `server64`
+ * thunk and lets `init()` fall back to the `server32` binary at runtime.
  */
 function optionalWasm64Plugin() {
     const NAMESPACE = "optional-wasm64";

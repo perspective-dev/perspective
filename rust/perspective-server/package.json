@@ -4,6 +4,11 @@
     "license": "Apache-2.0",
     "version": "5.6.1",
     "description": "Perspective's streaming query engine compiled to WebAssembly: incremental pivots, aggregates and joins for large, real-time datasets.",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/perspective-dev/perspective.git",
+        "directory": "rust/perspective-server"
+    },
     "keywords": [
         "perspective",
         "datagrid",
@@ -23,6 +28,7 @@
         "query-engine"
     ],
     "homepage": "https://perspective-dev.github.io",
+    "type": "module",
     "main": "./dist/wasm/perspective-server.js",
     "files": [
         "dist/wasm/**/*"

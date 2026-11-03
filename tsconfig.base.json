@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "strict": true,
+        "allowImportingTsExtensions": true,
+        "isolatedModules": true,
+        "skipLibCheck": true,
+        "declaration": true,
+        "emitDeclarationOnly": true
+    }
+}

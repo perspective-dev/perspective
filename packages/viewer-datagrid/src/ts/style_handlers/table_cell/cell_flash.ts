@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { CellMetadataBody } from "regular-table/dist/esm/types.js";
-import type { DatagridModel, ColorRecord } from "../../types.js";
+import type { DatagridModel, ColorRecord } from "../../types.ts";
 
 export function style_cell_flash(
     model: DatagridModel,

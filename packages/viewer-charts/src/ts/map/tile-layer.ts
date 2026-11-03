@@ -10,15 +10,20 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { WebGLContextManager } from "../webgl/context-manager";
-import type { PlotLayout } from "../layout/plot-layout";
-import { pickZoom, tilesForExtent, tileExtent, type TileId } from "./mercator";
-import { TileCache } from "./tile-cache";
-import { TileLoader, tileKey } from "./tile-loader";
-import type { TileSource } from "./tile-source";
+import type { WebGLContextManager } from "../webgl/context-manager.ts";
+import type { PlotLayout } from "../layout/plot-layout.ts";
+import {
+    pickZoom,
+    tilesForExtent,
+    tileExtent,
+    type TileId,
+} from "./mercator.ts";
+import { TileCache } from "./tile-cache.ts";
+import { TileLoader, tileKey } from "./tile-loader.ts";
+import type { TileSource } from "./tile-source.ts";
 import tileVert from "../shaders/tile.vert.glsl";
 import tileFrag from "../shaders/tile.frag.glsl";
-import { compileProgram } from "../webgl/program-cache";
+import { compileProgram } from "../webgl/program-cache.ts";
 
 type GL = WebGL2RenderingContext | WebGLRenderingContext;
 

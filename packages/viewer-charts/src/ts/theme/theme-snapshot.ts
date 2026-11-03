@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ThemeSnapshot } from "./theme";
+import type { ThemeSnapshot } from "./theme.ts";
 
 /**
  * CSS variables (and one inherited property) the chart renderer reads.

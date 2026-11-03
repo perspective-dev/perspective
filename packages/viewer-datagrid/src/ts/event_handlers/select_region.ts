@@ -15,7 +15,7 @@ import type {
     DatagridPluginElement,
     EditMode,
     SelectionArea,
-} from "../types.js";
+} from "../types.ts";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 import type { ViewWindow } from "@perspective-dev/client";
 import type { CellMetadataBody } from "regular-table/dist/esm/types.js";

@@ -93,7 +93,7 @@ const DOCS_DTS_FILES = [
         "Notation",
         "CustomDatetimeStyleConfig",
         "SimpleDatetimeStyleConfig",
-    ].map((x) => ({ file: `./src/ts/ts-rs/${x}.ts`, prefix: "Column Format" })),
+    ].map((x) => ({ file: `./dist/ts-rs/${x}.d.ts`, prefix: "Column Format" })),
     ...[
         "WorkspaceConfigUpdate",
         "Layout",
@@ -101,7 +101,7 @@ const DOCS_DTS_FILES = [
         "TabLayout",
         "Orientation",
         "DerivedTableConfig",
-    ].map((x) => ({ file: `./src/ts/ts-rs/${x}.ts`, prefix: "Workspace" })),
+    ].map((x) => ({ file: `./dist/ts-rs/${x}.d.ts`, prefix: "Workspace" })),
 ];
 
 const DOCS_MERGE_UNDER = 500;
@@ -334,11 +334,11 @@ function normalizeChunks(chunks) {
     return out;
 }
 
-// JSON Schemas for tool parameters, generated from the ts-rs `.ts` output
+// JSON Schemas for tool parameters, generated from the ts-rs `.d.ts` output
 const TOOL_SCHEMA_TYPES = [
-    ["ViewerConfigUpdate", "src/ts/ts-rs/ViewerConfigUpdate.ts"],
-    ["ViewerConfigInitial", "src/ts/ts-rs/ViewerConfigInitial.ts"],
-    ["WorkspaceConfigUpdate", "src/ts/ts-rs/WorkspaceConfigUpdate.ts"],
+    ["ViewerConfigUpdate", "dist/ts-rs/ViewerConfigUpdate.d.ts"],
+    ["ViewerConfigInitial", "dist/ts-rs/ViewerConfigInitial.d.ts"],
+    ["WorkspaceConfigUpdate", "dist/ts-rs/WorkspaceConfigUpdate.d.ts"],
 ];
 
 // Inline every definition whose GENERATED NAME is not a legible

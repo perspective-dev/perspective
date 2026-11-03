@@ -10,11 +10,11 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColumnDataMap, ColumnData } from "../../data/view-reader";
-import { buildSplitGroups } from "../../data/split-groups";
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import type { CartesianChart, SplitGroup } from "./cartesian";
-import { LabelInterner } from "./label-interner";
+import type { ColumnDataMap, ColumnData } from "../../data/view-reader.ts";
+import { buildSplitGroups } from "../../data/split-groups.ts";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { CartesianChart, SplitGroup } from "./cartesian.ts";
+import { LabelInterner } from "./label-interner.ts";
 
 /**
  * Resolve a row's string value into a slot index in `dictionary`,

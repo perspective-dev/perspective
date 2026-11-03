@@ -16,18 +16,18 @@ import type {
     SetCursorMsg,
     UserClickMsg,
     UserSelectMsg,
-} from "../transport/protocol";
+} from "../transport/protocol.ts";
 import type {
     CssBounds,
     HostSink,
     UserClickPayload,
     UserSelectPayload,
-} from "./tooltip-controller";
+} from "./tooltip-controller.ts";
 import {
     DEFAULT_TOOLTIP_STYLE,
     type TooltipContent,
     type TooltipStyle,
-} from "./tooltip-grid";
+} from "./tooltip-grid.ts";
 
 /**
  * The subset of `WorkerMsg`s that flow chart → host through a

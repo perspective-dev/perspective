@@ -24,13 +24,13 @@ import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wa
 // @ts-ignore
 import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm";
 
-import { ClickhouseHandler } from "@perspective-dev/client/src/ts/virtual_servers/clickhouse.ts";
+import { ClickhouseHandler } from "@perspective-dev/client/virtual_servers/clickhouse";
 import { createClient } from "@clickhouse/client-web";
 
-await Promise.all([
-    perspective.init_server(fetch(SERVER_WASM)),
-    perspective_viewer.init_client(fetch(CLIENT_WASM)),
-]);
+await perspective_viewer.init({
+    server: fetch(SERVER_WASM),
+    viewer: fetch(CLIENT_WASM),
+});
 
 const db = createClient({
     url: "http://localhost:8123",
@@ -40,7 +40,6 @@ const db = createClient({
     session_id: Math.random() + "",
 });
 
-await perspective.init_client(fetch(CLIENT_WASM));
 const server = perspective.createMessageHandler(new ClickhouseHandler(db));
 const client = await perspective.worker(server);
 const viewer = document.querySelector("perspective-viewer")!;

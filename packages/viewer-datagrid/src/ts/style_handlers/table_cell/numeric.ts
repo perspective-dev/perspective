@@ -9,21 +9,21 @@
 // ┃ This file is part of the Perspective library, distributed under the terms ┃
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-import { style_cell_flash } from "./cell_flash.js";
-import { format_raw } from "../../data_listener/format_cell.js";
+import { style_cell_flash } from "./cell_flash.ts";
+import { format_raw } from "../../data_listener/format_cell.ts";
 import {
     infer_foreground_from_background,
     rgbaToRgb,
     rgbToHex,
     sampleGradientRgb,
-} from "../../color_utils.js";
+} from "../../color_utils.ts";
 import {
     parse_bg_mode,
     parse_fg_mode,
     type ColorRecord,
     type DatagridModel,
     type ResolvedColumnStyle,
-} from "../../types.js";
+} from "../../types.ts";
 import type { ColumnType } from "@perspective-dev/client";
 
 const MAX_BAR_WIDTH_PCT = 1;

@@ -11,12 +11,12 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { RegularTableElement } from "regular-table";
-import { get_psp_type, type DatagridModel } from "../types.js";
-import { CollectedHeaderRow } from "./types.js";
+import { get_psp_type, type DatagridModel } from "../types.ts";
+import { CollectedHeaderRow } from "./types.ts";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
-import { apply_borders, classify_header_cell } from "./border_model.js";
-import { corner_boundary_x } from "./group_header.js";
-import { is_loaded, split_depth } from "../model/column_path_area.js";
+import { apply_borders, classify_header_cell } from "./border_model.ts";
+import { corner_boundary_x } from "./group_header.ts";
+import { is_loaded, split_depth } from "../model/column_path_area.ts";
 
 /**
  * Apply selected column styling in response to column settings toggle events.

@@ -10,13 +10,13 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { FormatterCache, Formatter } from "./formatter_cache.js";
+import { FormatterCache, Formatter } from "./formatter_cache.ts";
 import type {
     ColumnConfig,
     DatagridModel,
     ResolvedColumnsConfig,
     ResolvedColumnStyle,
-} from "../types.js";
+} from "../types.ts";
 import type { ColumnType } from "@perspective-dev/client";
 
 const FORMAT_CACHE = new FormatterCache();

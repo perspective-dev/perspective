@@ -1,19 +1,14 @@
 {
+    "extends": "../../tsconfig.base.json",
     "compilerOptions": {
-        "allowImportingTsExtensions": true,
-        "strict": true,
         "module": "NodeNext",
-        "target": "ESNext",
-        "declaration": true,
-        "emitDeclarationOnly": true,
+        "moduleResolution": "NodeNext",
         "outDir": "./dist/esm",
         "rootDir": ".",
-        "moduleResolution": "NodeNext",
-        "skipLibCheck": true,
         "resolveJsonModule": true
     },
     "include": [
         "./src/ts/virtual_servers/duckdb.ts",
-        "./src/ts/virtual_servers/clickhouse.ts",
+        "./src/ts/virtual_servers/clickhouse.ts"
     ]
 }

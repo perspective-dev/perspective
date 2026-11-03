@@ -10,12 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Canvas2D, Context2D } from "../canvas-types";
-import type { PlotRect } from "../../layout/plot-layout";
-import { PlotLayout } from "../../layout/plot-layout";
-import type { GradientStop } from "../../theme/gradient";
-import type { Vec3 } from "../../theme/palette";
-import type { Theme } from "../../theme/theme";
+import type { Canvas2D, Context2D } from "../canvas-types.ts";
+import type { PlotRect } from "../../layout/plot-layout.ts";
+import { PlotLayout } from "../../layout/plot-layout.ts";
+import type { GradientStop } from "../../theme/gradient.ts";
+import type { Vec3 } from "../../theme/palette.ts";
+import type { Theme } from "../../theme/theme.ts";
 import {
     gradientLegendAutoFit,
     legendAutoFit,
@@ -24,14 +24,14 @@ import {
     renderLegend,
     renderLegendAt,
     type LegendPaintView,
-} from "../../axis/legend";
+} from "../../axis/legend.ts";
 import {
     legendSidebarWidth,
     resolveLegendMode,
-} from "../../interaction/legend-controller";
-import type { TreeChartBase } from "./tree-chart";
-import { drawTooltipBox } from "./draw-tooltip-box";
-import { tooltipStyleOf } from "../../interaction/tooltip-grid";
+} from "../../interaction/legend-controller.ts";
+import type { TreeChartBase } from "./tree-chart.ts";
+import { drawTooltipBox } from "./draw-tooltip-box.ts";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid.ts";
 
 /**
  * Click target for one breadcrumb segment. Tree-chart hit-testing

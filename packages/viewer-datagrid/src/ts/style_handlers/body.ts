@@ -18,26 +18,26 @@ import {
     type ResolvedColumnStyle,
     type Align,
     get_psp_type,
-} from "../types.js";
+} from "../types.ts";
 import type { ColumnType } from "@perspective-dev/client";
 import {
     css_font_family,
     measure_px,
     wrap_lines,
-} from "../plugin/plugin_config_schema.js";
+} from "../plugin/plugin_config_schema.ts";
 
-import { cell_style_numeric } from "./table_cell/numeric.js";
-import { cell_style_string } from "./table_cell/string.js";
-import { cell_style_datetime } from "./table_cell/datetime.js";
-import { cell_style_boolean } from "./table_cell/boolean.js";
-import { cell_style_row_header } from "./table_cell/row_header.js";
-import { is_type_text_editable } from "../event_handlers/edit_focus.js";
+import { cell_style_numeric } from "./table_cell/numeric.ts";
+import { cell_style_string } from "./table_cell/string.ts";
+import { cell_style_datetime } from "./table_cell/datetime.ts";
+import { cell_style_boolean } from "./table_cell/boolean.ts";
+import { cell_style_row_header } from "./table_cell/row_header.ts";
+import { is_type_text_editable } from "../event_handlers/edit_focus.ts";
 import {
     sync_column_alignment,
     type ColumnAlignment,
-} from "./column_alignment.js";
-import { CollectedCell } from "./types.js";
-import { is_loaded, split_depth } from "../model/column_path_area.js";
+} from "./column_alignment.ts";
+import { CollectedCell } from "./types.ts";
+import { is_loaded, split_depth } from "../model/column_path_area.ts";
 
 const B_VALUE_NULL = 1;
 const B_USER_NULL = 2;

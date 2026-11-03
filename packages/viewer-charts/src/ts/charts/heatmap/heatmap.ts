@@ -10,28 +10,28 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColumnDataMap } from "../../data/view-reader";
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import { AbstractChart } from "../chart-base";
-import { PlotLayout } from "../../layout/plot-layout";
-import type { CategoricalLevel } from "../../axis/categorical-axis";
-import type { FacetGrid } from "../../layout/facet-grid";
+import type { ColumnDataMap } from "../../data/view-reader.ts";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import { AbstractChart } from "../chart-base.ts";
+import { PlotLayout } from "../../layout/plot-layout.ts";
+import type { CategoricalLevel } from "../../axis/categorical-axis.ts";
+import type { FacetGrid } from "../../layout/facet-grid.ts";
 import type {
     AxisMode,
     NumericCategoryDomain,
-} from "../common/category-axis-resolver";
+} from "../common/category-axis-resolver.ts";
 import {
     buildHeatmapPipeline,
     partitionColumnsPerFacet,
     type HeatmapCell,
     type HeatmapPipelineResult,
-} from "./heatmap-build";
+} from "./heatmap-build.ts";
 import {
     renderHeatmapFrame,
     renderHeatmapChromeOverlay,
     type HeatmapLocations,
-} from "./heatmap-render";
-import { handleHeatmapHover } from "./heatmap-interact";
+} from "./heatmap-render.ts";
+import { handleHeatmapHover } from "./heatmap-interact.ts";
 
 /**
  * One heatmap in a facet-grid layout. Each facet corresponds to one
@@ -77,7 +77,7 @@ export class HeatmapChart extends AbstractChart {
     _locations: HeatmapLocations | null = null;
     _cornerBuffer: WebGLBuffer | null = null;
     _gradientCache:
-        | import("../../webgl/gradient-texture").GradientTextureCache
+        | import("../../webgl/gradient-texture.ts").GradientTextureCache
         | null = null;
 
     _xLevels: CategoricalLevel[] = [];

@@ -10,30 +10,30 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColumnDataMap } from "../../data/view-reader";
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import { AbstractChart } from "../chart-base";
-import { SpatialHitTester } from "../../interaction/hit-test";
-import { PlotLayout } from "../../layout/plot-layout";
-import { type AxisDomain } from "../../axis/numeric-axis";
-import type { CategoricalDomain } from "../../axis/categorical-axis";
-import type { GradientTextureCache } from "../../webgl/gradient-texture";
-import type { Glyph } from "./glyph";
+import type { ColumnDataMap } from "../../data/view-reader.ts";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import { AbstractChart } from "../chart-base.ts";
+import { SpatialHitTester } from "../../interaction/hit-test.ts";
+import { PlotLayout } from "../../layout/plot-layout.ts";
+import { type AxisDomain } from "../../axis/numeric-axis.ts";
+import type { CategoricalDomain } from "../../axis/categorical-axis.ts";
+import type { GradientTextureCache } from "../../webgl/gradient-texture.ts";
+import type { Glyph } from "./glyph.ts";
 import {
     initCartesianPipeline,
     processCartesianChunk,
-} from "./cartesian-build";
+} from "./cartesian-build.ts";
 import {
     renderCartesianFrame,
     renderCartesianChromeOverlay,
-} from "./cartesian-render";
+} from "./cartesian-render.ts";
 import {
     handleCartesianHover,
     showCartesianPinnedTooltip,
     dismissCartesianPinnedTooltip,
-} from "./cartesian-interact";
-import type { LabelInterner } from "./label-interner";
-import { LazyTooltip } from "../../interaction/lazy-tooltip";
+} from "./cartesian-interact.ts";
+import type { LabelInterner } from "./label-interner.ts";
+import { LazyTooltip } from "../../interaction/lazy-tooltip.ts";
 
 export interface SplitGroup {
     prefix: string;
@@ -121,8 +121,8 @@ export class CartesianChart extends AbstractChart {
      * `sx * xOrigin` clip units.
      */
     renderBackground(
-        _glManager: import("../../webgl/context-manager").WebGLContextManager,
-        _layout: import("../../layout/plot-layout").PlotLayout,
+        _glManager: import("../../webgl/context-manager.ts").WebGLContextManager,
+        _layout: import("../../layout/plot-layout.ts").PlotLayout,
         _projection: Float32Array,
         _domain: { xMin: number; xMax: number; yMin: number; yMax: number },
         _xOrigin: number,
@@ -138,9 +138,9 @@ export class CartesianChart extends AbstractChart {
      * cartesian charts still go through `renderAxesChrome`.
      */
     renderMapChrome(
-        _canvas: import("../canvas-types").Canvas2D | null,
-        _layout: import("../../layout/plot-layout").PlotLayout,
-        _theme: import("../../theme/theme").Theme,
+        _canvas: import("../canvas-types.ts").Canvas2D | null,
+        _layout: import("../../layout/plot-layout.ts").PlotLayout,
+        _theme: import("../../theme/theme.ts").Theme,
         _dpr: number,
     ): void {
         // no-op for cartesian charts
@@ -298,15 +298,16 @@ export class CartesianChart extends AbstractChart {
     _hoveredFacet = -1;
 
     //  Facet state (set when rendering in grid mode)
-    _facetGrid: import("../../layout/facet-grid").FacetGrid | null = null;
+    _facetGrid: import("../../layout/facet-grid.ts").FacetGrid | null = null;
 
     //  Last-frame cache (for chrome overlay-only redraws)
     _lastXDomain: AxisDomain | null = null;
     _lastYDomain: AxisDomain | null = null;
     _lastXTicks: number[] | null = null;
     _lastYTicks: number[] | null = null;
-    _lastGradientStops: import("../../theme/gradient").GradientStop[] | null =
-        null;
+    _lastGradientStops:
+        | import("../../theme/gradient.ts").GradientStop[]
+        | null = null;
     _lastHasColorCol = false;
 
     // Memoized categorical LUT stops — `ensureGradientTexture` uses
@@ -318,7 +319,8 @@ export class CartesianChart extends AbstractChart {
     // the `seriesPalette` reference compare a `restyle()` could leave
     // the chart painting with the prior theme's colors — same
     // `labelCount`/palette length but different RGB values.
-    _lastLutStops: import("../../theme/gradient").GradientStop[] | null = null;
+    _lastLutStops: import("../../theme/gradient.ts").GradientStop[] | null =
+        null;
     _lastLutSeriesPalette: [number, number, number][] | null = null;
     _lastLutLabelCount = -1;
 
@@ -485,9 +487,9 @@ export class CartesianChart extends AbstractChart {
 // `index.ts` registers plugin tags via `new ImplClass()`, so each chart
 // type needs a parameterless constructor. These wrappers pin the glyph.
 
-import { PointGlyph } from "./glyphs/points";
-import { LineGlyph } from "./glyphs/lines";
-import { DensityGlyph } from "./glyphs/density";
+import { PointGlyph } from "./glyphs/points.ts";
+import { LineGlyph } from "./glyphs/lines.ts";
+import { DensityGlyph } from "./glyphs/density.ts";
 
 /**
  * X/Y Scatter — continuous chart with the point glyph.

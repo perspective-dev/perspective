@@ -2,6 +2,11 @@
     "name": "@perspective-dev/anywidget",
     "version": "4.5.1",
     "description": "The `PerspectiveWidget` anywidget bundle for `perspective-python` (shipped in the wheel and loaded by anywidget). Not a JupyterLab labextension.",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/perspective-dev/perspective.git",
+        "directory": "packages/anywidget"
+    },
     "type": "module",
     "private": true,
     "exports": {

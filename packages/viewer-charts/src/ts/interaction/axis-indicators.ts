@@ -10,9 +10,9 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Canvas2D, Context2D } from "../charts/canvas-types";
-import type { PlotLayout } from "../layout/plot-layout";
-import type { Theme } from "../theme/theme";
+import type { Canvas2D, Context2D } from "../charts/canvas-types.ts";
+import type { PlotLayout } from "../layout/plot-layout.ts";
+import type { Theme } from "../theme/theme.ts";
 
 export type AxisSide = "bottom" | "left" | "right";
 

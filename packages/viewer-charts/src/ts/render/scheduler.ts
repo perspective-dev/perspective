@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { WebGLContextManager } from "../webgl/context-manager";
+import type { WebGLContextManager } from "../webgl/context-manager.ts";
 
 /**
  * Module-level render scheduler. The single entry point for driving a

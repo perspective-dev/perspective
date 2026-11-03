@@ -93,8 +93,8 @@ def approx_floats(value):
     if isinstance(value, float):
         return pytest.approx(value)
 
-    if isinstance(value, list):
-        return [approx_floats(x) for x in value]
+    if isinstance(value, (list, tuple)):
+        return type(value)(approx_floats(x) for x in value)
 
     if isinstance(value, dict):
         return {k: approx_floats(v) for k, v in value.items()}
@@ -1296,6 +1296,21 @@ class TestDuckDBTableFromView:
         derived.delete()
         view.delete()
 
+    def test_name_that_is_not_an_identifier(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Sales"], group_by=["Region"], aggregates={"Sales": "sum"}
+        )
+
+        derived = client.table(view, name="memory.superstore GROUP BY Region")
+        assert derived.schema() == {"Region": "string", "Sales": "float"}
+        assert derived.size() == view.num_rows()
+        child = derived.view(columns=["Region", "Sales"])
+        assert child.num_rows() == view.num_rows()
+        child.delete()
+        derived.delete()
+        view.delete()
+
     def test_explicit_schema(self, client):
         table = client.open_table("memory.superstore")
         view = table.view(
@@ -1342,6 +1357,181 @@ class TestDuckDBTableFromView:
         with pytest.raises(Exception):
             client.table(view, schema={"Sales": "string"})
 
+        view.delete()
+
+    def test_rejects_index_and_limit(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Sales"], group_by=["Region"], aggregates={"Sales": "sum"}
+        )
+
+        with pytest.raises(Exception):
+            client.table(view, index="Sales")
+
+        with pytest.raises(Exception):
+            client.table(view, limit=10)
+
+        view.delete()
+
+    def test_flat_view(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(columns=["Region", "Sales"], filter=[["Sales", ">", 5000]])
+
+        derived = client.table(view, name="py_derived_flat")
+        assert derived.schema() == {"Region": "string", "Sales": "float"}
+        child = derived.view(columns=["Region", "Sales"])
+        assert child.to_json() == view.to_json()
+        child.delete()
+        derived.delete()
+        view.delete()
+
+    def test_flat_rollup_split_by_view(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Sales"],
+            group_by=["Category"],
+            split_by=["Region"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+
+        derived = client.table(view, name="py_derived_split")
+        assert derived.columns() == [
+            "Category",
+            "Central|Sales",
+            "East|Sales",
+            "South|Sales",
+            "West|Sales",
+        ]
+
+        child = derived.view(
+            columns=["Category", "West|Sales"],
+            filter=[["West|Sales", ">", 250000]],
+        )
+
+        expected = sorted(
+            row["__ROW_PATH__"][0]
+            for row in view.to_json()
+            if row["West|Sales"] > 250000
+        )
+
+        assert sorted(row["Category"] for row in child.to_json()) == expected
+        child.delete()
+        derived.delete()
+        view.delete()
+
+    def test_expression_column(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Region", "Sales", "doublesales"],
+            expressions={"doublesales": '"Sales" * 2'},
+            filter=[["Sales", ">", 5000]],
+        )
+
+        derived = client.table(view, name="py_derived_expression")
+        assert derived.schema() == {
+            "Region": "string",
+            "Sales": "float",
+            "doublesales": "float",
+        }
+
+        child = derived.view(columns=["Region", "Sales", "doublesales"])
+        assert child.to_json() == view.to_json()
+        child.delete()
+        derived.delete()
+        view.delete()
+
+    def test_derived_of_derived(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Sales"],
+            group_by=["Region", "State"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+
+        derived = client.table(view, name="memory.superstore GROUP BY Region, State")
+
+        sub_view = derived.view(
+            columns=["Sales"],
+            group_by=["Region"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+
+        sub_derived = client.table(
+            sub_view, name="memory.superstore GROUP BY Region, State GROUP BY Region"
+        )
+
+        assert sub_derived.schema() == {"Region": "string", "Sales": "float"}
+        child = sub_derived.view(columns=["Region", "Sales"])
+        expected_view = table.view(
+            columns=["Sales"],
+            group_by=["Region"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+
+        expected = sorted(
+            (row["__ROW_PATH__"][0], row["Sales"]) for row in expected_view.to_json()
+        )
+
+        actual = sorted((row["Region"], row["Sales"]) for row in child.to_json())
+        assert actual == approx_floats(expected)
+        expected_view.delete()
+        child.delete()
+        sub_derived.delete()
+        sub_view.delete()
+        derived.delete()
+        view.delete()
+
+    def test_view_of_derived_table(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Sales"],
+            group_by=["Region", "State"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+
+        derived = client.table(view, name="memory.superstore GROUP BY Region, State 1")
+        child = derived.view(
+            columns=["State", "Sales", "double"],
+            expressions={"double": '"Sales" * 2'},
+            filter=[["Region", "==", "West"]],
+            sort=[["Sales", "desc"]],
+        )
+
+        expected = sorted(
+            (
+                (row["__ROW_PATH__"][1], row["Sales"])
+                for row in view.to_json()
+                if row["__ROW_PATH__"][0] == "West"
+            ),
+            key=lambda x: -x[1],
+        )
+
+        rows = child.to_json()
+        assert [row["State"] for row in rows] == [x[0] for x in expected]
+        assert [row["double"] for row in rows] == approx_floats(
+            [2 * x[1] for x in expected]
+        )
+
+        child.delete()
+        derived.delete()
+        view.delete()
+
+    def test_delete_frees_name(self, client):
+        table = client.open_table("memory.superstore")
+        view = table.view(
+            columns=["Sales"], group_by=["Region"], aggregates={"Sales": "sum"}
+        )
+
+        name = "memory.superstore GROUP BY Region 2"
+        client.table(view, name=name).delete()
+        derived = client.table(view, name=name)
+        assert derived.size() == view.num_rows()
+        derived.delete()
         view.delete()
 
 

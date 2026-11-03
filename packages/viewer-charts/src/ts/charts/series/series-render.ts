@@ -10,59 +10,62 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Context2D } from "../canvas-types";
-import type { WebGLContextManager } from "../../webgl/context-manager";
+import type { Context2D } from "../canvas-types.ts";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
 import {
     ensurePalette,
     type GlyphRun,
     type SeriesChart,
     type SeriesAutoFitCache,
-} from "./series";
-import type { PlotRect } from "../../layout/plot-layout";
-import { PlotLayout } from "../../layout/plot-layout";
+} from "./series.ts";
+import type { PlotRect } from "../../layout/plot-layout.ts";
+import { PlotLayout } from "../../layout/plot-layout.ts";
 import {
     clearAndSetupFrame,
     renderInPlotFrame,
     withScissor,
-} from "../../webgl/plot-frame";
-import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
-import { tooltipStyleOf } from "../../interaction/tooltip-grid";
+} from "../../webgl/plot-frame.ts";
+import { renderCanvasTooltip } from "../../interaction/tooltip-controller.ts";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid.ts";
 import {
     renderAxisHoverIndicators,
     type AxisIndicator,
-} from "../../interaction/axis-indicators";
-import { drawBars, BAR_TYPE_BAR_VAL as BAR_TYPE_BAR } from "./glyphs/draw-bars";
-import { getHoveredBar, formatBarCategoryPath } from "./series-interact";
-import { computeNiceTicks, stepTickFormatter } from "../../layout/ticks";
+} from "../../interaction/axis-indicators.ts";
+import {
+    drawBars,
+    BAR_TYPE_BAR_VAL as BAR_TYPE_BAR,
+} from "./glyphs/draw-bars.ts";
+import { getHoveredBar, formatBarCategoryPath } from "./series-interact.ts";
+import { computeNiceTicks, stepTickFormatter } from "../../layout/ticks.ts";
 import {
     renderOuterXAxis,
     renderOuterYAxis,
     type AxisDomain,
-} from "../../axis/numeric-axis";
+} from "../../axis/numeric-axis.ts";
 import {
     renderBarAxesChrome,
     renderBarGridlines,
     type BarCategoryAxis,
     type BarValueAxis,
-} from "../../axis/bar-axis";
+} from "../../axis/bar-axis.ts";
 import {
     measureCategoricalAxisHeight,
     measureCategoricalAxisWidth,
     renderCategoricalXTicks,
     renderCategoricalYTicks,
     type CategoricalDomain,
-} from "../../axis/categorical-axis";
-import { positionsInRange } from "../../axis/categorical-axis-core";
+} from "../../axis/categorical-axis.ts";
+import { positionsInRange } from "../../axis/categorical-axis-core.ts";
 import {
     bottomRowLayouts,
     buildFacetGrid,
     leftColumnLayouts,
     type FacetGrid,
-} from "../../layout/facet-grid";
-import { drawFacetTitle } from "../../axis/facet-chrome";
-import { getScaledContext, initCanvas } from "../../axis/canvas";
-import { drawGridlinesX, drawGridlinesY } from "../../axis/axis-primitives";
-import { buildBarTooltipLines } from "./series-interact";
+} from "../../layout/facet-grid.ts";
+import { drawFacetTitle } from "../../axis/facet-chrome.ts";
+import { getScaledContext, initCanvas } from "../../axis/canvas.ts";
+import { drawGridlinesX, drawGridlinesY } from "../../axis/axis-primitives.ts";
+import { buildBarTooltipLines } from "./series-interact.ts";
 import {
     LEGEND_LINE_HEIGHT,
     legendAutoFit,
@@ -70,12 +73,12 @@ import {
     paintLegendScrollbar,
     truncateText,
     type LegendPaintView,
-} from "../../axis/legend";
+} from "../../axis/legend.ts";
 import {
     legendRightGutter,
     resolveLegendMode,
     legendSidebarWidth,
-} from "../../interaction/legend-controller";
+} from "../../interaction/legend-controller.ts";
 
 /**
  * Reusable scratch for bar instance uploads.

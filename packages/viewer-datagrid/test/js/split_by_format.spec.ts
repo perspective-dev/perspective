@@ -18,11 +18,11 @@ const TABLE = "split-by-format";
 const COLUMNS_CONFIG = {
     dt: {
         date_format: {
-            format: "custom",
             timeZone: "UTC",
-            second: "disabled",
-            minute: "disabled",
-            hour: "disabled",
+            year: "2-digit",
+            month: "numeric",
+            day: "numeric",
+            hour12: true,
         },
     },
     i: {

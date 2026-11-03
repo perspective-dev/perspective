@@ -11,11 +11,11 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { View } from "@perspective-dev/client";
-import { TILE_SOURCES } from "../map/tile-source";
-import type { ColumnDataMap } from "../data/view-reader";
-import type { WebGLContextManager } from "../webgl/context-manager";
-import type { ZoomController } from "../interaction/zoom-controller";
-import type { HostSink } from "../interaction/tooltip-controller";
+import { TILE_SOURCES } from "../map/tile-source.ts";
+import type { ColumnDataMap } from "../data/view-reader.ts";
+import type { WebGLContextManager } from "../webgl/context-manager.ts";
+import type { ZoomController } from "../interaction/zoom-controller.ts";
+import type { HostSink } from "../interaction/tooltip-controller.ts";
 
 export interface ChartImplementation {
     uploadAndRender(
@@ -109,9 +109,8 @@ export interface ChartImplementation {
      * `dispatchHover` / `dispatchLeave` / `dispatchClick` /
      * `dispatchDblClick` from `InteractionEvent`s; the supplied
      * `HostSink` posts pin / dismiss / setCursor intents back to the
-     * host so the resulting DOM mutations happen there (the renderer
-     * scope has no DOM in worker mode, and uses the same channel
-     * in-process for symmetry).
+     * host so the resulting DOM mutations happen there (the renderer's
+     * worker scope has no DOM).
      */
     attachTooltip?(host: HostSink): void;
 

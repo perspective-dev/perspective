@@ -15,7 +15,7 @@ import type {
     DatagridModel,
     ResolvedColumnStyle,
     ColorRecord,
-} from "../../types.js";
+} from "../../types.ts";
 
 export function cell_style_boolean(
     model: DatagridModel,

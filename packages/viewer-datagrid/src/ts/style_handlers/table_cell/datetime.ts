@@ -14,13 +14,13 @@ import {
     rgbaToRgb,
     infer_foreground_from_background,
     type RGB,
-} from "../../color_utils.js";
+} from "../../color_utils.ts";
 import {
     parse_bg_mode,
     parse_fg_mode,
     type DatagridModel,
     type ResolvedColumnStyle,
-} from "../../types.js";
+} from "../../types.ts";
 
 /** Apply a datetime column's foreground and background modes independently. */
 export function cell_style_datetime(

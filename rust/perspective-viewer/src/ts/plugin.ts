@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { View } from "@perspective-dev/client";
-import { PluginStaticConfig } from "./ts-rs/PluginStaticConfig.js";
+import type { PluginStaticConfig } from "../../dist/ts-rs/PluginStaticConfig.d.ts";
 
 /**
  * The `IPerspectiveViewerPlugin` interface defines the necessary API for a

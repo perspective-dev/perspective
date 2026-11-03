@@ -12,11 +12,11 @@
 
 import { RegularTableElement } from "regular-table";
 
-import type { DatagridModel } from "../types.js";
+import type { DatagridModel } from "../types.ts";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
-import { styleColumnHeaderRow } from "./column_header.js";
+import { styleColumnHeaderRow } from "./column_header.ts";
 
-import { CollectedHeaderRow } from "./types.js";
+import { CollectedHeaderRow } from "./types.ts";
 
 /**
  * Apply styles to column header rows.

@@ -10,17 +10,17 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { WebGLContextManager } from "../../../webgl/context-manager";
-import type { CartesianChart } from "../cartesian";
-import type { Glyph } from "../glyph";
-import { bindGradientTexture } from "../../../webgl/gradient-texture";
+import type { WebGLContextManager } from "../../../webgl/context-manager.ts";
+import type { CartesianChart } from "../cartesian.ts";
+import type { Glyph } from "../glyph.ts";
+import { bindGradientTexture } from "../../../webgl/gradient-texture.ts";
 import {
     createLineCornerBuffer,
     getInstancing,
-} from "../../../webgl/instanced-attrs";
-import { compileProgram } from "../../../webgl/program-cache";
-import { colorRangePivot } from "../../../theme/gradient";
-import { buildPointRowTooltipLines } from "../tooltip-lines";
+} from "../../../webgl/instanced-attrs.ts";
+import { compileProgram } from "../../../webgl/program-cache.ts";
+import { colorRangePivot } from "../../../theme/gradient.ts";
+import { buildPointRowTooltipLines } from "../tooltip-lines.ts";
 import lineVert from "../../../shaders/line.vert.glsl";
 import lineFrag from "../../../shaders/line.frag.glsl";
 

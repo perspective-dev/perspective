@@ -10,14 +10,14 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { PRIVATE_PLUGIN_SYMBOL } from "../model/index.js";
+import { PRIVATE_PLUGIN_SYMBOL } from "../model/index.ts";
 import {
     type RegularTable,
     type DatagridModel,
     type ResolvedColumnsConfig,
     get_psp_type,
     isEditableMode,
-} from "../types.js";
+} from "../types.ts";
 import type { ColumnType } from "@perspective-dev/client";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 

@@ -10,24 +10,24 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { SeriesChart } from "./series";
+import type { SeriesChart } from "./series.ts";
 import {
     BAR_TYPE_BAR,
     BAR_TYPE_AREA,
     readBarRecord,
     type SeriesChartRecord,
-} from "./series-build";
+} from "./series-build.ts";
 import {
     uploadBarInstances,
     rebuildGlyphBuffers,
     rightAxisDataToPixel,
     layoutForRecord,
-} from "./series-render";
-import { tooltipStyleOf } from "../../interaction/tooltip-grid";
+} from "./series-render.ts";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid.ts";
 import {
     nearestPosition,
     positionsInRange,
-} from "../../axis/categorical-axis-core";
+} from "../../axis/categorical-axis-core.ts";
 
 const POINT_HIT_RADIUS_PX = 10;
 

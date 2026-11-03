@@ -181,7 +181,7 @@ notify_sparse_tree(
 ) {
 
     auto strand_values = tree->build_strand_table(
-        flattened, prev, current, transitions, aggregates, config
+        flattened, prev, current, transitions, existed, aggregates, config
     );
 
     auto strands = strand_values.first;

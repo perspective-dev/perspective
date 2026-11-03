@@ -10,36 +10,39 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { WebGLContextManager } from "../../webgl/context-manager";
-import type { CandlestickChart, CandlestickAutoFitCache } from "./candlestick";
-import { PlotLayout } from "../../layout/plot-layout";
-import { sampleGradient } from "../../theme/gradient";
-import { renderInPlotFrame } from "../../webgl/plot-frame";
-import { renderCanvasTooltip } from "../../interaction/tooltip-controller";
-import { tooltipStyleOf } from "../../interaction/tooltip-grid";
+import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type {
+    CandlestickChart,
+    CandlestickAutoFitCache,
+} from "./candlestick.ts";
+import { PlotLayout } from "../../layout/plot-layout.ts";
+import { sampleGradient } from "../../theme/gradient.ts";
+import { renderInPlotFrame } from "../../webgl/plot-frame.ts";
+import { renderCanvasTooltip } from "../../interaction/tooltip-controller.ts";
+import { tooltipStyleOf } from "../../interaction/tooltip-grid.ts";
 import {
     renderAxisHoverIndicators,
     type AxisIndicator,
-} from "../../interaction/axis-indicators";
-import { computeNiceTicks, stepTickFormatter } from "../../layout/ticks";
-import { type AxisDomain } from "../../axis/numeric-axis";
+} from "../../interaction/axis-indicators.ts";
+import { computeNiceTicks, stepTickFormatter } from "../../layout/ticks.ts";
+import { type AxisDomain } from "../../axis/numeric-axis.ts";
 import {
     renderBarAxesChrome,
     renderBarGridlines,
     type BarCategoryAxis,
-} from "../../axis/bar-axis";
+} from "../../axis/bar-axis.ts";
 import {
     measureCategoricalAxisHeight,
     type CategoricalDomain,
-} from "../../axis/categorical-axis";
+} from "../../axis/categorical-axis.ts";
 import {
     buildCandlestickTooltipLines,
     candleCategoryText,
-} from "./candlestick-interact";
+} from "./candlestick-interact.ts";
 import {
     computeVisibleExtent,
     type VisibleExtent,
-} from "../common/visible-extent";
+} from "../common/visible-extent.ts";
 
 /**
  * Resolve up/down body colors from `theme.gradientStops`. Cached on the

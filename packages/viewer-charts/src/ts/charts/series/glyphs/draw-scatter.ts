@@ -10,9 +10,9 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { WebGLContextManager } from "../../../webgl/context-manager";
-import type { SeriesChart } from "../series";
-import { compileProgram } from "../../../webgl/program-cache";
+import type { WebGLContextManager } from "../../../webgl/context-manager.ts";
+import type { SeriesChart } from "../series.ts";
+import { compileProgram } from "../../../webgl/program-cache.ts";
 import scatterVert from "../../../shaders/y-scatter.vert.glsl";
 import scatterFrag from "../../../shaders/y-scatter.frag.glsl";
 

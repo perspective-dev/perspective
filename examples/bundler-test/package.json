@@ -1,0 +1,25 @@
+{
+    "name": "bundler-test",
+    "private": true,
+    "version": "5.6.1",
+    "description": "A downstream TypeScript app which type-checks Perspective's published typings.",
+    "type": "module",
+    "scripts": {
+        "build": "tsc -p tsconfig.json"
+    },
+    "keywords": [],
+    "license": "Apache-2.0",
+    "dependencies": {
+        "@clickhouse/client-web": "catalog:",
+        "@duckdb/duckdb-wasm": "catalog:",
+        "@perspective-dev/client": "workspace:^",
+        "@perspective-dev/react": "workspace:^",
+        "@perspective-dev/viewer": "workspace:^",
+        "@perspective-dev/viewer-charts": "workspace:^",
+        "@perspective-dev/viewer-datagrid": "workspace:^"
+    },
+    "devDependencies": {
+        "@types/emscripten": "catalog:",
+        "typescript": "catalog:"
+    }
+}

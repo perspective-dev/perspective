@@ -33,7 +33,8 @@
     "types": "index.d.ts",
     "repository": {
         "type": "git",
-        "url": "https://github.com/perspective-dev/perspective"
+        "url": "git+https://github.com/perspective-dev/perspective.git",
+        "directory": "packages/cli"
     },
     "author": "",
     "license": "Apache-2.0",

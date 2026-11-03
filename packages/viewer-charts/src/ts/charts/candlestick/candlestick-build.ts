@@ -11,17 +11,17 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { DateFormatModifiers } from "@perspective-dev/viewer/column-format";
-import type { ColumnDataMap } from "../../data/view-reader";
-import { buildSplitGroups } from "../../data/split-groups";
-import type { CategoricalLevel } from "../../axis/categorical-axis";
+import type { ColumnDataMap } from "../../data/view-reader.ts";
+import { buildSplitGroups } from "../../data/split-groups.ts";
+import type { CategoricalLevel } from "../../axis/categorical-axis.ts";
 import {
     resolveAxisMode,
     resolveCategoryAxis,
     resolveNumericCategoryDomain,
     type AxisMode,
     type NumericCategoryDomain,
-} from "../common/category-axis-resolver";
-import { computeSlotGeometry } from "../common/band-layout";
+} from "../common/category-axis-resolver.ts";
+import { computeSlotGeometry } from "../common/band-layout.ts";
 
 export interface CandleSeriesInfo {
     seriesId: number;

@@ -129,6 +129,9 @@ const BUILD = [
         // minifyWhitespace: !process.env.PSP_DEBUG,
         // minifyIdentifiers: !process.env.PSP_DEBUG,
         // mangleProps: process.env.PSP_DEBUG ? false : /^[_#]/,
+        minify: false,
+        minifySyntax: !process.env.PSP_DEBUG,
+        minifyIdentifiers: !process.env.PSP_DEBUG,
         format: "esm",
         loader: {
             ".css": "text",

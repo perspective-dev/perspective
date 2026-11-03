@@ -22,6 +22,6 @@ function get_host() {
 }
 
 execSync(
-    `PSP_ROOT_DIR=../.. TS_RS_IMPORT_EXTENSION=js cargo run --target=${get_host()}`,
+    `PSP_ROOT_DIR=../.. TS_RS_IMPORT_EXTENSION=ts cargo run --target=${get_host()}`,
     INHERIT,
 );

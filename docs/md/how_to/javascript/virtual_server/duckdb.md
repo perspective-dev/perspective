@@ -25,7 +25,7 @@ result of `db.connect()` — not the `AsyncDuckDB` itself.
 import perspective, { createMessageHandler } from "@perspective-dev/client";
 import "@perspective-dev/viewer";
 import * as duckdb from "@duckdb/duckdb-wasm";
-import { DuckDBHandler } from "@perspective-dev/client/dist/esm/virtual_servers/duckdb.js";
+import { DuckDBHandler } from "@perspective-dev/client/virtual_servers/duckdb";
 
 // Initialize DuckDB-WASM
 const DUCKDB_BUNDLES = duckdb.getJsDelivrBundles();

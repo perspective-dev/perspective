@@ -10,17 +10,17 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { TreemapChart } from "./treemap";
-import { NULL_NODE } from "../common/node-store";
-import { PADDING_LABEL } from "./treemap-layout";
-import { renderTreemapChromeOverlay } from "./treemap-render";
+import type { TreemapChart } from "./treemap.ts";
+import { NULL_NODE } from "../common/node-store.ts";
+import { PADDING_LABEL } from "./treemap-layout.ts";
+import { renderTreemapChromeOverlay } from "./treemap-render.ts";
 import {
     buildTreeTooltipLines,
     dismissTreePinnedTooltip,
     emitTreeNodeEvent,
     showTreePinnedTooltip,
     treeDrillTo,
-} from "../common/tree-interact";
+} from "../common/tree-interact.ts";
 
 interface HitResult {
     leafId: number;
@@ -272,4 +272,4 @@ export function dismissTreemapPinnedTooltip(chart: TreemapChart): void {
     dismissTreePinnedTooltip(chart);
 }
 
-export { buildTreeTooltipLines as buildTreemapTooltipLines } from "../common/tree-interact";
+export { buildTreeTooltipLines as buildTreemapTooltipLines } from "../common/tree-interact.ts";

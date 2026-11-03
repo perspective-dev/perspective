@@ -299,7 +299,7 @@ test.describe("llm-agent search_docs", () => {
             "rust/perspective-viewer/dist/wasm/perspective-viewer.d.ts",
             "packages/viewer-datagrid/src/ts/types.ts",
             "packages/viewer-charts/src/ts/charts/chart.ts",
-            "rust/perspective-viewer/src/ts/ts-rs/Layout.ts",
+            "rust/perspective-viewer/dist/ts-rs/Layout.d.ts",
         ]) {
             expect(paths).toContain(included);
         }

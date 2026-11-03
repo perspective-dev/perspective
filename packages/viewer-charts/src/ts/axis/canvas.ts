@@ -10,8 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Canvas2D, Context2D } from "../charts/canvas-types";
-import type { PlotLayout } from "../layout/plot-layout";
+import type { Canvas2D, Context2D } from "../charts/canvas-types.ts";
+import type { PlotLayout } from "../layout/plot-layout.ts";
 
 /**
  * Destructive per-frame canvas setup: resize to CSS pixels × DPR,

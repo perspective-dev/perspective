@@ -20,7 +20,7 @@ import * as url from "node:url";
 import {
     resolveNPM,
     inlineUrlVisitor,
-} from "@perspective-dev/viewer/tools.mjs";
+} from "../../rust/perspective-viewer/tools.mjs";
 
 const __dirname = url.fileURLToPath(new URL(".", import.meta.url)).slice(0, -1);
 

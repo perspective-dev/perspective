@@ -22,7 +22,7 @@ import {
     createMessageHandler,
     wasmModule,
 } from "@perspective-dev/client";
-import { DuckDBHandler } from "@perspective-dev/client/src/ts/virtual_servers/duckdb.ts";
+import { DuckDBHandler } from "@perspective-dev/client/virtual_servers/duckdb";
 
 const require = createRequire(import.meta.url);
 const DUCKDB_DIST = path.dirname(require.resolve("@duckdb/duckdb-wasm"));

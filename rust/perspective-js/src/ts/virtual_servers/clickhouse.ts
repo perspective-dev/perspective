@@ -11,26 +11,26 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 /**
- * An implementation of a Perspective Virtual Server for DuckDB.
+ * An implementation of a Perspective Virtual Server for ClickHouse.
  *
- * This import is optional, and so must be imported manually from either
- * `@perspective-dev/client/dist/esm/virtual_servers/duckdb.js` or
- * `@perspective-dev/client/src/ts/virtual_servers/duckdb.ts`, it is not
- * exported from the package root `@perspective-dev/client`
+ * This import is optional, and so must be imported manually from
+ * `@perspective-dev/client/virtual_servers/clickhouse`, it is not exported from
+ * the package root `@perspective-dev/client`
  *
  * @module
  */
 
 import type * as perspective from "@perspective-dev/client";
-import type { ColumnType } from "@perspective-dev/client/dist/esm/ts-rs/ColumnType.d.ts";
-import type { ViewConfig } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfig.d.ts";
+import { client_runtime } from "../wasm/registry.ts";
+import type { ColumnType } from "../../../dist/ts-rs/ColumnType.d.ts";
+import type { ViewConfig } from "../../../dist/ts-rs/ViewConfig.d.ts";
 import type {
     ExpressionError,
     TableDescription,
 } from "@perspective-dev/client";
-import type { ViewConfigUpdate } from "@perspective-dev/client/dist/esm/ts-rs/ViewConfigUpdate.d.ts";
-import type { ViewWindow } from "@perspective-dev/client/dist/esm/ts-rs/ViewWindow.d.ts";
-import type { WindowAggSpec } from "@perspective-dev/client/dist/esm/ts-rs/WindowAggSpec.d.ts";
+import type { ViewConfigUpdate } from "../../../dist/ts-rs/ViewConfigUpdate.d.ts";
+import type { ViewWindow } from "../../../dist/ts-rs/ViewWindow.d.ts";
+import type { WindowAggSpec } from "../../../dist/ts-rs/WindowAggSpec.d.ts";
 import type * as clickhouse from "@clickhouse/client-web";
 
 const NUMBER_AGGS = [
@@ -259,21 +259,17 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
     private db: clickhouse.ClickHouseClient;
     private sqlBuilder: perspective.GenericSQLVirtualServerModel;
     constructor(db: clickhouse.ClickHouseClient, mod?: typeof perspective) {
-        if (!mod) {
-            if (customElements) {
-                const viewer_class: any =
-                    customElements.get("perspective-viewer");
-                if (viewer_class) {
-                    mod = viewer_class.__wasm_module__;
-                } else {
-                    throw new Error("Missing perspective-client.wasm");
-                }
-            } else {
-            }
+        mod ??= client_runtime()?.glue as unknown as
+            | typeof perspective
+            | undefined;
+        if (mod === undefined) {
+            throw new Error(
+                "perspective-js is not initialized yet: construct a ClickhouseHandler once <perspective-viewer> is ready or a Client exists, or pass the wasm module",
+            );
         }
 
         this.db = db;
-        this.sqlBuilder = new mod!.GenericSQLVirtualServerModel({
+        this.sqlBuilder = new mod.GenericSQLVirtualServerModel({
             create_entity: "VIEW",
             grouping_fn: "GROUPING",
             column_separator: "|",
@@ -450,7 +446,7 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
         for (const [name, expression] of Object.entries(config.expressions)) {
             const query = this.sqlBuilder.expressionDescribe(
                 tableId,
-                expression,
+                expression!,
             );
 
             try {

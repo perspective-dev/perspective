@@ -10,11 +10,11 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { ShaderRegistry } from "./shader-registry";
-import { BufferPool } from "./buffer-pool";
-import { GLContext, type WebGLCanvas } from "./gl-context";
+import { ShaderRegistry } from "./shader-registry.ts";
+import { BufferPool } from "./buffer-pool.ts";
+import { GLContext, type WebGLCanvas } from "./gl-context.ts";
 
-export type { WebGLCanvas } from "./gl-context";
+export type { WebGLCanvas } from "./gl-context.ts";
 
 export interface WebGLContextManagerOptions {
     /**
@@ -147,9 +147,8 @@ export class WebGLContextManager {
     /**
      * Resize the GL canvas's bitmap to match the host's CSS layout. The
      * host measures the DOM element and DPR — the manager never touches
-     * DOM, so the same path works for an `HTMLCanvasElement`
-     * (in-process), a transferred `OffscreenCanvas` (direct/worker), or
-     * a pool-shared `OffscreenCanvas` (pooled blit).
+     * DOM, so the same path works for a transferred `OffscreenCanvas`
+     * (direct) or a pool-shared `OffscreenCanvas` (pooled blit).
      */
     resize(cssWidth: number, cssHeight: number, dpr: number): void {
         this._cssWidth = cssWidth;
@@ -184,8 +183,8 @@ export class WebGLContextManager {
      * the WebGL spec) happens inside {@link applyPendingResize} /
      * {@link beginFrame}, paired in the same synchronous task as the
      * paint that fills the new buffer — eliminating the one-frame blank
-     * the compositor would otherwise show in direct/in-process modes
-     * (where the GL canvas IS the visible canvas).
+     * the compositor would otherwise show in direct mode (where the GL
+     * canvas IS the visible canvas).
      *
      * Multiple calls before the next render coalesce to last-write-wins.
      */

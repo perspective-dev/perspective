@@ -35,15 +35,13 @@
             "types": "./dist/esm/index.d.ts",
             "default": "./dist/esm/perspective-viewer-charts.js"
         },
-        "./src/*": "./src/*",
         "./dist/*": "./dist/*",
-        "./cdn/": "./dist/cdn/",
-        "./esm/": "./dist/esm/",
+        "./cdn/*": "./dist/cdn/*",
+        "./esm/*": "./dist/esm/*",
         "./package.json": "./package.json"
     },
     "files": [
-        "dist/**/*",
-        "src/**/*"
+        "dist/**/*"
     ],
     "types": "dist/esm/index.d.ts",
     "scripts": {
@@ -55,7 +53,8 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/perspective-dev/perspective"
+        "url": "git+https://github.com/perspective-dev/perspective.git",
+        "directory": "packages/viewer-charts"
     },
     "author": "",
     "license": "Apache-2.0",

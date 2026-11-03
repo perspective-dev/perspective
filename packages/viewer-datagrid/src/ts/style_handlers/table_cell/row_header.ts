@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { CellMetadataRowHeader } from "regular-table/dist/esm/types.js";
-import type { DatagridModel } from "../../types.js";
+import type { DatagridModel } from "../../types.ts";
 
 /**
  * Classify a `<th>` row-header cell as a tree label, leaf or indent spacer by

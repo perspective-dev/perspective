@@ -11,8 +11,8 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { RegularTableElement } from "regular-table";
-import getCellConfig from "../get_cell_config.js";
-import type { DatagridModel, PerspectiveClickDetail } from "../types.js";
+import getCellConfig from "../get_cell_config.ts";
+import type { DatagridModel, PerspectiveClickDetail } from "../types.ts";
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 
 export function createDispatchClickListener(

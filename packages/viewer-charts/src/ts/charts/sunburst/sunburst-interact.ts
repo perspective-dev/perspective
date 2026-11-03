@@ -10,21 +10,21 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { SunburstChart } from "./sunburst";
-import { NULL_NODE } from "../common/node-store";
+import type { SunburstChart } from "./sunburst.ts";
+import { NULL_NODE } from "../common/node-store.ts";
 import {
     renderSunburstChromeOverlay,
     facetCenterForNode,
-} from "./sunburst-render";
+} from "./sunburst-render.ts";
 import {
     buildTreeTooltipLines,
     dismissTreePinnedTooltip,
     emitTreeNodeEvent,
     showTreePinnedTooltip,
     treeDrillTo,
-} from "../common/tree-interact";
+} from "../common/tree-interact.ts";
 
-export type { BreadcrumbRegion as SunburstBreadcrumbRegion } from "../common/tree-chrome";
+export type { BreadcrumbRegion as SunburstBreadcrumbRegion } from "../common/tree-chrome.ts";
 
 interface FacetHitContext {
     centerX: number;
@@ -312,4 +312,4 @@ export function dismissSunburstPinnedTooltip(chart: SunburstChart): void {
     dismissTreePinnedTooltip(chart);
 }
 
-export { buildTreeTooltipLines as buildSunburstTooltipLines } from "../common/tree-interact";
+export { buildTreeTooltipLines as buildSunburstTooltipLines } from "../common/tree-interact.ts";

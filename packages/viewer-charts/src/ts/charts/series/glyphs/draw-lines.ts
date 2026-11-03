@@ -10,16 +10,16 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { WebGLContextManager } from "../../../webgl/context-manager";
-import type { SeriesChart } from "../series";
+import type { WebGLContextManager } from "../../../webgl/context-manager.ts";
+import type { SeriesChart } from "../series.ts";
 import {
     createLineCornerBuffer,
     getInstancing,
-} from "../../../webgl/instanced-attrs";
-import { compileProgram } from "../../../webgl/program-cache";
+} from "../../../webgl/instanced-attrs.ts";
+import { compileProgram } from "../../../webgl/program-cache.ts";
 import lineVert from "../../../shaders/line-uniform.vert.glsl";
 import lineFrag from "../../../shaders/line-uniform.frag.glsl";
-import type { InterpolateMode } from "../series-type";
+import type { InterpolateMode } from "../series-type.ts";
 
 type GL = WebGL2RenderingContext | WebGLRenderingContext;
 

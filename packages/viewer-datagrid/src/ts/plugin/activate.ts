@@ -10,34 +10,34 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { style_selected_column } from "../style_handlers/column_header.js";
+import { style_selected_column } from "../style_handlers/column_header.ts";
 import {
     createMousedownListener,
     createClickListener,
     createDblclickListener,
-} from "../event_handlers/header_click.js";
+} from "../event_handlers/header_click.ts";
 
 import {
     createFocusinListener,
     createFocusoutListener,
-} from "../event_handlers/focus.js";
-import { createEditPointerdownListener } from "../event_handlers/edit_focus.js";
+} from "../event_handlers/focus.ts";
+import { createEditPointerdownListener } from "../event_handlers/edit_focus.ts";
 import {
     createKeydownListener,
     createEditClickListener,
-} from "../event_handlers/click.js";
+} from "../event_handlers/click.ts";
 
-import { createModel } from "../model/create.js";
-import { createDispatchClickListener } from "../event_handlers/dispatch_click.js";
+import { createModel } from "../model/create.ts";
+import { createDispatchClickListener } from "../event_handlers/dispatch_click.ts";
 
 import {
     addAreaMouseSelection,
     type OnSelectCallback,
-} from "../event_handlers/select_region.js";
+} from "../event_handlers/select_region.ts";
 
-import { createConsolidatedStyleListener } from "../style_handlers/consolidated.js";
+import { createConsolidatedStyleListener } from "../style_handlers/consolidated.ts";
 
-import getCellConfig from "../get_cell_config.js";
+import getCellConfig from "../get_cell_config.ts";
 
 import type { View } from "@perspective-dev/client";
 import {
@@ -45,7 +45,7 @@ import {
     type SelectedPositionMap,
     type SelectionArea,
     PerspectiveSelectDetail,
-} from "../types.js";
+} from "../types.ts";
 
 import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
 

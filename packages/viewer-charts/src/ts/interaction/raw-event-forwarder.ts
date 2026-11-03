@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { InteractionEvent } from "../transport/protocol";
+import type { InteractionEvent } from "../transport/protocol.ts";
 
 /**
  * Captures wheel / pointer events on the GL canvas, normalizes coords

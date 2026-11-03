@@ -10,10 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { FacetConfig, PluginConfig } from "../charts/chart";
-import type { PerspectiveClickDetail } from "../event-detail";
-import type { ThemeSnapshot } from "../theme/theme";
-import type { TileSourceSpec } from "../map/tile-source";
+import type { FacetConfig, PluginConfig } from "../charts/chart.ts";
+import type { PerspectiveClickDetail } from "../event-detail.ts";
+import type { ThemeSnapshot } from "../theme/theme.ts";
+import type { TileSourceSpec } from "../map/tile-source.ts";
 import type { ViewConfig } from "@perspective-dev/client";
 
 export type { ThemeSnapshot };
@@ -65,11 +65,6 @@ export type WorkerMsg =
  * message between the host and the shared `Worker` carries a numeric
  * `sessionId` that addresses a specific `WorkerRenderer` slot in the
  * worker's `RENDERERS` map.
- *
- * In-process mode bypasses these — its `MessageChannel` is per-
- * transport, so messages are already private and routing isn't
- * needed. Only worker-mode `RendererTransport` and the worker-scope
- * message handler wrap / unwrap envelopes.
  */
 export interface ControlEnvelope {
     sessionId: number;
@@ -118,31 +113,19 @@ export interface InitMsg {
     chromeCanvas?: OffscreenCanvas;
 
     /**
-     * `MessagePort` to the host's `ProxySession`. Worker mode only —
-     * the worker bootstraps a fresh `Client` and bridges it through
-     * this port. In-process mode uses the host's `Client` directly
-     * (handed in via `bootstrapInProcess`'s `client` option), so no
-     * proxy bridge is needed.
+     * `MessagePort` to the host's `ProxySession`, through which the worker's fresh `Client` is bridged.
      */
-    proxyPort?: MessagePort;
+    proxyPort: MessagePort;
 
     /**
-     * Compiled perspective-js client wasm forwarded from the host.
-     * Worker mode only — passed to `module.initSync(...)` after the
-     * worker dynamic-imports `clientWorkerURL`. In-process mode
-     * inherits the host's already-bound wasm via the supplied
-     * `Client` instance.
+     * Compiled client wasm forwarded from the host, passed to `module.initSync(...)` after the worker imports `clientWorkerURL`.
      */
-    clientWasm?: WebAssembly.Module;
+    clientWasm: WebAssembly.Module;
 
     /**
-     * URL the worker uses to dynamic-import the perspective-viewer
-     * wasm-bindgen JS module. Worker mode only — required because
-     * the worker scope can't share module instances with the host.
-     * In-process mode uses the host's already-loaded module via
-     * the supplied `Client` instance.
+     * URL of the perspective-viewer wasm-bindgen JS module the worker imports, since a worker can't share the host's module instance.
      */
-    clientWorkerURL?: URL;
+    clientWorkerURL: URL;
 
     /**
      * `ChartTypeConfig.tag` — selects which `ChartImplementation` to
@@ -207,10 +190,8 @@ export interface InitMsg {
     /**
      * `@font-face` rules captured from the host document, to be
      * re-loaded into the worker's `self.fonts` set before first
-     * paint. Worker mode only — workers don't share `FontFaceSet`
-     * with the document, so any font referenced via `font-family`
-     * must be reloaded there. In-process mode shares
-     * `document.fonts` with the host so the array is empty / unused.
+     * paint. Workers don't share `FontFaceSet` with the document, so
+     * any font referenced via `font-family` must be reloaded there.
      * See `snapshotFontFaces()` for CORS / scope caveats.
      */
     fontFaces: FontFaceDescriptor[];

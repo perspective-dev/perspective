@@ -123,21 +123,19 @@ const BOOT = (async () => {
         "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm"
     );
 
-    await Promise.all([
-        perspective.init_server({
-            wasm64: () =>
-                import(
-                    // @ts-ignore
-                    "@perspective-dev/server/dist/wasm/perspective-server.memory64.wasm"
-                ).then((x: any) => x.default),
-            wasm32: () =>
-                import(
-                    // @ts-ignore
-                    "@perspective-dev/server/dist/wasm/perspective-server.wasm"
-                ).then((x: any) => x.default),
-        }),
-        perspective_viewer.init_client(client_wasm.then((x: any) => x.default)),
-    ]);
+    await perspective_viewer.init({
+        server64: () =>
+            import(
+                // @ts-ignore
+                "@perspective-dev/server/dist/wasm/perspective-server.memory64.wasm"
+            ).then((x: any) => x.default),
+        server32: () =>
+            import(
+                // @ts-ignore
+                "@perspective-dev/server/dist/wasm/perspective-server.wasm"
+            ).then((x: any) => x.default),
+        viewer: client_wasm.then((x: any) => x.default),
+    });
 
     return perspective;
 })();

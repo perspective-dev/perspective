@@ -10,9 +10,9 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { Canvas2D, Context2D } from "../charts/canvas-types";
-import type { PlotLayout, PlotRect } from "../layout/plot-layout";
-import { formatTickValue } from "../layout/ticks";
+import type { Canvas2D, Context2D } from "../charts/canvas-types.ts";
+import type { PlotLayout, PlotRect } from "../layout/plot-layout.ts";
+import { formatTickValue } from "../layout/ticks.ts";
 import {
     LEGEND_ENTRY_LEADING,
     LEGEND_FRAME_H,
@@ -23,13 +23,13 @@ import {
     LEGEND_TITLE_PAD,
     type LegendAutoFit,
     type LegendController,
-} from "../interaction/legend-controller";
+} from "../interaction/legend-controller.ts";
 import {
     colorValueToT,
     sampleGradient,
     type GradientStop,
-} from "../theme/gradient";
-import type { Theme } from "../theme/theme";
+} from "../theme/gradient.ts";
+import type { Theme } from "../theme/theme.ts";
 
 export { LEGEND_LINE_HEIGHT };
 

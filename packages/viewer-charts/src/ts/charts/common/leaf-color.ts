@@ -10,13 +10,13 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { TreeChartBase } from "./tree-chart";
-import type { Vec3 } from "../../theme/palette";
+import type { TreeChartBase } from "./tree-chart.ts";
+import type { Vec3 } from "../../theme/palette.ts";
 import {
     colorValueToT,
     sampleGradient,
     type GradientStop,
-} from "../../theme/gradient";
+} from "../../theme/gradient.ts";
 
 /**
  * Perceptual luminance for a 0..1 RGB triple. Used by tree-chart label

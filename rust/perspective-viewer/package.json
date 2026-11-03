@@ -24,7 +24,8 @@
     "homepage": "https://perspective-dev.github.io",
     "repository": {
         "type": "git",
-        "url": "https://github.com/perspective-dev/perspective"
+        "url": "git+https://github.com/perspective-dev/perspective.git",
+        "directory": "rust/perspective-viewer"
     },
     "type": "module",
     "license": "Apache-2.0",
@@ -51,16 +52,10 @@
         "./themes/*.css": "./dist/css/*.css",
         "./themes/intl/*.css": "./dist/css/intl/*.css",
         "./dist/*": "./dist/*",
-        "./src/*": "./src/*",
-        "./test/*": "./test/*",
-        "./package.json": "./package.json",
-        "./tsconfig.json": "./tsconfig.json",
-        "./tools.mjs": "./tools.mjs"
+        "./package.json": "./package.json"
     },
     "files": [
-        "dist/**/*",
-        "src/**/*",
-        "tsconfig.json"
+        "dist/**/*"
     ],
     "types": "dist/esm/perspective-viewer.d.ts",
     "scripts": {
