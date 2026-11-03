@@ -58,6 +58,7 @@
         "dist/**/*"
     ],
     "types": "dist/esm/perspective-viewer.d.ts",
+    "customElements": "dist/custom-elements.json",
     "scripts": {
         "build": "node ./build.mjs",
         "clean": "node ./clean.mjs",
