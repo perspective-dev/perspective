@@ -47,17 +47,29 @@ the table after a page reload, and <code>restore()</code> will fail.</div>
 
 ## Attributes
 
-`<perspective-viewer>` can be configured via HTML attributes or JavaScript
-properties. When set as attributes, the viewer will apply the configuration on
-initialization:
+`<perspective-viewer>` reads one HTML attribute, `theme`, which selects the
+initial theme by the `--psp-theme-name` a loaded stylesheet declares. Every
+other setting is applied through the JavaScript API, typically `restore()`,
+and the viewer reflects the active theme back onto the same attribute when the
+user picks one:
 
 ```html
-<perspective-viewer
-    columns='["Sales", "Profit"]'
-    group-by='["Region"]'
-    sort='[["Sales", "desc"]]'>
-</perspective-viewer>
+<perspective-viewer theme="Pro Dark"></perspective-viewer>
 ```
+
+```javascript
+await viewer.restore({ columns: ["Sales", "Profit"], group_by: ["Region"] });
+```
+
+## Editor and tooling support
+
+`@perspective-dev/viewer` ships a
+[Custom Elements Manifest](https://github.com/webcomponents/custom-elements-manifest)
+at `dist/custom-elements.json`, advertised by the `customElements` field of its
+`package.json`. It enumerates the element's methods, static methods, events,
+the `theme` attribute, slots, the `tab` shadow part and every theme CSS custom
+property, so editors, Storybook and documentation generators that read the
+manifest can offer completion and reference tables without any further setup.
 
 ## UI Features
 

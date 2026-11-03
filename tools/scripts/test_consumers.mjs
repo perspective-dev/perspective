@@ -26,6 +26,12 @@ const PUBLINT = "publint@0.3.25";
 
 const ATTW = "@arethetypeswrong/cli@0.18.5";
 
+const AJV = "ajv-cli@5.0.0";
+
+const CEM_SCHEMA_PACKAGE = "custom-elements-manifest@2.1.0";
+
+const CEM_MANIFEST = "rust/perspective-viewer/dist/custom-elements.json";
+
 const PACKAGES = [
     { dir: "rust/perspective-server" },
     { dir: "rust/perspective-js" },
@@ -107,6 +113,74 @@ function check_public_types(failures) {
                 `public_types.ts does not re-export ts-rs/${name}.d.ts`,
             );
         }
+    }
+}
+
+function check_custom_elements_manifest(tmp, failures) {
+    const pkg = JSON.parse(
+        fs.readFileSync(
+            path.join(ROOT, "rust/perspective-viewer/package.json"),
+            "utf8",
+        ),
+    );
+
+    if (pkg.customElements !== "dist/custom-elements.json") {
+        failures.push("viewer package.json#customElements is not the manifest");
+    }
+
+    const manifest = path.join(ROOT, CEM_MANIFEST);
+    if (!fs.existsSync(manifest)) {
+        failures.push(`${CEM_MANIFEST} is missing`);
+        return;
+    }
+
+    const schema_dir = path.join(tmp, "cem-schema");
+    fs.mkdirSync(schema_dir, { recursive: true });
+    const packed = run(
+        "npm",
+        ["pack", CEM_SCHEMA_PACKAGE, "--pack-destination", schema_dir],
+        { cwd: schema_dir, capture: true },
+    );
+
+    if (packed.status !== 0) {
+        failures.push(`npm pack ${CEM_SCHEMA_PACKAGE}`);
+        return;
+    }
+
+    const tarball = path.join(
+        schema_dir,
+        packed.stdout.trim().split("\n").pop(),
+    );
+    if (run("tar", ["-xzf", tarball, "-C", schema_dir]).status !== 0) {
+        failures.push(`extract ${CEM_SCHEMA_PACKAGE}`);
+        return;
+    }
+
+    const schema = path.join(schema_dir, "package/schema.json");
+    const validate = run("pnpm", [
+        "dlx",
+        AJV,
+        "validate",
+        "--spec=draft7",
+        "--all-errors",
+        "-s",
+        schema,
+        "-d",
+        manifest,
+    ]);
+
+    if (validate.status !== 0) {
+        failures.push(`ajv ${CEM_MANIFEST}`);
+    }
+}
+
+function check_packed_manifest(tarballs, failures) {
+    const viewer = tarballs.find((x) => path.basename(x).includes("viewer-"));
+    const listing = run("tar", ["-tzf", viewer], { capture: true });
+    if (!listing.stdout.includes("package/dist/custom-elements.json")) {
+        failures.push(
+            "viewer tarball does not contain dist/custom-elements.json",
+        );
     }
 }
 
@@ -254,8 +328,11 @@ const failures = [];
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "psp-consumers-"));
 try {
     check_public_types(failures);
+    check_custom_elements_manifest(tmp, failures);
     lint_packages(failures);
-    typecheck_consumer(tmp, pack_packages(tmp), failures);
+    const tarballs = pack_packages(tmp);
+    check_packed_manifest(tarballs, failures);
+    typecheck_consumer(tmp, tarballs, failures);
     build_examples(failures);
 } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

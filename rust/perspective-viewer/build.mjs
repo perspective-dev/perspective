@@ -23,6 +23,7 @@ import {
 } from "lightningcss";
 import { compress } from "pro_self_extracting_wasm";
 import {
+    buildCustomElementsManifest,
     buildDocsCorpus,
     get_host,
     inlineUrlVisitor,
@@ -61,6 +62,11 @@ export async function build_all() {
     const docs_stats = await buildDocsCorpus();
     console.log(
         `docs corpus: ${docs_stats.chunks} chunks / ${docs_stats.bytes} bytes from ${docs_stats.files} files`,
+    );
+
+    const cem_stats = await buildCustomElementsManifest();
+    console.log(
+        `custom-elements.json: ${cem_stats.members} members / ${cem_stats.events} events / ${cem_stats.cssProperties} css properties / ${cem_stats.exports} exports`,
     );
 
     // JavaScript

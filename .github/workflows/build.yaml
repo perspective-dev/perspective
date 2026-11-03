@@ -883,6 +883,9 @@ jobs:
                   name: perspective-server-wasm64-dist
                   path: rust/perspective-server/dist/wasm
 
+            - name: Consumer checks
+              run: pnpm run test:consumers
+
             - name: Run Tests
               id: run_tests
               run: pnpm run test -- --fetch-snapshots
@@ -944,9 +947,6 @@ jobs:
               with:
                   name: perspective-server-wasm64-dist
                   path: rust/perspective-server/dist/wasm
-
-            - name: Consumer checks
-              run: pnpm run test:consumers
 
             - name: Run Tests
               id: run_tests
