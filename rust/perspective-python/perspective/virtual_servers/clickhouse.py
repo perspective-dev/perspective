@@ -12,7 +12,8 @@
 
 import perspective
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+import json
 import logging
 
 from perspective.virtual_servers import VirtualServerHandler, sql_table_describe
@@ -125,16 +126,26 @@ class ClickhouseVirtualServer:
         return ClickhouseVirtualSession(callback, self.db)
 
 
+SYSTEM_DATABASES = ("system", "INFORMATION_SCHEMA", "information_schema")
+
+
 class ClickhouseVirtualServerHandler(VirtualServerHandler):
     """
     An implementation of a `perspective.VirtualServerHandler` for ClickHouse.
+
+    Hosts every table and view of every database the connection can read,
+    except ClickHouse's own catalog - by bare name in the connection's
+    current database, otherwise as `database.table`. The views this handler
+    creates (named by the client's random view ids) are tracked and never
+    hosted.
     """
 
     def __init__(self, db):
         self.db = db
         self.sql_builder = perspective.GenericSQLVirtualServerModel(
-            {"create_entity": "VIEW", "grouping_fn": "GROUPING"}
+            {"create_entity": "VIEW", "grouping_fn": "GROUPING", "unordered": True}
         )
+        self._own_entities = set()
 
     def get_features(self):
         return {
@@ -173,9 +184,19 @@ class ClickhouseVirtualServerHandler(VirtualServerHandler):
         }
 
     def get_hosted_tables(self):
-        query = "SHOW TABLES"
+        excluded = ", ".join(f"'{db}'" for db in SYSTEM_DATABASES)
+        query = f"""
+            SELECT database, name, database = currentDatabase()
+            FROM system.tables
+            WHERE database NOT IN ({excluded}) AND NOT is_temporary
+            ORDER BY database, name
+        """
         results = run_query(self.db, query)
-        return [result[0] for result in results]
+        return [
+            self.sql_builder.table_path([name] if current else [database, name])
+            for database, name, current in results
+            if not (current and name in self._own_entities)
+        ]
 
     def table_schema(self, table_name, config=None):
         query = self.sql_builder.table_schema(table_name)
@@ -184,7 +205,7 @@ class ClickhouseVirtualServerHandler(VirtualServerHandler):
         for result in results:
             col_name = result[0]
             if not col_name.startswith("__"):
-                schema[col_name] = clickhouse_type_to_psp(result[1])
+                schema[col_name] = clickhouse_type_to_psp(result[1], col_name)
 
         return schema
 
@@ -206,6 +227,7 @@ class ClickhouseVirtualServerHandler(VirtualServerHandler):
         schema = self.table_schema(table_name) if config.get("windows") else None
         query = self.sql_builder.table_make_view(table_name, view_name, config, schema)
         run_query(self.db, query, execute=True)
+        self._own_entities.add(view_name)
 
     def table_describe(self, table_name, config):
         schema = self.table_schema(table_name) if config.get("windows") else None
@@ -215,7 +237,7 @@ class ClickhouseVirtualServerHandler(VirtualServerHandler):
 
     def _describe_query(self, query):
         return {
-            row[0]: clickhouse_type_to_psp(row[1])
+            row[0]: clickhouse_type_to_psp(row[1], row[0])
             for row in run_query(self.db, query)
             if not row[0].startswith("__")
         }
@@ -223,26 +245,37 @@ class ClickhouseVirtualServerHandler(VirtualServerHandler):
     def view_delete(self, view_name):
         query = self.sql_builder.view_delete(view_name)
         run_query(self.db, query, execute=True)
+        self._own_entities.discard(view_name)
 
     def view_get_min_max(self, view_name, column_name, config):
         query = self.sql_builder.view_get_min_max(view_name, column_name, config)
-        results = run_query(self.db, query)
+        results, _columns, dtypes = run_query(self.db, query, columns=True)
         row = results[0]
-        return (row[0], row[1])
+        return tuple(
+            clickhouse_to_py(value, clickhouse_type_to_psp(str(dtype)))
+            for value, dtype in zip(row, dtypes)
+        )
 
     def view_get_data(self, view_name, config, schema, viewport, data):
         group_by = config["group_by"]
+        is_flat = config.get("group_rollup_mode", "rollup") == "flat"
         query = self.sql_builder.view_get_data(view_name, config, viewport, schema)
         results, columns, dtypes = run_query(self.db, query, columns=True)
+        grouping_idx = (
+            columns.index("__GROUPING_ID__") if "__GROUPING_ID__" in columns else None
+        )
+
         for cidx, col in enumerate(columns):
-            dtype = clickhouse_type_to_psp(str(dtypes[cidx]))
+            dtype = clickhouse_type_to_psp(str(dtypes[cidx]), col)
             for ridx, row in enumerate(results):
-                grouping_id = row[0] if len(group_by) > 0 else None
+                if len(group_by) == 0:
+                    grouping_id = None
+                elif is_flat or grouping_idx is None:
+                    grouping_id = 0
+                else:
+                    grouping_id = row[grouping_idx]
 
-                value = row[cidx]
-                if dtype == "string" and not isinstance(value, str):
-                    value = str(value)
-
+                value = clickhouse_to_py(row[cidx], dtype)
                 data.set_col(dtype, col, ridx, value, grouping_id)
 
 
@@ -251,28 +284,100 @@ class ClickhouseVirtualServerHandler(VirtualServerHandler):
 # ClickHouse Utils
 
 
-def clickhouse_type_to_psp(name):
-    """Convert a ClickHouse `dtype` to a Perspective `ColumnType`."""
-    if name.startswith("Nullable(") and name.endswith(")"):
-        name = name[9:-1]
+_INTEGER_TYPES = frozenset(["Int8", "Int16", "Int32", "UInt8", "UInt16"])
+_FLOAT_TYPES = frozenset(
+    [
+        "UInt32",
+        "UInt64",
+        "UInt128",
+        "UInt256",
+        "Int64",
+        "Int128",
+        "Int256",
+        "Float32",
+        "Float64",
+        "BFloat16",
+    ]
+)
+_DATE_TYPES = frozenset(["Date", "Date32"])
 
-    if name.startswith("Array"):
-        return "string"
+_TRANSPARENT_WRAPPERS = ("Nullable(", "LowCardinality(", "SimpleAggregateFunction(")
 
-    if name in ("Int64", "UInt64", "Float64"):
+
+def _unwrap_type(name):
+    name = name.strip()
+    while True:
+        for wrapper in _TRANSPARENT_WRAPPERS:
+            if name.startswith(wrapper) and name.endswith(")"):
+                inner = name[len(wrapper) : -1]
+                if wrapper == "SimpleAggregateFunction(":
+                    inner = inner.split(",", 1)[-1]
+
+                name = inner.strip()
+                break
+        else:
+            return name
+
+
+def clickhouse_type_to_psp(name, col_name=""):
+    base = _unwrap_type(name)
+    if base in _INTEGER_TYPES:
+        return "integer"
+
+    if base in _FLOAT_TYPES or base.startswith("Decimal"):
         return "float"
 
-    if name == "String":
-        return "string"
+    if base == "Bool":
+        return "boolean"
 
-    if name == "DateTime":
-        return "datetime"
-
-    if name == "Date":
+    if base in _DATE_TYPES:
         return "date"
 
-    msg = f"Unknown type '{name}'"
-    raise ValueError(msg)
+    if base.startswith("DateTime") or base.startswith("Time"):
+        return "datetime"
+
+    if not (
+        base.startswith("String")
+        or base.startswith("FixedString")
+        or base.startswith("Enum")
+    ):
+        logger.debug(f"Rendering type '{name}' of column '{col_name}' as string")
+
+    return "string"
+
+
+def clickhouse_to_py(value, dtype):
+    if value is None:
+        return None
+
+    if dtype == "datetime":
+        if isinstance(value, timedelta):
+            return int(value.total_seconds() * 1000)
+
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+
+            return int(value.timestamp() * 1000)
+
+        return value
+
+    if dtype == "float":
+        return float(value)
+
+    if dtype == "string":
+        if isinstance(value, str):
+            return value
+
+        if isinstance(value, bytes):
+            return value.rstrip(b"\x00").decode("utf-8", errors="replace")
+
+        if isinstance(value, (dict, list, tuple)):
+            return json.dumps(value, default=str)
+
+        return str(value)
+
+    return value
 
 
 def run_query(db, query, execute=False, columns=False):

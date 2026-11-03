@@ -43,7 +43,7 @@ use crate::config::{
 };
 use crate::proto::{ColumnType, ViewPort};
 use crate::virtual_server::generic_sql_model::table_make_view::{
-    ViewQueryContext, entity_ref, quote_ident,
+    ViewQueryContext, entity_ref, is_bare_ident, quote_ident,
 };
 
 /// Error type for SQL generation operations.
@@ -98,8 +98,16 @@ pub struct GenericSQLVirtualServerModelArgs {
     /// Expression for the dialect's natural row identity, used for unsorted
     /// view order and natural-order window frames — `rowid` (DuckDB, the
     /// default) or `ctid` (Postgres). Dialects with no such pseudo-column
-    /// (ClickHouse) should advertise `unordered` instead.
+    /// (ClickHouse) set [`Self::unordered`] instead.
     row_id_expr: Option<String>,
+
+    /// Whether the dialect has NO natural row identity (ClickHouse), so the
+    /// builder must never reference `row_id_expr`: an unsorted view takes no
+    /// default `ORDER BY` (its order is whatever the engine scans), and a
+    /// split-only pivot numbers its rows with `ROW_NUMBER() OVER ()`. Pair
+    /// with the handler's `unordered` feature, which rejects windows without
+    /// an explicit `order_by` before they reach the builder.
+    unordered: Option<bool>,
 
     /// Separator joining `split_by` values and the column name in pivoted
     /// view column names, e.g. `"CA|Sales"` for separator `"|"`. Perspective's
@@ -131,6 +139,13 @@ pub struct GenericSQLVirtualServerModelArgs {
     /// Template wrapping a `SELECT` so the dialect PLANS it and reports its
     /// result columns without executing it; `{}` is the query.
     describe_template: Option<String>,
+
+    /// Whether the dialect folds unquoted identifiers to lower case
+    /// (Postgres), so [`GenericSQLVirtualServerModel::table_path`] must
+    /// quote any path part with an upper-case letter to keep it resolving
+    /// to the same relation. Case-insensitive (DuckDB) and case-preserving
+    /// (ClickHouse) dialects omit it.
+    folds_unquoted_to_lower: Option<bool>,
 
     /// Whether views carry a `__HIDDEN__` column, `UPDATE`d in place by
     /// [`GenericSQLVirtualServerModel::view_expand`] and friends, which
@@ -326,6 +341,39 @@ impl GenericSQLVirtualServerModel {
         ))
     }
 
+    /// Renders a hosted table's relation path - e.g. `["memory", "main",
+    /// "trades"]` - as its entity id: parts joined with `.`, each quoted
+    /// only when it is not a bare identifier, so that SQL-safe names read as
+    /// they always have (`memory.trades`) and every other name is still a
+    /// relation reference the builder passes through verbatim.
+    pub fn table_path(&self, parts: &[&str]) -> GenericSQLResult<String> {
+        if parts.is_empty() || parts.iter().any(|x| x.is_empty()) {
+            return Err(GenericSQLError::InvalidConfig(format!(
+                "Invalid table path {parts:?}"
+            )));
+        }
+
+        let folds = self.0.folds_unquoted_to_lower.unwrap_or(false);
+        Ok(parts
+            .iter()
+            .map(|part| {
+                if is_bare_ident(part) && !(folds && part.chars().any(char::is_uppercase)) {
+                    (*part).to_owned()
+                } else {
+                    format!("\"{}\"", quote_ident(part))
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("."))
+    }
+
+    /// Returns the SQL relation reference for an entity id - a hosted
+    /// table's path verbatim, any other name quoted whole - for handlers
+    /// that build their own queries against an entity.
+    pub fn quote_entity(&self, entity_id: &str) -> GenericSQLResult<String> {
+        Ok(entity_ref(entity_id))
+    }
+
     /// Returns the SQL query to list all hosted tables.
     ///
     /// # Returns
@@ -440,6 +488,28 @@ impl GenericSQLVirtualServerModel {
         config: &ViewConfig,
         schema: &IndexMap<String, ColumnType>,
     ) -> GenericSQLResult<Option<String>> {
+        self.table_describe_source(table_id, config, schema, false)
+    }
+
+    /// As [`Self::table_describe`], for a source with no natural row order -
+    /// a table made by [`Self::view_make_table`] in a dialect whose
+    /// `create_entity` is a view, which `row_id_expr` cannot address.
+    pub fn table_describe_unordered(
+        &self,
+        table_id: &str,
+        config: &ViewConfig,
+        schema: &IndexMap<String, ColumnType>,
+    ) -> GenericSQLResult<Option<String>> {
+        self.table_describe_source(table_id, config, schema, true)
+    }
+
+    fn table_describe_source(
+        &self,
+        table_id: &str,
+        config: &ViewConfig,
+        schema: &IndexMap<String, ColumnType>,
+        unordered: bool,
+    ) -> GenericSQLResult<Option<String>> {
         if config.columns.iter().flatten().next().is_none() {
             return Ok(None);
         }
@@ -455,8 +525,8 @@ impl GenericSQLVirtualServerModel {
             folded.group_by.extend(split_by);
         }
 
-        let ctx = ViewQueryContext::new(self, table_id, &folded, schema)?;
-        Ok(Some(self.describe_wrap(&ctx.build_query())))
+        let ctx = ViewQueryContext::new(self, table_id, &folded, schema, unordered)?;
+        Ok(Some(self.describe_wrap(&ctx.build_query_unordered())))
     }
 
     /// Returns the SQL query to delete a view.
@@ -490,7 +560,33 @@ impl GenericSQLVirtualServerModel {
         config: &ViewConfig,
         schema: &IndexMap<String, ColumnType>,
     ) -> GenericSQLResult<String> {
-        let ctx = ViewQueryContext::new(self, table_id, config, schema)?;
+        self.table_make_view_source(table_id, view_id, config, schema, false)
+    }
+
+    /// As [`Self::table_make_view`], for a source with no natural row order -
+    /// a table made by [`Self::view_make_table`] in a dialect whose
+    /// `create_entity` is a view, which `row_id_expr` cannot address - so an
+    /// unsorted view takes the source's own order and windows never read
+    /// `row_id_expr`.
+    pub fn table_make_view_unordered(
+        &self,
+        table_id: &str,
+        view_id: &str,
+        config: &ViewConfig,
+        schema: &IndexMap<String, ColumnType>,
+    ) -> GenericSQLResult<String> {
+        self.table_make_view_source(table_id, view_id, config, schema, true)
+    }
+
+    fn table_make_view_source(
+        &self,
+        table_id: &str,
+        view_id: &str,
+        config: &ViewConfig,
+        schema: &IndexMap<String, ColumnType>,
+        unordered: bool,
+    ) -> GenericSQLResult<String> {
+        let ctx = ViewQueryContext::new(self, table_id, config, schema, unordered)?;
         let mut query = ctx.build_query();
         if self.is_expand_collapse() {
             query = format!(

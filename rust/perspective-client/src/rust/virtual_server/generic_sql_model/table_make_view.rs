@@ -65,7 +65,7 @@ fn window_over_clause(
     w: &WindowSpec,
     frame: Option<&str>,
     order_expr: Option<&str>,
-    row_id: &str,
+    row_id: Option<&str>,
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     if !w.partition_by.is_empty() {
@@ -100,7 +100,11 @@ fn window_over_clause(
                 }
             ))
         },
-        None => parts.push(format!("ORDER BY {} ASC", row_id)),
+        None => {
+            if let Some(row_id) = row_id {
+                parts.push(format!("ORDER BY {} ASC", row_id));
+            }
+        },
     }
     if let Some(f) = frame {
         parts.push(f.to_string());
@@ -127,7 +131,7 @@ fn window_sql(
     w: &WindowSpec,
     resolve: &dyn Fn(&str) -> String,
     order_type: Option<ColumnType>,
-    row_id: &str,
+    row_id: Option<&str>,
 ) -> Result<String, GenericSQLError> {
     // `range` frame interval arithmetic is defined on the order key's
     // units - the natural (`rowid`) fallback is meaningless for it, so an
@@ -266,21 +270,66 @@ pub(crate) fn quote_ident(name: &str) -> String {
     name.replace('"', "\"\"")
 }
 
-/// Renders an entity id as a SQL relation, quoted whole unless it is a plain
-/// dotted identifier.
+/// Renders an entity id as a SQL relation, verbatim when it is already a
+/// relation path of bare or quoted parts and quoted whole otherwise.
 pub(crate) fn entity_ref(id: &str) -> String {
-    let is_plain = id.split('.').all(|part| {
-        let mut chars = part.chars();
-        chars
-            .next()
-            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
-    });
-
-    if is_plain {
+    if parse_relation_path(id).is_some() {
         id.to_owned()
     } else {
         format!("\"{}\"", quote_ident(id))
+    }
+}
+
+pub(crate) fn is_bare_ident(part: &str) -> bool {
+    let mut chars = part.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+}
+
+pub(crate) fn parse_relation_path(name: &str) -> Option<Vec<String>> {
+    let mut parts = vec![];
+    let mut chars = name.chars().peekable();
+    loop {
+        let mut part = String::new();
+        if chars.peek() == Some(&'"') {
+            chars.next();
+            loop {
+                match chars.next()? {
+                    '"' if chars.peek() == Some(&'"') => {
+                        chars.next();
+                        part.push('"');
+                    },
+                    '"' => break,
+                    c => part.push(c),
+                }
+            }
+
+            if part.is_empty() {
+                return None;
+            }
+        } else {
+            while let Some(&c) = chars.peek() {
+                if c == '.' {
+                    break;
+                }
+
+                part.push(c);
+                chars.next();
+            }
+
+            if !is_bare_ident(&part) {
+                return None;
+            }
+        }
+
+        parts.push(part);
+        match chars.next() {
+            None => return Some(parts),
+            Some('.') => continue,
+            Some(_) => return None,
+        }
     }
 }
 
@@ -330,7 +379,7 @@ pub(crate) struct ViewQueryContext<'a> {
     like_escape_clause: Option<&'a str>,
     backslash_escaped_literals: bool,
     regex_fn: Option<&'a str>,
-    row_id_expr: &'a str,
+    row_id_expr: Option<&'a str>,
     row_path_aliases: Vec<String>,
 }
 
@@ -344,6 +393,7 @@ impl<'a> ViewQueryContext<'a> {
         table: &'a str,
         config: &'a ViewConfig,
         schema: &IndexMap<String, ColumnType>,
+        unordered: bool,
     ) -> Result<Self, GenericSQLError> {
         let table = &entity_ref(table);
         let expressions = &config.expressions.0;
@@ -354,7 +404,11 @@ impl<'a> ViewQueryContext<'a> {
                 .unwrap_or_else(|| format!("\"{}\"", quote_ident(col)))
         };
 
-        let row_id_expr = model.0.row_id_expr.as_deref().unwrap_or("rowid");
+        let row_id_expr = if unordered || model.0.unordered.unwrap_or(false) {
+            None
+        } else {
+            Some(model.0.row_id_expr.as_deref().unwrap_or("rowid"))
+        };
 
         // Window columns materialize in a wrapping sub-select, so every
         // downstream clause (filter, group_by, aggregate, sort) sees them as
@@ -387,9 +441,13 @@ impl<'a> ViewQueryContext<'a> {
             // `SELECT *` into the sub-select, so the natural row order is
             // re-exported under an internal alias for the outer query's
             // `ORDER BY` (see [`Self::natural_order_col`]).
+            let row_id_select = row_id_expr
+                .map(|expr| format!("{} AS \"__PSP_ROWID__\", ", expr))
+                .unwrap_or_default();
+
             format!(
-                "(SELECT *, {} AS \"__PSP_ROWID__\", {} FROM {}) AS __PSP_WINDOW_SRC__",
-                row_id_expr,
+                "(SELECT *, {}{} FROM {}) AS __PSP_WINDOW_SRC__",
+                row_id_select,
                 selects.join(", "),
                 table
             )
@@ -425,6 +483,14 @@ impl<'a> ViewQueryContext<'a> {
     /// wrapper) for the four `group_by` x `split_by` combinations, appending
     /// an `ORDER BY` clause as needed.
     pub(crate) fn build_query(&self) -> String {
+        self.build_query_ordered(true)
+    }
+
+    pub(crate) fn build_query_unordered(&self) -> String {
+        self.build_query_ordered(false)
+    }
+
+    fn build_query_ordered(&self, with_default_order: bool) -> String {
         let where_sql = self.where_sql();
         let order_by = self.order_by_clauses();
         let mut query = match self.query_orientation() {
@@ -457,10 +523,12 @@ impl<'a> ViewQueryContext<'a> {
             QueryOrientation::Pivoted => {
                 let mut src_clauses = self.select_clauses();
                 src_clauses.extend(self.split_select_clauses());
-                src_clauses.push(format!(
-                    "ROW_NUMBER() OVER (ORDER BY {}) as \"__ROW_NUM__\"",
-                    self.pivot_row_num_order()
-                ));
+                src_clauses.push(match self.pivot_row_num_order() {
+                    Some(order) => {
+                        format!("ROW_NUMBER() OVER (ORDER BY {}) as \"__ROW_NUM__\"", order)
+                    },
+                    None => "ROW_NUMBER() OVER () as \"__ROW_NUM__\"".to_string(),
+                });
 
                 let src = format!(
                     "SELECT {} FROM {}{}",
@@ -660,6 +728,7 @@ impl<'a> ViewQueryContext<'a> {
 
         if !order_by.is_empty() {
             query = format!("{} ORDER BY {}", query, order_by.join(", "));
+        } else if !with_default_order {
         } else if self.is_flat_mode() && !self.config.group_by.is_empty() {
             let default_order: Vec<String> = self
                 .row_path_aliases
@@ -673,10 +742,12 @@ impl<'a> ViewQueryContext<'a> {
             let default_order = if self.config.split_by.is_empty() {
                 self.natural_order_col()
             } else {
-                "\"__ROW_NUM__\""
+                Some("\"__ROW_NUM__\"")
             };
 
-            query = format!("{} ORDER BY {}", query, default_order);
+            if let Some(default_order) = default_order {
+                query = format!("{} ORDER BY {}", query, default_order);
+            }
         }
 
         query
@@ -974,18 +1045,19 @@ impl<'a> ViewQueryContext<'a> {
     }
 
     /// The natural row-order column as visible to clauses that select `FROM
-    fn natural_order_col(&self) -> &str {
-        if self.config.windows.is_empty() {
-            self.row_id_expr
+    fn natural_order_col(&self) -> Option<&str> {
+        let row_id = self.row_id_expr?;
+        Some(if self.config.windows.is_empty() {
+            row_id
         } else {
             "\"__PSP_ROWID__\""
-        }
+        })
     }
 
     /// Builds the `ORDER BY` expression for the `ROW_NUMBER()` window
     /// function used inside `PIVOT` queries. Uses sort config if available,
     /// otherwise falls back to the natural row order.
-    fn pivot_row_num_order(&self) -> String {
+    fn pivot_row_num_order(&self) -> Option<String> {
         let sort_exprs: Vec<String> = self
             .config
             .sort
@@ -995,9 +1067,9 @@ impl<'a> ViewQueryContext<'a> {
             .collect();
 
         if sort_exprs.is_empty() {
-            self.natural_order_col().to_string()
+            self.natural_order_col().map(str::to_owned)
         } else {
-            sort_exprs.join(", ")
+            Some(sort_exprs.join(", "))
         }
     }
 

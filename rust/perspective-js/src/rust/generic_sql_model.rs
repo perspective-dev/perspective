@@ -51,6 +51,24 @@ impl GenericSQLVirtualServerModel {
         })
     }
 
+    /// Returns the entity id of the hosted table at relation path `parts`,
+    /// each part quoted only when it is not a bare identifier.
+    #[wasm_bindgen(js_name = "tablePath")]
+    pub fn table_path(&self, parts: Vec<String>) -> Result<String, JsValue> {
+        let parts = parts.iter().map(String::as_str).collect::<Vec<_>>();
+        self.inner
+            .table_path(&parts)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// Returns the SQL relation reference for an entity id.
+    #[wasm_bindgen(js_name = "quoteEntity")]
+    pub fn quote_entity(&self, entity_id: &str) -> Result<String, JsValue> {
+        self.inner
+            .quote_entity(entity_id)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
     /// Returns the SQL query to list all hosted tables.
     #[wasm_bindgen(js_name = "getHostedTables")]
     pub fn get_hosted_tables(&self) -> Result<String, JsValue> {
@@ -119,6 +137,7 @@ impl GenericSQLVirtualServerModel {
         table_id: &str,
         config: JsValue,
         schema: JsValue,
+        unordered: Option<bool>,
     ) -> Result<Option<String>, JsValue> {
         let config: ViewConfig = serde_wasm_bindgen::from_value(config)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
@@ -129,9 +148,14 @@ impl GenericSQLVirtualServerModel {
             self.parse_schema(schema)?
         };
 
-        self.inner
-            .table_describe(table_id, &config, &schema)
-            .map_err(|e| JsValue::from_str(&e.to_string()))
+        let result = if unordered.unwrap_or(false) {
+            self.inner
+                .table_describe_unordered(table_id, &config, &schema)
+        } else {
+            self.inner.table_describe(table_id, &config, &schema)
+        };
+
+        result.map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     /// Returns the SQL query to delete a view.
@@ -151,6 +175,7 @@ impl GenericSQLVirtualServerModel {
         view_id: &str,
         config: JsValue,
         schema: JsValue,
+        unordered: Option<bool>,
     ) -> Result<String, JsValue> {
         let config: ViewConfig = serde_wasm_bindgen::from_value(config)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
@@ -161,9 +186,15 @@ impl GenericSQLVirtualServerModel {
             self.parse_schema(schema)?
         };
 
-        self.inner
-            .table_make_view(table_id, view_id, &config, &schema)
-            .map_err(|e| JsValue::from_str(&e.to_string()))
+        let result = if unordered.unwrap_or(false) {
+            self.inner
+                .table_make_view_unordered(table_id, view_id, &config, &schema)
+        } else {
+            self.inner
+                .table_make_view(table_id, view_id, &config, &schema)
+        };
+
+        result.map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     /// Returns the SQL query to create a table from a view.

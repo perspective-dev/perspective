@@ -207,6 +207,14 @@ pub trait VirtualServerHandler {
         Box::pin(async { unimplemented!("view_make_table not implemented") })
     }
 
+    /// Deletes a table made by [`Self::view_make_table`].
+    ///
+    /// Default implementation delegates to [`Self::view_delete`], for
+    /// backends which create both as the same kind of entity.
+    fn table_delete(&self, table_id: &str) -> VirtualServerFuture<'_, Result<(), Self::Error>> {
+        self.view_delete(table_id)
+    }
+
     /// Creates a new table with the given data.
     ///
     /// Default implementation panics with "not implemented".

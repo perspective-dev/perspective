@@ -171,12 +171,18 @@ class DuckDBVirtualServer:
 class DuckDBVirtualServerHandler(VirtualServerHandler):
     """
     An implementation of a `perspective.VirtualServerHandler` for DuckDB.
+
+    Hosts every table and view of every attached database, named by its
+    relation path - `catalog.table` in a `main` schema, otherwise
+    `catalog.schema.table`. Views (and tables derived from them) are
+    `TEMPORARY TABLE`s, so they never appear among the hosted tables and
+    drop with the connection.
     """
 
     def __init__(self, db):
         self.db = db
         self.sql_builder = perspective.GenericSQLVirtualServerModel(
-            {"expand_collapse": True}
+            {"expand_collapse": True, "create_entity": "TEMPORARY TABLE"}
         )
 
     def get_features(self):
@@ -218,7 +224,11 @@ class DuckDBVirtualServerHandler(VirtualServerHandler):
     def get_hosted_tables(self):
         query = self.sql_builder.get_hosted_tables()
         results = run_query(self.db, query)
-        return [f"{result[0]}.{result[2]}" for result in results]
+        return [
+            self.sql_builder.table_path(duckdb_table_path(database, schema, name))
+            for database, schema, name, _names, _types, temporary in results
+            if not temporary
+        ]
 
     def table_schema(self, table_name, config=None):
         query = self.sql_builder.table_schema(table_name)
@@ -368,6 +378,13 @@ def duckdb_type_to_psp(name):
         logger.warning(f"Unknown type '{name}'")
 
     return "string"
+
+
+def duckdb_table_path(database, schema, name):
+    if schema == "main":
+        return [database, name]
+
+    return [database, schema, name]
 
 
 def run_query(db, query, execute=False, columns=False):

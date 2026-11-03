@@ -282,7 +282,8 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
         }
 
         this.db = db;
-        this.sqlBuilder = new mod.GenericSQLVirtualServerModel({
+        this.sqlBuilder = new mod!.GenericSQLVirtualServerModel({
+            create_entity: "TEMPORARY TABLE",
             column_separator: "|",
             like_escape_clause: "\\",
             regex_fn: "regexp_matches",
@@ -328,13 +329,26 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
         };
     }
 
+    /**
+     * Every table and view of every attached database, named by its
+     * relation path - `catalog.table` in a `main` schema, otherwise
+     * `catalog.schema.table`.
+     */
     async getHostedTables() {
         const query = this.sqlBuilder.getHostedTables();
         const results = await runQuery(this.db, query);
-        return results.map((row) => {
-            const json = row.toJSON();
-            return `${json.database || "memory"}.${json.name}`;
-        });
+        return results
+            .map((row) => row.toJSON())
+            .filter((json) => !json.temporary)
+            .map((json) => {
+                const database = json.database || "memory";
+                const path =
+                    json.schema && json.schema !== "main"
+                        ? [database, json.schema, json.name]
+                        : [database, json.name];
+
+                return this.sqlBuilder.tablePath(path);
+            });
     }
 
     async tableSchema(tableId: string, config?: ViewConfig) {

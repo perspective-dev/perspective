@@ -23,8 +23,8 @@ use super::handler::VirtualServerHandler;
 use crate::config::{GroupRollupMode, ViewConfig, ViewConfigUpdate};
 use crate::proto::response::ClientResp;
 use crate::proto::{
-    ColumnPathLevel, ColumnType, GetFeaturesResp, GetHostedTablesResp, MakeTableResp, Request,
-    Response, Scalar, ServerError, TableDeleteResp, TableDescribeResp, TableMakePortResp,
+    ColumnPathLevel, ColumnType, GetFeaturesResp, GetHostedTablesResp, HostedTable, MakeTableResp,
+    Request, Response, Scalar, ServerError, TableDeleteResp, TableDescribeResp, TableMakePortResp,
     TableMakeViewResp, TableOnDeleteResp, TableRemoveDeleteResp, TableSchemaResp, TableSizeResp,
     ViewCollapseResp, ViewColumnPathsResp, ViewDeleteResp, ViewDescription, ViewDimensionsResp,
     ViewExpandResp, ViewExpressionSchemaResp, ViewGetConfigResp, ViewGetMinMaxResp,
@@ -196,9 +196,18 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 respond!(msg, GetFeaturesResp { ..features.into() })
             },
             GetHostedTablesReq(_) => {
-                respond!(msg, GetHostedTablesResp {
-                    table_infos: self.handler.get_hosted_tables().await?
-                })
+                let mut table_infos = self.handler.get_hosted_tables().await?;
+                for name in &self.view_tables {
+                    if !table_infos.iter().any(|x| &x.entity_id == name) {
+                        table_infos.push(HostedTable {
+                            entity_id: name.clone(),
+                            index: Vec::new(),
+                            limit: None,
+                        });
+                    }
+                }
+
+                respond!(msg, GetHostedTablesResp { table_infos })
             },
             TableSchemaReq(_) => {
                 respond!(msg, TableSchemaResp {
@@ -630,7 +639,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             },
 
             TableDeleteReq(_) if self.view_tables.contains(&msg.entity_id) => {
-                self.handler.view_delete(msg.entity_id.as_str()).await?;
+                self.handler.table_delete(msg.entity_id.as_str()).await?;
                 self.view_tables.shift_remove(&msg.entity_id);
                 respond!(msg, TableDeleteResp {})
             },

@@ -172,12 +172,6 @@ class PostgresVirtualServerHandler(VirtualServerHandler):
     """
     An implementation of a `perspective.VirtualServerHandler` for PostgreSQL
     (16 or later, for `any_value`).
-
-    Each handler owns one connection, and views are created as `TEMPORARY
-    VIEW`s: view names are connection-scoped so sessions cannot collide, every
-    viewport read re-plans the view's inner `ORDER BY` (a materialized
-    `CREATE TABLE AS` would depend on seq-scan order, which Postgres does not
-    guarantee), and all views drop automatically on disconnect.
     """
 
     def __init__(self, conninfo):
@@ -191,8 +185,11 @@ class PostgresVirtualServerHandler(VirtualServerHandler):
                 "like_escape_clause": "\\",
                 "regex_fn": "regexp_like",
                 "describe_template": "SELECT * FROM ({}) AS __psp_describe__ LIMIT 0",
+                "folds_unquoted_to_lower": True,
             }
         )
+
+        self.derived_tables = set()
 
     def close(self):
         self.db.close()
@@ -250,7 +247,7 @@ class PostgresVirtualServerHandler(VirtualServerHandler):
             ORDER BY 1, 2
         """
         results = run_query(self.db, query)
-        return [f"{result[0]}.{result[1]}" for result in results]
+        return [self.sql_builder.table_path([schema, name]) for schema, name in results]
 
     def _describe(self, entity_id):
         """The column name/OID pairs of any relation or query result.
@@ -291,13 +288,25 @@ class PostgresVirtualServerHandler(VirtualServerHandler):
     def table_make_view(self, table_name, view_name, config):
         # Window order keys need column types for `range` frame emission.
         schema = self.table_schema(table_name) if config.get("windows") else None
-        query = self.sql_builder.table_make_view(table_name, view_name, config, schema)
+        query = self.sql_builder.table_make_view(
+            table_name,
+            view_name,
+            config,
+            schema,
+            unordered=table_name in self.derived_tables,
+        )
+
         run_query(self.db, query, execute=True)
 
     def table_describe(self, table_name, config):
         schema = self.table_schema(table_name) if config.get("windows") else None
         return sql_table_describe(
-            self.sql_builder, table_name, config, self._describe_query, schema
+            self.sql_builder,
+            table_name,
+            config,
+            self._describe_query,
+            schema,
+            unordered=table_name in self.derived_tables,
         )
 
     def _describe_query(self, query):
@@ -314,10 +323,15 @@ class PostgresVirtualServerHandler(VirtualServerHandler):
         )
 
         run_query(self.db, query, execute=True)
+        self.derived_tables.add(table_name)
 
     def view_delete(self, view_name):
         query = self.sql_builder.view_delete(view_name)
         run_query(self.db, query, execute=True)
+
+    def table_delete(self, table_name):
+        self.derived_tables.discard(table_name)
+        self.view_delete(table_name)
 
     def view_get_min_max(self, view_name, column_name, config):
         query = self.sql_builder.view_get_min_max(view_name, column_name, config)
@@ -446,7 +460,7 @@ def pg_to_py(value):
 
 def run_query(db, query, execute=False, cursor=False):
     query = " ".join(query.split())
-    start = datetime.now(datetime.UTC)
+    start = datetime.now(timezone.utc)
     try:
         cur = db.execute(query)
     except psycopg.Error as e:
@@ -454,7 +468,7 @@ def run_query(db, query, execute=False, cursor=False):
         logger.error(f"{query}")
         raise
     else:
-        logger.debug(f"{datetime.now(datetime.UTC) - start} {query}")
+        logger.debug(f"{datetime.now(timezone.utc) - start} {query}")
         if cursor:
             return cur
         elif not execute:

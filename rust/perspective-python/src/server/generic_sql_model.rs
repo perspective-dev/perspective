@@ -38,6 +38,22 @@ impl PyGenericSQLVirtualServerModel {
         }
     }
 
+    /// The entity id of the hosted table at relation path `parts`, each
+    /// part quoted only when it is not a bare identifier.
+    pub fn table_path(&self, parts: Vec<String>) -> PyResult<String> {
+        let parts = parts.iter().map(String::as_str).collect::<Vec<_>>();
+        self.inner
+            .table_path(&parts)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// The SQL relation reference for an entity id.
+    pub fn quote_entity(&self, entity_id: &str) -> PyResult<String> {
+        self.inner
+            .quote_entity(entity_id)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
     pub fn get_hosted_tables(&self) -> PyResult<String> {
         self.inner
             .get_hosted_tables()
@@ -91,12 +107,13 @@ impl PyGenericSQLVirtualServerModel {
     /// The SQL query that plans the view `config` would build and reports its
     /// result columns without materializing it (`split_by` folded into
     /// `group_by`, no `PIVOT`), or `None` when the config selects no columns.
-    #[pyo3(signature = (table_id, config, schema=None))]
+    #[pyo3(signature = (table_id, config, schema=None, unordered=false))]
     pub fn table_describe(
         &self,
         table_id: &str,
         config: Py<PyAny>,
         schema: Option<Py<PyAny>>,
+        unordered: bool,
     ) -> PyResult<Option<String>> {
         Python::attach(|py| {
             let config: ViewConfig = pythonize::depythonize(config.bind(py))
@@ -111,9 +128,14 @@ impl PyGenericSQLVirtualServerModel {
                 None => IndexMap::new(),
             };
 
-            self.inner
-                .table_describe(table_id, &config, &schema)
-                .map_err(|e| PyValueError::new_err(e.to_string()))
+            let result = if unordered {
+                self.inner
+                    .table_describe_unordered(table_id, &config, &schema)
+            } else {
+                self.inner.table_describe(table_id, &config, &schema)
+            };
+
+            result.map_err(|e| PyValueError::new_err(e.to_string()))
         })
     }
 
@@ -123,13 +145,14 @@ impl PyGenericSQLVirtualServerModel {
             .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
-    #[pyo3(signature = (table_id, view_id, config, schema=None))]
+    #[pyo3(signature = (table_id, view_id, config, schema=None, unordered=false))]
     pub fn table_make_view(
         &self,
         table_id: &str,
         view_id: &str,
         config: Py<PyAny>,
         schema: Option<Py<PyAny>>,
+        unordered: bool,
     ) -> PyResult<String> {
         Python::attach(|py| {
             let config: ViewConfig = pythonize::depythonize(config.bind(py))
@@ -144,9 +167,15 @@ impl PyGenericSQLVirtualServerModel {
                 None => IndexMap::new(),
             };
 
-            self.inner
-                .table_make_view(table_id, view_id, &config, &schema)
-                .map_err(|e| PyValueError::new_err(e.to_string()))
+            let result = if unordered {
+                self.inner
+                    .table_make_view_unordered(table_id, view_id, &config, &schema)
+            } else {
+                self.inner
+                    .table_make_view(table_id, view_id, &config, &schema)
+            };
+
+            result.map_err(|e| PyValueError::new_err(e.to_string()))
         })
     }
 

@@ -137,32 +137,109 @@ const STRING_FILTER_OPS = [
     "NOT ILIKE",
 ];
 
-function duckdbTypeToPsp(name: string): ColumnType {
-    if (name.startsWith("Nullable")) {
-        name = name.match(/Nullable\((.+?)\)/)![1];
+const INTEGER_TYPES = new Set(["Int8", "Int16", "Int32", "UInt8", "UInt16"]);
+const FLOAT_TYPES = new Set([
+    "UInt32",
+    "UInt64",
+    "UInt128",
+    "UInt256",
+    "Int64",
+    "Int128",
+    "Int256",
+    "Float32",
+    "Float64",
+    "BFloat16",
+]);
+const DATE_TYPES = new Set(["Date", "Date32"]);
+
+const TRANSPARENT_WRAPPERS = [
+    "Nullable(",
+    "LowCardinality(",
+    "SimpleAggregateFunction(",
+];
+
+function unwrapType(name: string): string {
+    name = name.trim();
+    for (;;) {
+        const wrapper = TRANSPARENT_WRAPPERS.find(
+            (w) => name.startsWith(w) && name.endsWith(")"),
+        );
+
+        if (!wrapper) {
+            return name;
+        }
+
+        let inner = name.slice(wrapper.length, -1);
+        if (wrapper === "SimpleAggregateFunction(") {
+            inner = inner.slice(inner.indexOf(",") + 1);
+        }
+
+        name = inner.trim();
+    }
+}
+
+function clickhouseTypeToPsp(name: string): ColumnType {
+    const base = unwrapType(name);
+    if (INTEGER_TYPES.has(base)) {
+        return "integer";
     }
 
-    if (name.startsWith("Array")) {
-        return "string";
-    }
-
-    if (name === "Int64" || name === "UInt64" || name === "Float64") {
+    if (FLOAT_TYPES.has(base) || base.startsWith("Decimal")) {
         return "float";
     }
 
-    if (name === "String") {
-        return "string";
+    if (base === "Bool") {
+        return "boolean";
     }
 
-    if (name === "DateTime") {
-        return "datetime";
-    }
-
-    if (name === "Date") {
+    if (DATE_TYPES.has(base)) {
         return "date";
     }
 
-    throw new Error(`Unknown type '${name}'`);
+    if (base.startsWith("DateTime") || base.startsWith("Time")) {
+        return "datetime";
+    }
+
+    return "string";
+}
+
+function clickhouseToJs(value: any, dtype: ColumnType): any {
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    if (typeof value === "bigint") {
+        value = Number(value);
+    }
+
+    switch (dtype) {
+        case "integer":
+        case "float":
+            return typeof value === "number" ? value : Number(value);
+        case "datetime":
+            if (typeof value === "string") {
+                const iso = /^-?\d+:\d{2}:\d{2}/.test(value)
+                    ? `1970-01-01T${value}`
+                    : value.replace(" ", "T");
+                return Date.parse(`${iso}Z`);
+            }
+
+            return value;
+        case "date":
+            return typeof value === "string"
+                ? Date.parse(`${value}T00:00:00Z`)
+                : value;
+        case "string":
+            if (typeof value === "string") {
+                return value.replace(/\0+$/, "");
+            }
+
+            return typeof value === "object"
+                ? JSON.stringify(value)
+                : `${value}`;
+        default:
+            return value;
+    }
 }
 
 function convertDecimalToNumber(value: any, dtypeString: string) {
@@ -255,9 +332,18 @@ async function runQuery(
 /**
  * An implementation of Perspective's Virtual Server for `@duckdb/duckdb-wasm`.
  */
+const SYSTEM_DATABASES = ["system", "INFORMATION_SCHEMA", "information_schema"];
+
+/**
+ * Hosts every table and view of every database the connection can read,
+ * except ClickHouse's own catalog - by bare name in the connection's current
+ * database, otherwise as `database.table`. The views this handler creates
+ * (named by the client's random view ids) are tracked and never hosted.
+ */
 export class ClickhouseHandler implements perspective.VirtualServerHandler {
     private db: clickhouse.ClickHouseClient;
     private sqlBuilder: perspective.GenericSQLVirtualServerModel;
+    private ownEntities = new Set<string>();
     constructor(db: clickhouse.ClickHouseClient, mod?: typeof perspective) {
         mod ??= client_runtime()?.glue as unknown as
             | typeof perspective
@@ -275,6 +361,7 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
             column_separator: "|",
             backslash_escaped_literals: true,
             regex_fn: "match",
+            unordered: true,
         });
     }
 
@@ -317,11 +404,22 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
     }
 
     async getHostedTables() {
-        const query = "SHOW TABLES";
+        const excluded = SYSTEM_DATABASES.map((db) => `'${db}'`).join(", ");
+        const query = `
+            SELECT database, name, database = currentDatabase() AS current
+            FROM system.tables
+            WHERE database NOT IN (${excluded}) AND NOT is_temporary
+            ORDER BY database, name
+        `;
+
         const results = await runQuery(this.db, query);
-        return results.map((row) => {
-            return `${row.name}`;
-        });
+        return results
+            .filter((row) => !(row.current && this.ownEntities.has(row.name)))
+            .map((row) =>
+                this.sqlBuilder.tablePath(
+                    row.current ? [row.name] : [row.database, row.name],
+                ),
+            );
     }
 
     async tableSchema(tableId: string, config?: ViewConfig) {
@@ -331,7 +429,9 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
         for (const result of results) {
             const colName = result.name;
             if (!colName.startsWith("__")) {
-                schema[colName] = duckdbTypeToPsp(result.type) as ColumnType;
+                schema[colName] = clickhouseTypeToPsp(
+                    result.type,
+                ) as ColumnType;
             }
         }
 
@@ -374,6 +474,7 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
         );
 
         await runQuery(this.db, query, { execute: true });
+        this.ownEntities.add(viewId);
     }
 
     async tableDescribe(
@@ -426,7 +527,7 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
         const schema = {} as Record<string, ColumnType>;
         for (const result of results) {
             if (!result.name.startsWith("__")) {
-                schema[result.name] = duckdbTypeToPsp(
+                schema[result.name] = clickhouseTypeToPsp(
                     result.type,
                 ) as ColumnType;
             }
@@ -451,7 +552,7 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
 
             try {
                 const results = await runQuery(this.db, query);
-                expression_schema[name] = duckdbTypeToPsp(
+                expression_schema[name] = clickhouseTypeToPsp(
                     results[0]["type"],
                 ) as ColumnType;
             } catch (error) {
@@ -473,6 +574,7 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
     async viewDelete(viewId: string) {
         const query = this.sqlBuilder.viewDelete(viewId);
         await runQuery(this.db, query, { execute: true });
+        this.ownEntities.delete(viewId);
     }
 
     async viewGetData(
@@ -493,31 +595,25 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
             columns: true,
         });
 
+        const hasGroupBy = (config.group_by?.length ?? 0) > 0;
+        const hasGroupingId = columns.includes("__GROUPING_ID__");
         for (let cidx = 0; cidx < columns.length; cidx++) {
             const col = columns[cidx];
-            const dtype = duckdbTypeToPsp(dtypes[cidx]) as ColumnType;
-
-            const isDecimal = dtypes[cidx].startsWith("Decimal");
+            const dtype = clickhouseTypeToPsp(dtypes[cidx]) as ColumnType;
+            const isDecimal = dtypes[cidx].includes("Decimal");
             for (let ridx = 0; ridx < rows.length; ridx++) {
                 const row = rows[ridx];
-                const grouping_id = row["__GROUPING_ID__"];
+                const grouping_id = !hasGroupBy
+                    ? undefined
+                    : hasGroupingId
+                      ? Number(row["__GROUPING_ID__"])
+                      : 0;
                 let value = row[col];
                 if (isDecimal) {
                     value = convertDecimalToNumber(value, dtypes[cidx]);
                 }
 
-                if (typeof value === "bigint") {
-                    value = Number(value);
-                }
-
-                if (dtype === "datetime" && typeof value === "string") {
-                    value = +new Date(value);
-                }
-
-                if (dtype === "string" && typeof value !== "string") {
-                    value = `${value}`;
-                }
-
+                value = clickhouseToJs(value, dtype);
                 dataSlice.setCol(dtype, col, ridx, value, grouping_id);
             }
         }
