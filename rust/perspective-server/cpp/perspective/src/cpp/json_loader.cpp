@@ -110,11 +110,9 @@ rapidjson_type_to_dtype(const rapidjson::Value& value) {
         case rapidjson::kNullType:
             return t_dtype::DTYPE_NONE;
         case rapidjson::kArrayType:
+        case rapidjson::kObjectType:
             // Only reachable under `stringify`; the expanding modes descend.
             return t_dtype::DTYPE_STR;
-        case rapidjson::kObjectType:
-            PSP_COMPLAIN_AND_ABORT("Unknown JSON type");
-            return t_dtype::DTYPE_NONE;
         default:
             PSP_COMPLAIN_AND_ABORT("Unknown JSON type");
             return t_dtype::DTYPE_NONE;
@@ -179,7 +177,6 @@ json_into(const rapidjson::Value& value) {
             case rapidjson::kTrueType:
                 return "true";
             case rapidjson::kObjectType:
-                PSP_COMPLAIN_AND_ABORT("Cannot coerce object to string");
             case rapidjson::kArrayType: {
                 // `stringify` keeps the array as its JSON text.
                 rapidjson::StringBuffer buffer;
@@ -417,6 +414,11 @@ fill_column_json(
 static const char FLATTEN_SEPARATOR = '.';
 
 /**
+ * The `array_path` of a leaf not reached through any array.
+ */
+static constexpr std::size_t NO_ARRAY = std::string::npos;
+
+/**
  * Visit every scalar beneath `value`, naming it by its dotted path from
  * `prefix`. An object contributes its leaves rather than itself, because
  * Perspective's column model is flat; an empty object contributes nothing.
@@ -428,22 +430,22 @@ static void
 for_each_leaf(
     std::string& prefix,
     const rapidjson::Value& value,
-    t_list_flatten mode,
+    const t_flatten_mode& mode,
     F&& fn,
-    bool through_array = false
+    std::size_t array_path = NO_ARRAY
 ) {
-    if (mode != LIST_FLATTEN_STRINGIFY && value.IsArray()) {
+    if (mode.list != LIST_FLATTEN_STRINGIFY && value.IsArray()) {
         // Inference only needs one element to learn the leaves' types; any
         // path a later element introduces is grown into by `resolve_column`.
         if (!value.Empty()) {
-            for_each_leaf(prefix, value[0], mode, fn, true);
+            for_each_leaf(prefix, value[0], mode, fn, prefix.size());
         }
 
         return;
     }
 
-    if (!value.IsObject()) {
-        fn(static_cast<const std::string&>(prefix), value, through_array);
+    if (!value.IsObject() || mode.structs == STRUCT_FLATTEN_STRINGIFY) {
+        fn(static_cast<const std::string&>(prefix), value, array_path);
         return;
     }
 
@@ -451,8 +453,25 @@ for_each_leaf(
     for (const auto& child : value.GetObj()) {
         prefix += FLATTEN_SEPARATOR;
         prefix += child.name.GetString();
-        for_each_leaf(prefix, child.value, mode, fn, through_array);
+        for_each_leaf(prefix, child.value, mode, fn, array_path);
         prefix.resize(len);
+    }
+}
+
+/**
+ * Record a leaf reached through an array as per-element, and the innermost
+ * array it was reached through as an expansion point.
+ */
+static void
+note_expansion(
+    const std::string& name,
+    std::size_t array_path,
+    std::set<std::string>& per_element,
+    std::set<std::string>& expansions
+) {
+    if (array_path != NO_ARRAY) {
+        per_element.insert(name);
+        expansions.insert(name.substr(0, array_path));
     }
 }
 
@@ -485,8 +504,8 @@ check_row_count(std::uint64_t rows) {
  * fixpoint the Arrow path reaches by re-running its pass.
  */
 static t_uindex
-leaf_width(const rapidjson::Value& value, t_list_flatten mode) {
-    if (mode == LIST_FLATTEN_STRINGIFY || value.IsNull()) {
+leaf_width(const rapidjson::Value& value, const t_flatten_mode& mode) {
+    if (mode.list == LIST_FLATTEN_STRINGIFY || value.IsNull()) {
         return 1;
     }
 
@@ -500,7 +519,7 @@ leaf_width(const rapidjson::Value& value, t_list_flatten mode) {
         return std::max<t_uindex>(total, 1);
     }
 
-    if (!value.IsObject()) {
+    if (!value.IsObject() || mode.structs == STRUCT_FLATTEN_STRINGIFY) {
         return 1;
     }
 
@@ -508,7 +527,7 @@ leaf_width(const rapidjson::Value& value, t_list_flatten mode) {
     const char* witness = nullptr;
     for (const auto& child : value.GetObj()) {
         const auto child_width = leaf_width(child.value, mode);
-        if (mode == LIST_FLATTEN_CARTESIAN) {
+        if (mode.list == LIST_FLATTEN_CARTESIAN) {
             width *= child_width;
             continue;
         }
@@ -539,9 +558,9 @@ leaf_width(const rapidjson::Value& value, t_list_flatten mode) {
  * named by its key, with no path string and no width arithmetic.
  */
 static bool
-is_nested(const rapidjson::Value& value, t_list_flatten mode) {
-    return value.IsObject()
-        || (mode != LIST_FLATTEN_STRINGIFY && value.IsArray());
+is_nested(const rapidjson::Value& value, const t_flatten_mode& mode) {
+    return (value.IsObject() && mode.structs != STRUCT_FLATTEN_STRINGIFY)
+        || (mode.list != LIST_FLATTEN_STRINGIFY && value.IsArray());
 }
 
 /**
@@ -594,10 +613,10 @@ emit_leaves(
     const rapidjson::Value& value,
     t_uindex k,
     t_uindex width,
-    t_list_flatten mode,
+    const t_flatten_mode& mode,
     F&& fn
 ) {
-    if (mode == LIST_FLATTEN_STRINGIFY || value.IsNull()) {
+    if (mode.list == LIST_FLATTEN_STRINGIFY || value.IsNull()) {
         fn(std::string_view{prefix}, value);
         return;
     }
@@ -629,7 +648,7 @@ emit_leaves(
         return;
     }
 
-    if (!value.IsObject()) {
+    if (!value.IsObject() || mode.structs == STRUCT_FLATTEN_STRINGIFY) {
         fn(std::string_view{prefix}, value);
         return;
     }
@@ -638,7 +657,7 @@ emit_leaves(
     const auto len = prefix.size();
     for (const auto& child : value.GetObj()) {
         const auto child_width = leaf_width(child.value, mode);
-        const auto child_k = child_slot(k, child_width, stride, mode);
+        const auto child_k = child_slot(k, child_width, stride, mode.list);
         prefix += FLATTEN_SEPARATOR;
         prefix += child.name.GetString();
         emit_leaves(prefix, child.value, child_k, child_width, mode, fn);
@@ -702,10 +721,11 @@ JsonLoader::init(
     t_json_format format,
     const std::vector<std::string>& index,
     const t_schema* existing,
-    t_list_flatten mode
+    t_list_flatten mode,
+    t_struct_flatten struct_mode
 ) {
     m_format = format;
-    m_mode = mode;
+    m_mode = t_flatten_mode{mode, struct_mode};
     m_index = index;
     if (format == JSON_FORMAT_NDJSON) {
         m_stream = rapidjson::StringStream(data.data());
@@ -779,7 +799,7 @@ JsonLoader::init(
     }
 
     m_expands = !m_per_element.empty();
-    if (mode == LIST_FLATTEN_CARTESIAN && m_per_element.size() > 1) {
+    if (mode == LIST_FLATTEN_CARTESIAN && m_expansions.size() > 1) {
         // A product repeats every factor against the others' dimensions, so
         // with more than one expansion point nothing varies per row.
         m_per_element.clear();
@@ -851,7 +871,8 @@ infer_record(
     std::set<std::string>& literal,
     std::set<std::string>& descended,
     std::set<std::string>& per_element,
-    t_list_flatten mode
+    std::set<std::string>& expansions,
+    const t_flatten_mode& mode
 ) {
     std::string path;
     for (const auto& col : record.GetObj()) {
@@ -861,12 +882,10 @@ infer_record(
             path,
             col.value,
             mode,
-            [&](const auto& name, const auto&, bool through_array) {
+            [&](const auto& name, const auto&, std::size_t array_path) {
                 seen.insert(name);
                 (name.size() == top ? literal : descended).insert(name);
-                if (through_array) {
-                    per_element.insert(name);
-                }
+                note_expansion(name, array_path, per_element, expansions);
             }
         );
     }
@@ -874,7 +893,7 @@ infer_record(
     // https://github.com/Tencent/rapidjson/issues/1994
     for (const auto& col : record.GetObj()) {
         path.assign(col.name.GetString());
-        for_each_leaf(path, col.value, mode, [&](const auto& name, const auto& leaf, bool) {
+        for_each_leaf(path, col.value, mode, [&](const auto& name, const auto& leaf, std::size_t) {
             if (std::find(index.begin(), index.end(), name) != index.end()) {
                 is_implicit = false;
             }
@@ -959,6 +978,7 @@ JsonLoader::infer_rows(const std::vector<std::string>& index) {
             literal,
             descended,
             m_per_element,
+            m_expansions,
             m_mode
         );
 
@@ -992,6 +1012,7 @@ JsonLoader::infer_ndjson(const std::vector<std::string>& index) {
         literal,
         descended,
         m_per_element,
+        m_expansions,
         m_mode
     );
 
@@ -1022,8 +1043,9 @@ JsonLoader::infer_cols(const std::vector<std::string>& index) {
         for (const auto& cell : it.value.GetArray()) {
             // Whether this cell contributes the column itself rather than
             // paths beneath it -- the same test `for_each_leaf` applies.
-            const bool is_leaf = !cell.IsObject()
-                && (m_mode == LIST_FLATTEN_STRINGIFY || !cell.IsArray());
+            const bool is_leaf =
+                (!cell.IsObject() || m_mode.structs == STRUCT_FLATTEN_STRINGIFY)
+                && (m_mode.list == LIST_FLATTEN_STRINGIFY || !cell.IsArray());
 
             saw_leaf = saw_leaf || is_leaf;
             path.assign(it.name.GetString());
@@ -1031,10 +1053,10 @@ JsonLoader::infer_cols(const std::vector<std::string>& index) {
                 path,
                 cell,
                 m_mode,
-                [&](const auto& name, const auto& v, bool through_array) {
-                    if (through_array) {
-                        m_per_element.insert(name);
-                    }
+                [&](const auto& name, const auto& v, std::size_t array_path) {
+                    note_expansion(
+                        name, array_path, m_per_element, m_expansions
+                    );
 
                     if (known.count(name) > 0) {
                         return;
@@ -1327,7 +1349,7 @@ JsonLoader::fill_rows(
         std::size_t ci = 0;
         for (const auto& it : row.GetObj()) {
             const auto child_width = m_child_widths[ci++];
-            const auto sub = child_slot(k, child_width, stride, m_mode);
+            const auto sub = child_slot(k, child_width, stride, m_mode.list);
             if (is_update
                 && std::string_view{it.name.GetString()} == "__INDEX__") {
                 fill_pkey_cell(tbl, psp_pkey_col, ii, it.value, is_update);
@@ -1478,7 +1500,7 @@ JsonLoader::fill_cols(
         const std::string* witness = nullptr;
         for (std::size_t c = 0; c < cells.size(); ++c) {
             const auto w = widths[c][r];
-            if (m_mode == LIST_FLATTEN_CARTESIAN) {
+            if (m_mode.list == LIST_FLATTEN_CARTESIAN) {
                 width *= w;
                 continue;
             }
@@ -1527,7 +1549,7 @@ JsonLoader::fill_cols(
                 }
 
                 t_uindex sub = 0;
-                if (m_mode == LIST_FLATTEN_CARTESIAN) {
+                if (m_mode.list == LIST_FLATTEN_CARTESIAN) {
                     t_uindex stride = 1;
                     for (std::size_t d = c + 1; d < cells.size(); ++d) {
                         stride *= widths[d][r];
@@ -1664,7 +1686,7 @@ JsonLoader::fill_ndjson(
         std::size_t ci = 0;
         for (const auto& it : m_document.GetObj()) {
             const auto child_width = m_child_widths[ci++];
-            const auto sub = child_slot(k, child_width, stride, m_mode);
+            const auto sub = child_slot(k, child_width, stride, m_mode.list);
             if (is_update
                 && std::string_view{it.name.GetString()} == "__INDEX__") {
                 fill_pkey_cell(tbl, psp_pkey_col, ii, it.value, is_update);

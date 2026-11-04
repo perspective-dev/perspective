@@ -60,7 +60,9 @@ public:
         std::vector<std::string> index,
         t_backing_store backing_store = BACKING_STORE_MEMORY,
         apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP
+            apachearrow::LIST_FLATTEN_ZIP,
+        apachearrow::t_struct_flatten struct_flatten =
+            apachearrow::STRUCT_FLATTEN_PIVOT
     );
 
     /**
@@ -252,7 +254,9 @@ public:
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
         apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP
+            apachearrow::LIST_FLATTEN_ZIP,
+        apachearrow::t_struct_flatten struct_flatten =
+            apachearrow::STRUCT_FLATTEN_PIVOT
     );
 
     static std::shared_ptr<Table> from_cols(
@@ -261,7 +265,9 @@ public:
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
         apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP
+            apachearrow::LIST_FLATTEN_ZIP,
+        apachearrow::t_struct_flatten struct_flatten =
+            apachearrow::STRUCT_FLATTEN_PIVOT
     );
 
     static std::shared_ptr<Table> from_rows(
@@ -270,7 +276,9 @@ public:
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
         apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP
+            apachearrow::LIST_FLATTEN_ZIP,
+        apachearrow::t_struct_flatten struct_flatten =
+            apachearrow::STRUCT_FLATTEN_PIVOT
     );
 
     static std::shared_ptr<Table> from_ndjson(
@@ -279,7 +287,9 @@ public:
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
         apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP
+            apachearrow::LIST_FLATTEN_ZIP,
+        apachearrow::t_struct_flatten struct_flatten =
+            apachearrow::STRUCT_FLATTEN_PIVOT
     );
 
     static std::shared_ptr<Table> from_schema(
@@ -288,7 +298,9 @@ public:
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
         apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP
+            apachearrow::LIST_FLATTEN_ZIP,
+        apachearrow::t_struct_flatten struct_flatten =
+            apachearrow::STRUCT_FLATTEN_PIVOT
     );
 
     /**
@@ -299,7 +311,8 @@ public:
         t_dtype pkey_dtype,
         const std::vector<std::string>& index,
         std::uint32_t limit,
-        std::shared_ptr<const t_pkey_codec> pkey_codec
+        std::shared_ptr<const t_pkey_codec> pkey_codec,
+        t_backing_store backing_store = BACKING_STORE_MEMORY
     );
 
     bool is_derived() const;
@@ -310,7 +323,9 @@ public:
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
         apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP
+            apachearrow::LIST_FLATTEN_ZIP,
+        apachearrow::t_struct_flatten struct_flatten =
+            apachearrow::STRUCT_FLATTEN_PIVOT
     );
 
     static std::shared_ptr<Table> make_table(
@@ -321,7 +336,9 @@ public:
         const std::string_view& data,
         t_backing_store backing_store = BACKING_STORE_MEMORY,
         apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP
+            apachearrow::LIST_FLATTEN_ZIP,
+        apachearrow::t_struct_flatten struct_flatten =
+            apachearrow::STRUCT_FLATTEN_PIVOT
     );
 
 private:
@@ -335,7 +352,8 @@ private:
         std::string&& data,
         std::uint32_t limit,
         t_backing_store backing_store,
-        apachearrow::t_list_flatten list_flatten
+        apachearrow::t_list_flatten list_flatten,
+        apachearrow::t_struct_flatten struct_flatten
     );
 
     /**
@@ -405,6 +423,12 @@ private:
      * different column shape than the schema it is written against.
      */
     const apachearrow::t_list_flatten m_list_flatten;
+
+    /**
+     * @brief How `arrow::Type::STRUCT` and `arrow::Type::MAP` columns are
+     * ingested, held for the same reason as `m_list_flatten`.
+     */
+    const apachearrow::t_struct_flatten m_struct_flatten;
 };
 
 } // namespace perspective

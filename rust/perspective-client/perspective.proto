@@ -405,6 +405,8 @@ message MakeTableReq {
 
         optional ListFlatten list_flatten = 4;
 
+        optional StructFlatten struct_flatten = 7;
+
         // The columns of a `Table` made from a `View`, in place of the ones
         // inferred from it. Only valid with `MakeTableData.from_view`.
         optional Schema view_schema = 5;
@@ -415,6 +417,11 @@ enum ListFlatten {
     LIST_FLATTEN_ZIP = 0;
     LIST_FLATTEN_CARTESIAN = 1;
     LIST_FLATTEN_STRINGIFY = 2;
+}
+
+enum StructFlatten {
+    STRUCT_FLATTEN_PIVOT = 0;
+    STRUCT_FLATTEN_STRINGIFY = 1;
 }
 message MakeTableResp {}
 

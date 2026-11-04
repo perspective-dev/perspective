@@ -24,9 +24,12 @@ namespace perspective {
 namespace apachearrow {
 
     using perspective::t_list_flatten;
+    using perspective::t_struct_flatten;
     using perspective::LIST_FLATTEN_CARTESIAN;
     using perspective::LIST_FLATTEN_STRINGIFY;
     using perspective::LIST_FLATTEN_ZIP;
+    using perspective::STRUCT_FLATTEN_PIVOT;
+    using perspective::STRUCT_FLATTEN_STRINGIFY;
     extern const char* const FLATTEN_SEPARATOR;
 
     /**
@@ -53,14 +56,22 @@ namespace apachearrow {
     };
 
     PERSPECTIVE_EXPORT t_normalized_table normalize_table(
-        std::shared_ptr<arrow::Table> input, t_list_flatten mode
+        std::shared_ptr<arrow::Table> input,
+        t_list_flatten mode,
+        t_struct_flatten struct_mode
     );
 
-    PERSPECTIVE_EXPORT bool
-    normalize_table_is_noop(const arrow::Table& input, t_list_flatten mode);
+    PERSPECTIVE_EXPORT bool normalize_table_is_noop(
+        const arrow::Table& input,
+        t_list_flatten mode,
+        t_struct_flatten struct_mode
+    );
 
-    PERSPECTIVE_EXPORT bool
-    normalize_table_expands(const arrow::Table& input, t_list_flatten mode);
+    PERSPECTIVE_EXPORT bool normalize_table_expands(
+        const arrow::Table& input,
+        t_list_flatten mode,
+        t_struct_flatten struct_mode
+    );
 
 } // namespace apachearrow
 } // namespace perspective

@@ -23,6 +23,18 @@ const list = (type: arrow.DataType) => new arrow.List(field("item", type));
 const struct = (fields: [string, arrow.DataType][]) =>
     new arrow.Struct(fields.map(([n, t]) => field(n, t)));
 
+const utf8 = () => new arrow.Utf8();
+const map = (value: arrow.DataType) =>
+    new arrow.Map_(
+        field(
+            "entries",
+            struct([
+                ["key", utf8()],
+                ["value", value],
+            ]),
+        ) as any,
+    );
+
 const ipc = (columns: Record<string, arrow.Vector>) =>
     arrow.tableToIPC(arrow.tableFromArrays(columns as any));
 
@@ -210,6 +222,40 @@ test.describe("Nested ingest parity", function () {
 
         await expect(perspective.table(ipc(columns))).rejects.toThrow(
             /[Cc]annot zip/,
+        );
+    });
+
+    test("map pivot", async function () {
+        await parity(
+            "map",
+            [
+                { id: 1, m: { a: 1, b: 2 } },
+                { id: 2, m: { b: 3 } },
+            ],
+            {
+                id: arrow.vectorFromArray([1, 2], int32()),
+                m: arrow.vectorFromArray(
+                    [{ a: 1, b: 2 }, { b: 3 }],
+                    map(int32()),
+                ),
+            },
+        );
+    });
+
+    test("struct stringify", async function () {
+        await parity(
+            "struct_stringify",
+            [{ s: { a: 1, b: "x" } }],
+            {
+                s: arrow.vectorFromArray(
+                    [{ a: 1, b: "x" }],
+                    struct([
+                        ["a", int32()],
+                        ["b", utf8()],
+                    ]),
+                ),
+            },
+            { struct_flatten: "stringify" },
         );
     });
 });

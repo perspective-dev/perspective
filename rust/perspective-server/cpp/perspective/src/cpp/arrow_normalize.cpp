@@ -20,11 +20,14 @@
 #include <arrow/util/bitmap_ops.h>
 #include <algorithm>
 #include <cstdint>
+#include <deque>
 #include <limits>
 #include <memory>
 #include <set>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace perspective::apachearrow {
@@ -39,17 +42,33 @@ namespace {
     }
 
     bool
-    type_expands(const arrow::DataType& type) {
+    is_pivot_id(arrow::Type::type id) {
+        return id == arrow::Type::STRUCT || id == arrow::Type::MAP;
+    }
+
+    bool
+    type_expands(const arrow::DataType& type, t_struct_flatten struct_mode) {
         if (is_list_id(type.id())) {
             return true;
         }
 
+        if (struct_mode == STRUCT_FLATTEN_STRINGIFY) {
+            return false;
+        }
+
         if (type.id() == arrow::Type::STRUCT) {
             for (const auto& child : type.fields()) {
-                if (type_expands(*child->type())) {
+                if (type_expands(*child->type(), struct_mode)) {
                     return true;
                 }
             }
+        }
+
+        if (type.id() == arrow::Type::MAP) {
+            return type_expands(
+                *static_cast<const arrow::MapType&>(type).item_type(),
+                struct_mode
+            );
         }
 
         return false;
@@ -190,6 +209,241 @@ namespace {
         return true;
     }
 
+    bool
+    is_string_id(arrow::Type::type id) {
+        return id == arrow::Type::STRING || id == arrow::Type::LARGE_STRING;
+    }
+
+    std::string_view
+    string_at(const arrow::Array& array, std::int64_t i) {
+        if (array.type_id() == arrow::Type::LARGE_STRING) {
+            const auto view =
+                static_cast<const arrow::LargeStringArray&>(array).GetView(i);
+            return {view.data(), view.size()};
+        }
+
+        const auto view =
+            static_cast<const arrow::StringArray&>(array).GetView(i);
+        return {view.data(), view.size()};
+    }
+
+    /**
+     * The distinct keys of a map column in first-appearance order.
+     */
+    struct t_key_table {
+        std::unordered_map<std::string_view, std::size_t> ordinals;
+        std::deque<std::string> names;
+
+        std::size_t
+        ordinal(std::string_view key) {
+            const auto it = ordinals.find(key);
+            if (it != ordinals.end()) {
+                return it->second;
+            }
+
+            names.emplace_back(key);
+            const auto ord = names.size() - 1;
+            ordinals.emplace(std::string_view{names.back()}, ord);
+            return ord;
+        }
+    };
+
+    /**
+     * One chunk of a map column, addressed by global row and global entry.
+     */
+    struct t_map_chunk {
+        std::shared_ptr<arrow::MapArray> map;
+        std::shared_ptr<arrow::Array> keys;
+        std::int64_t first;
+        std::int64_t item_base;
+        std::vector<std::int64_t> dict_ordinals;
+
+        std::size_t
+        ordinal(t_key_table& table, std::int64_t e) {
+            if (keys->type_id() != arrow::Type::DICTIONARY) {
+                return table.ordinal(string_at(*keys, e));
+            }
+
+            const auto& dict = static_cast<const arrow::DictionaryArray&>(*keys);
+            const auto di = dict.GetValueIndex(e);
+            auto& cached = dict_ordinals[di];
+            if (cached < 0) {
+                cached = static_cast<std::int64_t>(
+                    table.ordinal(string_at(*dict.dictionary(), di))
+                );
+            }
+
+            return static_cast<std::size_t>(cached);
+        }
+    };
+
+    void
+    check_map_key_type(
+        const std::string& name, const arrow::DataType& key_type
+    ) {
+        auto id = key_type.id();
+        if (id == arrow::Type::DICTIONARY) {
+            id = static_cast<const arrow::DictionaryType&>(key_type)
+                     .value_type()
+                     ->id();
+        }
+
+        if (!is_string_id(id)) {
+            std::stringstream ss;
+            ss << "Cannot pivot map column `" << name << "` with key type `"
+               << key_type.ToString() << "`; only string keys are supported\n";
+            abort_with(ss.str());
+        }
+    }
+
+    /**
+     * Collapse to a single chunk, so a gather index needs no chunk resolution.
+     */
+    std::shared_ptr<arrow::ChunkedArray>
+    combine_chunks(const std::shared_ptr<arrow::ChunkedArray>& column) {
+        if (column->num_chunks() <= 1) {
+            return column;
+        }
+
+        auto combined = unwrap(
+            arrow::Concatenate(column->chunks(), arrow::default_memory_pool()),
+            "Could not combine chunks of an expanded column"
+        );
+
+        return std::make_shared<arrow::ChunkedArray>(
+            arrow::ArrayVector{std::move(combined)}, column->type()
+        );
+    }
+
+    /**
+     * Pivot every top-level map column into one column per distinct key, each
+     * a gather into the map's items. Returns whether anything changed.
+     */
+    bool
+    pivot_maps(
+        std::vector<std::shared_ptr<arrow::Field>>& fields,
+        std::vector<std::shared_ptr<arrow::ChunkedArray>>& columns,
+        std::vector<std::vector<std::int64_t>>& gathers,
+        std::vector<bool>& per_element,
+        std::int64_t num_rows
+    ) {
+        bool has_map = false;
+        for (const auto& field : fields) {
+            if (field->type()->id() == arrow::Type::MAP) {
+                has_map = true;
+                break;
+            }
+        }
+
+        if (!has_map) {
+            return false;
+        }
+
+        std::vector<std::shared_ptr<arrow::Field>> out_fields;
+        std::vector<std::shared_ptr<arrow::ChunkedArray>> out_columns;
+        std::vector<std::vector<std::int64_t>> out_gathers;
+        std::vector<bool> out_per_element;
+        for (std::size_t i = 0; i < fields.size(); ++i) {
+            if (fields[i]->type()->id() != arrow::Type::MAP) {
+                out_fields.push_back(fields[i]);
+                out_columns.push_back(columns[i]);
+                out_gathers.push_back(std::move(gathers[i]));
+                out_per_element.push_back(per_element[i]);
+                continue;
+            }
+
+            const auto& map_type =
+                static_cast<const arrow::MapType&>(*fields[i]->type());
+            check_map_key_type(fields[i]->name(), *map_type.key_type());
+
+            std::vector<t_map_chunk> chunks;
+            std::vector<std::int64_t> row_base;
+            arrow::ArrayVector item_slices;
+            std::int64_t rows = 0;
+            std::int64_t items_total = 0;
+            for (const auto& chunk : columns[i]->chunks()) {
+                auto map = std::static_pointer_cast<arrow::MapArray>(chunk);
+                auto entries =
+                    std::static_pointer_cast<arrow::StructArray>(map->values()
+                    );
+
+                const auto* offsets = map->raw_value_offsets();
+                const auto len = map->length();
+                const auto first = len > 0 ? offsets[0] : 0;
+                const auto last = len > 0 ? offsets[len] : 0;
+                t_map_chunk mc{map, entries->field(0), first, items_total, {}};
+                if (mc.keys->type_id() == arrow::Type::DICTIONARY) {
+                    mc.dict_ordinals.assign(
+                        static_cast<const arrow::DictionaryArray&>(*mc.keys)
+                            .dictionary()
+                            ->length(),
+                        -1
+                    );
+                }
+
+                item_slices.push_back(entries->field(1)->Slice(first, last - first)
+                );
+
+                row_base.push_back(rows);
+                rows += len;
+                items_total += last - first;
+                chunks.push_back(std::move(mc));
+            }
+
+            t_key_table keys;
+            std::vector<std::vector<std::int64_t>> cells;
+            const auto& parent = gathers[i];
+            for (std::int64_t r = 0; r < num_rows; ++r) {
+                const auto src = parent.empty() ? r : parent[r];
+                if (src < 0) {
+                    continue;
+                }
+
+                const auto c = static_cast<std::size_t>(
+                    std::upper_bound(row_base.begin(), row_base.end(), src)
+                    - row_base.begin() - 1
+                );
+
+                auto& chunk = chunks[c];
+                const auto local = src - row_base[c];
+                if (chunk.map->IsNull(local)) {
+                    continue;
+                }
+
+                const auto* offsets = chunk.map->raw_value_offsets();
+                for (auto e = offsets[local]; e < offsets[local + 1]; ++e) {
+                    const auto ord = chunk.ordinal(keys, e);
+                    if (ord == cells.size()) {
+                        cells.emplace_back(num_rows, -1);
+                    }
+
+                    cells[ord][r] = chunk.item_base + (e - chunk.first);
+                }
+            }
+
+            auto items = combine_chunks(std::make_shared<arrow::ChunkedArray>(
+                std::move(item_slices), map_type.item_type()
+            ));
+
+            for (std::size_t ord = 0; ord < keys.names.size(); ++ord) {
+                out_fields.push_back(arrow::field(
+                    fields[i]->name() + FLATTEN_SEPARATOR + keys.names[ord],
+                    map_type.item_type()
+                ));
+
+                out_columns.push_back(items);
+                out_gathers.push_back(std::move(cells[ord]));
+                out_per_element.push_back(per_element[i]);
+            }
+        }
+
+        fields = std::move(out_fields);
+        columns = std::move(out_columns);
+        gathers = std::move(out_gathers);
+        per_element = std::move(out_per_element);
+        return true;
+    }
+
     /**
      * The per-row geometry of one list column, flattened across chunks so that
      * rows can be addressed globally. Chunk layout is per-column in an
@@ -301,25 +555,6 @@ namespace {
             columns[i] = take(columns[i], build_indices(gathers[i], has_null));
             gathers[i].clear();
         }
-    }
-
-    /**
-     * Collapse to a single chunk, so a gather index needs no chunk resolution.
-     */
-    std::shared_ptr<arrow::ChunkedArray>
-    combine_chunks(const std::shared_ptr<arrow::ChunkedArray>& column) {
-        if (column->num_chunks() <= 1) {
-            return column;
-        }
-
-        auto combined = unwrap(
-            arrow::Concatenate(column->chunks(), arrow::default_memory_pool()),
-            "Could not combine chunks of an expanded column"
-        );
-
-        return std::make_shared<arrow::ChunkedArray>(
-            arrow::ArrayVector{std::move(combined)}, column->type()
-        );
     }
 
     /**
@@ -515,10 +750,14 @@ namespace {
 } // namespace
 
 bool
-normalize_table_is_noop(const arrow::Table& input, t_list_flatten mode) {
+normalize_table_is_noop(
+    const arrow::Table& input,
+    t_list_flatten mode,
+    t_struct_flatten struct_mode
+) {
     for (const auto& field : input.schema()->fields()) {
         const auto id = field->type()->id();
-        if (id == arrow::Type::STRUCT) {
+        if (struct_mode != STRUCT_FLATTEN_STRINGIFY && is_pivot_id(id)) {
             return false;
         }
 
@@ -531,13 +770,17 @@ normalize_table_is_noop(const arrow::Table& input, t_list_flatten mode) {
 }
 
 bool
-normalize_table_expands(const arrow::Table& input, t_list_flatten mode) {
+normalize_table_expands(
+    const arrow::Table& input,
+    t_list_flatten mode,
+    t_struct_flatten struct_mode
+) {
     if (mode == LIST_FLATTEN_STRINGIFY) {
         return false;
     }
 
     for (const auto& field : input.schema()->fields()) {
-        if (type_expands(*field->type())) {
+        if (type_expands(*field->type(), struct_mode)) {
             return true;
         }
     }
@@ -546,7 +789,11 @@ normalize_table_expands(const arrow::Table& input, t_list_flatten mode) {
 }
 
 t_normalized_table
-normalize_table(std::shared_ptr<arrow::Table> input, t_list_flatten mode) {
+normalize_table(
+    std::shared_ptr<arrow::Table> input,
+    t_list_flatten mode,
+    t_struct_flatten struct_mode
+) {
     t_normalized_table out;
     out.fields = input->schema()->fields();
     out.columns = input->columns();
@@ -554,9 +801,22 @@ normalize_table(std::shared_ptr<arrow::Table> input, t_list_flatten mode) {
     out.per_element.assign(out.fields.size(), false);
     out.num_rows = input->num_rows();
     while (true) {
-        bool changed = flatten_structs(
-            out.fields, out.columns, out.gathers, out.per_element
-        );
+        bool changed = false;
+        if (struct_mode != STRUCT_FLATTEN_STRINGIFY) {
+            changed = flatten_structs(
+                out.fields, out.columns, out.gathers, out.per_element
+            );
+
+            if (pivot_maps(
+                    out.fields,
+                    out.columns,
+                    out.gathers,
+                    out.per_element,
+                    out.num_rows
+                )) {
+                changed = true;
+            }
+        }
 
         if (mode != LIST_FLATTEN_STRINGIFY
             && explode_lists(

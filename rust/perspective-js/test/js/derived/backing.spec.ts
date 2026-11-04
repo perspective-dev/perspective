@@ -63,3 +63,38 @@ test.describe("Derived tables over a disk-backed source", function () {
         await source.delete();
     });
 });
+
+test.describe("Disk-backed derived tables", function () {
+    test("group_by parent", async function () {
+        const source = await perspective.table(SCHEMA, { index: "id" });
+        await source.update(rows(24));
+        const view = await source.view(TREE);
+        const derived = await perspective.table(view, { page_to_disk: true });
+        await expect_tree_parity(source, TREE, derived, view);
+        await source.update(rows(12, 18));
+        await source.remove([0, 1, 2]);
+        await expect_tree_parity(source, TREE, derived, view);
+        await derived.delete();
+        await view.delete();
+        await source.delete();
+    });
+
+    test("flat parent", async function () {
+        const source = await perspective.table(SCHEMA, { index: "id" });
+        await source.update(rows(24));
+        const view = await source.view({
+            expressions: { double: '"x" * 2' },
+            filter: [["y", ">", 3]],
+        });
+
+        const derived = await perspective.table(view, { page_to_disk: true });
+        await expect_flat_parity(view, derived);
+        await source.update(rows(12, 18));
+        await source.update([{ id: 0, y: 11 }]);
+        await source.remove([5]);
+        await expect_flat_parity(view, derived);
+        await derived.delete();
+        await view.delete();
+        await source.delete();
+    });
+});

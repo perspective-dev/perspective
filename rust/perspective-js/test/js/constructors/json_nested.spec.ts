@@ -265,6 +265,32 @@ test.describe("JSON nested columns", function () {
                 await table.delete();
             });
 
+            test("encodes objects as JSON when configured", async function () {
+                const { data, options } = shape([
+                    { id: 1, s: { a: 1, b: "x" } },
+                    { id: 2, s: null },
+                ]);
+
+                const table = await perspective.table(data, {
+                    ...options,
+                    struct_flatten: "stringify",
+                });
+
+                expect(await table.schema()).toEqual({
+                    id: "integer",
+                    s: "string",
+                });
+
+                const view = await table.view();
+                expect(await view.to_columns()).toEqual({
+                    id: [1, 2],
+                    s: ['{"a":1,"b":"x"}', null],
+                });
+
+                await view.delete();
+                await table.delete();
+            });
+
             test("encodes arrays as JSON when configured", async function () {
                 const { data, options } = shape([
                     { x: 1, y: [10, 20] },
@@ -351,6 +377,44 @@ test.describe("JSON nested columns", function () {
                     list_flatten: "cartesian",
                 }),
             ).rejects.toThrow(/`id`/);
+        });
+
+        test("cartesian indexes on a column from one array of objects", async function () {
+            const table = await perspective.table(
+                orders([1, 2], [1.5, 2.5]) as any,
+                { index: "orders.id", list_flatten: "cartesian" },
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                batch: [1, 1],
+                "orders.id": [1, 2],
+                "orders.price": [1.5, 2.5],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("stringify keeps a sibling index usable on a schema table", async function () {
+            const table = await perspective.table(
+                { id: "integer", y: "string" },
+                { index: "id", list_flatten: "stringify" },
+            );
+
+            await table.update([
+                { id: 1, y: [10, 20] },
+                { id: 2, y: [30] },
+            ] as any);
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                id: [1, 2],
+                y: ["[10,20]", "[30]"],
+            });
+
+            await view.delete();
+            await table.delete();
         });
 
         test("stringify keeps a sibling index usable", async function () {

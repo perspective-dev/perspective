@@ -756,6 +756,7 @@ namespace server {
             const proto::MakeTableReq& req,
             const ServerResources::t_id& table_id,
             bool has_identity_options,
+            t_backing_store backing_store,
             std::vector<ProtoServerResp<Response>>& outs,
             std::shared_ptr<Table>& table
         );

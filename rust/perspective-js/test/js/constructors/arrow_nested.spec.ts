@@ -26,6 +26,17 @@ const list = (type: arrow.DataType) => new arrow.List(field("item", type));
 const struct = (fields: [string, arrow.DataType][]) =>
     new arrow.Struct(fields.map(([n, t]) => field(n, t)));
 
+const map = (value: arrow.DataType) =>
+    new arrow.Map_(
+        field(
+            "entries",
+            struct([
+                ["key", utf8()],
+                ["value", value],
+            ]),
+        ) as any,
+    );
+
 const ipc = (columns: Record<string, arrow.Vector>) =>
     arrow.tableToIPC(arrow.tableFromArrays(columns as any));
 
@@ -298,6 +309,20 @@ test.describe("Arrow nested columns", function () {
                 ),
             });
 
+        const empty_orders = () =>
+            ipc({
+                batch: arrow.vectorFromArray([], int32()),
+                orders: arrow.vectorFromArray(
+                    [],
+                    list(
+                        struct([
+                            ["id", int32()],
+                            ["price", float64()],
+                        ]),
+                    ),
+                ),
+            });
+
         test("Indexes on a column drawn from the list", async function () {
             const table = await perspective.table(
                 orders([1, 2, 3], [1.5, 2.5, 3.5]),
@@ -341,6 +366,76 @@ test.describe("Arrow nested columns", function () {
             ).rejects.toThrow(/`batch`/);
         });
 
+        test("Rejects an index on a repeated sibling from a zero-row arrow", async function () {
+            await expect(
+                perspective.table(empty_orders(), { index: "batch" }),
+            ).rejects.toThrow(/`batch`/);
+        });
+
+        test("Accepts an index drawn from the list of a zero-row arrow", async function () {
+            const table = await perspective.table(empty_orders(), {
+                index: "orders.id",
+            });
+
+            expect(await table.size()).toEqual(0);
+            await table.update(orders([1, 2], [1.5, 2.5]));
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                batch: [1, 1],
+                "orders.id": [1, 2],
+                "orders.price": [1.5, 2.5],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Stringify keeps a sibling index usable on a schema table", async function () {
+            const table = await perspective.table(
+                { id: "integer", y: "string" },
+                { index: "id", list_flatten: "stringify" },
+            );
+
+            await table.update(
+                ipc({
+                    id: arrow.vectorFromArray([1, 2], int32()),
+                    y: arrow.vectorFromArray([[10, 20], [30]], list(int32())),
+                }),
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                id: [1, 2],
+                y: ["[10,20]", "[30]"],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Cartesian persists across update on a schema table", async function () {
+            const table = await perspective.table(
+                { a: "integer", b: "integer" },
+                { list_flatten: "cartesian" },
+            );
+
+            await table.update(
+                ipc({
+                    a: arrow.vectorFromArray([[1, 2]], list(int32())),
+                    b: arrow.vectorFromArray([[3, 4, 5]], list(int32())),
+                }),
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                a: [1, 1, 1, 2, 2, 2],
+                b: [3, 4, 5, 3, 4, 5],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
         test("Rejects any index under a multi-list cartesian", async function () {
             await expect(
                 perspective.table(
@@ -351,6 +446,193 @@ test.describe("Arrow nested columns", function () {
                     { index: "id", list_flatten: "cartesian" },
                 ),
             ).rejects.toThrow(/`id`/);
+        });
+    });
+
+    test.describe("Map", function () {
+        test("Pivots a map into dotted columns", async function () {
+            const table = await perspective.table(
+                ipc({
+                    id: arrow.vectorFromArray([1, 2], int32()),
+                    m: arrow.vectorFromArray(
+                        [{ a: 1, b: 2 }, { b: 3 }],
+                        map(int32()),
+                    ),
+                }),
+            );
+
+            expect(await table.schema()).toEqual({
+                id: "integer",
+                "m.a": "integer",
+                "m.b": "integer",
+            });
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                id: [1, 2],
+                "m.a": [1, null],
+                "m.b": [2, 3],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Empty and null maps yield nulls", async function () {
+            const table = await perspective.table(
+                ipc({
+                    m: arrow.vectorFromArray(
+                        [{ a: 1 }, {}, null],
+                        map(int32()),
+                    ),
+                }),
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                "m.a": [1, null, null],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Pivots a map of structs", async function () {
+            const table = await perspective.table(
+                ipc({
+                    m: arrow.vectorFromArray(
+                        [{ x: { a: 1, b: 1.5 } }],
+                        map(
+                            struct([
+                                ["a", int32()],
+                                ["b", float64()],
+                            ]),
+                        ),
+                    ),
+                }),
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                "m.x.a": [1],
+                "m.x.b": [1.5],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Explodes a list of maps then pivots", async function () {
+            const table = await perspective.table(
+                ipc({
+                    id: arrow.vectorFromArray([1], int32()),
+                    m: arrow.vectorFromArray(
+                        [[{ a: 1 }, { b: 2 }]],
+                        list(map(int32())),
+                    ),
+                }),
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                id: [1, 1],
+                "m.a": [1, null],
+                "m.b": [null, 2],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+    });
+
+    test.describe("Struct stringify", function () {
+        test("Encodes a struct as JSON text when configured", async function () {
+            const table = await perspective.table(
+                ipc({
+                    s: arrow.vectorFromArray(
+                        [{ a: 1, b: "x" }, null],
+                        struct([
+                            ["a", int32()],
+                            ["b", utf8()],
+                        ]),
+                    ),
+                }),
+                { struct_flatten: "stringify" },
+            );
+
+            expect(await table.schema()).toEqual({ s: "string" });
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                s: ['{"a":1,"b":"x"}', null],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Encodes a map as JSON text when configured", async function () {
+            const table = await perspective.table(
+                ipc({
+                    m: arrow.vectorFromArray(
+                        [{ a: 1, b: 2 }, {}],
+                        map(int32()),
+                    ),
+                }),
+                { struct_flatten: "stringify" },
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                m: ['{"a":1,"b":2}', "{}"],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Keeps a list inside a stringified struct", async function () {
+            const table = await perspective.table(
+                ipc({
+                    s: arrow.vectorFromArray(
+                        [{ a: 1, tags: ["x", "y"] }],
+                        struct([
+                            ["a", int32()],
+                            ["tags", list(utf8())],
+                        ]),
+                    ),
+                }),
+                { struct_flatten: "stringify" },
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                s: ['{"a":1,"tags":["x","y"]}'],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Explodes a list of structs then stringifies each", async function () {
+            const table = await perspective.table(
+                ipc({
+                    id: arrow.vectorFromArray([1], int32()),
+                    l: arrow.vectorFromArray(
+                        [[{ a: 1 }, { a: 2 }]],
+                        list(struct([["a", int32()]])),
+                    ),
+                }),
+                { struct_flatten: "stringify" },
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                id: [1, 1],
+                l: ['{"a":1}', '{"a":2}'],
+            });
+
+            await view.delete();
+            await table.delete();
         });
     });
 });

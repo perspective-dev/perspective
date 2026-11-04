@@ -38,8 +38,8 @@ with open("data.arrow", "rb") as f:
 
 ### Nested columns
 
-Perspective's data model is flat, so Arrow `struct` and `list` columns are
-normalized on ingest.
+Perspective's data model is flat, so Arrow `struct`, `map` and `list` columns
+are normalized on ingest.
 
 A `struct` column is hoisted into one dotted column per leaf, recursively. A
 null parent nulls every descendant leaf:
@@ -84,6 +84,51 @@ perspective.table(arrow_table)
 
 # `{"x": [1, 2], "y": ["[10,20]", "[30]"]}`
 perspective.table(arrow_table, list_flatten="stringify")
+```
+
+A `map` column is pivoted into one column per distinct key, `m.<key>`, of the
+map's item type, so an Arrow map and a JSON object produce the same columns. A
+key absent from a row yields a null in that row. A key absent from the whole
+batch yields no column, which on an indexed update leaves that cell unchanged,
+so declare the keys in a schema when updates must be stable. Only string keys
+are supported, and pivoting suits maps with a bounded key set since each key
+becomes a column:
+
+```python
+arrow_table = pa.table({
+    "id": pa.array([1, 2], type=pa.int64()),
+    "m": pa.array(
+        [[("a", 1), ("b", 2)], [("b", 3)]],
+        type=pa.map_(pa.string(), pa.int64()),
+    ),
+})
+
+# `{"id": [1, 2], "m.a": [1, None], "m.b": [2, 3]}`
+perspective.table(arrow_table)
+```
+
+Both `struct` and `map` columns are controlled by the `struct_flatten`
+argument:
+
+-   `"pivot"` (default) hoists each field or key into its own dotted column,
+    as above.
+-   `"stringify"` keeps the whole value as JSON text in a single string
+    column.
+
+The two arguments compose from the outside in. A list inside a stringified
+struct is an array within its JSON text and is never expanded, while a struct
+inside an expanded list is stringified once per element row:
+
+```python
+arrow_table = pa.table({
+    "s": pa.array(
+        [{"a": 1, "tags": ["x", "y"]}],
+        type=pa.struct([("a", pa.int64()), ("tags", pa.list_(pa.string()))]),
+    ),
+})
+
+# `{"s": ['{"a":1,"tags":["x","y"]}']}`
+perspective.table(arrow_table, struct_flatten="stringify")
 ```
 
 ## Polars

@@ -63,7 +63,8 @@ namespace json {
             t_json_format format,
             const std::vector<std::string>& index,
             const t_schema* existing,
-            t_list_flatten mode
+            t_list_flatten mode,
+            t_struct_flatten struct_mode = STRUCT_FLATTEN_PIVOT
         );
 
         const std::vector<std::string>& names() const;
@@ -135,9 +136,10 @@ namespace json {
         t_json_format m_format{JSON_FORMAT_ROWS};
         std::vector<std::string> m_names;
         std::vector<t_dtype> m_types;
-        t_list_flatten m_mode{LIST_FLATTEN_ZIP};
+        t_flatten_mode m_mode;
 
         std::set<std::string> m_per_element;
+        std::set<std::string> m_expansions;
         std::vector<t_uindex> m_child_widths;
         bool m_expands{false};
         bool m_is_implicit{true};
