@@ -13,6 +13,7 @@
 import pathlib
 
 import anywidget
+import pyarrow as pa
 import pytest
 
 import perspective.widget as widget_module
@@ -128,6 +129,18 @@ class TestAnyWidgetSmoke:
 
         assert widget.table.get_name() == "forwarded"
         assert widget.table.view().to_columns() == {"a": [1, 2, 3]}
+
+    def test_forwards_map_flatten(self):
+        data = pa.table(
+            {
+                "m": pa.array(
+                    [[("a", 1)]], type=pa.map_(pa.string(), pa.int64())
+                )
+            }
+        )
+
+        widget = PerspectiveWidget(data, map_flatten="stringify")
+        assert widget.table.view().to_columns() == {"m": ['{"a":1}']}
 
     def test_table_options_without_data(self):
         with pytest.raises(TypeError):

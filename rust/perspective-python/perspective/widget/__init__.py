@@ -30,7 +30,14 @@ __all__ = ["PerspectiveWidget"]
 
 _STATIC = pathlib.Path(__file__).parent / "static"
 
-_TABLE_OPTIONS = ("name", "format", "page_to_disk", "list_flatten", "struct_flatten")
+_TABLE_OPTIONS = (
+    "name",
+    "format",
+    "page_to_disk",
+    "list_flatten",
+    "struct_flatten",
+    "map_flatten",
+)
 
 __doc__ = """
 `PerspectiveWidget` is a JupyterLab widget that implements the same API as
@@ -161,8 +168,8 @@ class PerspectiveWidget(anywidget.AnyWidget, PerspectiveViewer):
             Cannot be set at the same time as `index`, ignored if `server`
             is True.
         -   `name`, `format`, `page_to_disk`, `list_flatten`,
-            `struct_flatten`: `Table` constructor options, used when `data`
-            is a dataset.
+            `struct_flatten`, `map_flatten`: `Table` constructor options,
+            used when `data` is a dataset.
         -   `kwargs` (`dict`): configuration options for the `PerspectiveViewer`.
 
         # Examples

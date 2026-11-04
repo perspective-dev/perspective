@@ -80,6 +80,10 @@ fn prost_build() -> Result<()> {
                 "StructFlatten",
                 "#[derive(serde::Deserialize, ts_rs::TS)] #[serde(rename_all = \"snake_case\")]",
             )
+            .type_attribute(
+                "MapFlatten",
+                "#[derive(serde::Deserialize, ts_rs::TS)] #[serde(rename_all = \"snake_case\")]",
+            )
             .field_attribute("ViewToArrowResp.arrow", "#[serde(skip)]")
             .field_attribute("from_arrow", "#[serde(skip)]")
             .type_attribute(".", "#[derive(serde::Serialize)]")

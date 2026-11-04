@@ -953,3 +953,107 @@ class TestTableArrowStructStringify(object):
         assert Table(data, struct_flatten="pivot").view().to_columns() == {
             "s.a": [1]
         }
+
+
+class TestTableArrowMapFlatten(object):
+    map_type = pa.map_(pa.string(), pa.int64())
+
+    def mixed(self):
+        return pa.table(
+            {
+                "s": pa.array([{"a": 1}], type=pa.struct([("a", pa.int64())])),
+                "m": pa.array([[("a", 1), ("b", 2)]], type=self.map_type),
+            }
+        )
+
+    def test_map_stringifies_while_struct_pivots(self):
+        tbl = Table(self.mixed(), map_flatten="stringify")
+        assert tbl.schema() == {"s.a": "integer", "m": "string"}
+        assert tbl.view().to_columns() == {"s.a": [1], "m": ['{"a":1,"b":2}']}
+
+    def test_map_pivots_while_struct_stringifies(self):
+        tbl = Table(self.mixed(), struct_flatten="stringify", map_flatten="pivot")
+        assert tbl.schema() == {"s": "string", "m.a": "integer", "m.b": "integer"}
+        assert tbl.view().to_columns() == {
+            "s": ['{"a":1}'],
+            "m.a": [1],
+            "m.b": [2],
+        }
+
+    def test_unset_map_flatten_follows_struct_flatten(self):
+        tbl = Table(self.mixed(), struct_flatten="stringify")
+        assert tbl.view().to_columns() == {"s": ['{"a":1}'], "m": ['{"a":1,"b":2}']}
+        assert Table(self.mixed()).schema() == {
+            "s.a": "integer",
+            "m.a": "integer",
+            "m.b": "integer",
+        }
+
+    def test_map_inside_pivoted_struct_stringifies(self):
+        data = pa.table(
+            {
+                "s": pa.array(
+                    [{"a": 1, "m": [("k", 1)]}],
+                    type=pa.struct([("a", pa.int64()), ("m", self.map_type)]),
+                )
+            }
+        )
+
+        assert Table(data, map_flatten="stringify").view().to_columns() == {
+            "s.a": [1],
+            "s.m": ['{"k":1}'],
+        }
+
+    def test_struct_under_pivoted_map_stringifies(self):
+        data = pa.table(
+            {
+                "n": pa.array(
+                    [[("k", {"x": 1})]],
+                    type=pa.map_(pa.string(), pa.struct([("x", pa.int64())])),
+                )
+            }
+        )
+
+        tbl = Table(data, struct_flatten="stringify", map_flatten="pivot")
+        assert tbl.view().to_columns() == {"n.k": ['{"x":1}']}
+
+    def test_integer_keys_stringify_but_do_not_pivot(self):
+        data = pa.table(
+            {"m": pa.array([[(1, "x")]], type=pa.map_(pa.int32(), pa.string()))}
+        )
+
+        assert Table(data, map_flatten="stringify").view().to_columns() == {
+            "m": ['{"1":"x"}']
+        }
+
+        with pytest.raises(psp.PerspectiveError, match=r"`int32`"):
+            Table(data, map_flatten="pivot")
+
+    def test_list_of_maps_explodes_then_stringifies(self):
+        data = pa.table(
+            {
+                "id": pa.array([1], type=pa.int64()),
+                "l": pa.array(
+                    [[[("a", 1)], [("a", 2)]]], type=pa.list_(self.map_type)
+                ),
+            }
+        )
+
+        assert Table(data, map_flatten="stringify").view().to_columns() == {
+            "id": [1, 1],
+            "l": ['{"a":1}', '{"a":2}'],
+        }
+
+    def test_mode_persists_across_update_on_a_schema_table(self):
+        tbl = Table({"m": "string"}, map_flatten="stringify")
+        tbl.update(
+            arrow_bytes(
+                pa.table({"m": pa.array([[("a", 1)]], type=self.map_type)})
+            )
+        )
+
+        assert tbl.view().to_columns() == {"m": ['{"a":1}']}
+
+    def test_unknown_value_is_rejected(self):
+        with pytest.raises(ValueError, match=r"map_flatten"):
+            Table(self.mixed(), map_flatten="bogus")

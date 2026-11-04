@@ -63,8 +63,7 @@ namespace json {
             t_json_format format,
             const std::vector<std::string>& index,
             const t_schema* existing,
-            t_list_flatten mode,
-            t_struct_flatten struct_mode = STRUCT_FLATTEN_PIVOT
+            t_flatten_mode mode
         );
 
         const std::vector<std::string>& names() const;

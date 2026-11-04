@@ -211,10 +211,7 @@ convert_type(const std::string& src) {
 
 void
 ArrowLoader::initialize(
-    const std::uint8_t* ptr,
-    const uint32_t length,
-    t_list_flatten mode,
-    t_struct_flatten struct_mode
+    const std::uint8_t* ptr, const uint32_t length, t_flatten_mode mode
 ) {
     if (std::memcmp("ARROW1", (const void*)ptr, 6) == 0) {
         load_file(ptr, length, m_table);
@@ -227,11 +224,11 @@ ArrowLoader::initialize(
         PSP_COMPLAIN_AND_ABORT(validation.ToString());
     }
 
-    if (!normalize_table_is_noop(*m_table, mode, struct_mode)) {
-        m_expanded = normalize_table_expands(*m_table, mode, struct_mode);
-        m_normalized = std::make_unique<t_normalized_table>(
-            normalize_table(m_table, mode, struct_mode)
-        );
+    if (!normalize_table_is_noop(*m_table, mode)) {
+        m_expanded = normalize_table_expands(*m_table, mode);
+        m_normalized =
+            std::make_unique<t_normalized_table>(normalize_table(m_table, mode)
+            );
     }
 
     for (const auto& field : fields()) {

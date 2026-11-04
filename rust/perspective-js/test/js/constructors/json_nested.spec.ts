@@ -291,6 +291,21 @@ test.describe("JSON nested columns", function () {
                 await table.delete();
             });
 
+            test("ignores map_flatten for objects", async function () {
+                const { data, options } = shape([{ id: 1, m: { a: 1 } }]);
+                const table = await perspective.table(data, {
+                    ...options,
+                    map_flatten: "stringify",
+                });
+
+                expect(await table.schema()).toEqual({
+                    id: "integer",
+                    "m.a": "integer",
+                });
+
+                await table.delete();
+            });
+
             test("encodes arrays as JSON when configured", async function () {
                 const { data, options } = shape([
                     { x: 1, y: [10, 20] },

@@ -78,14 +78,18 @@ it is over a websocket.
 ## Nested columns
 
 Perspective's data model is flat, so nested Arrow and JSON values are
-normalized on ingest, controlled by two `Table` options.
+normalized on ingest, controlled by three `Table` options.
 
-`struct_flatten` applies to Arrow `struct` and `map` columns and to JSON
-objects. `"pivot"` (the default) hoists each field or key into its own dotted
-column, so `{ s: { a: 1 } }` becomes a column `s.a` and a map `m` becomes one
+`struct_flatten` applies to Arrow `struct` columns and to JSON objects.
+`"pivot"` (the default) hoists each field into its own dotted column, so
+`{ s: { a: 1 } }` becomes a column `s.a`. `"stringify"` keeps the whole value
+as JSON text in a single string column.
+
+`map_flatten` applies to Arrow `map` columns. `"pivot"` makes a map `m` one
 column `m.<key>` per distinct key in the batch, with a null where a row lacks
-the key. `"stringify"` keeps the whole value as JSON text in a single string
-column.
+the key, and `"stringify"` keeps the map as JSON text. When unset it follows
+`struct_flatten`. JSON has no map type, so JSON objects always follow
+`struct_flatten`.
 
 `list_flatten` applies to Arrow `list` columns and JSON arrays. `"zip"` (the
 default) expands a row into one row per element, repeating its siblings, and
@@ -93,9 +97,11 @@ requires sibling lists in a row to agree in length. `"cartesian"` expands to
 the product of the lists' lengths. `"stringify"` keeps each list as a JSON
 array in a string column.
 
-The two options compose from the outside in: a list inside a stringified
-struct stays inside its JSON text, while a struct inside an expanded list is
-stringified once per element row.
+The options compose from the outside in: a list inside a stringified struct
+stays inside its JSON text, a struct inside an expanded list is stringified
+once per element row, and a struct under a pivoted map is stringified once per
+key column when `struct_flatten` is `"stringify"` and `map_flatten` is
+`"pivot"`.
 
 ```javascript
 const table = await worker.table(

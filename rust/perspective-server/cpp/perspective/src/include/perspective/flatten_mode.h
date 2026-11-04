@@ -25,9 +25,16 @@ enum t_struct_flatten {
     STRUCT_FLATTEN_STRINGIFY = 1
 };
 
+enum t_map_flatten { MAP_FLATTEN_PIVOT = 0, MAP_FLATTEN_STRINGIFY = 1 };
+
 struct t_flatten_mode {
     t_list_flatten list{LIST_FLATTEN_ZIP};
     t_struct_flatten structs{STRUCT_FLATTEN_PIVOT};
+
+    /**
+     * Arrow `MAP` columns only; JSON objects follow `structs`.
+     */
+    t_map_flatten maps{MAP_FLATTEN_PIVOT};
 };
 
 } // namespace perspective

@@ -59,10 +59,7 @@ public:
         std::uint32_t limit,
         std::vector<std::string> index,
         t_backing_store backing_store = BACKING_STORE_MEMORY,
-        apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP,
-        apachearrow::t_struct_flatten struct_flatten =
-            apachearrow::STRUCT_FLATTEN_PIVOT
+        t_flatten_mode flatten = {}
     );
 
     /**
@@ -253,10 +250,7 @@ public:
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
-        apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP,
-        apachearrow::t_struct_flatten struct_flatten =
-            apachearrow::STRUCT_FLATTEN_PIVOT
+        t_flatten_mode flatten = {}
     );
 
     static std::shared_ptr<Table> from_cols(
@@ -264,10 +258,7 @@ public:
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
-        apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP,
-        apachearrow::t_struct_flatten struct_flatten =
-            apachearrow::STRUCT_FLATTEN_PIVOT
+        t_flatten_mode flatten = {}
     );
 
     static std::shared_ptr<Table> from_rows(
@@ -275,10 +266,7 @@ public:
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
-        apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP,
-        apachearrow::t_struct_flatten struct_flatten =
-            apachearrow::STRUCT_FLATTEN_PIVOT
+        t_flatten_mode flatten = {}
     );
 
     static std::shared_ptr<Table> from_ndjson(
@@ -286,10 +274,7 @@ public:
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
-        apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP,
-        apachearrow::t_struct_flatten struct_flatten =
-            apachearrow::STRUCT_FLATTEN_PIVOT
+        t_flatten_mode flatten = {}
     );
 
     static std::shared_ptr<Table> from_schema(
@@ -297,10 +282,7 @@ public:
         const t_schema& schema,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
-        apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP,
-        apachearrow::t_struct_flatten struct_flatten =
-            apachearrow::STRUCT_FLATTEN_PIVOT
+        t_flatten_mode flatten = {}
     );
 
     /**
@@ -322,10 +304,7 @@ public:
         std::string&& data,
         std::uint32_t limit = std::numeric_limits<std::uint32_t>::max(),
         t_backing_store backing_store = BACKING_STORE_MEMORY,
-        apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP,
-        apachearrow::t_struct_flatten struct_flatten =
-            apachearrow::STRUCT_FLATTEN_PIVOT
+        t_flatten_mode flatten = {}
     );
 
     static std::shared_ptr<Table> make_table(
@@ -335,10 +314,7 @@ public:
         const std::vector<std::string>& index,
         const std::string_view& data,
         t_backing_store backing_store = BACKING_STORE_MEMORY,
-        apachearrow::t_list_flatten list_flatten =
-            apachearrow::LIST_FLATTEN_ZIP,
-        apachearrow::t_struct_flatten struct_flatten =
-            apachearrow::STRUCT_FLATTEN_PIVOT
+        t_flatten_mode flatten = {}
     );
 
 private:
@@ -352,8 +328,7 @@ private:
         std::string&& data,
         std::uint32_t limit,
         t_backing_store backing_store,
-        apachearrow::t_list_flatten list_flatten,
-        apachearrow::t_struct_flatten struct_flatten
+        t_flatten_mode flatten
     );
 
     /**
@@ -416,19 +391,13 @@ private:
     const t_backing_store m_backing_store;
 
     /**
-     * @brief How `arrow::Type::LIST` columns are ingested.
+     * @brief How nested columns are ingested.
      *
      * INVARIANT: this must be applied to `update_arrow` as well as to the
      * `from_arrow` which created the Table, or an update would produce a
      * different column shape than the schema it is written against.
      */
-    const apachearrow::t_list_flatten m_list_flatten;
-
-    /**
-     * @brief How `arrow::Type::STRUCT` and `arrow::Type::MAP` columns are
-     * ingested, held for the same reason as `m_list_flatten`.
-     */
-    const apachearrow::t_struct_flatten m_struct_flatten;
+    const t_flatten_mode m_flatten;
 };
 
 } // namespace perspective

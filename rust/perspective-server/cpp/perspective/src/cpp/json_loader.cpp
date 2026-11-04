@@ -721,11 +721,10 @@ JsonLoader::init(
     t_json_format format,
     const std::vector<std::string>& index,
     const t_schema* existing,
-    t_list_flatten mode,
-    t_struct_flatten struct_mode
+    t_flatten_mode mode
 ) {
     m_format = format;
-    m_mode = t_flatten_mode{mode, struct_mode};
+    m_mode = mode;
     m_index = index;
     if (format == JSON_FORMAT_NDJSON) {
         m_stream = rapidjson::StringStream(data.data());
@@ -799,7 +798,7 @@ JsonLoader::init(
     }
 
     m_expands = !m_per_element.empty();
-    if (mode == LIST_FLATTEN_CARTESIAN && m_expansions.size() > 1) {
+    if (mode.list == LIST_FLATTEN_CARTESIAN && m_expansions.size() > 1) {
         // A product repeats every factor against the others' dimensions, so
         // with more than one expansion point nothing varies per row.
         m_per_element.clear();

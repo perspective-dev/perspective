@@ -42,32 +42,24 @@ namespace {
     }
 
     bool
-    is_pivot_id(arrow::Type::type id) {
-        return id == arrow::Type::STRUCT || id == arrow::Type::MAP;
-    }
-
-    bool
-    type_expands(const arrow::DataType& type, t_struct_flatten struct_mode) {
+    type_expands(const arrow::DataType& type, t_flatten_mode mode) {
         if (is_list_id(type.id())) {
             return true;
         }
 
-        if (struct_mode == STRUCT_FLATTEN_STRINGIFY) {
-            return false;
-        }
-
-        if (type.id() == arrow::Type::STRUCT) {
+        if (type.id() == arrow::Type::STRUCT
+            && mode.structs != STRUCT_FLATTEN_STRINGIFY) {
             for (const auto& child : type.fields()) {
-                if (type_expands(*child->type(), struct_mode)) {
+                if (type_expands(*child->type(), mode)) {
                     return true;
                 }
             }
         }
 
-        if (type.id() == arrow::Type::MAP) {
+        if (type.id() == arrow::Type::MAP
+            && mode.maps != MAP_FLATTEN_STRINGIFY) {
             return type_expands(
-                *static_cast<const arrow::MapType&>(type).item_type(),
-                struct_mode
+                *static_cast<const arrow::MapType&>(type).item_type(), mode
             );
         }
 
@@ -750,18 +742,19 @@ namespace {
 } // namespace
 
 bool
-normalize_table_is_noop(
-    const arrow::Table& input,
-    t_list_flatten mode,
-    t_struct_flatten struct_mode
-) {
+normalize_table_is_noop(const arrow::Table& input, t_flatten_mode mode) {
     for (const auto& field : input.schema()->fields()) {
         const auto id = field->type()->id();
-        if (struct_mode != STRUCT_FLATTEN_STRINGIFY && is_pivot_id(id)) {
+        if (mode.structs != STRUCT_FLATTEN_STRINGIFY
+            && id == arrow::Type::STRUCT) {
             return false;
         }
 
-        if (mode != LIST_FLATTEN_STRINGIFY && is_list_id(id)) {
+        if (mode.maps != MAP_FLATTEN_STRINGIFY && id == arrow::Type::MAP) {
+            return false;
+        }
+
+        if (mode.list != LIST_FLATTEN_STRINGIFY && is_list_id(id)) {
             return false;
         }
     }
@@ -770,17 +763,13 @@ normalize_table_is_noop(
 }
 
 bool
-normalize_table_expands(
-    const arrow::Table& input,
-    t_list_flatten mode,
-    t_struct_flatten struct_mode
-) {
-    if (mode == LIST_FLATTEN_STRINGIFY) {
+normalize_table_expands(const arrow::Table& input, t_flatten_mode mode) {
+    if (mode.list == LIST_FLATTEN_STRINGIFY) {
         return false;
     }
 
     for (const auto& field : input.schema()->fields()) {
-        if (type_expands(*field->type(), struct_mode)) {
+        if (type_expands(*field->type(), mode)) {
             return true;
         }
     }
@@ -789,11 +778,7 @@ normalize_table_expands(
 }
 
 t_normalized_table
-normalize_table(
-    std::shared_ptr<arrow::Table> input,
-    t_list_flatten mode,
-    t_struct_flatten struct_mode
-) {
+normalize_table(std::shared_ptr<arrow::Table> input, t_flatten_mode mode) {
     t_normalized_table out;
     out.fields = input->schema()->fields();
     out.columns = input->columns();
@@ -802,30 +787,32 @@ normalize_table(
     out.num_rows = input->num_rows();
     while (true) {
         bool changed = false;
-        if (struct_mode != STRUCT_FLATTEN_STRINGIFY) {
-            changed = flatten_structs(
+        if (mode.structs != STRUCT_FLATTEN_STRINGIFY
+            && flatten_structs(
                 out.fields, out.columns, out.gathers, out.per_element
-            );
-
-            if (pivot_maps(
-                    out.fields,
-                    out.columns,
-                    out.gathers,
-                    out.per_element,
-                    out.num_rows
-                )) {
-                changed = true;
-            }
+            )) {
+            changed = true;
         }
 
-        if (mode != LIST_FLATTEN_STRINGIFY
+        if (mode.maps != MAP_FLATTEN_STRINGIFY
+            && pivot_maps(
+                out.fields,
+                out.columns,
+                out.gathers,
+                out.per_element,
+                out.num_rows
+            )) {
+            changed = true;
+        }
+
+        if (mode.list != LIST_FLATTEN_STRINGIFY
             && explode_lists(
                 out.fields,
                 out.columns,
                 out.gathers,
                 out.per_element,
                 out.num_rows,
-                mode
+                mode.list
             )) {
             changed = true;
         }

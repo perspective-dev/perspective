@@ -107,17 +107,20 @@ arrow_table = pa.table({
 perspective.table(arrow_table)
 ```
 
-Both `struct` and `map` columns are controlled by the `struct_flatten`
-argument:
+A `struct` column is controlled by the `struct_flatten` argument and a `map`
+column by the `map_flatten` argument, each taking:
 
 -   `"pivot"` (default) hoists each field or key into its own dotted column,
     as above.
 -   `"stringify"` keeps the whole value as JSON text in a single string
     column.
 
-The two arguments compose from the outside in. A list inside a stringified
-struct is an array within its JSON text and is never expanded, while a struct
-inside an expanded list is stringified once per element row:
+An unset `map_flatten` follows `struct_flatten`, so `struct_flatten="stringify"`
+alone stringifies both. JSON objects always follow `struct_flatten`.
+
+The arguments compose from the outside in. A list inside a stringified struct
+is an array within its JSON text and is never expanded, while a struct inside
+an expanded list is stringified once per element row:
 
 ```python
 arrow_table = pa.table({
@@ -129,6 +132,23 @@ arrow_table = pa.table({
 
 # `{"s": ['{"a":1,"tags":["x","y"]}']}`
 perspective.table(arrow_table, struct_flatten="stringify")
+```
+
+Setting the two independently keeps a map with an open key set as text while
+its sibling structs still pivot, or stringifies each struct under a pivoted
+map:
+
+```python
+arrow_table = pa.table({
+    "s": pa.array([{"a": 1}], type=pa.struct([("a", pa.int64())])),
+    "m": pa.array([[("k", 1)]], type=pa.map_(pa.string(), pa.int64())),
+})
+
+# `{"s.a": [1], "m": ['{"k":1}']}`
+perspective.table(arrow_table, map_flatten="stringify")
+
+# `{"s": ['{"a":1}'], "m.k": [1]}`
+perspective.table(arrow_table, struct_flatten="stringify", map_flatten="pivot")
 ```
 
 ## Polars
