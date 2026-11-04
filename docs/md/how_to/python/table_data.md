@@ -71,7 +71,11 @@ A `list` column is controlled by the `list_flatten` argument:
 -   `"cartesian"` expands a row into the product of its list columns' lengths,
     with an empty or null list counting as a single null element.
 -   `"stringify"` encodes each list as a JSON array in a single string column,
-    leaving the row count unchanged.
+    leaving the row count unchanged. Datetimes and dates inside the text are
+    epoch milliseconds, as in `to_json`; decimals are strings and binary is
+    base64.
+-   `"stringify_formatted"` is `"stringify"` with datetimes and dates written
+    as the text `to_json` emits under `formatted`.
 
 ```python
 arrow_table = pa.table({
@@ -113,7 +117,9 @@ column by the `map_flatten` argument, each taking:
 -   `"pivot"` (default) hoists each field or key into its own dotted column,
     as above.
 -   `"stringify"` keeps the whole value as JSON text in a single string
-    column.
+    column, with datetimes and dates as epoch milliseconds, as in `to_json`.
+-   `"stringify_formatted"` is `"stringify"` with datetimes and dates written
+    as the text `to_json` emits under `formatted`.
 
 An unset `map_flatten` follows `struct_flatten`, so `struct_flatten="stringify"`
 alone stringifies both. JSON objects always follow `struct_flatten`.

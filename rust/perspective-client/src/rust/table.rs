@@ -166,23 +166,28 @@ pub struct TableInitOptions {
     /// default) and `cartesian` expand a row into one row per list element,
     /// and are incompatible with `index`, as the rows of an expansion
     /// repeat their index. `stringify` encodes each list as a JSON array in
-    /// a single string column instead. `STRUCT` and `MAP` columns are
-    /// governed by `struct_flatten` and `map_flatten`.
+    /// a single string column instead, with datetimes as epoch milliseconds,
+    /// and `stringify_formatted` writes them as the text `to_json` emits
+    /// under `formatted`. `STRUCT` and `MAP` columns are governed by
+    /// `struct_flatten` and `map_flatten`.
     #[serde(default)]
     #[ts(optional)]
     pub list_flatten: Option<crate::proto::ListFlatten>,
 
     /// How Arrow `STRUCT` columns and JSON objects are ingested. `pivot` (the
     /// default) hoists each field into its own dotted column, and `stringify`
-    /// keeps the whole value as JSON text in a single string column.
+    /// keeps the whole value as JSON text in a single string column, with
+    /// datetimes as epoch milliseconds; `stringify_formatted` writes them as
+    /// the text `to_json` emits under `formatted`.
     #[serde(default)]
     #[ts(optional)]
     pub struct_flatten: Option<crate::proto::StructFlatten>,
 
     /// How Arrow `MAP` columns are ingested. `pivot` hoists each distinct key
-    /// into its own dotted column, and `stringify` keeps the whole value as
-    /// JSON text in a single string column. When unset, follows
-    /// `struct_flatten`. JSON objects always follow `struct_flatten`.
+    /// into its own dotted column, and `stringify` or `stringify_formatted`
+    /// keeps the whole value as JSON text in a single string column, as for
+    /// `struct_flatten`. When unset, follows `struct_flatten`. JSON objects
+    /// always follow `struct_flatten`.
     #[serde(default)]
     #[ts(optional)]
     pub map_flatten: Option<crate::proto::MapFlatten>,

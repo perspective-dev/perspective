@@ -10,6 +10,9 @@
 #  ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 #  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+import json
+from decimal import Decimal
+
 import pyarrow as pa
 import pytest
 import perspective as psp
@@ -1057,3 +1060,258 @@ class TestTableArrowMapFlatten(object):
     def test_unknown_value_is_rejected(self):
         with pytest.raises(ValueError, match=r"map_flatten"):
             Table(self.mixed(), map_flatten="bogus")
+
+
+class TestTableArrowStringifyTemporal(object):
+    us_utc = pa.timestamp("us", tz="UTC")
+    instant_ms = 1704164645000
+    instant_us = 1704164645000006
+
+    def flat_json(self, column, **options):
+        tbl = Table(pa.table({"v": column}), **options)
+        return json.loads(tbl.view().to_columns_string())["v"]
+
+    def test_list_of_timestamps_matches_the_flat_column(self):
+        column = pa.array([[self.instant_us]], pa.list_(self.us_utc))
+        tbl = Table(pa.table({"v": column}), list_flatten="stringify")
+        assert tbl.schema() == {"v": "string"}
+        assert tbl.view().to_columns() == {"v": ["[1704164645000]"]}
+        flat = pa.array([self.instant_us], self.us_utc)
+        assert self.flat_json(flat) == [self.instant_ms]
+
+    def test_list_of_structs_with_timestamps(self):
+        item = pa.struct([("ts", self.us_utc), ("x", pa.int64())])
+        column = pa.array([[{"ts": self.instant_us, "x": 1}]], pa.list_(item))
+        tbl = Table(pa.table({"v": column}), list_flatten="stringify")
+        assert tbl.view().to_columns() == {
+            "v": ['[{"ts":1704164645000,"x":1}]']
+        }
+
+    def test_struct_with_timestamp(self):
+        item = pa.struct([("ts", pa.timestamp("ms"))])
+        column = pa.array([{"ts": 1704164645006}], item)
+        tbl = Table(pa.table({"v": column}), struct_flatten="stringify")
+        assert tbl.view().to_columns() == {"v": ['{"ts":1704164645006}']}
+
+    def test_every_unit_truncates_like_the_flat_path(self):
+        units = {
+            "s": 1704164645,
+            "ms": 1704164645006,
+            "us": 1704164645006007,
+            "ns": 1704164645006007008,
+        }
+
+        for unit, value in units.items():
+            column = pa.array([[value]], pa.list_(pa.timestamp(unit)))
+            tbl = Table(pa.table({"v": column}), list_flatten="stringify")
+            flat = self.flat_json(pa.array([value], pa.timestamp(unit)))
+            assert tbl.view().to_columns() == {"v": [json.dumps(flat)]}
+
+    def test_timezone_is_ignored(self):
+        naive = pa.array([[self.instant_us]], pa.list_(pa.timestamp("us")))
+        zoned = pa.array(
+            [[self.instant_us]],
+            pa.list_(pa.timestamp("us", tz="America/New_York")),
+        )
+
+        for column in (naive, zoned):
+            tbl = Table(pa.table({"v": column}), list_flatten="stringify")
+            assert tbl.view().to_columns() == {"v": ["[1704164645000]"]}
+
+    def test_before_the_epoch(self):
+        column = pa.array([[-1]], pa.list_(pa.timestamp("ms")))
+        tbl = Table(pa.table({"v": column}), list_flatten="stringify")
+        assert tbl.view().to_columns() == {"v": ["[-1]"]}
+
+    def test_dates_match_the_flat_column(self):
+        for column, flat in (
+            (pa.array([[19724]], pa.list_(pa.date32())), pa.array([19724], pa.date32())),
+            (
+                pa.array([[1704153600000]], pa.list_(pa.date64())),
+                pa.array([1704153600000], pa.date64()),
+            ),
+        ):
+            tbl = Table(pa.table({"v": column}), list_flatten="stringify")
+            assert tbl.view().to_columns() == {"v": ["[1704153600000]"]}
+            assert self.flat_json(flat) == [1704153600000]
+
+    def test_null_timestamp_element(self):
+        column = pa.array([[self.instant_us, None]], pa.list_(self.us_utc))
+        tbl = Table(pa.table({"v": column}), list_flatten="stringify")
+        assert tbl.view().to_columns() == {"v": ["[1704164645000,null]"]}
+
+    def test_map_of_timestamps(self):
+        column = pa.array(
+            [[("k", self.instant_us)]], pa.map_(pa.string(), self.us_utc)
+        )
+
+        tbl = Table(pa.table({"v": column}), map_flatten="stringify")
+        assert tbl.view().to_columns() == {"v": ['{"k":1704164645000}']}
+
+    def test_formatted_output_is_unchanged(self):
+        tbl = Table(pa.table({"v": pa.array([self.instant_us], self.us_utc)}))
+        assert json.loads(tbl.view().to_columns_string(formatted=True)) == {
+            "v": ["2024-01-02 03:04:05.000"]
+        }
+
+    def test_time_and_duration_are_unit_counts(self):
+        time = pa.array([[11045000006]], pa.list_(pa.time64("us")))
+        duration = pa.array([[1500]], pa.list_(pa.duration("ns")))
+        for column, text in ((time, "[11045000006]"), (duration, "[1500]")):
+            tbl = Table(pa.table({"v": column}), list_flatten="stringify")
+            assert tbl.view().to_columns() == {"v": [text]}
+
+    def test_decimal_is_text(self):
+        column = pa.array([[Decimal("1.50")]], pa.list_(pa.decimal128(10, 2)))
+        tbl = Table(pa.table({"v": column}), list_flatten="stringify")
+        assert tbl.view().to_columns() == {"v": ['["1.50"]']}
+
+    def test_binary_is_base64(self):
+        column = pa.array([[b"hi"]], pa.list_(pa.binary()))
+        tbl = Table(pa.table({"v": column}), list_flatten="stringify")
+        assert tbl.view().to_columns() == {"v": ['["aGk="]']}
+
+    def test_non_finite_floats_are_null(self):
+        values = [float("inf"), float("-inf"), float("nan"), 1.5]
+        column = pa.array([values], pa.list_(pa.float64()))
+        tbl = Table(pa.table({"v": column}), list_flatten="stringify")
+        assert tbl.view().to_columns() == {"v": ["[null,null,null,1.5]"]}
+        assert self.flat_json(pa.array(values, pa.float64())) == [
+            None,
+            None,
+            None,
+            1.5,
+        ]
+
+    def test_fixed_size_list_inside_a_struct(self):
+        item = pa.struct([("p", pa.list_(pa.int32(), 2))])
+        column = pa.array([{"p": [1, 2]}], item)
+        tbl = Table(pa.table({"v": column}), struct_flatten="stringify")
+        assert tbl.view().to_columns() == {"v": ['{"p":[1,2]}']}
+
+
+class TestTableArrowStringifyFormatted(object):
+    us_utc = pa.timestamp("us", tz="UTC")
+    instant_us = 1704164645000006
+    text = "2024-01-02 03:04:05.000"
+
+    def struct_column(self):
+        return pa.array(
+            [{"ts": self.instant_us, "d": 19724, "x": 1}],
+            pa.struct([("ts", self.us_utc), ("d", pa.date32()), ("x", pa.int64())]),
+        )
+
+    def map_column(self):
+        return pa.array(
+            [[("k", self.instant_us)]], pa.map_(pa.string(), self.us_utc)
+        )
+
+    def test_struct_formats_datetimes(self):
+        tbl = Table(
+            pa.table({"v": self.struct_column()}),
+            struct_flatten="stringify_formatted",
+        )
+
+        assert tbl.schema() == {"v": "string"}
+        assert tbl.view().to_columns() == {
+            "v": ['{"ts":"2024-01-02 03:04:05.000","d":"2024-01-02","x":1}']
+        }
+
+    def test_matches_formatted_to_json(self):
+        flat = Table(
+            pa.table(
+                {
+                    "ts": pa.array([self.instant_us], self.us_utc),
+                    "d": pa.array([19724], pa.date32()),
+                }
+            )
+        )
+
+        assert json.loads(flat.view().to_columns_string(formatted=True)) == {
+            "ts": [self.text],
+            "d": ["2024-01-02"],
+        }
+
+    def test_map_formats_datetimes(self):
+        tbl = Table(
+            pa.table({"v": self.map_column()}), map_flatten="stringify_formatted"
+        )
+
+        assert tbl.view().to_columns() == {
+            "v": ['{"k":"2024-01-02 03:04:05.000"}']
+        }
+
+    def test_unset_map_flatten_follows_formatted_struct(self):
+        tbl = Table(
+            pa.table({"v": self.map_column()}),
+            struct_flatten="stringify_formatted",
+        )
+
+        assert tbl.view().to_columns() == {
+            "v": ['{"k":"2024-01-02 03:04:05.000"}']
+        }
+
+    def test_explicit_map_flatten_overrides_formatted_struct(self):
+        tbl = Table(
+            pa.table({"v": self.map_column()}),
+            struct_flatten="stringify_formatted",
+            map_flatten="stringify",
+        )
+
+        assert tbl.view().to_columns() == {"v": ['{"k":1704164645000}']}
+
+    def test_each_exploded_struct_is_formatted(self):
+        item = pa.struct([("ts", self.us_utc)])
+        column = pa.array(
+            [[{"ts": self.instant_us}, {"ts": self.instant_us}]], pa.list_(item)
+        )
+
+        tbl = Table(
+            pa.table({"v": column}), struct_flatten="stringify_formatted"
+        )
+
+        assert tbl.view().to_columns() == {
+            "v": ['{"ts":"2024-01-02 03:04:05.000"}'] * 2
+        }
+
+    def test_outer_list_stringify_wins(self):
+        item = pa.struct([("ts", self.us_utc)])
+        column = pa.array([[{"ts": self.instant_us}]], pa.list_(item))
+        tbl = Table(
+            pa.table({"v": column}),
+            list_flatten="stringify",
+            struct_flatten="stringify_formatted",
+        )
+
+        assert tbl.view().to_columns() == {"v": ['[{"ts":1704164645000}]']}
+
+    def test_list_formats_datetimes(self):
+        column = pa.array([[self.instant_us, None]], pa.list_(self.us_utc))
+        tbl = Table(pa.table({"v": column}), list_flatten="stringify_formatted")
+        assert tbl.schema() == {"v": "string"}
+        assert tbl.view().to_columns() == {
+            "v": ['["2024-01-02 03:04:05.000",null]']
+        }
+
+    def test_list_of_structs_formats_through_the_outer_layer(self):
+        item = pa.struct([("ts", self.us_utc)])
+        column = pa.array([[{"ts": self.instant_us}]], pa.list_(item))
+        tbl = Table(pa.table({"v": column}), list_flatten="stringify_formatted")
+        assert tbl.view().to_columns() == {
+            "v": ['[{"ts":"2024-01-02 03:04:05.000"}]']
+        }
+
+    def test_json_arrays_are_unchanged(self):
+        tbl = Table([{"y": [1, 2]}], list_flatten="stringify_formatted")
+        assert tbl.view().to_columns() == {"y": ["[1,2]"]}
+
+    def test_json_objects_are_unchanged(self):
+        tbl = Table([{"s": {"a": 1}}], struct_flatten="stringify_formatted")
+        assert tbl.view().to_columns() == {"s": ['{"a":1}']}
+
+    def test_persists_across_update_on_a_schema_table(self):
+        tbl = Table({"v": "string"}, struct_flatten="stringify_formatted")
+        tbl.update(arrow_bytes(pa.table({"v": self.struct_column()})))
+        assert tbl.view().to_columns() == {
+            "v": ['{"ts":"2024-01-02 03:04:05.000","d":"2024-01-02","x":1}']
+        }

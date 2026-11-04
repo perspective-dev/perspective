@@ -72,6 +72,7 @@ fn parse_list_flatten(value: Option<String>) -> PyResult<Option<ListFlatten>> {
         Some("zip") => Ok(Some(ListFlatten::Zip)),
         Some("cartesian") => Ok(Some(ListFlatten::Cartesian)),
         Some("stringify") => Ok(Some(ListFlatten::Stringify)),
+        Some("stringify_formatted") => Ok(Some(ListFlatten::StringifyFormatted)),
         Some(_x) => Err(PyValueError::new_err("Unknown `list_flatten`".to_string())),
     }
 }
@@ -81,6 +82,7 @@ fn parse_struct_flatten(value: Option<String>) -> PyResult<Option<StructFlatten>
         None => Ok(None),
         Some("pivot") => Ok(Some(StructFlatten::Pivot)),
         Some("stringify") => Ok(Some(StructFlatten::Stringify)),
+        Some("stringify_formatted") => Ok(Some(StructFlatten::StringifyFormatted)),
         Some(_x) => Err(PyValueError::new_err(
             "Unknown `struct_flatten`".to_string(),
         )),
@@ -92,6 +94,7 @@ fn parse_map_flatten(value: Option<String>) -> PyResult<Option<MapFlatten>> {
         None => Ok(None),
         Some("pivot") => Ok(Some(MapFlatten::Pivot)),
         Some("stringify") => Ok(Some(MapFlatten::Stringify)),
+        Some("stringify_formatted") => Ok(Some(MapFlatten::StringifyFormatted)),
         Some(_x) => Err(PyValueError::new_err("Unknown `map_flatten`".to_string())),
     }
 }

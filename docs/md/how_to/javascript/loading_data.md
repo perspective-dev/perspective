@@ -83,19 +83,23 @@ normalized on ingest, controlled by three `Table` options.
 `struct_flatten` applies to Arrow `struct` columns and to JSON objects.
 `"pivot"` (the default) hoists each field into its own dotted column, so
 `{ s: { a: 1 } }` becomes a column `s.a`. `"stringify"` keeps the whole value
-as JSON text in a single string column.
+as JSON text in a single string column, with datetimes as epoch milliseconds;
+`"stringify_formatted"` writes them as the text `to_json` emits under
+`formatted`.
 
 `map_flatten` applies to Arrow `map` columns. `"pivot"` makes a map `m` one
 column `m.<key>` per distinct key in the batch, with a null where a row lacks
-the key, and `"stringify"` keeps the map as JSON text. When unset it follows
-`struct_flatten`. JSON has no map type, so JSON objects always follow
+the key, and `"stringify"` or `"stringify_formatted"` keeps the map as JSON
+text. When unset it follows `struct_flatten`. JSON has no map type, so JSON objects always follow
 `struct_flatten`.
 
 `list_flatten` applies to Arrow `list` columns and JSON arrays. `"zip"` (the
 default) expands a row into one row per element, repeating its siblings, and
 requires sibling lists in a row to agree in length. `"cartesian"` expands to
 the product of the lists' lengths. `"stringify"` keeps each list as a JSON
-array in a string column.
+array in a string column, with datetimes and dates as epoch milliseconds, as
+in `to_json`; `"stringify_formatted"` writes them as the text `to_json` emits
+under `formatted`.
 
 The options compose from the outside in: a list inside a stringified struct
 stays inside its JSON text, a struct inside an expanded list is stringified

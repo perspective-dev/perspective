@@ -129,6 +129,7 @@ namespace apachearrow {
         std::vector<std::string> m_names;
         std::vector<t_dtype> m_types;
         bool m_expanded{false};
+        t_flatten_mode m_mode;
     };
 
     template <typename T, typename V, typename GATHER>

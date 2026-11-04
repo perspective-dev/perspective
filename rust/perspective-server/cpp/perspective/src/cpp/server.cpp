@@ -2580,6 +2580,9 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 case proto::LIST_FLATTEN_STRINGIFY:
                     flatten.list = LIST_FLATTEN_STRINGIFY;
                     break;
+                case proto::LIST_FLATTEN_STRINGIFY_FORMATTED:
+                    flatten.list = LIST_FLATTEN_STRINGIFY_FORMATTED;
+                    break;
                 case proto::LIST_FLATTEN_ZIP:
                 default:
                     flatten.list = LIST_FLATTEN_ZIP;
@@ -2590,6 +2593,9 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 case proto::STRUCT_FLATTEN_STRINGIFY:
                     flatten.structs = STRUCT_FLATTEN_STRINGIFY;
                     break;
+                case proto::STRUCT_FLATTEN_STRINGIFY_FORMATTED:
+                    flatten.structs = STRUCT_FLATTEN_STRINGIFY_FORMATTED;
+                    break;
                 case proto::STRUCT_FLATTEN_PIVOT:
                 default:
                     flatten.structs = STRUCT_FLATTEN_PIVOT;
@@ -2597,13 +2603,25 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             }
 
             if (!r.options().has_map_flatten()) {
-                flatten.maps = flatten.structs == STRUCT_FLATTEN_STRINGIFY
-                    ? MAP_FLATTEN_STRINGIFY
-                    : MAP_FLATTEN_PIVOT;
+                switch (flatten.structs) {
+                    case STRUCT_FLATTEN_STRINGIFY:
+                        flatten.maps = MAP_FLATTEN_STRINGIFY;
+                        break;
+                    case STRUCT_FLATTEN_STRINGIFY_FORMATTED:
+                        flatten.maps = MAP_FLATTEN_STRINGIFY_FORMATTED;
+                        break;
+                    case STRUCT_FLATTEN_PIVOT:
+                    default:
+                        flatten.maps = MAP_FLATTEN_PIVOT;
+                        break;
+                }
             } else {
                 switch (r.options().map_flatten()) {
                     case proto::MAP_FLATTEN_STRINGIFY:
                         flatten.maps = MAP_FLATTEN_STRINGIFY;
+                        break;
+                    case proto::MAP_FLATTEN_STRINGIFY_FORMATTED:
+                        flatten.maps = MAP_FLATTEN_STRINGIFY_FORMATTED;
                         break;
                     case proto::MAP_FLATTEN_PIVOT:
                     default:

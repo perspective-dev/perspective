@@ -13,8 +13,12 @@
 #include "perspective/base.h"
 #include "perspective/raw_types.h"
 #include <arrow/array/array_binary.h>
+#include <arrow/array/array_decimal.h>
 #include <arrow/array/array_nested.h>
 #include <arrow/array/array_primitive.h>
+#include <arrow/util/base64.h>
+#include <arrow/util/decimal.h>
+#include <perspective/scalar_json.h>
 #include <arrow/type.h>
 #include <arrow/type_fwd.h>
 #include <algorithm>
@@ -30,7 +34,6 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 #include <arrow/util/float16.h>
-#include <cmath>
 
 namespace perspective::apachearrow {
 
@@ -224,6 +227,7 @@ ArrowLoader::initialize(
         PSP_COMPLAIN_AND_ABORT(validation.ToString());
     }
 
+    m_mode = mode;
     if (!normalize_table_is_noop(*m_table, mode)) {
         m_expanded = normalize_table_expands(*m_table, mode);
         m_normalized =
@@ -388,6 +392,131 @@ iter_col_copy(
     }
 }
 
+static std::int64_t
+timestamp_to_ms(std::int64_t value, arrow::TimeUnit::type unit) {
+    switch (unit) {
+        case arrow::TimeUnit::SECOND:
+            return value * 1000;
+        case arrow::TimeUnit::MICRO:
+            return value / 1000;
+        case arrow::TimeUnit::NANO:
+            return value / 1000000;
+        case arrow::TimeUnit::MILLI:
+        default:
+            return value;
+    }
+}
+
+/**
+ * `date::month` is [1-12] where `t_date::month()` is [0-11].
+ */
+static t_date
+date_from_days(date::sys_days days) {
+    const auto ymd = date::year_month_day{days};
+    return t_date(
+        static_cast<std::int32_t>(ymd.year()),
+        static_cast<std::uint32_t>(ymd.month()) - 1,
+        static_cast<std::uint32_t>(ymd.day())
+    );
+}
+
+static date::sys_days
+date32_days(std::int32_t days) {
+    return date::sys_days{date::days{days}};
+}
+
+static date::sys_days
+date64_days(std::int64_t ms) {
+    return date::sys_days{
+        date::floor<date::days>(std::chrono::milliseconds(ms))
+    };
+}
+
+/**
+ * The `t_tscalar` the flat ingest path stores for this scalar element.
+ */
+static t_tscalar
+leaf_scalar(const arrow::Array& array, std::int64_t i) {
+    switch (array.type_id()) {
+        case arrow::Type::BOOL:
+            return mktscalar(
+                static_cast<const arrow::BooleanArray&>(array).Value(i)
+            );
+        case arrow::Type::INT8:
+            return mktscalar(static_cast<const arrow::Int8Array&>(array).Value(i)
+            );
+        case arrow::Type::INT16:
+            return mktscalar(
+                static_cast<const arrow::Int16Array&>(array).Value(i)
+            );
+        case arrow::Type::INT32:
+            return mktscalar(
+                static_cast<const arrow::Int32Array&>(array).Value(i)
+            );
+        case arrow::Type::INT64:
+            return mktscalar(
+                static_cast<const arrow::Int64Array&>(array).Value(i)
+            );
+        case arrow::Type::UINT8:
+            return mktscalar(
+                static_cast<const arrow::UInt8Array&>(array).Value(i)
+            );
+        case arrow::Type::UINT16:
+            return mktscalar(
+                static_cast<const arrow::UInt16Array&>(array).Value(i)
+            );
+        case arrow::Type::UINT32:
+            return mktscalar(
+                static_cast<const arrow::UInt32Array&>(array).Value(i)
+            );
+        case arrow::Type::UINT64:
+            return mktscalar(
+                static_cast<const arrow::UInt64Array&>(array).Value(i)
+            );
+        case arrow::Type::HALF_FLOAT:
+            return mktscalar(
+                arrow::util::Float16::FromBits(
+                    static_cast<const arrow::HalfFloatArray&>(array).Value(i)
+                )
+                    .ToFloat()
+            );
+        case arrow::Type::FLOAT:
+            return mktscalar(
+                static_cast<const arrow::FloatArray&>(array).Value(i)
+            );
+        case arrow::Type::DOUBLE:
+            return mktscalar(
+                static_cast<const arrow::DoubleArray&>(array).Value(i)
+            );
+        case arrow::Type::TIMESTAMP: {
+            const auto unit =
+                static_cast<const arrow::TimestampType&>(*array.type()).unit();
+            const auto value =
+                static_cast<const arrow::TimestampArray&>(array).Value(i);
+            return mktscalar(t_time(timestamp_to_ms(value, unit)));
+        }
+        case arrow::Type::DATE32:
+            return mktscalar(date_from_days(date32_days(
+                static_cast<const arrow::Date32Array&>(array).Value(i)
+            )));
+        case arrow::Type::DATE64:
+            return mktscalar(date_from_days(date64_days(
+                static_cast<const arrow::Date64Array&>(array).Value(i)
+            )));
+        default:
+            PSP_COMPLAIN_AND_ABORT("Not a scalar Arrow type");
+            return mktscalar();
+    }
+}
+
+static void
+write_base64(
+    rapidjson::Writer<rapidjson::StringBuffer>& writer, std::string_view bytes
+) {
+    const auto text = arrow::util::base64_encode(bytes);
+    writer.String(text.data(), static_cast<rapidjson::SizeType>(text.size()));
+}
+
 /**
  * Write element `i` of `array` as JSON, recursing into nested values.
  */
@@ -395,7 +524,8 @@ static void
 write_json(
     rapidjson::Writer<rapidjson::StringBuffer>& writer,
     const arrow::Array& array,
-    std::int64_t i
+    std::int64_t i,
+    bool formatted
 ) {
     if (!array.IsValid(i)) {
         writer.Null();
@@ -403,59 +533,6 @@ write_json(
     }
 
     switch (array.type_id()) {
-        case arrow::Type::BOOL: {
-            writer.Bool(static_cast<const arrow::BooleanArray&>(array).Value(i));
-        } break;
-        case arrow::Type::INT8: {
-            writer.Int64(static_cast<const arrow::Int8Array&>(array).Value(i));
-        } break;
-        case arrow::Type::INT16: {
-            writer.Int64(static_cast<const arrow::Int16Array&>(array).Value(i));
-        } break;
-        case arrow::Type::INT32: {
-            writer.Int64(static_cast<const arrow::Int32Array&>(array).Value(i));
-        } break;
-        case arrow::Type::INT64: {
-            writer.Int64(static_cast<const arrow::Int64Array&>(array).Value(i));
-        } break;
-        case arrow::Type::UINT8: {
-            writer.Uint64(static_cast<const arrow::UInt8Array&>(array).Value(i));
-        } break;
-        case arrow::Type::UINT16: {
-            writer.Uint64(static_cast<const arrow::UInt16Array&>(array).Value(i)
-            );
-        } break;
-        case arrow::Type::UINT32: {
-            writer.Uint64(static_cast<const arrow::UInt32Array&>(array).Value(i)
-            );
-        } break;
-        case arrow::Type::UINT64: {
-            writer.Uint64(static_cast<const arrow::UInt64Array&>(array).Value(i)
-            );
-        } break;
-        case arrow::Type::HALF_FLOAT: {
-            const auto bits =
-                static_cast<const arrow::HalfFloatArray&>(array).Value(i);
-            writer.Double(arrow::util::Float16::FromBits(bits).ToFloat());
-        } break;
-        case arrow::Type::FLOAT: {
-            const double v =
-                static_cast<const arrow::FloatArray&>(array).Value(i);
-            if (std::isfinite(v)) {
-                writer.Double(v);
-            } else {
-                writer.Null();
-            }
-        } break;
-        case arrow::Type::DOUBLE: {
-            const double v =
-                static_cast<const arrow::DoubleArray&>(array).Value(i);
-            if (std::isfinite(v)) {
-                writer.Double(v);
-            } else {
-                writer.Null();
-            }
-        } break;
         case arrow::Type::STRING: {
             const auto view =
                 static_cast<const arrow::StringArray&>(array).GetView(i);
@@ -472,7 +549,9 @@ write_json(
         } break;
         case arrow::Type::DICTIONARY: {
             const auto& dict = static_cast<const arrow::DictionaryArray&>(array);
-            write_json(writer, *dict.dictionary(), dict.GetValueIndex(i));
+            write_json(
+                writer, *dict.dictionary(), dict.GetValueIndex(i), formatted
+            );
         } break;
         case arrow::Type::LIST: {
             const auto& list = static_cast<const arrow::ListArray&>(array);
@@ -480,7 +559,7 @@ write_json(
             writer.StartArray();
             for (auto e = list.value_offset(i); e < list.value_offset(i + 1);
                  ++e) {
-                write_json(writer, values, e);
+                write_json(writer, values, e, formatted);
             }
 
             writer.EndArray();
@@ -491,7 +570,7 @@ write_json(
             writer.StartArray();
             for (auto e = list.value_offset(i); e < list.value_offset(i + 1);
                  ++e) {
-                write_json(writer, values, e);
+                write_json(writer, values, e, formatted);
             }
 
             writer.EndArray();
@@ -506,7 +585,7 @@ write_json(
                     name.data(), static_cast<rapidjson::SizeType>(name.size())
                 );
 
-                write_json(writer, *strct.field(c), i);
+                write_json(writer, *strct.field(c), i, formatted);
             }
 
             writer.EndObject();
@@ -538,14 +617,97 @@ write_json(
                 } else {
                     rapidjson::StringBuffer key;
                     rapidjson::Writer<rapidjson::StringBuffer> key_writer(key);
-                    write_json(key_writer, keys, e);
+                    write_json(key_writer, keys, e, formatted);
                     writer.Key(key.GetString(), key.GetSize());
                 }
 
-                write_json(writer, items, e);
+                write_json(writer, items, e, formatted);
             }
 
             writer.EndObject();
+        } break;
+        case arrow::Type::BOOL:
+        case arrow::Type::INT8:
+        case arrow::Type::INT16:
+        case arrow::Type::INT32:
+        case arrow::Type::INT64:
+        case arrow::Type::UINT8:
+        case arrow::Type::UINT16:
+        case arrow::Type::UINT32:
+        case arrow::Type::UINT64:
+        case arrow::Type::HALF_FLOAT:
+        case arrow::Type::FLOAT:
+        case arrow::Type::DOUBLE:
+        case arrow::Type::TIMESTAMP:
+        case arrow::Type::DATE32:
+        case arrow::Type::DATE64: {
+            write_scalar(leaf_scalar(array, i), formatted, writer);
+        } break;
+        case arrow::Type::TIME32: {
+            writer.Int64(static_cast<const arrow::Time32Array&>(array).Value(i)
+            );
+        } break;
+        case arrow::Type::TIME64: {
+            writer.Int64(static_cast<const arrow::Time64Array&>(array).Value(i)
+            );
+        } break;
+        case arrow::Type::DURATION: {
+            writer.Int64(
+                static_cast<const arrow::DurationArray&>(array).Value(i)
+            );
+        } break;
+        case arrow::Type::DECIMAL128: {
+            const auto scale =
+                static_cast<const arrow::Decimal128Type&>(*array.type()).scale();
+            const auto text =
+                arrow::Decimal128(
+                    static_cast<const arrow::Decimal128Array&>(array).GetValue(i)
+                )
+                    .ToString(scale);
+            writer.String(
+                text.data(), static_cast<rapidjson::SizeType>(text.size())
+            );
+        } break;
+        case arrow::Type::DECIMAL256: {
+            const auto scale =
+                static_cast<const arrow::Decimal256Type&>(*array.type()).scale();
+            const auto text =
+                arrow::Decimal256(
+                    static_cast<const arrow::Decimal256Array&>(array).GetValue(i)
+                )
+                    .ToString(scale);
+            writer.String(
+                text.data(), static_cast<rapidjson::SizeType>(text.size())
+            );
+        } break;
+        case arrow::Type::BINARY: {
+            write_base64(
+                writer, static_cast<const arrow::BinaryArray&>(array).GetView(i)
+            );
+        } break;
+        case arrow::Type::LARGE_BINARY: {
+            write_base64(
+                writer,
+                static_cast<const arrow::LargeBinaryArray&>(array).GetView(i)
+            );
+        } break;
+        case arrow::Type::FIXED_SIZE_BINARY: {
+            write_base64(
+                writer,
+                static_cast<const arrow::FixedSizeBinaryArray&>(array).GetView(i)
+            );
+        } break;
+        case arrow::Type::FIXED_SIZE_LIST: {
+            const auto& list =
+                static_cast<const arrow::FixedSizeListArray&>(array);
+            const auto& values = *list.values();
+            const auto start = list.value_offset(i);
+            writer.StartArray();
+            for (auto e = start; e < start + list.value_length(i); ++e) {
+                write_json(writer, values, e, formatted);
+            }
+
+            writer.EndArray();
         } break;
         default: {
             std::stringstream ss;
@@ -556,6 +718,25 @@ write_json(
     }
 }
 
+/**
+ * Whether a stringified top-level column of this type writes its datetimes as
+ * `to_json`'s `formatted` text rather than epoch milliseconds.
+ */
+static bool
+stringify_formatted(t_flatten_mode mode, arrow::Type::type id) {
+    switch (id) {
+        case arrow::Type::LIST:
+        case arrow::Type::LARGE_LIST:
+            return mode.list == LIST_FLATTEN_STRINGIFY_FORMATTED;
+        case arrow::Type::STRUCT:
+            return mode.structs == STRUCT_FLATTEN_STRINGIFY_FORMATTED;
+        case arrow::Type::MAP:
+            return mode.maps == MAP_FLATTEN_STRINGIFY_FORMATTED;
+        default:
+            return false;
+    }
+}
+
 template <typename GATHER>
 void
 copy_array_impl(
@@ -563,13 +744,15 @@ copy_array_impl(
     const std::shared_ptr<arrow::Array>& src,
     const int64_t offset,
     const int64_t len,
-    const GATHER& gather
+    const GATHER& gather,
+    t_flatten_mode mode
 ) {
     switch (src->type()->id()) {
         case arrow::Type::LIST:
         case arrow::Type::LARGE_LIST:
         case arrow::Type::STRUCT:
         case arrow::Type::MAP: {
+            const bool formatted = stringify_formatted(mode, src->type_id());
             rapidjson::StringBuffer buffer;
             for (std::int64_t i = 0; i < len; ++i) {
                 if (gather.is_null(i)) {
@@ -583,7 +766,7 @@ copy_array_impl(
 
                 buffer.Clear();
                 rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                write_json(writer, *src, row);
+                write_json(writer, *src, row, formatted);
                 dest->set_nth(offset + i, buffer.GetString());
             }
         } break;
@@ -766,27 +949,12 @@ copy_array_impl(
                         }
                     }
                 } break;
-                case arrow::TimeUnit::NANO: {
+                default: {
                     const int64_t* vals = scol->raw_values();
                     for (int64_t i = 0; i < len; i++) {
                         dest->set_nth<int64_t>(
-                            offset + i, vals[gather[i]] / 1000000
-                        );
-                    }
-                } break;
-                case arrow::TimeUnit::MICRO: {
-                    const int64_t* vals = scol->raw_values();
-                    for (int64_t i = 0; i < len; i++) {
-                        dest->set_nth<int64_t>(
-                            offset + i, vals[gather[i]] / 1000
-                        );
-                    }
-                } break;
-                case arrow::TimeUnit::SECOND: {
-                    const int64_t* vals = scol->raw_values();
-                    for (int64_t i = 0; i < len; i++) {
-                        dest->set_nth<int64_t>(
-                            offset + i, vals[gather[i]] * 1000
+                            offset + i,
+                            timestamp_to_ms(vals[gather[i]], tunit->unit())
                         );
                     }
                 } break;
@@ -798,15 +966,9 @@ copy_array_impl(
             auto scol = std::static_pointer_cast<arrow::Date64Array>(src);
             const int64_t* vals = scol->raw_values();
             for (int64_t i = 0; i < len; i++) {
-                std::chrono::milliseconds timestamp(vals[gather[i]]);
-                date::sys_days days(date::floor<date::days>(timestamp));
-                auto ymd = date::year_month_day{days};
-                std::int32_t year = static_cast<std::int32_t>(ymd.year());
-                std::uint32_t month = static_cast<std::uint32_t>(ymd.month());
-                std::uint32_t day = static_cast<std::uint32_t>(ymd.day());
-                // Decrement month by 1, as date::month is
-                // [1-12] but t_date::month() is [0-11]
-                dest->set_nth(offset + i, t_date(year, month - 1, day));
+                dest->set_nth(
+                    offset + i, date_from_days(date64_days(vals[gather[i]]))
+                );
             }
         } break;
         case arrow::Date32Type::type_id: {
@@ -815,15 +977,9 @@ copy_array_impl(
             auto scol = std::static_pointer_cast<arrow::Date32Array>(src);
             const int32_t* vals = scol->raw_values();
             for (int64_t i = 0; i < len; i++) {
-                date::days days{vals[gather[i]]};
-                auto ymd = date::year_month_day{date::sys_days{days}};
-                // years are signed, month/day are unsigned
-                std::int32_t year = static_cast<std::int32_t>(ymd.year());
-                std::uint32_t month = static_cast<std::uint32_t>(ymd.month());
-                std::uint32_t day = static_cast<std::uint32_t>(ymd.day());
-                // Decrement month by 1, as date::month is
-                // [1-12] but t_date::month() is [0-11]
-                dest->set_nth(offset + i, t_date(year, month - 1, day));
+                dest->set_nth(
+                    offset + i, date_from_days(date32_days(vals[gather[i]]))
+                );
             }
         } break;
         case arrow::FloatType::type_id: {
@@ -884,7 +1040,7 @@ copy_array(
     const int64_t offset,
     const int64_t len
 ) {
-    copy_array_impl(dest, src, offset, len, t_identity_gather{});
+    copy_array_impl(dest, src, offset, len, t_identity_gather{}, t_flatten_mode{});
 }
 
 // Defines the full matrix of type interactions between arrow arrays and
@@ -991,7 +1147,8 @@ void fill_column_chunk(
     std::int64_t offset,
     std::int64_t len,
     bool is_update,
-    const GATHER& gather
+    const GATHER& gather,
+    t_flatten_mode mode
 );
 
 void
@@ -1044,7 +1201,8 @@ ArrowLoader::fill_column(
             0,
             static_cast<std::int64_t>(indices->size()),
             is_update,
-            t_index_gather{indices->data()}
+            t_index_gather{indices->data()},
+            m_mode
         );
 
         return;
@@ -1055,7 +1213,15 @@ ArrowLoader::fill_column(
         std::shared_ptr<arrow::Array> array = carray->chunk(i);
         int64_t len = array->length();
         fill_column_chunk(
-            col, array, name, type, offset, len, is_update, t_identity_gather{}
+            col,
+            array,
+            name,
+            type,
+            offset,
+            len,
+            is_update,
+            t_identity_gather{},
+            m_mode
         );
 
         offset += len;
@@ -1072,7 +1238,8 @@ fill_column_chunk(
     std::int64_t offset,
     std::int64_t len,
     bool is_update,
-    const GATHER& gather
+    const GATHER& gather,
+    t_flatten_mode mode
 ) {
     {
         // A null-typed array carries no values and no validity bitmap: every
@@ -1134,7 +1301,7 @@ fill_column_chunk(
                 };
             }
         } else {
-            copy_array_impl(col, array, offset, len, gather);
+            copy_array_impl(col, array, offset, len, gather, mode);
         }
 
         fill_validity(col, array, offset, len, is_update, gather);

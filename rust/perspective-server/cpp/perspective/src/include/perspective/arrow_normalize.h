@@ -29,11 +29,15 @@ namespace apachearrow {
     using perspective::t_struct_flatten;
     using perspective::LIST_FLATTEN_CARTESIAN;
     using perspective::LIST_FLATTEN_STRINGIFY;
+    using perspective::LIST_FLATTEN_STRINGIFY_FORMATTED;
     using perspective::LIST_FLATTEN_ZIP;
+    using perspective::stringifies;
     using perspective::MAP_FLATTEN_PIVOT;
     using perspective::MAP_FLATTEN_STRINGIFY;
+    using perspective::MAP_FLATTEN_STRINGIFY_FORMATTED;
     using perspective::STRUCT_FLATTEN_PIVOT;
     using perspective::STRUCT_FLATTEN_STRINGIFY;
+    using perspective::STRUCT_FLATTEN_STRINGIFY_FORMATTED;
     extern const char* const FLATTEN_SEPARATOR;
 
     /**

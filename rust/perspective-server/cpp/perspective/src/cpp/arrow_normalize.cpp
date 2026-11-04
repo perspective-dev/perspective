@@ -47,8 +47,7 @@ namespace {
             return true;
         }
 
-        if (type.id() == arrow::Type::STRUCT
-            && mode.structs != STRUCT_FLATTEN_STRINGIFY) {
+        if (type.id() == arrow::Type::STRUCT && !stringifies(mode.structs)) {
             for (const auto& child : type.fields()) {
                 if (type_expands(*child->type(), mode)) {
                     return true;
@@ -56,8 +55,7 @@ namespace {
             }
         }
 
-        if (type.id() == arrow::Type::MAP
-            && mode.maps != MAP_FLATTEN_STRINGIFY) {
+        if (type.id() == arrow::Type::MAP && !stringifies(mode.maps)) {
             return type_expands(
                 *static_cast<const arrow::MapType&>(type).item_type(), mode
             );
@@ -745,16 +743,15 @@ bool
 normalize_table_is_noop(const arrow::Table& input, t_flatten_mode mode) {
     for (const auto& field : input.schema()->fields()) {
         const auto id = field->type()->id();
-        if (mode.structs != STRUCT_FLATTEN_STRINGIFY
-            && id == arrow::Type::STRUCT) {
+        if (!stringifies(mode.structs) && id == arrow::Type::STRUCT) {
             return false;
         }
 
-        if (mode.maps != MAP_FLATTEN_STRINGIFY && id == arrow::Type::MAP) {
+        if (!stringifies(mode.maps) && id == arrow::Type::MAP) {
             return false;
         }
 
-        if (mode.list != LIST_FLATTEN_STRINGIFY && is_list_id(id)) {
+        if (!stringifies(mode.list) && is_list_id(id)) {
             return false;
         }
     }
@@ -764,7 +761,7 @@ normalize_table_is_noop(const arrow::Table& input, t_flatten_mode mode) {
 
 bool
 normalize_table_expands(const arrow::Table& input, t_flatten_mode mode) {
-    if (mode.list == LIST_FLATTEN_STRINGIFY) {
+    if (stringifies(mode.list)) {
         return false;
     }
 
@@ -787,14 +784,14 @@ normalize_table(std::shared_ptr<arrow::Table> input, t_flatten_mode mode) {
     out.num_rows = input->num_rows();
     while (true) {
         bool changed = false;
-        if (mode.structs != STRUCT_FLATTEN_STRINGIFY
+        if (!stringifies(mode.structs)
             && flatten_structs(
                 out.fields, out.columns, out.gathers, out.per_element
             )) {
             changed = true;
         }
 
-        if (mode.maps != MAP_FLATTEN_STRINGIFY
+        if (!stringifies(mode.maps)
             && pivot_maps(
                 out.fields,
                 out.columns,
@@ -805,7 +802,7 @@ normalize_table(std::shared_ptr<arrow::Table> input, t_flatten_mode mode) {
             changed = true;
         }
 
-        if (mode.list != LIST_FLATTEN_STRINGIFY
+        if (!stringifies(mode.list)
             && explode_lists(
                 out.fields,
                 out.columns,
