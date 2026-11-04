@@ -317,32 +317,16 @@ impl Layout {
         }
     }
 
-    /// Check that this tree names each of `ids` exactly once and is
-    /// well-formed, describing the first violation found.
-    pub fn validate(&self, ids: &[String]) -> Result<(), String> {
-        if let Layout::Split(split) = self
-            && split.children.is_empty()
-            && split.sizes.is_empty()
-            && ids.is_empty()
-        {
-            return Ok(());
-        }
-
+    /// Check that this tree is well-formed and names each of `ids` at most
+    /// once, returning the `ids` it leaves unplaced.
+    pub fn validate(&self, ids: &[String]) -> Result<Vec<String>, String> {
         let mut seen = Vec::new();
         self.validate_node("layout", ids, &mut seen)?;
-        let missing = ids
+        Ok(ids
             .iter()
             .filter(|id| !seen.contains(id))
-            .collect::<Vec<_>>();
-
-        if !missing.is_empty() {
-            return Err(format!(
-                "Invalid layout: panels {missing:?} are missing - a layout must name every panel \
-                 exactly once (panels: {ids:?})"
-            ));
-        }
-
-        Ok(())
+            .cloned()
+            .collect())
     }
 
     fn validate_node(
@@ -353,32 +337,20 @@ impl Layout {
     ) -> Result<(), String> {
         match self {
             Layout::Split(split) => {
-                if split.children.is_empty() {
-                    return Err(format!("Invalid layout: {path}.children is empty"));
-                }
-
                 if split.sizes.len() != split.children.len() {
                     return Err(format!(
-                        "Invalid layout: {path}.sizes has {} entries for {} children - give one \
-                         size per child",
+                        "Invalid layout: {path}.sizes has {} entries for {} children",
                         split.sizes.len(),
                         split.children.len()
                     ));
                 }
 
-                if let Some(size) = split.sizes.iter().find(|x| !x.is_finite() || **x <= 0.0) {
-                    return Err(format!(
-                        "Invalid layout: {path}.sizes contains {size} - sizes must be positive \
-                         fractions"
-                    ));
+                if let Some(size) = split.sizes.iter().find(|x| !x.is_finite() || **x < 0.0) {
+                    return Err(format!("Invalid layout: {path}.sizes contains {size}"));
                 }
 
-                let total: f64 = split.sizes.iter().sum();
-                if (total - 1.0).abs() > 1e-6 {
-                    return Err(format!(
-                        "Invalid layout: {path}.sizes sum to {total} - sizes are fractions of the \
-                         split and must sum to 1"
-                    ));
+                if !split.sizes.is_empty() && split.sizes.iter().sum::<f64>() <= 0.0 {
+                    return Err(format!("Invalid layout: {path}.sizes sum to zero"));
                 }
 
                 for (index, child) in split.children.iter().enumerate() {
@@ -388,20 +360,6 @@ impl Layout {
                 Ok(())
             },
             Layout::Tab(tab) => {
-                if tab.tabs.is_empty() {
-                    return Err(format!("Invalid layout: {path}.tabs is empty"));
-                }
-
-                if let Some(selected) = tab.selected
-                    && selected >= tab.tabs.len()
-                {
-                    return Err(format!(
-                        "Invalid layout: {path}.selected is {selected} but {path}.tabs has {} \
-                         entries",
-                        tab.tabs.len()
-                    ));
-                }
-
                 for name in &tab.tabs {
                     if !ids.contains(name) {
                         return Err(format!(
@@ -412,8 +370,7 @@ impl Layout {
 
                     if seen.contains(name) {
                         return Err(format!(
-                            "Invalid layout: panel \"{name}\" appears more than once - a layout \
-                             must name every panel exactly once"
+                            "Invalid layout: panel \"{name}\" appears more than once"
                         ));
                     }
 

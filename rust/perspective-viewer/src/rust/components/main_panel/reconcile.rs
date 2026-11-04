@@ -41,9 +41,6 @@ const LAYOUT_PHYSICS: LayoutPhysics = LayoutPhysics {
 };
 
 impl MainPanel {
-    /// Size each STAGED panel's hidden `.psp-staging` wrapper to the exact
-    /// plugin box its promote insert will commit (see
-    /// `.plan/DUPLICATE_STAGING_PREDICTION_PLAN.md`).
     pub(super) fn size_staging_wrappers(&self, ctx: &Context<Self>) {
         let Some(root) = self.main_panel_ref.cast::<web_sys::Element>() else {
             return;

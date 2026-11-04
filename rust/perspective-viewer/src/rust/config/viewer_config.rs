@@ -332,13 +332,13 @@ pub struct ViewerConfigInitial {
     pub plugin: Option<String>,
 
     /// Panel title, shown in its tab. Absent renders the default title.
-    #[ts(optional)]
+    #[ts(optional = nullable)]
     pub title: Option<String>,
 
     /// Theme NAME (e.g. `"Pro Dark"`) — not a CSS value. Valid names are
     /// the Perspective themes loaded on the page. Absent uses the
     /// default.
-    #[ts(optional)]
+    #[ts(optional = nullable)]
     pub theme: Option<String>,
 
     /// Plugin-wide settings (as opposed to the per-column

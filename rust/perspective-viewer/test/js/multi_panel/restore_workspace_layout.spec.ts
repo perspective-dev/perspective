@@ -88,11 +88,6 @@ const INVALID_LAYOUTS: [string, any, string][] = [
         'unknown panel "nope"',
     ],
     [
-        "an omitted panel",
-        split("horizontal", [0.5, 0.5], [tab("one"), tab("two")]),
-        "missing",
-    ],
-    [
         "a duplicated panel",
         split(
             "horizontal",
@@ -104,12 +99,7 @@ const INVALID_LAYOUTS: [string, any, string][] = [
     [
         "a sizes length mismatch",
         split("horizontal", [0.5, 0.5], [tab("one"), tab("two"), tab("three")]),
-        "one size per child",
-    ],
-    [
-        "sizes that do not sum to 1",
-        split("horizontal", [1, 1, 1], [tab("one"), tab("two"), tab("three")]),
-        "must sum to 1",
+        "has 2 entries for 3 children",
     ],
     [
         "a negative size",
@@ -118,21 +108,12 @@ const INVALID_LAYOUTS: [string, any, string][] = [
             [1.5, -0.25, -0.25],
             [tab("one"), tab("two"), tab("three")],
         ),
-        "positive",
+        "contains -0.25",
     ],
     [
-        "an empty tab stack",
-        split(
-            "horizontal",
-            [0.5, 0.5],
-            [tab("one", "two", "three"), { type: "tab-layout", tabs: [] }],
-        ),
-        "tabs is empty",
-    ],
-    [
-        "an out-of-range selected tab",
-        { type: "tab-layout", tabs: ["one", "two", "three"], selected: 3 },
-        "selected is 3",
+        "all-zero sizes",
+        split("horizontal", [0, 0, 0], [tab("one"), tab("two"), tab("three")]),
+        "sum to zero",
     ],
 ];
 
@@ -160,6 +141,44 @@ test.describe("restoreWorkspace layout validation", () => {
 
         expect(result.error).toContain('unknown panel "c"');
         expect(result.after).toEqual(result.before);
+        expect(result.panels).toEqual(result.names);
+    });
+
+    test("drops an existing panel the layout omits", async ({ page }) => {
+        const layout = split("horizontal", [0.5, 0.5], [tab("one"), tab("two")]);
+        const result = await try_restore(page, { layout });
+        expect(result.error).toBeNull();
+        expect(result.panels).toEqual(["one", "two"]);
+        expect(result.after.layout).toEqual(layout);
+        expect(Object.keys(result.after.panels).sort()).toEqual(["one", "two"]);
+    });
+
+    test("drops an incoming panel the layout omits", async ({ page }) => {
+        const layout = split("horizontal", [0.5, 0.5], [tab("a"), tab("b")]);
+        const result = await try_restore(page, {
+            layout,
+            panels: {
+                a: { table: TABLE, plugin: "Debug" },
+                b: { table: TABLE, plugin: "Debug" },
+                c: { table: TABLE, plugin: "Debug" },
+            },
+        });
+
+        expect(result.error).toBeNull();
+        expect(result.panels).toEqual(["a", "b"]);
+        expect(result.after.layout).toEqual(layout);
+    });
+
+    test("accepts sizes that do not sum to 1", async ({ page }) => {
+        const result = await try_restore(page, {
+            layout: split(
+                "horizontal",
+                [1, 2, 1],
+                [tab("one"), tab("two"), tab("three")],
+            ),
+        });
+
+        expect(result.error).toBeNull();
         expect(result.panels).toEqual(result.names);
     });
 

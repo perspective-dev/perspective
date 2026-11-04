@@ -1217,6 +1217,24 @@ impl PerspectiveViewerElement {
             ));
         }
 
+        if let Some(layout) = args.config.get("layout").filter(|x| !x.is_null()) {
+            let layout: crate::js::Layout = serde_json::from_value(layout.clone())?;
+            let ids = self
+                .workspace
+                .panel_ids()
+                .iter()
+                .map(|id| id.as_str().to_owned())
+                .collect::<Vec<_>>();
+
+            let unplaced = layout.validate(&ids).map_err(ToolError)?;
+            if !unplaced.is_empty() {
+                return Err(ToolError(format!(
+                    "Invalid layout: panels {unplaced:?} are missing - name every panel, or \
+                     remove it first with `remove_panel`"
+                )));
+            }
+        }
+
         let snapshot = self.agent_save_workspace().await?;
         if let Some(derived) = args.config.get("derived_tables") {
             self.agent_check_derived(&snapshot, derived).await?;
