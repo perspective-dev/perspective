@@ -431,10 +431,10 @@ str_to_filter_op(const std::string& str) {
     if (str == "|" || str == "or") {
         return t_filter_op::FILTER_OP_OR;
     }
-    if (str == "is null" || str == "is None") {
+    if (str == "is null") {
         return t_filter_op::FILTER_OP_IS_NULL;
     }
-    if (str == "is not null" || str == "is not None") {
+    if (str == "is not null") {
         return t_filter_op::FILTER_OP_IS_NOT_NULL;
     }
 
@@ -591,9 +591,6 @@ maybe_str_to_aggtype(const std::string& str) {
     if (str == "sum or zero" || str == "sum_or_zero") {
         return t_aggtype::AGGTYPE_SUM_OR_ZERO;
     }
-    if (str == "sum not null" || str == "sum_not_null") {
-        return t_aggtype::AGGTYPE_SUM;
-    }
     if (str == "mean by count" || str == "mean_by_count") {
         return t_aggtype::AGGTYPE_MEAN_BY_COUNT;
     }
@@ -606,8 +603,7 @@ maybe_str_to_aggtype(const std::string& str) {
     if (str == "pct sum parent" || str == "pct_sum_parent") {
         return t_aggtype::AGGTYPE_PCT_SUM_PARENT;
     }
-    if (str == "pct sum total" || str == "pct_sum_total"
-        || str == "pct sum grand total" || str == "pct_sum_grand_total") {
+    if (str == "pct sum total" || str == "pct_sum_total") {
         return t_aggtype::AGGTYPE_PCT_SUM_GRAND_TOTAL;
     }
     if (str.find("udf_combiner_") != std::string::npos) {

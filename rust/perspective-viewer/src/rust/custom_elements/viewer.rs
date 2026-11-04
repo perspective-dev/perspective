@@ -1048,7 +1048,9 @@ impl PerspectiveViewerElement {
     ///
     /// This restores a SINGLE panel; a workspace config (with a `panels`
     /// map) must be applied via [`Self::restoreWorkspace`] — its `panels` /
-    /// `layout` keys are ignored here.
+    /// `layout` keys are rejected here, as is any key the config format does
+    /// not define; a rejected config stamped by another release names that
+    /// release in the error (upgrade those with `perspective-migrate`).
     ///
     /// One of the best ways to use [`Self::restore`] is by first configuring
     /// a `<perspective-viewer>` as you wish, then using either the `Debug`
@@ -1057,8 +1059,7 @@ impl PerspectiveViewerElement {
     ///
     /// # Arguments
     ///
-    /// - `update` - The config to restore to, as returned by [`Self::save`] in
-    ///   either "json", "string" or "arraybuffer" format.
+    /// - `update` - The config to restore to, as returned by [`Self::save`].
     /// - `options.panel` - The panel to target, or the active panel when
     ///   omitted.
     /// - `options.suppress_errors` - when `true`, a config that was applied and
@@ -1090,7 +1091,8 @@ impl PerspectiveViewerElement {
     ) -> JsVoidPromise {
         let effect = self.workspace.effects().guard();
         let this = self.clone();
-        let fut = ApiFuture::new_throttled(async move {
+        let saved = saved_version(&update);
+        let fut = ApiFuture::new_throttled(noting_saved_version(saved, async move {
             let RestoreOptions {
                 panel: name,
                 suppress_errors,
@@ -1108,7 +1110,6 @@ impl PerspectiveViewerElement {
             let _effect = effect;
             let id = name.map(PanelId::from);
             let mut update = ViewerConfigUpdate::decode(&update)?;
-            update.migrate();
             let settings = std::mem::replace(&mut update.settings, OptionalUpdate::Missing);
             enum Target {
                 Existing { panel: Panel, active: bool },
@@ -1206,7 +1207,7 @@ impl PerspectiveViewerElement {
                     Ok(())
                 },
             }
-        });
+        }));
 
         js_sys::Promise::from(fut).unchecked_into()
     }
@@ -1243,7 +1244,8 @@ impl PerspectiveViewerElement {
     ) -> JsVoidPromise {
         let effect = self.workspace.effects().guard();
         let this = self.clone();
-        let fut = ApiFuture::new(async move {
+        let saved = saved_version(&update);
+        let fut = ApiFuture::new(noting_saved_version(saved, async move {
             let _effect = effect;
             let RestoreWorkspaceOptions { wait_for_table } = parse_options(options)?;
             let missing = MissingTable::from_wait(wait_for_table);
@@ -1308,7 +1310,7 @@ impl PerspectiveViewerElement {
 
             ejected?;
             Ok(())
-        });
+        }));
 
         js_sys::Promise::from(fut).unchecked_into()
     }
@@ -2024,11 +2026,11 @@ impl PerspectiveViewerElement {
         clone!(self.elem, self.presentation, self.workspace);
         let effect = workspace.effects().guard();
         let notify = self.layout_changed_notify();
-        ApiFuture::new(async move {
+        let saved = saved_version(&config);
+        ApiFuture::new(noting_saved_version(saved, async move {
             let _effect = effect;
             let AddPanelOptions { wait_for_table } = parse_options(options)?;
-            let mut config = ViewerConfigInitial::decode(&config)?;
-            config.migrate();
+            let config = ViewerConfigInitial::decode(&config)?;
             let id = create_panel(
                 &elem,
                 &presentation,
@@ -2041,7 +2043,7 @@ impl PerspectiveViewerElement {
             )
             .await?;
             Ok(JsValue::from_str(id.as_str()))
-        })
+        }))
     }
 
     /// Get the ids of all panels in this viewer's layout, in insertion order.

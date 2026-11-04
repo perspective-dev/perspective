@@ -1,0 +1,83 @@
+{
+    "kind": "view",
+    "from": "5.5.0",
+    "source": "hand-written",
+    "input": {
+        "group_by": [
+            "A",
+            "B",
+            "A"
+        ],
+        "columns": [
+            "x",
+            "y",
+            "z",
+            "v"
+        ],
+        "filter": [
+            [
+                "A",
+                "is None",
+                null
+            ],
+            [
+                "B",
+                "is not None"
+            ]
+        ],
+        "aggregates": {
+            "x": "sum not null",
+            "y": "last value",
+            "z": "pct_sum_grand_total",
+            "w": "py agg",
+            "v": "high minuslow"
+        }
+    },
+    "output": {
+        "group_by": [
+            "A",
+            "B"
+        ],
+        "columns": [
+            "x",
+            "y",
+            "z",
+            "v"
+        ],
+        "filter": [
+            [
+                "A",
+                "is null",
+                null
+            ],
+            [
+                "B",
+                "is not null"
+            ]
+        ],
+        "aggregates": {
+            "x": "sum",
+            "y": "last",
+            "z": "pct sum total",
+            "v": "high minus low"
+        }
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "view.dedupe_group_by",
+            "pointer": "/group_by",
+            "value": "A"
+        },
+        {
+            "kind": "Dropped",
+            "step": "view.canonical_names",
+            "pointer": "/aggregates/w",
+            "value": "py agg"
+        }
+    ],
+    "steps": [
+        "view.dedupe_group_by",
+        "view.canonical_names"
+    ]
+}

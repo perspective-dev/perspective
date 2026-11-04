@@ -150,7 +150,10 @@ const result = await table.validate_expressions({
 <div class="python">
 
 ```python
-result = table.validate_expressions(['"Sales" + "Profit"', 'invalid + 1'])
+result = table.validate_expressions({
+    "expr1": '"Sales" + "Profit"',
+    "expr2": "invalid_column + 1",
+})
 ```
 
 </div>

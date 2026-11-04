@@ -1,0 +1,27 @@
+{
+    "kind": "workspace",
+    "source": "hand-written from v5.1.0:rust/perspective-viewer/src/rust/config/workspace_config.rs",
+    "input": {
+        "version": "5.1.0",
+        "layout": {
+            "type": "tab-layout",
+            "tabs": [
+                "A"
+            ]
+        },
+        "panels": {
+            "A": {
+                "version": "5.1.0",
+                "plugin": "Datagrid",
+                "table": null
+            }
+        }
+    },
+    "error": {
+        "kind": "MissingTable",
+        "step": "ws.panel_table",
+        "panel": "A"
+    },
+    "notices": [],
+    "steps": []
+}

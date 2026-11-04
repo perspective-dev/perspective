@@ -23,7 +23,7 @@ use futures::future::LocalBoxFuture;
 use perspective_client::config::ViewConfigUpdate;
 use perspective_js::utils::*;
 
-use crate::config::{OptionalUpdate, ViewerConfigUpdate};
+use crate::config::{OptionalUpdate, UnknownKeys, ViewerConfigUpdate};
 use crate::utils::InFlightGuard;
 
 /// The render an op's ticket waits on after its write is finished.
@@ -373,6 +373,7 @@ fn overwrites((later_view, later): Writes, (earlier_view, earlier): Writes) -> b
         title,
         table,
         view_config,
+        unknown: UnknownKeys,
     } = earlier.unwrap_or(&empty);
 
     let _ = (version, view_config);

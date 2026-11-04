@@ -916,7 +916,10 @@ const random_string = (
             ];
 
             const view = await table.view({
-                expressions,
+                expressions: expressions.reduce(
+                    (x, y) => Object.assign(x, { [y]: y }),
+                    {},
+                ),
             });
 
             const schema = await view.expression_schema();
@@ -984,7 +987,10 @@ const random_string = (
             ];
 
             const view = await table.view({
-                expressions,
+                expressions: expressions.reduce(
+                    (x, y) => Object.assign(x, { [y]: y }),
+                    {},
+                ),
             });
 
             const schema = await view.expression_schema();
@@ -1042,7 +1048,9 @@ const random_string = (
                 `match("a", '?')`,
             ];
 
-            const validated = await table.validate_expressions(expressions);
+            const validated = await table.validate_expressions(
+                expressions.reduce((x, y) => Object.assign(x, { [y]: y }), {}),
+            );
             expect(validated.expression_schema).toEqual({});
 
             for (const expr of expressions) {
@@ -1059,7 +1067,10 @@ const random_string = (
             // valid to create a view from them.
             await expect(
                 table.view({
-                    expressions,
+                    expressions: expressions.reduce(
+                        (x, y) => Object.assign(x, { [y]: y }),
+                        {},
+                    ),
                 }),
             ).rejects.toThrow();
 
@@ -1080,7 +1091,9 @@ const random_string = (
                 `match("a", '?')`,
             ];
 
-            const validated = await table.validate_expressions(expressions);
+            const validated = await table.validate_expressions(
+                expressions.reduce((x, y) => Object.assign(x, { [y]: y }), {}),
+            );
             expect(validated.expression_schema).toEqual({});
 
             for (const expr of expressions) {
@@ -1096,7 +1109,10 @@ const random_string = (
             // Because a bad regex does not raise a parse error, it is still
             // valid to create a view from them.
             const view = await table.view({
-                expressions,
+                expressions: expressions.reduce(
+                    (x, y) => Object.assign(x, { [y]: y }),
+                    {},
+                ),
             });
 
             const schema = await view.expression_schema();
@@ -1124,7 +1140,9 @@ const random_string = (
                 `match_all("a", '+.')`,
             ];
 
-            const validated = await table.validate_expressions(expressions);
+            const validated = await table.validate_expressions(
+                expressions.reduce((x, y) => Object.assign(x, { [y]: y }), {}),
+            );
             expect(validated.expression_schema).toEqual({});
 
             for (const expr of expressions) {
@@ -1139,7 +1157,10 @@ const random_string = (
 
             await expect(
                 table.view({
-                    expressions,
+                    expressions: expressions.reduce(
+                        (x, y) => Object.assign(x, { [y]: y }),
+                        {},
+                    ),
                 }),
             ).rejects.toThrow();
 
@@ -1159,7 +1180,9 @@ const random_string = (
                 `match(False, '[0-9]{7}')`,
             ];
 
-            const validated = await table.validate_expressions(expressions);
+            const validated = await table.validate_expressions(
+                expressions.reduce((x, y) => Object.assign(x, { [y]: y }), {}),
+            );
 
             for (const expr of expressions) {
                 expect(validated.expression_schema[expr]).toBeUndefined();
@@ -1203,7 +1226,9 @@ const random_string = (
                 `match_all(False, '[0-9]{7}')`,
             ];
 
-            const validated = await table.validate_expressions(expressions);
+            const validated = await table.validate_expressions(
+                expressions.reduce((x, y) => Object.assign(x, { [y]: y }), {}),
+            );
 
             for (const expr of expressions) {
                 expect(validated.expression_schema[expr]).toBeUndefined();
@@ -1247,7 +1272,10 @@ const random_string = (
             ];
 
             const view = await table.view({
-                expressions,
+                expressions: expressions.reduce(
+                    (x, y) => Object.assign(x, { [y]: y }),
+                    {},
+                ),
             });
 
             const schema = await view.expression_schema();
@@ -1290,7 +1318,10 @@ const random_string = (
             ];
 
             const view = await table.view({
-                expressions,
+                expressions: expressions.reduce(
+                    (x, y) => Object.assign(x, { [y]: y }),
+                    {},
+                ),
             });
 
             const schema = await view.expression_schema();
@@ -1333,7 +1364,10 @@ const random_string = (
             ];
 
             const view = await table.view({
-                expressions,
+                expressions: expressions.reduce(
+                    (x, y) => Object.assign(x, { [y]: y }),
+                    {},
+                ),
             });
 
             const schema = await view.expression_schema();
@@ -1374,7 +1408,10 @@ const random_string = (
             ];
 
             const view = await table.view({
-                expressions,
+                expressions: expressions.reduce(
+                    (x, y) => Object.assign(x, { [y]: y }),
+                    {},
+                ),
             });
 
             const schema = await view.expression_schema();
@@ -1414,7 +1451,10 @@ const random_string = (
             ];
 
             const view = await table.view({
-                expressions,
+                expressions: expressions.reduce(
+                    (x, y) => Object.assign(x, { [y]: y }),
+                    {},
+                ),
             });
 
             const schema = await view.expression_schema();
@@ -1462,7 +1502,10 @@ const random_string = (
             ];
 
             const view = await table.view({
-                expressions,
+                expressions: expressions.reduce(
+                    (x, y) => Object.assign(x, { [y]: y }),
+                    {},
+                ),
             });
 
             const schema = await view.expression_schema();
@@ -1516,7 +1559,12 @@ const random_string = (
                 `search("b", '([A-Za-z]{3})')`,
             ];
 
-            const view = await table.view({ expressions });
+            const view = await table.view({
+                expressions: expressions.reduce(
+                    (x, y) => Object.assign(x, { [y]: y }),
+                    {},
+                ),
+            });
 
             const schema = await view.expression_schema();
 
@@ -1594,12 +1642,10 @@ const random_string = (
             };
 
             const table = await perspective.table({ a: get_data(100) });
-            const expressions = [
-                `// address
-            search("a", '^([a-zA-Z0-9._-]+)@');`,
-                `// domain
-            search("a", '@([a-zA-Z.]+)$')`,
-            ];
+            const expressions = {
+                address: `search("a", '^([a-zA-Z0-9._-]+)@');`,
+                domain: `search("a", '@([a-zA-Z.]+)$')`,
+            };
 
             // Make the same regex 10x - make sure it's ok to cache the regex
             for (let i = 0; i < 10; i++) {
@@ -1764,7 +1810,9 @@ const random_string = (
                 }
             }
 
-            const validate = await table.validate_expressions(expressions);
+            const validate = await table.validate_expressions(
+                expressions.reduce((x, y) => Object.assign(x, { [y]: y }), {}),
+            );
             expect(validate.expression_schema).toEqual({});
 
             for (const expr of expressions) {
@@ -1826,7 +1874,9 @@ const random_string = (
                 expressions.push(expr);
             }
 
-            const validate = await table.validate_expressions(expressions);
+            const validate = await table.validate_expressions(
+                expressions.reduce((x, y) => Object.assign(x, { [y]: y }), {}),
+            );
             expect(validate.expression_schema).toEqual(expected_schema);
 
             await table.delete();
@@ -2028,28 +2078,24 @@ const random_string = (
                 y: ["$300", "$123.58", "$0.99", "$1.99"],
             });
 
-            const expressions = [
-                `// year
-            var year_vec[2];
+            const expressions = {
+                year: `var year_vec[2];
             indexof("x", '([0-9]{4})$', year_vec);
             var start := year_vec[0];
             var len := year_vec[1] - start + 1;
             substring("x", start, len);`,
-                `// year int
-            var year_vec[2];
+                "year int": `var year_vec[2];
             indexof("x", '([0-9]{4})$', year_vec);
             var start := year_vec[0];
             var len := year_vec[1] - start + 1;
             integer(substring("x", start, len));`,
-                `// dollars
-            var out[2];
+                dollars: `var out[2];
             indexof("y", '^[$]([0-9.]+)', out);
             substring("y", out[0], out[1] - out[0] + 1)`,
-                `// dollars float
-            var out[2];
+                "dollars float": `var out[2];
             indexof("y", '^[$]([0-9.]+)', out);
             float(substring("y", out[0], out[1] - out[0] + 1))`,
-            ];
+            };
 
             const view = await table.view({ expressions });
             const schema = await view.expression_schema();
@@ -2134,12 +2180,14 @@ const random_string = (
 
             // substring() with invalid indices will pass type checking but
             // will return null.
-            const validate = await table.validate_expressions([
-                'substring("x", -1)',
-                'substring("x", 1, 10000)',
-                'substring("x", 10000)',
-                'substring("x", 5, 4)',
-            ]);
+            const validate = await table.validate_expressions(
+                [
+                    'substring("x", -1)',
+                    'substring("x", 1, 10000)',
+                    'substring("x", 10000)',
+                    'substring("x", 5, 4)',
+                ].reduce((x, y) => Object.assign(x, { [y]: y }), {}),
+            );
 
             expect(validate.expression_schema).toEqual({
                 'substring("x", -1)': "string",
@@ -2363,16 +2411,15 @@ const random_string = (
             };
 
             const table = await perspective.table({ a: get_data(100) });
-            const expressions = [
-                `// ending
-            var domain := search(\"a\", '@([a-zA-Z.]+)$');
+            const expressions = {
+                ending: `var domain := search(\"a\", '@([a-zA-Z.]+)$');
             var len := length(domain);
             if (len > 0 and is_not_null(domain)) {
                 search(domain, '[.](.*)$');
             } else {
                 'not found';
             }`,
-            ];
+            };
 
             // Make the same regex 10x - make sure it's ok to cache the regex
             for (let i = 0; i < 10; i++) {

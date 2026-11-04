@@ -169,7 +169,7 @@ class PerspectiveWidget(anywidget.AnyWidget, PerspectiveViewer):
         ...     group_by=["a"],
         ...     sort=[["b", "desc"]],
         ...     filter=[["a", ">", 1]],
-        ...     expressions=["\"a\" + 100"])
+        ...     expressions={"plus_100": "\"a\" + 100"})
         """
 
         self.binding_mode = binding_mode

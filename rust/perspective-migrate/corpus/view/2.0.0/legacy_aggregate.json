@@ -1,0 +1,37 @@
+{
+    "kind": "view",
+    "from": "2.0.0",
+    "source": "hand-written from v2.10.1:packages/perspective/src/js/perspective.js",
+    "input": {
+        "aggregate": [
+            {
+                "column": "Sales",
+                "op": "sum"
+            },
+            {
+                "column": "Profit",
+                "op": "avg"
+            }
+        ],
+        "group_by": [
+            "Region"
+        ]
+    },
+    "output": {
+        "group_by": [
+            "Region"
+        ],
+        "aggregates": {
+            "Sales": "sum",
+            "Profit": "avg"
+        },
+        "columns": [
+            "Sales",
+            "Profit"
+        ]
+    },
+    "notices": [],
+    "steps": [
+        "view.v2_aliases"
+    ]
+}

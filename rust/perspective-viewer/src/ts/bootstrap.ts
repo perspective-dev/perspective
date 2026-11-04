@@ -13,11 +13,16 @@
 import type * as wasm_module_type from "../../dist/wasm/perspective-viewer.js";
 import {
     init as registry_init,
+    MigrateLoader,
     provide_viewer_runtime,
+    resolve_migrate,
+    shared_migrate,
 } from "@perspective-dev/client/registry";
 import type {
     ClientRuntime,
     InitOptions,
+    MigrateKind,
+    MigrateResult,
     WasmRegistration,
 } from "@perspective-dev/client/registry";
 
@@ -42,6 +47,26 @@ export async function init(
     await registry_init(wasm, options);
 }
 
+/**
+ * A WebAssembly binary in any form `init_client` accepts; thunks are only
+ * invoked when the binary is needed.
+ */
+export type ViewerWasmSource =
+    | Promise<Response | ArrayBuffer | Uint8Array>
+    | Response
+    | ArrayBuffer
+    | Uint8Array
+    | (() => Promise<Response | ArrayBuffer | Uint8Array>);
+
+/**
+ * The `<perspective-viewer>` binary, and the `perspective-migrate` binary
+ * behind `migrate()`.
+ */
+export interface ViewerWasmRegistration {
+    viewer?: ViewerWasmSource;
+    migrate?: ViewerWasmSource;
+}
+
 let GLUE_OVERRIDE: typeof wasm_module_type | undefined;
 
 provide_viewer_runtime(async (wasm) => {
@@ -59,21 +84,70 @@ provide_viewer_runtime(async (wasm) => {
     return { glue: glue as ClientRuntime["glue"], module };
 });
 
+const MIGRATE = new MigrateLoader();
+MIGRATE.register(resolve_migrate);
+
+function is_registration(
+    wasm: ViewerWasmSource | ViewerWasmRegistration,
+): wasm is ViewerWasmRegistration {
+    return (
+        typeof wasm === "object" &&
+        !(wasm instanceof Promise) &&
+        !(wasm instanceof Response) &&
+        !(wasm instanceof ArrayBuffer) &&
+        !ArrayBuffer.isView(wasm)
+    );
+}
+
 /**
- * Initialize `<perspective-viewer>` from its WebAssembly binary; a wrapper
- * over `init()`'s `viewer` role.
+ * Initialize `<perspective-viewer>` from its WebAssembly binary, and register
+ * the `perspective-migrate` binary which `migrate()` downloads on first use;
+ * a wrapper over `init()`'s `viewer` and `migrate` roles.
+ *
+ * # Examples
+ *
+ * ```javascript
+ * await init_client({
+ *     viewer: () => fetch("perspective-viewer.wasm"),
+ *     migrate: () => fetch("perspective-migrate-js.wasm"),
+ * });
+ * ```
  */
 export async function init_client(
-    wasm_binary:
-        | Promise<Response | ArrayBuffer | Uint8Array>
-        | Response
-        | ArrayBuffer
-        | Uint8Array,
+    wasm: ViewerWasmSource | ViewerWasmRegistration,
     wasm_module?: typeof wasm_module_type,
 ) {
+    const registration = is_registration(wasm) ? wasm : { viewer: wasm };
+    const { viewer, migrate } = registration;
+    if (viewer === undefined && migrate === undefined) {
+        throw new Error(
+            "init_client requires a wasm source or a {viewer, migrate} registration",
+        );
+    }
+
     if (wasm_module !== undefined) {
         GLUE_OVERRIDE = wasm_module;
     }
 
-    await init({ viewer: wasm_binary });
+    await init({ viewer, migrate });
+}
+
+/**
+ * Upgrade a persisted config written by any Perspective release since 2.0.0
+ * to the current schema, using the `migrate` binary registered with `init()`.
+ *
+ * # Arguments
+ *
+ * - `kind` - `"view"` for a `ViewConfig`, `"viewer"` for a `save()` token, or
+ *   `"workspace"` for a `saveWorkspace()` token.
+ * - `config` - The config to upgrade.
+ * - `from_version` - The release which wrote `config`, used only when it has
+ *   no `version` field.
+ */
+export async function migrate<T = Record<string, unknown>>(
+    kind: MigrateKind,
+    config: unknown,
+    from_version?: string,
+): Promise<MigrateResult<T>> {
+    return await shared_migrate(MIGRATE).migrate<T>(kind, config, from_version);
 }

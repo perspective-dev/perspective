@@ -22,8 +22,14 @@ const URLS = {
     cdn: `${CLIENT}/dist/cdn/perspective.js`,
     viewer_cdn: `${VIEWER}/dist/cdn/perspective-viewer.js`,
     client_wasm: `${CLIENT}/dist/wasm/perspective-js.wasm`,
+    migrate_wasm: `${CLIENT}/dist/wasm/perspective-migrate-js.wasm`,
     wasm32: `${SERVER}/dist/wasm/perspective-server.wasm`,
     wasm64: `${SERVER}/dist/wasm/perspective-server.memory64.wasm`,
+};
+
+const V2_VIEW = {
+    row_pivot: ["State"],
+    expressions: ['//profit\n"Sales" - "Cost"'],
 };
 
 async function in_page(page, fn, args = {}) {
@@ -243,6 +249,33 @@ test.describe("wasm registry", () => {
         });
 
         test.expect(result).toEqual({ esm: false, registry: true, cdn: true });
+    });
+
+    test("client and viewer migrate() share one download", async ({ page }) => {
+        const result = await in_page(
+            page,
+            async ({ urls, config }) => {
+                const perspective = await import(urls.esm);
+                let downloads = 0;
+                await perspective.init({
+                    migrate: () => {
+                        downloads += 1;
+                        return fetch(urls.migrate_wasm);
+                    },
+                });
+
+                const viewer = await import(urls.viewer_cdn);
+                const a = await perspective.migrate("view", config, "2.6.0");
+                const b = await viewer.default.migrate("view", config, "2.6.0");
+                return {
+                    downloads,
+                    same: JSON.stringify(a) === JSON.stringify(b),
+                };
+            },
+            { config: V2_VIEW },
+        );
+
+        test.expect(result).toEqual({ downloads: 1, same: true });
     });
 
     test("make_client() Clients load into the viewer", async ({ page }) => {

@@ -17,7 +17,9 @@ use perspective_client::config::{ViewConfig, ViewConfigUpdate};
 use perspective_client::{Client, DeleteOptions, TableData, TableInitOptions};
 use perspective_js::utils::*;
 
-use crate::config::{DerivedTableConfig, OptionalUpdate, TableRef, ViewerConfigUpdate};
+use crate::config::{
+    DerivedTableConfig, OptionalUpdate, TableRef, UnknownKeys, ViewerConfigUpdate,
+};
 use crate::derived::{DerivedSource, DerivedTable, suggest_name};
 use crate::presentation::Presentation;
 use crate::queries::fetch_hosted_tables;
@@ -78,6 +80,7 @@ pub async fn resolve_table_ref(
         let config = DerivedTableConfig {
             table: parent.clone(),
             view_config,
+            unknown: UnknownKeys,
         };
 
         if let Some(existing) = workspace.derived_find_structural(&config) {

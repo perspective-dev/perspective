@@ -16,7 +16,7 @@ use perspective_client::config::ViewConfig;
 use perspective_client::{DeleteOptions, Table, View};
 use perspective_js::utils::*;
 
-use crate::config::DerivedTableConfig;
+use crate::config::{DerivedTableConfig, UnknownKeys};
 use crate::session::ViewSubscription;
 use crate::utils::PtrEqRc;
 
@@ -76,6 +76,7 @@ impl DerivedTable {
         DerivedTableConfig {
             table: self.parent.clone(),
             view_config: self.view_config.clone(),
+            unknown: UnknownKeys,
         }
     }
 

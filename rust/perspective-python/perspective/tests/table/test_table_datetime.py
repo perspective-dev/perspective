@@ -1325,7 +1325,7 @@ if os.name != "nt":
 
             table = Table(data)
             now = datetime.now()
-            view = table.view(expressions=["now()"])
+            view = table.view(expressions={"now()": "now()"})
             result = view.to_columns()
 
             for item in result["now()"]:
@@ -1343,7 +1343,7 @@ if os.name != "nt":
 
             table = Table(data)
             now = datetime.now()
-            view = table.view(expressions=["now()"])
+            view = table.view(expressions={"now()": "now()"})
             result = view.to_columns()
 
             for item in result["now()"]:
@@ -1361,7 +1361,7 @@ if os.name != "nt":
 
             table = Table(data)
             now = datetime.now()
-            view = table.view(expressions=["now()"])
+            view = table.view(expressions={"now()": "now()"})
             result = view.to_columns()
 
             for item in result["now()"]:
@@ -1375,7 +1375,7 @@ if os.name != "nt":
             data = {"a": LOCAL_DATETIMES}
 
             table = Table(data)
-            view = table.view(expressions=['hour_of_day("a")'])
+            view = table.view(expressions={'hour_of_day("a")': 'hour_of_day("a")'})
             result = view.to_columns()
             assert result['hour_of_day("a")'] == [0, 11, 19]
 
@@ -1387,7 +1387,7 @@ if os.name != "nt":
             data = {"a": LOCAL_DATETIMES}
 
             table = Table(data)
-            view = table.view(expressions=['hour_of_day("a")'])
+            view = table.view(expressions={'hour_of_day("a")': 'hour_of_day("a")'})
             result = view.to_columns()
             assert result['hour_of_day("a")'] == [0, 11, 19]
 
@@ -1399,7 +1399,7 @@ if os.name != "nt":
             data = {"a": LOCAL_DATETIMES}
 
             table = Table(data)
-            view = table.view(expressions=['hour_of_day("a")'])
+            view = table.view(expressions={'hour_of_day("a")': 'hour_of_day("a")'})
             result = view.to_columns()
             assert result['hour_of_day("a")'] == [0, 11, 19]
 
@@ -1409,7 +1409,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=['day_of_week("a")'])
+            view = table.view(expressions={'day_of_week("a")': 'day_of_week("a")'})
             result = view.to_columns()
             assert result['day_of_week("a")'] == ["6 Friday"]
 
@@ -1420,7 +1420,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=['day_of_week("a")'])
+            view = table.view(expressions={'day_of_week("a")': 'day_of_week("a")'})
             result = view.to_columns()
             assert result['day_of_week("a")'] == ["6 Friday"]
 
@@ -1431,7 +1431,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=['day_of_week("a")'])
+            view = table.view(expressions={'day_of_week("a")': 'day_of_week("a")'})
             result = view.to_columns()
             assert result['day_of_week("a")'] == ["6 Friday"]
 
@@ -1441,7 +1441,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=['month_of_year("a")'])
+            view = table.view(expressions={'month_of_year("a")': 'month_of_year("a")'})
             result = view.to_columns()
             assert result['month_of_year("a")'] == ["01 January"]
 
@@ -1452,7 +1452,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=['month_of_year("a")'])
+            view = table.view(expressions={'month_of_year("a")': 'month_of_year("a")'})
             result = view.to_columns()
             assert result['month_of_year("a")'] == ["01 January"]
 
@@ -1463,7 +1463,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=['month_of_year("a")'])
+            view = table.view(expressions={'month_of_year("a")': 'month_of_year("a")'})
             result = view.to_columns()
             assert result['month_of_year("a")'] == ["01 January"]
 
@@ -1474,7 +1474,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'D')"])
+            view = table.view(expressions={"bucket(\"a\", 'D')": "bucket(\"a\", 'D')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'D')"] == [
                 util.to_timestamp(date(2020, 1, 31))
@@ -1487,7 +1487,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'D')"])
+            view = table.view(expressions={"bucket(\"a\", 'D')": "bucket(\"a\", 'D')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'D')"] == [
                 util.to_timestamp(date(2020, 1, 31))
@@ -1500,7 +1500,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'D')"])
+            view = table.view(expressions={"bucket(\"a\", 'D')": "bucket(\"a\", 'D')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'D')"] == [
                 util.to_timestamp(date(2020, 1, 31))
@@ -1513,7 +1513,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 2, 2, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'W')"])
+            view = table.view(expressions={"bucket(\"a\", 'W')": "bucket(\"a\", 'W')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'W')"] == [
                 util.to_timestamp(date(2020, 1, 27))
@@ -1526,7 +1526,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 2, 2, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'W')"])
+            view = table.view(expressions={"bucket(\"a\", 'W')": "bucket(\"a\", 'W')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'W')"] == [
                 util.to_timestamp(date(2020, 1, 27))
@@ -1539,7 +1539,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 2, 2, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'W')"])
+            view = table.view(expressions={"bucket(\"a\", 'W')": "bucket(\"a\", 'W')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'W')"] == [
                 util.to_timestamp(date(2020, 1, 27))
@@ -1550,7 +1550,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 3, 1, 12, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'W')"])
+            view = table.view(expressions={"bucket(\"a\", 'W')": "bucket(\"a\", 'W')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'W')"] == [
                 util.to_timestamp(date(2020, 2, 24))
@@ -1562,7 +1562,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 3, 1, 12, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'W')"])
+            view = table.view(expressions={"bucket(\"a\", 'W')": "bucket(\"a\", 'W')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'W')"] == [
                 util.to_timestamp(date(2020, 2, 24))
@@ -1574,7 +1574,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 3, 1, 12, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'W')"])
+            view = table.view(expressions={"bucket(\"a\", 'W')": "bucket(\"a\", 'W')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'W')"] == [
                 util.to_timestamp(date(2020, 2, 24))
@@ -1587,7 +1587,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 6, 30, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'M')"])
+            view = table.view(expressions={"bucket(\"a\", 'M')": "bucket(\"a\", 'M')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'M')"] == [
                 util.to_timestamp(date(2020, 6, 1))
@@ -1600,7 +1600,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 6, 30, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'M')"])
+            view = table.view(expressions={"bucket(\"a\", 'M')": "bucket(\"a\", 'M')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'M')"] == [
                 util.to_timestamp(date(2020, 6, 1))
@@ -1613,7 +1613,7 @@ if os.name != "nt":
             data = {"a": [datetime(2020, 6, 30, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'M')"])
+            view = table.view(expressions={"bucket(\"a\", 'M')": "bucket(\"a\", 'M')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'M')"] == [
                 util.to_timestamp(date(2020, 6, 1))
@@ -1626,7 +1626,7 @@ if os.name != "nt":
             data = {"a": [datetime(2019, 12, 31, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'Y')"])
+            view = table.view(expressions={"bucket(\"a\", 'Y')": "bucket(\"a\", 'Y')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'Y')"] == [
                 util.to_timestamp(date(2019, 1, 1))
@@ -1638,7 +1638,7 @@ if os.name != "nt":
             data = {"a": [datetime(2019, 12, 31, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'Y')"])
+            view = table.view(expressions={"bucket(\"a\", 'Y')": "bucket(\"a\", 'Y')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'Y')"] == [
                 util.to_timestamp(date(2019, 1, 1))
@@ -1650,7 +1650,7 @@ if os.name != "nt":
             data = {"a": [datetime(2019, 12, 31, 23, 59)]}
 
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'Y')"])
+            view = table.view(expressions={"bucket(\"a\", 'Y')": "bucket(\"a\", 'Y')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'Y')"] == [
                 util.to_timestamp(date(2019, 1, 1))
@@ -2494,7 +2494,7 @@ if hasattr(time, "tzset"):
 
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
             table = Table(data)
-            view = table.view(expressions=["bucket(\"a\", 'D')"])
+            view = table.view(expressions={"bucket(\"a\", 'D')": "bucket(\"a\", 'D')"})
             result = view.to_columns()
             assert result["bucket(\"a\", 'D')"] == [
                 util.to_timestamp(date(2020, 1, 31))
@@ -2506,7 +2506,7 @@ if hasattr(time, "tzset"):
 
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
             table = Table(data)
-            view = table.view(expressions=['day_of_week("a")'])
+            view = table.view(expressions={'day_of_week("a")': 'day_of_week("a")'})
             result = view.to_columns()
             assert result['day_of_week("a")'] == ["6 Friday"]
 
@@ -2516,7 +2516,7 @@ if hasattr(time, "tzset"):
 
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
             table = Table(data)
-            view = table.view(expressions=['month_of_year("a")'])
+            view = table.view(expressions={'month_of_year("a")': 'month_of_year("a")'})
             result = view.to_columns()
             assert result['month_of_year("a")'] == ["01 January"]
 
@@ -2526,7 +2526,7 @@ if hasattr(time, "tzset"):
 
             data = {"a": [datetime(2020, 1, 31, 23, 59)]}
             table = Table(data)
-            view = table.view(expressions=['hour_of_day("a")'])
+            view = table.view(expressions={'hour_of_day("a")': 'hour_of_day("a")'})
             result = view.to_columns()
             assert result['hour_of_day("a")'] == [23]
 

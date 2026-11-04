@@ -1,0 +1,53 @@
+{
+    "kind": "viewer",
+    "source": "hand-written from v5.6.0:rust/perspective-viewer/src/rust/config/workspace_config.rs TableRef",
+    "input": {
+        "version": "5.6.0",
+        "plugin": "Datagrid",
+        "table": {
+            "table": {
+                "table": "superstore",
+                "group_by": [
+                    "Region"
+                ],
+                "foo": 1
+            },
+            "expressions": [
+                "1+1"
+            ],
+            "columns": [
+                "Region"
+            ]
+        }
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "Datagrid",
+        "table": {
+            "table": {
+                "table": "superstore",
+                "group_by": [
+                    "Region"
+                ]
+            },
+            "expressions": {
+                "1+1": "1+1"
+            },
+            "columns": [
+                "Region"
+            ]
+        }
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "viewer.unknown_keys",
+            "pointer": "/table/table/foo",
+            "value": 1
+        }
+    ],
+    "steps": [
+        "view.expressions_map",
+        "viewer.unknown_keys"
+    ]
+}

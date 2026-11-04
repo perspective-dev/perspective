@@ -147,7 +147,7 @@ class TestServer(object):
             s = Server()
             c = s.new_local_client()
             t = c.table({"a": "string", "b": int})
-            t.view(expressions=["//tmp\nfalse"])
+            t.view(expressions={"tmp": "false"})
             while x > 0:
                 t.update([{"a": "foo", "b": 42}])
                 x -= 1
