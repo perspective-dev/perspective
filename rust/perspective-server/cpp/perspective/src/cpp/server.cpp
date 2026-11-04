@@ -2572,29 +2572,62 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                 ? BACKING_STORE_DISK
                 : BACKING_STORE_MEMORY;
 
-            apachearrow::t_list_flatten list_flatten;
+            t_flatten_mode flatten;
             switch (r.options().list_flatten()) {
                 case proto::LIST_FLATTEN_CARTESIAN:
-                    list_flatten = apachearrow::LIST_FLATTEN_CARTESIAN;
+                    flatten.list = LIST_FLATTEN_CARTESIAN;
                     break;
                 case proto::LIST_FLATTEN_STRINGIFY:
-                    list_flatten = apachearrow::LIST_FLATTEN_STRINGIFY;
+                    flatten.list = LIST_FLATTEN_STRINGIFY;
+                    break;
+                case proto::LIST_FLATTEN_STRINGIFY_FORMATTED:
+                    flatten.list = LIST_FLATTEN_STRINGIFY_FORMATTED;
                     break;
                 case proto::LIST_FLATTEN_ZIP:
                 default:
-                    list_flatten = apachearrow::LIST_FLATTEN_ZIP;
+                    flatten.list = LIST_FLATTEN_ZIP;
                     break;
             }
 
-            apachearrow::t_struct_flatten struct_flatten;
             switch (r.options().struct_flatten()) {
                 case proto::STRUCT_FLATTEN_STRINGIFY:
-                    struct_flatten = apachearrow::STRUCT_FLATTEN_STRINGIFY;
+                    flatten.structs = STRUCT_FLATTEN_STRINGIFY;
+                    break;
+                case proto::STRUCT_FLATTEN_STRINGIFY_FORMATTED:
+                    flatten.structs = STRUCT_FLATTEN_STRINGIFY_FORMATTED;
                     break;
                 case proto::STRUCT_FLATTEN_PIVOT:
                 default:
-                    struct_flatten = apachearrow::STRUCT_FLATTEN_PIVOT;
+                    flatten.structs = STRUCT_FLATTEN_PIVOT;
                     break;
+            }
+
+            if (!r.options().has_map_flatten()) {
+                switch (flatten.structs) {
+                    case STRUCT_FLATTEN_STRINGIFY:
+                        flatten.maps = MAP_FLATTEN_STRINGIFY;
+                        break;
+                    case STRUCT_FLATTEN_STRINGIFY_FORMATTED:
+                        flatten.maps = MAP_FLATTEN_STRINGIFY_FORMATTED;
+                        break;
+                    case STRUCT_FLATTEN_PIVOT:
+                    default:
+                        flatten.maps = MAP_FLATTEN_PIVOT;
+                        break;
+                }
+            } else {
+                switch (r.options().map_flatten()) {
+                    case proto::MAP_FLATTEN_STRINGIFY:
+                        flatten.maps = MAP_FLATTEN_STRINGIFY;
+                        break;
+                    case proto::MAP_FLATTEN_STRINGIFY_FORMATTED:
+                        flatten.maps = MAP_FLATTEN_STRINGIFY_FORMATTED;
+                        break;
+                    case proto::MAP_FLATTEN_PIVOT:
+                    default:
+                        flatten.maps = MAP_FLATTEN_PIVOT;
+                        break;
+                }
             }
 
             if (r.options().has_view_schema()
@@ -2627,8 +2660,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                         std::move(data),
                         limit,
                         backing_store,
-                        list_flatten,
-                        struct_flatten
+                        flatten
                     );
                     break;
                 }
@@ -2641,8 +2673,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                         std::move(data),
                         limit,
                         backing_store,
-                        list_flatten,
-                        struct_flatten
+                        flatten
                     );
                     break;
                 }
@@ -2655,8 +2686,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                         std::move(data),
                         limit,
                         backing_store,
-                        list_flatten,
-                        struct_flatten
+                        flatten
                     );
                     break;
                 }
@@ -2669,8 +2699,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                         std::move(data),
                         limit,
                         backing_store,
-                        list_flatten,
-                        struct_flatten
+                        flatten
                     );
                     break;
                 }
@@ -2683,8 +2712,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                         std::move(data),
                         limit,
                         backing_store,
-                        list_flatten,
-                        struct_flatten
+                        flatten
                     );
                     break;
                 }
@@ -2703,8 +2731,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
                         table_schema,
                         limit,
                         backing_store,
-                        list_flatten,
-                        struct_flatten
+                        flatten
                     );
                     break;
                 }

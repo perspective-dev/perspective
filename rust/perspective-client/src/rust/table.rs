@@ -166,19 +166,31 @@ pub struct TableInitOptions {
     /// default) and `cartesian` expand a row into one row per list element,
     /// and are incompatible with `index`, as the rows of an expansion
     /// repeat their index. `stringify` encodes each list as a JSON array in
-    /// a single string column instead. `STRUCT` and `MAP` columns are
-    /// governed by `struct_flatten`.
+    /// a single string column instead, with datetimes as epoch milliseconds,
+    /// and `stringify_formatted` writes them as the text `to_json` emits
+    /// under `formatted`. `STRUCT` and `MAP` columns are governed by
+    /// `struct_flatten` and `map_flatten`.
     #[serde(default)]
     #[ts(optional)]
     pub list_flatten: Option<crate::proto::ListFlatten>,
 
-    /// How Arrow `STRUCT` and `MAP` columns and JSON objects are ingested.
-    /// `pivot` (the default) hoists each field or key into its own dotted
-    /// column, and `stringify` keeps the whole value as JSON text in a single
-    /// string column.
+    /// How Arrow `STRUCT` columns and JSON objects are ingested. `pivot` (the
+    /// default) hoists each field into its own dotted column, and `stringify`
+    /// keeps the whole value as JSON text in a single string column, with
+    /// datetimes as epoch milliseconds; `stringify_formatted` writes them as
+    /// the text `to_json` emits under `formatted`.
     #[serde(default)]
     #[ts(optional)]
     pub struct_flatten: Option<crate::proto::StructFlatten>,
+
+    /// How Arrow `MAP` columns are ingested. `pivot` hoists each distinct key
+    /// into its own dotted column, and `stringify` or `stringify_formatted`
+    /// keeps the whole value as JSON text in a single string column, as for
+    /// `struct_flatten`. When unset, follows `struct_flatten`. JSON objects
+    /// always follow `struct_flatten`.
+    #[serde(default)]
+    #[ts(optional)]
+    pub map_flatten: Option<crate::proto::MapFlatten>,
 
     /// The columns of a [`Table`] made from a [`View`], in place of the ones
     /// inferred from it.
@@ -200,6 +212,7 @@ impl TryFrom<TableOptions> for MakeTableOptions {
         let page_to_disk = value.page_to_disk;
         let list_flatten = value.list_flatten.map(|x| x as i32);
         let struct_flatten = value.struct_flatten.map(|x| x as i32);
+        let map_flatten = value.map_flatten.map(|x| x as i32);
         let view_schema = value.schema.clone().map(|schema| crate::proto::Schema {
             schema: schema
                 .into_iter()
@@ -214,6 +227,7 @@ impl TryFrom<TableOptions> for MakeTableOptions {
             page_to_disk,
             list_flatten,
             struct_flatten,
+            map_flatten,
             view_schema,
             make_table_type: match value {
                 TableOptions {
@@ -247,6 +261,7 @@ pub(crate) struct TableOptions {
     pub page_to_disk: Option<bool>,
     pub list_flatten: Option<crate::proto::ListFlatten>,
     pub struct_flatten: Option<crate::proto::StructFlatten>,
+    pub map_flatten: Option<crate::proto::MapFlatten>,
     pub schema: Option<IndexMap<String, ColumnType>>,
 }
 
@@ -267,6 +282,7 @@ impl From<TableInitOptions> for TableOptions {
             page_to_disk: value.page_to_disk,
             list_flatten: value.list_flatten,
             struct_flatten: value.struct_flatten,
+            map_flatten: value.map_flatten,
             schema: value.schema,
         }
     }

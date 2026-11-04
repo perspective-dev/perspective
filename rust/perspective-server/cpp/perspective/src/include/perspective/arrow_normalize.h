@@ -23,13 +23,21 @@
 namespace perspective {
 namespace apachearrow {
 
+    using perspective::t_flatten_mode;
     using perspective::t_list_flatten;
+    using perspective::t_map_flatten;
     using perspective::t_struct_flatten;
     using perspective::LIST_FLATTEN_CARTESIAN;
     using perspective::LIST_FLATTEN_STRINGIFY;
+    using perspective::LIST_FLATTEN_STRINGIFY_FORMATTED;
     using perspective::LIST_FLATTEN_ZIP;
+    using perspective::stringifies;
+    using perspective::MAP_FLATTEN_PIVOT;
+    using perspective::MAP_FLATTEN_STRINGIFY;
+    using perspective::MAP_FLATTEN_STRINGIFY_FORMATTED;
     using perspective::STRUCT_FLATTEN_PIVOT;
     using perspective::STRUCT_FLATTEN_STRINGIFY;
+    using perspective::STRUCT_FLATTEN_STRINGIFY_FORMATTED;
     extern const char* const FLATTEN_SEPARATOR;
 
     /**
@@ -55,23 +63,14 @@ namespace apachearrow {
         std::int64_t num_rows;
     };
 
-    PERSPECTIVE_EXPORT t_normalized_table normalize_table(
-        std::shared_ptr<arrow::Table> input,
-        t_list_flatten mode,
-        t_struct_flatten struct_mode
-    );
+    PERSPECTIVE_EXPORT t_normalized_table
+    normalize_table(std::shared_ptr<arrow::Table> input, t_flatten_mode mode);
 
-    PERSPECTIVE_EXPORT bool normalize_table_is_noop(
-        const arrow::Table& input,
-        t_list_flatten mode,
-        t_struct_flatten struct_mode
-    );
+    PERSPECTIVE_EXPORT bool
+    normalize_table_is_noop(const arrow::Table& input, t_flatten_mode mode);
 
-    PERSPECTIVE_EXPORT bool normalize_table_expands(
-        const arrow::Table& input,
-        t_list_flatten mode,
-        t_struct_flatten struct_mode
-    );
+    PERSPECTIVE_EXPORT bool
+    normalize_table_expands(const arrow::Table& input, t_flatten_mode mode);
 
 } // namespace apachearrow
 } // namespace perspective

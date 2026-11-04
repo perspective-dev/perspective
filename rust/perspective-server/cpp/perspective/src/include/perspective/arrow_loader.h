@@ -44,14 +44,10 @@ namespace apachearrow {
          * describe the post-flattening shape.
          *
          * @param ptr
-         * @param mode - how `LIST` columns are ingested.
-         * @param struct_mode - how `STRUCT` and `MAP` columns are ingested.
+         * @param mode - how nested columns are ingested.
          */
         void initialize(
-            const std::uint8_t* ptr,
-            std::uint32_t,
-            t_list_flatten mode = LIST_FLATTEN_ZIP,
-            t_struct_flatten struct_mode = STRUCT_FLATTEN_PIVOT
+            const std::uint8_t* ptr, std::uint32_t, t_flatten_mode mode = {}
         );
 
         /**
@@ -133,6 +129,7 @@ namespace apachearrow {
         std::vector<std::string> m_names;
         std::vector<t_dtype> m_types;
         bool m_expanded{false};
+        t_flatten_mode m_mode;
     };
 
     template <typename T, typename V, typename GATHER>

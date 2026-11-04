@@ -258,4 +258,13 @@ test.describe("Nested ingest parity", function () {
             { struct_flatten: "stringify" },
         );
     });
+
+    test("map_flatten leaves objects and structs pivoted", async function () {
+        await parity(
+            "map_flatten_object",
+            [{ m: { a: 1 } }],
+            { m: arrow.vectorFromArray([{ a: 1 }], struct([["a", int32()]])) },
+            { map_flatten: "stringify" },
+        );
+    });
 });

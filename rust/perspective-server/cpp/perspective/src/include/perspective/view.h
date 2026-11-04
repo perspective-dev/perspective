@@ -22,6 +22,7 @@
 #include <perspective/data_slice.h>
 #include <perspective/table.h>
 #include <perspective/view_config.h>
+#include <perspective/scalar_json.h>
 #include <rapidjson/writer.h>
 #include <rapidjson/stringbuffer.h>
 #include <cstddef>
@@ -38,12 +39,6 @@ namespace perspective {
  * @brief Arrow IPC body compression applied by `View::to_arrow`.
  */
 enum class t_arrow_compression : std::uint8_t { NONE, LZ4, ZSTD };
-
-void write_scalar(
-    t_tscalar scalar,
-    bool is_formatted,
-    rapidjson::Writer<rapidjson::StringBuffer>& writer
-);
 
 template <typename CTX_T>
 class PERSPECTIVE_EXPORT View {

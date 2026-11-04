@@ -18,7 +18,7 @@ use std::sync::Arc;
 use futures::FutureExt;
 use indexmap::IndexMap;
 use perspective_client::config::{ColumnType, ViewConfigUpdate};
-use perspective_client::proto::{ListFlatten, StructFlatten};
+use perspective_client::proto::{ListFlatten, MapFlatten, StructFlatten};
 use perspective_client::{
     Client, ColumnWindow, DeleteOptions, DescribeVerdict, OnRemoveData, OnUpdateData, OnUpdateMode,
     OnUpdateOptions, Table, TableData, TableIndex, TableInitOptions, TableReadFormat, TableRef,
@@ -72,6 +72,7 @@ fn parse_list_flatten(value: Option<String>) -> PyResult<Option<ListFlatten>> {
         Some("zip") => Ok(Some(ListFlatten::Zip)),
         Some("cartesian") => Ok(Some(ListFlatten::Cartesian)),
         Some("stringify") => Ok(Some(ListFlatten::Stringify)),
+        Some("stringify_formatted") => Ok(Some(ListFlatten::StringifyFormatted)),
         Some(_x) => Err(PyValueError::new_err("Unknown `list_flatten`".to_string())),
     }
 }
@@ -81,9 +82,20 @@ fn parse_struct_flatten(value: Option<String>) -> PyResult<Option<StructFlatten>
         None => Ok(None),
         Some("pivot") => Ok(Some(StructFlatten::Pivot)),
         Some("stringify") => Ok(Some(StructFlatten::Stringify)),
+        Some("stringify_formatted") => Ok(Some(StructFlatten::StringifyFormatted)),
         Some(_x) => Err(PyValueError::new_err(
             "Unknown `struct_flatten`".to_string(),
         )),
+    }
+}
+
+fn parse_map_flatten(value: Option<String>) -> PyResult<Option<MapFlatten>> {
+    match value.as_deref() {
+        None => Ok(None),
+        Some("pivot") => Ok(Some(MapFlatten::Pivot)),
+        Some("stringify") => Ok(Some(MapFlatten::Stringify)),
+        Some("stringify_formatted") => Ok(Some(MapFlatten::StringifyFormatted)),
+        Some(_x) => Err(PyValueError::new_err("Unknown `map_flatten`".to_string())),
     }
 }
 
@@ -215,7 +227,7 @@ impl AsyncClient {
     /// table = await client.table("x,y\n1,2\n3,4")
     /// ```
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature=(input, limit=None, index=None, name=None, format=None, page_to_disk=None, list_flatten=None, struct_flatten=None, schema=None))]
+    #[pyo3(signature=(input, limit=None, index=None, name=None, format=None, page_to_disk=None, list_flatten=None, struct_flatten=None, map_flatten=None, schema=None))]
     pub async fn table(
         &self,
         input: Py<PyAny>,
@@ -226,6 +238,7 @@ impl AsyncClient {
         page_to_disk: Option<bool>,
         list_flatten: Option<Py<PyString>>,
         struct_flatten: Option<Py<PyString>>,
+        map_flatten: Option<Py<PyString>>,
         schema: Option<Py<PyDict>>,
     ) -> PyResult<AsyncTable> {
         let client = self.client.clone();
@@ -236,6 +249,7 @@ impl AsyncClient {
                 page_to_disk,
                 list_flatten: parse_list_flatten(list_flatten.map(|x| x.to_string()))?,
                 struct_flatten: parse_struct_flatten(struct_flatten.map(|x| x.to_string()))?,
+                map_flatten: parse_map_flatten(map_flatten.map(|x| x.to_string()))?,
                 schema: schema.map(|x| parse_schema(py, x.bind(py))).transpose()?,
                 ..TableInitOptions::default()
             };

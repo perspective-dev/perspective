@@ -44,8 +44,7 @@ Table::Table(
     std::uint32_t limit,
     std::vector<std::string> index,
     t_backing_store backing_store,
-    apachearrow::t_list_flatten list_flatten,
-    apachearrow::t_struct_flatten struct_flatten
+    t_flatten_mode flatten
 ) :
     m_init(false),
     m_id(GLOBAL_TABLE_ID++),
@@ -57,8 +56,7 @@ Table::Table(
     m_index(std::move(index)),
     m_gnode_set(false),
     m_backing_store(backing_store),
-    m_list_flatten(list_flatten),
-    m_struct_flatten(struct_flatten) {
+    m_flatten(flatten) {
 
     validate_columns(m_column_names);
     if (is_composite_index()) {
@@ -550,8 +548,7 @@ Table::from_csv(
     std::string&& data,
     std::uint32_t limit,
     t_backing_store backing_store,
-    apachearrow::t_list_flatten list_flatten,
-    apachearrow::t_struct_flatten struct_flatten
+    t_flatten_mode flatten
 ) {
     auto map =
         std::unordered_map<std::string, std::shared_ptr<arrow::DataType>>();
@@ -609,8 +606,7 @@ Table::from_csv(
         limit,
         index,
         backing_store,
-        list_flatten,
-        struct_flatten
+        flatten
     );
 
     // `psp_pkey` is guaranteed unique only when the index is implicit (a
@@ -756,8 +752,7 @@ Table::remove_arrow(const std::string_view& data) {
     arrow_loader.initialize(
         reinterpret_cast<const std::uint8_t*>(data.data()),
         data.size(),
-        m_list_flatten,
-        m_struct_flatten
+        m_flatten
     );
 
     const auto names = arrow_loader.names();
@@ -791,8 +786,7 @@ Table::from_json_loader(
     std::string&& data,
     std::uint32_t limit,
     t_backing_store backing_store,
-    apachearrow::t_list_flatten list_flatten,
-    apachearrow::t_struct_flatten struct_flatten
+    t_flatten_mode flatten
 ) {
     if (const auto repeated = loader.repeated_index(index)) {
         std::stringstream ss;
@@ -843,8 +837,7 @@ Table::from_json_loader(
         limit,
         index,
         backing_store,
-        list_flatten,
-        struct_flatten
+        flatten
     );
 
     tbl->init(*data_table, nrows, t_op::OP_INSERT, 0);
@@ -861,9 +854,7 @@ Table::update_json(
 ) {
     t_schema table_schema = get_schema();
     json::JsonLoader loader;
-    loader.init(
-        data, format, m_index, &table_schema, m_list_flatten, m_struct_flatten
-    );
+    loader.init(data, format, m_index, &table_schema, m_flatten);
     if (loader.empty()) {
         return;
     }
@@ -898,8 +889,7 @@ Table::from_cols(
     std::string&& data,
     std::uint32_t limit,
     t_backing_store backing_store,
-    apachearrow::t_list_flatten list_flatten,
-    apachearrow::t_struct_flatten struct_flatten
+    t_flatten_mode flatten
 ) {
     json::JsonLoader loader;
     loader.init(
@@ -907,8 +897,7 @@ Table::from_cols(
         json::JSON_FORMAT_COLUMNS,
         index,
         nullptr,
-        list_flatten,
-        struct_flatten
+        flatten
     );
     return from_json_loader(
         loader,
@@ -916,8 +905,7 @@ Table::from_cols(
         std::move(data),
         limit,
         backing_store,
-        list_flatten,
-        struct_flatten
+        flatten
     );
 }
 
@@ -938,8 +926,7 @@ Table::from_rows(
     std::string&& data,
     std::uint32_t limit,
     t_backing_store backing_store,
-    apachearrow::t_list_flatten list_flatten,
-    apachearrow::t_struct_flatten struct_flatten
+    t_flatten_mode flatten
 ) {
     json::JsonLoader loader;
     loader.init(
@@ -947,8 +934,7 @@ Table::from_rows(
         json::JSON_FORMAT_ROWS,
         index,
         nullptr,
-        list_flatten,
-        struct_flatten
+        flatten
     );
     return from_json_loader(
         loader,
@@ -956,8 +942,7 @@ Table::from_rows(
         std::move(data),
         limit,
         backing_store,
-        list_flatten,
-        struct_flatten
+        flatten
     );
 }
 
@@ -972,8 +957,7 @@ Table::from_ndjson(
     std::string&& data,
     std::uint32_t limit,
     t_backing_store backing_store,
-    apachearrow::t_list_flatten list_flatten,
-    apachearrow::t_struct_flatten struct_flatten
+    t_flatten_mode flatten
 ) {
     json::JsonLoader loader;
     loader.init(
@@ -981,8 +965,7 @@ Table::from_ndjson(
         json::JSON_FORMAT_NDJSON,
         index,
         nullptr,
-        list_flatten,
-        struct_flatten
+        flatten
     );
     return from_json_loader(
         loader,
@@ -990,8 +973,7 @@ Table::from_ndjson(
         std::move(data),
         limit,
         backing_store,
-        list_flatten,
-        struct_flatten
+        flatten
     );
 }
 
@@ -1001,8 +983,7 @@ Table::from_schema(
     const t_schema& schema,
     std::uint32_t limit,
     t_backing_store backing_store,
-    apachearrow::t_list_flatten list_flatten,
-    apachearrow::t_struct_flatten struct_flatten
+    t_flatten_mode flatten
 ) {
     auto pool = std::make_shared<t_pool>();
     pool->init();
@@ -1037,8 +1018,7 @@ Table::from_schema(
         limit,
         index,
         backing_store,
-        list_flatten,
-        struct_flatten
+        flatten
     );
 
     tbl->init(data_table, 0, t_op::OP_INSERT, 0);
@@ -1091,8 +1071,7 @@ Table::update_arrow(const std::string_view& data, std::uint32_t port_id) {
     arrow_loader.initialize(
         reinterpret_cast<const std::uint8_t*>(data.data()),
         data.size(),
-        m_list_flatten,
-        m_struct_flatten
+        m_flatten
     );
 
     if (const auto repeated = arrow_loader.repeated_index(m_index)) {
@@ -1150,8 +1129,7 @@ Table::from_arrow(
     std::string&& data,
     std::uint32_t limit,
     t_backing_store backing_store,
-    apachearrow::t_list_flatten list_flatten,
-    apachearrow::t_struct_flatten struct_flatten
+    t_flatten_mode flatten
 ) {
     apachearrow::ArrowLoader arrow_loader;
 
@@ -1159,8 +1137,7 @@ Table::from_arrow(
     arrow_loader.initialize(
         reinterpret_cast<const std::uint8_t*>(data.data()),
         data.size(),
-        list_flatten,
-        struct_flatten
+        flatten
     );
 
     if (const auto repeated = arrow_loader.repeated_index(index)) {
@@ -1222,8 +1199,7 @@ Table::from_arrow(
         limit,
         index,
         backing_store,
-        list_flatten,
-        struct_flatten
+        flatten
     );
 
     table->init(*data_table, data_table->num_rows(), t_op::OP_INSERT, 0);
@@ -1240,8 +1216,7 @@ Table::make_table(
     const std::vector<std::string>& index,
     const std::string_view& data,
     t_backing_store backing_store,
-    apachearrow::t_list_flatten list_flatten,
-    apachearrow::t_struct_flatten struct_flatten
+    t_flatten_mode flatten
 ) {
     auto pool = std::make_shared<t_pool>();
     pool->init();
@@ -1272,8 +1247,7 @@ Table::make_table(
         limit,
         index,
         backing_store,
-        list_flatten,
-        struct_flatten
+        flatten
     );
     table->init(data_table, data_table.num_rows(), t_op::OP_INSERT, 0);
     pool->_process();

@@ -434,7 +434,7 @@ for_each_leaf(
     F&& fn,
     std::size_t array_path = NO_ARRAY
 ) {
-    if (mode.list != LIST_FLATTEN_STRINGIFY && value.IsArray()) {
+    if (!stringifies(mode.list) && value.IsArray()) {
         // Inference only needs one element to learn the leaves' types; any
         // path a later element introduces is grown into by `resolve_column`.
         if (!value.Empty()) {
@@ -444,7 +444,7 @@ for_each_leaf(
         return;
     }
 
-    if (!value.IsObject() || mode.structs == STRUCT_FLATTEN_STRINGIFY) {
+    if (!value.IsObject() || stringifies(mode.structs)) {
         fn(static_cast<const std::string&>(prefix), value, array_path);
         return;
     }
@@ -505,7 +505,7 @@ check_row_count(std::uint64_t rows) {
  */
 static t_uindex
 leaf_width(const rapidjson::Value& value, const t_flatten_mode& mode) {
-    if (mode.list == LIST_FLATTEN_STRINGIFY || value.IsNull()) {
+    if (stringifies(mode.list) || value.IsNull()) {
         return 1;
     }
 
@@ -519,7 +519,7 @@ leaf_width(const rapidjson::Value& value, const t_flatten_mode& mode) {
         return std::max<t_uindex>(total, 1);
     }
 
-    if (!value.IsObject() || mode.structs == STRUCT_FLATTEN_STRINGIFY) {
+    if (!value.IsObject() || stringifies(mode.structs)) {
         return 1;
     }
 
@@ -559,8 +559,8 @@ leaf_width(const rapidjson::Value& value, const t_flatten_mode& mode) {
  */
 static bool
 is_nested(const rapidjson::Value& value, const t_flatten_mode& mode) {
-    return (value.IsObject() && mode.structs != STRUCT_FLATTEN_STRINGIFY)
-        || (mode.list != LIST_FLATTEN_STRINGIFY && value.IsArray());
+    return (value.IsObject() && !stringifies(mode.structs))
+        || (!stringifies(mode.list) && value.IsArray());
 }
 
 /**
@@ -616,7 +616,7 @@ emit_leaves(
     const t_flatten_mode& mode,
     F&& fn
 ) {
-    if (mode.list == LIST_FLATTEN_STRINGIFY || value.IsNull()) {
+    if (stringifies(mode.list) || value.IsNull()) {
         fn(std::string_view{prefix}, value);
         return;
     }
@@ -648,7 +648,7 @@ emit_leaves(
         return;
     }
 
-    if (!value.IsObject() || mode.structs == STRUCT_FLATTEN_STRINGIFY) {
+    if (!value.IsObject() || stringifies(mode.structs)) {
         fn(std::string_view{prefix}, value);
         return;
     }
@@ -721,11 +721,10 @@ JsonLoader::init(
     t_json_format format,
     const std::vector<std::string>& index,
     const t_schema* existing,
-    t_list_flatten mode,
-    t_struct_flatten struct_mode
+    t_flatten_mode mode
 ) {
     m_format = format;
-    m_mode = t_flatten_mode{mode, struct_mode};
+    m_mode = mode;
     m_index = index;
     if (format == JSON_FORMAT_NDJSON) {
         m_stream = rapidjson::StringStream(data.data());
@@ -799,7 +798,7 @@ JsonLoader::init(
     }
 
     m_expands = !m_per_element.empty();
-    if (mode == LIST_FLATTEN_CARTESIAN && m_expansions.size() > 1) {
+    if (mode.list == LIST_FLATTEN_CARTESIAN && m_expansions.size() > 1) {
         // A product repeats every factor against the others' dimensions, so
         // with more than one expansion point nothing varies per row.
         m_per_element.clear();
@@ -1044,8 +1043,8 @@ JsonLoader::infer_cols(const std::vector<std::string>& index) {
             // Whether this cell contributes the column itself rather than
             // paths beneath it -- the same test `for_each_leaf` applies.
             const bool is_leaf =
-                (!cell.IsObject() || m_mode.structs == STRUCT_FLATTEN_STRINGIFY)
-                && (m_mode.list == LIST_FLATTEN_STRINGIFY || !cell.IsArray());
+                (!cell.IsObject() || stringifies(m_mode.structs))
+                && (stringifies(m_mode.list) || !cell.IsArray());
 
             saw_leaf = saw_leaf || is_leaf;
             path.assign(it.name.GetString());

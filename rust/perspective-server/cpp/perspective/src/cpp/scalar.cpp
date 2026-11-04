@@ -14,6 +14,7 @@
 #include <perspective/base.h>
 #include <perspective/raw_types.h>
 #include <perspective/scalar.h>
+#include <perspective/scalar_json.h>
 #include <perspective/sym_table.h>
 #include <cstring>
 #include <cstdio>
@@ -1762,6 +1763,88 @@ t_tscalar::coerce_numeric<bool>() const {
     bool v = static_cast<bool>(m_data.m_uint64);
     rv.set(v);
     return rv;
+}
+
+void
+write_scalar(
+    t_tscalar scalar,
+    bool is_formatted,
+    rapidjson::Writer<rapidjson::StringBuffer>& writer
+) {
+
+    if (!scalar.is_valid()) {
+        writer.Null();
+        return;
+    }
+
+    switch (scalar.get_dtype()) {
+        case DTYPE_NONE:
+            writer.Null();
+            break;
+        case DTYPE_BOOL:
+            writer.Bool(scalar.get<bool>());
+            break;
+        case DTYPE_INT8:
+            writer.Int(scalar.get<std::int8_t>());
+            break;
+        case DTYPE_INT16:
+            writer.Int(scalar.get<std::int16_t>());
+            break;
+        case DTYPE_INT32:
+            writer.Int(scalar.get<std::int32_t>());
+            break;
+        case DTYPE_INT64:
+            writer.Int64(scalar.get<std::int64_t>());
+            break;
+        case DTYPE_UINT8:
+            writer.Uint(scalar.get<std::uint8_t>());
+            break;
+        case DTYPE_UINT16:
+            writer.Uint(scalar.get<std::uint16_t>());
+            break;
+        case DTYPE_UINT32:
+            writer.Uint(scalar.get<std::uint32_t>());
+            break;
+        case DTYPE_UINT64:
+            writer.Uint64(scalar.get<std::uint64_t>());
+            break;
+        case DTYPE_FLOAT32:
+            if (scalar.is_nan()) {
+                writer.Null();
+            } else {
+                writer.Double(scalar.get<float>());
+            }
+            break;
+        case DTYPE_FLOAT64:
+            if (scalar.is_nan()) {
+                writer.Null();
+            } else {
+                writer.Double(scalar.get<double>());
+            }
+            break;
+        case DTYPE_STR:
+            writer.String(scalar.get<const char*>());
+            break;
+        case DTYPE_TIME:
+            if (is_formatted) {
+                writer.String(scalar.to_string().c_str());
+            } else {
+                writer.Int64(scalar.get<int64_t>());
+            }
+
+            break;
+        case DTYPE_DATE: {
+            if (is_formatted) {
+                writer.String(scalar.to_string().c_str());
+            } else {
+                writer.Int64(scalar.get<t_date>().as_epoch_ms());
+            }
+            break;
+        }
+
+        default:
+            break;
+    }
 }
 
 } // end namespace perspective

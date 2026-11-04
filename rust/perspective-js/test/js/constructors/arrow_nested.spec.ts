@@ -292,6 +292,87 @@ test.describe("Arrow nested columns", function () {
             await view.delete();
             await table.delete();
         });
+
+        test("Formats list datetimes when configured", async function () {
+            const table = await perspective.table(
+                ipc({
+                    y: arrow.vectorFromArray(
+                        [[1704164645000]],
+                        list(new arrow.TimestampMillisecond()),
+                    ),
+                }),
+                { list_flatten: "stringify_formatted" },
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                y: ['["2024-01-02 03:04:05.000"]'],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Encodes timestamps as epoch milliseconds", async function () {
+            const table = await perspective.table(
+                ipc({
+                    y: arrow.vectorFromArray(
+                        [[1704164645006]],
+                        list(new arrow.TimestampMillisecond()),
+                    ),
+                }),
+                { list_flatten: "stringify" },
+            );
+
+            expect(await table.schema()).toEqual({ y: "string" });
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                y: ["[1704164645006]"],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Encodes non-finite floats as null", async function () {
+            const table = await perspective.table(
+                ipc({
+                    y: arrow.vectorFromArray(
+                        [[Infinity, -Infinity, NaN, 1.5]],
+                        list(float64()),
+                    ),
+                }),
+                { list_flatten: "stringify" },
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                y: ["[null,null,null,1.5]"],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Encodes dates as epoch milliseconds", async function () {
+            const table = await perspective.table(
+                ipc({
+                    y: arrow.vectorFromArray(
+                        [[new Date(1704153600000)]],
+                        list(new arrow.DateDay()),
+                    ),
+                }),
+                { list_flatten: "stringify" },
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                y: ["[1704153600000]"],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
     });
 
     test.describe("Expanded index", function () {
@@ -631,6 +712,197 @@ test.describe("Arrow nested columns", function () {
                 l: ['{"a":1}', '{"a":2}'],
             });
 
+            await view.delete();
+            await table.delete();
+        });
+    });
+
+    test.describe("Map flatten", function () {
+        const mixed = () =>
+            ipc({
+                s: arrow.vectorFromArray([{ a: 1 }], struct([["a", int32()]])),
+                m: arrow.vectorFromArray([{ a: 1, b: 2 }], map(int32())),
+            });
+
+        test("Stringifies maps while structs pivot", async function () {
+            const table = await perspective.table(mixed(), {
+                map_flatten: "stringify",
+            });
+
+            expect(await table.schema()).toEqual({
+                "s.a": "integer",
+                m: "string",
+            });
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                "s.a": [1],
+                m: ['{"a":1,"b":2}'],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Pivots maps while structs stringify", async function () {
+            const table = await perspective.table(mixed(), {
+                struct_flatten: "stringify",
+                map_flatten: "pivot",
+            });
+
+            expect(await table.schema()).toEqual({
+                s: "string",
+                "m.a": "integer",
+                "m.b": "integer",
+            });
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                s: ['{"a":1}'],
+                "m.a": [1],
+                "m.b": [2],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Follows struct_flatten when unset", async function () {
+            const table = await perspective.table(mixed(), {
+                struct_flatten: "stringify",
+            });
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                s: ['{"a":1}'],
+                m: ['{"a":1,"b":2}'],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Stringifies a map inside a pivoted struct", async function () {
+            const table = await perspective.table(
+                ipc({
+                    s: arrow.vectorFromArray(
+                        [{ a: 1, m: { k: 1 } }],
+                        struct([
+                            ["a", int32()],
+                            ["m", map(int32())],
+                        ]),
+                    ),
+                }),
+                { map_flatten: "stringify" },
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                "s.a": [1],
+                "s.m": ['{"k":1}'],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Stringifies each struct under a pivoted map", async function () {
+            const table = await perspective.table(
+                ipc({
+                    n: arrow.vectorFromArray(
+                        [{ k: { x: 1 } }],
+                        map(struct([["x", int32()]])),
+                    ),
+                }),
+                { struct_flatten: "stringify", map_flatten: "pivot" },
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                "n.k": ['{"x":1}'],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Explodes a list of maps then stringifies each", async function () {
+            const table = await perspective.table(
+                ipc({
+                    id: arrow.vectorFromArray([1], int32()),
+                    l: arrow.vectorFromArray(
+                        [[{ a: 1 }, { a: 2 }]],
+                        list(map(int32())),
+                    ),
+                }),
+                { map_flatten: "stringify" },
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                id: [1, 1],
+                l: ['{"a":1}', '{"a":2}'],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Formats struct datetimes when configured", async function () {
+            const table = await perspective.table(
+                ipc({
+                    s: arrow.vectorFromArray(
+                        [{ ts: 1704164645000, x: 1 }],
+                        struct([
+                            ["ts", new arrow.TimestampMillisecond()],
+                            ["x", int32()],
+                        ]),
+                    ),
+                }),
+                { struct_flatten: "stringify_formatted" },
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                s: ['{"ts":"2024-01-02 03:04:05.000","x":1}'],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Formats map datetimes when configured", async function () {
+            const table = await perspective.table(
+                ipc({
+                    m: arrow.vectorFromArray(
+                        [{ k: 1704164645000 }],
+                        map(new arrow.TimestampMillisecond()),
+                    ),
+                }),
+                { map_flatten: "stringify_formatted" },
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({
+                m: ['{"k":"2024-01-02 03:04:05.000"}'],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Persists across update on a schema table", async function () {
+            const table = await perspective.table(
+                { m: "string" },
+                { map_flatten: "stringify" },
+            );
+
+            await table.update(
+                ipc({ m: arrow.vectorFromArray([{ a: 1 }], map(int32())) }),
+            );
+
+            const view = await table.view();
+            expect(await view.to_columns()).toEqual({ m: ['{"a":1}'] });
             await view.delete();
             await table.delete();
         });
