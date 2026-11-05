@@ -1,3 +1,23 @@
+# [v5.8.0](https://github.com/perspective-dev/perspective/releases/tag/v5.8.0)
+
+_6 November 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.7.0...v5.8.0))
+
+**Breaking**
+
+- Support cross-client `replace()` and `clear()` on `Table` [#3274](https://github.com/finos/perspective/pull/3274)
+
+Features
+
+- Add `last-group-by-*` facet mode for `viewer-charts` [#3277](https://github.com/finos/perspective/pull/3277)
+
+Fixes
+
+- Fix SQL Virtual Server `get_hosted_table_names` [#3276](https://github.com/finos/perspective/pull/3276)
+
+Misc
+
+- Move build to macos-15 [#3275](https://github.com/finos/perspective/pull/3275)
+
 # [v5.7.0](https://github.com/perspective-dev/perspective/releases/tag/v5.7.0)
 
 _5 November 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.6.1...v5.7.0))

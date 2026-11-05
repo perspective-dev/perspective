@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/client",
-    "version": "5.7.0",
+    "version": "5.8.0",
     "description": "Streaming query engine for data grids, pivot tables and charts over large, real-time datasets — WebAssembly in the browser, native in Node.js, or remote over WebSocket.",
     "keywords": [
         "perspective",

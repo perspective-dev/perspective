@@ -12,7 +12,7 @@
 
 [package]
 name = "perspective-migrate"
-version = "5.7.0"
+version = "5.8.0"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
 description = "Upgrades persisted Perspective `ViewConfig`, `<perspective-viewer>` and workspace configs from any release since 2.0 to the current schema."

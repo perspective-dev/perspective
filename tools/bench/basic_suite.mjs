@@ -57,7 +57,7 @@ perspective_bench.suite(
             );
             client = await perspective.websocket(path);
             metadata = {
-                version: "5.7.0",
+                version: "5.8.0",
                 version_idx,
             };
         } else {

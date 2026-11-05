@@ -2,7 +2,7 @@
     "name": "@perspective-dev/server",
     "author": "The Perspective Authors",
     "license": "Apache-2.0",
-    "version": "5.7.0",
+    "version": "5.8.0",
     "description": "Perspective's streaming query engine compiled to WebAssembly: incremental pivots, aggregates and joins for large, real-time datasets.",
     "repository": {
         "type": "git",
