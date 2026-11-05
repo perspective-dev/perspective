@@ -124,20 +124,26 @@ import perspective from "./perspective_client";
                     ),
                 );
 
-                const settle = async (a, b) => {
-                    for (let i = 0; i < 50; i++) {
+                const sync = async (view0, view1, action) => {
+                    const { promise, resolve } = Promise.withResolvers();
+                    const token = await view1.on_update(async () => {
                         const [x, y] = await Promise.all([
-                            a.to_json(),
-                            b.to_json(),
+                            view0.to_json(),
+                            view1.to_json(),
                         ]);
-                        if (JSON.stringify(x) === JSON.stringify(y)) {
-                            return;
-                        }
 
-                        await new Promise((resolve) =>
-                            setTimeout(resolve, 100),
-                        );
-                    }
+                        if (JSON.stringify(x) === JSON.stringify(y)) {
+                            resolve();
+                        }
+                    });
+
+                    await action();
+                    await Promise.race([
+                        promise,
+                        new Promise((resolve) => setTimeout(resolve, 2000)),
+                    ]);
+
+                    await view1.remove_update(token);
                 };
 
                 const worker0 = await perspective.worker();
@@ -146,12 +152,13 @@ import perspective from "./perspective_client";
                 const view0 = await table0.view();
                 const table1 = await worker1.table(view0);
                 const view1 = await table1.view();
-                await table0.replace([
-                    { x: 5, y: 6 },
-                    { x: 7, y: 8 },
-                ]);
+                await sync(view0, view1, () =>
+                    table0.replace([
+                        { x: 5, y: 6 },
+                        { x: 7, y: 8 },
+                    ]),
+                );
 
-                await settle(view0, view1);
                 return [await view0.to_json(), await view1.to_json()];
             });
 
@@ -178,20 +185,26 @@ import perspective from "./perspective_client";
                     ),
                 );
 
-                const settle = async (a, b) => {
-                    for (let i = 0; i < 50; i++) {
+                const sync = async (view0, view1, action) => {
+                    const { promise, resolve } = Promise.withResolvers();
+                    const token = await view1.on_update(async () => {
                         const [x, y] = await Promise.all([
-                            a.to_json(),
-                            b.to_json(),
+                            view0.to_json(),
+                            view1.to_json(),
                         ]);
-                        if (JSON.stringify(x) === JSON.stringify(y)) {
-                            return;
-                        }
 
-                        await new Promise((resolve) =>
-                            setTimeout(resolve, 100),
-                        );
-                    }
+                        if (JSON.stringify(x) === JSON.stringify(y)) {
+                            resolve();
+                        }
+                    });
+
+                    await action();
+                    await Promise.race([
+                        promise,
+                        new Promise((resolve) => setTimeout(resolve, 2000)),
+                    ]);
+
+                    await view1.remove_update(token);
                 };
 
                 const worker0 = await perspective.worker();
@@ -200,8 +213,7 @@ import perspective from "./perspective_client";
                 const view0 = await table0.view();
                 const table1 = await worker1.table(view0);
                 const view1 = await table1.view();
-                await table0.clear();
-                await settle(view0, view1);
+                await sync(view0, view1, () => table0.clear());
                 return [await view0.to_json(), await view1.to_json()];
             });
 
@@ -224,20 +236,26 @@ import perspective from "./perspective_client";
                     ),
                 );
 
-                const settle = async (a, b) => {
-                    for (let i = 0; i < 50; i++) {
+                const sync = async (view0, view1, action) => {
+                    const { promise, resolve } = Promise.withResolvers();
+                    const token = await view1.on_update(async () => {
                         const [x, y] = await Promise.all([
-                            a.to_json(),
-                            b.to_json(),
+                            view0.to_json(),
+                            view1.to_json(),
                         ]);
-                        if (JSON.stringify(x) === JSON.stringify(y)) {
-                            return;
-                        }
 
-                        await new Promise((resolve) =>
-                            setTimeout(resolve, 100),
-                        );
-                    }
+                        if (JSON.stringify(x) === JSON.stringify(y)) {
+                            resolve();
+                        }
+                    });
+
+                    await action();
+                    await Promise.race([
+                        promise,
+                        new Promise((resolve) => setTimeout(resolve, 2000)),
+                    ]);
+
+                    await view1.remove_update(token);
                 };
 
                 const worker0 = await perspective.worker();
@@ -249,8 +267,10 @@ import perspective from "./perspective_client";
                 const view0 = await table0.view({ columns: ["y"] });
                 const table1 = await worker1.table(view0);
                 const view1 = await table1.view();
-                await table0.replace([{ x: 1, y: 20 }]);
-                await settle(view0, view1);
+                await sync(view0, view1, () =>
+                    table0.replace([{ x: 1, y: 20 }]),
+                );
+
                 return [await view0.to_json(), await view1.to_json()];
             });
 
@@ -273,20 +293,26 @@ import perspective from "./perspective_client";
                     ),
                 );
 
-                const settle = async (a, b) => {
-                    for (let i = 0; i < 50; i++) {
+                const sync = async (view0, view1, action) => {
+                    const { promise, resolve } = Promise.withResolvers();
+                    const token = await view1.on_update(async () => {
                         const [x, y] = await Promise.all([
-                            a.to_json(),
-                            b.to_json(),
+                            view0.to_json(),
+                            view1.to_json(),
                         ]);
-                        if (JSON.stringify(x) === JSON.stringify(y)) {
-                            return;
-                        }
 
-                        await new Promise((resolve) =>
-                            setTimeout(resolve, 100),
-                        );
-                    }
+                        if (JSON.stringify(x) === JSON.stringify(y)) {
+                            resolve();
+                        }
+                    });
+
+                    await action();
+                    await Promise.race([
+                        promise,
+                        new Promise((resolve) => setTimeout(resolve, 2000)),
+                    ]);
+
+                    await view1.remove_update(token);
                 };
 
                 const worker0 = await perspective.worker();
@@ -298,15 +324,15 @@ import perspective from "./perspective_client";
                 const view0 = await table0.view();
                 const table1 = await worker1.table(view0);
                 const view1 = await table1.view();
-                await table0.replace([
-                    { x: 3, y: 40 },
-                    { x: 5, y: 6 },
-                ]);
+                await sync(view0, view1, () =>
+                    table0.replace([
+                        { x: 3, y: 40 },
+                        { x: 5, y: 6 },
+                    ]),
+                );
 
-                await settle(view0, view1);
                 const replaced = [await view0.to_json(), await view1.to_json()];
-                await table0.clear();
-                await settle(view0, view1);
+                await sync(view0, view1, () => table0.clear());
                 return [
                     replaced,
                     [await view0.to_json(), await view1.to_json()],

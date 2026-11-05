@@ -86,7 +86,7 @@ await perspective_client.default({ module_or_path: uncompressed_client_wasm });
 const MIGRATE = new MigrateLoader();
 MIGRATE.register(async () => {
     const buffer = await fs.readFile(
-        path.join(__dirname, "../../dist/wasm/perspective-migrate-js.wasm"),
+        path.join(__dirname, "../../dist/wasm/perspective-migrate.wasm"),
     );
 
     return await load_wasm_stage_0(buffer.buffer as ArrayBuffer);

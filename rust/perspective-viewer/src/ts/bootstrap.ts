@@ -109,7 +109,7 @@ function is_registration(
  * ```javascript
  * await init_client({
  *     viewer: () => fetch("perspective-viewer.wasm"),
- *     migrate: () => fetch("perspective-migrate-js.wasm"),
+ *     migrate: () => fetch("perspective-migrate.wasm"),
  * });
  * ```
  */

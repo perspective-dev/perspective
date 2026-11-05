@@ -28,7 +28,6 @@ members = [
     "rust/perspective-client",
     "rust/perspective-js",
     "rust/perspective-migrate",
-    "rust/perspective-migrate-js",
     "rust/perspective-python",
     "rust/perspective-server",
     "rust/perspective-viewer",

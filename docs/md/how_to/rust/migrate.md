@@ -43,7 +43,7 @@ await viewer.restoreWorkspace(value);
 ```
 
 `MIGRATE_WASM` is
-`@perspective-dev/client/dist/wasm/perspective-migrate-js.wasm`. In Node.js,
+`@perspective-dev/client/dist/wasm/perspective-migrate.wasm`. In Node.js,
 `perspective.migrate()` needs no registration.
 
 ```python

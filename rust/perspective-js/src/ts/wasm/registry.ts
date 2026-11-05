@@ -345,7 +345,7 @@ export function register(
  * - `wasm` - Binaries by role: `client` (`perspective-js.wasm`), `viewer`
  *   (`perspective-viewer.wasm`, which also backs every `Client`), `server`
  *   (one engine build) or `server32` / `server64` (selected by Memory64
- *   support), and `migrate` (`perspective-migrate-js.wasm`).
+ *   support), and `migrate` (`perspective-migrate.wasm`).
  * - `options` - `disable_stage_0` skips decompression for these sources.
  *
  * # Examples
@@ -500,7 +500,7 @@ export function resolve_migrate(): Promise<ArrayBuffer | WebAssembly.Module> {
         if (entry === undefined) {
             return Promise.reject(
                 new Error(
-                    "Missing perspective-migrate-js.wasm: register `migrate` with init()",
+                    "Missing perspective-migrate.wasm: register `migrate` with init()",
                 ),
             );
         }

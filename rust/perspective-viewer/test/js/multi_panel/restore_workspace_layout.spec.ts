@@ -145,7 +145,11 @@ test.describe("restoreWorkspace layout validation", () => {
     });
 
     test("drops an existing panel the layout omits", async ({ page }) => {
-        const layout = split("horizontal", [0.5, 0.5], [tab("one"), tab("two")]);
+        const layout = split(
+            "horizontal",
+            [0.5, 0.5],
+            [tab("one"), tab("two")],
+        );
         const result = await try_restore(page, { layout });
         expect(result.error).toBeNull();
         expect(result.panels).toEqual(["one", "two"]);
