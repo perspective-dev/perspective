@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/metadata",
-    "version": "5.6.1",
+    "version": "5.7.0",
     "description": "Benchmark utility based on perspective",
     "private": true,
     "files": [

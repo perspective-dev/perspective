@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/scripts",
-    "version": "5.6.1",
+    "version": "5.7.0",
     "description": "Build scripts based on perspective",
     "private": true,
     "files": [

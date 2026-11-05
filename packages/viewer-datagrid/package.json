@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/viewer-datagrid",
-    "version": "5.6.1",
+    "version": "5.7.0",
     "description": "Virtual-scrolling, editable data grid and pivot table plugin for `<perspective-viewer>`, built on `regular-table`.",
     "keywords": [
         "perspective",

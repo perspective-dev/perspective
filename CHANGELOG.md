@@ -1,3 +1,21 @@
+# [v5.7.0](https://github.com/perspective-dev/perspective/releases/tag/v5.7.0)
+
+_5 November 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.6.1...v5.7.0))
+
+**Breaking**
+
+- Comprehensive migrations [#3268](https://github.com/finos/perspective/pull/3268)
+- Better WASM `init` [#3269](https://github.com/finos/perspective/pull/3269)
+- Add `expand`/`collapse`/`set_depth` support for Virtual Servers [#3266](https://github.com/finos/perspective/pull/3266)
+- Add `plugin_config` and `columns_config` defaults API [#3267](https://github.com/finos/perspective/pull/3267)
+
+Features
+
+- Add `map_flatten` fallback to `struct_flatten` [#3273](https://github.com/finos/perspective/pull/3273)
+- Add `struct_flatten`, fix `list_flatten` options [#3272](https://github.com/finos/perspective/pull/3272)
+- Custom Elements Manifest [#3271](https://github.com/finos/perspective/pull/3271)
+- Add support for multiple `index` columns [#3270](https://github.com/finos/perspective/pull/3270)
+
 # [v5.6.1](https://github.com/perspective-dev/perspective/releases/tag/v5.6.1)
 
 _23 October 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.6.0...v5.6.1))
