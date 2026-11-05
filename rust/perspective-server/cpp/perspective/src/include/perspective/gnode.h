@@ -172,6 +172,11 @@ public:
      */
     std::shared_ptr<t_data_table> get_removed_pkeys() const;
 
+    /**
+     * @brief Whether the most recent step consumed a pending `reset()`.
+     */
+    bool get_was_reset() const;
+
     void set_removes_enabled(bool enabled);
     bool get_removes_enabled() const;
 
@@ -355,7 +360,9 @@ protected:
      * `pkey_col` as removed.
      */
     void _take_reset_removes(
-        const t_column* pkey_col, t_uindex flattened_num_rows
+        const t_column* pkey_col,
+        const t_column* op_col,
+        t_uindex flattened_num_rows
     );
 
     t_mask _compute_transitions(
@@ -482,6 +489,7 @@ private:
     bool m_was_updated;
     bool m_removes_enabled = false;
     bool m_reset_pending = false;
+    bool m_was_reset = false;
     std::shared_ptr<t_data_table> m_removed_pkeys;
     std::shared_ptr<t_data_table> m_reset_pkeys;
 

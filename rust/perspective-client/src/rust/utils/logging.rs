@@ -145,6 +145,7 @@ impl std::fmt::Display for Response {
                 client_resp: Some(ClientResp::ViewOnUpdateResp(ViewOnUpdateResp {
                     delta: x.delta.as_ref().map(|_| vec![]),
                     port_id: x.port_id,
+                    reset: x.reset,
                 })),
                 ..msg.clone()
             },

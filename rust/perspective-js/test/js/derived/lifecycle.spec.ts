@@ -119,4 +119,24 @@ test.describe("Derived table lifecycle", function () {
             await source.delete();
         });
     }
+    for (const [name, config] of Object.entries({
+        unit: {},
+        flat: PARENTS.flat,
+    })) {
+        test(`${name}: unindexed parent clear then replace`, async function () {
+            const source = await perspective.table(SCHEMA);
+            await source.update(rows(24));
+            const view = await source.view(config);
+            const derived = await perspective.table(view);
+            await source.clear();
+            await expect_flat_parity(view, derived);
+            await source.update(rows(8, 3));
+            await expect_flat_parity(view, derived);
+            await source.replace(rows(5, 50));
+            await expect_flat_parity(view, derived);
+            await derived.delete();
+            await view.delete();
+            await source.delete();
+        });
+    }
 });

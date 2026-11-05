@@ -4088,6 +4088,7 @@ ProtoServer::_notify_table(
             out.set_entity_id(view_id);
             auto* r = out.mutable_view_on_update_resp();
             r->set_port_id(port_id);
+            r->set_reset(table->get_gnode()->get_was_reset());
             if (view->get_deltas_enabled()) {
                 *r->mutable_delta() = *view->get_row_delta_as_arrow();
             }

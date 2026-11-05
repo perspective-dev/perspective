@@ -627,9 +627,13 @@ impl Client {
 
             let table_ = table.clone();
             let callback = asyncfn!(table_, update, async move |update: OnUpdateData| {
-                let update = UpdateData::Arrow(update.delta.expect("Malformed message").into());
-                let options = crate::UpdateOptions::default();
-                table_.update(update, options).await.unwrap_or_log();
+                let data = UpdateData::Arrow(update.delta.expect("Malformed message").into());
+                if update.reset {
+                    table_.replace(data).await.unwrap_or_log();
+                } else {
+                    let options = crate::UpdateOptions::default();
+                    table_.update(data, options).await.unwrap_or_log();
+                }
             });
 
             let options = OnUpdateOptions {

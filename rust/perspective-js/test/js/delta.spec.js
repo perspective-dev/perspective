@@ -87,6 +87,38 @@ function it_old_behavior(name, capture) {
                 await table.update(partial_change_y);
             });
 
+            test("`reset` marks steps that began with `replace` or `clear`", async function () {
+                const table = await perspective.table(data, { index: "x" });
+                const view = await table.view();
+                const steps = [];
+                let resolve;
+                const next = () =>
+                    new Promise((x) => {
+                        resolve = x;
+                    });
+
+                await view.on_update(
+                    (updated) => {
+                        steps.push(updated.reset);
+                        resolve();
+                    },
+                    { mode: "row" },
+                );
+
+                let promise = next();
+                await table.update(partial_change_y);
+                await promise;
+                promise = next();
+                await table.replace(data);
+                await promise;
+                promise = next();
+                await table.clear();
+                await promise;
+                expect(steps).toEqual([false, true, true]);
+                await view.delete();
+                await table.delete();
+            });
+
             it_old_behavior(
                 "returns changed rows, hidden sort",
                 async function (done) {

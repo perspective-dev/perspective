@@ -651,7 +651,8 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             ViewOnUpdateReq(_) => {
                 respond!(msg, ViewOnUpdateResp {
                     delta: None,
-                    port_id: 0
+                    port_id: 0,
+                    reset: false
                 })
             },
             ViewOnDeleteReq(_) => {

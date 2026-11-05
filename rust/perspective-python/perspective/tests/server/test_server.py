@@ -425,7 +425,7 @@ class TestServer(object):
     def test_server_on_update_rows(self, sentinel):
         s = sentinel(0)
 
-        def update_callback(port_id, delta):
+        def update_callback(port_id, delta, reset):
             table = Table(delta)
             assert table.size() == 1
             assert table.schema() == {"a": "integer", "b": "string"}
@@ -459,7 +459,7 @@ class TestServer(object):
     def test_server_on_update_rows_with_port_id(self, sentinel):
         s = sentinel(0)
 
-        def update_callback(port_id, delta):
+        def update_callback(port_id, delta, reset):
             table = Table(delta)
             assert table.size() == 1
             assert table.schema() == {"a": "integer", "b": "string"}
@@ -525,7 +525,7 @@ class TestServer(object):
     def test_server_remove_update(self, sentinel):
         s = sentinel(0)
 
-        def update_callback(port_id, delta):
+        def update_callback(port_id, delta, reset):
             s.set(s.get() + 1)
 
         # create a table and view using client
@@ -706,7 +706,7 @@ class TestServer(object):
     def test_server_on_update_rows_with_port_id_through_wire_API(self, sentinel):
         s = sentinel(0)
 
-        def update_callback(port_id, delta):
+        def update_callback(port_id, delta, reset):
             table = Table(delta)
             assert table.size() == 1
             assert table.schema() == {"a": "integer", "b": "string"}
@@ -808,7 +808,7 @@ class TestServer(object):
     def test_server_remove_update_through_wire_API(self, sentinel):
         s = sentinel(0)
 
-        def update_callback(port_id, delta):
+        def update_callback(port_id, delta, reset):
             s.set(s.get() + 1)
 
         # create a table and view using client

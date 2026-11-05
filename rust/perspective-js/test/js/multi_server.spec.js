@@ -108,5 +108,218 @@ import perspective from "./perspective_client";
             expect(json0).toEqual([{ x: 3, y: 4 }]);
             expect(json0).toEqual(json1);
         });
+
+        test("Replace transfers to an unindexed remote Table", async function ({
+            page,
+        }) {
+            await page.goto("/rust/perspective-js/test/html/test.html");
+            const [json0, json1] = await page.evaluate(async () => {
+                let perspective = await import(
+                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
+                );
+
+                perspective.init_client(
+                    fetch(
+                        "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
+                    ),
+                );
+
+                const settle = async (a, b) => {
+                    for (let i = 0; i < 50; i++) {
+                        const [x, y] = await Promise.all([
+                            a.to_json(),
+                            b.to_json(),
+                        ]);
+                        if (JSON.stringify(x) === JSON.stringify(y)) {
+                            return;
+                        }
+
+                        await new Promise((resolve) =>
+                            setTimeout(resolve, 100),
+                        );
+                    }
+                };
+
+                const worker0 = await perspective.worker();
+                const worker1 = await perspective.worker();
+                const table0 = await worker0.table("x,y\n1,2\n3,4");
+                const view0 = await table0.view();
+                const table1 = await worker1.table(view0);
+                const view1 = await table1.view();
+                await table0.replace([
+                    { x: 5, y: 6 },
+                    { x: 7, y: 8 },
+                ]);
+
+                await settle(view0, view1);
+                return [await view0.to_json(), await view1.to_json()];
+            });
+
+            expect(json0).toEqual([
+                { x: 5, y: 6 },
+                { x: 7, y: 8 },
+            ]);
+
+            expect(json1).toEqual(json0);
+        });
+
+        test("Clear transfers to an unindexed remote Table", async function ({
+            page,
+        }) {
+            await page.goto("/rust/perspective-js/test/html/test.html");
+            const [json0, json1] = await page.evaluate(async () => {
+                let perspective = await import(
+                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
+                );
+
+                perspective.init_client(
+                    fetch(
+                        "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
+                    ),
+                );
+
+                const settle = async (a, b) => {
+                    for (let i = 0; i < 50; i++) {
+                        const [x, y] = await Promise.all([
+                            a.to_json(),
+                            b.to_json(),
+                        ]);
+                        if (JSON.stringify(x) === JSON.stringify(y)) {
+                            return;
+                        }
+
+                        await new Promise((resolve) =>
+                            setTimeout(resolve, 100),
+                        );
+                    }
+                };
+
+                const worker0 = await perspective.worker();
+                const worker1 = await perspective.worker();
+                const table0 = await worker0.table("x,y\n1,2\n3,4");
+                const view0 = await table0.view();
+                const table1 = await worker1.table(view0);
+                const view1 = await table1.view();
+                await table0.clear();
+                await settle(view0, view1);
+                return [await view0.to_json(), await view1.to_json()];
+            });
+
+            expect(json0).toEqual([]);
+            expect(json1).toEqual([]);
+        });
+
+        test("Replace transfers to a remote Table whose View omits the index", async function ({
+            page,
+        }) {
+            await page.goto("/rust/perspective-js/test/html/test.html");
+            const [json0, json1] = await page.evaluate(async () => {
+                let perspective = await import(
+                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
+                );
+
+                perspective.init_client(
+                    fetch(
+                        "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
+                    ),
+                );
+
+                const settle = async (a, b) => {
+                    for (let i = 0; i < 50; i++) {
+                        const [x, y] = await Promise.all([
+                            a.to_json(),
+                            b.to_json(),
+                        ]);
+                        if (JSON.stringify(x) === JSON.stringify(y)) {
+                            return;
+                        }
+
+                        await new Promise((resolve) =>
+                            setTimeout(resolve, 100),
+                        );
+                    }
+                };
+
+                const worker0 = await perspective.worker();
+                const worker1 = await perspective.worker();
+                const table0 = await worker0.table("x,y\n1,2\n3,4", {
+                    index: "x",
+                });
+
+                const view0 = await table0.view({ columns: ["y"] });
+                const table1 = await worker1.table(view0);
+                const view1 = await table1.view();
+                await table0.replace([{ x: 1, y: 20 }]);
+                await settle(view0, view1);
+                return [await view0.to_json(), await view1.to_json()];
+            });
+
+            expect(json0).toEqual([{ y: 20 }]);
+            expect(json1).toEqual(json0);
+        });
+
+        test("Replace and clear transfer to an indexed remote Table", async function ({
+            page,
+        }) {
+            await page.goto("/rust/perspective-js/test/html/test.html");
+            const [json0, json1] = await page.evaluate(async () => {
+                let perspective = await import(
+                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
+                );
+
+                perspective.init_client(
+                    fetch(
+                        "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
+                    ),
+                );
+
+                const settle = async (a, b) => {
+                    for (let i = 0; i < 50; i++) {
+                        const [x, y] = await Promise.all([
+                            a.to_json(),
+                            b.to_json(),
+                        ]);
+                        if (JSON.stringify(x) === JSON.stringify(y)) {
+                            return;
+                        }
+
+                        await new Promise((resolve) =>
+                            setTimeout(resolve, 100),
+                        );
+                    }
+                };
+
+                const worker0 = await perspective.worker();
+                const worker1 = await perspective.worker();
+                const table0 = await worker0.table("x,y\n1,2\n3,4", {
+                    index: "x",
+                });
+
+                const view0 = await table0.view();
+                const table1 = await worker1.table(view0);
+                const view1 = await table1.view();
+                await table0.replace([
+                    { x: 3, y: 40 },
+                    { x: 5, y: 6 },
+                ]);
+
+                await settle(view0, view1);
+                const replaced = [await view0.to_json(), await view1.to_json()];
+                await table0.clear();
+                await settle(view0, view1);
+                return [
+                    replaced,
+                    [await view0.to_json(), await view1.to_json()],
+                ];
+            });
+
+            expect(json0[0]).toEqual([
+                { x: 3, y: 40 },
+                { x: 5, y: 6 },
+            ]);
+
+            expect(json0[1]).toEqual(json0[0]);
+            expect(json1).toEqual([[], []]);
+        });
     });
 })(perspective);

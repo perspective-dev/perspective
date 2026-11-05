@@ -265,7 +265,7 @@ class TestAsync(object):
         view = tbl.view()
         tbl2 = client.table(view.to_arrow())
 
-        def _update(port_id, delta):
+        def _update(port_id, delta, reset):
             print("Updating tbl2", delta)
             tbl2.update(delta)
 

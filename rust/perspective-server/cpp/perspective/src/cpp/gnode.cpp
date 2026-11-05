@@ -337,13 +337,16 @@ t_gnode::_process_mask_existed_rows(t_process_state& process_state) {
 
 void
 t_gnode::_take_reset_removes(
-    const t_column* pkey_col, t_uindex flattened_num_rows
+    const t_column* pkey_col,
+    const t_column* op_col,
+    t_uindex flattened_num_rows
 ) {
     if (!m_reset_pending) {
         return;
     }
 
     m_reset_pending = false;
+    m_was_reset = true;
     if (!m_reset_pkeys) {
         return;
     }
@@ -351,6 +354,10 @@ t_gnode::_take_reset_removes(
     tsl::hopscotch_set<t_tscalar> incoming;
     incoming.reserve(flattened_num_rows);
     for (t_uindex idx = 0; idx < flattened_num_rows; ++idx) {
+        if (*(op_col->get_nth<std::uint8_t>(idx)) == OP_DELETE) {
+            continue;
+        }
+
         incoming.insert(pkey_col->get_scalar(idx));
     }
 
@@ -609,6 +616,7 @@ t_gnode::_process_table(t_uindex port_id) {
         }
 
         m_reset_pending = false;
+        m_was_reset = true;
         m_removed_pkeys = std::move(m_reset_pkeys);
         m_reset_pkeys = nullptr;
         m_was_updated = true;
@@ -633,7 +641,9 @@ t_gnode::_process_table(t_uindex port_id) {
         row_lookup[idx] = m_gstate->lookup(pkey);
     }
 
-    _take_reset_removes(pkey_col, flattened_num_rows);
+    _take_reset_removes(
+        pkey_col, flattened->_get_const_column("psp_op"), flattened_num_rows
+    );
 
     // first update - master table is empty
     if (m_gstate->mapping_size() == 0) {
@@ -895,6 +905,7 @@ t_gnode::process_derived(const t_derived_step& step) {
     PSP_TRACE_SENTINEL();
     PSP_VERBOSE_ASSERT(m_init, "Cannot `process_derived` on an uninited gnode.");
     m_was_updated = false;
+    m_was_reset = false;
     m_removed_pkeys = nullptr;
 
     const std::shared_ptr<t_data_table>& flattened = step.m_flattened;
@@ -905,6 +916,7 @@ t_gnode::process_derived(const t_derived_step& step) {
         }
 
         m_reset_pending = false;
+        m_was_reset = true;
         m_removed_pkeys = std::move(m_reset_pkeys);
         m_reset_pkeys = nullptr;
         m_was_updated = true;
@@ -923,7 +935,9 @@ t_gnode::process_derived(const t_derived_step& step) {
         identity_lookup[idx] = t_rlookup(idx, exists);
     }
 
-    _take_reset_removes(pkey_col, flattened_num_rows);
+    _take_reset_removes(
+        pkey_col, flattened->_get_const_column("psp_op"), flattened_num_rows
+    );
 
     if (m_gstate->mapping_size() == 0) {
         m_gstate->commit_derived(flattened, step.m_rows);
@@ -2105,11 +2119,17 @@ t_gnode::clear_output_ports() {
         m_oport->get_table()->clear();
     }
     m_removed_pkeys = nullptr;
+    m_was_reset = false;
 }
 
 std::shared_ptr<t_data_table>
 t_gnode::get_removed_pkeys() const {
     return m_removed_pkeys;
+}
+
+bool
+t_gnode::get_was_reset() const {
+    return m_was_reset;
 }
 
 void
