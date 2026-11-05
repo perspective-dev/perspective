@@ -272,7 +272,7 @@ jobs:
                 os:
                     - ubuntu-22.04
                     - ubuntu-22.04-arm
-                    - macos-14
+                    - macos-15
                     - windows-2025
                 arch:
                     - aarch64
@@ -294,9 +294,9 @@ jobs:
                 exclude:
                     - os: windows-2025
                       arch: aarch64
-                    - os: macos-14
+                    - os: macos-15
                       is-release: false
-                    - os: macos-14
+                    - os: macos-15
                       arch: x86_64
                     - os: windows-2025
                       is-release: false
@@ -791,7 +791,7 @@ jobs:
             - uses: actions/download-artifact@v4
               if: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' || github.event.inputs.ci-full == 'true' }}
               with:
-                  name: perspective-python-dist-aarch64-macos-14-${{ matrix.python-version }}
+                  name: perspective-python-dist-aarch64-macos-15-${{ matrix.python-version }}
                   path: .
 
             - uses: actions/download-artifact@v4
@@ -984,7 +984,7 @@ jobs:
                 os:
                     - ubuntu-22.04
                     - ubuntu-22.04-arm
-                    - macos-14
+                    - macos-15
                     - windows-2025
                 arch:
                     - x86_64
@@ -996,15 +996,15 @@ jobs:
                 is-release:
                     - ${{ startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'master' || github.event.inputs.ci-full }}
                 exclude:
-                    - os: macos-14
+                    - os: macos-15
                       is-release: false
-                    - os: macos-14
+                    - os: macos-15
                       is-release: false
                     - os: windows-2025
                       is-release: false
-                    - os: macos-14
+                    - os: macos-15
                       arch: aarch64
-                    - os: macos-14
+                    - os: macos-15
                       arch: x86_64
                     - os: windows-2025
                       arch: aarch64

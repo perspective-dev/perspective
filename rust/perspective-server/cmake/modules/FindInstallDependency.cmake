@@ -76,6 +76,19 @@ function(psp_build_dep name cmake_file)
             EXCLUDE_FROM_ALL)
         set(${name}_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/${name}-src PARENT_SCOPE)
     elseif(${name} STREQUAL protobuf)
+        set(_absl_copts "${CMAKE_BINARY_DIR}/${name}-src/third_party/abseil-cpp/absl/copts/AbseilConfigureCopts.cmake")
+        if(EXISTS ${_absl_copts})
+            file(READ ${_absl_copts} _absl_copts_text)
+            string(REPLACE
+                [["-Xarch_${_arch}" "${_flag}"]]
+                [["SHELL:-Xarch_${_arch} ${_flag}"]]
+                _absl_copts_patched "${_absl_copts_text}")
+            if(NOT _absl_copts_patched STREQUAL _absl_copts_text)
+                psp_build_message("${Cyan}Patching abseil -Xarch_ copts (abseil-cpp#1707)${ColorReset}")
+                file(WRITE ${_absl_copts} "${_absl_copts_patched}")
+            endif()
+        endif()
+
         add_subdirectory(${CMAKE_BINARY_DIR}/${name}-src
             ${CMAKE_BINARY_DIR}/${name}-build
             EXCLUDE_FROM_ALL)
