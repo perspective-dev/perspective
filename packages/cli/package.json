@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/cli",
-    "version": "5.6.1",
+    "version": "5.7.0",
     "description": "Command line tool for Perspective: convert between Arrow, CSV and JSON, or host a local file as an interactive data grid, pivot table and charts.",
     "keywords": [
         "perspective",

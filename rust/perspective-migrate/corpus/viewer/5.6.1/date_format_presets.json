@@ -2,7 +2,7 @@
     "kind": "viewer",
     "source": "rust/perspective-viewer/test/js/viewer_config/date_format_migration.spec.ts@f423f05698",
     "input": {
-        "version": "5.6.1",
+        "version": "5.7.0",
         "plugin": "Debug",
         "columns_config": {
             "A": {

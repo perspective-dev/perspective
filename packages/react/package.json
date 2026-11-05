@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/react",
-    "version": "5.6.1",
+    "version": "5.7.0",
     "description": "React data grid, pivot table and charts for large, real-time and streaming datasets — React bindings for `<perspective-viewer>`.",
     "keywords": [
         "perspective",

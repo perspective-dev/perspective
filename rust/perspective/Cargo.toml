@@ -12,7 +12,7 @@
 
 [package]
 name = "perspective"
-version = "5.6.1"
+version = "5.7.0"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
 description = "Data grid, pivot table and charting engine for large, real-time and streaming datasets."
@@ -39,8 +39,8 @@ external-cpp = [
 
 [dependencies]
 async-lock = "2.5.0"
-perspective-client = { version = "5.6.1" }
-perspective-server = { version = "5.6.1" }
+perspective-client = { version = "5.7.0" }
+perspective-server = { version = "5.7.0" }
 tracing = { version = ">=0.1.36" }
 axum = { version = ">=0.7,<0.9", features = ["ws"], optional = true }
 fallible-iterator = "0.2.0"
