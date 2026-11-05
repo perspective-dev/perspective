@@ -106,7 +106,7 @@ class TestPorts(object):
             port: [{"a": port, "b": str(port), "c": True}] for port in ports_to_update
         }
 
-        def callback(port_id, delta):
+        def callback(port_id, delta, reset):
             assert port_id in ports_to_update
             _t = Table(delta)
             _v = _t.view()
@@ -157,13 +157,13 @@ class TestPorts(object):
 
         # when the client updates, check whether the port id matches that
         # of the server, and complete the test.
-        def client_callback(port_id, delta):
+        def client_callback(port_id, delta, reset):
             if port_id == client_port:
                 print("UPDATING SERVER")
                 server.update(delta, port_id=server_port_for_client)
 
         # when the server updates, pass the update back to the client
-        def server_callback(port_id, delta):
+        def server_callback(port_id, delta, reset):
             print("UPDATING CLIENT")
             assert port_id == server_port_for_client
             assert server.size() == 8

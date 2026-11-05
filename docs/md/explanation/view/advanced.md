@@ -222,7 +222,7 @@ view.remove_update(callback);
 <div class="python">
 
 ```python
-def on_update(port_id, delta):
+def on_update(port_id, delta, reset):
     print("View updated", port_id)
 
 view.on_update(on_update, mode="row")
@@ -233,16 +233,19 @@ view.remove_update(on_update)
 
 When `mode` is set to `"row"`, the callback receives a delta of only the rows
 that changed (as Apache Arrow), which is useful for efficiently synchronizing
-tables across clients.
+tables across clients. The callback also receives `reset`, which is `true` when
+the update step began with `clear()` or `replace()`; the delta is then relative
+to an empty `Table`, so a replica should apply it with `replace()` rather than
+`update()`.
 
 ## Remove Callbacks
 
 Register a callback to be notified whenever rows are removed from the underlying
 `Table` by `remove()`, which requires an `index`. The callback receives the
 `port_id` and the removed `index` column values as an Apache Arrow with one
-column per index column, named after that column. It fires once per update step, only for rows which
-existed before that step; `replace()` reports the keys it does not re-supply,
-and `clear()` reports every key:
+column per index column, named after that column. It fires once per update step,
+only for rows which existed before that step; `replace()` reports the keys it
+does not re-supply, and `clear()` reports every key:
 
 <div class="javascript">
 

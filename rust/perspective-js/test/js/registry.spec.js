@@ -22,7 +22,7 @@ const URLS = {
     cdn: `${CLIENT}/dist/cdn/perspective.js`,
     viewer_cdn: `${VIEWER}/dist/cdn/perspective-viewer.js`,
     client_wasm: `${CLIENT}/dist/wasm/perspective-js.wasm`,
-    migrate_wasm: `${CLIENT}/dist/wasm/perspective-migrate-js.wasm`,
+    migrate_wasm: `${CLIENT}/dist/wasm/perspective-migrate.wasm`,
     wasm32: `${SERVER}/dist/wasm/perspective-server.wasm`,
     wasm64: `${SERVER}/dist/wasm/perspective-server.memory64.wasm`,
 };

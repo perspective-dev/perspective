@@ -10,24 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-// Workspace structural invariants (see `.plan/WORKSPACE_TEST_PLAN.md` §1).
-// Each helper asserts a layer the model-level APIs cannot see, locking the
-// failure classes of the panel-materialization arc:
-//
-// - I1 `armLayoutCanary`/`assertLayoutStable`: the `<regular-layout>` ELEMENT
-//   is never replaced (a Yew unkeyed list diff once recreated it, silently
-//   re-booting an EMPTY layout with no listeners).
-// - I2 `assertTreeSane`: `layout.save()` sizes are finite, positive and
-//   normalized (an insert into an empty split once poisoned the tree with
-//   `NaN` sizes that rendered plausibly).
-// - I3 `assertCoherent`: model panel set ≡ layout tree ≡ frame geometry ≡
-//   slotted plugin projection (a duplicate once committed into an empty tree,
-//   orphaning the original panel from the layout while the model kept both —
-//   and the two frames rendered pixel-superimposed).
-//
-// `armInvariants(test)` retrofits I1+I2+I3 onto a whole spec file; the
-// invariants then gate EVERY test's end state.
-
 import type { Page, TestType } from "@playwright/test";
 import { expect } from "../helpers.ts";
 
@@ -104,7 +86,7 @@ function stackGroups(tree: LayoutTree | null): string[][] {
     return tree.children.flatMap(stackGroups);
 }
 
-/// I2 — every `sizes` entry finite and positive, per-split sum ≈ 1, arity
+/// I2 — every `sizes` entry finite and non-negative, per-split sum > 0, arity
 /// matches, no duplicate or empty slots. The empty root split (zero panels)
 /// is legal.
 export function assertTreeSane(tree: LayoutTree | null): void {
@@ -137,11 +119,11 @@ export function assertTreeSane(tree: LayoutTree | null): void {
         let total = 0;
         for (const size of node.sizes) {
             expect(Number.isFinite(size), `non-finite size ${size}`).toBe(true);
-            expect(size, "non-positive size").toBeGreaterThan(0);
+            expect(size, "negative size").toBeGreaterThanOrEqual(0);
             total += size;
         }
 
-        expect(Math.abs(total - 1), "sizes not normalized").toBeLessThan(1e-6);
+        expect(total, "sizes sum to zero").toBeGreaterThan(0);
         for (const child of node.children) {
             walk(child, false);
         }

@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import * as migrate_wasm from "../../../dist/wasm/perspective-migrate-js.js";
+import * as migrate_wasm from "../../../dist/wasm/perspective-migrate.js";
 
 /**
  * The kind of persisted config `migrate()` upgrades: an engine `ViewConfig`,
@@ -57,7 +57,7 @@ export class MigrateLoader {
     ): Promise<MigrateResult<T>> {
         if (this.module === undefined) {
             if (this.source === undefined) {
-                throw new Error("Missing perspective-migrate-js.wasm");
+                throw new Error("Missing perspective-migrate.wasm");
             }
 
             const source = this.source;

@@ -672,7 +672,7 @@ class TestTable:
 
         s = sentinel(False)
 
-        def updater(port_id, delta):
+        def updater(port_id, delta, reset):
             # assert port_id == 0
             table2 = Table(delta)
             assert table2.view().to_records() == data2

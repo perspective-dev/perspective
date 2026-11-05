@@ -152,7 +152,7 @@ function is_wasm_source(
  * perspective.init_server({
  *     wasm32: () => fetch("perspective-server.wasm"),
  *     wasm64: () => fetch("perspective-server.memory64.wasm"),
- *     migrate: () => fetch("perspective-migrate-js.wasm"),
+ *     migrate: () => fetch("perspective-migrate.wasm"),
  * });
  * ```
  */

@@ -27,7 +27,7 @@ register_default({
                 import.meta.url,
                 "viewer",
                 "client",
-                "perspective-migrate-js.wasm",
+                "perspective-migrate.wasm",
             ),
         ),
 });

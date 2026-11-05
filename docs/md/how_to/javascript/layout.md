@@ -13,8 +13,8 @@ A layout is built from two kinds of node:
 - `split-layout` divides its space among its `children`. The `orientation`
   decides the direction: `"horizontal"` places the children side by side as
   columns, left to right, and `"vertical"` stacks them as rows, top to bottom.
-  `sizes` gives each child's fraction of the split, one number per child, and
-  the sizes must sum to 1 (`[0.5, 0.5]` is an even split, `[0.25, 0.75]` a
+  `sizes` gives each child's share of the split, one number per child, as
+  proportions of their total (`[0.5, 0.5]` is an even split, `[0.25, 0.75]` a
   narrow column next to a wide one).
 - `tab-layout` is a leaf cell holding a stack of panels, listed by panel id in
   `tabs`. Only one panel of a stack is visible at a time; `selected` is the
@@ -27,7 +27,8 @@ across the bottom row. A split nested directly inside a split of the same
 orientation is flattened into its parent, so `saveWorkspace()` may return an
 equivalent but flatter tree than the one you restored.
 
-Every panel must appear in the layout exactly once.
+Each panel may appear in the layout at most once. A panel the layout leaves out
+is removed, with a warning logged to the console.
 
 ```javascript
 const layout = {
@@ -111,7 +112,7 @@ side by side; arrange them afterwards by restoring a `layout`, as below.
 ## Rearranging existing panels
 
 A `restoreWorkspace()` call with a `layout` but no `panels` keeps every panel
-and only moves them. Name the panels by their existing ids, from
+the layout names and only moves them. Name the panels by their existing ids, from
 `getPanelNames()` or a `saveWorkspace()` token. This is how to move or swap a
 panel, resize a row or column, change a row into a column, or stack panels as
 tabs; nothing is re-created or re-queried.
@@ -149,12 +150,9 @@ the viewer is left exactly as it was. A layout is rejected when:
 
 - a panel id in `tabs` is unknown — without `panels` the ids must be existing
   panel ids, and with `panels` they must be `panels` keys;
-- a panel is missing from the layout, or appears more than once — every panel
-  must be placed exactly once;
-- a `split-layout` has no `children`, or its `sizes` do not have one entry per
-  child, or a size is zero or negative, or the sizes do not sum to 1;
-- a `tab-layout` has empty `tabs`, or its `selected` index is past the end of
-  `tabs`.
+- a panel appears more than once;
+- a `split-layout`'s `sizes` do not have one entry per child, or a size is
+  negative or not finite, or every size is zero.
 
 The error message names the offending node by its path, e.g.
 `layout.children[1].tabs`, and lists the valid panel ids.

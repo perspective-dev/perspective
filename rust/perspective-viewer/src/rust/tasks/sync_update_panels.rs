@@ -48,7 +48,7 @@ pub fn sync_update_panels(
         version,
         active,
         layout,
-        panels,
+        mut panels,
         derived_tables,
         global_filters,
         masters,
@@ -68,15 +68,24 @@ pub fn sync_update_panels(
 
     let old_ids = this.workspace.panel_ids();
     let replace = panels.is_some();
+    let mut unplaced = Vec::new();
     if let Some(layout) = &layout {
         let ids = match &panels {
             Some(panels) => panels.keys().cloned().collect::<Vec<_>>(),
             None => old_ids.iter().map(|id| id.as_str().to_owned()).collect(),
         };
 
-        layout
+        unplaced = layout
             .validate(&ids)
             .map_err(|e| ApiError::from(JsValue::from_str(&e)))?;
+
+        for id in &unplaced {
+            tracing::warn!("`layout` does not place panel \"{id}\", dropping it");
+        }
+
+        if let Some(panels) = &mut panels {
+            panels.retain(|id, _| !unplaced.contains(id));
+        }
     }
 
     // Phase 1 — models only, NO renders and NO draws
@@ -124,7 +133,12 @@ pub fn sync_update_panels(
         },
         None => {
             for id in &old_ids {
-                id_map.insert(id.as_str().to_owned(), id.as_str().to_owned());
+                if !unplaced.iter().any(|x| x == id.as_str()) {
+                    id_map.insert(id.as_str().to_owned(), id.as_str().to_owned());
+                } else if let Some(panel) = this.workspace.remove_panel(id) {
+                    panel.renderer.retire_slot();
+                    eject_tasks.push(eject_panel(panel, Disposal::Reject));
+                }
             }
         },
     }
@@ -164,6 +178,12 @@ pub fn sync_update_panels(
         active_target
             .clone()
             .or_else(|| this.workspace.active_id().map(|id| id.as_str().to_owned()))
+            .or_else(|| {
+                this.workspace
+                    .panel_ids()
+                    .first()
+                    .map(|id| id.as_str().to_owned())
+            })
     } else {
         None
     };

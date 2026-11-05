@@ -963,17 +963,17 @@ impl AsyncView {
     }
 
     /// Register a callback with this [`View`]. Whenever the view's underlying
-    /// table emits an update, this callback will be invoked with an object
-    /// containing `port_id`, indicating which port the update fired on, and
-    /// optionally `delta`, which is the new data that was updated for each
-    /// cell or each row.
+    /// table emits an update, this callback will be invoked with `port_id`,
+    /// indicating which port the update fired on, and in `"row"` mode also
+    /// with `delta`, the new data that was updated for each row, and `reset`,
+    /// which is `True` when the step began with `clear()` or `replace()` so
+    /// `delta` is relative to an empty table.
     ///
     /// # Arguments
     ///
-    /// - `on_update` - A callback function invoked on update, which receives an
-    ///   object with two keys: `port_id`, indicating which port the update was
-    ///   triggered on, and `delta`, whose value is dependent on the mode
-    ///   parameter.
+    /// - `on_update` - A callback function invoked on update, which receives
+    ///   `port_id`, indicating which port the update was triggered on, and in
+    ///   `"row"` mode `delta` and `reset`.
     /// - `options` - If this is provided as `OnUpdateOptions { mode:
     ///   Some(OnUpdateMode::Row) }`, then `delta` is an Arrow of the updated
     ///   rows. Otherwise `delta` will be [`Option::None`].
@@ -988,7 +988,7 @@ impl AsyncView {
                         match &x.delta {
                             None => callback.call1(py, (x.port_id,))?,
                             Some(delta) => {
-                                callback.call1(py, (x.port_id, PyBytes::new(py, delta)))?
+                                callback.call1(py, (x.port_id, PyBytes::new(py, delta), x.reset))?
                             },
                         };
 

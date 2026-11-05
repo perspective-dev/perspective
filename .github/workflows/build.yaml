@@ -721,7 +721,7 @@ jobs:
 
             - name: Package
               if: ${{ steps.config-step.outputs.FULL_RUN }}
-              run: cargo package --config .cargo/release.toml --no-verify --allow-dirty -p perspective -p perspective-viewer -p perspective-js -p perspective-client -p perspective-server -p perspective-python
+              run: cargo package --config .cargo/release.toml --no-verify --allow-dirty -p perspective -p perspective-viewer -p perspective-js -p perspective-client -p perspective-server -p perspective-migrate -p perspective-python
 
             - uses: actions/upload-artifact@v4
               if: ${{ steps.config-step.outputs.FULL_RUN }}
@@ -1104,15 +1104,17 @@ jobs:
             - name: Set up path overrides for perspective .crate contents
               shell: bash
               run: |
-                  (cd crates && tar xvf perspective-client-*.crate && tar xvf perspective-server-*.crate)
+                  (cd crates && tar xvf perspective-client-*.crate && tar xvf perspective-server-*.crate && tar xvf perspective-migrate-[0-9]*.crate)
                   CLIENT_CRATE_ROOT=$(ls -d "$PWD"/crates/perspective-client-*/ | head -n 1)
                   SERVER_CRATE_ROOT=$(ls -d "$PWD"/crates/perspective-server-*/ | head -n 1)
+                  MIGRATE_CRATE_ROOT=$(ls -d "$PWD"/crates/perspective-migrate-[0-9]*/ | head -n 1)
 
                   mkdir -p $HOME/.cargo
                   cat > $HOME/.cargo/config.toml <<EOF
                   [patch.crates-io]
                   perspective-client = { path = "$CLIENT_CRATE_ROOT" }
                   perspective-server = { path = "$SERVER_CRATE_ROOT" }
+                  perspective-migrate = { path = "$MIGRATE_CRATE_ROOT" }
                   EOF
 
             - name: Install perspective-python sdist

@@ -876,7 +876,7 @@ class TestView(object):
         # 2 here should result in null var because the group size is 1
         update_data = {"a": [15.12, 9.102, 0.99, 12.8], "b": [1, 0, 1, 2]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             table2 = Table(delta)
             view2 = table2.view()
             result = view2.to_columns()
@@ -1025,7 +1025,7 @@ class TestView(object):
             "c": [0, 4, 1, 6],
         }
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             table2 = Table(delta)
             view2 = table2.view()
             result = view2.to_columns()
@@ -1236,7 +1236,7 @@ class TestView(object):
         # 2 here should result in null stddev because the group size is 1
         update_data = {"a": [15.12, 9.102, 0.99, 12.8], "b": [1, 0, 1, 2]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             table2 = Table(delta)
             view2 = table2.view()
             result = view2.to_columns()
@@ -1385,7 +1385,7 @@ class TestView(object):
             "c": [0, 4, 1, 6],
         }
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             table2 = Table(delta)
             view2 = table2.view()
             result = view2.to_columns()
@@ -1931,7 +1931,7 @@ class TestView(object):
         data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
         update_data = {"a": [5], "b": [6]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, update_data)
 
         tbl = Table(data)
@@ -1939,11 +1939,26 @@ class TestView(object):
         view.on_update(cb1, mode="row")
         tbl.update(update_data)
 
+    def test_view_row_delta_reset_flag(self):
+        data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+        steps = []
+
+        def cb1(port_id, delta, reset):
+            steps.append(reset)
+
+        tbl = Table(data, index="a")
+        view = tbl.view()
+        view.on_update(cb1, mode="row")
+        tbl.update([{"a": 1, "b": 5}])
+        tbl.replace(data)
+        tbl.clear()
+        assert steps == [False, True, True]
+
     def test_view_row_delta_zero_column_subset(self, util):
         data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
         update_data = {"a": [5], "b": [6]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"b": [6]})
 
         tbl = Table(data)
@@ -1954,7 +1969,7 @@ class TestView(object):
     def test_view_row_delta_zero_from_schema(self, util):
         update_data = {"a": [5], "b": [6]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, update_data)
 
         tbl = Table({"a": "integer", "b": "integer"})
@@ -1965,7 +1980,7 @@ class TestView(object):
     def test_view_row_delta_zero_from_schema_column_subset(self, util):
         update_data = {"a": [5], "b": [6]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"b": [6]})
 
         tbl = Table({"a": "integer", "b": "integer"})
@@ -1977,7 +1992,7 @@ class TestView(object):
     def test_view_row_delta_zero_from_schema_filtered(self, util):
         update_data = {"a": [8, 9, 10, 11], "b": [1, 2, 3, 4]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"a": [11], "b": [4]})
 
         tbl = Table({"a": "integer", "b": "integer"})
@@ -1988,7 +2003,7 @@ class TestView(object):
     def test_view_row_delta_zero_from_schema_indexed(self, util):
         update_data = {"a": ["a", "b", "a"], "b": [1, 2, 3]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"a": ["a", "b"], "b": [3, 2]})
 
         tbl = Table({"a": "string", "b": "integer"}, index="a")
@@ -2001,7 +2016,7 @@ class TestView(object):
     def test_view_row_delta_zero_from_schema_indexed_filtered(self, util):
         update_data = {"a": [8, 9, 10, 11, 11], "b": [1, 2, 3, 4, 5]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"a": [11], "b": [5]})
 
         tbl = Table({"a": "integer", "b": "integer"}, index="a")
@@ -2013,7 +2028,7 @@ class TestView(object):
         data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
         update_data = {"a": [5], "b": [6]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"a": [9, 5], "b": [12, 6]})
 
         tbl = Table(data)
@@ -2029,7 +2044,7 @@ class TestView(object):
     def test_view_row_delta_one_from_schema(self, util):
         update_data = {"a": [1, 2, 3, 4, 5], "b": [6, 7, 8, 9, 10]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"a": [15, 1, 2, 3, 4, 5], "b": [40, 6, 7, 8, 9, 10]})
 
         tbl = Table({"a": "integer", "b": "integer"})
@@ -2040,7 +2055,7 @@ class TestView(object):
     def test_view_row_delta_one_from_schema_sorted(self, util):
         update_data = {"a": [1, 2, 3, 4, 5], "b": [6, 7, 8, 9, 10]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"a": [15, 5, 4, 3, 2, 1], "b": [40, 10, 9, 8, 7, 6]})
 
         tbl = Table({"a": "integer", "b": "integer"})
@@ -2051,7 +2066,7 @@ class TestView(object):
     def test_view_row_delta_one_from_schema_filtered(self, util):
         update_data = {"a": [1, 2, 3, 4, 5], "b": [6, 7, 8, 9, 10]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"a": [9, 4, 5], "b": [19, 9, 10]})
 
         tbl = Table({"a": "integer", "b": "integer"})
@@ -2062,7 +2077,7 @@ class TestView(object):
     def test_view_row_delta_one_from_schema_sorted_filtered(self, util):
         update_data = {"a": [1, 2, 3, 4, 5], "b": [6, 7, 8, 9, 10]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"a": [9, 5, 4], "b": [19, 10, 9]})
 
         tbl = Table({"a": "integer", "b": "integer"})
@@ -2073,7 +2088,7 @@ class TestView(object):
     def test_view_row_delta_one_from_schema_indexed(self, util):
         update_data = {"a": [1, 2, 3, 4, 5, 5, 4], "b": [6, 7, 8, 9, 10, 11, 12]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"a": [15, 1, 2, 3, 4, 5], "b": [44, 6, 7, 8, 12, 11]})
 
         tbl = Table({"a": "integer", "b": "integer"}, index="a")
@@ -2086,7 +2101,7 @@ class TestView(object):
     def test_view_row_delta_one_from_schema_sorted_indexed(self, util):
         update_data = {"a": [1, 2, 3, 4, 5, 5, 4], "b": [6, 7, 8, 9, 10, 11, 12]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"a": [15, 4, 5, 3, 2, 1], "b": [44, 12, 11, 8, 7, 6]})
 
         tbl = Table({"a": "integer", "b": "integer"}, index="a")
@@ -2099,7 +2114,7 @@ class TestView(object):
     def test_view_row_delta_one_from_schema_filtered_indexed(self, util):
         update_data = {"a": [1, 2, 3, 4, 5, 5, 4], "b": [6, 7, 8, 9, 10, 11, 12]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(delta, {"a": [9, 4, 5], "b": [23, 12, 11]})
 
         tbl = Table({"a": "integer", "b": "integer"}, index="a")
@@ -2113,7 +2128,7 @@ class TestView(object):
         data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
         update_data = {"a": [5], "b": [6]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(
                 delta,
                 {
@@ -2141,7 +2156,7 @@ class TestView(object):
     def test_view_row_delta_two_from_schema(self, util):
         data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(
                 delta,
                 {
@@ -2160,7 +2175,7 @@ class TestView(object):
     def test_view_row_delta_two_from_schema_indexed(self, util):
         data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}, {"a": 3, "b": 5}]
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(
                 delta,
                 {
@@ -2180,7 +2195,7 @@ class TestView(object):
         data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
         update_data = {"a": [5], "b": [6]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(
                 delta,
                 {
@@ -2208,7 +2223,7 @@ class TestView(object):
         data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}, {"a": 3, "b": 5}]
         update_data = {"a": [5], "b": [6]}
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(
                 delta,
                 {
@@ -2235,7 +2250,7 @@ class TestView(object):
     def test_view_row_delta_two_column_only_from_schema(self, util):
         data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(
                 delta,
                 {
@@ -2254,7 +2269,7 @@ class TestView(object):
     def test_view_row_delta_two_column_only_from_schema_indexed(self, util):
         data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}, {"a": 3, "b": 5}]
 
-        def cb1(port_id, delta):
+        def cb1(port_id, delta, reset):
             compare_delta(
                 delta,
                 {
