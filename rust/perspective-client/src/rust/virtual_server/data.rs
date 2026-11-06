@@ -110,7 +110,7 @@ pub enum RowPathStyle {
 ///
 /// This trait enables type-safe insertion of values into virtual data columns,
 /// ensuring that values are written to columns of the correct type.
-pub trait SetVirtualDataColumn {
+pub trait SetVirtualDataColumn: Clone {
     /// Writes this value (sequentially) to the given column builder.
     ///
     /// Returns an error if the column type does not match the value type.
@@ -1202,9 +1202,12 @@ impl VirtualDataSlice {
 
     /// Sets a value in a column at the specified row index.
     ///
-    /// If `group_by_index` is `Some`, the value is added to the `__ROW_PATH__`
-    /// column as part of the row's group-by path. Otherwise, the value is
-    /// inserted into the named column.
+    /// A `__ROW_PATH_N__` value is added to the row's `__ROW_PATH__`
+    /// sidecar path when `grouping_id` marks level `N` as un-rolled-up, and
+    /// is always written to the `__ROW_PATH_N__` column itself, which is
+    /// kept in the frozen batch as in [`Self::from_arrow_ipc`] - see the
+    /// comment there. Otherwise, the value is inserted into the named
+    /// column.
     ///
     /// Creates the column if it does not already exist.
     pub fn set_col<T: SetVirtualDataColumn>(
@@ -1226,30 +1229,112 @@ impl VirtualDataSlice {
             if grouping_id.map(|x| x as i32).unwrap_or(i32::MAX) < max_grouping_id {
                 let col = self.row_path.get_or_insert_with(Vec::new);
                 if let Some(row) = col.get_mut(index) {
-                    let scalar = value.to_scalar();
+                    let scalar = value.clone().to_scalar();
                     row.push(scalar);
                 } else {
                     while col.len() < index {
                         col.push(vec![])
                     }
 
-                    let scalar = value.to_scalar();
+                    let scalar = value.clone().to_scalar();
                     col.push(vec![scalar]);
                 }
             }
-
-            Ok(())
-        } else {
-            if !self.builders.contains_key(name) {
-                self.builders.insert(name.to_owned(), T::new_builder());
-            }
-
-            let col = self
-                .builders
-                .get_mut(name)
-                .ok_or_else(|| format!("Column '{}' not found after insertion", name))?;
-
-            Ok(value.write_to(col)?)
         }
+
+        if !self.builders.contains_key(name) {
+            self.builders.insert(name.to_owned(), T::new_builder());
+        }
+
+        let col = self
+            .builders
+            .get_mut(name)
+            .ok_or_else(|| format!("Column '{}' not found after insertion", name))?;
+
+        Ok(value.write_to(col)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn grouped_config(group_by: &[&str], mode: GroupRollupMode) -> ViewConfig {
+        ViewConfig {
+            group_by: group_by.iter().map(|x| x.to_string()).collect(),
+            group_rollup_mode: mode,
+            ..ViewConfig::default()
+        }
+    }
+
+    #[test]
+    fn test_set_col_keeps_row_path_columns_in_arrow() {
+        let mut slice =
+            VirtualDataSlice::new(grouped_config(&["business_day"], GroupRollupMode::Flat));
+        for (ridx, (day, gmv)) in [(1_000_i64, 1.5), (2_000, 2.5)].into_iter().enumerate() {
+            slice
+                .set_col("__ROW_PATH_0__", Some(0), ridx, Some(day))
+                .unwrap();
+            slice.set_col("gmv", Some(0), ridx, Some(gmv)).unwrap();
+        }
+
+        let batch = slice.freeze();
+        let rp = batch.column_by_name("__ROW_PATH_0__").unwrap();
+        assert_eq!(
+            rp.data_type(),
+            &DataType::Timestamp(TimeUnit::Millisecond, None)
+        );
+        assert_eq!(
+            rp.as_primitive::<arrow_array::types::TimestampMillisecondType>()
+                .values()
+                .to_vec(),
+            vec![1_000, 2_000]
+        );
+
+        assert_eq!(batch.num_rows(), 2);
+    }
+
+    #[test]
+    fn test_set_col_row_path_rollup() {
+        let mut slice =
+            VirtualDataSlice::new(grouped_config(&["asset", "lp"], GroupRollupMode::Rollup));
+
+        let rows = [
+            (3, None, None),
+            (1, Some("EURUSD"), None),
+            (0, Some("EURUSD"), Some("JPM")),
+        ];
+
+        for (ridx, (gid, asset, lp)) in rows.into_iter().enumerate() {
+            let asset = asset.map(str::to_owned);
+            let lp = lp.map(str::to_owned);
+            slice
+                .set_col("__ROW_PATH_0__", Some(gid), ridx, asset)
+                .unwrap();
+            slice
+                .set_col("__ROW_PATH_1__", Some(gid), ridx, lp)
+                .unwrap();
+            slice.set_col("gmv", Some(gid), ridx, Some(1.0)).unwrap();
+        }
+
+        let batch = slice.freeze().clone();
+        let lp = batch.column_by_name("__ROW_PATH_1__").unwrap();
+        assert_eq!(lp.len(), 3);
+        assert!(lp.is_null(0) && lp.is_null(1) && !lp.is_null(2));
+
+        let json: serde_json::Value = serde_json::from_str(
+            &slice
+                .render_to_columns_json(RowPathStyle::Sidecar, false)
+                .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "__ROW_PATH__": [[], ["EURUSD"], ["EURUSD", "JPM"]],
+                "gmv": [1.0, 1.0, 1.0],
+            })
+        );
     }
 }

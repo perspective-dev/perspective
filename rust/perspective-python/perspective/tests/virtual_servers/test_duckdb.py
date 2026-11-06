@@ -1614,3 +1614,76 @@ class TestDuckDBExpandCollapse:
         assert view.num_columns() == 2
         assert sorted(view.to_columns().keys()) == ["Region", "Sales"]
         view.delete()
+
+
+class TestDuckDBHostedTableNames:
+
+    @pytest.fixture
+    def multi(self):
+        db = duckdb.connect()
+        db.execute("CREATE TABLE trades AS SELECT 1 AS a")
+        db.execute("CREATE SCHEMA s; CREATE TABLE s.t AS SELECT 2 AS a")
+        db.execute('CREATE SCHEMA "my schema"')
+        db.execute('CREATE TABLE "my schema"."MyT" AS SELECT 3 AS a')
+        db.execute("ATTACH ':memory:' AS other")
+        db.execute("CREATE TABLE other.main.w AS SELECT 4 AS a")
+        server = DuckDBVirtualServer(db)
+
+        def handle_request(msg):
+            session.handle_request(msg)
+
+        def handle_response(msg):
+            c.handle_response(msg)
+
+        session = server.new_session(handle_response)
+        c = Client(handle_request)
+        yield c
+        session.close()
+
+    def test_lists_every_catalog_and_schema(self, multi):
+        assert sorted(multi.get_hosted_table_names()) == [
+            'memory."my schema".MyT',
+            "memory.s.t",
+            "memory.trades",
+            "other.w",
+        ]
+
+    def test_opens_every_table(self, multi):
+        expected = {
+            'memory."my schema".MyT': 3,
+            "memory.s.t": 2,
+            "memory.trades": 1,
+            "other.w": 4,
+        }
+
+        for name, value in expected.items():
+            view = multi.open_table(name).view(columns=["a"])
+            assert view.to_columns() == {"a": [value]}
+            view.delete()
+
+    def test_views_are_not_hosted(self, multi):
+        before = sorted(multi.get_hosted_table_names())
+        view = multi.open_table("memory.trades").view(
+            group_by=["a"], columns=["a"], aggregates={"a": "sum"}
+        )
+
+        assert sorted(multi.get_hosted_table_names()) == before
+        view.delete()
+
+    def test_derived_tables_are_hosted_once(self, multi):
+        view = multi.open_table("memory.s.t").view(
+            group_by=["a"],
+            columns=["a"],
+            aggregates={"a": "sum"},
+            group_rollup_mode="flat",
+        )
+
+        derived = multi.table(view, name="s.t GROUP BY a")
+        names = multi.get_hosted_table_names()
+        assert names.count("s.t GROUP BY a") == 1
+        assert multi.open_table("s.t GROUP BY a").view(columns=["a"]).to_columns() == {
+            "a": [2]
+        }
+
+        derived.delete()
+        view.delete()

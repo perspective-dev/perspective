@@ -121,6 +121,15 @@ class VirtualServerHandler:
 
         pass
 
+    def table_delete(self, table_name):
+        """
+        Delete a table made by `view_make_table`. Optional - when absent,
+        `view_delete` is called instead, which suits handlers that create
+        both as the same kind of entity.
+        """
+
+        self.view_delete(table_name)
+
     def view_get_min_max(self, view_name, column_name, config):
         """
         [OPTIONAL] Get the min and max values of a column in a view.
@@ -198,7 +207,9 @@ def describe_via_make_view(handler, table_name, config):
     return {"expression_schema": expression_schema, "view_schema": view_schema}
 
 
-def sql_table_describe(sql_builder, table_name, config, describe_query, schema=None):
+def sql_table_describe(
+    sql_builder, table_name, config, describe_query, schema=None, unordered=False
+):
     """The `table_describe` flow shared by the SQL models."""
     expression_schema = {}
     query = sql_builder.expressions_describe(table_name, config)
@@ -229,7 +240,7 @@ def sql_table_describe(sql_builder, table_name, config, describe_query, schema=N
             }
 
     view_schema = {}
-    query = sql_builder.table_describe(table_name, config, schema)
+    query = sql_builder.table_describe(table_name, config, schema, unordered)
     if query is not None:
         try:
             view_schema = describe_query(query)

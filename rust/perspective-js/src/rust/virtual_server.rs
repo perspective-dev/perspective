@@ -605,6 +605,28 @@ impl VirtualServerHandler for JsServerHandler {
         })
     }
 
+    fn table_delete(&self, table_id: &str) -> HandlerFuture<Result<(), Self::Error>> {
+        let has_method = Reflect::get(&self.0, &JsValue::from_str("tableDelete"))
+            .map(|val| !val.is_undefined())
+            .unwrap_or(false);
+
+        let method = if has_method {
+            "tableDelete"
+        } else {
+            "viewDelete"
+        };
+
+        let handler = self.0.clone();
+        let table_id = table_id.to_string();
+        Box::pin(async move {
+            let this = JsServerHandler(handler);
+            let args = Array::new();
+            args.push(&JsValue::from_str(&table_id));
+            this.call_method_js_async(method, &args).await?;
+            Ok(())
+        })
+    }
+
     fn table_make_port(
         &self,
         _req: &perspective_client::proto::TableMakePortReq,

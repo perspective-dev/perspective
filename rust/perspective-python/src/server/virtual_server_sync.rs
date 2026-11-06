@@ -373,6 +373,23 @@ impl VirtualServerHandler for PyServerHandler {
         })
     }
 
+    fn table_delete(&self, table_id: &str) -> VirtualServerFuture<'_, Result<(), Self::Error>> {
+        let handler = Python::attach(|py| self.0.clone_ref(py));
+        let table_id = table_id.to_string();
+        Box::pin(async move {
+            Python::attach(|py| {
+                let method = if handler.getattr(py, "table_delete").is_ok() {
+                    pyo3::intern!(py, "table_delete")
+                } else {
+                    pyo3::intern!(py, "view_delete")
+                };
+
+                handler.call_method1(py, method, (&table_id,))?;
+                Ok(())
+            })
+        })
+    }
+
     fn view_get_min_max(
         &self,
         view_id: &str,

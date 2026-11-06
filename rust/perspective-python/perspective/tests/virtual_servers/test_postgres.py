@@ -963,3 +963,105 @@ class TestPostgresCoerceTypes:
         assert view.num_rows() == 0
         assert view.to_json() == []
         view.delete()
+
+
+class TestPostgresDerivedTable:
+
+    def _derive(self, client, name):
+        source = client.open_table("psp_test.superstore")
+        view = source.view(
+            group_by=["Region"],
+            columns=["Sales"],
+            aggregates={"Sales": "sum"},
+            group_rollup_mode="flat",
+        )
+
+        return view, client.table(view, name=name)
+
+    def test_unsorted_view_of_derived_table(self, client):
+        source_view, derived = self._derive(client, "psp_test_derived_unsorted")
+        view = derived.view(columns=["Region", "Sales"])
+        columns = view.to_columns()
+        assert list(columns) == ["Region", "Sales"]
+        assert sorted(columns["Region"]) == ["Central", "East", "South", "West"]
+        view.delete()
+        derived.delete()
+        source_view.delete()
+
+    def test_sorted_view_of_derived_table(self, client):
+        source_view, derived = self._derive(client, "psp_test_derived_sorted")
+        view = derived.view(columns=["Sales"], sort=[["Sales", "desc"]])
+        sales = view.to_columns()["Sales"]
+        assert len(sales) == 4
+        assert sales == sorted(sales, reverse=True)
+        view.delete()
+        derived.delete()
+        source_view.delete()
+
+    def test_unsorted_view_of_twice_derived_table(self, client):
+        source_view, derived = self._derive(client, "psp_test_derived_once")
+        middle = derived.view(columns=["Region", "Sales"])
+        twice = client.table(middle, name="psp_test_derived_twice")
+        view = twice.view(columns=["Region"])
+        assert sorted(view.to_columns()["Region"]) == [
+            "Central",
+            "East",
+            "South",
+            "West",
+        ]
+        view.delete()
+        twice.delete()
+        middle.delete()
+        derived.delete()
+        source_view.delete()
+
+    def test_describe_of_derived_table(self, client):
+        source_view, derived = self._derive(client, "psp_test_derived_describe")
+        result = derived.describe(
+            columns=["Region", "Big"],
+            expressions={"Big": '"Sales" > 100000'},
+        )
+
+        assert result == {
+            "expression_schema": {"Big": "boolean"},
+            "view_schema": {"Region": "string", "Big": "boolean"},
+        }
+
+        derived.delete()
+        source_view.delete()
+
+    def test_ctid_is_not_a_column(self, client):
+        source_view, derived = self._derive(client, "psp_test_derived_ctid")
+        assert derived.schema() == {"Region": "string", "Sales": "float"}
+        view = derived.view(columns=["Region", "Sales"])
+        assert view.schema() == {"Region": "string", "Sales": "float"}
+        assert view.to_csv().splitlines()[0] == "Region,Sales"
+        view.delete()
+        derived.delete()
+        source_view.delete()
+
+    def test_delete_drops_table(self, client, pg_db):
+        source_view, derived = self._derive(client, "psp_test_derived_delete")
+        derived.delete()
+        assert "psp_test_derived_delete" not in client.get_hosted_table_names()
+        source_view.delete()
+
+
+class TestPostgresHostedTableNames:
+
+    @pytest.fixture
+    def quoted(self, pg_db):
+        pg_db.execute('DROP SCHEMA IF EXISTS "psp test" CASCADE')
+        pg_db.execute('CREATE SCHEMA "psp test"')
+        pg_db.execute('CREATE TABLE "psp test"."MyTable" (a INTEGER)')
+        pg_db.execute('INSERT INTO "psp test"."MyTable" VALUES (7)')
+        yield
+        pg_db.execute('DROP SCHEMA "psp test" CASCADE')
+
+    def test_lists_quoted_path(self, client, quoted):
+        assert '"psp test"."MyTable"' in client.get_hosted_table_names()
+
+    def test_opens_quoted_path(self, client, quoted):
+        view = client.open_table('"psp test"."MyTable"').view(columns=["a"])
+        assert view.to_columns() == {"a": [7]}
+        view.delete()
