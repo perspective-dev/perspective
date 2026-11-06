@@ -153,7 +153,7 @@ runs:
         # https://github.com/apache/arrow/issues/38391
         - if: ${{ runner.os == 'macOS' }}
           shell: bash
-          run: echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)" >> $GITHUB_ENV
+          run: echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> $GITHUB_ENV
 
         # Use python 3.12 from manylinu
         - run: echo "/opt/python/cp311-cp311/bin" >> $GITHUB_PATH
