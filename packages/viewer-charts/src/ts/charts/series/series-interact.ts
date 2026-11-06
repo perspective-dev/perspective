@@ -625,7 +625,18 @@ export function buildBarTooltipLines(
 
     const yFmt = chart.getColumnFormatter(s.aggName, "value");
     grid.push([s.aggName, yFmt(b.value)]);
-    if (s.splitKey) {
+    const last = chart._lastGroupBySplit;
+    const entry = last?.prefixes.get(s.splitKey);
+    if (last && entry) {
+        grid.push([
+            chart._groupBy[chart._groupBy.length - 1],
+            last.values[entry.value],
+        ]);
+
+        if (entry.facet !== "") {
+            grid.push(["Split", entry.facet]);
+        }
+    } else if (s.splitKey) {
         grid.push(["Split", s.splitKey]);
     }
 

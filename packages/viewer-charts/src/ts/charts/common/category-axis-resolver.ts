@@ -188,7 +188,7 @@ export function resolveAxisMode(
 /**
  * Stringify a single value from a non-string row-path column.
  */
-function formatLevelValue(
+export function formatLevelValue(
     value: number,
     valid: boolean,
     levelType: string,

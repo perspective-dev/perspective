@@ -19,6 +19,7 @@ import type {
 } from "@perspective-dev/viewer";
 import {
     ChartTypeConfig,
+    FACET_MODES,
     LEGEND_FIELDS,
     TOOLTIP_FIELDS,
     PluginConfigField,
@@ -27,6 +28,7 @@ import style from "../../css/perspective-viewer-charts.css";
 import {
     DEFAULT_FACET_CONFIG,
     DEFAULT_PLUGIN_CONFIG,
+    facetLayout,
     type FacetConfig,
     type PluginConfig,
 } from "../charts/chart.ts";
@@ -112,6 +114,11 @@ const FIELD_SCHEMAS: Record<PluginConfigField, FieldSpec | (() => FieldSpec)> =
             variants: [
                 { value: "grid", label: "Grid" },
                 { value: "overlay", label: "Overlay" },
+                { value: "last_group_by_grid", label: "Last Group By Grid" },
+                {
+                    value: "last_group_by_overlay",
+                    label: "Last Group By Overlay",
+                },
             ],
         },
         facet_zoom_mode: {
@@ -186,9 +193,20 @@ const FIELD_SCHEMAS: Record<PluginConfigField, FieldSpec | (() => FieldSpec)> =
 function fieldSpec(
     key: PluginConfigField,
     defaults: PluginConfig,
+    chartType: ChartTypeConfig,
 ): Record<string, unknown> & { kind: string } {
     const entry = FIELD_SCHEMAS[key];
     const spec = typeof entry === "function" ? entry() : entry;
+    if (key === "facet_mode" && spec.kind === "Enum") {
+        const offered: readonly string[] = chartType.facet_modes ?? FACET_MODES;
+        return {
+            ...spec,
+            variants: spec.variants.filter((v) => offered.includes(v.value)),
+            key,
+            default: defaults[key],
+        };
+    }
+
     return { ...spec, key, default: defaults[key] };
 }
 
@@ -549,7 +567,7 @@ export class HTMLPerspectiveViewerWebGLPluginElement
             chrome: this._chromeCanvas,
             facetConfig: {
                 ...FACET_CONFIG_DEFAULTS,
-                facet_mode: this._pluginConfig.facet_mode,
+                facet_mode: facetLayout(this._pluginConfig.facet_mode),
                 zoom_mode: this._pluginConfig.facet_zoom_mode,
             },
             pluginConfig: this._pluginConfig,
@@ -771,7 +789,9 @@ export class HTMLPerspectiveViewerWebGLPluginElement
                 groups.push({
                     kind: "Group",
                     key: group.key,
-                    fields: members.map((k) => fieldSpec(k, defaults)),
+                    fields: members.map((k) =>
+                        fieldSpec(k, defaults, this._chartType),
+                    ),
                 });
             }
         }
@@ -779,7 +799,7 @@ export class HTMLPerspectiveViewerWebGLPluginElement
         const fields: Array<Record<string, unknown> & { kind: string }> =
             applicable
                 .filter((k) => !grouped.has(k))
-                .map((k) => fieldSpec(k, defaults));
+                .map((k) => fieldSpec(k, defaults, this._chartType));
 
         return { fields: [...fields, ...groups] };
     }

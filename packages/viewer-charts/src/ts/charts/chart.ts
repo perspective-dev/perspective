@@ -203,6 +203,17 @@ export interface ChartImplementation {
     destroy(): void;
 }
 
+/**
+ * The facet layout a `PluginConfig.facet_mode` value renders with.
+ */
+export function facetLayout(
+    mode: PluginConfig["facet_mode"],
+): FacetConfig["facet_mode"] {
+    return mode === "overlay" || mode === "last_group_by_overlay"
+        ? "overlay"
+        : "grid";
+}
+
 export interface FacetConfig {
     /**
      * "grid" = small multiples (default); "overlay" = legacy single-plot.
@@ -269,13 +280,20 @@ export interface PluginConfig {
     auto_alt_y_axis: boolean;
 
     /**
-     * Faceting strategy when `split_by` is non-empty.
+     * Faceting strategy when `split_by` is non-empty, and which view
+     * dimension becomes the series (color) dimension.
      *
      * - `"grid"` — one small-multiple sub-plot per split group.
      * - `"overlay"` — a single plot: cartesian charts differentiate
      *   split groups by color; the categorical band pipeline (series
      *   charts) stacks splits within each aggregate's band slot.
-     *   Synced into `_facetConfig.facet_mode`.
+     * - `"last_group_by_grid"` / `"last_group_by_overlay"` — series
+     *   charts only. The LAST `group_by` level is transposed into the
+     *   series dimension (as if appended to `split_by`) and the
+     *   remaining levels form the category axis; `split_by` then
+     *   facets (grid) or overlays exactly as the two modes above.
+     *
+     * Synced into `_facetConfig.facet_mode` via {@link facetLayout}.
      *
      * The default differs by family via
      * `ChartTypeConfig.plugin_field_defaults`: cartesian / density /
@@ -286,7 +304,11 @@ export interface PluginConfig {
      * `buildSeriesPipeline`) so each facet grows from its own
      * baseline.
      */
-    facet_mode: "grid" | "overlay";
+    facet_mode:
+        | "grid"
+        | "overlay"
+        | "last_group_by_grid"
+        | "last_group_by_overlay";
 
     /**
      * Faceted-cartesian zoom routing. `"shared"` — one viewport across
