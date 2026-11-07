@@ -138,8 +138,9 @@ export async function init_client(
  *
  * # Arguments
  *
- * - `kind` - `"view"` for a `ViewConfig`, `"viewer"` for a `save()` token, or
- *   `"workspace"` for a `saveWorkspace()` token.
+ * - `kind` - `"view"` for a `ViewConfig`, `"viewer"` for a `save()` token,
+ *   `"panel"` for one workspace panel, or `"workspace"` for a
+ *   `saveWorkspace()` token.
  * - `config` - The config to upgrade.
  * - `from_version` - The release which wrote `config`, used only when it has
  *   no `version` field.
@@ -150,4 +151,23 @@ export async function migrate<T = Record<string, unknown>>(
     from_version?: string,
 ): Promise<MigrateResult<T>> {
     return await shared_migrate(MIGRATE).migrate<T>(kind, config, from_version);
+}
+
+/**
+ * Check that a config is valid for this release without migrating it,
+ * rejecting with the offending JSON pointer and reason otherwise.
+ *
+ * # Arguments
+ *
+ * - `kind` - `"view"`, `"viewer"`, `"panel"` or `"workspace"`.
+ * - `config` - The config to check.
+ * - `options.strict` - Require the complete `save()` form rather than the
+ *   field-wise `restore()` update form.
+ */
+export async function validate(
+    kind: MigrateKind,
+    config: unknown,
+    options?: { strict?: boolean },
+): Promise<void> {
+    await shared_migrate(MIGRATE).validate(kind, config, options?.strict);
 }

@@ -16,7 +16,7 @@ import * as migrate_wasm from "../../../dist/wasm/perspective-migrate.js";
  * The kind of persisted config `migrate()` upgrades: an engine `ViewConfig`,
  * a `<perspective-viewer>` `save()` token, or a `saveWorkspace()` token.
  */
-export type MigrateKind = "view" | "viewer" | "workspace";
+export type MigrateKind = "view" | "viewer" | "panel" | "workspace";
 
 /**
  * Information `migrate()` could not carry into the current schema exactly.
@@ -55,6 +55,20 @@ export class MigrateLoader {
         config: unknown,
         from_version?: string,
     ): Promise<MigrateResult<T>> {
+        const wasm = await this.load();
+        return wasm.migrate(kind, from_version, config) as MigrateResult<T>;
+    }
+
+    async validate(
+        kind: MigrateKind,
+        config: unknown,
+        strict?: boolean,
+    ): Promise<void> {
+        const wasm = await this.load();
+        wasm.validate_config(kind, config, strict);
+    }
+
+    private async load(): Promise<typeof migrate_wasm> {
         if (this.module === undefined) {
             if (this.source === undefined) {
                 throw new Error("Missing perspective-migrate.wasm");
@@ -74,7 +88,6 @@ export class MigrateLoader {
             });
         }
 
-        const wasm = await this.module;
-        return wasm.migrate(kind, from_version, config) as MigrateResult<T>;
+        return await this.module;
     }
 }

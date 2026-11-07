@@ -22,7 +22,7 @@ use perspective_client::ViewWindow;
 use perspective_js::utils::*;
 use wasm_bindgen::{JsCast, JsValue};
 
-use crate::config::ExportMethod;
+use crate::config::{EncodeConfig, ExportMethod};
 use crate::js::JsPerspectiveViewerPlugin;
 use crate::presentation::Presentation;
 use crate::queries::{export_app, get_viewer_config};

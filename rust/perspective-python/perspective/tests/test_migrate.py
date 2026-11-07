@@ -13,7 +13,7 @@
 import pytest
 
 import perspective
-from perspective import PerspectiveError, migrate
+from perspective import PerspectiveError, migrate, validate
 
 V2_VIEW = {
     "row_pivot": ["State"],
@@ -59,3 +59,28 @@ class TestMigrate:
     def test_names_the_step_which_rejected_a_config(self):
         with pytest.raises(PerspectiveError, match="view.v2_aliases"):
             migrate("view", {"row_pivot": ["a"], "group_by": ["b"]}, "2.0.0")
+
+
+class TestValidate:
+    def test_accepts_a_current_view_config(self):
+        validate("view", {"group_by": ["State"]})
+
+    def test_accepts_a_migrated_config(self):
+        validate("view", migrate("view", V2_VIEW, "2.6.0")["value"])
+
+    def test_rejects_an_unknown_key(self):
+        with pytest.raises(PerspectiveError, match="bogus"):
+            validate("viewer", {"bogus": 1})
+
+    def test_rejects_a_panel_without_a_table(self):
+        with pytest.raises(PerspectiveError, match="table"):
+            validate("panel", {"plugin": "Datagrid"})
+
+    def test_strict_requires_the_complete_form(self):
+        validate("viewer", {"plugin": "Datagrid"})
+        with pytest.raises(PerspectiveError, match="settings"):
+            validate("viewer", {"plugin": "Datagrid"}, strict=True)
+
+    def test_rejects_an_unknown_kind(self):
+        with pytest.raises(ValueError, match="Unknown config kind"):
+            validate("table", {})

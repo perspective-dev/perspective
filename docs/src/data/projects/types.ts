@@ -67,8 +67,9 @@ export type ProjectSource =
  *
  * Every entry opens with the settings sidebar, which the top-level `active`
  * field is the workspace format's only carrier for — a `settings: true` key
- * inside a panel entry is silently ignored. Both helpers below always emit
- * it, so a hand-written `workspace` literal is the only way to omit it.
+ * inside a panel entry is REJECTED by `restoreWorkspace` as an unknown key.
+ * Both helpers below always emit it, so a hand-written `workspace` literal
+ * is the only way to omit it.
  */
 export interface Project {
     id: string;

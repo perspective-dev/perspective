@@ -1,0 +1,19 @@
+{
+    "kind": "workspace",
+    "input": {
+        "layout": {
+            "type": "tab-layout",
+            "tabs": [
+                "p",
+                "p"
+            ]
+        },
+        "panels": {
+            "p": {
+                "table": "t"
+            }
+        }
+    },
+    "pointer": "/layout",
+    "message": "more than once"
+}

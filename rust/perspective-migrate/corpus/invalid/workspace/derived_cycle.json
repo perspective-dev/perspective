@@ -1,0 +1,15 @@
+{
+    "kind": "workspace",
+    "input": {
+        "derived_tables": {
+            "a": {
+                "table": "b"
+            },
+            "b": {
+                "table": "a"
+            }
+        }
+    },
+    "pointer": "/derived_tables/a",
+    "message": "cycle"
+}

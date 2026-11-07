@@ -89,6 +89,12 @@ export interface MigrateHost {
         config: unknown,
         from_version?: string,
     ): Promise<MigrateResult<T>>;
+
+    validate(
+        kind: MigrateKind,
+        config: unknown,
+        strict?: boolean,
+    ): Promise<void>;
 }
 
 type WasmKey = keyof WasmRegistration;

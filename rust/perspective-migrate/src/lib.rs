@@ -39,6 +39,7 @@ mod notice;
 mod plugin;
 mod plugins;
 mod step;
+mod validate;
 mod version;
 mod view;
 mod viewer;
@@ -51,6 +52,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub use step::{Apply, Step, StepCx};
 use step::{Entry, Layer, Run, panels};
+pub use validate::{Form, ValidateError, validate};
 pub use version::Version;
 
 /// The kind of document a config is.
@@ -63,8 +65,28 @@ pub enum Kind {
     /// A `<perspective-viewer>` `save()` / `restore()` token.
     Viewer,
 
+    /// One workspace panel: a `panels` entry, with no `settings` and a
+    /// required `table` name.
+    Panel,
+
     /// A workspace `save()` / `restoreWorkspace()` token.
     Workspace,
+}
+
+impl std::str::FromStr for Kind {
+    type Err = String;
+
+    fn from_str(kind: &str) -> Result<Self, Self::Err> {
+        match kind {
+            "view" => Ok(Kind::View),
+            "viewer" => Ok(Kind::Viewer),
+            "panel" => Ok(Kind::Panel),
+            "workspace" => Ok(Kind::Workspace),
+            _ => Err(format!(
+                "Unknown config kind `{kind}`; expected `view`, `viewer`, `panel` or `workspace`"
+            )),
+        }
+    }
 }
 
 /// A migrated config and what the migration could not carry over exactly.
@@ -161,6 +183,7 @@ impl Migrator {
 
         run.apply(&entries, &mut value)?;
         stamp(kind, &schema.to_string(), &mut value);
+        validate(kind, Form::Update, &value)?;
         Ok(Migrated {
             value,
             notices: run.notices,
@@ -252,7 +275,7 @@ fn stamp(kind: Kind, version: &str, value: &mut Value) {
     let version = Value::from(version);
     match kind {
         Kind::View => {},
-        Kind::Viewer => {
+        Kind::Viewer | Kind::Panel => {
             value["version"] = version;
         },
         Kind::Workspace => {
@@ -275,17 +298,7 @@ use wasm_bindgen::prelude::*;
 /// `{value, notices, steps}`.
 #[wasm_bindgen]
 pub fn migrate(kind: &str, from: Option<String>, value: JsValue) -> Result<JsValue, JsError> {
-    let kind = match kind {
-        "view" => Kind::View,
-        "viewer" => Kind::Viewer,
-        "workspace" => Kind::Workspace,
-        _ => {
-            return Err(JsError::new(&format!(
-                "Unknown config kind `{kind}`; expected `view`, `viewer` or `workspace`"
-            )));
-        },
-    };
-
+    let kind: Kind = kind.parse().map_err(|e: String| JsError::new(&e))?;
     let value: serde_json::Value = serde_wasm_bindgen::from_value(value)?;
     let migrated = Migrator::new().migrate(kind, from.as_deref(), value)?;
     let result = serde_json::json!({
@@ -295,4 +308,19 @@ pub fn migrate(kind: &str, from: Option<String>, value: JsValue) -> Result<JsVal
     });
 
     Ok(result.serialize(&serde_wasm_bindgen::Serializer::json_compatible())?)
+}
+
+/// Check that a config is valid for the current schema without migrating it,
+/// where `strict` requires the complete `save()` form.
+#[wasm_bindgen]
+pub fn validate_config(kind: &str, value: JsValue, strict: Option<bool>) -> Result<(), JsError> {
+    let kind: Kind = kind.parse().map_err(|e: String| JsError::new(&e))?;
+    let form = if strict.unwrap_or(false) {
+        Form::Complete
+    } else {
+        Form::Update
+    };
+
+    let value: serde_json::Value = serde_wasm_bindgen::from_value(value)?;
+    validate(kind, form, &value).map_err(|e| JsError::new(&e.to_string()))
 }

@@ -13,7 +13,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use perspective_migrate::{Kind, Migrator};
+use perspective_migrate::{Form, Kind, Migrator, validate};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -23,6 +23,8 @@ const CURRENT: &str = "CURRENT";
 #[serde(deny_unknown_fields)]
 struct Case {
     kind: Kind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    form: Option<Form>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     from: Option<String>,
     source: String,
@@ -46,6 +48,10 @@ fn corpus() -> Vec<(PathBuf, Case)> {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
             if path.is_dir() {
+                if path.file_name().is_some_and(|x| x == "invalid") {
+                    continue;
+                }
+
                 walk(&path, out);
             } else if path.extension().is_some_and(|x| x == "json") {
                 out.push(path);
@@ -211,13 +217,110 @@ fn every_step_is_covered() {
 }
 
 #[test]
-fn view_outputs_are_current() {
+fn outputs_are_valid() {
     for (path, case) in corpus() {
-        if case.kind == Kind::View
-            && let Some(output) = case.output
-        {
-            serde_json::from_value::<perspective_client::config::ViewConfigUpdate>(output)
-                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let Some(output) = case.output else {
+            continue;
+        };
+
+        validate(case.kind, Form::Update, &output)
+            .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+
+        if case.form == Some(Form::Complete) {
+            validate(case.kind, Form::Complete, &output)
+                .unwrap_or_else(|e| panic!("{}: complete: {e}", path.display()));
         }
+
+        if case.kind == Kind::Workspace
+            && let Some(Value::Object(panels)) = output.get("panels")
+        {
+            for (id, panel) in panels {
+                validate(Kind::Panel, Form::Update, panel)
+                    .unwrap_or_else(|e| panic!("{}: panels/{id}: {e}", path.display()));
+            }
+        }
+    }
+}
+
+#[test]
+fn panels_migrate_alike() {
+    let migrator = Migrator::new();
+    let schema = migrator.schema_version().to_string();
+    for (path, case) in corpus() {
+        let (Kind::Workspace, Some(output)) = (case.kind, &case.output) else {
+            continue;
+        };
+
+        let (Some(Value::Object(inputs)), Some(Value::Object(expected))) =
+            (case.input.get("panels"), output.get("panels"))
+        else {
+            continue;
+        };
+
+        let version = case
+            .input
+            .get("version")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .or_else(|| case.from.clone());
+
+        for (id, panel) in inputs {
+            let Some(want) = expected.get(id) else {
+                continue;
+            };
+
+            let mut got = migrator
+                .migrate(Kind::Panel, version.as_deref(), panel.clone())
+                .unwrap_or_else(|e| panic!("{}: panels/{id}: {e}", path.display()))
+                .value;
+
+            swap_stamps(Kind::Panel, &mut got, &schema, CURRENT);
+            assert_eq!(&got, want, "{}: panels/{id}", path.display());
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Invalid {
+    kind: Kind,
+    #[serde(default)]
+    form: Form,
+    input: Value,
+    pointer: String,
+    message: String,
+}
+
+#[test]
+fn invalid_corpus_is_rejected() {
+    let mut paths = vec![];
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().is_some_and(|x| x == "json") {
+                out.push(path);
+            }
+        }
+    }
+
+    walk(&root().join("corpus/invalid"), &mut paths);
+    paths.sort();
+    assert!(!paths.is_empty());
+    for path in paths {
+        let text = std::fs::read_to_string(&path).unwrap();
+        let case: Invalid =
+            serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+
+        let error = validate(case.kind, case.form, &case.input)
+            .expect_err(&format!("{}: accepted", path.display()));
+
+        assert_eq!(error.pointer, case.pointer, "{}: {error}", path.display());
+        assert!(
+            error.message.contains(&case.message),
+            "{}: {error}",
+            path.display()
+        );
     }
 }

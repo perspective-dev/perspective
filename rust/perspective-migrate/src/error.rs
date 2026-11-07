@@ -44,8 +44,11 @@ pub enum MigrateError {
         keys: Vec<String>,
     },
 
-    /// The workspace panel `panel` has no `table` to bind.
-    MissingTable { step: &'static str, panel: String },
+    /// The panel at `pointer` has no `table` to bind.
+    MissingTable { step: &'static str, pointer: String },
+
+    /// The migrated config does not deserialize into the current schema.
+    Invalid { pointer: String, message: String },
 }
 
 impl fmt::Display for MigrateError {
@@ -72,11 +75,23 @@ impl fmt::Display for MigrateError {
                 pointer,
                 keys,
             } => write!(f, "{step}: conflicting keys {keys:?} at `{pointer}`"),
-            Self::MissingTable { step, panel } => {
-                write!(f, "{step}: panel `{panel}` has no `table`")
+            Self::MissingTable { step, pointer } => {
+                write!(f, "{step}: panel `{pointer}` has no `table`")
+            },
+            Self::Invalid { pointer, message } => {
+                write!(f, "migrated config is invalid at `{pointer}`: {message}")
             },
         }
     }
 }
 
 impl std::error::Error for MigrateError {}
+
+impl From<crate::ValidateError> for MigrateError {
+    fn from(error: crate::ValidateError) -> Self {
+        Self::Invalid {
+            pointer: error.pointer,
+            message: error.message,
+        }
+    }
+}

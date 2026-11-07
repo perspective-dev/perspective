@@ -48,11 +48,6 @@ pub(crate) const STEPS: &[Step] = &[
         apply: regular_layout::regular_layout,
     },
     Step {
-        at: Version::new(5, 2, 0),
-        id: "ws.panel_table",
-        apply: panel_table,
-    },
-    Step {
         at: Version::new(5, 7, 0),
         id: "ws.unknown_keys",
         apply: unknown_keys,
@@ -153,20 +148,6 @@ fn drop_linked(root: &mut Map<String, Value>, cx: &mut StepCx) -> Result<(), Mig
 fn drop_master_flag(root: &mut Map<String, Value>, _cx: &mut StepCx) -> Result<(), MigrateError> {
     for (_, panel) in lumino_panels(root) {
         panel.shift_remove("master");
-    }
-
-    Ok(())
-}
-
-fn panel_table(root: &mut Map<String, Value>, cx: &mut StepCx) -> Result<(), MigrateError> {
-    let Some(panels) = object_mut(root, "panels") else {
-        return Ok(());
-    };
-
-    for (id, panel) in panels.iter() {
-        if !panel.get("table").is_some_and(Value::is_string) {
-            return Err(cx.missing_table(id));
-        }
     }
 
     Ok(())

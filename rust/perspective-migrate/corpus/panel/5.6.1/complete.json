@@ -1,0 +1,35 @@
+{
+    "kind": "panel",
+    "form": "complete",
+    "source": "hand-written: a complete `saveWorkspace()` panel entry",
+    "input": {
+        "version": "5.6.1",
+        "plugin": "Datagrid",
+        "table": "t",
+        "title": null,
+        "theme": null,
+        "plugin_config": {},
+        "columns_config": {},
+        "settings": false
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "Datagrid",
+        "table": "t",
+        "title": null,
+        "theme": null,
+        "plugin_config": {},
+        "columns_config": {}
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "viewer.unknown_keys",
+            "pointer": "/settings",
+            "value": false
+        }
+    ],
+    "steps": [
+        "viewer.unknown_keys"
+    ]
+}

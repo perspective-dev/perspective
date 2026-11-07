@@ -28,6 +28,7 @@ const CASES = [
     "viewer/4.4.1/d3fc_y_bar.json",
     "viewer/5.2.0/datagrid_sizes_and_colors.json",
     "viewer/5.4.0/datagrid_formats.json",
+    "panel/5.6.1/settings_dropped.json",
 ];
 
 const HOST_KEYS = ["version", "table", "theme", "settings"];
@@ -72,6 +73,26 @@ test.describe("perspective-migrate corpus", () => {
 
             expect({ ...result.value, version: "CURRENT" }).toEqual(output);
             expect(result.steps).toEqual(steps);
+        });
+
+        test(`${name} output validates in the browser`, async ({ page }) => {
+            const { kind, output } = corpus_case(name);
+            const error = await page.evaluate(
+                async ({ kind, output }) => {
+                    const url =
+                        "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
+                    const viewer = await import(url);
+                    try {
+                        await viewer.default.validate(kind, output);
+                        return null;
+                    } catch (e) {
+                        return `${e}`;
+                    }
+                },
+                { kind, output },
+            );
+
+            expect(error).toBeNull();
         });
 
         test(`${name} restores into the current viewer`, async ({ page }) => {
@@ -124,4 +145,42 @@ test.describe("perspective-migrate corpus", () => {
             }
         });
     }
+
+    test("the live viewer's save() validates strictly", async ({ page }) => {
+        const error = await page.evaluate(async () => {
+            const url =
+                "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
+            const module = await import(url);
+            const viewer = document.querySelector("perspective-viewer")! as any;
+            const token = await viewer.save();
+            try {
+                await module.default.validate("viewer", token, {
+                    strict: true,
+                });
+                return null;
+            } catch (e) {
+                return `${e}`;
+            }
+        });
+
+        expect(error).toBeNull();
+    });
+
+    test("validate rejects an unknown key with its reason", async ({
+        page,
+    }) => {
+        const error = await page.evaluate(async () => {
+            const url =
+                "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
+            const module = await import(url);
+            try {
+                await module.default.validate("viewer", { bogus: 1 });
+                return null;
+            } catch (e) {
+                return `${e}`;
+            }
+        });
+
+        expect(error).toContain("bogus");
+    });
 });

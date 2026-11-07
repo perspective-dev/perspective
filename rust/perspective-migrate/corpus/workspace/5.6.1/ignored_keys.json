@@ -2,7 +2,7 @@
     "kind": "workspace",
     "source": "hand-written",
     "input": {
-        "version": "5.7.0",
+        "version": "5.6.1",
         "layout": {
             "type": "tab-layout",
             "tabs": [
@@ -11,7 +11,7 @@
         },
         "panels": {
             "P": {
-                "version": "5.7.0",
+                "version": "5.6.1",
                 "plugin": "Datagrid",
                 "table": "t",
                 "settings": true

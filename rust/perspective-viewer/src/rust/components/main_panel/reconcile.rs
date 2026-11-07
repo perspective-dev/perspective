@@ -21,7 +21,7 @@ use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
 use super::MainPanel;
-use crate::js::{Layout, Orientation, RegularLayout};
+use crate::js::{Layout, LayoutExt, Orientation, RegularLayout};
 use crate::workspace::PanelId;
 
 /// Layout interaction tuning constants, applied via
