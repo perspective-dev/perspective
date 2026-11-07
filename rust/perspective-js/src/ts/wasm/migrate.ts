@@ -14,7 +14,8 @@ import * as migrate_wasm from "../../../dist/wasm/perspective-migrate.js";
 
 /**
  * The kind of persisted config `migrate()` upgrades: an engine `ViewConfig`,
- * a `<perspective-viewer>` `save()` token, or a `saveWorkspace()` token.
+ * a `<perspective-viewer>` `save()` token, one workspace panel, or a
+ * `saveWorkspace()` token.
  */
 export type MigrateKind = "view" | "viewer" | "panel" | "workspace";
 
@@ -35,59 +36,66 @@ export interface MigrateResult<T = Record<string, unknown>> {
     steps: string[];
 }
 
-type MigrateBinary = BufferSource | WebAssembly.Module;
-
 /**
- * Instantiates the `perspective-migrate` WebAssembly module from its
- * registered source on the first `migrate()` call.
+ * Synchronous `migrate()` and `validate()` over an instantiated
+ * `perspective-migrate` binary, from `create_validator()`.
  */
-export class MigrateLoader {
-    private source?: () => Promise<MigrateBinary>;
-    private module?: Promise<typeof migrate_wasm>;
-
-    register(source: () => Promise<MigrateBinary>) {
-        this.source = source;
-        this.module = undefined;
-    }
-
-    async migrate<T = Record<string, unknown>>(
+export interface Validator {
+    /**
+     * Upgrade a persisted config written by any Perspective release since
+     * 2.0.0 to the current schema.
+     *
+     * # Arguments
+     *
+     * - `kind` - `"view"` for a `ViewConfig`, `"viewer"` for a `save()`
+     *   token, `"panel"` for one workspace panel, or `"workspace"` for a
+     *   `saveWorkspace()` token.
+     * - `config` - The config to upgrade.
+     * - `from_version` - The release which wrote `config`, used only when it
+     *   has no `version` field.
+     */
+    migrate<T = Record<string, unknown>>(
         kind: MigrateKind,
         config: unknown,
         from_version?: string,
-    ): Promise<MigrateResult<T>> {
-        const wasm = await this.load();
-        return wasm.migrate(kind, from_version, config) as MigrateResult<T>;
-    }
+    ): MigrateResult<T>;
 
-    async validate(
+    /**
+     * Check that a config is valid for this release without migrating it,
+     * throwing the offending JSON pointer and reason otherwise.
+     *
+     * # Arguments
+     *
+     * - `kind` - `"view"`, `"viewer"`, `"panel"` or `"workspace"`.
+     * - `config` - The config to check.
+     * - `options.strict` - Require the complete `save()` form rather than the
+     *   field-wise `restore()` update form.
+     */
+    validate(
         kind: MigrateKind,
         config: unknown,
-        strict?: boolean,
-    ): Promise<void> {
-        const wasm = await this.load();
-        wasm.validate_config(kind, config, strict);
-    }
+        options?: { strict?: boolean },
+    ): void;
+}
 
-    private async load(): Promise<typeof migrate_wasm> {
-        if (this.module === undefined) {
-            if (this.source === undefined) {
-                throw new Error("Missing perspective-migrate.wasm");
-            }
-
-            const source = this.source;
-            const module = source().then(async (module_or_path) => {
-                await migrate_wasm.default({ module_or_path });
-                return migrate_wasm;
-            });
-
-            this.module = module;
-            module.catch(() => {
-                if (this.module === module) {
-                    this.module = undefined;
-                }
-            });
-        }
-
-        return await this.module;
-    }
+/**
+ * Instantiate the `perspective-migrate` binary and wrap its exports as a
+ * `Validator`.
+ */
+export async function load_validator(
+    binary: BufferSource | WebAssembly.Module,
+): Promise<Validator> {
+    await migrate_wasm.default({ module_or_path: binary });
+    return {
+        migrate<T>(kind: MigrateKind, config: unknown, from_version?: string) {
+            return migrate_wasm.migrate(
+                kind,
+                from_version,
+                config,
+            ) as MigrateResult<T>;
+        },
+        validate(kind, config, options) {
+            migrate_wasm.validate_config(kind, config, options?.strict);
+        },
+    };
 }

@@ -13,16 +13,15 @@
 import type * as wasm_module_type from "../../dist/wasm/perspective-viewer.js";
 import {
     init as registry_init,
-    MigrateLoader,
     provide_viewer_runtime,
-    resolve_migrate,
-    shared_migrate,
+    shared_validator,
 } from "@perspective-dev/client/registry";
 import type {
     ClientRuntime,
     InitOptions,
     MigrateKind,
     MigrateResult,
+    Validator,
     WasmRegistration,
 } from "@perspective-dev/client/registry";
 
@@ -84,9 +83,6 @@ provide_viewer_runtime(async (wasm) => {
     return { glue: glue as ClientRuntime["glue"], module };
 });
 
-const MIGRATE = new MigrateLoader();
-MIGRATE.register(resolve_migrate);
-
 function is_registration(
     wasm: ViewerWasmSource | ViewerWasmRegistration,
 ): wasm is ViewerWasmRegistration {
@@ -133,6 +129,23 @@ export async function init_client(
 }
 
 /**
+ * Load the `migrate` binary registered with `init()` and return synchronous
+ * `migrate()` and `validate()` over it; the page shares one instance.
+ *
+ * # Examples
+ *
+ * ```javascript
+ * const validator = await perspective_viewer.create_validator();
+ * for (const token of tokens) {
+ *     validator.validate("viewer", token, { strict: true });
+ * }
+ * ```
+ */
+export async function create_validator(): Promise<Validator> {
+    return await shared_validator();
+}
+
+/**
  * Upgrade a persisted config written by any Perspective release since 2.0.0
  * to the current schema, using the `migrate` binary registered with `init()`.
  *
@@ -150,7 +163,7 @@ export async function migrate<T = Record<string, unknown>>(
     config: unknown,
     from_version?: string,
 ): Promise<MigrateResult<T>> {
-    return await shared_migrate(MIGRATE).migrate<T>(kind, config, from_version);
+    return (await shared_validator()).migrate<T>(kind, config, from_version);
 }
 
 /**
@@ -169,5 +182,5 @@ export async function validate(
     config: unknown,
     options?: { strict?: boolean },
 ): Promise<void> {
-    await shared_migrate(MIGRATE).validate(kind, config, options?.strict);
+    (await shared_validator()).validate(kind, config, options);
 }

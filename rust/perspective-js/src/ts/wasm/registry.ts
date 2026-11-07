@@ -20,10 +20,15 @@
 import type * as psp from "../../../dist/wasm/perspective-js.d.ts";
 import { load_wasm_stage_0 } from "./decompress.ts";
 import { host_supports_memory64 } from "./features.ts";
-import type { MigrateKind, MigrateResult } from "./migrate.ts";
+import { load_validator } from "./migrate.ts";
+import type { Validator } from "./migrate.ts";
 
-export { MigrateLoader } from "./migrate.ts";
-export type { MigrateKind, MigrateNotice, MigrateResult } from "./migrate.ts";
+export type {
+    MigrateKind,
+    MigrateNotice,
+    MigrateResult,
+    Validator,
+} from "./migrate.ts";
 export { resolve_package_wasm_url } from "./cdn.ts";
 
 declare const __PSP_VERSION__: string;
@@ -80,23 +85,6 @@ export type RuntimeProvider = (
     wasm: ArrayBuffer | WebAssembly.Module,
 ) => Promise<ClientRuntime>;
 
-/**
- * A loader which runs `perspective-migrate` for `migrate()`.
- */
-export interface MigrateHost {
-    migrate<T = Record<string, unknown>>(
-        kind: MigrateKind,
-        config: unknown,
-        from_version?: string,
-    ): Promise<MigrateResult<T>>;
-
-    validate(
-        kind: MigrateKind,
-        config: unknown,
-        strict?: boolean,
-    ): Promise<void>;
-}
-
 type WasmKey = keyof WasmRegistration;
 
 type ServerKey = "server" | "server32" | "server64";
@@ -120,7 +108,7 @@ interface RegistryState {
     viewer?: Promise<ClientRuntime>;
     server?: Promise<ArrayBuffer | WebAssembly.Module>;
     migrate_binary?: Promise<ArrayBuffer | WebAssembly.Module>;
-    migrate?: MigrateHost;
+    validator?: Promise<Validator>;
 }
 
 const STATE_KEY = Symbol.for("@perspective-dev/wasm");
@@ -519,10 +507,21 @@ export function resolve_migrate(): Promise<ArrayBuffer | WebAssembly.Module> {
 }
 
 /**
- * The page's one `migrate()` loader, installing `local` if there is none.
+ * The page's one `Validator`, instantiated from the registered `migrate`
+ * binary on the first call.
  */
-export function shared_migrate(local: MigrateHost): MigrateHost {
+export function shared_validator(): Promise<Validator> {
     const s = state();
-    s.migrate ??= local;
-    return s.migrate;
+    if (s.validator === undefined) {
+        const validator = resolve_migrate().then(load_validator);
+        validator.catch(() => {
+            if (s.validator === validator) {
+                s.validator = undefined;
+            }
+        });
+
+        s.validator = validator;
+    }
+
+    return s.validator;
 }

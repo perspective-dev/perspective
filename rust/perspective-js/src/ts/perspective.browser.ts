@@ -17,17 +17,15 @@ import * as psp_virtual from "./virtual_server.ts";
 import * as wasm_module from "../../dist/wasm/perspective-js.js";
 import * as api from "./wasm/browser.ts";
 import { host_supports_memory64 } from "./wasm/features.ts";
-import type { MigrateKind, MigrateResult } from "./wasm/migrate.ts";
+import type { MigrateKind, MigrateResult, Validator } from "./wasm/migrate.ts";
 import {
     init,
-    MigrateLoader,
     provide_client_glue,
     provide_client_runtime,
     register,
     resolve_client,
-    resolve_migrate,
     resolve_server,
-    shared_migrate,
+    shared_validator,
 } from "./wasm/registry.ts";
 import type { WasmSource } from "./wasm/registry.ts";
 
@@ -44,6 +42,7 @@ export type {
     MigrateKind,
     MigrateNotice,
     MigrateResult,
+    Validator,
 } from "./wasm/migrate.ts";
 
 export {
@@ -97,9 +96,6 @@ provide_client_runtime(async (wasm) => {
     await wasm_module.init();
     return { glue: wasm_module, module };
 });
-
-const MIGRATE = new MigrateLoader();
-MIGRATE.register(resolve_migrate);
 
 function client_glue(): Promise<typeof psp> {
     return resolve_client().then((runtime) => runtime.glue);
@@ -191,14 +187,31 @@ export function init_server(
 }
 
 /**
+ * Load the `migrate` binary registered with `init()` and return synchronous
+ * `migrate()` and `validate()` over it; the page shares one instance.
+ *
+ * # Examples
+ *
+ * ```javascript
+ * const validator = await perspective.create_validator();
+ * for (const token of tokens) {
+ *     validator.validate("viewer", token, { strict: true });
+ * }
+ * ```
+ */
+export async function create_validator(): Promise<Validator> {
+    return await shared_validator();
+}
+
+/**
  * Upgrade a persisted config written by any Perspective release since 2.0.0
  * to the current schema, using the `migrate` binary registered with `init()`.
  *
  * # Arguments
  *
  * - `kind` - `"view"` for a `ViewConfig`, `"viewer"` for a
- *   `<perspective-viewer>` `save()` token, or `"workspace"` for a
- *   `saveWorkspace()` token.
+ *   `<perspective-viewer>` `save()` token, `"panel"` for one workspace
+ *   panel, or `"workspace"` for a `saveWorkspace()` token.
  * - `config` - The config to upgrade.
  * - `from_version` - The release which wrote `config`, used only when it has
  *   no `version` field.
@@ -215,7 +228,7 @@ export async function migrate<T = Record<string, unknown>>(
     config: unknown,
     from_version?: string,
 ): Promise<MigrateResult<T>> {
-    return await shared_migrate(MIGRATE).migrate<T>(kind, config, from_version);
+    return (await shared_validator()).migrate<T>(kind, config, from_version);
 }
 
 /**
@@ -234,7 +247,7 @@ export async function validate(
     config: unknown,
     options?: { strict?: boolean },
 ): Promise<void> {
-    await shared_migrate(MIGRATE).validate(kind, config, options?.strict);
+    (await shared_validator()).validate(kind, config, options);
 }
 
 export type PerspectiveWasm =
@@ -347,6 +360,7 @@ export default {
     init_client,
     init_server,
     make_client,
+    create_validator,
     migrate,
     validate,
     host_supports_memory64,

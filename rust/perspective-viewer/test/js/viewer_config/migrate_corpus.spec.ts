@@ -60,15 +60,15 @@ test.describe("perspective-migrate corpus", () => {
         test(`${name} migrates in the browser to its corpus output`, async ({
             page,
         }) => {
-            const { input, from, output, steps } = corpus_case(name);
+            const { kind, input, from, output, steps } = corpus_case(name);
             const result = await page.evaluate(
-                async ({ input, from }) => {
+                async ({ kind, input, from }) => {
                     const url =
                         "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
                     const viewer = await import(url);
-                    return await viewer.default.migrate("viewer", input, from);
+                    return await viewer.default.migrate(kind, input, from);
                 },
-                { input, from },
+                { kind, input, from },
             );
 
             expect({ ...result.value, version: "CURRENT" }).toEqual(output);
@@ -182,5 +182,29 @@ test.describe("perspective-migrate corpus", () => {
         });
 
         expect(error).toContain("bogus");
+    });
+
+    test("create_validator migrates and validates synchronously", async ({
+        page,
+    }) => {
+        const result = await page.evaluate(async () => {
+            const url =
+                "/node_modules/@perspective-dev/viewer/dist/cdn/perspective-viewer.js";
+            const module = await import(url);
+            const validator = await module.default.create_validator();
+            const viewer = document.querySelector("perspective-viewer")! as any;
+            const token = await viewer.save();
+            validator.validate("viewer", token, { strict: true });
+            const { steps } = validator.migrate("viewer", token);
+            try {
+                validator.validate("viewer", { bogus: 1 });
+                return { steps, error: null };
+            } catch (e) {
+                return { steps, error: `${e}` };
+            }
+        });
+
+        expect(result.steps).toEqual([]);
+        expect(result.error).toContain("bogus");
     });
 });
