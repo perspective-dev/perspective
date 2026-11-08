@@ -111,6 +111,13 @@ public:
     const std::vector<t_tscalar>& get_slice() const;
     const std::vector<std::vector<t_tscalar>>& get_column_names() const;
     const std::vector<t_uindex>& get_column_indices() const;
+
+    /**
+     * @brief The view row index of each slice row when the slice is a row
+     * delta, empty when slice rows are view rows.
+     */
+    const std::vector<t_uindex>& get_row_indices() const;
+    void set_row_indices(const std::vector<t_uindex>& row_indices);
     t_get_data_extents get_data_extents() const;
     t_uindex get_stride() const;
     t_uindex num_rows() const;
@@ -141,5 +148,6 @@ private:
     std::vector<t_tscalar> m_slice;
     std::vector<std::vector<t_tscalar>> m_column_names;
     std::vector<t_uindex> m_column_indices;
+    std::vector<t_uindex> m_row_indices;
 };
 } // end namespace perspective

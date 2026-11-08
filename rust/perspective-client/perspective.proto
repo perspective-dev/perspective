@@ -477,8 +477,14 @@ message TableRemoveDeleteResp {}
 // `View::on_remove`
 message ViewOnRemoveReq {}
 message ViewOnRemoveResp {
+    enum Cause {
+        KEY = 0;
+        GROUP = 1;
+        FILTER = 2;
+    }
     optional bytes indices = 1;
     uint32 port_id = 2;
+    Cause cause = 3;
 }
 
 // `View::remove_remove`

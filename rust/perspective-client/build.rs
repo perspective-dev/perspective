@@ -61,8 +61,6 @@ fn prost_build() -> Result<()> {
                 "#[ts(type = \"Uint8Array | undefined\")]",
             )
             .field_attribute("ViewOnUpdateResp.delta", "#[serde(with = \"serde_bytes\")]")
-            .type_attribute("ViewOnRemoveResp", "#[derive(ts_rs::TS)]")
-            .field_attribute("ViewOnRemoveResp.indices", "#[ts(type = \"Uint8Array\")]")
             .field_attribute(
                 "ViewOnRemoveResp.indices",
                 "#[serde(with = \"serde_bytes\")]",

@@ -40,6 +40,17 @@ namespace perspective {
  */
 enum class t_arrow_compression : std::uint8_t { NONE, LZ4, ZSTD };
 
+struct t_stree_capture;
+struct t_stree_dropped;
+
+/**
+ * @brief Serialize `pkeys` of `table` as an Arrow IPC of one column per
+ * index column, named after it.
+ */
+PERSPECTIVE_EXPORT std::shared_ptr<std::string> pkeys_to_index_arrow(
+    const Table& table, const std::vector<t_tscalar>& pkeys
+);
+
 template <typename CTX_T>
 class PERSPECTIVE_EXPORT View {
 public:
@@ -347,6 +358,19 @@ public:
     bool _get_deltas_enabled() const;
     void _set_deltas_enabled(bool enabled_state);
 
+    /**
+     * @brief Record the rows which leave this `View`, for
+     * `take_removed_rows`.
+     */
+    void set_removes_enabled(bool enabled_state);
+
+    /**
+     * @brief The keys of the rows which left this `View` since the last call,
+     * as an Arrow IPC of one column per key column, or `nullptr` when none
+     * did.
+     */
+    std::shared_ptr<std::string> take_removed_rows();
+
     // Pivot table operations
 
     /**
@@ -447,6 +471,12 @@ private:
 
     void _find_hidden_sort(const std::vector<t_sortspec>& sort);
 
+    void attach_removes_capture();
+    void detach_removes_capture();
+    t_dtype row_pivot_dtype(const std::string& name) const;
+    std::shared_ptr<std::string>
+    dropped_to_arrow(const std::vector<t_stree_dropped>& dropped) const;
+
     std::shared_ptr<Table> m_table;
     std::shared_ptr<CTX_T> m_ctx;
     std::shared_ptr<const t_pkey_codec> m_pkey_codec;
@@ -468,6 +498,9 @@ private:
     bool m_split_rollup;
 
     std::shared_ptr<t_view_config> m_view_config;
+    std::shared_ptr<t_stree_capture> m_removes_capture;
+    t_uindex m_removes_generation = 0;
+    bool m_removes_enabled = false;
 };
 
 /**

@@ -68,6 +68,16 @@ t_rowdelta::t_rowdelta(
     rows_changed(rows_changed),
     num_rows_changed(num_rows_changed),
     data(data) {}
+
+t_rowdelta::t_rowdelta(
+    bool rows_changed,
+    const std::vector<t_uindex>& rows,
+    const std::vector<t_tscalar>& data
+) :
+    rows_changed(rows_changed),
+    num_rows_changed(rows.size()),
+    data(data),
+    rows(rows) {}
 } // end namespace perspective
 
 namespace std {

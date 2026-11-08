@@ -53,7 +53,7 @@ export type * from "../ts-rs/ColumnWindow.d.ts";
 export type * from "../ts-rs/TableInitOptions.d.ts";
 export type * from "../ts-rs/ViewConfigUpdate.d.ts";
 export type * from "../ts-rs/ViewOnUpdateResp.d.ts";
-export type * from "../ts-rs/ViewOnRemoveResp.d.ts";
+export type * from "../ts-rs/RemoveCause.d.ts";
 export type * from "../ts-rs/OnRemoveData.d.ts";
 export type * from "../ts-rs/OnUpdateData.d.ts";
 export type * from "../ts-rs/OnUpdateOptions.d.ts";

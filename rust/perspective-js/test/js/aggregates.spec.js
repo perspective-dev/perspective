@@ -2430,6 +2430,191 @@ const std = (nums) => {
             view.delete();
             table.delete();
         });
+
+        const ORDER_EXPECTED = {
+            avg: 1.5,
+            min: 1,
+            max: 2,
+            low: 1,
+            high: 2,
+            q1: 1,
+            median: 1.5,
+            q3: 2,
+            "high minus low": 1,
+        };
+
+        async function grouped_order_aggregate(table, column, agg) {
+            const view = await table.view({
+                group_by: ["g"],
+                columns: [column],
+                aggregates: { [column]: agg },
+            });
+
+            const out = (await view.to_columns())[column];
+            await view.delete();
+            return out;
+        }
+
+        test("order aggregates skip nulls in the first update", async function () {
+            const table = await perspective.table({ g: "string", x: "float" });
+            await table.update({ g: ["a", "a", "a"], x: [1, null, 2] });
+            const results = {};
+            for (const agg of Object.keys(ORDER_EXPECTED)) {
+                results[agg] = await grouped_order_aggregate(table, "x", agg);
+            }
+
+            const expected = Object.fromEntries(
+                Object.entries(ORDER_EXPECTED).map(([k, v]) => [k, [v, v]]),
+            );
+
+            expect(results).toEqual(expected);
+            await table.delete();
+        });
+
+        test("order aggregates skip nulls appended in a later update", async function () {
+            const table = await perspective.table({ g: "string", x: "float" });
+            await table.update({ g: ["a"], x: [1] });
+            await table.update({ g: ["a", "a"], x: [null, 2] });
+            const results = {};
+            for (const agg of Object.keys(ORDER_EXPECTED)) {
+                results[agg] = await grouped_order_aggregate(table, "x", agg);
+            }
+
+            const expected = Object.fromEntries(
+                Object.entries(ORDER_EXPECTED).map(([k, v]) => [k, [v, v]]),
+            );
+
+            expect(results).toEqual(expected);
+            await table.delete();
+        });
+
+        test("order aggregates skip omitted keys", async function () {
+            const table = await perspective.table({ g: "string", x: "float" });
+            await table.update([
+                { g: "a", x: 1 },
+                { g: "a" },
+                { g: "a", x: 2 },
+            ]);
+            const results = {};
+            for (const agg of Object.keys(ORDER_EXPECTED)) {
+                results[agg] = await grouped_order_aggregate(table, "x", agg);
+            }
+
+            const expected = Object.fromEntries(
+                Object.entries(ORDER_EXPECTED).map(([k, v]) => [k, [v, v]]),
+            );
+
+            expect(results).toEqual(expected);
+            await table.delete();
+        });
+
+        test("high and low skip nulls with negative values", async function () {
+            const table = await perspective.table({ g: "string", x: "float" });
+            await table.update({ g: ["a", "a", "a"], x: [-1, null, -2] });
+            const results = {};
+            for (const agg of ["high", "low", "max", "min", "high minus low"]) {
+                results[agg] = await grouped_order_aggregate(table, "x", agg);
+            }
+
+            expect(results).toEqual({
+                high: [-1, -1],
+                low: [-2, -2],
+                max: [-1, -1],
+                min: [-2, -2],
+                "high minus low": [1, 1],
+            });
+
+            await table.delete();
+        });
+
+        test("order aggregates skip nulls for integer, string and date columns", async function () {
+            const table = await perspective.table({
+                g: "string",
+                i: "integer",
+                s: "string",
+                d: "date",
+            });
+
+            await table.update({
+                g: ["a", "a"],
+                i: [7, null],
+                s: ["x", null],
+                d: [new Date(2020, 0, 5), null],
+            });
+
+            const flat = await table.view({ columns: ["d"] });
+            const date = (await flat.to_columns()).d[0];
+            await flat.delete();
+
+            const results = {};
+            for (const agg of ["max", "min", "median"]) {
+                for (const column of ["i", "s", "d"]) {
+                    results[`${column} ${agg}`] = await grouped_order_aggregate(
+                        table,
+                        column,
+                        agg,
+                    );
+                }
+            }
+
+            expect(date).not.toBeNull();
+            expect(results).toEqual({
+                "i max": [7, 7],
+                "s max": ["x", "x"],
+                "d max": [date, date],
+                "i min": [7, 7],
+                "s min": ["x", "x"],
+                "d min": [date, date],
+                "i median": [7, 7],
+                "s median": ["x", "x"],
+                "d median": [date, date],
+            });
+
+            await table.delete();
+        });
+
+        test("order aggregates report null for an all-null group", async function () {
+            const table = await perspective.table({ g: "string", x: "float" });
+            await table.update({ g: ["a", "a"], x: [null, null] });
+            const results = {};
+            for (const agg of Object.keys(ORDER_EXPECTED)) {
+                results[agg] = await grouped_order_aggregate(table, "x", agg);
+            }
+
+            const expected = Object.fromEntries(
+                Object.keys(ORDER_EXPECTED).map((k) => [k, [null, null]]),
+            );
+
+            expect(results).toEqual(expected);
+            await table.delete();
+        });
+
+        test("high and low keep their mark when a row is updated to null", async function () {
+            const table = await perspective.table(
+                { g: "string", x: "float", k: "integer" },
+                { index: "k" },
+            );
+
+            await table.update({ g: ["a", "a"], x: [3, 5], k: [1, 2] });
+            const high = await table.view({
+                group_by: ["g"],
+                columns: ["x"],
+                aggregates: { x: "high" },
+            });
+
+            const low = await table.view({
+                group_by: ["g"],
+                columns: ["x"],
+                aggregates: { x: "low" },
+            });
+
+            await table.update({ k: [2], x: [null] });
+            expect((await high.to_columns()).x).toEqual([5, 5]);
+            expect((await low.to_columns()).x).toEqual([3, 3]);
+            await high.delete();
+            await low.delete();
+            await table.delete();
+        });
     });
 
     test.describe("Invalid aggregates", function () {

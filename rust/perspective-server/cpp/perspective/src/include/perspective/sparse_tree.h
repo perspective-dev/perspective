@@ -172,6 +172,10 @@ struct PERSPECTIVE_EXPORT t_stree_capture {
         m_changed;
     std::vector<t_uindex> m_created;
     std::vector<t_stree_dropped> m_dropped;
+
+    /// Whether only `m_dropped` is wanted, so changes and creations are
+    /// not recorded and dropped nodes carry no aggregates.
+    bool m_dropped_only = false;
 };
 
 struct PERSPECTIVE_EXPORT t_agg_update_info {
@@ -549,6 +553,7 @@ private:
     t_symtable m_symtable;
     bool m_has_delta;
     std::vector<std::shared_ptr<t_stree_capture>> m_captures;
+    bool m_captures_want_changes = false;
     std::string m_grand_agg_str;
 
     // Used by AGGTYPE_GMV under split_by. For t_ctx1 (group_by only) the

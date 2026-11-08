@@ -878,7 +878,9 @@ ServerResources::table_has_on_remove_subs(const t_id& table_id) {
     auto range = m_table_to_view.equal_range(table_id);
     for (auto it = range.first; it != range.second; ++it) {
         auto subs = m_view_on_remove_subs.find(it->second);
-        if (subs != m_view_on_remove_subs.end() && !subs->second.empty()) {
+        auto view = m_views.find(it->second);
+        if (subs != m_view_on_remove_subs.end() && !subs->second.empty()
+            && view != m_views.end() && view->second->sides() == 0) {
             return true;
         }
     }
@@ -3166,9 +3168,10 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             sub_info.id = req.msg_id();
             sub_info.client_id = client_id;
             m_resources.create_view_on_remove_sub(req.entity_id(), sub_info);
+            m_resources.get_view(req.entity_id())->set_removes_enabled(true);
             auto table_id = m_resources.get_table_id_for_view(req.entity_id());
             m_resources.get_table(table_id)->get_gnode()->set_removes_enabled(
-                true
+                m_resources.table_has_on_remove_subs(table_id)
             );
             break;
         }
@@ -3177,6 +3180,12 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             m_resources.remove_view_on_remove_sub(
                 req.entity_id(), sub_id, client_id
             );
+            const auto& view_id = req.entity_id();
+            if (m_resources.has_view(view_id)
+                && m_resources.get_view_on_remove_sub(view_id).empty()) {
+                m_resources.get_view(view_id)->set_removes_enabled(false);
+            }
+
             auto table_id = m_resources.get_table_id_for_view(req.entity_id());
             m_resources.get_table(table_id)->get_gnode()->set_removes_enabled(
                 m_resources.table_has_on_remove_subs(table_id)
@@ -4008,37 +4017,14 @@ removed_keys_to_arrow(
     const std::shared_ptr<Table>& table,
     const std::shared_ptr<t_data_table>& removed
 ) {
-    const auto& index = table->get_index();
     const auto pkey = removed->get_const_column("psp_pkey");
-    if (index.size() == 1) {
-        return apachearrow::column_to_arrow_ipc(
-            *pkey, index[0], removed->size()
-        );
-    }
-
-    const auto& codec = *table->get_pkey_codec();
-    t_schema schema(index, codec.dtypes());
-    t_data_table keys(schema);
-    keys.init();
-    keys.extend(removed->size());
-    std::vector<std::shared_ptr<t_column>> cols;
-    cols.reserve(index.size());
-    for (const auto& name : index) {
-        cols.push_back(keys.get_column(name));
-    }
-
-    std::vector<std::string> storage;
+    std::vector<t_tscalar> pkeys;
+    pkeys.reserve(removed->size());
     for (t_uindex ridx = 0; ridx < removed->size(); ++ridx) {
-        const auto key = pkey->get_scalar(ridx);
-        const auto values = codec.decode(
-            key.is_valid() ? key.get_char_ptr() : nullptr, storage
-        );
-        for (std::size_t i = 0; i < values.size(); ++i) {
-            cols[i]->set_scalar(ridx, values[i]);
-        }
+        pkeys.push_back(pkey->get_scalar(ridx));
     }
 
-    return apachearrow::table_to_arrow_ipc(keys);
+    return pkeys_to_index_arrow(*table, pkeys);
 }
 
 void
@@ -4061,23 +4047,41 @@ ProtoServer::_notify_table(
         }
 
         auto view = m_resources.get_view(view_id);
-        if (has_removes) {
-            auto remove_subs = m_resources.get_view_on_remove_sub(view_id);
-            if (!remove_subs.empty() && !removed_indices) {
-                removed_indices = removed_keys_to_arrow(table, removed);
+        auto remove_subs = m_resources.get_view_on_remove_sub(view_id);
+        if (!remove_subs.empty()) {
+            const bool flat = view->sides() == 0;
+            auto emit = [&](const std::shared_ptr<std::string>& indices,
+                            proto::ViewOnRemoveResp::Cause cause) {
+                for (auto& subscription : remove_subs) {
+                    Response out;
+                    out.set_msg_id(subscription.id);
+                    out.set_entity_id(view_id);
+                    auto* r = out.mutable_view_on_remove_resp();
+                    r->set_port_id(port_id);
+                    r->set_cause(cause);
+                    *r->mutable_indices() = *indices;
+                    ProtoServerResp<proto::Response> resp2;
+                    resp2.data = std::move(out);
+                    resp2.client_id = subscription.client_id;
+                    outs.emplace_back(std::move(resp2));
+                }
+            };
+
+            if (flat && has_removes) {
+                if (!removed_indices) {
+                    removed_indices = removed_keys_to_arrow(table, removed);
+                }
+
+                emit(removed_indices, proto::ViewOnRemoveResp::KEY);
             }
 
-            for (auto& subscription : remove_subs) {
-                Response out;
-                out.set_msg_id(subscription.id);
-                out.set_entity_id(view_id);
-                auto* r = out.mutable_view_on_remove_resp();
-                r->set_port_id(port_id);
-                *r->mutable_indices() = *removed_indices;
-                ProtoServerResp<proto::Response> resp2;
-                resp2.data = std::move(out);
-                resp2.client_id = subscription.client_id;
-                outs.emplace_back(std::move(resp2));
+            auto left = view->take_removed_rows();
+            if (left) {
+                emit(
+                    left,
+                    flat ? proto::ViewOnRemoveResp::FILTER
+                         : proto::ViewOnRemoveResp::GROUP
+                );
             }
         }
 

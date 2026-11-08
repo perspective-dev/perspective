@@ -233,24 +233,35 @@ view.remove_update(on_update)
 
 When `mode` is set to `"row"`, the callback receives a delta of only the rows
 that changed (as Apache Arrow), which is useful for efficiently synchronizing
-tables across clients. The callback also receives `reset`, which is `true` when
-the update step began with `clear()` or `replace()`; the delta is then relative
-to an empty `Table`, so a replica should apply it with `replace()` rather than
-`update()`.
+tables across clients. For a `View` with `group_by`, each delta row also carries
+the `group_by` columns, named and typed as `to_arrow()` emits them and `null`
+below the row's depth, so the delta can be applied with `update()` to a replica
+indexed on those columns. The callback also receives `reset`, which is `true`
+when the update step began with `clear()` or `replace()`; the delta is then
+relative to an empty `Table`, so a replica should apply it with `replace()`
+rather than `update()`. In Python, a callback that does not declare `reset`,
+positionally or as a keyword, is called without it.
 
 ## Remove Callbacks
 
-Register a callback to be notified whenever rows are removed from the underlying
-`Table` by `remove()`, which requires an `index`. The callback receives the
-`port_id` and the removed `index` column values as an Apache Arrow with one
-column per index column, named after that column. It fires once per update step,
-only for rows which existed before that step; `replace()` reports the keys it
-does not re-supply, and `clear()` reports every key:
+Register a callback to be notified whenever rows leave this `View`. The callback
+receives the `port_id`, the rows' keys as an Apache Arrow, and a `cause` naming
+the rule they left under. For a `View` without `group_by`, the keys are the
+`index` column values, one column per index column named after it, and it
+requires an `index`: `cause` is `"key"` when the row was removed from the
+`Table` (`remove()`; `replace()` reports the keys it does not re-supply and
+`clear()` every key) and `"filter"` when an `update()` moved the row outside the
+View's `filter`. For a `View` with `group_by`, `cause` is `"group"` and the keys
+are one column per `group_by` column named after it, `null` below the group's
+depth, for each group which no longer has any rows. In every case a replica
+indexed on those columns can pass the Arrow to `remove()` unchanged. It fires
+once per cause per update step, `"key"` first, only for rows which existed
+before that step:
 
 <div class="javascript">
 
 ```javascript
-const callback = await view.on_remove(({ indices, port_id }) => {
+const callback = await view.on_remove(({ indices, port_id, cause }) => {
     replica.remove(indices);
 });
 
@@ -262,12 +273,15 @@ await view.remove_remove(callback);
 <div class="python">
 
 ```python
-def on_remove(port_id, indices):
+def on_remove(port_id, indices, cause):
     replica.remove(indices)
 
 callback = view.on_remove(on_remove)
 view.remove_remove(callback)
 ```
+
+A callback that does not declare `cause`, positionally or as a keyword, is
+called without it.
 
 </div>
 

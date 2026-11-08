@@ -364,19 +364,24 @@ impl View {
         Ok(self.0.remove_update(callback_id).await?)
     }
 
-    /// Register a callback which is invoked whenever rows are removed from
-    /// this [`View`]'s [`Table`] by [`Table::remove`], with an object
-    /// containing `port_id` and `indices`, the removed `index` column
-    /// values as an Arrow of one column named after the index.
+    /// Register a callback which is invoked whenever rows leave this
+    /// [`View`], with an object containing `port_id`, `indices` (their keys
+    /// as an Arrow of one column per key column named after it) and `cause`,
+    /// one of `"key"`, `"filter"` or `"group"`.
     ///
-    /// [`Table::replace`] reports the keys it does not re-supply and
-    /// [`Table::clear`] reports every key. `on_remove` never fires for a
-    /// [`Table`] without an `index`.
+    /// For a [`View`] without `group_by` the keys are the `index` columns of
+    /// the [`Table`], which must have one: `"key"` when [`Table::remove`]
+    /// removed them ([`Table::replace`] reports the keys it does not
+    /// re-supply and [`Table::clear`] every key) and `"filter"` when
+    /// [`Table::update`] moved them outside the [`View`]'s `filter`. For a
+    /// [`View`] with `group_by` the keys are the `group_by` columns of each
+    /// group which no longer has any rows, `"group"`, `null` below the
+    /// group's depth. It fires once per cause per update step.
     ///
     /// # JavaScript Examples
     ///
     /// ```javascript
-    /// const id = await view.on_remove(({ indices, port_id }) => {
+    /// const id = await view.on_remove(({ indices, port_id, cause }) => {
     ///     replica.remove(indices);
     /// });
     /// ```
@@ -387,7 +392,7 @@ impl View {
         on_remove_js: Function,
     ) -> ApiFuture<u32> {
         let poll_loop = LocalPollLoop::new(move |args: OnRemoveData| {
-            let js_obj = JsValue::from_serde_ext(&*args)?;
+            let js_obj = JsValue::from_serde_ext(&args)?;
             on_remove_js.call1(&JsValue::UNDEFINED, &js_obj)
         });
 

@@ -347,5 +347,222 @@ import perspective from "./perspective_client";
             expect(json0[1]).toEqual(json0[0]);
             expect(json1).toEqual([[], []]);
         });
+
+        test("Dissolved groups transfer to a remote Table", async function ({
+            page,
+        }) {
+            await page.goto("/rust/perspective-js/test/html/test.html");
+            const result = await page.evaluate(async () => {
+                let perspective = await import(
+                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
+                );
+
+                perspective.init_client(
+                    fetch(
+                        "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
+                    ),
+                );
+
+                const worker0 = await perspective.worker();
+                const worker1 = await perspective.worker();
+                const sorted = (rows) =>
+                    rows.map((row) => JSON.stringify(row)).sort();
+
+                const rows_of = async (view) => {
+                    const table = await worker1.table(await view.to_arrow());
+                    const flat = await table.view();
+                    const rows = await flat.to_json();
+                    await flat.delete();
+                    await table.delete();
+                    return rows;
+                };
+
+                const sync = async (view1, check, action) => {
+                    const { promise, resolve } = Promise.withResolvers();
+                    const token = await view1.on_update(async () => {
+                        if (await check()) {
+                            resolve();
+                        }
+                    });
+
+                    await action();
+                    await Promise.race([
+                        promise,
+                        new Promise((resolve) => setTimeout(resolve, 2000)),
+                    ]);
+
+                    await view1.remove_update(token);
+                };
+
+                const table0 = await worker0.table("x,y\n1,a\n2,b\n3,a", {
+                    index: "x",
+                });
+
+                const view0 = await table0.view({
+                    group_by: ["y"],
+                    columns: ["x"],
+                });
+
+                const table1 = await worker1.table(view0);
+                const view1 = await table1.view();
+                const same = async () =>
+                    JSON.stringify(sorted(await rows_of(view0))) ===
+                    JSON.stringify(sorted(await view1.to_json()));
+
+                await sync(view1, same, () => table0.remove([2]));
+                return {
+                    index: [await table1.get_index()].flat(),
+                    same: await same(),
+                    rows: await view1.to_json(),
+                };
+            });
+
+            expect(result.index).toEqual(["y"]);
+            expect(result.same).toEqual(true);
+            expect(result.rows.some((row) => row.y === "b")).toEqual(false);
+        });
+
+        test("Dissolved groups of a limited remote Table transfer", async function ({
+            page,
+        }) {
+            await page.goto("/rust/perspective-js/test/html/test.html");
+            const result = await page.evaluate(async () => {
+                let perspective = await import(
+                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
+                );
+
+                perspective.init_client(
+                    fetch(
+                        "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
+                    ),
+                );
+
+                const worker0 = await perspective.worker();
+                const worker1 = await perspective.worker();
+                const sorted = (rows) =>
+                    rows.map((row) => JSON.stringify(row)).sort();
+
+                const rows_of = async (view) => {
+                    const table = await worker1.table(await view.to_arrow());
+                    const flat = await table.view();
+                    const rows = await flat.to_json();
+                    await flat.delete();
+                    await table.delete();
+                    return rows;
+                };
+
+                const sync = async (view1, check, action) => {
+                    const { promise, resolve } = Promise.withResolvers();
+                    const token = await view1.on_update(async () => {
+                        if (await check()) {
+                            resolve();
+                        }
+                    });
+
+                    await action();
+                    await Promise.race([
+                        promise,
+                        new Promise((resolve) => setTimeout(resolve, 2000)),
+                    ]);
+
+                    await view1.remove_update(token);
+                };
+
+                const table0 = await worker0.table("x,y\n1,a\n2,b\n3,c", {
+                    limit: 3,
+                });
+
+                const view0 = await table0.view({
+                    group_by: ["y"],
+                    columns: ["x"],
+                });
+
+                const table1 = await worker1.table(view0);
+                const view1 = await table1.view();
+                const same = async () =>
+                    JSON.stringify(sorted(await rows_of(view0))) ===
+                    JSON.stringify(sorted(await view1.to_json()));
+
+                await sync(view1, same, () =>
+                    table0.update([{ x: 4, y: "d" }]),
+                );
+                return {
+                    limit: await table1.get_limit(),
+                    same: await same(),
+                    rows: await view1.to_json(),
+                };
+            });
+
+            expect(result.limit).toBeFalsy();
+            expect(result.same).toEqual(true);
+            expect(result.rows.some((row) => row.y === "a")).toEqual(false);
+        });
+
+        test("Rows leaving a remote View's filter transfer", async function ({
+            page,
+        }) {
+            await page.goto("/rust/perspective-js/test/html/test.html");
+            const result = await page.evaluate(async () => {
+                let perspective = await import(
+                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
+                );
+
+                perspective.init_client(
+                    fetch(
+                        "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
+                    ),
+                );
+
+                const worker0 = await perspective.worker();
+                const worker1 = await perspective.worker();
+                const sorted = (rows) =>
+                    rows.map((row) => JSON.stringify(row)).sort();
+
+                const rows_of = async (view) => {
+                    const table = await worker1.table(await view.to_arrow());
+                    const flat = await table.view();
+                    const rows = await flat.to_json();
+                    await flat.delete();
+                    await table.delete();
+                    return rows;
+                };
+
+                const sync = async (view1, check, action) => {
+                    const { promise, resolve } = Promise.withResolvers();
+                    const token = await view1.on_update(async () => {
+                        if (await check()) {
+                            resolve();
+                        }
+                    });
+
+                    await action();
+                    await Promise.race([
+                        promise,
+                        new Promise((resolve) => setTimeout(resolve, 2000)),
+                    ]);
+
+                    await view1.remove_update(token);
+                };
+
+                const table0 = await worker0.table("x,y\n1,a\n2,b\n3,a", {
+                    index: "x",
+                });
+
+                const view0 = await table0.view({ filter: [["y", "==", "a"]] });
+                const table1 = await worker1.table(view0);
+                const view1 = await table1.view();
+                const same = async () =>
+                    JSON.stringify(await view0.to_json()) ===
+                    JSON.stringify(await view1.to_json());
+
+                await sync(view1, same, () =>
+                    table0.update([{ x: 1, y: "b" }]),
+                );
+                return [await view0.to_json(), await view1.to_json()];
+            });
+
+            expect(result[0]).toEqual([{ x: 3, y: "a" }]);
+            expect(result[1]).toEqual(result[0]);
+        });
     });
 })(perspective);

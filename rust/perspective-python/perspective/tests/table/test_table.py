@@ -141,6 +141,24 @@ class TestTable:
         assert tbl.size() == 2
         assert tbl.schema() == {"a": "float", "b": "float"}
 
+    def test_table_int_to_float_promotion_preserves_nulls(self):
+        tbl = Table([{"x": 1}, {"x": None}, {"x": 2.5}])
+        assert tbl.schema() == {"x": "float"}
+        assert tbl.view().to_columns() == {"x": [1, None, 2.5]}
+
+    def test_table_int_to_float_promotion_preserves_nulls_column_oriented(self):
+        leading = Table({"x": [None, 1, 2.5]})
+        assert leading.schema() == {"x": "float"}
+        assert leading.view().to_columns() == {"x": [None, 1, 2.5]}
+        interior = Table({"x": [1, 2, None, 2.5]})
+        assert interior.schema() == {"x": "float"}
+        assert interior.view().to_columns() == {"x": [1, 2, None, 2.5]}
+
+    def test_table_int_to_str_promotion_preserves_nulls(self):
+        tbl = Table([{"x": 1}, {"x": None}, {"x": "a"}])
+        assert tbl.schema() == {"x": "string"}
+        assert tbl.view().to_columns() == {"x": ["1", None, "a"]}
+
     def test_table_str(self):
         str_data = [{"a": "b", "b": "b"}, {"a": "3", "b": "3"}]
         tbl = Table(str_data)

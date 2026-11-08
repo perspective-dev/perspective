@@ -30,9 +30,9 @@
             const websocket = await perspective.websocket("ws://localhost:8081/subscribe");
             const table = await websocket.open_table("benchmarks");
             const worker = await perspective.worker();
-            const table2 = await worker.table(await table.view());
-            el.load(table2);
-            el.restore(JSON.parse(localStorage.getItem("layout")));
+            const table2 = await worker.table(await table.view(), { name: "benchmarks" });
+            el.load(worker);
+            el.restore({ table: "benchmarks", ...JSON.parse(localStorage.getItem("layout")) });
         </script>
     </body>
 </html>

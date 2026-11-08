@@ -115,9 +115,18 @@ struct PERSPECTIVE_EXPORT t_rowdelta {
         const std::vector<t_tscalar>& data
     );
 
+    t_rowdelta(
+        bool rows_changed,
+        const std::vector<t_uindex>& rows,
+        const std::vector<t_tscalar>& data
+    );
+
     bool rows_changed;
     t_uindex num_rows_changed;
     std::vector<t_tscalar> data;
+
+    /// The view row index of each delta row, empty for a flat context.
+    std::vector<t_uindex> rows;
 };
 
 } // end namespace perspective

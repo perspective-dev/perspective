@@ -12,6 +12,14 @@
 
 #include <perspective/first.h>
 #include <perspective/view.h>
+#include <perspective/sparse_tree.h>
+
+namespace {
+template <typename CTX_T>
+constexpr bool has_row_tree =
+    std::is_same_v<perspective::t_ctx1, CTX_T>
+    || std::is_same_v<perspective::t_ctx2, CTX_T>;
+}
 #include <perspective/arrow_writer.h>
 #include <sstream>
 #include <utility>
@@ -91,6 +99,7 @@ View<CTX_T>::View(
 
 template <typename CTX_T>
 View<CTX_T>::~View() {
+    detach_removes_capture();
     auto pool = m_table->get_pool();
     auto gnode = m_table->get_gnode();
     PSP_GIL_UNLOCK();
@@ -873,6 +882,17 @@ View<CTX_T>::data_slice_to_batches(
 
     auto num_output_row_paths = is_column_only() ? 0 : num_row_paths;
 
+    const std::vector<t_uindex>& row_indices = data_slice->get_row_indices();
+    auto row_path_value = [&](t_uindex rpidx, t_uindex ridx) -> t_tscalar {
+        t_uindex vidx = row_indices.empty() ? ridx : row_indices.at(ridx);
+        auto depth = m_ctx->unity_get_row_depth(vidx);
+        if (rpidx < depth) {
+            return m_ctx->unity_get_row_path(vidx).at((depth - 1) - rpidx);
+        }
+
+        return mknone();
+    };
+
     t_uindex write_idx = 0;
     if (emit_group_by && num_output_row_paths > 0) {
         auto schema = m_table->get_schema();
@@ -908,14 +928,8 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::numeric_col_to_array<
                         arrow::Int8Type,
                         std::int8_t>(extents, [&, rpidx](t_uindex ridx) {
-                        auto depth = m_ctx->unity_get_row_depth(ridx);
-                        if (rpidx < depth) {
-                            return m_ctx->unity_get_row_path(ridx).at(
-                                (depth - 1) - rpidx
-                            );
-                        }
-                        return mknone();
-                    });
+                            return row_path_value(rpidx, ridx);
+                        });
                 } break;
                 case DTYPE_UINT8: {
                     fields[write_idx] =
@@ -923,14 +937,8 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::numeric_col_to_array<
                         arrow::UInt8Type,
                         std::uint8_t>(extents, [&, rpidx](t_uindex ridx) {
-                        auto depth = m_ctx->unity_get_row_depth(ridx);
-                        if (rpidx < depth) {
-                            return m_ctx->unity_get_row_path(ridx).at(
-                                (depth - 1) - rpidx
-                            );
-                        }
-                        return mknone();
-                    });
+                            return row_path_value(rpidx, ridx);
+                        });
                 } break;
                 case DTYPE_INT16: {
                     fields[write_idx] =
@@ -938,14 +946,8 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::numeric_col_to_array<
                         arrow::Int16Type,
                         std::int16_t>(extents, [&, rpidx](t_uindex ridx) {
-                        auto depth = m_ctx->unity_get_row_depth(ridx);
-                        if (rpidx < depth) {
-                            return m_ctx->unity_get_row_path(ridx).at(
-                                (depth - 1) - rpidx
-                            );
-                        }
-                        return mknone();
-                    });
+                            return row_path_value(rpidx, ridx);
+                        });
                 } break;
                 case DTYPE_UINT16: {
                     fields[write_idx] =
@@ -953,14 +955,8 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::numeric_col_to_array<
                         arrow::UInt16Type,
                         std::uint16_t>(extents, [&, rpidx](t_uindex ridx) {
-                        auto depth = m_ctx->unity_get_row_depth(ridx);
-                        if (rpidx < depth) {
-                            return m_ctx->unity_get_row_path(ridx).at(
-                                (depth - 1) - rpidx
-                            );
-                        }
-                        return mknone();
-                    });
+                            return row_path_value(rpidx, ridx);
+                        });
                 } break;
                 case DTYPE_INT32: {
                     fields[write_idx] =
@@ -968,14 +964,8 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::numeric_col_to_array<
                         arrow::Int32Type,
                         std::int32_t>(extents, [&, rpidx](t_uindex ridx) {
-                        auto depth = m_ctx->unity_get_row_depth(ridx);
-                        if (rpidx < depth) {
-                            return m_ctx->unity_get_row_path(ridx).at(
-                                (depth - 1) - rpidx
-                            );
-                        }
-                        return mknone();
-                    });
+                            return row_path_value(rpidx, ridx);
+                        });
                 } break;
                 case DTYPE_UINT32: {
                     fields[write_idx] =
@@ -983,14 +973,8 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::numeric_col_to_array<
                         arrow::UInt32Type,
                         std::uint32_t>(extents, [&, rpidx](t_uindex ridx) {
-                        auto depth = m_ctx->unity_get_row_depth(ridx);
-                        if (rpidx < depth) {
-                            return m_ctx->unity_get_row_path(ridx).at(
-                                (depth - 1) - rpidx
-                            );
-                        }
-                        return mknone();
-                    });
+                            return row_path_value(rpidx, ridx);
+                        });
                 } break;
                 case DTYPE_INT64: {
                     fields[write_idx] =
@@ -998,14 +982,8 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::numeric_col_to_array<
                         arrow::Int64Type,
                         std::int64_t>(extents, [&, rpidx](t_uindex ridx) {
-                        auto depth = m_ctx->unity_get_row_depth(ridx);
-                        if (rpidx < depth) {
-                            return m_ctx->unity_get_row_path(ridx).at(
-                                (depth - 1) - rpidx
-                            );
-                        }
-                        return mknone();
-                    });
+                            return row_path_value(rpidx, ridx);
+                        });
                 } break;
                 case DTYPE_UINT64: {
                     fields[write_idx] =
@@ -1013,14 +991,8 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::numeric_col_to_array<
                         arrow::UInt64Type,
                         std::uint64_t>(extents, [&, rpidx](t_uindex ridx) {
-                        auto depth = m_ctx->unity_get_row_depth(ridx);
-                        if (rpidx < depth) {
-                            return m_ctx->unity_get_row_path(ridx).at(
-                                (depth - 1) - rpidx
-                            );
-                        }
-                        return mknone();
-                    });
+                            return row_path_value(rpidx, ridx);
+                        });
                 } break;
                 case DTYPE_FLOAT32: {
                     fields[write_idx] =
@@ -1028,14 +1000,8 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::numeric_col_to_array<
                         arrow::FloatType,
                         float>(extents, [&, rpidx](t_uindex ridx) {
-                        auto depth = m_ctx->unity_get_row_depth(ridx);
-                        if (rpidx < depth) {
-                            return m_ctx->unity_get_row_path(ridx).at(
-                                (depth - 1) - rpidx
-                            );
-                        }
-                        return mknone();
-                    });
+                            return row_path_value(rpidx, ridx);
+                        });
                 } break;
                 case DTYPE_FLOAT64: {
                     fields[write_idx] =
@@ -1043,14 +1009,8 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::numeric_col_to_array<
                         arrow::DoubleType,
                         double>(extents, [&, rpidx](t_uindex ridx) {
-                        auto depth = m_ctx->unity_get_row_depth(ridx);
-                        if (rpidx < depth) {
-                            return m_ctx->unity_get_row_path(ridx).at(
-                                (depth - 1) - rpidx
-                            );
-                        }
-                        return mknone();
-                    });
+                            return row_path_value(rpidx, ridx);
+                        });
                 } break;
                 case DTYPE_DATE: {
                     fields[write_idx] =
@@ -1058,13 +1018,7 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::date_col_to_array(
                         extents,
                         [&, rpidx](t_uindex ridx) {
-                            auto depth = m_ctx->unity_get_row_depth(ridx);
-                            if (rpidx < depth) {
-                                return m_ctx->unity_get_row_path(ridx).at(
-                                    (depth - 1) - rpidx
-                                );
-                            }
-                            return mknone();
+                            return row_path_value(rpidx, ridx);
                         }
                     );
                 } break;
@@ -1075,13 +1029,7 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::timestamp_col_to_array(
                         extents,
                         [&, rpidx](t_uindex ridx) {
-                            auto depth = m_ctx->unity_get_row_depth(ridx);
-                            if (rpidx < depth) {
-                                return m_ctx->unity_get_row_path(ridx).at(
-                                    (depth - 1) - rpidx
-                                );
-                            }
-                            return mknone();
+                            return row_path_value(rpidx, ridx);
                         }
                     );
                 } break;
@@ -1091,13 +1039,7 @@ View<CTX_T>::data_slice_to_batches(
                     vectors[write_idx] = apachearrow::boolean_col_to_array(
                         extents,
                         [&, rpidx](t_uindex ridx) {
-                            auto depth = m_ctx->unity_get_row_depth(ridx);
-                            if (rpidx < depth) {
-                                return m_ctx->unity_get_row_path(ridx).at(
-                                    (depth - 1) - rpidx
-                                );
-                            }
-                            return mknone();
+                            return row_path_value(rpidx, ridx);
                         }
                     );
                 } break;
@@ -1110,14 +1052,8 @@ View<CTX_T>::data_slice_to_batches(
                         apachearrow::string_col_to_dictionary_array(
                             extents,
                             [&, rpidx](t_uindex ridx) {
-                                auto depth = m_ctx->unity_get_row_depth(ridx);
-                                if (rpidx < depth) {
-                                    return m_ctx->unity_get_row_path(ridx).at(
-                                        (depth - 1) - rpidx
-                                    );
-                                }
-                                return mknone();
-                            }
+                            return row_path_value(rpidx, ridx);
+                        }
                         );
                 } break;
                 case DTYPE_OBJECT:
@@ -1503,6 +1439,192 @@ View<CTX_T>::_set_deltas_enabled(bool enabled_state) {
     m_ctx->set_deltas_enabled(enabled_state);
 }
 
+template <typename CTX_T>
+void
+View<CTX_T>::set_removes_enabled(bool enabled_state) {
+    m_removes_enabled = enabled_state;
+    if constexpr (std::is_same_v<CTX_T, t_ctx0>) {
+        m_ctx->set_removes_enabled(enabled_state);
+    } else if constexpr (has_row_tree<CTX_T>) {
+        if (enabled_state) {
+            attach_removes_capture();
+        } else {
+            detach_removes_capture();
+        }
+    }
+}
+
+template <typename CTX_T>
+std::shared_ptr<std::string>
+View<CTX_T>::take_removed_rows() {
+    if (!m_removes_enabled) {
+        return nullptr;
+    }
+
+    if constexpr (std::is_same_v<CTX_T, t_ctx0>) {
+        auto pkeys = m_ctx->take_filtered_out_pkeys();
+        if (pkeys.empty()) {
+            return nullptr;
+        }
+
+        return pkeys_to_index_arrow(*m_table, pkeys);
+    } else if constexpr (has_row_tree<CTX_T>) {
+        if (m_removes_generation != m_ctx->get_storage_generation()) {
+            attach_removes_capture();
+            return nullptr;
+        }
+
+        std::vector<t_stree_dropped> dropped;
+        std::swap(dropped, m_removes_capture->m_dropped);
+        return dropped_to_arrow(dropped);
+    } else {
+        return nullptr;
+    }
+}
+
+template <typename CTX_T>
+void
+View<CTX_T>::attach_removes_capture() {
+    detach_removes_capture();
+    if constexpr (has_row_tree<CTX_T>) {
+        auto trees = m_ctx->get_trees();
+        if (trees.empty()) {
+            return;
+        }
+
+        m_removes_capture = std::make_shared<t_stree_capture>();
+        m_removes_capture->m_dropped_only = true;
+        trees[0]->add_capture(m_removes_capture);
+        m_removes_generation = m_ctx->get_storage_generation();
+    }
+}
+
+template <typename CTX_T>
+void
+View<CTX_T>::detach_removes_capture() {
+    if (!m_removes_capture) {
+        return;
+    }
+
+    if constexpr (has_row_tree<CTX_T>) {
+        auto trees = m_ctx->get_trees();
+        if (!trees.empty()) {
+            trees[0]->remove_capture(m_removes_capture);
+        }
+    }
+
+    m_removes_capture = nullptr;
+}
+
+template <typename CTX_T>
+t_dtype
+View<CTX_T>::row_pivot_dtype(const std::string& name) const {
+    const auto& schema = m_table->get_schema();
+    if (schema.has_column(name)) {
+        return schema.get_dtype(name);
+    }
+
+    for (const auto& expr : m_expressions) {
+        if (expr->get_expression_alias() == name) {
+            return expr->get_dtype();
+        }
+    }
+
+    return DTYPE_STR;
+}
+
+template <typename CTX_T>
+std::shared_ptr<std::string>
+View<CTX_T>::dropped_to_arrow(const std::vector<t_stree_dropped>& dropped
+) const {
+    const t_uindex num_pivots = m_row_pivots.size();
+    std::vector<const t_stree_dropped*> rows;
+    rows.reserve(dropped.size());
+    for (const auto& node : dropped) {
+        bool selected = node.m_depth > 0;
+        if (m_view_config->is_total_only()) {
+            selected = false;
+        } else if (m_view_config->is_leaves_only()) {
+            selected = node.m_depth == num_pivots;
+        }
+
+        if (selected) {
+            rows.push_back(&node);
+        }
+    }
+
+    if (rows.empty()) {
+        return nullptr;
+    }
+
+    std::vector<t_dtype> dtypes;
+    dtypes.reserve(num_pivots);
+    for (const auto& name : m_row_pivots) {
+        dtypes.push_back(row_pivot_dtype(name));
+    }
+
+    t_schema schema(m_row_pivots, dtypes);
+    t_data_table keys(schema);
+    keys.init();
+    keys.extend(rows.size());
+    for (t_uindex rpidx = 0; rpidx < num_pivots; ++rpidx) {
+        auto column = keys.get_column(m_row_pivots[rpidx]);
+        for (t_uindex ridx = 0; ridx < rows.size(); ++ridx) {
+            const t_stree_dropped& node = *rows[ridx];
+            if (rpidx < node.m_depth) {
+                column->set_scalar(ridx, node.m_path[rpidx]);
+            } else {
+                column->set_scalar(ridx, mknull(dtypes[rpidx]));
+            }
+        }
+    }
+
+    return apachearrow::table_to_arrow_ipc(keys);
+}
+
+std::shared_ptr<std::string>
+pkeys_to_index_arrow(const Table& table, const std::vector<t_tscalar>& pkeys) {
+    const auto& index = table.get_index();
+    std::vector<t_dtype> dtypes;
+    if (index.size() == 1) {
+        dtypes.push_back(table.get_schema().get_dtype(index[0]));
+    } else {
+        dtypes = table.get_pkey_codec()->dtypes();
+    }
+
+    t_schema schema(index, dtypes);
+    t_data_table keys(schema);
+    keys.init();
+    keys.extend(pkeys.size());
+    std::vector<std::shared_ptr<t_column>> cols;
+    cols.reserve(index.size());
+    for (const auto& name : index) {
+        cols.push_back(keys.get_column(name));
+    }
+
+    if (index.size() == 1) {
+        for (t_uindex ridx = 0; ridx < pkeys.size(); ++ridx) {
+            cols[0]->set_scalar(ridx, pkeys[ridx]);
+        }
+
+        return apachearrow::table_to_arrow_ipc(keys);
+    }
+
+    const auto& codec = *table.get_pkey_codec();
+    std::vector<std::string> storage;
+    for (t_uindex ridx = 0; ridx < pkeys.size(); ++ridx) {
+        const auto& key = pkeys[ridx];
+        const auto values = codec.decode(
+            key.is_valid() ? key.get_char_ptr() : nullptr, storage
+        );
+        for (std::size_t i = 0; i < values.size(); ++i) {
+            cols[i]->set_scalar(ridx, values[i]);
+        }
+    }
+
+    return apachearrow::table_to_arrow_ipc(keys);
+}
+
 // Pivot table operations
 template <typename CTX_T>
 bool
@@ -1704,7 +1826,7 @@ View<CTX_T>::get_row_delta() const {
     // the eventual Arrow output for this path.
     t_uindex ncols = paths.size();
 
-    return std::make_shared<t_data_slice<CTX_T>>(
+    auto slice = std::make_shared<t_data_slice<CTX_T>>(
         m_ctx,
         0,
         num_rows_changed,
@@ -1715,6 +1837,9 @@ View<CTX_T>::get_row_delta() const {
         data,
         paths
     );
+
+    slice->set_row_indices(delta.rows);
+    return slice;
 }
 
 template <typename CTX_T>

@@ -156,6 +156,18 @@ t_data_slice<CTX_T>::get_column_indices() const {
 }
 
 template <typename CTX_T>
+const std::vector<t_uindex>&
+t_data_slice<CTX_T>::get_row_indices() const {
+    return m_row_indices;
+}
+
+template <typename CTX_T>
+void
+t_data_slice<CTX_T>::set_row_indices(const std::vector<t_uindex>& row_indices) {
+    m_row_indices = row_indices;
+}
+
+template <typename CTX_T>
 bool
 t_data_slice<CTX_T>::is_column_only() const {
     return false;

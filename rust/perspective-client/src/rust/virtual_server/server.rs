@@ -651,7 +651,8 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             ViewOnRemoveReq(_) => {
                 respond!(msg, ViewOnRemoveResp {
                     indices: None,
-                    port_id: 0
+                    port_id: 0,
+                    cause: 0
                 })
             },
             ViewRemoveOnRemoveReq(_) => {

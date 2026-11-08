@@ -61,6 +61,7 @@ t_ctx0::step_begin() {
 
     m_deltas = std::make_shared<t_zcdeltas>();
     m_delta_pkeys.clear();
+    m_filtered_out_pkeys.clear();
     m_rows_changed = false;
     m_columns_changed = false;
     m_traversal->step_begin();
@@ -167,6 +168,9 @@ t_ctx0::notify(
                             );
                         } else {
                             m_traversal->delete_row(pkey);
+                            if (m_features[CTX_FEAT_REMOVES]) {
+                                m_filtered_out_pkeys.insert(pkey);
+                            }
                         }
                     } else {
                         if (filter_curr) {
@@ -953,6 +957,23 @@ t_ctx0::get_deltas_enabled() const {
 void
 t_ctx0::set_deltas_enabled(bool enabled_state) {
     m_features[CTX_FEAT_DELTA] = enabled_state;
+}
+
+void
+t_ctx0::set_removes_enabled(bool enabled_state) {
+    m_features[CTX_FEAT_REMOVES] = enabled_state;
+    if (!enabled_state) {
+        m_filtered_out_pkeys.clear();
+    }
+}
+
+std::vector<t_tscalar>
+t_ctx0::take_filtered_out_pkeys() {
+    std::vector<t_tscalar> pkeys(
+        m_filtered_out_pkeys.begin(), m_filtered_out_pkeys.end()
+    );
+    m_filtered_out_pkeys.clear();
+    return pkeys;
 }
 
 std::vector<t_stree*>

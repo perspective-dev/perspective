@@ -803,6 +803,11 @@ t_data_table::promote_column(
 
     if (fill) {
         for (auto i = 0; i < iter_limit; ++i) {
+            if (current_col->is_status_enabled() && !current_col->is_valid(i)) {
+                promoted_col->clear(i);
+                continue;
+            }
+
             switch (new_dtype) {
                 case DTYPE_INT64: {
                     auto* val = current_col->get_nth<std::int32_t>(i);

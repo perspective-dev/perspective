@@ -1131,7 +1131,7 @@ t_rowdelta
 t_ctx2::get_row_delta() {
     std::vector<t_uindex> rows = get_rows_changed();
     std::vector<t_tscalar> data = get_data(rows);
-    t_rowdelta rval(true, rows.size(), data);
+    t_rowdelta rval(true, rows, data);
     clear_deltas();
     return rval;
 }
