@@ -1032,75 +1032,18 @@ importers:
 
   tools/bench:
     dependencies:
-      perspective-0-10-0:
-        specifier: npm:@finos/perspective@0.10.0
-        version: '@finos/perspective@0.10.0'
       perspective-0-9-0:
         specifier: npm:@finos/perspective@0.9.0
         version: '@finos/perspective@0.9.0'
       perspective-1-0-0:
         specifier: npm:@finos/perspective@1.0.0
         version: '@finos/perspective@1.0.0'
-      perspective-1-1-0:
-        specifier: npm:@finos/perspective@1.1.0
-        version: '@finos/perspective@1.1.0'
-      perspective-2-1-0:
-        specifier: npm:@finos/perspective@2.1.0
-        version: '@finos/perspective@2.1.0'
-      perspective-2-10-0:
-        specifier: npm:@finos/perspective@2.10.0
-        version: '@finos/perspective@2.10.0'
       perspective-2-2-0:
         specifier: npm:@finos/perspective@2.2.0
         version: '@finos/perspective@2.2.0'
-      perspective-2-3-0:
-        specifier: npm:@finos/perspective@2.3.0
-        version: '@finos/perspective@2.3.0'
-      perspective-2-4-0:
-        specifier: npm:@finos/perspective@2.4.0
-        version: '@finos/perspective@2.4.0'
-      perspective-2-5-0:
-        specifier: npm:@finos/perspective@2.5.0
-        version: '@finos/perspective@2.5.0'
-      perspective-2-6-0:
-        specifier: npm:@finos/perspective@2.6.0
-        version: '@finos/perspective@2.6.0'
-      perspective-2-7-0:
-        specifier: npm:@finos/perspective@2.7.0
-        version: '@finos/perspective@2.7.0'
-      perspective-2-8-0:
-        specifier: npm:@finos/perspective@2.8.0
-        version: '@finos/perspective@2.8.0'
-      perspective-2-9-0:
-        specifier: npm:@finos/perspective@2.9.0
-        version: '@finos/perspective@2.9.0'
       perspective-3-0-0:
         specifier: npm:@finos/perspective@3.0.0
         version: '@finos/perspective@3.0.0'
-      perspective-3-1-0:
-        specifier: npm:@finos/perspective@3.1.0
-        version: '@finos/perspective@3.1.0'
-      perspective-3-2-0:
-        specifier: npm:@finos/perspective@3.2.0
-        version: '@finos/perspective@3.2.0'
-      perspective-3-3-0:
-        specifier: npm:@finos/perspective@3.3.0
-        version: '@finos/perspective@3.3.0'
-      perspective-3-4-0:
-        specifier: npm:@finos/perspective@3.4.0
-        version: '@finos/perspective@3.4.0'
-      perspective-3-5-0:
-        specifier: npm:@finos/perspective@3.5.0
-        version: '@finos/perspective@3.5.0'
-      perspective-3-6-0:
-        specifier: npm:@finos/perspective@3.6.0
-        version: '@finos/perspective@3.6.0'
-      perspective-3-7-0:
-        specifier: npm:@finos/perspective@3.7.0
-        version: '@finos/perspective@3.7.0'
-      perspective-3-8-0:
-        specifier: npm:@finos/perspective@3.8.0
-        version: '@finos/perspective@3.8.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
       perspective-4-0-0:
         specifier: npm:@perspective-dev/client@4.0.0
         version: '@perspective-dev/client@4.0.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
@@ -1137,6 +1080,15 @@ importers:
       perspective-5-5-0:
         specifier: npm:@perspective-dev/client@5.5.0
         version: '@perspective-dev/client@5.5.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
+      perspective-5-6-0:
+        specifier: npm:@perspective-dev/client@5.6.0
+        version: '@perspective-dev/client@5.6.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)'
+      perspective-5-7-0:
+        specifier: npm:@perspective-dev/client@5.7.0
+        version: '@perspective-dev/client@5.7.0(@clickhouse/client-web@1.17.0)(@duckdb/duckdb-wasm@1.32.0)'
+      perspective-5-8-0:
+        specifier: npm:@perspective-dev/client@5.8.0
+        version: '@perspective-dev/client@5.8.0(@clickhouse/client-web@1.17.0)(@duckdb/duckdb-wasm@1.32.0)'
     devDependencies:
       '@perspective-dev/client':
         specifier: workspace:^
@@ -1451,11 +1403,6 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@finos/perspective@0.10.0':
-    resolution: {integrity: sha512-PmsUiaOjChJaivDxGLNH8vAw8lG98OLlPjKCvci3iAFAEclGKMhSkHP/qYDU+NUZSPqsvk2Rf66TFsK8aiy/jg==}
-    engines: {node: '>=12'}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
   '@finos/perspective@0.9.0':
     resolution: {integrity: sha512-CkQ8thiCcSLpIr08aMYaYaMcHgk0Cj2PS1TPpz0hbwlR27UZeItgqrR4LNb3Fl4O6lZ3DaBQXIlqV05sP9yvGg==}
     engines: {node: '>=12'}
@@ -1466,95 +1413,13 @@ packages:
     engines: {node: '>=12'}
     deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
-  '@finos/perspective@1.1.0':
-    resolution: {integrity: sha512-UHqkIKXmJ+q++hhVrVe9uFuNXifeyImHinUOi1Vyw172GpWZE1w8b53zRRk9P2U3WtYm7x7Jrhp1ILqkZ5F+aw==}
-    engines: {node: '>=12'}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@2.1.0':
-    resolution: {integrity: sha512-NgDJtM7BbPEry574qQuSkzKEDdhSBSJecFeMyTOOlfzQ8cldR9xMg7/Lo5/NQWWi5cKuyzTWjTphOn6bP2M6YA==}
-    engines: {node: '>=14'}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@2.10.0':
-    resolution: {integrity: sha512-8g6hsKhpS2gR7GYQWksNDm8kpymHZiSbJkC4HAp1dI95RArksr4U9CUAOnALgw8JI9B5CYI6b1SWQxbzCsTQ6A==}
-    engines: {node: '>=14'}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
   '@finos/perspective@2.2.0':
     resolution: {integrity: sha512-OPSFrwnaUyDnAL4jQb4kICMDBO6tqZ1vGGgd9xgTssB0VToIXObPMzlNAFtuWDL7qwiyxupqMYkjXMhoRGY7pA==}
     engines: {node: '>=14'}
     deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
-  '@finos/perspective@2.3.0':
-    resolution: {integrity: sha512-SnsdYdYHXKarG/mFIUcZmUiTKo9yccnbd+r0a9BRUcY3p9VuDPdp8fnPanoXLKi1xUkIz7RJSSTVpbPL1T+jWg==}
-    engines: {node: '>=14'}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@2.4.0':
-    resolution: {integrity: sha512-JPYGAZq0WmcYUKXnyqdgZW+UPvgSAiWHmYx6I+ZVbjz1TIuuPFZ5Yw1n/VumUrjNGn/XNl7WnUUovh31Tez7tQ==}
-    engines: {node: '>=14'}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@2.5.0':
-    resolution: {integrity: sha512-4YUs0oLvvGG4HQzqLJQCkRic+FW4h623etmcjBSuqcC3tLT+OMFxNZ8Z3NjS6uvdFu6vPTO7fAA0RnTdZKhXKg==}
-    engines: {node: '>=14'}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@2.6.0':
-    resolution: {integrity: sha512-3YIBv4h1wQl8FBuabWLIV6H5aS1ufDC4/xjsrp3bIL5y5dgYwV5Uqr3gFj6cpmbWn0jNaFb6pEVm3Scn2QyDNw==}
-    engines: {node: '>=14'}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@2.7.0':
-    resolution: {integrity: sha512-/9UHAnH1iW8ANnfplDLGMS60dx3R8UWRoL0dKTx9A3jNbeP2l+5wd0twsal00FqR/wgUomd3+tbbkzOIMsNclA==}
-    engines: {node: '>=14'}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@2.8.0':
-    resolution: {integrity: sha512-D2LSwwFqs4mcZjwBBCNn7JdidK+Th29ZA6rdA1LMKn4pvedok0YzKii0beKTzovhVeKthlcVROKQpFY3DEjptw==}
-    engines: {node: '>=14'}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@2.9.0':
-    resolution: {integrity: sha512-O40EzleYRpmX2k8xwbcJfWlgi4QDJ2cUJlmEA0wG1LLVmSOQD7vFeQK9H2v6xQBwn6+/andpDLglrzDYCEBOHg==}
-    engines: {node: '>=14'}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
   '@finos/perspective@3.0.0':
     resolution: {integrity: sha512-myWGlfxN97vV3qvv34QAxCH389Oo2SH0EGN4eyrGdZSb+UlFjv9HR1TYM18GRhdM1ASg7jFwnIvGDcw7oM+qNA==}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@3.1.0':
-    resolution: {integrity: sha512-nyO4NWU1+C4C0SOYDdHM7p01uPl9eeJUYMG+YNy+LNOg5xGSpNZ4CI4iT9+1N7mSKLl9mrly8OAoRQXEHoDKTA==}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@3.2.0':
-    resolution: {integrity: sha512-shV80NUE44V6AX2jhEAD4XS4uhMyv5A22SJ9kbop/ZKAC3Z9rbrmJffQqymZCgM2457fkjy/GxIcwcDur7GgFQ==}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@3.3.0':
-    resolution: {integrity: sha512-GYzXPqHnhrWQz930f9OejVvsBs5I6jjJLvbK/xfUK2AUijMhzAUsPI70uEKUFwsy5VMA6sxWPl/UQB9W9IBGDw==}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@3.4.0':
-    resolution: {integrity: sha512-7FlOdnotYkJOc5/+yerpcSv9VH+1e2fs53ZiOAm0/id2cke9RySbm30NpHICGq13SQW5J3ezByZElx3V72A8mQ==}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@3.5.0':
-    resolution: {integrity: sha512-J4Q6aGq541iFeNeCrnW6tuq1ELfg0hhILH8qYoI9oJUSx1O/kwackunHOkxcPxW6zeaT0vUfHZaJjS7u1dYTuA==}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@3.6.0':
-    resolution: {integrity: sha512-MOXifjSsPNO39Bc0LiXp1OvV6ujNes4EoFxJ58edzCutbeSWf0yknXyEBmwR0PB/QWNHx1Czl3cnnJHXgRPn3Q==}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@3.7.0':
-    resolution: {integrity: sha512-UCtIGE6fuT7A7ljS9R5EmDfN7PZd5DwMg3iAikB/WPVE7dOtulEbvbsnkUMKa78zL8aN5hAGR4h4hxWMlv7fnw==}
-    deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
-
-  '@finos/perspective@3.8.0':
-    resolution: {integrity: sha512-9pot9YJq1RDdIRJlffp97ktbd0Sxk74mnoSOcf6U/luWceyEnfceQYHwJqUPR1IMNb9H1ZC6NQTbU4WRUT3hAQ==}
     deprecated: This package is no longer maintained. Please upgrade to @perspective-dev/client
 
   '@fontsource/roboto-mono@4.5.10':
@@ -2018,6 +1883,33 @@ packages:
   '@perspective-dev/client@5.5.0':
     resolution: {integrity: sha512-c6nN671nxKphyL2U9cjzTNnZm6+mwnTECXsCtaL+HWixPBeE5KMd9LTXsigiXMinC7gYrvpGZsvaJlRecv2jKQ==}
 
+  '@perspective-dev/client@5.6.0':
+    resolution: {integrity: sha512-mDeORPXWbfZZ3QCMdETgw668DZM1wTD/5nU9nOIdM3cWF5yuXRhgaHV4XnVbYtTEWSDkhvEXiZtHesCx5Xx9hA==}
+
+  '@perspective-dev/client@5.7.0':
+    resolution: {integrity: sha512-gpIT9uxKv0XgorPTwMzRJ1nWQQwB7u8InFmc9W8xCqKLJYcoRuH5gZCJYNf69jkFJmad6RxzFeKh2rJiE2qB/w==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@clickhouse/client-web': ^1.12.0
+      '@duckdb/duckdb-wasm': ^1.30.0
+    peerDependenciesMeta:
+      '@clickhouse/client-web':
+        optional: true
+      '@duckdb/duckdb-wasm':
+        optional: true
+
+  '@perspective-dev/client@5.8.0':
+    resolution: {integrity: sha512-gnpyzG5QuUjhAowKuSdho/ysKB3juUyDKzbRSG2nITTN8qwWCvscSTQeFBaIwL4/4GyzZAxK5vtnjgXkJ98zHQ==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@clickhouse/client-web': ^1.12.0
+      '@duckdb/duckdb-wasm': ^1.30.0
+    peerDependenciesMeta:
+      '@clickhouse/client-web':
+        optional: true
+      '@duckdb/duckdb-wasm':
+        optional: true
+
   '@perspective-dev/server@4.0.0':
     resolution: {integrity: sha512-S25Mr+cgRomU9aDiplXUj2gImuYZFXUUfytLdJC+f9iipFqX3MqFUCPI4jEzb1xTUnP3Fzg9xzs8p1SymHOF9g==}
 
@@ -2053,6 +1945,9 @@ packages:
 
   '@perspective-dev/server@5.5.0':
     resolution: {integrity: sha512-4wVCiabrrCpe7kvZu5Kx8BNJEjTGj2An7nJJiqZ9CvBZ8bObke6rqFNgTj3o1oGDmai+eTNFpg5LrFH4dZlPEw==}
+
+  '@perspective-dev/server@5.8.0':
+    resolution: {integrity: sha512-kF7UgSKA1HLxYyfSsFwnKHZDjyNPlovixWjhz7bvOTqbDzphVY1EnZAGZUtJ7IB8wjty9lk0kMSp1AvtpfFyTw==}
 
   '@playwright/experimental-ct-core@1.62.0':
     resolution: {integrity: sha512-jmd7zmlTHrDf4coLZKxIQSmc8Dqr9NuNnadSQx1xeBlkoCUYO9eiiL5yIQ71LKHm/xcipRpe6HSIFEjoxXsAvQ==}
@@ -3598,6 +3493,7 @@ packages:
   image-size@0.5.5:
     resolution: {integrity: sha512-6TDAlDPZxUFCv+fuOkIoXT/V/f3Qbq8e37p+YOiYrUv3v9cc3/6x78VdfPgFVaB9dZYeLUfKgHRebpkm/oP2VQ==}
     engines: {node: '>=0.10.0'}
+    deprecated: Please migrate to image-size@2.x
     hasBin: true
 
   import-cwd@3.0.0:
@@ -5522,21 +5418,6 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@finos/perspective@0.10.0':
-    dependencies:
-      '@babel/runtime': 7.28.4
-      core-js: 3.46.0
-      d3-array: 1.2.4
-      detectie: 1.0.0
-      flatbuffers: 1.12.0
-      lodash: 4.17.21
-      text-encoding-utf-8: 1.0.2
-      tslib: 1.14.1
-      ws: 6.2.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
   '@finos/perspective@0.9.0':
     dependencies:
       '@babel/runtime': 7.28.4
@@ -5567,90 +5448,9 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@finos/perspective@1.1.0':
-    dependencies:
-      fflate: 0.7.4
-      ws: 6.2.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@2.1.0':
-    dependencies:
-      fflate: 0.7.4
-      ws: 6.2.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@2.10.0':
-    dependencies:
-      stoppable: 1.1.0
-      ws: 6.2.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
   '@finos/perspective@2.2.0':
     dependencies:
       fflate: 0.7.4
-      ws: 6.2.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@2.3.0':
-    dependencies:
-      fflate: 0.7.4
-      ws: 6.2.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@2.4.0':
-    dependencies:
-      fflate: 0.7.4
-      ws: 6.2.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@2.5.0':
-    dependencies:
-      fflate: 0.7.4
-      ws: 6.2.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@2.6.0':
-    dependencies:
-      fflate: 0.7.4
-      stoppable: 1.1.0
-      ws: 6.2.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@2.7.0':
-    dependencies:
-      stoppable: 1.1.0
-      ws: 6.2.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@2.8.0':
-    dependencies:
-      stoppable: 1.1.0
-      ws: 6.2.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@2.9.0':
-    dependencies:
-      stoppable: 1.1.0
       ws: 6.2.3
     transitivePeerDependencies:
       - bufferutil
@@ -5662,73 +5462,6 @@ snapshots:
       ws: 8.18.3
     transitivePeerDependencies:
       - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@3.1.0':
-    dependencies:
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@3.2.0':
-    dependencies:
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@3.3.0':
-    dependencies:
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@3.4.0':
-    dependencies:
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@3.5.0':
-    dependencies:
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@3.6.0':
-    dependencies:
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@3.7.0':
-    dependencies:
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@finos/perspective@3.8.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
-    dependencies:
-      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
-      stoppable: 1.1.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - supports-color
       - utf-8-validate
 
   '@fontsource/roboto-mono@4.5.10': {}
@@ -6686,6 +6419,42 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@perspective-dev/client@5.6.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)':
+    dependencies:
+      '@perspective-dev/server': 5.8.0
+      pro_self_extracting_wasm: 0.0.9(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+      stoppable: 1.1.0
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - debug
+      - supports-color
+      - utf-8-validate
+
+  '@perspective-dev/client@5.7.0(@clickhouse/client-web@1.17.0)(@duckdb/duckdb-wasm@1.32.0)':
+    dependencies:
+      '@perspective-dev/server': 5.8.0
+      stoppable: 1.1.0
+      ws: 8.18.3
+    optionalDependencies:
+      '@clickhouse/client-web': 1.17.0
+      '@duckdb/duckdb-wasm': 1.32.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@perspective-dev/client@5.8.0(@clickhouse/client-web@1.17.0)(@duckdb/duckdb-wasm@1.32.0)':
+    dependencies:
+      '@perspective-dev/server': 5.8.0
+      stoppable: 1.1.0
+      ws: 8.18.3
+    optionalDependencies:
+      '@clickhouse/client-web': 1.17.0
+      '@duckdb/duckdb-wasm': 1.32.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@perspective-dev/server@4.0.0': {}
 
   '@perspective-dev/server@4.1.0': {}
@@ -6709,6 +6478,8 @@ snapshots:
   '@perspective-dev/server@5.4.0': {}
 
   '@perspective-dev/server@5.5.0': {}
+
+  '@perspective-dev/server@5.8.0': {}
 
   '@playwright/experimental-ct-core@1.62.0(@types/node@24.9.1)(jiti@1.21.7)(less@4.4.2)(terser@5.44.0)(tsx@4.20.6)(yaml@2.8.1)':
     dependencies:

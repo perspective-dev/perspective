@@ -44,7 +44,10 @@ loop.start()
 Perspective's websocket client interfaces with the Python server, then
 _replicates_ the server-side Table. When the server-side `Table` has an `index`,
 the replica inherits it, and both `update()` and `remove()` on the server are
-mirrored in the browser.
+mirrored in the browser, including rows which an `update()` moves outside the
+`View`'s `filter`. A replica of a `View` with `group_by` is indexed on the
+`group_by` columns instead, so groups which gain, change or lose all of their
+rows on the server are mirrored too.
 
 ```javascript
 const websocket = await perspective.websocket("ws://localhost:8080");

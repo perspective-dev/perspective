@@ -159,16 +159,55 @@ impl Deref for OnUpdateData {
     }
 }
 
-/// Removed index values and port ID corresponding to a remove batch, provided
-/// to the callback argument to [`View::on_remove`].
-#[derive(TS)]
-pub struct OnRemoveData(crate::proto::ViewOnRemoveResp);
+/// The rule under which the rows reported by [`View::on_remove`] left the
+/// [`View`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+pub enum RemoveCause {
+    Key,
+    Group,
+    Filter,
+}
 
-impl Deref for OnRemoveData {
-    type Target = crate::proto::ViewOnRemoveResp;
+impl RemoveCause {
+    /// This cause as its lowercase name.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RemoveCause::Key => "key",
+            RemoveCause::Group => "group",
+            RemoveCause::Filter => "filter",
+        }
+    }
+}
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl From<view_on_remove_resp::Cause> for RemoveCause {
+    fn from(cause: view_on_remove_resp::Cause) -> Self {
+        match cause {
+            view_on_remove_resp::Cause::Key => RemoveCause::Key,
+            view_on_remove_resp::Cause::Group => RemoveCause::Group,
+            view_on_remove_resp::Cause::Filter => RemoveCause::Filter,
+        }
+    }
+}
+
+/// The keys of rows which left a [`View`], the port ID and the [`RemoveCause`]
+/// they left under, provided to the callback argument to [`View::on_remove`].
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct OnRemoveData {
+    pub port_id: u32,
+    #[ts(type = "Uint8Array | undefined")]
+    #[serde(with = "serde_bytes")]
+    pub indices: Option<Vec<u8>>,
+    pub cause: RemoveCause,
+}
+
+impl From<ViewOnRemoveResp> for OnRemoveData {
+    fn from(resp: ViewOnRemoveResp) -> Self {
+        OnRemoveData {
+            port_id: resp.port_id,
+            cause: resp.cause().into(),
+            indices: resp.indices,
+        }
     }
 }
 /// The [`View`] struct is Perspective's query and serialization interface. It
@@ -638,13 +677,19 @@ impl View {
         }
     }
 
-    /// Register a callback which is invoked whenever rows are removed from
-    /// this [`View`]'s [`Table`] by [`Table::remove`], with the removed `index`
-    /// column values as an Apache Arrow of one column named after the index.
+    /// Register a callback which is invoked whenever rows leave this [`View`],
+    /// with their keys as an Apache Arrow of one column per key column named
+    /// after it and the [`RemoveCause`] they left under.
     ///
-    /// [`Table::replace`] reports the keys it does not re-supply and
-    /// [`Table::clear`] reports every key. It never fires for a
-    /// [`Table`] without an `index`.
+    /// For a [`View`] without `group_by` the keys are the `index` columns of
+    /// the [`Table`], which must have one: [`RemoveCause::Key`] when
+    /// [`Table::remove`] removed them ([`Table::replace`] reports the keys it
+    /// does not re-supply and [`Table::clear`] every key) and
+    /// [`RemoveCause::Filter`] when [`Table::update`] moved them outside the
+    /// [`View`]'s `filter`. For a [`View`] with `group_by` the keys are the
+    /// `group_by` columns of each group which no longer has any rows,
+    /// [`RemoveCause::Group`], `null` below the group's depth. It fires once
+    /// per cause per update step.
     ///
     /// # Examples
     ///
@@ -668,7 +713,7 @@ impl View {
             async move {
                 match resp.client_resp {
                     Some(ClientResp::ViewOnRemoveResp(resp)) => {
-                        on_remove(OnRemoveData(resp)).await;
+                        on_remove(OnRemoveData::from(resp)).await;
                         Ok(())
                     },
                     resp => Err(resp.into()),

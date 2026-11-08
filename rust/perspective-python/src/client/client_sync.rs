@@ -826,7 +826,8 @@ impl View {
     ///   parameter.
     /// - `options` - If this is provided as `OnUpdateOptions { mode:
     ///   Some(OnUpdateMode::Row) }`, then `delta` is an Arrow of the updated
-    ///   rows. Otherwise `delta` will be [`Option::None`].
+    ///   rows, followed by `reset` when the callback declares it. Otherwise
+    ///   `delta` will be [`Option::None`].
     #[pyo3(signature = (callback, mode=None))]
     pub fn on_update(
         &self,
@@ -855,20 +856,26 @@ impl View {
         self.0.remove_update(callback_id).py_block_on(py)
     }
 
-    /// Register a callback which is invoked whenever rows are removed from
-    /// this [`View`]'s [`Table`] by [`Table::remove`], with two arguments:
-    /// `port_id`,
-    /// and `indices`, the removed `index` column values as an Apache Arrow
-    /// (`bytes`) of one column named after the index.
+    /// Register a callback which is invoked whenever rows leave this [`View`]
+    /// with `port_id`, `indices` (their keys as an Apache Arrow (`bytes`) of
+    /// one column per key column named after it) and `cause`, one of
+    /// `"key"`, `"filter"` or `"group"`.
     ///
-    /// [`Table::replace`] reports the keys it does not re-supply and
-    /// [`Table::clear`] reports every key. It never fires for a
-    /// [`Table`] without an `index`.
+    /// For a [`View`] without `group_by` the keys are the `index` columns of
+    /// the [`Table`], which must have one: `"key"` when [`Table::remove`]
+    /// removed them ([`Table::replace`] reports the keys it does not
+    /// re-supply and [`Table::clear`] every key) and `"filter"` when
+    /// [`Table::update`] moved them outside the [`View`]'s `filter`. For a
+    /// [`View`] with `group_by` the keys are the `group_by` columns of each
+    /// group which no longer has any rows, `"group"`, `None` below the
+    /// group's depth. It fires once per cause per update step. A callback
+    /// which does not declare `cause`, positionally or as a keyword, is
+    /// called without it.
     ///
     /// # Python Examples
     ///
     /// ```python
-    /// def on_remove(port_id, indices):
+    /// def on_remove(port_id, indices, cause):
     ///     replica.remove(indices)
     ///
     /// callback_id = view.on_remove(on_remove)

@@ -325,7 +325,7 @@ const data = {
                 // The delta batch carries one column per emitted column
                 // path, total and subtotal groups included.
                 expect(Object.keys(delta).sort()).toStrictEqual(
-                    ["w", "false|w", "true|w"].sort(),
+                    ["y", "w", "false|w", "true|w"].sort(),
                 );
                 view.delete();
                 table.delete();

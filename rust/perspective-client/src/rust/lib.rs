@@ -61,7 +61,8 @@ pub use crate::table::{
 pub use crate::table_data::{TableData, UpdateData};
 pub use crate::table_ref::TableRef;
 pub use crate::view::{
-    ColumnWindow, OnRemoveData, OnUpdateData, OnUpdateMode, OnUpdateOptions, View, ViewWindow,
+    ColumnWindow, OnRemoveData, OnUpdateData, OnUpdateMode, OnUpdateOptions, RemoveCause, View,
+    ViewWindow,
 };
 
 pub type ClientError = utils::ClientError;

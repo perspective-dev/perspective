@@ -37,6 +37,89 @@ use super::{pandas, polars, pyarrow};
 use crate::py_async::{self, AllowThreads};
 use crate::py_err::{PyPerspectiveError, ResultTClientErrorExt};
 
+/// How a callback receives an argument its signature may or may not declare.
+#[derive(Clone, Copy)]
+enum ExtraArg {
+    Positional,
+    Keyword,
+    Omit,
+}
+
+/// Decide from `callback`'s signature how to pass the argument `name` beyond
+/// the first `legacy_arity` positional ones, passing it positionally to any
+/// callable `inspect` cannot describe.
+fn negotiate_extra_arg(
+    py: Python<'_>,
+    callback: &Py<PyAny>,
+    legacy_arity: usize,
+    name: &str,
+) -> ExtraArg {
+    let inspect = || -> PyResult<ExtraArg> {
+        let inspect = py.import("inspect")?;
+        let parameter = inspect.getattr("Parameter")?;
+        let var_positional = parameter.getattr("VAR_POSITIONAL")?;
+        let positional_only = parameter.getattr("POSITIONAL_ONLY")?;
+        let positional_or_keyword = parameter.getattr("POSITIONAL_OR_KEYWORD")?;
+        let keyword_only = parameter.getattr("KEYWORD_ONLY")?;
+        let var_keyword = parameter.getattr("VAR_KEYWORD")?;
+        let signature = inspect.call_method1("signature", (callback.bind(py),))?;
+        let parameters = signature.getattr("parameters")?.call_method0("values")?;
+        let mut positional = 0usize;
+        let mut keyword = false;
+        for param in parameters.try_iter()? {
+            let param = param?;
+            let kind = param.getattr("kind")?;
+            if kind.eq(&var_positional)? {
+                return Ok(ExtraArg::Positional);
+            } else if kind.eq(&positional_only)? || kind.eq(&positional_or_keyword)? {
+                positional += 1;
+            } else if kind.eq(&var_keyword)? {
+                keyword = true;
+            } else if kind.eq(&keyword_only)? && param.getattr("name")?.extract::<String>()? == name
+            {
+                keyword = true;
+            }
+        }
+
+        Ok(if positional > legacy_arity {
+            ExtraArg::Positional
+        } else if keyword {
+            ExtraArg::Keyword
+        } else {
+            ExtraArg::Omit
+        })
+    };
+
+    inspect().unwrap_or(ExtraArg::Positional)
+}
+
+/// Call `callback` with `port_id`, `payload` and, as `extra` decided, `value`.
+fn call_with_extra<'py, V: IntoPyObject<'py>>(
+    py: Python<'py>,
+    callback: &Py<PyAny>,
+    port_id: u32,
+    payload: Bound<'py, PyBytes>,
+    extra: ExtraArg,
+    name: &str,
+    value: V,
+) -> PyResult<()> {
+    match extra {
+        ExtraArg::Positional => {
+            callback.call1(py, (port_id, payload, value))?;
+        },
+        ExtraArg::Keyword => {
+            let kwargs = PyDict::new(py);
+            kwargs.set_item(name, value)?;
+            callback.call(py, (port_id, payload), Some(&kwargs))?;
+        },
+        ExtraArg::Omit => {
+            callback.call1(py, (port_id, payload))?;
+        },
+    }
+
+    Ok(())
+}
+
 fn py_to_table_ref_async(val: &Bound<'_, PyAny>) -> PyResult<TableRef> {
     if let Ok(t) = val.cast::<AsyncTable>() {
         let table = t.borrow();
@@ -967,7 +1050,8 @@ impl AsyncView {
     /// indicating which port the update fired on, and in `"row"` mode also
     /// with `delta`, the new data that was updated for each row, and `reset`,
     /// which is `True` when the step began with `clear()` or `replace()` so
-    /// `delta` is relative to an empty table.
+    /// `delta` is relative to an empty table. A callback which does not
+    /// declare `reset`, positionally or as a keyword, is called without it.
     ///
     /// # Arguments
     ///
@@ -979,6 +1063,7 @@ impl AsyncView {
     ///   rows. Otherwise `delta` will be [`Option::None`].
     #[pyo3(signature=(callback, mode=None))]
     pub async fn on_update(&self, callback: Py<PyAny>, mode: Option<String>) -> PyResult<u32> {
+        let extra = Python::attach(|py| negotiate_extra_arg(py, &callback, 2, "reset"));
         let callback = move |x: OnUpdateData| {
             let callback = Python::attach(|py| Py::clone_ref(&callback, py));
             async move {
@@ -986,10 +1071,18 @@ impl AsyncView {
                     let callback = Python::attach(|py| Py::clone_ref(&callback, py));
                     Python::attach(|py| {
                         match &x.delta {
-                            None => callback.call1(py, (x.port_id,))?,
-                            Some(delta) => {
-                                callback.call1(py, (x.port_id, PyBytes::new(py, delta), x.reset))?
+                            None => {
+                                callback.call1(py, (x.port_id,))?;
                             },
+                            Some(delta) => call_with_extra(
+                                py,
+                                &callback,
+                                x.port_id,
+                                PyBytes::new(py, delta),
+                                extra,
+                                "reset",
+                                x.reset,
+                            )?,
                         };
 
                         Ok(())
@@ -1024,34 +1117,49 @@ impl AsyncView {
         self.view.remove_update(callback_id).await.into_pyerr()
     }
 
-    /// Register a callback which is invoked whenever rows are removed from
-    /// this [`View`]'s [`Table`] by [`Table::remove`], with two arguments:
-    /// `port_id`,
-    /// and `indices`, the removed `index` column values as an Apache Arrow
-    /// (`bytes`) of one column named after the index.
+    /// Register a callback which is invoked whenever rows leave this [`View`]
+    /// with `port_id`, `indices` (their keys as an Apache Arrow (`bytes`) of
+    /// one column per key column named after it) and `cause`, one of
+    /// `"key"`, `"filter"` or `"group"`.
     ///
-    /// [`Table::replace`] reports the keys it does not re-supply and
-    /// [`Table::clear`] reports every key. It never fires for a
-    /// [`Table`] without an `index`.
+    /// For a [`View`] without `group_by` the keys are the `index` columns of
+    /// the [`Table`], which must have one: `"key"` when [`Table::remove`]
+    /// removed them ([`Table::replace`] reports the keys it does not
+    /// re-supply and [`Table::clear`] every key) and `"filter"` when
+    /// [`Table::update`] moved them outside the [`View`]'s `filter`. For a
+    /// [`View`] with `group_by` the keys are the `group_by` columns of each
+    /// group which no longer has any rows, `"group"`, `None` below the
+    /// group's depth. It fires once per cause per update step. A callback
+    /// which does not declare `cause`, positionally or as a keyword, is
+    /// called without it.
     ///
     /// # Python Examples
     ///
     /// ```python
-    /// def on_remove(port_id, indices):
+    /// def on_remove(port_id, indices, cause):
     ///     replica.remove(indices)
     ///
     /// callback_id = await view.on_remove(on_remove)
     /// ```
     pub async fn on_remove(&self, callback: Py<PyAny>) -> PyResult<u32> {
+        let extra = Python::attach(|py| negotiate_extra_arg(py, &callback, 2, "cause"));
         let callback = move |x: OnRemoveData| {
             let callback = Python::attach(|py| Py::clone_ref(&callback, py));
             async move {
                 let aggregate_errors: PyResult<()> = Python::attach(|py| {
                     match &x.indices {
-                        None => callback.call1(py, (x.port_id,))?,
-                        Some(indices) => {
-                            callback.call1(py, (x.port_id, PyBytes::new(py, indices)))?
+                        None => {
+                            callback.call1(py, (x.port_id,))?;
                         },
+                        Some(indices) => call_with_extra(
+                            py,
+                            &callback,
+                            x.port_id,
+                            PyBytes::new(py, indices),
+                            extra,
+                            "cause",
+                            x.cause.as_str(),
+                        )?,
                     };
 
                     Ok(())

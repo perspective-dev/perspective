@@ -55,6 +55,17 @@ public:
      */
     std::vector<t_tscalar> get_member_pkeys() const;
 
+    /**
+     * @brief Record the keys of rows an update moves outside this context's
+     * filter, for `take_filtered_out_pkeys`.
+     */
+    void set_removes_enabled(bool enabled_state);
+
+    /**
+     * @brief The keys recorded by `set_removes_enabled` since the last call.
+     */
+    std::vector<t_tscalar> take_filtered_out_pkeys();
+
     void sort_by();
     std::vector<t_sortspec> get_sort_by() const;
 
@@ -116,6 +127,7 @@ private:
     std::shared_ptr<t_ftrav> m_traversal;
     std::shared_ptr<t_zcdeltas> m_deltas;
     tsl::hopscotch_set<t_tscalar> m_delta_pkeys;
+    tsl::hopscotch_set<t_tscalar> m_filtered_out_pkeys;
     std::shared_ptr<t_expression_tables> m_expression_tables;
     std::shared_ptr<t_window_engine> m_window_engine;
     t_symtable m_symtable;

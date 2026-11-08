@@ -139,4 +139,19 @@ test.describe("Derived table lifecycle", function () {
             await source.delete();
         });
     }
+
+    test("group_by: a dissolved group leaves the derived table", async function () {
+        const config = PARENTS.group_by;
+        const source = await make_source();
+        const view = await source.view(config);
+        const derived = await perspective.table(view);
+        const ids = rows(24)
+            .filter((row) => row.g === "a")
+            .map((row) => row.id);
+        await source.remove(ids);
+        await expect_tree_parity(source, config, derived, view);
+        await derived.delete();
+        await view.delete();
+        await source.delete();
+    });
 });

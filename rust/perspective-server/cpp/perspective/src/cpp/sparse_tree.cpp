@@ -1057,7 +1057,9 @@ t_stree::update_shape_from_static(const t_dtree_ctx& ctx) {
 
             m_newids.insert(sptidx);
             for (const auto& capture : m_captures) {
-                capture->m_created.push_back(sptidx);
+                if (!capture->m_dropped_only) {
+                    capture->m_created.push_back(sptidx);
+                }
             }
 
             if (ndepth == dtree.last_level()) {
@@ -2327,7 +2329,7 @@ t_stree::update_agg_table(
             ));
         }
 
-        if (!m_captures.empty()
+        if (m_captures_want_changes
             && (val_neq || old_value.is_valid() != dst->is_valid(dst_ridx))) {
             capture_change(nidx, idx, old_value);
         }
@@ -2878,6 +2880,8 @@ t_stree::set_deltas_enabled(bool enabled_state) {
 void
 t_stree::add_capture(const std::shared_ptr<t_stree_capture>& capture) {
     m_captures.push_back(capture);
+    m_captures_want_changes =
+        m_captures_want_changes || !capture->m_dropped_only;
 }
 
 void
@@ -2885,6 +2889,11 @@ t_stree::remove_capture(const std::shared_ptr<t_stree_capture>& capture) {
     m_captures.erase(
         std::remove(m_captures.begin(), m_captures.end(), capture),
         m_captures.end()
+    );
+    m_captures_want_changes = std::any_of(
+        m_captures.begin(),
+        m_captures.end(),
+        [](const auto& remaining) { return !remaining->m_dropped_only; }
     );
 }
 
@@ -2912,6 +2921,10 @@ t_stree::capture_change(
     t_uindex nidx, t_uindex aggnum, const t_tscalar& old_value
 ) {
     for (const auto& capture : m_captures) {
+        if (capture->m_dropped_only) {
+            continue;
+        }
+
         auto& cells = capture->m_changed[nidx];
         bool seen = false;
         for (const auto& cell : cells) {
@@ -2932,9 +2945,11 @@ t_stree::capture_dropped(const t_stnode& node) {
     dropped.m_depth = node.m_depth;
     get_path(node.m_idx, dropped.m_path);
     std::reverse(dropped.m_path.begin(), dropped.m_path.end());
-    dropped.m_aggregates.reserve(m_aggcols.size());
-    for (t_uindex aggnum = 0; aggnum < m_aggcols.size(); ++aggnum) {
-        dropped.m_aggregates.push_back(get_aggregate(node.m_idx, aggnum));
+    if (m_captures_want_changes) {
+        dropped.m_aggregates.reserve(m_aggcols.size());
+        for (t_uindex aggnum = 0; aggnum < m_aggcols.size(); ++aggnum) {
+            dropped.m_aggregates.push_back(get_aggregate(node.m_idx, aggnum));
+        }
     }
 
     for (const auto& capture : m_captures) {

@@ -1954,6 +1954,90 @@ class TestView(object):
         tbl.clear()
         assert steps == [False, True, True]
 
+    def test_view_row_delta_two_arg_callback_omits_reset(self):
+        data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+        calls = []
+
+        def cb1(port_id, delta):
+            calls.append((port_id, delta is not None))
+
+        tbl = Table(data, index="a")
+        view = tbl.view()
+        view.on_update(cb1, mode="row")
+        tbl.update([{"a": 1, "b": 5}])
+        tbl.replace(data)
+        tbl.clear()
+        assert calls == [(0, True), (0, True), (0, True)]
+
+    def test_view_row_delta_keyword_only_reset(self):
+        data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+        steps = []
+
+        def cb1(port_id, delta, *, reset):
+            steps.append(reset)
+
+        tbl = Table(data, index="a")
+        view = tbl.view()
+        view.on_update(cb1, mode="row")
+        tbl.update([{"a": 1, "b": 5}])
+        tbl.replace(data)
+        assert steps == [False, True]
+
+    def test_view_row_delta_var_args_receives_reset(self):
+        data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+        arities = []
+
+        def cb1(*args):
+            arities.append(len(args))
+
+        tbl = Table(data, index="a")
+        view = tbl.view()
+        view.on_update(cb1, mode="row")
+        tbl.update([{"a": 1, "b": 5}])
+        assert arities == [3]
+
+    def test_view_row_delta_kwargs_receives_reset(self):
+        data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+        kwargs = []
+
+        def cb1(port_id, delta, **kw):
+            kwargs.append(kw)
+
+        tbl = Table(data, index="a")
+        view = tbl.view()
+        view.on_update(cb1, mode="row")
+        tbl.clear()
+        assert kwargs == [{"reset": True}]
+
+    def test_view_row_delta_bound_method_and_partial(self):
+        data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
+        import functools
+
+        class Collector:
+            def __init__(self):
+                self.calls = []
+
+            def two(self, port_id, delta):
+                self.calls.append(2)
+
+            def three(self, port_id, delta, reset):
+                self.calls.append(3)
+
+        collector = Collector()
+        partial_calls = []
+
+        def with_extra(extra, port_id, delta, reset):
+            partial_calls.append((extra, reset))
+
+        tbl = Table(data, index="a")
+        view = tbl.view()
+        view.on_update(collector.two, mode="row")
+        view.on_update(collector.three, mode="row")
+        view.on_update(functools.partial(with_extra, "x"), mode="row")
+        tbl.update([{"a": 1, "b": 5}])
+        assert sorted(collector.calls) == [2, 3]
+        assert partial_calls == [("x", False)]
+
     def test_view_row_delta_zero_column_subset(self, util):
         data = [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
         update_data = {"a": [5], "b": [6]}
@@ -2029,7 +2113,7 @@ class TestView(object):
         update_data = {"a": [5], "b": [6]}
 
         def cb1(port_id, delta, reset):
-            compare_delta(delta, {"a": [9, 5], "b": [12, 6]})
+            compare_delta(delta, {"a": [None, 5], "a (sum)": [9, 5], "b": [12, 6]})
 
         tbl = Table(data)
         view = tbl.view(group_by=["a"])
@@ -2045,7 +2129,14 @@ class TestView(object):
         update_data = {"a": [1, 2, 3, 4, 5], "b": [6, 7, 8, 9, 10]}
 
         def cb1(port_id, delta, reset):
-            compare_delta(delta, {"a": [15, 1, 2, 3, 4, 5], "b": [40, 6, 7, 8, 9, 10]})
+            compare_delta(
+                delta,
+                {
+                    "a": [None, 1, 2, 3, 4, 5],
+                    "a (sum)": [15, 1, 2, 3, 4, 5],
+                    "b": [40, 6, 7, 8, 9, 10],
+                },
+            )
 
         tbl = Table({"a": "integer", "b": "integer"})
         view = tbl.view(group_by=["a"])
@@ -2056,7 +2147,14 @@ class TestView(object):
         update_data = {"a": [1, 2, 3, 4, 5], "b": [6, 7, 8, 9, 10]}
 
         def cb1(port_id, delta, reset):
-            compare_delta(delta, {"a": [15, 5, 4, 3, 2, 1], "b": [40, 10, 9, 8, 7, 6]})
+            compare_delta(
+                delta,
+                {
+                    "a": [None, 5, 4, 3, 2, 1],
+                    "a (sum)": [15, 5, 4, 3, 2, 1],
+                    "b": [40, 10, 9, 8, 7, 6],
+                },
+            )
 
         tbl = Table({"a": "integer", "b": "integer"})
         view = tbl.view(group_by=["a"], sort=[["a", "desc"]])
@@ -2067,7 +2165,9 @@ class TestView(object):
         update_data = {"a": [1, 2, 3, 4, 5], "b": [6, 7, 8, 9, 10]}
 
         def cb1(port_id, delta, reset):
-            compare_delta(delta, {"a": [9, 4, 5], "b": [19, 9, 10]})
+            compare_delta(
+                delta, {"a": [None, 4, 5], "a (sum)": [9, 4, 5], "b": [19, 9, 10]}
+            )
 
         tbl = Table({"a": "integer", "b": "integer"})
         view = tbl.view(group_by=["a"], filter=[["a", ">", 3]])
@@ -2078,7 +2178,9 @@ class TestView(object):
         update_data = {"a": [1, 2, 3, 4, 5], "b": [6, 7, 8, 9, 10]}
 
         def cb1(port_id, delta, reset):
-            compare_delta(delta, {"a": [9, 5, 4], "b": [19, 10, 9]})
+            compare_delta(
+                delta, {"a": [None, 5, 4], "a (sum)": [9, 5, 4], "b": [19, 10, 9]}
+            )
 
         tbl = Table({"a": "integer", "b": "integer"})
         view = tbl.view(group_by=["a"], sort=[["a", "desc"]], filter=[["a", ">", 3]])
@@ -2089,7 +2191,14 @@ class TestView(object):
         update_data = {"a": [1, 2, 3, 4, 5, 5, 4], "b": [6, 7, 8, 9, 10, 11, 12]}
 
         def cb1(port_id, delta, reset):
-            compare_delta(delta, {"a": [15, 1, 2, 3, 4, 5], "b": [44, 6, 7, 8, 12, 11]})
+            compare_delta(
+                delta,
+                {
+                    "a": [None, 1, 2, 3, 4, 5],
+                    "a (sum)": [15, 1, 2, 3, 4, 5],
+                    "b": [44, 6, 7, 8, 12, 11],
+                },
+            )
 
         tbl = Table({"a": "integer", "b": "integer"}, index="a")
 
@@ -2102,7 +2211,14 @@ class TestView(object):
         update_data = {"a": [1, 2, 3, 4, 5, 5, 4], "b": [6, 7, 8, 9, 10, 11, 12]}
 
         def cb1(port_id, delta, reset):
-            compare_delta(delta, {"a": [15, 4, 5, 3, 2, 1], "b": [44, 12, 11, 8, 7, 6]})
+            compare_delta(
+                delta,
+                {
+                    "a": [None, 4, 5, 3, 2, 1],
+                    "a (sum)": [15, 4, 5, 3, 2, 1],
+                    "b": [44, 12, 11, 8, 7, 6],
+                },
+            )
 
         tbl = Table({"a": "integer", "b": "integer"}, index="a")
 
@@ -2115,7 +2231,9 @@ class TestView(object):
         update_data = {"a": [1, 2, 3, 4, 5, 5, 4], "b": [6, 7, 8, 9, 10, 11, 12]}
 
         def cb1(port_id, delta, reset):
-            compare_delta(delta, {"a": [9, 4, 5], "b": [23, 12, 11]})
+            compare_delta(
+                delta, {"a": [None, 4, 5], "a (sum)": [9, 4, 5], "b": [23, 12, 11]}
+            )
 
         tbl = Table({"a": "integer", "b": "integer"}, index="a")
 
@@ -2132,11 +2250,12 @@ class TestView(object):
             compare_delta(
                 delta,
                 {
-                    "2|a": [1, None],
+                    "a": [None, 5],
+                    "2|a (sum)": [1, None],
                     "2|b": [2, None],
-                    "4|a": [3, None],
+                    "4|a (sum)": [3, None],
                     "4|b": [4, None],
-                    "6|a": [5, 5],
+                    "6|a (sum)": [5, 5],
                     "6|b": [6, 6],
                 },
             )
@@ -2160,9 +2279,10 @@ class TestView(object):
             compare_delta(
                 delta,
                 {
-                    "2|a": [1, 1, None],
+                    "a": [None, 1, 3],
+                    "2|a (sum)": [1, 1, None],
                     "2|b": [2, 2, None],
-                    "4|a": [3, None, 3],
+                    "4|a (sum)": [3, None, 3],
                     "4|b": [4, None, 4],
                 },
             )
@@ -2179,9 +2299,10 @@ class TestView(object):
             compare_delta(
                 delta,
                 {
-                    "2|a": [1, 1, None],
+                    "a": [None, 1, 3],
+                    "2|a (sum)": [1, 1, None],
                     "2|b": [2, 2, None],
-                    "5|a": [3, None, 3],
+                    "5|a (sum)": [3, None, 3],
                     "5|b": [5, None, 5],
                 },
             )

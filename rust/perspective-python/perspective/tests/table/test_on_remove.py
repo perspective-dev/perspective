@@ -155,3 +155,116 @@ class TestOnRemove(object):
         view = tbl.view(group_by=["y"])
         tbl2 = Table(view)
         assert tbl2.get_index() is None
+
+    def test_on_remove_cause_is_key(self):
+        tbl = Table(data, index="x")
+        view = tbl.view()
+        calls = []
+        cid = view.on_remove(
+            lambda port_id, indices, cause: calls.append((cause, indices))
+        )
+        tbl.remove([2])
+        assert [cause for cause, _ in calls] == ["key"]
+        assert removed_indices(calls[0][1]) == [{"x": 2}]
+        view.remove_remove(cid)
+
+    def test_on_remove_keyword_only_cause(self):
+        tbl = Table(data, index="x")
+        view = tbl.view()
+        calls = []
+
+        def cb(port_id, indices, *, cause):
+            calls.append(cause)
+
+        cid = view.on_remove(cb)
+        tbl.remove([2])
+        assert calls == ["key"]
+        view.remove_remove(cid)
+
+    def test_on_remove_group_by_reports_dissolved_group(self):
+        tbl = Table(data, index="x")
+        view = tbl.view(group_by=["y"])
+        calls = []
+        cid = view.on_remove(
+            lambda port_id, indices, cause: calls.append((cause, indices))
+        )
+        tbl.remove([2])
+        assert [cause for cause, _ in calls] == ["group"]
+        assert removed_indices(calls[0][1]) == [{"y": "b"}]
+        view.remove_remove(cid)
+
+    def test_on_remove_group_by_rekeying_update(self):
+        tbl = Table(data, index="x")
+        view = tbl.view(group_by=["y"])
+        calls = []
+        cid = view.on_remove(
+            lambda port_id, indices, cause: calls.append((cause, indices))
+        )
+        tbl.update([{"x": 1, "y": "zz"}])
+        tbl.update([{"x": 2, "y": "a"}])
+        assert [cause for cause, _ in calls] == ["group", "group"]
+        assert removed_indices(calls[0][1]) == [{"y": "a"}]
+        assert removed_indices(calls[1][1]) == [{"y": "b"}]
+        view.remove_remove(cid)
+
+    def test_on_remove_group_by_two_levels(self):
+        tbl = Table(data, index="x")
+        view = tbl.view(group_by=["y", "x"])
+        calls = []
+        cid = view.on_remove(lambda port_id, indices, cause: calls.append(indices))
+        tbl.remove([2])
+        assert len(calls) == 1
+        rows = sorted(removed_indices(calls[0]), key=lambda row: row["x"] or 0)
+        assert rows == [{"y": "b", "x": None}, {"y": "b", "x": 2}]
+        view.remove_remove(cid)
+
+    def test_on_remove_group_by_aggregate_change_does_not_fire(self):
+        tbl = Table(data, index="x")
+        view = tbl.view(group_by=["y"], aggregates={"x": "sum"})
+        calls = []
+        cid = view.on_remove(lambda port_id, indices, cause: calls.append(cause))
+        tbl.update([{"x": 1, "y": "a"}])
+        tbl.update([{"x": 4, "y": "a"}])
+        assert calls == []
+        view.remove_remove(cid)
+
+    def test_on_remove_group_by_limit_eviction(self):
+        tbl = Table(data, limit=3)
+        view = tbl.view(group_by=["y"])
+        calls = []
+        cid = view.on_remove(
+            lambda port_id, indices, cause: calls.append((cause, indices))
+        )
+        tbl.update([{"x": 4, "y": "d"}])
+        assert [cause for cause, _ in calls] == ["group"]
+        assert removed_indices(calls[0][1]) == [{"y": "a"}]
+        view.remove_remove(cid)
+
+    def test_on_remove_filter_reports_rows_leaving(self):
+        tbl = Table(data, index="x")
+        view = tbl.view(filter=[["y", "==", "a"]])
+        calls = []
+        cid = view.on_remove(
+            lambda port_id, indices, cause: calls.append((cause, indices))
+        )
+        tbl.update([{"x": 1, "y": "b"}])
+        assert [cause for cause, _ in calls] == ["filter"]
+        assert removed_indices(calls[0][1]) == [{"x": 1}]
+        assert view.to_records() == []
+        tbl.update([{"x": 1, "y": "a"}])
+        assert len(calls) == 1
+        view.remove_remove(cid)
+
+    def test_on_remove_filter_key_and_filter_are_separate_messages(self):
+        tbl = Table(data, index="x")
+        view = tbl.view(filter=[["y", "==", "a"]])
+        calls = []
+        cid = view.on_remove(
+            lambda port_id, indices, cause: calls.append((cause, indices))
+        )
+        tbl.remove([2])
+        tbl.update([{"x": 1, "y": "b"}])
+        assert [cause for cause, _ in calls] == ["key", "filter"]
+        assert removed_indices(calls[0][1]) == [{"x": 2}]
+        assert removed_indices(calls[1][1]) == [{"x": 1}]
+        view.remove_remove(cid)

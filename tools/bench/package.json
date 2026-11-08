@@ -31,6 +31,9 @@
         "zx": "catalog:"
     },
     "dependencies": {
+        "perspective-5-8-0": "npm:@perspective-dev/client@5.8.0",
+        "perspective-5-7-0": "npm:@perspective-dev/client@5.7.0",
+        "perspective-5-6-0": "npm:@perspective-dev/client@5.6.0",
         "perspective-5-5-0": "npm:@perspective-dev/client@5.5.0",
         "perspective-5-4-0": "npm:@perspective-dev/client@5.4.0",
         "perspective-5-3-0": "npm:@perspective-dev/client@5.3.0",
@@ -43,6 +46,12 @@
         "perspective-4-2-0": "npm:@perspective-dev/client@4.2.0",
         "perspective-4-1-0": "npm:@perspective-dev/client@4.1.0",
         "perspective-4-0-0": "npm:@perspective-dev/client@4.0.0",
+        "perspective-3-0-0": "npm:@finos/perspective@3.0.0",
+        "perspective-2-2-0": "npm:@finos/perspective@2.2.0",
+        "perspective-1-0-0": "npm:@finos/perspective@1.0.0",
+        "perspective-0-9-0": "npm:@finos/perspective@0.9.0"
+    },
+    "deprecatedDependencies": {
         "perspective-3-8-0": "npm:@finos/perspective@3.8.0",
         "perspective-3-7-0": "npm:@finos/perspective@3.7.0",
         "perspective-3-6-0": "npm:@finos/perspective@3.6.0",
@@ -51,23 +60,11 @@
         "perspective-3-3-0": "npm:@finos/perspective@3.3.0",
         "perspective-3-2-0": "npm:@finos/perspective@3.2.0",
         "perspective-3-1-0": "npm:@finos/perspective@3.1.0",
-        "perspective-3-0-0": "npm:@finos/perspective@3.0.0",
         "perspective-2-10-0": "npm:@finos/perspective@2.10.0",
-        "perspective-2-9-0": "npm:@finos/perspective@2.9.0",
-        "perspective-2-8-0": "npm:@finos/perspective@2.8.0",
         "perspective-2-7-0": "npm:@finos/perspective@2.7.0",
         "perspective-2-6-0": "npm:@finos/perspective@2.6.0",
-        "perspective-2-5-0": "npm:@finos/perspective@2.5.0",
         "perspective-2-4-0": "npm:@finos/perspective@2.4.0",
         "perspective-2-3-0": "npm:@finos/perspective@2.3.0",
-        "perspective-2-2-0": "npm:@finos/perspective@2.2.0",
-        "perspective-2-1-0": "npm:@finos/perspective@2.1.0",
-        "perspective-1-1-0": "npm:@finos/perspective@1.1.0",
-        "perspective-1-0-0": "npm:@finos/perspective@1.0.0",
-        "perspective-0-10-0": "npm:@finos/perspective@0.10.0",
-        "perspective-0-9-0": "npm:@finos/perspective@0.9.0"
-    },
-    "deprecatedDependencies": {
         "perspective-2-0-0": "npm:@finos/perspective@2.0.0",
         "perspective-1-9-0": "npm:@finos/perspective@1.9.0",
         "perspective-1-8-0": "npm:@finos/perspective@1.8.0",
@@ -76,6 +73,9 @@
         "perspective-1-5-0": "npm:@finos/perspective@1.5.0",
         "perspective-1-4-0": "npm:@finos/perspective@1.4.0",
         "perspective-1-3-0": "npm:@finos/perspective@1.3.0",
-        "perspective-1-2-0": "npm:@finos/perspective@1.2.0"
+        "perspective-1-2-0": "npm:@finos/perspective@1.2.0",
+        "perspective-1-1-0": "npm:@finos/perspective@1.1.0",
+        "perspective-0-10-0": "npm:@finos/perspective@0.10.0"
+
     }
 }

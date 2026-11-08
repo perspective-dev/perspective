@@ -400,6 +400,7 @@ enum t_ctx_feature {
     CTX_FEAT_DELTA,
     CTX_FEAT_ALERT,
     CTX_FEAT_ENABLED,
+    CTX_FEAT_REMOVES,
     CTX_FEAT_LAST_FEATURE
 };
 

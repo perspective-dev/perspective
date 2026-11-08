@@ -39,6 +39,15 @@ let partial_change_nonseq = [
     { x: 4, y: "string2", z: true },
 ];
 
+async function arrow_rows(perspective, view) {
+    const table = await perspective.table(await view.to_arrow());
+    const flat = await table.view();
+    const rows = await flat.to_json();
+    await flat.delete();
+    await table.delete();
+    return rows;
+}
+
 async function match_delta(
     perspective,
     delta,
@@ -721,8 +730,18 @@ function it_old_behavior(name, capture) {
                 view.on_update(
                     async function (updated) {
                         const expected = [
-                            { x: 1, y: 1, z: 1 },
-                            { x: 2, y: 1, z: 1 },
+                            {
+                                y: "string1",
+                                x: 1,
+                                "y (distinct count)": 1,
+                                z: 1,
+                            },
+                            {
+                                y: "string2",
+                                x: 2,
+                                "y (distinct count)": 1,
+                                z: 1,
+                            },
                         ];
                         await match_delta(perspective, updated.delta, expected);
                         view.delete();
@@ -795,7 +814,10 @@ function it_old_behavior(name, capture) {
                     });
                     view.on_update(
                         async function (updated) {
-                            const expected = [{ x: 1 }, { x: 2 }];
+                            const expected = [
+                                { y: "string1", x: 1 },
+                                { y: "string2", x: 2 },
+                            ];
                             await match_delta(
                                 perspective,
                                 updated.delta,
@@ -844,9 +866,19 @@ function it_old_behavior(name, capture) {
                 view.on_update(
                     async function (updated) {
                         const expected = [
-                            { x: 13, y: 6, z: 3 },
-                            { x: 1, y: 1, z: 1 },
-                            { x: 2, y: 1, z: 1 },
+                            { y: null, x: 13, "y (distinct count)": 6, z: 3 },
+                            {
+                                y: "string1",
+                                x: 1,
+                                "y (distinct count)": 1,
+                                z: 1,
+                            },
+                            {
+                                y: "string2",
+                                x: 2,
+                                "y (distinct count)": 1,
+                                z: 1,
+                            },
                         ];
                         await match_delta(perspective, updated.delta, expected);
                         view.delete();
@@ -872,7 +904,11 @@ function it_old_behavior(name, capture) {
                     });
                     view.on_update(
                         async function (updated) {
-                            const expected = [{ z: 3 }, { z: 1 }, { z: 1 }];
+                            const expected = [
+                                { y: null, z: 3 },
+                                { y: "string1", z: 1 },
+                                { y: "string2", z: 1 },
+                            ];
                             await match_delta(
                                 perspective,
                                 updated.delta,
@@ -897,8 +933,8 @@ function it_old_behavior(name, capture) {
                 view.on_update(
                     async function (updated) {
                         const expected = [
-                            { x: 10, y: 3, z: 2 },
-                            { x: 5, y: 1, z: 2 },
+                            { y: null, x: 10, "y (distinct count)": 3, z: 2 },
+                            { y: null, x: 5, "y (distinct count)": 1, z: 2 },
                         ];
                         await match_delta(perspective, updated.delta, expected);
                         view.delete();
@@ -928,8 +964,18 @@ function it_old_behavior(name, capture) {
                         async function (updated) {
                             // aggregates are sorted, in this case by string comparator - "string1" and "string2" are at the end
                             const expected = [
-                                { x: 1, y: 1, z: 1 },
-                                { x: 4, y: 1, z: 1 },
+                                {
+                                    y: "string1",
+                                    x: 1,
+                                    "y (distinct count)": 1,
+                                    z: 1,
+                                },
+                                {
+                                    y: "string2",
+                                    x: 4,
+                                    "y (distinct count)": 1,
+                                    z: 1,
+                                },
                             ];
                             await match_delta(
                                 perspective,
@@ -961,7 +1007,11 @@ function it_old_behavior(name, capture) {
 
                     view.on_update(
                         async function (updated) {
-                            const expected = [{ x: 13 }, { x: 2 }, { x: 1 }];
+                            const expected = [
+                                { y: null, x: 13 },
+                                { y: "string2", x: 2 },
+                                { y: "string1", x: 1 },
+                            ];
                             await match_delta(
                                 perspective,
                                 updated.delta,
@@ -990,11 +1040,10 @@ function it_old_behavior(name, capture) {
                     });
                     view.on_update(
                         async function (updated) {
-                            const json = await view.to_json();
-                            json.map((d) => {
-                                delete d["__ROW_PATH__"];
-                            });
-                            const expected = json.slice(0, 3);
+                            const json = await arrow_rows(perspective, view);
+                            const expected = json.filter((d) =>
+                                [null, "string1", "string2"].includes(d.y),
+                            );
                             await match_delta(
                                 perspective,
                                 updated.delta,
@@ -1021,11 +1070,10 @@ function it_old_behavior(name, capture) {
                     });
                     view.on_update(
                         async function (updated) {
-                            const json = await view.to_json();
-                            json.map((d) => {
-                                delete d["__ROW_PATH__"];
-                            });
-                            const expected = json.slice(0, 3);
+                            const json = await arrow_rows(perspective, view);
+                            const expected = json.filter((d) =>
+                                [null, "string1", "string2"].includes(d.y),
+                            );
                             await match_delta(
                                 perspective,
                                 updated.delta,
@@ -1053,14 +1101,14 @@ function it_old_behavior(name, capture) {
                     });
                     view.on_update(
                         async function (updated) {
-                            const expected = await view.to_json();
+                            const expected = await arrow_rows(
+                                perspective,
+                                view,
+                            );
                             await match_delta(
                                 perspective,
                                 updated.delta,
-                                expected.slice(0, 3).map((x) => {
-                                    delete x.__ROW_PATH__;
-                                    return x;
-                                }),
+                                expected.slice(0, 3),
                             );
                             view.delete();
                             table.delete();
@@ -1117,10 +1165,7 @@ function it_old_behavior(name, capture) {
                     });
                     view.on_update(
                         async function (updated) {
-                            const json = await view.to_json();
-                            json.map((d) => {
-                                delete d["__ROW_PATH__"];
-                            });
+                            const json = await arrow_rows(perspective, view);
                             const expected = json.slice(0, 3);
                             await match_delta(
                                 perspective,
@@ -1148,10 +1193,7 @@ function it_old_behavior(name, capture) {
                     });
                     view.on_update(
                         async function (updated) {
-                            const json = await view.to_json();
-                            json.map((d) => {
-                                delete d["__ROW_PATH__"];
-                            });
+                            const json = await arrow_rows(perspective, view);
                             const expected = json.slice(0, 3);
                             await match_delta(
                                 perspective,
@@ -1178,10 +1220,7 @@ function it_old_behavior(name, capture) {
                     });
                     view.on_update(
                         async function (updated) {
-                            const json = await view.to_json();
-                            json.map((d) => {
-                                delete d["__ROW_PATH__"];
-                            });
+                            const json = await arrow_rows(perspective, view);
                             const expected = [json[0], json[3], json[4]];
                             await match_delta(
                                 perspective,
@@ -1209,10 +1248,7 @@ function it_old_behavior(name, capture) {
                     });
                     view.on_update(
                         async function (updated) {
-                            const json = await view.to_json();
-                            json.map((d) => {
-                                delete d["__ROW_PATH__"];
-                            });
+                            const json = await arrow_rows(perspective, view);
                             const expected = [json[0], json[3], json[4]];
                             await match_delta(
                                 perspective,
@@ -1262,11 +1298,10 @@ function it_old_behavior(name, capture) {
                 });
                 view.on_update(
                     async function (updated) {
-                        const json = await view.to_json();
-                        json.map((d) => {
-                            delete d["__ROW_PATH__"];
-                        });
-                        const expected = json.slice(0, 3);
+                        const json = await arrow_rows(perspective, view);
+                        const expected = json.filter((d) =>
+                            [null, "string1", "string2"].includes(d.y),
+                        );
                         await match_delta(perspective, updated.delta, expected);
                         view.delete();
                         table.delete();
@@ -1287,14 +1322,9 @@ function it_old_behavior(name, capture) {
                 });
                 view.on_update(
                     async function (updated) {
-                        const expected = (await view.to_json()).filter(
-                            (d) =>
-                                d["__ROW_PATH__"].length === 0 ||
-                                d["__ROW_PATH__"][0] !== "c",
-                        );
-                        expected.map((d) => {
-                            delete d["__ROW_PATH__"];
-                        });
+                        const expected = (
+                            await arrow_rows(perspective, view)
+                        ).filter((d) => d.y !== "c");
                         await match_delta(perspective, updated.delta, expected);
                         view.delete();
                         table.delete();
@@ -1321,14 +1351,9 @@ function it_old_behavior(name, capture) {
                     });
                     view.on_update(
                         async function (updated) {
-                            const expected = (await view.to_json()).filter(
-                                (d) =>
-                                    d["__ROW_PATH__"].length === 0 ||
-                                    d["__ROW_PATH__"][0] !== "c",
-                            );
-                            expected.map((d) => {
-                                delete d["__ROW_PATH__"];
-                            });
+                            const expected = (
+                                await arrow_rows(perspective, view)
+                            ).filter((d) => d.y !== "c");
                             await match_delta(
                                 perspective,
                                 updated.delta,
@@ -1363,10 +1388,7 @@ function it_old_behavior(name, capture) {
                     view.on_update(
                         async function (updated) {
                             // aggregates are sorted, in this case by string comparator - "string1" and "string2" are at the end
-                            const json = await view.to_json();
-                            json.map((d) => {
-                                delete d["__ROW_PATH__"];
-                            });
+                            const json = await arrow_rows(perspective, view);
                             const expected = [json[3], json[4]];
                             await match_delta(
                                 perspective,

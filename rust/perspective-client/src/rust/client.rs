@@ -590,8 +590,11 @@ impl Client {
             let request_options: TableOptions = options.clone().into();
             let mut options = options;
             let source_index = view.source.as_ref().and_then(|x| x.options.index.clone());
+            let config = view.get_config().await?;
+            let is_pivoted = !config.group_by.is_empty();
+            let keyed_by_group =
+                options.index.is_none() && is_pivoted && config.split_by.is_empty();
             if let (None, Some(index)) = (&options.index, &source_index) {
-                let config = view.get_config().await?;
                 let is_flat = config.group_by.is_empty() && config.split_by.is_empty();
                 let has_index = index
                     .columns()
@@ -619,6 +622,11 @@ impl Client {
                 return Err(ClientError::BadTableOptions);
             }
 
+            if keyed_by_group {
+                options.index = Some(config.group_by.clone().into());
+                options.limit = None;
+            }
+
             let window = ViewWindow::default();
             let arrow = view.to_arrow(window).await?;
             let mut table = self
@@ -641,7 +649,11 @@ impl Client {
             };
 
             let update_token = view.on_update(callback, options).await?;
-            let remove_token = if source_index.is_some() && source_index == table.get_index() {
+            let replica_index = table.get_index();
+            let mirrors_removes =
+                replica_index.is_some() && (is_pivoted || source_index == replica_index);
+
+            let remove_token = if mirrors_removes {
                 let table_ = table.clone();
                 let callback = asyncfn!(table_, async move |removed: OnRemoveData| {
                     if let Some(indices) = removed.indices.as_ref().filter(|x| !x.is_empty()) {

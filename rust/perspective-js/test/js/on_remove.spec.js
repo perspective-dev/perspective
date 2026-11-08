@@ -66,6 +66,7 @@ async function fixture(perspective, index) {
             await table.remove([2]);
             const removed = await promise;
             expect(removed.port_id).toEqual(0);
+            expect(removed.cause).toEqual("key");
             expect(await removed_indices(perspective, removed.indices)).toEqual(
                 [{ x: 2 }],
             );
@@ -244,6 +245,212 @@ async function fixture(perspective, index) {
             expect(message).toContain("missing index column");
             await keys_view.delete();
             await keys.delete();
+            await cleanup();
+        });
+    });
+
+    test.describe("View.on_remove pivoted", function () {
+        async function pivoted(perspective, config, options = { index: "x" }) {
+            const table = await perspective.table(data, options);
+            const view = await table.view(config);
+            const cleanup = async () => {
+                await view.delete();
+                await table.delete();
+            };
+
+            return { table, view, cleanup };
+        }
+
+        const by_x = (a, b) => (a.x ?? -Infinity) - (b.x ?? -Infinity);
+
+        test("fires when a `remove` dissolves a group", async function () {
+            const { table, view, cleanup } = await pivoted(perspective, {
+                group_by: ["y"],
+            });
+            const sub = await subscribe(view);
+            const promise = sub.next();
+            await table.remove([2]);
+            const removed = await promise;
+            expect(removed.cause).toEqual("group");
+            expect(await removed_indices(perspective, removed.indices)).toEqual(
+                [{ y: "b" }],
+            );
+            await view.remove_remove(sub.id);
+            await cleanup();
+        });
+
+        test("fires when an `update` re-keys the last member of a group", async function () {
+            const { table, view, cleanup } = await pivoted(perspective, {
+                group_by: ["y"],
+            });
+            const sub = await subscribe(view);
+            const promise = sub.next();
+            await table.update([{ x: 2, y: "a", z: 2.5 }]);
+            const removed = await promise;
+            expect(removed.cause).toEqual("group");
+            expect(await removed_indices(perspective, removed.indices)).toEqual(
+                [{ y: "b" }],
+            );
+            await view.remove_remove(sub.id);
+            await cleanup();
+        });
+
+        test("does not fire when a group only changes aggregates", async function () {
+            const { table, view, cleanup } = await pivoted(perspective, {
+                group_by: ["y"],
+            });
+            const sub = await subscribe(view);
+            await table.update([{ x: 1, y: "a", z: 9.5 }]);
+            await table.size();
+            expect(sub.calls.length).toEqual(0);
+            const promise = sub.next();
+            await table.remove([3]);
+            await promise;
+            expect(sub.calls.length).toEqual(1);
+            expect(
+                await removed_indices(perspective, sub.calls[0].indices),
+            ).toEqual([{ y: "c" }]);
+            await view.remove_remove(sub.id);
+            await cleanup();
+        });
+
+        test("reports every level of a dropped subtree", async function () {
+            const { table, view, cleanup } = await pivoted(perspective, {
+                group_by: ["y", "x"],
+            });
+            const sub = await subscribe(view);
+            const promise = sub.next();
+            await table.remove([2]);
+            const removed = await promise;
+            const rows = await removed_indices(perspective, removed.indices);
+            expect(rows.sort(by_x)).toEqual([
+                { y: "b", x: null },
+                { y: "b", x: 2 },
+            ]);
+            await view.remove_remove(sub.id);
+            await cleanup();
+        });
+
+        test("`group_rollup_mode: 'flat'` reports leaves only", async function () {
+            const { table, view, cleanup } = await pivoted(perspective, {
+                group_by: ["y", "x"],
+                group_rollup_mode: "flat",
+            });
+            const sub = await subscribe(view);
+            const promise = sub.next();
+            await table.remove([2]);
+            const removed = await promise;
+            expect(await removed_indices(perspective, removed.indices)).toEqual(
+                [{ y: "b", x: 2 }],
+            );
+            await view.remove_remove(sub.id);
+            await cleanup();
+        });
+
+        test("`clear` reports nothing", async function () {
+            const { table, view, cleanup } = await pivoted(perspective, {
+                group_by: ["y"],
+            });
+            const sub = await subscribe(view);
+            await table.clear();
+            await table.update(data);
+            await table.size();
+            expect(sub.calls.length).toEqual(0);
+            expect(await view.num_rows()).toEqual(4);
+            await view.remove_remove(sub.id);
+            await cleanup();
+        });
+
+        test("fires when a `limit` eviction dissolves a group", async function () {
+            const { table, view, cleanup } = await pivoted(
+                perspective,
+                { group_by: ["y"] },
+                { limit: 3 },
+            );
+            const sub = await subscribe(view);
+            const promise = sub.next();
+            await table.update([{ x: 4, y: "d", z: 4.5 }]);
+            const removed = await promise;
+            expect(removed.cause).toEqual("group");
+            expect(await removed_indices(perspective, removed.indices)).toEqual(
+                [{ y: "a" }],
+            );
+            await view.remove_remove(sub.id);
+            await cleanup();
+        });
+    });
+
+    test.describe("View.on_remove filter", function () {
+        async function filtered(perspective) {
+            const table = await perspective.table(data, { index: "x" });
+            const view = await table.view({ filter: [["y", "==", "a"]] });
+            const cleanup = async () => {
+                await view.delete();
+                await table.delete();
+            };
+
+            return { table, view, cleanup };
+        }
+
+        test("fires when an `update` moves a row outside the filter", async function () {
+            const { table, view, cleanup } = await filtered(perspective);
+            const sub = await subscribe(view);
+            const promise = sub.next();
+            await table.update([{ x: 1, y: "b", z: 1.5 }]);
+            const removed = await promise;
+            expect(removed.cause).toEqual("filter");
+            expect(await removed_indices(perspective, removed.indices)).toEqual(
+                [{ x: 1 }],
+            );
+            expect(await view.to_json()).toEqual([]);
+            await view.remove_remove(sub.id);
+            await cleanup();
+        });
+
+        test("does not fire when a row re-enters the filter", async function () {
+            const { table, view, cleanup } = await filtered(perspective);
+            const sub = await subscribe(view);
+            const promise = sub.next();
+            await table.update([{ x: 1, y: "b", z: 1.5 }]);
+            await promise;
+            await table.update([{ x: 1, y: "a", z: 1.5 }]);
+            await table.size();
+            expect(sub.calls.length).toEqual(1);
+            expect(await view.to_json()).toEqual([{ x: 1, y: "a", z: 1.5 }]);
+            await view.remove_remove(sub.id);
+            await cleanup();
+        });
+
+        test("does not fire for an `update` inside the filter", async function () {
+            const { table, view, cleanup } = await filtered(perspective);
+            const sub = await subscribe(view);
+            await table.update([{ x: 1, y: "a", z: 9.5 }]);
+            await table.size();
+            expect(sub.calls.length).toEqual(0);
+            await view.remove_remove(sub.id);
+            await cleanup();
+        });
+
+        test("`key` and `filter` removals arrive as separate messages", async function () {
+            const { table, view, cleanup } = await filtered(perspective);
+            const sub = await subscribe(view);
+            const first = sub.next();
+            await table.remove([2]);
+            await first;
+            const second = sub.next();
+            await table.update([{ x: 1, y: "b", z: 1.5 }]);
+            await second;
+            expect(sub.calls.map((removed) => removed.cause)).toEqual([
+                "key",
+                "filter",
+            ]);
+            expect(
+                await removed_indices(perspective, sub.calls[0].indices),
+            ).toEqual([{ x: 2 }]);
+            expect(
+                await removed_indices(perspective, sub.calls[1].indices),
+            ).toEqual([{ x: 1 }]);
+            await view.remove_remove(sub.id);
             await cleanup();
         });
     });
