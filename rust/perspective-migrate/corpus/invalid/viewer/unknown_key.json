@@ -1,0 +1,9 @@
+{
+    "kind": "viewer",
+    "input": {
+        "plugin": "Datagrid",
+        "bogus": 1
+    },
+    "pointer": "",
+    "message": "bogus"
+}

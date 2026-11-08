@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_migrate::{Kind, Migrator};
+use perspective_migrate::{Form, Kind, Migrator};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -21,7 +21,7 @@ use crate::py_err::PyPerspectiveError;
 ///
 /// # Arguments
 ///
-/// - `kind` - `"view"`, `"viewer"` or `"workspace"`.
+/// - `kind` - `"view"`, `"viewer"`, `"panel"` or `"workspace"`.
 /// - `config` - The config, as a `dict`.
 /// - `from_version` - The release that wrote `config`, used only when it has no
 ///   `version` field.
@@ -33,17 +33,7 @@ pub fn migrate(
     config: &Bound<'_, PyAny>,
     from_version: Option<&str>,
 ) -> PyResult<Py<PyAny>> {
-    let kind = match kind {
-        "view" => Kind::View,
-        "viewer" => Kind::Viewer,
-        "workspace" => Kind::Workspace,
-        _ => {
-            return Err(PyValueError::new_err(format!(
-                "Unknown config kind `{kind}`; expected `view`, `viewer` or `workspace`"
-            )));
-        },
-    };
-
+    let kind: Kind = kind.parse().map_err(PyValueError::new_err)?;
     let value: serde_json::Value = pythonize::depythonize(config)?;
     let migrated = Migrator::new()
         .migrate(kind, from_version, value)
@@ -56,4 +46,23 @@ pub fn migrate(
     });
 
     Ok(pythonize::pythonize(py, &result)?.unbind())
+}
+
+/// Check that `config` is valid for the current schema without migrating it,
+/// raising `PerspectiveError` naming the offending JSON pointer otherwise.
+///
+/// # Arguments
+///
+/// - `kind` - `"view"`, `"viewer"`, `"panel"` or `"workspace"`.
+/// - `config` - The config, as a `dict`.
+/// - `strict` - Require the complete `save()` form rather than the field-wise
+///   `restore()` update form.
+#[pyfunction]
+#[pyo3(signature = (kind, config, strict = false))]
+pub fn validate(kind: &str, config: &Bound<'_, PyAny>, strict: bool) -> PyResult<()> {
+    let kind: Kind = kind.parse().map_err(PyValueError::new_err)?;
+    let form = if strict { Form::Complete } else { Form::Update };
+    let value: serde_json::Value = pythonize::depythonize(config)?;
+    perspective_migrate::validate(kind, form, &value)
+        .map_err(|error| PyPerspectiveError::new_err(error.to_string()))
 }

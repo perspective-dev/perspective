@@ -2018,6 +2018,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
+ "serde_path_to_error",
  "wasm-bindgen",
 ]
 

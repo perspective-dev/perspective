@@ -305,6 +305,7 @@ impl PerspectiveViewerElement {
                 .map(|id| id.as_str().to_owned())
                 .collect(),
             palette,
+            unknown: UnknownKeys,
         })?)
     }
 }
@@ -1133,9 +1134,10 @@ impl PerspectiveViewerElement {
                         .flatten()
                     {
                         Some(panel) => Target::Claimed(panel),
-                        None => Target::Create(Box::new(ViewerConfigInitial::try_from(
-                            std::mem::take(&mut update),
-                        )?)),
+                        None => Target::Create(Box::new(
+                            ViewerConfigInitial::try_from(std::mem::take(&mut update))
+                                .map_err(ApiError::new)?,
+                        )),
                     }
                 },
             };

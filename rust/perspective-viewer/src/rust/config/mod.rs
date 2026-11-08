@@ -24,7 +24,6 @@ mod options;
 mod plugin_static_config;
 pub mod view_config;
 mod viewer_config;
-mod workspace_config;
 
 pub use column_config_schema::*;
 pub use columns_config::*;
@@ -33,7 +32,7 @@ pub use export_method::*;
 pub use number_series_style::*;
 pub use number_string_format::*;
 pub use options::*;
+pub use perspective_client::config::viewer::*;
 pub use plugin_static_config::*;
 pub use view_config::*;
 pub use viewer_config::*;
-pub use workspace_config::*;

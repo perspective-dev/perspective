@@ -68,6 +68,7 @@ pub async fn get_viewer_config(
             table,
             view_config,
             theme,
+            unknown: UnknownKeys,
         },
     })
 }

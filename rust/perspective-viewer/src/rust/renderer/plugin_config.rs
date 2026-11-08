@@ -77,7 +77,7 @@ struct ColumnSchemaEnv<'a> {
 /// A per-column config map. Each inner [`serde_json::Map`] is a flat collection
 /// of plugin-defined JSON keys whose shape is dictated by the active plugin's
 /// [`crate::config::ColumnConfigSchema`].
-pub type ColumnConfigMap = HashMap<String, serde_json::Map<String, serde_json::Value>>;
+pub use crate::config::ColumnConfigMap;
 
 /// Per-plugin config bucket. Holds the per-column style map and the
 /// plugin-level config map for one plugin. Buckets are keyed by plugin

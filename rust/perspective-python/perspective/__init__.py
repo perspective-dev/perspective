@@ -27,6 +27,7 @@ __all__ = [
     "num_cpus",
     "set_num_cpus",
     "migrate",
+    "validate",
     "system_info",
 ]
 
@@ -365,6 +366,7 @@ from .perspective import (
     num_cpus,
     set_num_cpus,
     migrate,
+    validate,
 )
 
 

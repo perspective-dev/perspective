@@ -18,7 +18,6 @@
 
 mod browser;
 mod completion;
-mod css;
 mod css_vars;
 mod custom_element;
 mod datetime;
@@ -37,7 +36,6 @@ mod weak_scope;
 
 pub use browser::*;
 pub use completion::*;
-pub use css::*;
 pub use css_vars::*;
 pub use custom_element::*;
 pub use datetime::*;
@@ -49,6 +47,7 @@ pub use modal_position::*;
 pub use number_format::*;
 pub use pending_effects::*;
 pub use perspective_client::clone;
+pub use perspective_client::config::viewer::css::*;
 pub use plugin_host_state::*;
 pub use ptr_eq_rc::*;
 pub use pubsub::*;

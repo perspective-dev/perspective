@@ -1,0 +1,8 @@
+{
+    "kind": "view",
+    "input": {
+        "group_by": "State"
+    },
+    "pointer": "/group_by",
+    "message": "invalid type"
+}

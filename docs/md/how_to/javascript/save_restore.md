@@ -31,7 +31,8 @@ await elem.restore(token);
 `restore()` validates its argument, rejecting for example a key the config
 format does not define; when a rejected token is stamped with another release's
 `version`, the error names that release. Tokens saved by older releases should
-be upgraded first — see [Migrating saved configs](../rust/migrate.md).
+be upgraded first — see [Migrating saved configs](../rust/migrate.md), whose
+`validate()` runs the same check outside a viewer.
 
 ```javascript
 // This will error!

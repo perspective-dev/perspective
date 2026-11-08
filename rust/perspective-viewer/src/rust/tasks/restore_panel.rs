@@ -94,7 +94,7 @@ async fn plan_binding(
         return Ok(Some(BindPlan::Keep));
     };
 
-    let name = table.name()?;
+    let name = table.name().map_err(ApiError::new)?;
     let same = session.get_table().is_some_and(|t| t.get_name() == name);
 
     if same && !session.is_errored() && renderer.failure().is_none() {

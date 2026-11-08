@@ -19,8 +19,8 @@
     },
     "error": {
         "kind": "MissingTable",
-        "step": "ws.panel_table",
-        "panel": "A"
+        "step": "viewer.null_table",
+        "pointer": "/panels/A"
     },
     "notices": [],
     "steps": []

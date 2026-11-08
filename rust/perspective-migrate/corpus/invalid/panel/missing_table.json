@@ -1,0 +1,8 @@
+{
+    "kind": "panel",
+    "input": {
+        "plugin": "Datagrid"
+    },
+    "pointer": "",
+    "message": "table"
+}

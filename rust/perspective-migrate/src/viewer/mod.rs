@@ -67,8 +67,14 @@ fn plugin_config_object(
 }
 
 fn null_table(token: &mut Map<String, Value>, cx: &mut StepCx) -> Result<(), MigrateError> {
-    if cx.kind() == Kind::Viewer && token.get("table").is_some_and(Value::is_null) {
-        token.shift_remove("table");
+    match cx.kind() {
+        Kind::Viewer if token.get("table").is_some_and(Value::is_null) => {
+            token.shift_remove("table");
+        },
+        Kind::Panel if !token.get("table").is_some_and(Value::is_string) => {
+            return Err(cx.missing_table());
+        },
+        _ => {},
     }
 
     Ok(())

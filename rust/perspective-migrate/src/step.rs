@@ -97,10 +97,10 @@ impl StepCx<'_> {
     }
 
     /// A [`MigrateError::MissingTable`] for the workspace panel `panel`.
-    pub fn missing_table(&self, panel: &str) -> MigrateError {
+    pub fn missing_table(&self) -> MigrateError {
         MigrateError::MissingTable {
             step: self.step,
-            panel: panel.to_owned(),
+            pointer: self.pointer.to_owned(),
         }
     }
 
@@ -162,7 +162,7 @@ impl Run<'_> {
 
                 let before = target.clone();
                 let mut cx = StepCx {
-                    kind: self.kind,
+                    kind: self.kind_at(&pointer),
                     from,
                     step: entry.step.id,
                     pointer: &pointer,
@@ -180,6 +180,16 @@ impl Run<'_> {
         }
 
         Ok(())
+    }
+
+    fn kind_at(&self, pointer: &str) -> Kind {
+        if self.kind == Kind::Workspace
+            && (pointer.starts_with("/panels/") || pointer.starts_with("/viewers/"))
+        {
+            Kind::Panel
+        } else {
+            self.kind
+        }
     }
 
     fn owns(&self, plugins: &[&'static str], target: &Map<String, Value>) -> bool {
@@ -207,6 +217,8 @@ fn targets(kind: Kind, layer: Layer, root: &Value) -> Vec<String> {
         },
         (Kind::Viewer, Layer::Workspace) => vec![],
         (Kind::Viewer, _) => vec![String::new()],
+        (Kind::Panel, Layer::Workspace) => vec![],
+        (Kind::Panel, _) => vec![String::new()],
         (Kind::Workspace, Layer::Workspace) => vec![String::new()],
         (Kind::Workspace, Layer::View) => {
             let mut out = panels(root);

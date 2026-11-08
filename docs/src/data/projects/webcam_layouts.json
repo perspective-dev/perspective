@@ -49,7 +49,6 @@
     {
         "plugin": "Heatmap",
         "plugin_config": {},
-        "settings": true,
         "title": "Downsampled Heatmap Cam",
         "group_by": ["x"],
         "split_by": ["y"],

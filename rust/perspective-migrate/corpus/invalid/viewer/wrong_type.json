@@ -1,0 +1,8 @@
+{
+    "kind": "viewer",
+    "input": {
+        "plugin": 1
+    },
+    "pointer": "/plugin",
+    "message": "invalid type"
+}

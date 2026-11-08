@@ -1,0 +1,26 @@
+{
+    "kind": "panel",
+    "source": "hand-written: a `panels` entry carrying the element-level `settings` flag",
+    "input": {
+        "version": "5.6.1",
+        "plugin": "Datagrid",
+        "table": "t",
+        "settings": true
+    },
+    "output": {
+        "version": "CURRENT",
+        "plugin": "Datagrid",
+        "table": "t"
+    },
+    "notices": [
+        {
+            "kind": "Dropped",
+            "step": "viewer.unknown_keys",
+            "pointer": "/settings",
+            "value": true
+        }
+    ],
+    "steps": [
+        "viewer.unknown_keys"
+    ]
+}

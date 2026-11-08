@@ -37,8 +37,8 @@ import * as perspective_client from "../../dist/wasm/perspective-js.js";
 import { load_wasm_stage_0 } from "./wasm/decompress.ts";
 import { host_supports_memory64 } from "./wasm/features.ts";
 import * as engine from "./wasm/engine.ts";
-import { MigrateLoader } from "./wasm/migrate.ts";
-import type { MigrateKind, MigrateResult } from "./wasm/migrate.ts";
+import { load_validator } from "./wasm/migrate.ts";
+import type { MigrateKind, MigrateResult, Validator } from "./wasm/migrate.ts";
 
 export { host_supports_memory64 } from "./wasm/features.ts";
 export type {
@@ -51,6 +51,7 @@ export type {
     MigrateKind,
     MigrateNotice,
     MigrateResult,
+    Validator,
 } from "./wasm/migrate.ts";
 import { compile_perspective } from "./wasm/emscripten_api.ts";
 import * as psp_websocket from "./websocket.ts";
@@ -83,14 +84,31 @@ const uncompressed_client_wasm = await fs
 
 await perspective_client.default({ module_or_path: uncompressed_client_wasm });
 
-const MIGRATE = new MigrateLoader();
-MIGRATE.register(async () => {
-    const buffer = await fs.readFile(
-        path.join(__dirname, "../../dist/wasm/perspective-migrate.wasm"),
-    );
+let VALIDATOR: Promise<Validator> | undefined;
 
-    return await load_wasm_stage_0(buffer.buffer as ArrayBuffer);
-});
+/**
+ * Load the `perspective-migrate` binary and return synchronous `migrate()`
+ * and `validate()` over it; the process shares one instance.
+ *
+ * # Examples
+ *
+ * ```javascript
+ * const validator = await perspective.create_validator();
+ * for (const token of tokens) {
+ *     validator.validate("viewer", token, { strict: true });
+ * }
+ * ```
+ */
+export async function create_validator(): Promise<Validator> {
+    VALIDATOR ??= fs
+        .readFile(
+            path.join(__dirname, "../../dist/wasm/perspective-migrate.wasm"),
+        )
+        .then((buffer) => load_wasm_stage_0(buffer.buffer as ArrayBuffer))
+        .then(load_validator);
+
+    return await VALIDATOR;
+}
 
 /**
  * Upgrade a persisted config written by any Perspective release since 2.0.0
@@ -99,8 +117,8 @@ MIGRATE.register(async () => {
  * # Arguments
  *
  * - `kind` - `"view"` for a `ViewConfig`, `"viewer"` for a
- *   `<perspective-viewer>` `save()` token, or `"workspace"` for a
- *   `saveWorkspace()` token.
+ *   `<perspective-viewer>` `save()` token, `"panel"` for one workspace
+ *   panel, or `"workspace"` for a `saveWorkspace()` token.
  * - `config` - The config to upgrade.
  * - `from_version` - The release which wrote `config`, used only when it has
  *   no `version` field.
@@ -110,7 +128,26 @@ export async function migrate<T = Record<string, unknown>>(
     config: unknown,
     from_version?: string,
 ): Promise<MigrateResult<T>> {
-    return await MIGRATE.migrate<T>(kind, config, from_version);
+    return (await create_validator()).migrate<T>(kind, config, from_version);
+}
+
+/**
+ * Check that a config is valid for this release without migrating it,
+ * rejecting with the offending JSON pointer and reason otherwise.
+ *
+ * # Arguments
+ *
+ * - `kind` - `"view"`, `"viewer"`, `"panel"` or `"workspace"`.
+ * - `config` - The config to check.
+ * - `options.strict` - Require the complete `save()` form rather than the
+ *   field-wise `restore()` update form.
+ */
+export async function validate(
+    kind: MigrateKind,
+    config: unknown,
+    options?: { strict?: boolean },
+): Promise<void> {
+    (await create_validator()).validate(kind, config, options);
 }
 
 function make_node_disk_bridge({
@@ -586,7 +623,9 @@ export default {
     join,
     websocket,
     worker,
+    create_validator,
     migrate,
+    validate,
     host_supports_memory64,
     get_hosted_table_names,
     on_hosted_tables_update,

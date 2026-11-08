@@ -1,0 +1,15 @@
+{
+    "kind": "viewer",
+    "form": "complete",
+    "input": {
+        "version": "5.8.0",
+        "plugin": "Datagrid",
+        "table": "t",
+        "title": null,
+        "theme": null,
+        "plugin_config": {},
+        "columns_config": {}
+    },
+    "pointer": "",
+    "message": "settings"
+}

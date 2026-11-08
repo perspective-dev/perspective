@@ -12,10 +12,11 @@
 
 use std::collections::BTreeMap;
 
-use perspective_client::config::{Filter, ViewConfig};
-
-use crate::config::{OptionalUpdate, PanelViewerConfig, UnknownKeys, ViewerConfigInitial};
-use crate::utils::CssKind;
+use super::css::CssKind;
+use super::{
+    Layout, OptionalUpdate, PanelViewerConfig, UnknownKeys, ViewerConfigError, ViewerConfigInitial,
+};
+use crate::config::{Filter, ViewConfig};
 
 /// A derived `Table`'s definition: the `Table` its source `View` reads, and
 /// the config of that `View`; generic over the `table` slot, which is a name
@@ -27,9 +28,11 @@ pub struct DerivedTableConfig<T: ts_rs::TS = String> {
     /// derived `Table`.
     pub table: T,
 
+    /// The source `View`'s config.
     #[serde(flatten)]
     pub view_config: ViewConfig,
 
+    /// Rejects keys no field above consumed.
     #[serde(flatten, skip_serializing)]
     #[ts(skip)]
     pub unknown: UnknownKeys,
@@ -41,7 +44,10 @@ pub struct DerivedTableConfig<T: ts_rs::TS = String> {
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 #[serde(untagged)]
 pub enum TableRef {
+    /// A hosted `Table`'s name.
     Name(String),
+
+    /// An inline derived-table definition.
     Derived(Box<DerivedTableConfig<TableRef>>),
 }
 
@@ -115,12 +121,10 @@ impl From<String> for TableRef {
 impl TableRef {
     /// The concrete `Table` name, or an error for an inline definition which
     /// a restore boundary has not resolved.
-    pub fn name(&self) -> Result<&str, perspective_js::utils::ApiError> {
+    pub fn name(&self) -> Result<&str, ViewerConfigError> {
         match self {
             Self::Name(name) => Ok(name),
-            Self::Derived(_) => Err(perspective_js::utils::ApiError::new(
-                "Unresolved inline derived table",
-            )),
+            Self::Derived(_) => Err(ViewerConfigError::UnresolvedTableRef),
         }
     }
 }
@@ -165,21 +169,26 @@ impl<'de> serde::Deserialize<'de> for TableRef {
 
 /// The workspace config format (`{version, active?, layout, panels}`) —
 /// the multi-panel counterpart of the single-panel [`ViewerConfig`] — as
-/// emitted by [`PerspectiveViewerElement::save`].
+/// emitted by `saveWorkspace()`.
 ///
 /// - `panels` entries are [`PanelViewerConfig`]s: per-panel state only, no
 ///   `settings` key (element-level state).
 /// - `active` names the panel targeted by the *open* settings sidebar; it is
 ///   omitted when the sidebar is closed.
-#[derive(serde::Serialize, ts_rs::TS)]
+///
+/// [`ViewerConfig`]: super::ViewerConfig
+#[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize, ts_rs::TS)]
 pub struct WorkspaceConfig {
+    /// The `@perspective-dev/viewer` version that wrote this workspace.
     pub version: String,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// The panel targeted by the open settings sidebar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub active: Option<String>,
 
-    pub layout: Option<crate::js::Layout>,
+    /// The panel arrangement.
+    pub layout: Option<Layout>,
 
     /// `BTreeMap` (not `HashMap`) so `save()` serializes panels in a
     /// DETERMINISTIC (sorted) key order — a fresh `HashMap` per call
@@ -189,7 +198,7 @@ pub struct WorkspaceConfig {
 
     /// Named derived `Table`s, each a `View` of its `table` promoted to a
     /// `Table`. A `BTreeMap` for the same determinism reason as `panels`.
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub derived_tables: BTreeMap<String, DerivedTableConfig>,
@@ -197,7 +206,7 @@ pub struct WorkspaceConfig {
     /// The element-level global (master/detail cross-) filters. A transient
     /// overlay on every detail panel's view — persisted here, never in a
     /// per-panel entry. Omitted when empty.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub global_filters: Vec<Filter>,
@@ -206,7 +215,7 @@ pub struct WorkspaceConfig {
     /// Roles are layout state (like the panel arrangement), so they persist;
     /// which master contributed which clause does not — restored
     /// `global_filters` are one unattributed bucket. Omitted when empty.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub masters: Vec<String>,
@@ -214,16 +223,22 @@ pub struct WorkspaceConfig {
     /// Named color-scale definitions shared by every panel: CSS custom
     /// property name (`--psp-user--<kind>-<name>`) → canonical CSS
     /// value.
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub palette: BTreeMap<String, String>,
+
+    /// Rejects keys no field above consumed.
+    #[serde(flatten, skip_serializing)]
+    #[ts(skip)]
+    pub unknown: UnknownKeys,
 }
 
-/// The [`PerspectiveViewerElement::restoreWorkspace`] argument: a field-wise
-/// update of the element's workspace state, like [`ViewerConfigUpdate`] for a
-/// panel, where an absent key is unchanged, `null` resets and a value
-/// replaces.
+/// The `restoreWorkspace()` argument: a field-wise update of the element's
+/// workspace state, like [`ViewerConfigUpdate`] for a panel, where an absent
+/// key is unchanged, `null` resets and a value replaces.
+///
+/// [`ViewerConfigUpdate`]: super::ViewerConfigUpdate
 #[derive(serde::Deserialize, ts_rs::TS)]
 pub struct WorkspaceConfigUpdate {
     /// The `@perspective-dev/viewer` version a saved workspace was written
@@ -239,11 +254,11 @@ pub struct WorkspaceConfigUpdate {
     #[ts(optional)]
     pub active: OptionalUpdate<String>,
 
-    /// The layout tree to stage, naming every `panels` key (or, without
-    /// `panels`, every existing panel id) exactly once.
+    /// The layout tree to stage, naming `panels` keys (or, without `panels`,
+    /// existing panel ids) at most once; a panel it omits is dropped.
     #[serde(default)]
     #[ts(optional)]
-    pub layout: Option<crate::js::Layout>,
+    pub layout: Option<Layout>,
 
     /// The complete replacement panel set, each [`ViewerConfigInitial`] entry
     /// creating a new panel (`{}` empties the element); absent keeps the
@@ -281,6 +296,7 @@ pub struct WorkspaceConfigUpdate {
     #[ts(optional)]
     pub palette: OptionalUpdate<BTreeMap<String, String>>,
 
+    /// Rejects keys no field above consumed.
     #[serde(flatten)]
     #[ts(skip)]
     pub unknown: UnknownKeys,

@@ -68,7 +68,13 @@ export type * from "../../dist/ts-rs/GetClientOptions.d.ts";
 export type * from "../../dist/ts-rs/GetViewOptions.d.ts";
 export type * from "../../dist/ts-rs/GetViewMode.d.ts";
 
-export { init, init_client, migrate } from "./bootstrap.ts";
+export {
+    create_validator,
+    init,
+    init_client,
+    migrate,
+    validate,
+} from "./bootstrap.ts";
 export type {
     InitOptions,
     ViewerWasmRegistration,
@@ -81,7 +87,14 @@ export type {
     MigrateKind,
     MigrateNotice,
     MigrateResult,
+    Validator,
 } from "@perspective-dev/client";
-import { init, init_client, migrate } from "./bootstrap.ts";
+import {
+    create_validator,
+    init,
+    init_client,
+    migrate,
+    validate,
+} from "./bootstrap.ts";
 
-export default { init, init_client, migrate };
+export default { create_validator, init, init_client, migrate, validate };

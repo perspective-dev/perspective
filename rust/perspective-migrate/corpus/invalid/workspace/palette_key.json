@@ -1,0 +1,10 @@
+{
+    "kind": "workspace",
+    "input": {
+        "palette": {
+            "--psp-user--bogus-x": "red"
+        }
+    },
+    "pointer": "/palette",
+    "message": "must start with"
+}

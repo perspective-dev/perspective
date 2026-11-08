@@ -26,6 +26,7 @@ mod filters;
 mod plugin;
 mod sort;
 mod view_config;
+pub mod viewer;
 pub mod windows;
 
 pub use aggregates::*;

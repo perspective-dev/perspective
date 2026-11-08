@@ -28,7 +28,7 @@ use super::wiring::{
     clear_active_callbacks, create_active_subscriptions, inject_active_callbacks,
     subscribe_panel_titles,
 };
-use crate::config::ViewerConfigInitial;
+use crate::config::{DecodeConfig, ViewerConfigInitial};
 use crate::derived::suggest_name;
 use crate::queries::*;
 use crate::renderer::Renderer;

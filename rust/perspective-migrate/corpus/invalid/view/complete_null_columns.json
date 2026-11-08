@@ -1,0 +1,9 @@
+{
+    "kind": "view",
+    "form": "complete",
+    "input": {
+        "columns": null
+    },
+    "pointer": "/columns",
+    "message": "invalid type"
+}

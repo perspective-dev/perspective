@@ -1,0 +1,9 @@
+{
+    "kind": "panel",
+    "input": {
+        "table": "t",
+        "settings": true
+    },
+    "pointer": "",
+    "message": "settings"
+}

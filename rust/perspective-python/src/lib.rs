@@ -79,5 +79,6 @@ fn perspective(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(num_cpus, m)?)?;
     m.add_function(wrap_pyfunction!(set_num_cpus, m)?)?;
     m.add_function(wrap_pyfunction!(migrate::migrate, m)?)?;
+    m.add_function(wrap_pyfunction!(migrate::validate, m)?)?;
     Ok(())
 }

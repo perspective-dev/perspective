@@ -74,6 +74,7 @@ The first argument names the document being upgraded (`Kind` in Rust):
 | ------------------- | ----------------- | ----------------------------------------------------------------- |
 | `"view"`            | `Kind::View`      | An engine `ViewConfig`, as passed to `table.view()`               |
 | `"viewer"`          | `Kind::Viewer`    | A `<perspective-viewer>` `save()` / `restore()` token             |
+| `"panel"`           | `Kind::Panel`     | One workspace panel: a `panels` entry, with no `settings`         |
 | `"workspace"`       | `Kind::Workspace` | A `saveWorkspace()` token, or a 2.x–4.x `<perspective-workspace>` |
 
 Viewer and workspace output is stamped with the current `version`, so migrating
@@ -86,7 +87,45 @@ reports `notices` for information which has no current representation
 A config is rejected with a `MigrateError` only when no valid current form
 exists — for example a pre-5.2 workspace panel with no `table`, or a 2.x
 `ViewConfig` which names both an alias and its canonical key (`row_pivot` and
-`group_by`).
+`group_by`). Every result is checked against the current config types before it
+is returned, so a migration can never hand back a config `restore()` would
+reject.
+
+## Validating configs
+
+`validate()` runs that final check alone, without migrating: it deserializes a
+config into the current types and reports the first problem by JSON pointer.
+Unknown keys, wrong types and inconsistent workspaces (a `layout` naming an
+unknown panel or a panel twice, a negative `sizes` entry, a `palette` key
+without a `--psp-user--<kind>-` prefix, a cycle in `derived_tables`) are
+rejected; table names, column names, plugin names and plugin payloads are not
+checked, because only a running viewer knows them.
+
+By default a config is checked in the field-wise form `restore()` and
+`restoreWorkspace()` accept, where every key is optional. The strict form
+requires the complete token `save()` and `saveWorkspace()` emit:
+
+```javascript
+import perspective from "@perspective-dev/client";
+
+await perspective.validate("workspace", token);
+await perspective.validate("workspace", token, { strict: true });
+```
+
+```python
+import perspective
+
+perspective.validate("viewer", token)
+perspective.validate("viewer", token, strict=True)
+```
+
+```rust
+use perspective_migrate::{Form, Kind, validate};
+
+validate(Kind::Panel, Form::Complete, &panel)?;
+```
+
+In the browser `validate()` uses the same `migrate` binary as `migrate()`.
 
 ## Third-party plugins
 

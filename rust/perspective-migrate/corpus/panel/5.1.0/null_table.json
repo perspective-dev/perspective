@@ -1,0 +1,16 @@
+{
+    "kind": "panel",
+    "source": "hand-written from v5.1.0:rust/perspective-viewer/src/rust/config/workspace_config.rs",
+    "input": {
+        "version": "5.1.0",
+        "plugin": "Datagrid",
+        "table": null
+    },
+    "error": {
+        "kind": "MissingTable",
+        "step": "viewer.null_table",
+        "pointer": ""
+    },
+    "notices": [],
+    "steps": []
+}

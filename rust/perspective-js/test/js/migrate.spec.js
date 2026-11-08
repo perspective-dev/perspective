@@ -77,3 +77,36 @@ test.describe("migrate", function () {
         ).rejects.toThrow("view.v2_aliases");
     });
 });
+
+test.describe("create_validator", function () {
+    test("migrates synchronously", async function () {
+        const validator = await perspective.create_validator();
+        const result = validator.migrate("view", V2_VIEW, "2.6.0");
+        expect(result).toEqual(
+            await perspective.migrate("view", V2_VIEW, "2.6.0"),
+        );
+    });
+
+    test("validates synchronously", async function () {
+        const validator = await perspective.create_validator();
+        validator.validate("view", { group_by: ["State"] });
+        expect(() => validator.validate("view", { bogus: 1 })).toThrow("bogus");
+
+        expect(() =>
+            validator.validate(
+                "viewer",
+                { plugin: "Datagrid" },
+                { strict: true },
+            ),
+        ).toThrow("settings");
+    });
+
+    test("returns one shared instance", async function () {
+        const [a, b] = await Promise.all([
+            perspective.create_validator(),
+            perspective.create_validator(),
+        ]);
+
+        expect(a).toBe(b);
+    });
+});
