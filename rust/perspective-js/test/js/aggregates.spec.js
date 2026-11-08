@@ -2596,15 +2596,23 @@ const std = (nums) => {
             );
 
             await table.update({ g: ["a", "a"], x: [3, 5], k: [1, 2] });
+            const high = await table.view({
+                group_by: ["g"],
+                columns: ["x"],
+                aggregates: { x: "high" },
+            });
+
+            const low = await table.view({
+                group_by: ["g"],
+                columns: ["x"],
+                aggregates: { x: "low" },
+            });
+
             await table.update({ k: [2], x: [null] });
-
-            expect(await grouped_order_aggregate(table, "x", "high")).toEqual([
-                5, 5,
-            ]);
-            expect(await grouped_order_aggregate(table, "x", "low")).toEqual([
-                3, 3,
-            ]);
-
+            expect((await high.to_columns()).x).toEqual([5, 5]);
+            expect((await low.to_columns()).x).toEqual([3, 3]);
+            await high.delete();
+            await low.delete();
             await table.delete();
         });
     });

@@ -431,6 +431,75 @@ class TestView(object):
             {"__ROW_PATH__": ["a"], "y": 300 / 2},
         ]
 
+    def test_view_aggregate_mean_skips_nulls_before_float_promotion(self):
+        tbl = Table([{"g": "a", "x": 1}, {"g": "a", "x": None}, {"g": "a", "x": 2.5}])
+        view = tbl.view(aggregates={"x": "avg"}, group_by=["g"], columns=["x"])
+        assert view.to_columns()["x"] == [1.75, 1.75]
+
+    ORDER_AGGREGATES_EXPECTED = {
+        "avg": 1.5,
+        "min": 1,
+        "max": 2,
+        "low": 1,
+        "high": 2,
+        "q1": 1,
+        "median": 1.5,
+        "q3": 2,
+        "high minus low": 1,
+    }
+
+    def _order_aggregate(self, tbl, agg):
+        view = tbl.view(aggregates={"x": agg}, group_by=["g"], columns=["x"])
+        out = view.to_columns()["x"]
+        view.delete()
+        return out
+
+    def test_view_order_aggregates_skip_nulls(self):
+        tbl = Table({"g": "string", "x": "float"})
+        tbl.update({"g": ["a", "a", "a"], "x": [1, None, 2]})
+        results = {
+            agg: self._order_aggregate(tbl, agg)
+            for agg in self.ORDER_AGGREGATES_EXPECTED
+        }
+        assert results == {k: [v, v] for k, v in self.ORDER_AGGREGATES_EXPECTED.items()}
+
+    def test_view_order_aggregates_skip_nulls_from_later_update(self):
+        tbl = Table({"g": "string", "x": "float"})
+        tbl.update({"g": ["a"], "x": [1]})
+        tbl.update({"g": ["a", "a"], "x": [None, 2]})
+        results = {
+            agg: self._order_aggregate(tbl, agg)
+            for agg in self.ORDER_AGGREGATES_EXPECTED
+        }
+        assert results == {k: [v, v] for k, v in self.ORDER_AGGREGATES_EXPECTED.items()}
+
+    def test_view_high_low_skip_nulls_with_negative_values(self):
+        tbl = Table({"g": "string", "x": "float"})
+        tbl.update({"g": ["a", "a", "a"], "x": [-1, None, -2]})
+        assert self._order_aggregate(tbl, "high") == [-1, -1]
+        assert self._order_aggregate(tbl, "low") == [-2, -2]
+        assert self._order_aggregate(tbl, "max") == [-1, -1]
+        assert self._order_aggregate(tbl, "min") == [-2, -2]
+        assert self._order_aggregate(tbl, "high minus low") == [1, 1]
+
+    def test_view_order_aggregates_null_for_all_null_group(self):
+        tbl = Table({"g": "string", "x": "float"})
+        tbl.update({"g": ["a", "a"], "x": [None, None]})
+        results = {
+            agg: self._order_aggregate(tbl, agg)
+            for agg in self.ORDER_AGGREGATES_EXPECTED
+        }
+        assert results == {k: [None, None] for k in self.ORDER_AGGREGATES_EXPECTED}
+
+    def test_view_high_low_keep_mark_when_row_updated_to_null(self):
+        tbl = Table({"g": "string", "x": "float", "k": "integer"}, index="k")
+        tbl.update({"g": ["a", "a"], "x": [3, 5], "k": [1, 2]})
+        high = tbl.view(aggregates={"x": "high"}, group_by=["g"], columns=["x"])
+        low = tbl.view(aggregates={"x": "low"}, group_by=["g"], columns=["x"])
+        tbl.update({"k": [2], "x": [None]})
+        assert high.to_columns()["x"] == [5, 5]
+        assert low.to_columns()["x"] == [3, 3]
+
     def test_view_aggregate_gmv(self):
         data = {
             "division": [

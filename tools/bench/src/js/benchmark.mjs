@@ -166,6 +166,10 @@ async function benchmark_node_version(version, benchmarks_table) {
             ...(process.env.PSP_BENCH_WASM32 && {
                 PSP_BENCH_WASM32: process.env.PSP_BENCH_WASM32,
             }),
+            ...(process.env.PSP_BENCH_SUPERSTORE_COPIES && {
+                PSP_BENCH_SUPERSTORE_COPIES:
+                    process.env.PSP_BENCH_SUPERSTORE_COPIES,
+            }),
         },
     });
 

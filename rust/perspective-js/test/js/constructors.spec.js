@@ -1503,6 +1503,73 @@ function validate_typed_array(typed_array, column_data) {
             table.delete();
         });
 
+        test("Preserves nulls before an integer column is promoted to float", async function () {
+            const table = await perspective.table([
+                { x: 1 },
+                { x: null },
+                { x: 2.5 },
+            ]);
+
+            expect(await table.schema()).toEqual({ x: "float" });
+            const view = await table.view();
+            expect((await view.to_columns()).x).toEqual([1, null, 2.5]);
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Preserves nulls before a column-oriented integer column is promoted to float", async function () {
+            const leading = await perspective.table({ x: [null, 1, 2.5] });
+            expect(await leading.schema()).toEqual({ x: "float" });
+            const leading_view = await leading.view();
+            expect((await leading_view.to_columns()).x).toEqual([null, 1, 2.5]);
+            await leading_view.delete();
+            await leading.delete();
+
+            const interior = await perspective.table({ x: [1, 2, null, 2.5] });
+            expect(await interior.schema()).toEqual({ x: "float" });
+            const interior_view = await interior.view();
+            expect((await interior_view.to_columns()).x).toEqual([
+                1,
+                2,
+                null,
+                2.5,
+            ]);
+            await interior_view.delete();
+            await interior.delete();
+        });
+
+        test("Preserves nulls before an integer column is promoted to string", async function () {
+            const table = await perspective.table([
+                { x: 1 },
+                { x: null },
+                { x: "a" },
+            ]);
+
+            expect(await table.schema()).toEqual({ x: "string" });
+            const view = await table.view();
+            expect((await view.to_columns()).x).toEqual(["1", null, "a"]);
+            await view.delete();
+            await table.delete();
+        });
+
+        test("Nulls before a float promotion do not count toward avg", async function () {
+            const table = await perspective.table([
+                { g: "a", x: 1 },
+                { g: "a", x: null },
+                { g: "a", x: 2.5 },
+            ]);
+
+            const view = await table.view({
+                group_by: ["g"],
+                columns: ["x"],
+                aggregates: { x: "avg" },
+            });
+
+            expect((await view.to_columns()).x).toEqual([1.75, 1.75]);
+            await view.delete();
+            await table.delete();
+        });
+
         test("has correct size", async function () {
             var table = await perspective.table(data);
             let result = await table.size();

@@ -1842,6 +1842,7 @@ t_stree::update_agg_table(
 
                 drop_invalid(values);
                 if (values.empty()) {
+                    new_value.set(mknull(dst->get_dtype()));
                     dst->set_scalar(dst_ridx, new_value);
                     break;
                 }
@@ -1908,6 +1909,7 @@ t_stree::update_agg_table(
 
                 drop_invalid(values);
                 if (values.empty()) {
+                    new_value.set(mknull(dst->get_dtype()));
                     dst->set_scalar(dst_ridx, new_value);
                     break;
                 }
@@ -1961,7 +1963,9 @@ t_stree::update_agg_table(
                 old_value.set(dst_scalar);
 
                 if (!src_scalar.is_valid()) {
-                    new_value.set(is_new ? mknone() : dst_scalar);
+                    new_value.set(
+                        is_new ? mknull(dst->get_dtype()) : dst_scalar
+                    );
                 } else if (!is_new && dst_scalar.is_valid()) {
                     new_value.set(std::max(dst_scalar, src_scalar));
                 } else {
@@ -1977,7 +1981,9 @@ t_stree::update_agg_table(
                 old_value.set(dst_scalar);
 
                 if (!src_scalar.is_valid()) {
-                    new_value.set(is_new ? mknone() : dst_scalar);
+                    new_value.set(
+                        is_new ? mknull(dst->get_dtype()) : dst_scalar
+                    );
                 } else if (!is_new && dst_scalar.is_valid()) {
                     new_value.set(std::min(dst_scalar, src_scalar));
                 } else {
@@ -2001,6 +2007,7 @@ t_stree::update_agg_table(
 
                 drop_invalid(values);
                 if (values.empty()) {
+                    new_value.set(mknull(dst->get_dtype()));
                     dst->set_scalar(dst_ridx, new_value);
                     break;
                 }
