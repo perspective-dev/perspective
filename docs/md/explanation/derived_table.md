@@ -84,12 +84,26 @@ default `group_rollup_mode` of `"rollup"` that includes every subtotal row and
 the grand total; under `"flat"` it is the leaves only; under `"total"` it is the
 single total row. `split_rollup_mode` selects the data columns the same way.
 
+`sort`, `expand`/`collapse` and `group_by_depth` describe how a `View` is
+presented rather than what it contains, and do not affect the derived `Table`.
+
 <span class="warning">Set `group_rollup_mode: "flat"` on the source `View`
 before grouping or filtering a derived `Table`, or its subtotal rows will be
 counted alongside the rows they already summarize.</span>
 
-`sort`, `expand`/`collapse` and `group_by_depth` describe how a `View` is
-presented rather than what it contains, and do not affect the derived `Table`.
+Under `group_rollup_mode: "flat"` every row is a leaf, so the `group_by`
+columns identify it: the derived `Table` is indexed on them, `get_index()`
+reports them, a `View`'s `__ID__` is the group key, and `vlookup` into the
+`Table` is by group values. A `null` group value is an ordinary key. Because the
+`Table` has an `index`, a flat `View` of it reports groups which lose all their
+rows through `on_remove` with `cause: "key"`, and a replica of that `View` on
+another client (see [Client/Server Replicated](./architecture/client_server.md))
+inherits the index and mirrors the derived `Table` exactly.
+
+Under `"rollup"` and `"total"` the `Table` has no `index`: a subtotal row and a
+descendant whose remaining key values are `null` share the same key columns, so
+the key columns cannot identify a row. Omitting a key column through the
+`schema` option also leaves the `Table` unindexed.
 
 ## Read-only
 

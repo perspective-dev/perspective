@@ -22,6 +22,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::config::GroupRollupMode;
 use crate::proto::request::ClientReq;
 use crate::proto::response::ClientResp;
 use crate::proto::{
@@ -592,8 +593,10 @@ impl Client {
             let source_index = view.source.as_ref().and_then(|x| x.options.index.clone());
             let config = view.get_config().await?;
             let is_pivoted = !config.group_by.is_empty();
-            let keyed_by_group =
-                options.index.is_none() && is_pivoted && config.split_by.is_empty();
+            let keyed_by_group = options.index.is_none()
+                && is_pivoted
+                && config.split_by.is_empty()
+                && config.group_rollup_mode == GroupRollupMode::Flat;
             if let (None, Some(index)) = (&options.index, &source_index) {
                 let is_flat = config.group_by.is_empty() && config.split_by.is_empty();
                 let has_index = index
@@ -615,6 +618,16 @@ impl Client {
                 self.crate_table_inner(data, request_options, entity_id.clone())
                     .await?;
 
+                let has_keys = options
+                    .schema
+                    .as_ref()
+                    .is_none_or(|schema| config.group_by.iter().all(|x| schema.contains_key(x)));
+
+                if keyed_by_group && has_keys {
+                    options.index = TableIndex::from_columns(config.group_by.clone());
+                    options.limit = None;
+                }
+
                 return Ok(Table::new(entity_id, self.clone(), options.into()));
             }
 
@@ -623,7 +636,7 @@ impl Client {
             }
 
             if keyed_by_group {
-                options.index = Some(config.group_by.clone().into());
+                options.index = TableIndex::from_columns(config.group_by.clone());
                 options.limit = None;
             }
 

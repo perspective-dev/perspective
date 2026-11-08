@@ -35,6 +35,31 @@ test.describe("Derived table removes from a group_by view", function () {
         await source.delete();
     });
 
+    test("emptying a group in flat mode fires on_remove with its key", async function () {
+        const source = await make_source(6);
+        const config = { ...CONFIG, group_rollup_mode: "flat" };
+        const view = await source.view(config);
+        const derived = await perspective.table(view);
+        const child = await derived.view();
+        const { promise, resolve } = Promise.withResolvers();
+        const token = await child.on_remove(resolve);
+        await source.remove([0, 3]);
+        const { indices, cause } = await promise;
+        const keys = await perspective.table(indices);
+        const keys_view = await keys.view();
+        expect(await derived.size()).toEqual(2);
+        expect(cause).toEqual("key");
+        expect(await keys_view.to_json()).toEqual([{ g: "a" }]);
+        await keys_view.delete();
+        await keys.delete();
+        await child.remove_remove(token);
+        await expect_tree_parity(source, config, derived, view);
+        await child.delete();
+        await derived.delete();
+        await view.delete();
+        await source.delete();
+    });
+
     test("a freed slot is reused by a different group", async function () {
         const source = await make_source(6);
         const view = await source.view(CONFIG);

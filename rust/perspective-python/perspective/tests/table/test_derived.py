@@ -34,10 +34,7 @@ def _unrolled(view, group_by):
     names = list(columns.keys())
     out = []
     for i, path in enumerate(paths):
-        row = {
-            g: (path[d] if d < len(path) else None)
-            for d, g in enumerate(group_by)
-        }
+        row = {g: (path[d] if d < len(path) else None) for d, g in enumerate(group_by)}
 
         row.update({n: columns[n][i] for n in names})
         out.append(row)
@@ -57,7 +54,13 @@ class TestDerivedTable(object):
     def _source(self):
         client = Server().new_local_client()
         table = client.table(
-            {"id": "integer", "g": "string", "s": "string", "x": "float", "y": "integer"},
+            {
+                "id": "integer",
+                "g": "string",
+                "s": "string",
+                "x": "float",
+                "y": "integer",
+            },
             index="id",
         )
 
@@ -134,6 +137,40 @@ class TestDerivedTable(object):
 
         with pytest.raises(Exception):
             derived.clear()
+
+    def test_flat_group_by_is_indexed_by_its_key(self):
+        client, table = self._source()
+        view = table.view(group_by=["g"], columns=["x"], group_rollup_mode="flat")
+        derived = client.table(view)
+        assert derived.get_index() == "g"
+        child = derived.view()
+        assert _same(child.to_records(), _unrolled(view, ["g"]))
+        table.remove([0, 3, 6, 9, 12, 15, 18, 21])
+        assert derived.size() == 2
+        assert _same(child.to_records(), _unrolled(view, ["g"]))
+
+    def test_flat_group_by_is_indexed_by_all_of_its_keys(self):
+        client, table = self._source()
+        view = table.view(group_by=["g", "s"], columns=["x"], group_rollup_mode="flat")
+
+        derived = client.table(view)
+        assert derived.get_index() == ["g", "s"]
+        child = derived.view()
+        assert _same(child.to_records(), _unrolled(view, ["g", "s"]))
+        table.update([{"id": 100, "g": "a", "s": "Wed", "x": 1.0, "y": 1}])
+        assert _same(child.to_records(), _unrolled(view, ["g", "s"]))
+
+    def test_rollup_group_by_has_no_index(self):
+        client, table = self._source()
+        view = table.view(group_by=["g"], columns=["x"])
+        derived = client.table(view)
+        assert derived.get_index() is None
+
+    def test_flat_group_by_without_key_column_has_no_index(self):
+        client, table = self._source()
+        view = table.view(group_by=["g"], columns=["x"], group_rollup_mode="flat")
+        derived = client.table(view, schema={"x": "float"})
+        assert derived.get_index() is None
 
     def test_index_and_limit_rejected(self):
         client, table = self._source()

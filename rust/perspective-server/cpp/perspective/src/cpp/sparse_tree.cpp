@@ -1037,9 +1037,17 @@ t_stree::update_shape_from_static(const t_dtree_ctx& ctx) {
         t_tscalar value =
             m_symtable.get_interned_tscalar(dtree.get_value(filter, dptidx));
 
+        if (!value.is_valid()) {
+            value = mknull(value.get_dtype());
+        }
+
         t_tscalar sortby_value = m_symtable.get_interned_tscalar(
             dtree.get_sortby_value(filter, dptidx)
         );
+
+        if (!sortby_value.is_valid()) {
+            sortby_value = mknull(sortby_value.get_dtype());
+        }
 
         t_uindex src_ridx = dptidx;
 
