@@ -214,6 +214,19 @@ t_stree::get_sortby_value(t_index idx) const {
 
 namespace {
 
+/// Removes every non-valid scalar so order statistics see only real values.
+void
+drop_invalid(std::vector<t_tscalar>& values) {
+    values.erase(
+        std::remove_if(
+            values.begin(),
+            values.end(),
+            [](const t_tscalar& value) { return !value.is_valid(); }
+        ),
+        values.end()
+    );
+}
+
 /// The strand delta dtype for a source column, signed for unsigned sources.
 t_dtype
 strand_value_dtype(t_dtype dtype) {
@@ -1827,6 +1840,12 @@ t_stree::update_agg_table(
                     values
                 );
 
+                drop_invalid(values);
+                if (values.empty()) {
+                    dst->set_scalar(dst_ridx, new_value);
+                    break;
+                }
+
                 new_value.set(*std::max_element(values.begin(), values.end()));
                 dst->set_scalar(dst_ridx, new_value);
             } break;
@@ -1887,6 +1906,12 @@ t_stree::update_agg_table(
                     values
                 );
 
+                drop_invalid(values);
+                if (values.empty()) {
+                    dst->set_scalar(dst_ridx, new_value);
+                    break;
+                }
+
                 new_value.set(*std::min_element(values.begin(), values.end()));
                 dst->set_scalar(dst_ridx, new_value);
             } break;
@@ -1934,10 +1959,13 @@ t_stree::update_agg_table(
                 t_tscalar dst_scalar = dst->get_scalar(dst_ridx);
 
                 old_value.set(dst_scalar);
-                new_value.set(src_scalar);
 
-                if (dst_scalar.is_valid()) {
+                if (!src_scalar.is_valid()) {
+                    new_value.set(is_new ? mknone() : dst_scalar);
+                } else if (!is_new && dst_scalar.is_valid()) {
                     new_value.set(std::max(dst_scalar, src_scalar));
+                } else {
+                    new_value.set(src_scalar);
                 }
 
                 dst->set_scalar(dst_ridx, new_value);
@@ -1947,11 +1975,15 @@ t_stree::update_agg_table(
                 t_tscalar dst_scalar = dst->get_scalar(dst_ridx);
 
                 old_value.set(dst_scalar);
-                new_value.set(src_scalar);
 
-                if (dst_scalar.is_valid()) {
+                if (!src_scalar.is_valid()) {
+                    new_value.set(is_new ? mknone() : dst_scalar);
+                } else if (!is_new && dst_scalar.is_valid()) {
                     new_value.set(std::min(dst_scalar, src_scalar));
+                } else {
+                    new_value.set(src_scalar);
                 }
+
                 dst->set_scalar(dst_ridx, new_value);
             } break;
             case AGGTYPE_HIGH_MINUS_LOW: {
@@ -1966,6 +1998,13 @@ t_stree::update_agg_table(
                     pkeys,
                     values
                 );
+
+                drop_invalid(values);
+                if (values.empty()) {
+                    dst->set_scalar(dst_ridx, new_value);
+                    break;
+                }
+
                 auto low_high =
                     std::minmax_element(values.begin(), values.end());
                 t_tscalar first;
@@ -2813,6 +2852,7 @@ t_stree::get_aggregate(t_index idx, t_index aggnum) const {
 
 t_tscalar
 t_stree::get_aggregate_median(std::vector<t_tscalar>& values, float n) const {
+    drop_invalid(values);
     const auto size = values.size();
     const float raw_size = static_cast<float>(size) * n;
     bool is_even_size = fabsf(roundf(raw_size) - raw_size) <= 0.00001;

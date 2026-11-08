@@ -32,6 +32,8 @@ public:
     typedef ROLLING_T t_rolling;
     typedef RESULT_T t_result;
 
+    static constexpr bool skip_invalid = false;
+
     RESULT_T value(ROLLING_T rs);
     ROLLING_T reduce(const RAW_DATA_T* biter, const RAW_DATA_T* eiter);
     ROLLING_T roll_up(const ROLLING_T* biter, const ROLLING_T* eiter);
@@ -157,6 +159,8 @@ template <typename RAW_DATA_T, typename ROLLING_T, typename RESULT_T>
 class PERSPECTIVE_EXPORT t_aggimpl_hwm
     : public t_aggimpl<RAW_DATA_T, ROLLING_T, RESULT_T> {
 public:
+    static constexpr bool skip_invalid = true;
+
     RESULT_T
     value(ROLLING_T rs) { return RESULT_T(rs); }
 
@@ -181,6 +185,8 @@ template <typename RAW_DATA_T, typename ROLLING_T, typename RESULT_T>
 class PERSPECTIVE_EXPORT t_aggimpl_lwm
     : public t_aggimpl<RAW_DATA_T, ROLLING_T, RESULT_T> {
 public:
+    static constexpr bool skip_invalid = true;
+
     RESULT_T
     value(ROLLING_T rs) { return RESULT_T(rs); }
 
@@ -236,6 +242,30 @@ build_aggregate_helper(
 ) {
     typedef typename AGGIMPL_T::t_rolling t_rolling;
     const t_rolling* base = ocolumn->get_nth_base<t_rolling>();
+
+    if constexpr (AGGIMPL_T::skip_invalid) {
+        if (ocolumn->is_status_enabled()) {
+            std::vector<t_rolling> sbuf;
+            sbuf.reserve(ecidx - bcidx);
+            for (t_index cidx = bcidx; cidx < ecidx; ++cidx) {
+                const auto uidx = static_cast<t_uindex>(cidx);
+                if (*ocolumn->get_nth_status(uidx) == STATUS_VALID) {
+                    sbuf.push_back(base[cidx]);
+                }
+            }
+
+            if (sbuf.empty()) {
+                ocolumn->set_valid(nidx, false);
+                return;
+            }
+
+            t_rolling rolling =
+                aggimpl.roll_up(sbuf.data(), sbuf.data() + sbuf.size());
+            ocolumn->set_nth<t_rolling>(nidx, rolling);
+            return;
+        }
+    }
+
     const t_rolling* biter = base + bcidx;
     const t_rolling* eiter = base + ecidx;
     t_rolling rolling = aggimpl.roll_up(biter, eiter);
@@ -257,19 +287,30 @@ build_aggregate_helper(
 ) {
     const t_column* c_ocolumn = ocolumn;
     typedef typename AGGIMPL_T::t_rolling t_rolling;
-    std::vector<t_rolling> sbuf(ecidx - bcidx);
+    const bool skip_invalid =
+        AGGIMPL_T::skip_invalid && ocolumn->is_status_enabled();
+    std::vector<t_rolling> sbuf;
+    sbuf.reserve(ecidx - bcidx);
     for (t_index sidx = bcidx; sidx < ecidx; ++sidx) {
+        const auto uidx = static_cast<t_uindex>(sidx);
+        if (skip_invalid && *c_ocolumn->get_nth_status(uidx) != STATUS_VALID) {
+            continue;
+        }
 
-        auto tmpv = c_ocolumn->get_nth<const char>(static_cast<t_uindex>(sidx));
-        sbuf[sidx - bcidx] = tmpv;
+        sbuf.push_back(c_ocolumn->get_nth<const char>(uidx));
     }
 
-    if (!sbuf.empty()) {
+    if (sbuf.empty()) {
+        if (skip_invalid) {
+            ocolumn->set_valid(nidx, false);
+        }
 
-        t_rolling rolling =
-            aggimpl.roll_up(sbuf.data(), sbuf.data() + sbuf.size());
-        ocolumn->set_nth<t_rolling>(nidx, rolling);
+        return;
     }
+
+    t_rolling rolling =
+        aggimpl.roll_up(sbuf.data(), sbuf.data() + sbuf.size());
+    ocolumn->set_nth<t_rolling>(nidx, rolling);
 }
 
 template <typename AGGIMPL_T>
@@ -329,6 +370,24 @@ t_aggregate::build_aggregate() {
 
                 t_raw_data* biter = &buffer[0];
                 t_raw_data* eiter = biter + leaf_count;
+
+                if constexpr (AGGIMPL_T::skip_invalid) {
+                    if (icptr->is_status_enabled()) {
+                        eiter = biter;
+                        for (t_uindex lidx = 0; lidx < leaf_count; ++lidx) {
+                            if (*icptr->get_nth_status(blptr[lidx])
+                                == STATUS_VALID) {
+                                *eiter++ = buffer[lidx];
+                            }
+                        }
+
+                        if (biter == eiter && ocolumn->is_status_enabled()) {
+                            ocolumn->set_valid(nidx, false);
+                            continue;
+                        }
+                    }
+                }
+
                 auto tmp = aggimpl.reduce(biter, eiter);
                 ocolumn->set_nth<t_rolling>(nidx, tmp);
             }
