@@ -148,6 +148,8 @@ perspective-viewer {
     --psp-label--edit-mode--content: "Bearbeitungsmodus";
     --psp-label--scroll-lock--content: "Bildlaufsperre";
     --psp-label--column-menus--content: "Spaltenmenüs";
+    --psp-label--command-column--content: "Befehlsspalte";
+    --psp-label--command-cells--content: "Zellenbefehle";
     --psp-label--group-font--content: "Schrift";
     --psp-label--group-rows--content: "Zeilen";
     --psp-label--link--content: "Link";
@@ -195,6 +197,7 @@ perspective-viewer {
     --psp-label--legend-opacity--content: "Legendendeckkraft";
     --psp-label--tooltip-max-column-px--content: "Maximale Spaltenbreite";
     --psp-label--tooltip-opacity--content: "Deckkraft";
+    --psp-label--tooltip-commands--content: "Befehle";
 
     --psp-label--group-axes--content: "Achsen";
     --psp-label--group-facets--content: "Facetten";

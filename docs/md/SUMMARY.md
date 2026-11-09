@@ -57,6 +57,7 @@
     - [Saving and restoring UI state](./how_to/javascript/save_restore.md)
     - [Arranging panels: layouts and dashboards](./how_to/javascript/layout.md)
     - [Listening for events](./how_to/javascript/events.md)
+    - [Adding custom commands](./how_to/javascript/commands.md)
     - [Plugin render limits](./how_to/javascript/plugin_settings.md)
     - [Configuration defaults](./how_to/javascript/config_defaults.md)
     - [Map tile sources](./how_to/javascript/map_tile_sources.md)

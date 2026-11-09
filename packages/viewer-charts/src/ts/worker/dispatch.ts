@@ -76,6 +76,24 @@ export function dispatch(r: WorkerRenderer, msg: ControlMsg): void {
                 state: r.saveZoom(),
             });
             break;
+        case "hitTest": {
+            const requestId = msg.requestId;
+            const pending = r.chartImpl.resolveHit?.(msg.mx, msg.my);
+            Promise.resolve(pending ?? null)
+                .then((hit) => {
+                    r.post({ kind: "hitTestReply", requestId, hit });
+                })
+                .catch((err) => {
+                    r.post({
+                        kind: "hitTestReply",
+                        requestId,
+                        hit: null,
+                        error: String(err),
+                    });
+                });
+            break;
+        }
+
         case "destroy":
             r.destroy();
             break;

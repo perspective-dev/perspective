@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { CartesianChart } from "./cartesian.ts";
+import type { ChartHit } from "../../event-detail.ts";
 import { renderCartesianChromeOverlay } from "./cartesian-render.ts";
 import { tooltipStyleOf } from "../../interaction/tooltip-grid.ts";
 
@@ -292,8 +293,12 @@ function hoverOneSeries(
 export function showCartesianPinnedTooltip(
     chart: CartesianChart,
     pointIdx: number,
+    hit?: ChartHit,
 ): void {
-    chart._tooltip.dismiss();
+    if (chart._pinnedIndex !== pointIdx) {
+        chart._tooltip.dismiss();
+    }
+
     chart._pinnedIndex = pointIdx;
     if (pointIdx < 0 || !chart._xData || !chart._yData) {
         return;
@@ -332,6 +337,7 @@ export function showCartesianPinnedTooltip(
             pos,
             layout,
             tooltipStyleOf(chart._pluginConfig),
+            hit,
         );
     });
 
@@ -353,6 +359,24 @@ function layoutForIndex(
     }
 
     return chart._lastLayout;
+}
+
+/** Whether flat point index `pointIdx` addresses an uploaded point of the current build. */
+export function isPointIndexLive(
+    chart: CartesianChart,
+    pointIdx: number,
+): boolean {
+    if (pointIdx < 0 || !chart._xData || !chart._yData) {
+        return false;
+    }
+
+    if (chart._seriesCapacity > 0) {
+        const s = Math.floor(pointIdx / chart._seriesCapacity);
+        const j = pointIdx % chart._seriesCapacity;
+        return j < (chart._seriesUploadedCounts[s] ?? 0);
+    }
+
+    return pointIdx < chart._dataCount;
 }
 
 export function dismissCartesianPinnedTooltip(chart: CartesianChart): void {

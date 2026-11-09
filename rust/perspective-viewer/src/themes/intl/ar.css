@@ -151,6 +151,8 @@ perspective-viewer {
     --psp-label--edit-mode--content: "وضع التحرير";
     --psp-label--scroll-lock--content: "قفل التمرير";
     --psp-label--column-menus--content: "قوائم الأعمدة";
+    --psp-label--command-column--content: "عمود الأوامر";
+    --psp-label--command-cells--content: "أوامر الخلايا";
     --psp-label--group-font--content: "الخط";
     --psp-label--group-rows--content: "الصفوف";
     --psp-label--link--content: "رابط";
@@ -198,6 +200,7 @@ perspective-viewer {
     --psp-label--legend-opacity--content: "العتامة";
     --psp-label--tooltip-max-column-px--content: "أقصى عرض للعمود";
     --psp-label--tooltip-opacity--content: "العتامة";
+    --psp-label--tooltip-commands--content: "الأوامر";
 
     /* Derived tables */
     --psp-label--derive-table--content: "اشتقاق جدول";

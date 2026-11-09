@@ -161,6 +161,8 @@ perspective-viewer {
     --psp-label--edit-mode--content: "Edit mode";
     --psp-label--scroll-lock--content: "Scroll lock";
     --psp-label--column-menus--content: "Column menus";
+    --psp-label--command-column--content: "Command column";
+    --psp-label--command-cells--content: "Cell commands";
     --psp-label--group-font--content: "Font";
     --psp-label--group-rows--content: "Rows";
     --psp-label--link--content: "Link";
@@ -209,6 +211,7 @@ perspective-viewer {
     --psp-label--legend-opacity--content: "Opacity";
     --psp-label--tooltip-max-column-px--content: "Max column width";
     --psp-label--tooltip-opacity--content: "Opacity";
+    --psp-label--tooltip-commands--content: "Commands";
 
     /* Derived tables */
     --psp-label--derive-table--content: "Derive table";

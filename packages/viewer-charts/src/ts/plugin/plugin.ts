@@ -15,6 +15,7 @@ import type { View } from "@perspective-dev/client";
 import type {
     HTMLPerspectiveViewerElement,
     IPerspectiveViewerPlugin,
+    PerspectiveHitTest,
     PluginStaticConfig,
 } from "@perspective-dev/viewer";
 import {
@@ -188,6 +189,7 @@ const FIELD_SCHEMAS: Record<PluginConfigField, FieldSpec | (() => FieldSpec)> =
         legend_opacity: { kind: "Number", min: 0, max: 1, step: 0.05 },
         tooltip_max_column_px: { kind: "Number", min: 40, max: 512, step: 1 },
         tooltip_opacity: { kind: "Number", min: 0, max: 1, step: 0.05 },
+        tooltip_commands: { kind: "Bool" },
     };
 
 function fieldSpec(
@@ -774,7 +776,10 @@ export class HTMLPerspectiveViewerWebGLPluginElement
         group_rollup_mode?: string;
     }) {
         const defaults = this._effectiveDefaults();
-        const applicable = this._chartType.applicable_plugin_fields;
+        const applicable = this._chartType.applicable_plugin_fields.filter(
+            (k) => k !== "tooltip_commands" || this._hasTooltipCommandScope(),
+        );
+
         const present = new Set(applicable);
 
         const grouped = new Set<PluginConfigField>();
@@ -802,6 +807,30 @@ export class HTMLPerspectiveViewerWebGLPluginElement
                 .map((k) => fieldSpec(k, defaults, this._chartType));
 
         return { fields: [...fields, ...groups] };
+    }
+
+    /**
+     * Whether the host's command schema is scoped to `"chart-tooltip"`,
+     * asked with an empty frame so no schema call runs.
+     */
+    private _hasTooltipCommandScope(): boolean {
+        const viewer = this
+            .parentElement as HTMLPerspectiveViewerElement | null;
+        if (!viewer?.queryCommands) {
+            return false;
+        }
+
+        const frame = {
+            start_row: 0,
+            start_col: 0,
+            paths: [],
+            column_paths: [],
+            data: {},
+        };
+
+        return (
+            viewer.queryCommands(this, "chart-tooltip", frame, []) !== undefined
+        );
     }
 
     private _resolvedTheme(): Theme {
@@ -962,6 +991,26 @@ export class HTMLPerspectiveViewerWebGLPluginElement
      */
     async deselect(): Promise<void> {
         this._renderer?.deselect();
+    }
+
+    async hit_test(
+        x: number,
+        y: number,
+    ): Promise<PerspectiveHitTest | undefined> {
+        const rect = this._glCanvas?.getBoundingClientRect();
+        const is_inside =
+            rect !== undefined &&
+            x >= rect.left &&
+            x <= rect.right &&
+            y >= rect.top &&
+            y <= rect.bottom;
+
+        if (!this._renderer || !is_inside) {
+            return undefined;
+        }
+
+        const hit = await this._renderer.hitTest(x - rect.left, y - rect.top);
+        return hit ?? undefined;
     }
 
     async render(view: View): Promise<Blob> {

@@ -12,6 +12,10 @@
 
 import type { View } from "@perspective-dev/client";
 import type { PluginStaticConfig } from "../../dist/ts-rs/PluginStaticConfig.d.ts";
+import type {
+    PerspectiveCommandContext,
+    PerspectiveHitTest,
+} from "../../dist/wasm/perspective-viewer.js";
 
 /**
  * The `IPerspectiveViewerPlugin` interface defines the necessary API for a
@@ -216,6 +220,13 @@ export interface IPerspectiveViewerPlugin {
      * selection UI may omit it.
      */
     deselect?(): Promise<void>;
+
+    /**
+     * OPTIONAL — the `{ frame, ref }` this plugin drew at the viewport point
+     * `(x, y)`, or `undefined` over nothing; the viewer resolves it to a
+     * `PerspectiveHit`.
+     */
+    hit_test?(x: number, y: number): Promise<PerspectiveHitTest | undefined>;
 
     /**
      * Free any resources acquired by this plugin and prepare to be deleted.

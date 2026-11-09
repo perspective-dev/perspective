@@ -13,6 +13,7 @@
 import type { Canvas2D, Context2D } from "../charts/canvas-types.ts";
 import type { PlotLayout } from "../layout/plot-layout.ts";
 import type { Theme } from "../theme/theme.ts";
+import type { ChartHit } from "../event-detail.ts";
 import {
     measureTooltipGrid,
     paintTooltipGrid,
@@ -75,6 +76,7 @@ export interface HostSink {
         pos: { px: number; py: number },
         bounds: CssBounds,
         style?: TooltipStyle,
+        hit?: ChartHit,
     ): void;
     dismiss(): void;
     setCursor(cursor: string): void;
@@ -105,6 +107,15 @@ export class TooltipController {
     private _hoverTimeoutId: ReturnType<typeof setTimeout> | null = null;
     private _host: HostSink | null = null;
     private _pinned = false;
+
+    /** The chart's mark resolver, run at the click that starts a pin. */
+    hitAt: ((mx: number, my: number) => ChartHit | null) | null = null;
+
+    /** The hit of the last pin-starting click, which its pin consumes. */
+    private _pendingHit: ChartHit | null = null;
+
+    /** The last hovered canvas point, cleared when the pointer leaves. */
+    private _lastPointer: { mx: number; my: number } | null = null;
 
     get isPinned(): boolean {
         return this._pinned;
@@ -156,6 +167,7 @@ export class TooltipController {
      * coords.
      */
     dispatchHover(mx: number, my: number): void {
+        this._lastPointer = { mx, my };
         if (this._pinned || !this._callbacks) {
             return;
         }
@@ -178,11 +190,25 @@ export class TooltipController {
     }
 
     dispatchLeave(): void {
+        this._lastPointer = null;
         if (this._pinned || !this._callbacks) {
             return;
         }
 
         this._callbacks.onLeave();
+    }
+
+    /**
+     * Re-run the hover callback at the last pointer position, so a chart
+     * whose build just replaced its hover state recovers it before the
+     * frame that follows, without a `mousemove`.
+     */
+    rehover(): void {
+        if (this._pinned || !this._callbacks || !this._lastPointer) {
+            return;
+        }
+
+        this._callbacks.onHover(this._lastPointer.mx, this._lastPointer.my);
     }
 
     dispatchClick(mx: number, my: number): void {
@@ -201,6 +227,7 @@ export class TooltipController {
             return;
         }
 
+        this._pendingHit = this.hitAt?.(mx, my) ?? null;
         this._callbacks.onPin?.(mx, my);
     }
 
@@ -216,12 +243,13 @@ export class TooltipController {
         pos: { px: number; py: number },
         bounds: CssBounds,
         style: TooltipStyle = DEFAULT_TOOLTIP_STYLE,
+        hit: ChartHit | undefined = this._pendingHit ?? undefined,
     ): void {
         if (grid.length === 0) {
             return;
         }
 
-        this._host?.pin(grid, pos, bounds, style);
+        this._host?.pin(grid, pos, bounds, style, hit);
         this._pinned = true;
     }
 

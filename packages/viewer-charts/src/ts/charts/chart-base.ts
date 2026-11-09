@@ -50,7 +50,12 @@ import {
     type UserSelectPayload,
 } from "../interaction/tooltip-controller.ts";
 import { LegendController } from "../interaction/legend-controller.ts";
-import type { PerspectiveClickDetail } from "../event-detail.ts";
+import type {
+    ChartHit,
+    ClickTarget,
+    PerspectiveClickDetail,
+} from "../event-detail.ts";
+import { chartHitFromTarget } from "../event-detail.ts";
 import type { ViewConfig } from "@perspective-dev/client";
 import { resolveThemeFromVars, type Theme } from "../theme/theme.ts";
 import { applyColumnColorOverrides } from "../theme/overrides.ts";
@@ -241,7 +246,15 @@ export abstract class AbstractChart implements ChartImplementation {
     _pluginConfig: PluginConfig = { ...DEFAULT_PLUGIN_CONFIG };
 
     _legend = new LegendController();
-    _tooltip = new TooltipController();
+    _tooltip = (() => {
+        const tooltip = new TooltipController();
+        tooltip.hitAt = (mx, my) => {
+            const target = this.clickTargetAt(mx, my);
+            return target ? chartHitFromTarget(target) : null;
+        };
+
+        return tooltip;
+    })();
 
     /**
      * Reference to the active host sink, captured in {@link attachTooltip}.
@@ -734,6 +747,26 @@ export abstract class AbstractChart implements ChartImplementation {
     }
 
     /**
+     * Re-pin the active tooltip against the build an upload just produced,
+     * dismissing it (with an unselect) only when its mark is gone; a chart
+     * whose build clears its hover re-derives it before its own render.
+     */
+    refreshInteraction(): void {
+        if (this._tooltip.isPinned && !this.repin()) {
+            this._tooltip.dismiss();
+            this.emitUnselect();
+        }
+    }
+
+    /**
+     * Re-pin the active tooltip against the current build, returning
+     * `false` when its mark no longer exists.
+     */
+    protected repin(): boolean {
+        return false;
+    }
+
+    /**
      * Silently dismiss any pinned tooltip (the chart's selection visual)
      * WITHOUT emitting `perspective-global-filter` — unlike the `setView`
      * implicit dismiss above, the HOST initiated this (its global filter
@@ -784,12 +817,9 @@ export abstract class AbstractChart implements ChartImplementation {
      * `getCellConfig` ([packages/viewer-datagrid/src/ts/get_cell_config.ts]),
      * but operates on `AbstractChart` state rather than a `DatagridModel`.
      */
-    async buildClickDetail(target: {
-        rowIdx: number | null;
-        columnName: string;
-        groupByValues: (string | number | null)[];
-        splitByValues: (string | number | null)[];
-    }): Promise<PerspectiveClickDetail> {
+    async buildClickDetail(
+        target: ClickTarget,
+    ): Promise<PerspectiveClickDetail> {
         let row: Record<string, unknown> = {};
         if (target.rowIdx != null && target.rowIdx >= 0 && this._lazyRows) {
             try {
@@ -822,6 +852,23 @@ export abstract class AbstractChart implements ChartImplementation {
             column_names: [target.columnName],
             config: { filter } as Partial<ViewConfig>,
         };
+    }
+
+    /**
+     * The click target under canvas point `(mx, my)`, or `null` when there
+     * is none.
+     */
+    clickTargetAt(_mx: number, _my: number): ClickTarget | null {
+        return null;
+    }
+
+    /**
+     * The `{ frame, ref }` of the mark under canvas point `(mx, my)`, or
+     * `null` when there is none; no row fetch runs.
+     */
+    async resolveHit(mx: number, my: number): Promise<ChartHit | null> {
+        const target = this.clickTargetAt(mx, my);
+        return target ? chartHitFromTarget(target) : null;
     }
 
     /**
@@ -870,12 +917,7 @@ export abstract class AbstractChart implements ChartImplementation {
      * Chains through `_emitQueue` so the row-fetch await can't reorder
      * this emit behind a follow-up `emitUnselect`.
      */
-    emitClickAndSelect(target: {
-        rowIdx: number | null;
-        columnName: string;
-        groupByValues: (string | number | null)[];
-        splitByValues: (string | number | null)[];
-    }): Promise<void> {
+    emitClickAndSelect(target: ClickTarget): Promise<void> {
         const next = this._emitQueue.then(async () => {
             const detail = await this.buildClickDetail(target);
             this.emitUserClick(detail);

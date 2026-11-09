@@ -1,0 +1,296 @@
+[
+    {
+        "symbol": "PRSP",
+        "name": "Prospective Co",
+        "sector": "Technology",
+        "exchange": "NASDAQ",
+        "open": 142.1
+    },
+    {
+        "symbol": "HLX",
+        "name": "Helix Compute",
+        "sector": "Technology",
+        "exchange": "NASDAQ",
+        "open": 61.45
+    },
+    {
+        "symbol": "QBIT",
+        "name": "Qubit Fabrication",
+        "sector": "Technology",
+        "exchange": "NASDAQ",
+        "open": 310.9
+    },
+    {
+        "symbol": "ARRW",
+        "name": "Arrowhead Data",
+        "sector": "Technology",
+        "exchange": "NYSE",
+        "open": 27.3
+    },
+    {
+        "symbol": "LMNT",
+        "name": "Lumen Optics",
+        "sector": "Technology",
+        "exchange": "LSE",
+        "open": 88.7
+    },
+    {
+        "symbol": "VCTR",
+        "name": "Vector Semiconductor",
+        "sector": "Technology",
+        "exchange": "NASDAQ",
+        "open": 199.2
+    },
+    {
+        "symbol": "NODE",
+        "name": "Nodal Networks",
+        "sector": "Technology",
+        "exchange": "NYSE",
+        "open": 44.05
+    },
+    {
+        "symbol": "MRDN",
+        "name": "Meridian Bancorp",
+        "sector": "Financials",
+        "exchange": "NYSE",
+        "open": 73.8
+    },
+    {
+        "symbol": "CSTL",
+        "name": "Castle Reinsurance",
+        "sector": "Financials",
+        "exchange": "NYSE",
+        "open": 128.6
+    },
+    {
+        "symbol": "LDGR",
+        "name": "Ledger Trust",
+        "sector": "Financials",
+        "exchange": "LSE",
+        "open": 19.95
+    },
+    {
+        "symbol": "ANCH",
+        "name": "Anchor Capital",
+        "sector": "Financials",
+        "exchange": "NYSE",
+        "open": 56.2
+    },
+    {
+        "symbol": "PNNY",
+        "name": "Penny Exchange Group",
+        "sector": "Financials",
+        "exchange": "NASDAQ",
+        "open": 212.4
+    },
+    {
+        "symbol": "SFHR",
+        "name": "Safe Harbor Insurance",
+        "sector": "Financials",
+        "exchange": "NYSE",
+        "open": 91.15
+    },
+    {
+        "symbol": "BRDG",
+        "name": "Bridgewater Lending",
+        "sector": "Financials",
+        "exchange": "LSE",
+        "open": 33.6
+    },
+    {
+        "symbol": "DRLL",
+        "name": "Deepwater Drilling",
+        "sector": "Energy",
+        "exchange": "NYSE",
+        "open": 48.9
+    },
+    {
+        "symbol": "SOLR",
+        "name": "Solaris Power",
+        "sector": "Energy",
+        "exchange": "NASDAQ",
+        "open": 112.3
+    },
+    {
+        "symbol": "WNDR",
+        "name": "Windrow Renewables",
+        "sector": "Energy",
+        "exchange": "LSE",
+        "open": 24.75
+    },
+    {
+        "symbol": "PIPE",
+        "name": "Pipeline Midstream",
+        "sector": "Energy",
+        "exchange": "NYSE",
+        "open": 67.4
+    },
+    {
+        "symbol": "CRUD",
+        "name": "Crude Holdings",
+        "sector": "Energy",
+        "exchange": "NYSE",
+        "open": 81.05
+    },
+    {
+        "symbol": "GRID",
+        "name": "Gridline Transmission",
+        "sector": "Energy",
+        "exchange": "NASDAQ",
+        "open": 39.8
+    },
+    {
+        "symbol": "HYDR",
+        "name": "Hydra Fuel Cells",
+        "sector": "Energy",
+        "exchange": "NASDAQ",
+        "open": 15.2
+    },
+    {
+        "symbol": "GNOM",
+        "name": "Genome Therapeutics",
+        "sector": "Healthcare",
+        "exchange": "NASDAQ",
+        "open": 254.7
+    },
+    {
+        "symbol": "CRDX",
+        "name": "Cardex Devices",
+        "sector": "Healthcare",
+        "exchange": "NYSE",
+        "open": 97.3
+    },
+    {
+        "symbol": "VITA",
+        "name": "Vita Pharmaceuticals",
+        "sector": "Healthcare",
+        "exchange": "LSE",
+        "open": 41.6
+    },
+    {
+        "symbol": "NRVE",
+        "name": "Nerve Diagnostics",
+        "sector": "Healthcare",
+        "exchange": "NASDAQ",
+        "open": 72.85
+    },
+    {
+        "symbol": "SRGN",
+        "name": "Surgeon Robotics",
+        "sector": "Healthcare",
+        "exchange": "NYSE",
+        "open": 388.1
+    },
+    {
+        "symbol": "CLNC",
+        "name": "Clinic Networks",
+        "sector": "Healthcare",
+        "exchange": "NYSE",
+        "open": 29.4
+    },
+    {
+        "symbol": "BIOM",
+        "name": "Biome Labs",
+        "sector": "Healthcare",
+        "exchange": "NASDAQ",
+        "open": 18.65
+    },
+    {
+        "symbol": "ORCH",
+        "name": "Orchard Grocers",
+        "sector": "Consumer",
+        "exchange": "NYSE",
+        "open": 52.3
+    },
+    {
+        "symbol": "STCH",
+        "name": "Stitch Apparel",
+        "sector": "Consumer",
+        "exchange": "NASDAQ",
+        "open": 34.9
+    },
+    {
+        "symbol": "BREW",
+        "name": "Brewhouse Beverages",
+        "sector": "Consumer",
+        "exchange": "LSE",
+        "open": 63.15
+    },
+    {
+        "symbol": "NEST",
+        "name": "Nest Home Goods",
+        "sector": "Consumer",
+        "exchange": "NYSE",
+        "open": 121.8
+    },
+    {
+        "symbol": "TRVL",
+        "name": "Traveller Resorts",
+        "sector": "Consumer",
+        "exchange": "NYSE",
+        "open": 76.5
+    },
+    {
+        "symbol": "PLAY",
+        "name": "Playfield Games",
+        "sector": "Consumer",
+        "exchange": "NASDAQ",
+        "open": 45.2
+    },
+    {
+        "symbol": "FRSH",
+        "name": "Fresh Meal Kits",
+        "sector": "Consumer",
+        "exchange": "NASDAQ",
+        "open": 12.4
+    },
+    {
+        "symbol": "FRGE",
+        "name": "Forge Steelworks",
+        "sector": "Industrials",
+        "exchange": "NYSE",
+        "open": 84.6
+    },
+    {
+        "symbol": "RAIL",
+        "name": "Railhead Logistics",
+        "sector": "Industrials",
+        "exchange": "NYSE",
+        "open": 158.9
+    },
+    {
+        "symbol": "CRNE",
+        "name": "Crane & Hoist",
+        "sector": "Industrials",
+        "exchange": "LSE",
+        "open": 37.25
+    },
+    {
+        "symbol": "AERO",
+        "name": "Aerofoil Dynamics",
+        "sector": "Industrials",
+        "exchange": "NYSE",
+        "open": 203.3
+    },
+    {
+        "symbol": "BOLT",
+        "name": "Bolt Fasteners",
+        "sector": "Industrials",
+        "exchange": "NASDAQ",
+        "open": 22.1
+    },
+    {
+        "symbol": "CNVY",
+        "name": "Conveyor Automation",
+        "sector": "Industrials",
+        "exchange": "NASDAQ",
+        "open": 69.75
+    },
+    {
+        "symbol": "PAVE",
+        "name": "Pavement Infrastructure",
+        "sector": "Industrials",
+        "exchange": "NYSE",
+        "open": 58.4
+    }
+]

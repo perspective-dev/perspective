@@ -21,6 +21,14 @@ import {
 } from "../model/column_path_area.ts";
 import { format_cell } from "./format_cell.ts";
 import {
+    COMMAND_COLUMN_PATH,
+    build_frame,
+    command_block,
+    command_cell,
+    effective_command_scopes,
+    query_commands,
+} from "../commands.ts";
+import {
     ColumnHeaderLabels,
     type ColumnHeaderLabel,
 } from "./format_column_header.ts";
@@ -32,12 +40,16 @@ import {
 import type {
     ResolvedColumnsConfig,
     DatagridModel,
+    DatagridPluginElement,
     RegularTable,
     Schema,
 } from "../types.ts";
 import type { CellScalar, DataResponse } from "regular-table/dist/esm/types.js";
 import type { ViewConfig, ViewWindow } from "@perspective-dev/client";
-import type { HTMLPerspectiveViewerElement } from "@perspective-dev/viewer";
+import type {
+    HTMLPerspectiveViewerElement,
+    PerspectiveCommands,
+} from "@perspective-dev/viewer";
 
 interface ColumnData {
     __ROW_PATH__?: unknown[][];
@@ -54,6 +66,7 @@ interface ColumnData {
  */
 export function createDataListener(
     viewer: HTMLPerspectiveViewerElement,
+    plugin: DatagridPluginElement,
 ): (
     regularTable: RegularTable,
     x0: number,
@@ -86,6 +99,10 @@ export function createDataListener(
         };
 
         let num_columns: number | null = null;
+        const { row: row_scope, cell: cell_scope } =
+            effective_command_scopes(plugin);
+
+        const right_column = row_scope && this._command_column === "right";
 
         if (x1 - x0 > 0 && y1 - y0 > 0) {
             this._is_old_viewport =
@@ -218,7 +235,42 @@ export function createDataListener(
         const is_dim_call = x1 - x0 > 0 && y1 - y0 > 0;
         const is_row_path = columns.__ROW_PATH__ !== undefined;
         const is_flat = this._config.group_rollup_mode === "flat";
-        const row_headers = Array.from(
+        const n_fetched = is_dim_call ? this._ids.length : 0;
+        const frame = is_dim_call
+            ? build_frame(this, columns, x0, y0, x1)
+            : undefined;
+
+        const previous_blocks = this._command_blocks ?? new Map();
+        const blocks = new Map<string, HTMLElement>();
+        if (frame) {
+            this._command_blocks = blocks;
+            this._command_drawn = {
+                row: row_scope,
+                cell: cell_scope,
+                column: this._command_column,
+            };
+        }
+
+        const row_block = (
+            i: number,
+            result: PerspectiveCommands | undefined,
+        ) => {
+            const key = String(y0 + i);
+            const block = command_block(result, previous_blocks.get(key));
+            blocks.set(key, block);
+            return block;
+        };
+
+        const row_refs = Array.from({ length: n_fetched }, (_, i) => ({
+            y: y0 + i,
+        }));
+
+        const row_results =
+            frame && row_scope
+                ? query_commands(plugin, "datagrid-row", frame, row_refs)
+                : undefined;
+
+        let row_headers = Array.from(
             (is_row_path
                 ? is_flat
                     ? format_flat_header_row_path
@@ -232,8 +284,32 @@ export function createDataListener(
             ),
         ) as (string | HTMLElement)[][];
 
+        const header_column = row_scope && this._command_column !== "right";
+        const at_end =
+            this._command_column === "tree" && this._config.group_by.length > 0;
+
+        this._command_header_x = undefined;
+        if (header_column && row_results) {
+            if (row_headers.length === 0) {
+                row_headers = Array.from({ length: n_fetched }, () => []);
+            }
+
+            for (let i = 0; i < n_fetched; i++) {
+                const block = row_block(i, row_results[i]);
+                if (at_end) {
+                    row_headers[i].push(block);
+                } else {
+                    row_headers[i].unshift(block);
+                }
+            }
+
+            this._command_header_x = at_end ? row_headers[0]?.length - 1 : 0;
+            this._command_header_leaf =
+                at_end || this._config.group_by.length === 0;
+        }
+
         const num_row_headers = !is_dim_call
-            ? row_header_depth(this._config)
+            ? row_header_depth(this._config) + (header_column ? 1 : 0)
             : row_headers[0]?.length;
 
         this._num_row_headers = num_row_headers ?? 0;
@@ -245,11 +321,22 @@ export function createDataListener(
         const columns_config: ResolvedColumnsConfig =
             (regularTable as any)[PRIVATE_PLUGIN_SYMBOL] || {};
 
-        for (
-            let ipath = x0;
-            ipath < Math.min(x1, this._column_paths.length);
-            ++ipath
-        ) {
+        const x_end = Math.min(x1, this._column_paths.length);
+        const cell_refs: { y: number; x: number }[] = [];
+        if (frame && cell_scope) {
+            for (let ipath = x0; ipath < x_end; ++ipath) {
+                for (let i = 0; i < n_fetched; i++) {
+                    cell_refs.push({ y: y0 + i, x: ipath });
+                }
+            }
+        }
+
+        const cell_results =
+            frame && cell_scope
+                ? query_commands(plugin, "datagrid-cell", frame, cell_refs)
+                : undefined;
+
+        for (let ipath = x0; ipath < x_end; ++ipath) {
             const path = this._column_paths[ipath];
             const name = column_name(this, ipath);
             const levels = split_levels(this, ipath);
@@ -303,7 +390,24 @@ export function createDataListener(
                         columns_config,
                     ) as string | HTMLElement;
 
-                    return wrap ? wrap_cell(cell) : cell;
+                    const content = wrap ? wrap_cell(cell) : cell;
+                    if (!cell_results || i >= n_fetched) {
+                        return content;
+                    }
+
+                    const k = (ipath - x0) * n_fetched + i;
+                    const key = `${y0 + i}|${path}`;
+                    const block = command_cell(
+                        content,
+                        cell_results[k],
+                        previous_blocks.get(key),
+                    );
+
+                    if (block !== content && block instanceof HTMLElement) {
+                        blocks.set(key, block);
+                    }
+
+                    return block as string | HTMLElement;
                 }),
             );
 
@@ -324,6 +428,27 @@ export function createDataListener(
 
             column_headers.push(header);
             column_paths.push(path);
+        }
+
+        if (right_column && num_columns !== null) {
+            num_columns += 1;
+            const command_x = num_columns - 1;
+            if (row_results && x1 > command_x) {
+                data.push(row_results.map((result, i) => row_block(i, result)));
+                metadata.push([]);
+                const pad = "\u200b".repeat(this._config.split_by.length + 2);
+                const header: (string | ColumnHeaderLabel)[] = Array(
+                    this._config.split_by.length,
+                ).fill(pad);
+
+                header.push("");
+                if (is_settings_open) {
+                    header.push("");
+                }
+
+                column_headers.push(header);
+                column_paths.push(COMMAND_COLUMN_PATH);
+            }
         }
 
         // Only update the last state if this is not a "phantom" call.

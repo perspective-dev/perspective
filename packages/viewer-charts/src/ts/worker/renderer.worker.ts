@@ -354,6 +354,8 @@ export class WorkerRenderer {
                             0,
                             Math.min(totalRows, deliveredRows),
                         );
+
+                        this.chartImpl.refreshInteraction?.();
                     },
                     { end_row: totalRows, float32: msg.options.float32 },
                 );

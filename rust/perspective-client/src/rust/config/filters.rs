@@ -109,6 +109,15 @@ impl Filter {
         Filter(column.to_string(), op.to_string(), term.into())
     }
 
+    /// A filter whose term is the single scalar `value`.
+    pub fn scalar(column: &str, op: &str, value: Scalar) -> Self {
+        Filter(
+            column.to_string(),
+            op.to_string(),
+            FilterTerm::Scalar(value),
+        )
+    }
+
     pub fn column(&self) -> &str {
         self.0.as_str()
     }

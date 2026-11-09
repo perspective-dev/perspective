@@ -67,6 +67,12 @@ export type * from "../../dist/ts-rs/GetTableOptions.d.ts";
 export type * from "../../dist/ts-rs/GetClientOptions.d.ts";
 export type * from "../../dist/ts-rs/GetViewOptions.d.ts";
 export type * from "../../dist/ts-rs/GetViewMode.d.ts";
+export type * from "../../dist/ts-rs/CommandSchema.d.ts";
+export type * from "../../dist/ts-rs/CommandSpec.d.ts";
+export type * from "../../dist/ts-rs/CommandLocation.d.ts";
+export type * from "../../dist/ts-rs/CommandSchemaOptions.d.ts";
+export type * from "../../dist/ts-rs/PerspectiveHit.d.ts";
+export type * from "../../dist/ts-rs/PerspectiveHitRef.d.ts";
 
 export {
     create_validator,

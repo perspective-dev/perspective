@@ -49,4 +49,58 @@ export interface PerspectiveClickDetail {
     panel?: string;
 }
 
+/**
+ * A chart mark resolved to its view row, measure column and pivot values.
+ */
+export interface ClickTarget {
+    rowIdx: number | null;
+    columnName: string;
+    groupByValues: (string | number | null)[];
+    splitByValues: (string | number | null)[];
+}
+
+/**
+ * What a chart rendered at a point, as its plugin's `hit_test` reports it: a
+ * one-row frame cut from the mark's `ClickTarget` and the location in it.
+ */
+export interface ChartHit {
+    frame: PerspectiveViewFrame;
+    ref: PerspectiveHitRef;
+}
+
+/**
+ * The `{ frame, ref }` for a mark, built from its `ClickTarget` alone so no
+ * row fetch runs; a mark without a view row yields a column-only location.
+ */
+export function chartHitFromTarget(target: ClickTarget): ChartHit {
+    const key = [...target.splitByValues, target.columnName]
+        .map((v) => (v == null ? "" : String(v)))
+        .join("|");
+
+    const y =
+        target.rowIdx != null && target.rowIdx >= 0 ? target.rowIdx : undefined;
+    const data: Record<string, unknown[]> = {};
+    if (y !== undefined) {
+        data["__ROW_PATH__"] = [target.groupByValues];
+    }
+
+    return {
+        frame: {
+            start_row: y ?? 0,
+            start_col: 0,
+            paths: [key],
+            column_paths: [
+                ...target.splitByValues.map((v) => [v]),
+                [target.columnName],
+            ],
+            data,
+        },
+        ref: y === undefined ? { x: 0 } : { y, x: 0 },
+    };
+}
+
 export { PerspectiveSelectDetail } from "@perspective-dev/viewer/select-detail";
+import type {
+    PerspectiveHitRef,
+    PerspectiveViewFrame,
+} from "@perspective-dev/viewer";

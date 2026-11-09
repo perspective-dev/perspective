@@ -38,9 +38,10 @@ use perspective_client::{
     SystemInfo, TableInitOptions, TypedArrayWindow, UpdateOptions, ViewWindow,
 };
 use perspective_viewer::config::{
-    AddPanelOptions, ClientOptions, ColumnConfigDefaultsOptions, ConfigDefaultsOptions,
-    CustomNumberFormatConfig, DatetimeFormat, ExportMethod, ExportOptions, GetClientOptions,
-    GetTableOptions, GetViewOptions, Notation, NumberFormatStyle, PanelOptions, PluginStaticConfig,
+    AddPanelOptions, ClientOptions, ColumnConfigDefaultsOptions, CommandLocation, CommandSchema,
+    CommandSchemaOptions, ConfigDefaultsOptions, CustomNumberFormatConfig, DatetimeFormat,
+    ExportMethod, ExportOptions, GetClientOptions, GetTableOptions, GetViewOptions, Notation,
+    NumberFormatStyle, PanelOptions, PerspectiveHit, PerspectiveHitRef, PluginStaticConfig,
     RestoreOptions, RestoreWorkspaceOptions, SaveWorkspaceOptions, ViewerConfig,
     ViewerConfigInitial, ViewerConfigUpdate, WorkspaceConfig, WorkspaceConfigUpdate,
 };
@@ -112,6 +113,11 @@ pub fn generate_type_bindings_viewer() -> Result<(), Box<dyn Error>> {
     SaveWorkspaceOptions::export_all_to(&path)?;
     ConfigDefaultsOptions::export_all_to(&path)?;
     ColumnConfigDefaultsOptions::export_all_to(&path)?;
+    CommandSchema::export_all_to(&path)?;
+    CommandLocation::export_all_to(&path)?;
+    CommandSchemaOptions::export_all_to(&path)?;
+    PerspectiveHit::export_all_to(&path)?;
+    PerspectiveHitRef::export_all_to(&path)?;
 
     // The column-format wire types (`columns_config` values): the
     // flattened style/notation families export separately (ts-rs cannot

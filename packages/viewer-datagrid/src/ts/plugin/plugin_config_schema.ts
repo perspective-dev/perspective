@@ -13,10 +13,12 @@
 import { mixRgb, parseColor, rgbToHex } from "../color_utils.ts";
 import type {
     Align,
+    CommandColumn,
     DatagridPluginConfig,
     DatagridPluginElement,
 } from "../types.ts";
 import type { ColumnConfigSchema } from "./column_config_schema.ts";
+import { is_command_scope } from "../commands.ts";
 
 type ControlSpec = Record<string, unknown> & { kind: string };
 
@@ -31,6 +33,20 @@ export const ALIGNS: readonly Align[] = [
     "bottom",
     "bottom-right",
 ];
+
+export const COMMAND_COLUMNS: readonly CommandColumn[] = [
+    "none",
+    "left",
+    "right",
+    "tree",
+];
+
+/** A `command_column` value from a token, `"left"` for anything else. */
+export function parse_command_column(raw: unknown): CommandColumn {
+    return COMMAND_COLUMNS.includes(raw as CommandColumn)
+        ? (raw as CommandColumn)
+        : "left";
+}
 
 /** An `align` value from a token, or `undefined` for anything else. */
 export function parse_align(raw: unknown): Align | undefined {
@@ -160,6 +176,28 @@ export default function plugin_config_schema(
         key: "column_menus" satisfies keyof DatagridPluginConfig,
         default: true,
     });
+
+    if (is_command_scope(this, "datagrid-row")) {
+        fields.push({
+            kind: "Enum",
+            key: "command_column" satisfies keyof DatagridPluginConfig,
+            default: "left",
+            variants: [
+                { value: "none", label: "None" },
+                { value: "left", label: "Left" },
+                { value: "tree", label: "After Tree" },
+                { value: "right", label: "Right" },
+            ],
+        });
+    }
+
+    if (is_command_scope(this, "datagrid-cell")) {
+        fields.push({
+            kind: "Bool",
+            key: "command_cells" satisfies keyof DatagridPluginConfig,
+            default: true,
+        });
+    }
 
     fields.push({
         kind: "Group",

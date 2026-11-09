@@ -197,17 +197,24 @@ export function styleColumnHeaderRow(
         const is_string = type === "string";
         const is_date = type === "date";
         const is_datetime = type === "datetime";
+        const is_command =
+            !is_corner &&
+            metadata.x !== undefined &&
+            metadata.x >= model._column_paths.length;
 
+        td.classList.toggle("psp-command-column", is_command);
         td.classList.toggle(
             "psp-menu-enabled",
             (is_string || is_numeric || is_date || is_datetime) &&
                 !is_corner &&
+                !is_command &&
                 metadata.column_header_y === model._config.split_by.length + 1,
         );
         td.classList.toggle(
             "psp-sort-enabled",
             (is_string || is_numeric || is_date || is_datetime) &&
                 !is_corner &&
+                !is_command &&
                 metadata.column_header_y === model._config.split_by.length,
         );
         td.classList.toggle(

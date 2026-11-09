@@ -21,6 +21,9 @@ pub struct ContextMenuItem {
     pub label: String,
     pub on_select: Callback<()>,
     pub disabled: bool,
+
+    /// Tooltip text, when the command declares one.
+    pub title: Option<String>,
 }
 
 /// A row in a `ContextMenu`: a plain command `ContextMenuItem`, a
@@ -29,6 +32,9 @@ pub struct ContextMenuItem {
 pub enum ContextMenuEntry {
     Item(ContextMenuItem),
     Header(String),
+
+    /// A rule dividing two sections of the menu.
+    Separator,
 
     /// Arbitrary content rendered in place, whose own handlers must close
     /// the menu.
@@ -92,10 +98,14 @@ fn render_entry(entry: &ContextMenuEntry, on_close: &Callback<()>) -> Html {
                 class.push("disabled");
             }
 
-            html! { <span {class} {onclick}>{ item.label.clone() }</span> }
+            let title = item.title.clone();
+            html! { <span {class} {onclick} {title}>{ item.label.clone() }</span> }
         },
         ContextMenuEntry::Header(label) => {
             html! { <span class="context-menu-header">{ label.clone() }</span> }
+        },
+        ContextMenuEntry::Separator => {
+            html! { <span class="context-menu-separator" /> }
         },
         ContextMenuEntry::Custom(content) => content.clone(),
         ContextMenuEntry::Submenu {

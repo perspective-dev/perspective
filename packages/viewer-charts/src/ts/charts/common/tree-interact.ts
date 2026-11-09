@@ -14,6 +14,7 @@ import type { TreeChartBase } from "./tree-chart.ts";
 import { NULL_NODE, ancestorNames } from "./node-store.ts";
 import { rebuildBreadcrumbs } from "./tree-data.ts";
 import { tooltipStyleOf } from "../../interaction/tooltip-grid.ts";
+import type { ClickTarget } from "../../event-detail.ts";
 
 /**
  * Common subset of `TreemapChart` / `SunburstChart` reached by the
@@ -40,6 +41,17 @@ export async function emitTreeNodeEvent(
     nodeId: number,
     kind: "leaf" | "branch",
 ): Promise<void> {
+    await chart.emitClickAndSelect(treeNodeClickTarget(chart, nodeId, kind));
+}
+
+/**
+ * The click target for a treemap/sunburst node.
+ */
+export function treeNodeClickTarget(
+    chart: TreeInteractChart,
+    nodeId: number,
+    kind: "leaf" | "branch",
+): ClickTarget {
     const store = chart._nodeStore;
     const path = ancestorNames(store, nodeId);
     const isFaceted =
@@ -56,12 +68,12 @@ export async function emitTreeNodeEvent(
 
     const rowIdx = kind === "leaf" ? (store.leafRowIdx[nodeId] ?? null) : null;
 
-    await chart.emitClickAndSelect({
+    return {
         rowIdx: rowIdx != null && rowIdx >= 0 ? rowIdx : null,
         columnName: chart._sizeName,
         groupByValues,
         splitByValues,
-    });
+    };
 }
 
 /**

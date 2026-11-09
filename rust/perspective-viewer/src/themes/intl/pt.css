@@ -148,6 +148,8 @@ perspective-viewer {
     --psp-label--edit-mode--content: "Modo de edição";
     --psp-label--scroll-lock--content: "Bloqueio de rolagem";
     --psp-label--column-menus--content: "Menus de coluna";
+    --psp-label--command-column--content: "Coluna de comandos";
+    --psp-label--command-cells--content: "Comandos de célula";
     --psp-label--group-font--content: "Fonte";
     --psp-label--group-rows--content: "Linhas";
     --psp-label--link--content: "Link";
@@ -195,6 +197,7 @@ perspective-viewer {
     --psp-label--legend-opacity--content: "Opacidade da legenda";
     --psp-label--tooltip-max-column-px--content: "Largura máxima da coluna";
     --psp-label--tooltip-opacity--content: "Opacidade";
+    --psp-label--tooltip-commands--content: "Comandos";
 
     --psp-label--group-axes--content: "Eixos";
     --psp-label--group-facets--content: "Facetas";

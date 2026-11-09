@@ -31,6 +31,7 @@ use std::rc::Rc;
 use perspective_js::utils::*;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
+use yew::html::Scope;
 use yew::prelude::*;
 
 use crate::components::copy_dropdown::CopyDropDownMenu;
@@ -39,7 +40,7 @@ use crate::components::new_panel_menu::{HostedTables, NewPanelMenu, NewPanelPick
 use crate::components::style::StyleSurface;
 use crate::config::*;
 use crate::presentation::Presentation;
-use crate::queries::fetch_hosted_tables;
+use crate::queries::{ResolvedCommands, fetch_hosted_tables};
 use crate::tasks::{can_derive, copy_method_to_clipboard, delete_derived, export_method_to_blob};
 use crate::ui::{ContextMenu, ContextMenuEntry, ContextMenuItem, MODAL_SLOT, PortalModal};
 use crate::utils::*;
@@ -104,6 +105,14 @@ pub struct PanelMenuProps {
     /// Maximize/Restore item).
     pub maximized: bool,
 
+    /// The custom commands rendered above the built-in items.
+    #[prop_or_default]
+    pub commands: PtrEqRc<ResolvedCommands>,
+
+    /// A custom command was selected, by key.
+    #[prop_or_default]
+    pub on_custom: Callback<String>,
+
     /// A command was selected — the parent executes it (and ends the session
     /// via the `on_close` that follows every selection).
     pub on_command: Callback<PanelCommand>,
@@ -120,12 +129,16 @@ impl PartialEq for PanelMenuProps {
             && self.panel_id == rhs.panel_id
             && self.theme == rhs.theme
             && self.maximized == rhs.maximized
+            && self.commands == rhs.commands
     }
 }
 
 pub enum PanelMenuMsg {
     /// A parent-executed command was selected.
     Command(PanelCommand),
+
+    /// A custom command was selected, by key.
+    Custom(String),
 
     /// Export/Copy was selected: swap the menu for the format picker.
     OpenPicker(PickerKind),
@@ -205,6 +218,10 @@ impl Component for PanelMenu {
                 ctx.props().on_command.emit(cmd);
                 false
             },
+            PanelMenuMsg::Custom(key) => {
+                ctx.props().on_custom.emit(key);
+                false
+            },
             PanelMenuMsg::OpenPicker(kind) => {
                 self.picker = Some(kind);
                 true
@@ -253,13 +270,14 @@ impl PanelMenu {
                 label: label.to_owned(),
                 on_select,
                 disabled,
+                title: None,
             })
         };
         let cmd = |cmd: PanelCommand| {
             ctx.link()
                 .callback(move |_| PanelMenuMsg::Command(cmd.clone()))
         };
-        let entries = match ctx.props().panel_id.as_deref() {
+        let builtin = match ctx.props().panel_id.as_deref() {
             // The empty-stage menu: no target panel, so only the "New"
             // sub-menu. Hover-only (`on_select: None`) — plain "New" copies
             // its source panel's table binding, which doesn't exist here.
@@ -316,6 +334,11 @@ impl PanelMenu {
                 ]
             },
         };
+
+        let entries = custom_entries(ctx.link(), &ctx.props().commands)
+            .into_iter()
+            .chain(builtin)
+            .collect::<Vec<_>>();
 
         html! {
             <PortalModal
@@ -498,9 +521,53 @@ impl PanelMenu {
     }
 }
 
+/// The menu rows for the app's custom commands, closed by a separator when
+/// there are any.
+fn custom_entries(link: &Scope<PanelMenu>, commands: &ResolvedCommands) -> Vec<ContextMenuEntry> {
+    let mut entries = spec_entries(link, &commands.commands);
+    if !entries.is_empty() {
+        entries.push(ContextMenuEntry::Separator);
+    }
+
+    entries
+}
+
+fn spec_entries(link: &Scope<PanelMenu>, specs: &[CommandSpec]) -> Vec<ContextMenuEntry> {
+    specs
+        .iter()
+        .filter_map(|spec| match spec {
+            CommandSpec::Command {
+                key,
+                label,
+                disabled,
+                title,
+                ..
+            } => {
+                let key = key.clone();
+                Some(ContextMenuEntry::Item(ContextMenuItem {
+                    label: label.clone(),
+                    on_select: link.callback(move |_| PanelMenuMsg::Custom(key.clone())),
+                    disabled: disabled.unwrap_or_default(),
+                    title: title.clone(),
+                }))
+            },
+            CommandSpec::Group {
+                label, commands, ..
+            } => {
+                let entries = spec_entries(link, commands);
+                (!entries.is_empty()).then(|| ContextMenuEntry::Submenu {
+                    label: label.clone(),
+                    on_select: None,
+                    entries,
+                })
+            },
+        })
+        .collect()
+}
+
 /// Create the session-long 0×0 cursor anchor at viewport `(x, y)` as a
 /// light-DOM child of `viewer` in the modal slot.
-fn session_anchor(viewer: &HtmlElement, x: f64, y: f64) -> HtmlElement {
+pub(crate) fn session_anchor(viewer: &HtmlElement, x: f64, y: f64) -> HtmlElement {
     let anchor: HtmlElement = global::document()
         .create_element("div")
         .unwrap()

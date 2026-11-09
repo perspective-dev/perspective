@@ -11,6 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { SeriesChart } from "./series.ts";
+import type { ChartHit } from "../../event-detail.ts";
 import {
     BAR_TYPE_BAR,
     BAR_TYPE_AREA,
@@ -681,7 +682,11 @@ export function formatBarCategoryPath(
     return parts.join(" / ");
 }
 
-export function showBarPinnedTooltip(chart: SeriesChart, barIdx: number): void {
+export function showBarPinnedTooltip(
+    chart: SeriesChart,
+    barIdx: number,
+    hit?: ChartHit,
+): void {
     if (barIdx < 0 || barIdx >= chart._bars.count) {
         return;
     }
@@ -696,6 +701,7 @@ export function showBarPinnedTooltip(chart: SeriesChart, barIdx: number): void {
             chart._samples,
             chart._series.length,
         ),
+        hit,
     );
 }
 
@@ -705,13 +711,128 @@ export function showBarPinnedTooltip(chart: SeriesChart, barIdx: number): void {
 export function showBarPinnedTooltipForSample(
     chart: SeriesChart,
     bar: SeriesChartRecord,
+    hit?: ChartHit,
 ): void {
     chart._pinnedBarIdx = -1;
-    pinTooltip(chart, bar);
+    pinTooltip(chart, bar, hit);
 }
 
-function pinTooltip(chart: SeriesChart, b: SeriesChartRecord): void {
-    chart._tooltip.dismiss();
+/** The build-independent identity of a record: its category values and its series' names. */
+export interface PinnedRecordKey {
+    category: (string | number | null)[];
+    aggName: string;
+    splitKey: string;
+}
+
+function categoryValues(
+    chart: SeriesChart,
+    catIdx: number,
+): (string | number | null)[] {
+    return chart._categoryAxisMode === "numeric" && chart._categoryPositions
+        ? [chart._categoryPositions[catIdx] ?? null]
+        : chart._rowPaths.map((level) => level.labels[catIdx] ?? null);
+}
+
+function recordKey(
+    chart: SeriesChart,
+    rec: SeriesChartRecord,
+): PinnedRecordKey | null {
+    const series = chart._series[rec.seriesId];
+    if (!series) {
+        return null;
+    }
+
+    return {
+        category: categoryValues(chart, rec.catIdx),
+        aggName: series.aggName,
+        splitKey: series.splitKey,
+    };
+}
+
+/**
+ * The record `key` identifies in the current build, as a bar index when it
+ * is a bar and a synthetic record when it is a line or scatter sample, or
+ * `null` when the build no longer holds it.
+ */
+export function findPinnedRecord(
+    chart: SeriesChart,
+    key: PinnedRecordKey,
+): { barIdx: number; rec: SeriesChartRecord } | null {
+    const series = chart._series.find(
+        (s) => s.aggName === key.aggName && s.splitKey === key.splitKey,
+    );
+
+    if (!series) {
+        return null;
+    }
+
+    let catIdx = -1;
+    for (let c = 0; c < chart._numCategories; c++) {
+        const values = categoryValues(chart, c);
+        if (
+            values.length === key.category.length &&
+            values.every((v, i) => v === key.category[i])
+        ) {
+            catIdx = c;
+            break;
+        }
+    }
+
+    if (catIdx < 0) {
+        return null;
+    }
+
+    const bars = chart._bars;
+    for (let i = 0; i < bars.count; i++) {
+        if (bars.catIdx[i] === catIdx && bars.seriesId[i] === series.seriesId) {
+            return {
+                barIdx: i,
+                rec: readBarRecord(
+                    bars,
+                    i,
+                    chart._splitPrefixes.length,
+                    chart._samples,
+                    chart._series.length,
+                ),
+            };
+        }
+    }
+
+    const S = chart._series.length;
+    const idx = catIdx * S + series.seriesId;
+    if (!((chart._sampleValid[idx >> 3] >> (idx & 7)) & 1)) {
+        return null;
+    }
+
+    const grouped =
+        chart._categoryAxisMode === "category"
+            ? chart._categoryPositions
+            : null;
+    const v = chart._samples[idx];
+    return {
+        barIdx: -1,
+        rec: {
+            catIdx,
+            aggIdx: series.aggIdx,
+            splitIdx: series.splitIdx,
+            seriesId: series.seriesId,
+            xCenter: grouped ? grouped[catIdx] : catIdx,
+            halfWidth: 0.5,
+            y0: 0,
+            y1: v,
+            value: v,
+            axis: series.axis,
+            chartType: "area",
+        },
+    };
+}
+
+function pinTooltip(
+    chart: SeriesChart,
+    b: SeriesChartRecord,
+    hit?: ChartHit,
+): void {
+    chart._pinnedKey = recordKey(chart, b);
     if (!chart._lastLayout) {
         return;
     }
@@ -738,7 +859,13 @@ function pinTooltip(chart: SeriesChart, b: SeriesChartRecord): void {
         return;
     }
 
-    chart._tooltip.pin(grid, pos, layout, tooltipStyleOf(chart._pluginConfig));
+    chart._tooltip.pin(
+        grid,
+        pos,
+        layout,
+        tooltipStyleOf(chart._pluginConfig),
+        hit,
+    );
 
     chart._hoveredBarIdx = -1;
     chart._hoveredSample = null;
@@ -750,4 +877,5 @@ function pinTooltip(chart: SeriesChart, b: SeriesChartRecord): void {
 export function dismissBarPinnedTooltip(chart: SeriesChart): void {
     chart._tooltip.dismiss();
     chart._pinnedBarIdx = -1;
+    chart._pinnedKey = null;
 }

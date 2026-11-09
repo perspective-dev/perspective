@@ -148,6 +148,8 @@ perspective-viewer {
     --psp-label--edit-mode--content: "編集モード";
     --psp-label--scroll-lock--content: "スクロールロック";
     --psp-label--column-menus--content: "列メニュー";
+    --psp-label--command-column--content: "コマンド列";
+    --psp-label--command-cells--content: "セルコマンド";
     --psp-label--group-font--content: "フォント";
     --psp-label--group-rows--content: "行";
     --psp-label--link--content: "リンク";
@@ -195,6 +197,7 @@ perspective-viewer {
     --psp-label--legend-opacity--content: "凡例の不透明度";
     --psp-label--tooltip-max-column-px--content: "最大列幅";
     --psp-label--tooltip-opacity--content: "不透明度";
+    --psp-label--tooltip-commands--content: "コマンド";
 
     --psp-label--group-axes--content: "軸";
     --psp-label--group-facets--content: "ファセット";

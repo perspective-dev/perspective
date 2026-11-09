@@ -626,6 +626,28 @@ importers:
         specifier: 'catalog:'
         version: 3.2.0
 
+  examples/trading-terminal:
+    dependencies:
+      '@perspective-dev/client':
+        specifier: workspace:^
+        version: link:../../rust/perspective-js
+      '@perspective-dev/viewer':
+        specifier: workspace:^
+        version: link:../../rust/perspective-viewer
+      '@perspective-dev/viewer-charts':
+        specifier: workspace:^
+        version: link:../../packages/viewer-charts
+      '@perspective-dev/viewer-datagrid':
+        specifier: workspace:^
+        version: link:../../packages/viewer-datagrid
+    devDependencies:
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.25.11
+      http-server:
+        specifier: 'catalog:'
+        version: 14.1.1(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+
   examples/vite-example:
     dependencies:
       '@perspective-dev/client':

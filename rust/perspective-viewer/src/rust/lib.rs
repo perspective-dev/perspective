@@ -111,6 +111,12 @@ export type * from "../ts-rs/Notation.d.ts";
 export type * from "../ts-rs/DatetimeFormat.d.ts";
 export type * from "../ts-rs/ConfigDefaultsOptions.d.ts";
 export type * from "../ts-rs/ColumnConfigDefaultsOptions.d.ts";
+export type * from "../ts-rs/CommandSchema.d.ts";
+export type * from "../ts-rs/CommandSpec.d.ts";
+export type * from "../ts-rs/CommandLocation.d.ts";
+export type * from "../ts-rs/CommandSchemaOptions.d.ts";
+export type * from "../ts-rs/PerspectiveHit.d.ts";
+export type * from "../ts-rs/PerspectiveHitRef.d.ts";
 
 export type ExportData =
     | string
@@ -136,6 +142,82 @@ import type {ViewerConfigUpdate} from "../ts-rs/ViewerConfigUpdate.d.ts";
 import type {ViewerConfigInitial} from "../ts-rs/ViewerConfigInitial.d.ts";
 import type {WorkspaceConfig} from "../ts-rs/WorkspaceConfig.d.ts";
 import type {WorkspaceConfigUpdate} from "../ts-rs/WorkspaceConfigUpdate.d.ts";
+import type {CommandSchema} from "../ts-rs/CommandSchema.d.ts";
+import type {CommandSpec} from "../ts-rs/CommandSpec.d.ts";
+import type {CommandLocation} from "../ts-rs/CommandLocation.d.ts";
+import type {CommandSchemaOptions} from "../ts-rs/CommandSchemaOptions.d.ts";
+import type {PerspectiveHit} from "../ts-rs/PerspectiveHit.d.ts";
+import type {PerspectiveHitRef} from "../ts-rs/PerspectiveHitRef.d.ts";
+
+/** A surface a command schema is evaluated for. */
+export type PerspectiveCommandLocation = CommandLocation;
+
+/**
+ * A window of a plugin's viewport, in the shape of the parsed
+ * `to_columns_string({ id: true })` result and the `column_paths()` area.
+ */
+export interface PerspectiveViewFrame {
+    /** The view row index of `data`'s first entry. */
+    start_row: number;
+
+    /** The view column index of `paths[0]`. */
+    start_col: number;
+
+    /** The `data` key of each column from `start_col`. */
+    paths: string[];
+
+    /** One level per `split_by` plus the column name, each over `paths`. */
+    column_paths: Scalar[][];
+
+    /** Columns keyed by path, with `__ROW_PATH__` and `__ID__` when present. */
+    data: Record<string, unknown[]>;
+}
+
+/** What a plugin rendered at a viewport point, before the viewer resolves it. */
+export interface PerspectiveHitTest {
+    frame: PerspectiveViewFrame;
+    ref: PerspectiveHitRef;
+}
+
+/** One `queryCommands()` result: the context the schema saw and what it returned. */
+export interface PerspectiveCommands {
+    context: PerspectiveCommandContext;
+    commands: CommandSpec[];
+}
+
+/** What a command schema is evaluated against. */
+export interface PerspectiveCommandContext {
+    location: PerspectiveCommandLocation;
+
+    /** The targeted panel, absent only at zero panels. */
+    panel?: string;
+
+    /** The name of the panel's `Table`. */
+    table?: string;
+
+    /** The name of the panel's plugin. */
+    plugin?: string;
+
+    /** The panel's view config, as `getViewConfig()` reports it. */
+    view_config?: ViewConfig;
+
+    /** Viewport coordinates of the pointer that initiated the command, for the context menu. */
+    point?: { x: number; y: number };
+
+    /** What the plugin rendered at the location, absent over tabs and chrome. */
+    hit?: PerspectiveHit;
+}
+
+/** A synchronous, effect-free function declaring the commands for a context. */
+export type PerspectiveCommandSchema = (
+    context: PerspectiveCommandContext,
+) => CommandSchema;
+
+/** The `detail` of a `perspective-command` event. */
+export interface PerspectiveCommandEventDetail {
+    key: string;
+    context: PerspectiveCommandContext;
+}
 "#;
 
 /// Register a plugin globally.

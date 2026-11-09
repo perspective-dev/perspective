@@ -20,6 +20,10 @@ export function save(
             scroll_lock: !!this._is_scroll_lock,
             edit_mode: this._edit_mode,
             column_menus: this._column_menus ? undefined : false,
+            command_column:
+                this._command_column === "left"
+                    ? undefined
+                    : this._command_column,
             font_family: this._font_family,
             font_size: this._font_size,
             word_wrap: this._word_wrap || undefined,

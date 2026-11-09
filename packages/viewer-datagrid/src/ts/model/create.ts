@@ -349,6 +349,8 @@ export async function createModel(
         _row_height: this?._row_height,
         _word_wrap: this?._word_wrap ?? false,
         _column_menus: this?._column_menus ?? true,
+        _command_column: this?._command_column ?? "left",
+        _command_cells: this?._command_cells ?? true,
         _align: this?._align,
         _column_overrides: this?._column_overrides ?? new Map<string, number>(),
         _projected: new Map(),
@@ -368,6 +370,7 @@ export async function createModel(
     regular.setDataListener(
         createDataListener(
             this.parentElement as HTMLPerspectiveViewerElement,
+            this,
         ).bind(model, regular) as any,
         {
             virtual_mode: (window
