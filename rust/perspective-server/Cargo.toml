@@ -12,7 +12,7 @@
 
 [package]
 name = "perspective-server"
-version = "5.8.0"
+version = "5.9.0"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
 description = "Streaming query engine for Perspective: incremental pivots, aggregates and joins over large, real-time datasets."
@@ -47,7 +47,7 @@ shlex = "1.3.0"
 protobuf-src = { version = "2.1.1" }
 
 [dependencies]
-perspective-client = { version = "5.8.0" }
+perspective-client = { version = "5.9.0" }
 
 # Key order is frequently implicitly relied upon in dynamic languages, so for
 # convenience we try to provide this (as well as explicit metadata calls).

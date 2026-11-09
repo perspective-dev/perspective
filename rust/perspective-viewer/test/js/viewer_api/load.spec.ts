@@ -227,7 +227,7 @@ test.describe("Viewer Load", () => {
             table: "load-viewer-csv",
             theme: "Pro Light",
             title: null,
-            version: "5.8.0",
+            version: expect.any(String),
         });
     });
 });

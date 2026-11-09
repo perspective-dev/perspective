@@ -12,7 +12,7 @@
 
 [package]
 name = "perspective-client"
-version = "5.8.0"
+version = "5.9.0"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
 description = "Client API for Perspective, a streaming query engine for data grids, pivot tables and charts over large, real-time datasets."

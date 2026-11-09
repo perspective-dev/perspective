@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/viewer-charts",
-    "version": "5.8.0",
+    "version": "5.9.0",
     "description": "WebGL charts for `<perspective-viewer>`: bar, line, scatter, heatmap, treemap, sunburst, candlestick and map plugins for large, streaming datasets.",
     "keywords": [
         "perspective",

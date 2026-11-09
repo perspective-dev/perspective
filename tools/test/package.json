@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/test",
-    "version": "5.8.0",
+    "version": "5.9.0",
     "description": "Test utility based on perspective",
     "private": true,
     "main": "src/js/index.ts",

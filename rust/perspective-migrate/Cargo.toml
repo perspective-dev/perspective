@@ -12,7 +12,7 @@
 
 [package]
 name = "perspective-migrate"
-version = "5.8.0"
+version = "5.9.0"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
 description = "Upgrades persisted Perspective `ViewConfig`, `<perspective-viewer>` and workspace configs from any release since 2.0 to the current schema."
@@ -29,7 +29,7 @@ crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
 
 [dependencies]
-perspective-client = { version = "5.8.0" }
+perspective-client = { version = "5.9.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0.107", features = ["preserve_order"] }
 serde_path_to_error = "0.1.20"

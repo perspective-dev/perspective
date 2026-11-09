@@ -1,7 +1,7 @@
 {
     "name": "bundler-test",
     "private": true,
-    "version": "5.8.0",
+    "version": "5.9.0",
     "description": "A downstream TypeScript app which type-checks Perspective's published typings.",
     "type": "module",
     "scripts": {

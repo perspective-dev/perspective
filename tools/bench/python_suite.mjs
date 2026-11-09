@@ -40,13 +40,16 @@ const CLIENT_VERSION = {
     "4.2.0": "perspective-4-2-0",
     "4.1.0": "perspective-4-1-0",
     "4.0.0": "perspective-4-0-0",
-    "3.8.0": "perspective-3-8-0",
-    "3.6.0": "perspective-3-6-0",
-    "3.5.0": "perspective-3-5-0",
-    "3.4.0": "perspective-3-4-0",
-    "3.3.0": "perspective-3-3-0",
-    "3.2.0": "perspective-3-2-0",
-    "3.1.0": "perspective-3-1-0",
+
+    // TODO(texodus) Benchmarks are takign too long - only test majore releases
+    // beyond 2 versions.
+    // "3.8.0": "perspective-3-8-0",
+    // "3.6.0": "perspective-3-6-0",
+    // "3.5.0": "perspective-3-5-0",
+    // "3.4.0": "perspective-3-4-0",
+    // "3.3.0": "perspective-3-3-0",
+    // "3.2.0": "perspective-3-2-0",
+    // "3.1.0": "perspective-3-1-0",
 
     // TODO(texodus): These suites are legacy broken with python 3.9+ and can't
     // run in CI anymore, need to add python sandboxing to support them.

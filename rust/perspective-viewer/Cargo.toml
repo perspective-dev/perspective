@@ -12,7 +12,7 @@
 
 [package]
 name = "perspective-viewer"
-version = "5.8.0"
+version = "5.9.0"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
 description = "The `<perspective-viewer>` Custom Element: a WebAssembly data grid, pivot table and charting UI for large, real-time and streaming datasets."
@@ -47,8 +47,8 @@ glob = "0.3.0"
 anyhow = "1.0.66"
 
 [dependencies]
-perspective-client = { version = "5.8.0" }
-perspective-js = { version = "5.8.0" }
+perspective-client = { version = "5.9.0" }
+perspective-js = { version = "5.9.0" }
 
 # Provides async `Mutex` for locked sections such as `render`
 async-lock = "2.5.0"

@@ -1,3 +1,16 @@
+# [v5.9.0](https://github.com/perspective-dev/perspective/releases/tag/v5.9.0)
+
+_9 November 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.8.0...v5.9.0))
+
+**Breaking**
+
+- Add `group_by` and `filter` evictions to `on_remove` [#3281](https://github.com/finos/perspective/pull/3281)
+
+Features
+
+- Set `index` on derived grouped views to group columns  [#3282](https://github.com/finos/perspective/pull/3282)
+- Sync validation API [#3280](https://github.com/finos/perspective/pull/3280)
+
 # [v5.8.0](https://github.com/perspective-dev/perspective/releases/tag/v5.8.0)
 
 _6 November 2026_ ([Full changelog](https://github.com/finos/perspective/compare/v5.7.0...v5.8.0))

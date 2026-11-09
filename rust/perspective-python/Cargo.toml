@@ -12,7 +12,7 @@
 
 [package]
 name = "perspective-python"
-version = "5.8.0"
+version = "5.9.0"
 edition = "2024"
 description = "Interactive data grid, pivot table and charts for large, real-time and streaming datasets, with a Jupyter widget and WebSocket server."
 repository = "https://github.com/perspective-dev/perspective"
@@ -57,9 +57,9 @@ crate-type = ["cdylib"]
 pyo3-build-config = "0.29.0"
 
 [dependencies]
-perspective-client = { version = "5.8.0" }
-perspective-migrate = { version = "5.8.0" }
-perspective-server = { version = "5.8.0" }
+perspective-client = { version = "5.9.0" }
+perspective-migrate = { version = "5.9.0" }
+perspective-server = { version = "5.9.0" }
 bytes = "1.10.1"
 chrono = "0.4"
 macro_rules_attribute = "0.2.2"
