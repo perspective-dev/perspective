@@ -130,6 +130,12 @@ pub struct PresentationHandle {
     pub theme_config_updated: PubSub<(PtrEqRc<Vec<String>>, Option<usize>)>,
     pub on_eject: PubSub<()>,
     pub statusbar_pointer_event: PubSub<PointerEvent>,
+
+    /// The app's command schema function, as set by `setCommandSchema()`.
+    command_schema: RefCell<Option<js_sys::Function>>,
+
+    /// Fired with `(key, context)` when the user picks an app command.
+    pub command_invoked: PubSub<(String, JsValue)>,
 }
 
 /// State object responsible for the non-persistable/gui element state,
@@ -182,6 +188,8 @@ impl Presentation {
             host_pointerdown: Default::default(),
             source_dragend: Default::default(),
             drag_target: Default::default(),
+            command_schema: Default::default(),
+            command_invoked: Default::default(),
         }));
 
         theme.register_host_pointerdown();
@@ -191,6 +199,16 @@ impl Presentation {
 
     pub fn viewer_elem(&self) -> &HtmlElement {
         &self.viewer_elem
+    }
+
+    /// The app's command schema function, if one is set.
+    pub fn command_schema(&self) -> Option<js_sys::Function> {
+        self.0.command_schema.borrow().clone()
+    }
+
+    /// Replace the app's command schema function, or remove it with `None`.
+    pub fn set_command_schema(&self, schema: Option<js_sys::Function>) {
+        *self.0.command_schema.borrow_mut() = schema;
     }
 
     pub fn is_visible(&self) -> bool {

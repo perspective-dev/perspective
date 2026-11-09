@@ -32,17 +32,20 @@ mod update;
 pub mod msg;
 
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use perspective_js::utils::JsValueSerdeExt;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
-pub use self::msg::MainPanelMsg;
+pub use self::msg::{MainPanelMsg, MenuOrigin, MenuRequest};
 use super::panel_menu::PanelCommand;
 use crate::presentation::{Presentation, PresentationProps};
+use crate::queries::ResolvedCommands;
 use crate::renderer::*;
 use crate::session::{Session, SessionProps};
 use crate::tasks::PanelResizeObserverHandle;
+use crate::utils::PtrEqRc;
 use crate::workspace::{PanelId, Workspace};
 
 #[derive(Clone, Properties)]
@@ -236,6 +239,12 @@ pub struct MainPanel {
     /// cursor-anchored [`PanelMenu`](super::panel_menu::PanelMenu) overlay.
     context_menu: Option<(f64, f64, Option<String>)>,
 
+    /// The custom commands of the open context menu.
+    context_menu_commands: PtrEqRc<ResolvedCommands>,
+
+    /// The context-menu gesture whose custom commands are still resolving.
+    pending_menu: Option<Rc<MenuRequest>>,
+
     /// Id of the currently maximized panel (via `regular-layout.maximize`), or
     /// `None`. Transient (regular-layout doesn't persist it); drives the
     /// Maximize/Restore menu label. Cleared when the panel leaves the layout.
@@ -306,7 +315,7 @@ impl Component for MainPanel {
         // re-open the menu underneath it).
         let contextmenu_cb = ctx
             .link()
-            .callback(|(id, x, y)| MainPanelMsg::ContextMenu(id, x, y));
+            .callback(|(id, x, y, origin)| MainPanelMsg::ContextMenu(id, x, y, origin));
         let viewer_elem = ctx.props().presentation.viewer_elem().clone();
         let contextmenu_listener = Closure::wrap(Box::new(move |event: web_sys::Event| {
             // Shift+right-click passes through to the native browser menu.
@@ -352,7 +361,18 @@ impl Component for MainPanel {
 
             event.prevent_default();
             let mouse = event.unchecked_ref::<web_sys::MouseEvent>();
-            contextmenu_cb.emit((panel_id, mouse.client_x() as f64, mouse.client_y() as f64));
+            let origin = if panel_id.is_some() {
+                MenuOrigin::Body
+            } else {
+                MenuOrigin::Chrome
+            };
+
+            contextmenu_cb.emit((
+                panel_id,
+                mouse.client_x() as f64,
+                mouse.client_y() as f64,
+                origin,
+            ));
         }) as Box<dyn FnMut(web_sys::Event)>);
 
         let staged_sub = {
@@ -387,6 +407,8 @@ impl Component for MainPanel {
             panel_resize_observers: HashMap::new(),
             hidden_tabs: HashSet::new(),
             context_menu: None,
+            context_menu_commands: PtrEqRc::default(),
+            pending_menu: None,
             maximized: None,
             theme_backgrounds: HashMap::new(),
             stamped_frame_themes: None,
@@ -402,7 +424,13 @@ impl Component for MainPanel {
             MainPanelMsg::LayoutStaged => true,
             MainPanelMsg::LayoutUpdated => self.on_layout_updated(ctx),
             MainPanelMsg::TabSelected(name) => self.on_tab_selected(ctx, name),
-            MainPanelMsg::ContextMenu(id, x, y) => self.on_context_menu(ctx, id, x, y),
+            MainPanelMsg::ContextMenu(id, x, y, origin) => {
+                self.on_context_menu(ctx, id, x, y, origin)
+            },
+            MainPanelMsg::ContextMenuResolved(request, commands) => {
+                self.on_context_menu_resolved(ctx, request, commands)
+            },
+            MainPanelMsg::CustomCommand(source, key) => self.on_custom_command(ctx, source, key),
             MainPanelMsg::CloseContextMenu => self.on_close_context_menu(),
             MainPanelMsg::Command(cmd) => self.on_command(ctx, cmd),
             MainPanelMsg::BeforeResize(event) => self.on_before_resize(ctx, event),

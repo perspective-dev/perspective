@@ -50,7 +50,11 @@ import {
     type UserSelectPayload,
 } from "../interaction/tooltip-controller.ts";
 import { LegendController } from "../interaction/legend-controller.ts";
-import type { PerspectiveClickDetail } from "../event-detail.ts";
+import type {
+    ChartHit,
+    ClickTarget,
+    PerspectiveClickDetail,
+} from "../event-detail.ts";
 import type { ViewConfig } from "@perspective-dev/client";
 import { resolveThemeFromVars, type Theme } from "../theme/theme.ts";
 import { applyColumnColorOverrides } from "../theme/overrides.ts";
@@ -784,12 +788,9 @@ export abstract class AbstractChart implements ChartImplementation {
      * `getCellConfig` ([packages/viewer-datagrid/src/ts/get_cell_config.ts]),
      * but operates on `AbstractChart` state rather than a `DatagridModel`.
      */
-    async buildClickDetail(target: {
-        rowIdx: number | null;
-        columnName: string;
-        groupByValues: (string | number | null)[];
-        splitByValues: (string | number | null)[];
-    }): Promise<PerspectiveClickDetail> {
+    async buildClickDetail(
+        target: ClickTarget,
+    ): Promise<PerspectiveClickDetail> {
         let row: Record<string, unknown> = {};
         if (target.rowIdx != null && target.rowIdx >= 0 && this._lazyRows) {
             try {
@@ -821,6 +822,35 @@ export abstract class AbstractChart implements ChartImplementation {
             row,
             column_names: [target.columnName],
             config: { filter } as Partial<ViewConfig>,
+        };
+    }
+
+    /**
+     * The click target under canvas point `(mx, my)`, or `null` when there
+     * is none.
+     */
+    clickTargetAt(_mx: number, _my: number): ClickTarget | null {
+        return null;
+    }
+
+    /**
+     * Describe the mark under canvas point `(mx, my)`, or `null` when
+     * there is none.
+     */
+    async resolveHit(mx: number, my: number): Promise<ChartHit | null> {
+        const target = this.clickTargetAt(mx, my);
+        if (!target) {
+            return null;
+        }
+
+        const detail = await this.buildClickDetail(target);
+        return {
+            kind: "mark",
+            row: detail.row,
+            column_names: detail.column_names,
+            row_path: target.groupByValues,
+            column_path: target.splitByValues,
+            config: detail.config,
         };
     }
 
@@ -870,12 +900,7 @@ export abstract class AbstractChart implements ChartImplementation {
      * Chains through `_emitQueue` so the row-fetch await can't reorder
      * this emit behind a follow-up `emitUnselect`.
      */
-    emitClickAndSelect(target: {
-        rowIdx: number | null;
-        columnName: string;
-        groupByValues: (string | number | null)[];
-        splitByValues: (string | number | null)[];
-    }): Promise<void> {
+    emitClickAndSelect(target: ClickTarget): Promise<void> {
         const next = this._emitQueue.then(async () => {
             const detail = await this.buildClickDetail(target);
             this.emitUserClick(detail);

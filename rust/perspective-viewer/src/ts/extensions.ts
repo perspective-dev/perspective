@@ -11,7 +11,10 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { HTMLPerspectiveViewerPluginElement } from "./plugin.ts";
-import type { PerspectiveViewerElement } from "../../dist/wasm/perspective-viewer.js";
+import type {
+    PerspectiveCommandEventDetail,
+    PerspectiveViewerElement,
+} from "../../dist/wasm/perspective-viewer.js";
 import type React from "react";
 import type { ViewerConfigUpdate } from "../../dist/ts-rs/ViewerConfigUpdate.d.ts";
 import type { ColumnType, ViewWindow, Filter } from "@perspective-dev/client";
@@ -20,6 +23,13 @@ import type { ColumnConfigDefaultsOptions } from "../../dist/ts-rs/ColumnConfigD
 import type { PerspectiveSelectDetail } from "./select-detail.ts";
 
 export { PerspectiveSelectDetail } from "./select-detail.ts";
+export type {
+    PerspectiveCommandContext,
+    PerspectiveCommandEventDetail,
+    PerspectiveCommandLocation,
+    PerspectiveCommandSchema,
+    PerspectiveHit,
+} from "../../dist/wasm/perspective-viewer.js";
 
 // DOM extensions
 
@@ -350,6 +360,13 @@ export interface PerspectiveViewerElementExt {
         options?: { signal: AbortSignal },
     ): void;
 
+    /** Fires when the user picks a command declared through `setCommandSchema()`, with its `key` and context. */
+    addEventListener(
+        name: "perspective-command",
+        cb: (e: CustomEvent<PerspectiveCommandEventDetail>) => void,
+        options?: { signal: AbortSignal },
+    ): void;
+
     /** Fires after a panel's `Table` is deleted and the panel unloaded. */
     addEventListener(
         name: "perspective-table-delete",
@@ -394,6 +411,7 @@ export interface PerspectiveViewerElementExt {
         cb: any,
     ): void;
     removeEventListener(name: "perspective-agent-tool", cb: any): void;
+    removeEventListener(name: "perspective-command", cb: any): void;
     removeEventListener(name: "perspective-table-delete", cb: any): void;
     removeEventListener(name: "perspective-table-delete-before", cb: any): void;
 }

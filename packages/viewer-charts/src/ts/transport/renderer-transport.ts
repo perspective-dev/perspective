@@ -23,6 +23,7 @@ import type {
 } from "./protocol.ts";
 import {
     PerspectiveSelectDetail,
+    type ChartHit,
     type PerspectiveClickDetail,
 } from "../event-detail.ts";
 import { snapshotThemeVars } from "../theme/theme-snapshot.ts";
@@ -102,6 +103,7 @@ interface RendererHandle {
 
 type PendingRenderType =
     | "saveZoom"
+    | "hitTest"
     | "loadAndRender"
     | "snapshotPng"
     | "resize";
@@ -664,6 +666,16 @@ export class RendererTransport {
         return promise;
     }
 
+    /**
+     * Describe the mark at canvas-relative `(mx, my)`, or `null` over
+     * nothing.
+     */
+    hitTest(mx: number, my: number): Promise<ChartHit | null> {
+        const { id, promise } = this._allocPending<ChartHit | null>("hitTest");
+        this._post({ kind: "hitTest", requestId: id, mx, my });
+        return promise;
+    }
+
     forwardInteraction(event: InteractionEvent): void {
         this._post({ kind: "interaction", event });
     }
@@ -835,6 +847,18 @@ export class RendererTransport {
                 break;
             case "resizeAck":
                 this._resolvePending(msg.msgId, "resize", undefined);
+                break;
+            case "hitTestReply":
+                if (msg.error !== undefined) {
+                    this._rejectPending(
+                        msg.requestId,
+                        "hitTest",
+                        new Error(msg.error),
+                    );
+                } else {
+                    this._resolvePending(msg.requestId, "hitTest", msg.hit);
+                }
+
                 break;
             case "snapshotPngReply":
                 if (msg.error !== undefined) {

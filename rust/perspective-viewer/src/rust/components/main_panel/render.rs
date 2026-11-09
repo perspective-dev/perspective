@@ -17,7 +17,7 @@
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
-use super::{MainPanel, MainPanelMsg, MainPanelProps};
+use super::{MainPanel, MainPanelMsg, MainPanelProps, MenuOrigin};
 use crate::components::new_panel_menu::NewPanelPick;
 use crate::components::panel_menu::{PanelCommand, PanelMenu};
 use crate::components::panel_tab::PanelTab;
@@ -302,7 +302,7 @@ impl MainPanel {
                             on_select={on_select.clone()}
                             on_close={on_close.clone()}
                             on_open_settings={on_open_settings.clone()}
-                            on_context_menu={ctx.link().callback(|(id, x, y): (String, f64, f64)| MainPanelMsg::ContextMenu(Some(id), x, y))}
+                            on_context_menu={ctx.link().callback(|(id, x, y): (String, f64, f64)| MainPanelMsg::ContextMenu(Some(id), x, y, MenuOrigin::Tab))}
                             on_rename={on_rename.clone()}
                         />
                     }
@@ -395,6 +395,8 @@ impl MainPanel {
                         presentation={ctx.props().presentation.clone()}
                         {theme}
                         {maximized}
+                        commands={self.context_menu_commands.clone()}
+                        on_custom={ctx.link().callback(|(source, key)| MainPanelMsg::CustomCommand(source, key))}
                         on_command={ctx.link().callback(MainPanelMsg::Command)}
                         on_close={ctx.link().callback(|_| MainPanelMsg::CloseContextMenu)}
                     />

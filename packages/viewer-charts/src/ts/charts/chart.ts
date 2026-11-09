@@ -16,6 +16,7 @@ import type { ColumnDataMap } from "../data/view-reader.ts";
 import type { WebGLContextManager } from "../webgl/context-manager.ts";
 import type { ZoomController } from "../interaction/zoom-controller.ts";
 import type { HostSink } from "../interaction/tooltip-controller.ts";
+import type { ChartHit } from "../event-detail.ts";
 
 export interface ChartImplementation {
     uploadAndRender(
@@ -197,6 +198,12 @@ export interface ChartImplementation {
      * host's filter set.
      */
     deselect?(): void;
+
+    /**
+     * Describe the mark under canvas point `(mx, my)`, or `null` when
+     * there is none.
+     */
+    resolveHit?(mx: number, my: number): Promise<ChartHit | null>;
 
     repaintChrome?(): void;
 

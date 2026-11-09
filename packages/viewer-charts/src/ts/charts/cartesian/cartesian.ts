@@ -12,6 +12,7 @@
 
 import type { ColumnDataMap } from "../../data/view-reader.ts";
 import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { ClickTarget } from "../../event-detail.ts";
 import { AbstractChart } from "../chart-base.ts";
 import { SpatialHitTester } from "../../interaction/hit-test.ts";
 import { PlotLayout } from "../../layout/plot-layout.ts";
@@ -363,8 +364,22 @@ export class CartesianChart extends AbstractChart {
      * mirror — same lookup the lazy tooltip uses.
      */
     private async _emitCartesianClickSelect(flatIdx: number): Promise<void> {
+        const target = this._cartesianClickTarget(flatIdx);
+        if (target) {
+            await this.emitClickAndSelect(target);
+        }
+    }
+
+    override clickTargetAt(mx: number, my: number): ClickTarget | null {
+        handleCartesianHover(this, mx, my);
+        return this._hoveredIndex >= 0
+            ? this._cartesianClickTarget(this._hoveredIndex)
+            : null;
+    }
+
+    private _cartesianClickTarget(flatIdx: number): ClickTarget | null {
         if (!this._rowIndexData) {
-            return;
+            return null;
         }
 
         const rowIdx = this._rowIndexData[flatIdx];
@@ -379,12 +394,12 @@ export class CartesianChart extends AbstractChart {
             }
         }
 
-        await this.emitClickAndSelect({
+        return {
             rowIdx: rowIdx != null && rowIdx >= 0 ? rowIdx : null,
             columnName: yColumn,
             groupByValues: [],
             splitByValues,
-        });
+        };
     }
 
     async uploadAndRender(

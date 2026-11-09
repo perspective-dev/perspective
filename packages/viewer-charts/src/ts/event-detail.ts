@@ -49,4 +49,26 @@ export interface PerspectiveClickDetail {
     panel?: string;
 }
 
+/**
+ * A chart mark resolved to its view row, measure column and pivot values.
+ */
+export interface ClickTarget {
+    rowIdx: number | null;
+    columnName: string;
+    groupByValues: (string | number | null)[];
+    splitByValues: (string | number | null)[];
+}
+
+/**
+ * What a chart rendered at a point, as its plugin's `hit_test` reports it.
+ */
+export interface ChartHit {
+    kind: "mark";
+    row: Record<string, unknown>;
+    column_names: string[];
+    row_path: (string | number | null)[];
+    column_path: (string | number | null)[];
+    config: Partial<ViewConfig>;
+}
+
 export { PerspectiveSelectDetail } from "@perspective-dev/viewer/select-detail";

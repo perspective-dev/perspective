@@ -12,6 +12,7 @@
 
 import type { ColumnDataMap } from "../../data/view-reader.ts";
 import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { ClickTarget } from "../../event-detail.ts";
 import { AbstractChart } from "../chart-base.ts";
 import { PlotLayout } from "../../layout/plot-layout.ts";
 import type { CategoricalLevel } from "../../axis/categorical-axis.ts";
@@ -180,6 +181,20 @@ export class HeatmapChart extends AbstractChart {
         xIdx: number,
         yIdx: number,
     ): Promise<void> {
+        await this.emitClickAndSelect(this._heatmapClickTarget(xIdx, yIdx));
+    }
+
+    override clickTargetAt(mx: number, my: number): ClickTarget | null {
+        handleHeatmapHover(this, mx, my);
+        return this._hoveredCell
+            ? this._heatmapClickTarget(
+                  this._hoveredCell.xIdx,
+                  this._hoveredCell.yIdx,
+              )
+            : null;
+    }
+
+    private _heatmapClickTarget(xIdx: number, yIdx: number): ClickTarget {
         const groupByValues: (string | number | null)[] =
             this._xAxisMode.mode === "numeric" && this._xPositions
                 ? [this._xPositions[xIdx] ?? null]
@@ -189,12 +204,12 @@ export class HeatmapChart extends AbstractChart {
             .map((level) => level.labels[yIdx] ?? null);
 
         const colorColumn = this._columnSlots[0] ?? "";
-        await this.emitClickAndSelect({
+        return {
             rowIdx: xIdx + this._rowOffset,
             columnName: colorColumn,
             groupByValues,
             splitByValues,
-        });
+        };
     }
 
     async uploadAndRender(

@@ -61,8 +61,13 @@ function PerspectiveViewerImpl(props: PerspectiveViewerProps) {
         };
     }, [viewer, props.client, JSON.stringify(props.config)]);
 
+    React.useEffect(() => {
+        viewer?.setCommandSchema(props.commandSchema ?? null);
+    }, [viewer, props.commandSchema]);
+
     usePspListener(viewer, "perspective-click", props.onClick);
     usePspListener(viewer, "perspective-select", props.onSelect);
+    usePspListener(viewer, "perspective-command", props.onCommand);
     usePspListener(
         viewer,
         "perspective-config-update",
@@ -147,6 +152,19 @@ export interface PerspectiveViewerProps {
      * element's `"perspective-select"` Custom Event).
      */
     onSelect?: (data: pspViewer.PerspectiveSelectEventDetail) => void;
+
+    /**
+     * Declares the viewer's custom commands, forwarded to the element's
+     * `setCommandSchema()` method whenever its identity changes.
+     */
+    commandSchema?: pspViewer.PerspectiveCommandSchema;
+
+    /**
+     * Called when the user picks a command declared by
+     * {@link PerspectiveViewerProps.commandSchema} (the element's
+     * `"perspective-command"` Custom Event), with its `key` and context.
+     */
+    onCommand?: (data: pspViewer.PerspectiveCommandEventDetail) => void;
 
     // Applicable props from `React.HTMLAttributes`, which we cannot extend
     // directly because Perspective changes the signature of `onClick`.

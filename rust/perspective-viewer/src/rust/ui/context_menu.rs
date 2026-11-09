@@ -30,6 +30,9 @@ pub enum ContextMenuEntry {
     Item(ContextMenuItem),
     Header(String),
 
+    /// A rule dividing two sections of the menu.
+    Separator,
+
     /// Arbitrary content rendered in place, whose own handlers must close
     /// the menu.
     Custom(Html),
@@ -96,6 +99,9 @@ fn render_entry(entry: &ContextMenuEntry, on_close: &Callback<()>) -> Html {
         },
         ContextMenuEntry::Header(label) => {
             html! { <span class="context-menu-header">{ label.clone() }</span> }
+        },
+        ContextMenuEntry::Separator => {
+            html! { <span class="context-menu-separator" /> }
         },
         ContextMenuEntry::Custom(content) => content.clone(),
         ContextMenuEntry::Submenu {

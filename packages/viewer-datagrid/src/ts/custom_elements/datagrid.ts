@@ -19,6 +19,7 @@ import {
 import { activate } from "../plugin/activate.ts";
 import { restore, sync_wrap_lines } from "../plugin/restore.ts";
 import { save } from "../plugin/save.ts";
+import { hit_test } from "../plugin/hit_test.ts";
 import { draw } from "../plugin/draw.ts";
 import column_config_schema, {
     ColumnConfigSchema,
@@ -31,6 +32,7 @@ import type { ColumnWindow, View, ViewWindow } from "@perspective-dev/client";
 import type {
     HTMLPerspectiveViewerElement,
     IPerspectiveViewerPlugin,
+    PerspectiveHit,
     PluginStaticConfig,
 } from "@perspective-dev/viewer";
 import type {
@@ -375,6 +377,10 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         if (this._initialized) {
             await this.regular_table.draw({ preserve_width: true });
         }
+    }
+
+    async hit_test(x: number, y: number): Promise<PerspectiveHit | undefined> {
+        return await hit_test.call(this, x, y);
     }
 
     restyle(): void {

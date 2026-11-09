@@ -32,6 +32,7 @@ mod hosted_tables;
 mod is_invalid_drop;
 mod palette_set;
 mod plugin_column_styles;
+mod resolve_commands;
 mod validate_expression;
 
 pub use self::column_locator::*;
@@ -45,4 +46,5 @@ pub use self::hosted_tables::*;
 pub use self::is_invalid_drop::*;
 pub use self::palette_set::*;
 pub use self::plugin_column_styles::*;
+pub use self::resolve_commands::*;
 pub use self::validate_expression::*;
