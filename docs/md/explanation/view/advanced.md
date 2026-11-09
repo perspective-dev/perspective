@@ -253,10 +253,13 @@ requires an `index`: `cause` is `"key"` when the row was removed from the
 `clear()` every key) and `"filter"` when an `update()` moved the row outside the
 View's `filter`. For a `View` with `group_by`, `cause` is `"group"` and the keys
 are one column per `group_by` column named after it, `null` below the group's
-depth, for each group which no longer has any rows. In every case a replica
-indexed on those columns can pass the Arrow to `remove()` unchanged. It fires
-once per cause per update step, `"key"` first, only for rows which existed
-before that step:
+depth, for each group which no longer has any rows. A flat `View` of a
+[derived `Table`](../derived_table.md) made from a `group_rollup_mode: "flat"`
+`View` reports dissolved groups the same way but under `"key"`, since that
+`Table` is indexed on its `group_by` columns. In every case a replica indexed on
+those columns can pass the Arrow to `remove()` unchanged. It fires once per
+cause per update step, `"key"` first, only for rows which existed before that
+step:
 
 <div class="javascript">
 

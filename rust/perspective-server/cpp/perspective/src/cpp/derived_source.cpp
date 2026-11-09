@@ -17,6 +17,7 @@
 #include <perspective/expression_tables.h>
 #include <tsl/hopscotch_set.h>
 #include <algorithm>
+#include <deque>
 
 namespace perspective {
 
@@ -416,18 +417,32 @@ public:
         m_num_pivots = config->get_row_pivots().size();
         m_num_visible = config->get_columns().size();
         init_pct_flags(*config);
+        t_schema parent_schema = m_parent->get_schema();
+        for (const auto& pivot : config->get_row_pivots()) {
+            m_key_dtypes.push_back(pivot_dtype(parent_schema, *config, pivot));
+        }
+
+        m_keyed = config->is_leaves_only() && m_num_pivots > 0
+            && std::all_of(
+                m_key_dtypes.begin(),
+                m_key_dtypes.end(),
+                t_pkey_codec::is_supported
+            );
+
+        if (m_keyed && m_num_pivots > 1) {
+            m_codec = std::make_shared<const t_pkey_codec>(m_key_dtypes);
+        }
     }
 
     t_schema
     infer_schema() const override {
         auto config = m_view->get_view_config();
-        t_schema parent_schema = m_parent->get_schema();
         std::vector<std::string> names;
         std::vector<t_dtype> types;
         const auto pivots = config->get_row_pivots();
         for (t_uindex depth = 0; depth < pivots.size(); ++depth) {
             names.push_back(pivots[depth]);
-            types.push_back(pivot_dtype(parent_schema, *config, pivots[depth]));
+            types.push_back(m_key_dtypes[depth]);
         }
 
         const auto aggspecs = config->get_aggspecs();
@@ -442,7 +457,25 @@ public:
 
     t_dtype
     pkey_dtype() const override {
-        return DTYPE_INT64;
+        if (!m_keyed) {
+            return DTYPE_INT64;
+        }
+
+        return m_num_pivots == 1 ? m_key_dtypes[0] : DTYPE_STR;
+    }
+
+    std::vector<std::string>
+    index() const override {
+        if (!m_keyed) {
+            return {};
+        }
+
+        return m_view->get_view_config()->get_row_pivots();
+    }
+
+    std::shared_ptr<const t_pkey_codec>
+    pkey_codec() const override {
+        return m_codec;
     }
 
     void
@@ -484,6 +517,7 @@ protected:
     collect(bool full, std::vector<t_derived_member>& members) override {
         t_stree* tr = tree();
         snapshot_aggregates(*tr);
+        m_key_storage.clear();
         if (full) {
             m_paths.clear();
             tr->remove_capture(m_capture);
@@ -506,7 +540,8 @@ protected:
             }
 
             t_derived_member out;
-            out.m_pkey.set(static_cast<std::int64_t>(dropped.m_idx));
+            out.m_pkey = m_keyed ? key_of(dropped.m_path)
+                                 : node_key(dropped.m_idx);
             out.m_deleted = true;
             for (t_uindex aggnum = 0; aggnum < dropped.m_aggregates.size();
                  ++aggnum) {
@@ -641,10 +676,31 @@ private:
         }
     }
 
+    static t_tscalar
+    node_key(t_uindex idx) {
+        t_tscalar out;
+        out.set(static_cast<std::int64_t>(idx));
+        return out;
+    }
+
+    /// The `group_by` key of a leaf, held in `m_key_storage` until `step()`
+    /// copies it into the child's `psp_pkey` column.
+    t_tscalar
+    key_of(const std::vector<t_tscalar>& path) {
+        if (m_num_pivots == 1) {
+            return path[0].is_valid() ? path[0] : mknull(m_key_dtypes[0]);
+        }
+
+        m_key_storage.emplace_back();
+        m_codec->encode(path, m_key_storage.back());
+        t_tscalar out;
+        out.set(m_key_storage.back().c_str());
+        return out;
+    }
+
     t_derived_member
     member(const t_stree& tr, const t_stnode& node) {
         t_derived_member out;
-        out.m_pkey.set(static_cast<std::int64_t>(node.m_idx));
         out.m_row = node.m_aggidx;
         out.m_handle = node.m_idx;
         if (node.m_depth > 0) {
@@ -653,6 +709,7 @@ private:
             );
         }
 
+        out.m_pkey = m_keyed ? key_of(out.m_path) : node_key(node.m_idx);
         return out;
     }
 
@@ -660,6 +717,10 @@ private:
     std::shared_ptr<Table> m_parent;
     t_uindex m_num_pivots = 0;
     t_uindex m_num_visible = 0;
+    bool m_keyed = false;
+    std::vector<t_dtype> m_key_dtypes;
+    std::shared_ptr<const t_pkey_codec> m_codec;
+    std::deque<std::string> m_key_storage;
     std::vector<std::pair<t_role, t_uindex>> m_roles;
     std::vector<std::string> m_agg_names;
     std::vector<const t_column*> m_direct;

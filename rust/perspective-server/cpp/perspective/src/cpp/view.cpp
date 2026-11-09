@@ -66,6 +66,7 @@ View<CTX_T>::View(
     m_pkey_codec = m_table->get_pkey_codec();
     m_row_pivots = m_view_config->get_row_pivots();
     m_column_pivots = m_view_config->get_column_pivots();
+    m_column_only = m_view_config->is_column_only();
     m_aggregates = m_view_config->get_aggspecs();
     m_columns = m_view_config->get_columns();
     m_filter = m_view_config->get_fterm();

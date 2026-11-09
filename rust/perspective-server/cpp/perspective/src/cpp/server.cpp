@@ -4171,10 +4171,18 @@ ProtoServer::make_derived_table(
         schema = t_schema(names, types);
     }
 
+    std::vector<std::string> index = source->index();
+    for (const auto& name : index) {
+        if (!schema.has_column(name)) {
+            index.clear();
+            break;
+        }
+    }
+
     table = Table::make_derived(
         schema,
         source->pkey_dtype(),
-        source->index(),
+        index,
         source->limit(),
         source->pkey_codec(),
         backing_store
