@@ -24,14 +24,14 @@ use crate::config::{GroupRollupMode, ViewConfig, ViewConfigUpdate};
 use crate::proto::response::ClientResp;
 use crate::proto::{
     ColumnPathLevel, ColumnType, GetFeaturesResp, GetHostedTablesResp, HostedTable, MakeTableResp,
-    Request, Response, Scalar, ServerError, TableDeleteResp, TableDescribeResp, TableMakePortResp,
-    TableMakeViewResp, TableOnDeleteResp, TableRemoveDeleteResp, TableSchemaResp, TableSizeResp,
-    ViewCollapseResp, ViewColumnPathsResp, ViewDeleteResp, ViewDescription, ViewDimensionsResp,
-    ViewExpandResp, ViewExpressionSchemaResp, ViewGetConfigResp, ViewGetMinMaxResp,
-    ViewOnDeleteResp, ViewOnRemoveResp, ViewOnUpdateResp, ViewRemoveDeleteResp,
-    ViewRemoveOnRemoveResp, ViewRemoveOnUpdateResp, ViewSchemaResp, ViewSetDepthResp,
-    ViewToArrowResp, ViewToColumnsStringResp, ViewToCsvResp, ViewToNdjsonStringResp,
-    ViewToRowsStringResp, scalar, table_describe_resp,
+    Request, Response, Scalar, ServerError, StatusCode, TableDeleteResp, TableDescribeResp,
+    TableMakePortResp, TableMakeViewResp, TableOnDeleteResp, TableRemoveDeleteResp,
+    TableSchemaResp, TableSizeResp, ViewCollapseResp, ViewColumnPathsResp, ViewDeleteResp,
+    ViewDescription, ViewDimensionsResp, ViewExpandResp, ViewExpressionSchemaResp,
+    ViewGetConfigResp, ViewGetMinMaxResp, ViewOnDeleteResp, ViewOnRemoveResp, ViewOnUpdateResp,
+    ViewRemoveDeleteResp, ViewRemoveOnRemoveResp, ViewRemoveOnUpdateResp, ViewSchemaResp,
+    ViewSetDepthResp, ViewToArrowResp, ViewToColumnsStringResp, ViewToCsvResp,
+    ViewToNdjsonStringResp, ViewToRowsStringResp, scalar, table_describe_resp,
 };
 use crate::table::{DescribeError, Description};
 
@@ -99,16 +99,50 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             msg.client_req
         );
 
+        let was_view = self.view_to_table.contains_key(&msg.entity_id);
         match self.internal_handle_request(msg.clone()).await {
             Ok(resp) => Ok(resp),
+            Err(err) if was_view && !self.view_to_table.contains_key(&msg.entity_id) => {
+                tracing::debug!("View '{}' deleted mid-request: {}", msg.entity_id, err);
+                Ok(respond!(msg, ServerError {
+                    message: VirtualServerError::<T::Error>::UnknownViewId(msg.entity_id.clone())
+                        .to_string(),
+                    status_code: StatusCode::ViewNotFound as i32
+                }))
+            },
+            Err(err @ VirtualServerError::UnknownViewId(_)) => {
+                tracing::debug!("{}", err);
+                Ok(respond!(msg, ServerError {
+                    message: err.to_string(),
+                    status_code: StatusCode::ViewNotFound as i32
+                }))
+            },
             Err(err) => {
                 tracing::error!("{}", err);
                 Ok(respond!(msg, ServerError {
                     message: err.to_string(),
-                    status_code: 0
+                    status_code: StatusCode::ServerError as i32
                 }))
             },
         }
+    }
+
+    /// The config of a live view, cloned because a `ViewDeleteReq` answered
+    /// during any `await` of a re-entrant caller may remove the entry.
+    fn view_config(&self, view_id: &str) -> Result<ViewConfig, VirtualServerError<T::Error>> {
+        self.view_configs
+            .get(view_id)
+            .cloned()
+            .ok_or_else(|| VirtualServerError::UnknownViewId(view_id.to_string()))
+    }
+
+    /// The table a live view reads, cloned for the same reason as
+    /// [`Self::view_config`].
+    fn view_table(&self, view_id: &str) -> Result<String, VirtualServerError<T::Error>> {
+        self.view_to_table
+            .get(view_id)
+            .cloned()
+            .ok_or_else(|| VirtualServerError::UnknownViewId(view_id.to_string()))
     }
 
     /// Deletes every view this server still holds, as closing a native
@@ -116,6 +150,10 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
     pub async fn close(&mut self) -> Result<(), VirtualServerError<T::Error>> {
         let mut result = Ok(());
         for view_id in self.view_configs.keys().cloned().collect::<Vec<_>>() {
+            if !self.view_configs.contains_key(&view_id) {
+                continue;
+            }
+
             if let Err(err) = self.handler.view_delete(&view_id).await
                 && result.is_ok()
             {
@@ -137,23 +175,21 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
         to_psp_format: bool,
     ) -> Result<IndexMap<String, ColumnType>, VirtualServerError<T::Error>> {
         if !self.view_schemas.contains_key(entity_id) {
-            self.view_schemas.insert(
-                entity_id.to_string(),
-                self.handler
-                    .view_schema(entity_id, self.view_configs.get(entity_id).unwrap())
-                    .await?,
-            );
+            let config = self.view_config(entity_id)?;
+            let schema = self.handler.view_schema(entity_id, &config).await?;
+            self.view_config(entity_id)?;
+            self.view_schemas.insert(entity_id.to_string(), schema);
         }
 
         if to_psp_format {
             // `view.schema()` is keyed by *source* column name, matching the
             // native engine, while the cached schema is keyed by the view's
             // actual (possibly pivoted-path) SQL column names.
-            let config = self.view_configs.get(entity_id).unwrap();
+            let config = &self.view_config(entity_id)?;
             Ok(self
                 .view_schemas
                 .get(entity_id)
-                .unwrap()
+                .ok_or_else(|| VirtualServerError::UnknownViewId(entity_id.to_string()))?
                 .iter()
                 .map(|(k, v)| {
                     let name = column_path_source(k, config)
@@ -164,7 +200,10 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 })
                 .collect())
         } else {
-            Ok(self.view_schemas.get(entity_id).cloned().unwrap())
+            self.view_schemas
+                .get(entity_id)
+                .cloned()
+                .ok_or_else(|| VirtualServerError::UnknownViewId(entity_id.to_string()))
         }
     }
 
@@ -177,11 +216,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             ));
         }
 
-        let config = self
-            .view_configs
-            .get(view_id)
-            .ok_or_else(|| VirtualServerError::UnknownViewId(view_id.to_string()))?;
-
+        let config = self.view_config(view_id)?;
         Ok(!config.group_by.is_empty() && config.group_rollup_mode == GroupRollupMode::Rollup)
     }
 
@@ -231,9 +266,6 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 })
             },
             TableMakeViewReq(req) => {
-                self.view_to_table
-                    .insert(req.view_id.clone(), msg.entity_id.clone());
-
                 let mut config: ViewConfigUpdate = req.config.clone().unwrap_or_default().into();
                 if let Some(group_by) = &config.group_by
                     && let Some(duplicate) = group_by
@@ -259,13 +291,16 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                     ));
                 }
 
+                let view_id = msg.entity_id.clone();
                 let bytes = respond!(msg, TableMakeViewResp {
                     view_id: self
                         .handler
-                        .table_make_view(msg.entity_id.as_str(), req.view_id.as_str(), &mut config)
+                        .table_make_view(view_id.as_str(), req.view_id.as_str(), &mut config)
                         .await?
                 });
 
+                self.view_to_table
+                    .insert(req.view_id.clone(), view_id.clone());
                 self.view_configs.insert(req.view_id.clone(), config.into());
                 bytes
             },
@@ -325,15 +360,12 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             },
             ViewDimensionsReq(_) => {
                 let view_id = &msg.entity_id;
-                let table_id = self
-                    .view_to_table
-                    .get(view_id)
-                    .ok_or_else(|| VirtualServerError::UnknownViewId(view_id.to_string()))?;
-
-                let num_table_rows = self.handler.table_size(table_id).await?;
-                let num_table_columns = self.handler.table_column_size(table_id).await? as u32;
-                let config = self.view_configs.get(view_id).unwrap();
-                let num_view_columns = self.handler.view_column_size(view_id, config).await? as u32;
+                let table_id = self.view_table(view_id)?;
+                let num_table_rows = self.handler.table_size(&table_id).await?;
+                let num_table_columns = self.handler.table_column_size(&table_id).await? as u32;
+                let config = self.view_config(view_id)?;
+                let num_view_columns =
+                    self.handler.view_column_size(view_id, &config).await? as u32;
                 let num_view_rows = self.handler.view_size(view_id).await?;
                 let resp = ViewDimensionsResp {
                     num_table_columns,
@@ -346,34 +378,28 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             },
             ViewGetConfigReq(_) => {
                 respond!(msg, ViewGetConfigResp {
-                    config: Some(
-                        ViewConfigUpdate::from(
-                            self.view_configs.get(&msg.entity_id).unwrap().clone()
-                        )
-                        .into()
-                    )
+                    config: Some(ViewConfigUpdate::from(self.view_config(&msg.entity_id)?).into())
                 })
             },
             ViewExpressionSchemaReq(_) => {
                 let view_id = msg.entity_id.clone();
                 if !self.view_descriptions.contains_key(&view_id) {
-                    let table_id = self
-                        .view_to_table
-                        .get(&view_id)
-                        .cloned()
-                        .ok_or_else(|| VirtualServerError::UnknownViewId(view_id.clone()))?;
-
-                    let config = self.view_configs.get(&view_id).unwrap().clone();
+                    let table_id = self.view_table(&view_id)?;
+                    let config = self.view_config(&view_id)?;
                     let description = self
                         .handler
                         .table_describe(&table_id, &config)
                         .await?
                         .map_err(|e| VirtualServerError::Other(e.to_string()))?;
 
+                    self.view_config(&view_id)?;
                     self.view_descriptions.insert(view_id.clone(), description);
                 }
 
-                let schema = self.view_descriptions[&view_id]
+                let schema = self
+                    .view_descriptions
+                    .get(&view_id)
+                    .ok_or_else(|| VirtualServerError::UnknownViewId(view_id.clone()))?
                     .expression_schema
                     .iter()
                     .map(|(name, ty)| (name.clone(), *ty as i32))
@@ -382,17 +408,17 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 respond!(msg, ViewExpressionSchemaResp { schema })
             },
             ViewColumnPathsReq(view_column_paths_req) => {
-                let config = self.view_configs.get(&msg.entity_id).unwrap();
+                let config = self.view_config(&msg.entity_id)?;
                 let mut paths: Vec<String> = self
                     .handler
-                    .view_schema(msg.entity_id.as_str(), config)
+                    .view_schema(msg.entity_id.as_str(), &config)
                     .await?
                     .keys()
                     .cloned()
                     .collect();
 
                 if !config.split_by.is_empty() {
-                    sort_column_paths(&mut paths, config);
+                    sort_column_paths(&mut paths, &config);
                 }
 
                 let start = view_column_paths_req.start_col.unwrap_or(0) as usize;
@@ -446,10 +472,10 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             ViewToArrowReq(view_to_arrow_req) => {
                 let viewport = view_to_arrow_req.viewport.unwrap();
                 let schema = self.get_cached_view_schema(&msg.entity_id, false).await?;
-                let config = self.view_configs.get(&msg.entity_id).unwrap();
+                let config = self.view_config(&msg.entity_id)?;
                 let mut cols = self
                     .handler
-                    .view_get_data(msg.entity_id.as_str(), config, &schema, &viewport)
+                    .view_get_data(msg.entity_id.as_str(), &config, &schema, &viewport)
                     .await?;
 
                 let arrow = cols
@@ -461,10 +487,10 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             ViewToCsvReq(view_to_csv_req) => {
                 let viewport = view_to_csv_req.viewport.unwrap();
                 let schema = self.get_cached_view_schema(&msg.entity_id, false).await?;
-                let config = self.view_configs.get(&msg.entity_id).unwrap();
+                let config = self.view_config(&msg.entity_id)?;
                 let mut cols = self
                     .handler
-                    .view_get_data(msg.entity_id.as_str(), config, &schema, &viewport)
+                    .view_get_data(msg.entity_id.as_str(), &config, &schema, &viewport)
                     .await?;
 
                 let rows = cols.render_to_rows(RowPathStyle::PerLevel);
@@ -489,10 +515,10 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             ViewToNdjsonStringReq(view_to_ndjson_req) => {
                 let viewport = view_to_ndjson_req.viewport.unwrap();
                 let schema = self.get_cached_view_schema(&msg.entity_id, false).await?;
-                let config = self.view_configs.get(&msg.entity_id).unwrap();
+                let config = self.view_config(&msg.entity_id)?;
                 let mut cols = self
                     .handler
-                    .view_get_data(msg.entity_id.as_str(), config, &schema, &viewport)
+                    .view_get_data(msg.entity_id.as_str(), &config, &schema, &viewport)
                     .await?;
 
                 let rows = cols.render_to_rows(RowPathStyle::Sidecar);
@@ -508,10 +534,10 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             ViewToRowsStringReq(view_to_rows_string_req) => {
                 let viewport = view_to_rows_string_req.viewport.unwrap();
                 let schema = self.get_cached_view_schema(&msg.entity_id, false).await?;
-                let config = self.view_configs.get(&msg.entity_id).unwrap();
+                let config = self.view_config(&msg.entity_id)?;
                 let mut cols = self
                     .handler
-                    .view_get_data(msg.entity_id.as_str(), config, &schema, &viewport)
+                    .view_get_data(msg.entity_id.as_str(), &config, &schema, &viewport)
                     .await?;
 
                 let rows = cols.render_to_rows(RowPathStyle::Sidecar);
@@ -523,10 +549,10 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             ViewToColumnsStringReq(view_to_columns_string_req) => {
                 let viewport = view_to_columns_string_req.viewport.unwrap();
                 let schema = self.get_cached_view_schema(&msg.entity_id, false).await?;
-                let config = self.view_configs.get(&msg.entity_id).unwrap();
+                let config = self.view_config(&msg.entity_id)?;
                 let mut cols = self
                     .handler
-                    .view_get_data(msg.entity_id.as_str(), config, &schema, &viewport)
+                    .view_get_data(msg.entity_id.as_str(), &config, &schema, &viewport)
                     .await?;
 
                 let json_string = cols
@@ -539,9 +565,11 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 respond!(msg, ViewToColumnsStringResp { json_string })
             },
             ViewDeleteReq(_) => {
+                self.view_table(&msg.entity_id)?;
                 self.handler.view_delete(msg.entity_id.as_str()).await?;
                 self.view_to_table.shift_remove(&msg.entity_id);
                 self.view_configs.shift_remove(&msg.entity_id);
+                self.view_schemas.shift_remove(&msg.entity_id);
                 self.view_descriptions.shift_remove(&msg.entity_id);
                 respond!(msg, ViewDeleteResp {})
             },
@@ -562,9 +590,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                         ));
                     }
 
-                    let config = self.view_configs.get(view_id).ok_or_else(|| {
-                        VirtualServerError::Other(format!("View \"{}\" does not exist", view_id))
-                    })?;
+                    let config = self.view_config(view_id)?;
 
                     let schema = options
                         .view_schema
@@ -579,7 +605,7 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                         .map_err(|e| VirtualServerError::Other(e.to_string()))?;
 
                     self.handler
-                        .view_make_table(view_id, &msg.entity_id, config, schema.as_ref())
+                        .view_make_table(view_id, &msg.entity_id, &config, schema.as_ref())
                         .await?;
 
                     self.view_tables.insert(msg.entity_id.clone());
@@ -590,10 +616,10 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 respond!(msg, MakeTableResp {})
             },
             ViewGetMinMaxReq(req) => {
-                let config = self.view_configs.get(&msg.entity_id).unwrap();
+                let config = self.view_config(&msg.entity_id)?;
                 let (min, max) = self
                     .handler
-                    .view_get_min_max(&msg.entity_id, &req.column_name, config)
+                    .view_get_min_max(&msg.entity_id, &req.column_name, &config)
                     .await?;
                 respond!(msg, ViewGetMinMaxResp {
                     min: Some(min.into()),
@@ -603,9 +629,9 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
 
             ViewExpandReq(req) => {
                 let num_changed = if self.is_expandable(&msg.entity_id).await? {
-                    let config = &self.view_configs[&msg.entity_id];
+                    let config = self.view_config(&msg.entity_id)?;
                     self.handler
-                        .view_expand(&msg.entity_id, config, req.row_index)
+                        .view_expand(&msg.entity_id, &config, req.row_index)
                         .await?
                 } else {
                     0
@@ -615,9 +641,9 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             },
             ViewCollapseReq(req) => {
                 let num_changed = if self.is_expandable(&msg.entity_id).await? {
-                    let config = &self.view_configs[&msg.entity_id];
+                    let config = self.view_config(&msg.entity_id)?;
                     self.handler
-                        .view_collapse(&msg.entity_id, config, req.row_index)
+                        .view_collapse(&msg.entity_id, &config, req.row_index)
                         .await?
                 } else {
                     0
@@ -627,10 +653,10 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
             },
             ViewSetDepthReq(req) => {
                 if self.is_expandable(&msg.entity_id).await? {
-                    let config = &self.view_configs[&msg.entity_id];
+                    let config = self.view_config(&msg.entity_id)?;
                     if req.depth as usize <= config.group_by.len() {
                         self.handler
-                            .view_set_depth(&msg.entity_id, config, req.depth)
+                            .view_set_depth(&msg.entity_id, &config, req.depth)
                             .await?;
                     }
                 }
