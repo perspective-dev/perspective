@@ -10,7 +10,31 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use std::rc::Rc;
+
 use crate::components::panel_menu::PanelCommand;
+use crate::queries::{CommandSource, ResolvedCommands};
+
+/// Which surface a context-menu gesture landed on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MenuOrigin {
+    /// Inside a panel's frame, where its plugin can be hit-tested.
+    Body,
+
+    /// On a panel's tab.
+    Tab,
+
+    /// Anywhere else in the element.
+    Chrome,
+}
+
+/// A context-menu gesture: where it happened and the panel it targets.
+#[derive(Debug)]
+pub struct MenuRequest {
+    pub x: f64,
+    pub y: f64,
+    pub panel: Option<String>,
+}
 
 #[derive(Debug)]
 pub enum MainPanelMsg {
@@ -57,7 +81,13 @@ pub enum MainPanelMsg {
     /// sidebars, the empty stage) resolves to the ACTIVE panel, else to a
     /// target-less menu offering only "New", whose items create the first
     /// panel.
-    ContextMenu(Option<String>, f64, f64),
+    ContextMenu(Option<String>, f64, f64, MenuOrigin),
+
+    /// The custom commands for a pending context-menu gesture resolved.
+    ContextMenuResolved(Rc<MenuRequest>, ResolvedCommands),
+
+    /// The open context menu selected a custom command, by source and key.
+    CustomCommand(CommandSource, String),
 
     /// Dismiss the panel context menu (the menu session ended).
     CloseContextMenu,

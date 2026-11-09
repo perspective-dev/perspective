@@ -12,6 +12,7 @@
 
 import type { ColumnDataMap } from "../../data/view-reader.ts";
 import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { ClickTarget } from "../../event-detail.ts";
 import { CategoricalYChart } from "../common/categorical-y-chart.ts";
 import {
     buildCandlestickPipeline,
@@ -206,8 +207,20 @@ export class CandlestickChart extends CategoricalYChart {
      * `_splitPrefixes[splitIdx]` split on `|`.
      */
     private async _emitCandleClickSelect(idx: number): Promise<void> {
+        const target = this._candleClickTarget(idx);
+        if (target) {
+            await this.emitClickAndSelect(target);
+        }
+    }
+
+    override clickTargetAt(mx: number, my: number): ClickTarget | null {
+        handleCandlestickHover(this, mx, my);
+        return this._candleClickTarget(this._hoveredIdx);
+    }
+
+    private _candleClickTarget(idx: number): ClickTarget | null {
         if (idx < 0 || idx >= this._candles.count) {
-            return;
+            return null;
         }
 
         const catIdx = this._candles.catIdx[idx];
@@ -230,12 +243,12 @@ export class CandlestickChart extends CategoricalYChart {
             this._columnSlots.find((s): s is string => !!s) ||
             "";
 
-        await this.emitClickAndSelect({
+        return {
             rowIdx: catIdx + this._rowOffset,
             columnName,
             groupByValues,
             splitByValues,
-        });
+        };
     }
 
     override invalidateTheme(): void {

@@ -93,6 +93,22 @@ fn annotate_panel(detail: &JsValue, renderer: &Renderer) {
     }
 }
 
+/// Dispatch `perspective-command` on `elem` for the app command `key` picked
+/// against `context`.
+fn dispatch_command(elem: &HtmlElement, key: &str, context: &JsValue) -> ApiResult<()> {
+    let detail = js_sys::Object::new();
+    js_sys::Reflect::set(&detail, &"key".into(), &key.into())?;
+    js_sys::Reflect::set(&detail, &"context".into(), context)?;
+    let event_init = web_sys::CustomEventInit::new();
+    event_init.set_detail(&detail);
+    event_init.set_bubbles(true);
+    event_init.set_composed(true);
+    let event = web_sys::CustomEvent::new_with_event_init_dict("perspective-command", &event_init)?;
+
+    elem.dispatch_event(&event)?;
+    Ok(())
+}
+
 fn dispatch_column_settings_open_changed(
     workspace: &Workspace,
     elem: &HtmlElement,
@@ -315,7 +331,17 @@ pub fn wire_element_events(
         }
     });
 
+    let command_sub = presentation.command_invoked.add_listener({
+        clone!(elem);
+        move |(key, context): (String, JsValue)| {
+            if let Err(err) = dispatch_command(&elem, &key, &context) {
+                tracing::error!("Failed to dispatch `perspective-command`: {err}");
+            }
+        }
+    });
+
     vec![
+        command_sub,
         layout_sub,
         active_panel_sub,
         theme_sub,

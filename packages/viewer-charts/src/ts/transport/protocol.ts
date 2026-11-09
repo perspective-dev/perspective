@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { FacetConfig, PluginConfig } from "../charts/chart.ts";
-import type { PerspectiveClickDetail } from "../event-detail.ts";
+import type { ChartHit, PerspectiveClickDetail } from "../event-detail.ts";
 import type { ThemeSnapshot } from "../theme/theme.ts";
 import type { TileSourceSpec } from "../map/tile-source.ts";
 import type { ViewConfig } from "@perspective-dev/client";
@@ -41,6 +41,7 @@ export type ControlMsg =
     | ResetExpandedDomainMsg
     | SaveZoomReqMsg
     | SnapshotPngReqMsg
+    | HitTestReqMsg
     | InteractionMsg
     | DestroyMsg;
 
@@ -49,6 +50,7 @@ export type WorkerMsg =
     | ZoomChangedMsg
     | SaveZoomReplyMsg
     | SnapshotPngReplyMsg
+    | HitTestReplyMsg
     | PinTooltipMsg
     | DismissTooltipMsg
     | SetCursorMsg
@@ -426,6 +428,26 @@ export interface SnapshotPngReplyMsg {
     kind: "snapshotPngReply";
     requestId: number;
     blob?: Blob;
+    error?: string;
+}
+
+/**
+ * Host → worker: describe the mark at canvas-relative `(mx, my)`.
+ */
+export interface HitTestReqMsg {
+    kind: "hitTest";
+    requestId: number;
+    mx: number;
+    my: number;
+}
+
+/**
+ * Worker → host reply to a `HitTestReqMsg`, `hit` being `null` over nothing.
+ */
+export interface HitTestReplyMsg {
+    kind: "hitTestReply";
+    requestId: number;
+    hit: ChartHit | null;
     error?: string;
 }
 

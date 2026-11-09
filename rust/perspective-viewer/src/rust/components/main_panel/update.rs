@@ -15,15 +15,22 @@
 //! context menu. The heavier `BeforeResize` presize lives in
 //! [`super::presize`].
 
-use perspective_js::utils::JsValueSerdeExt;
+use std::rc::Rc;
+
+use perspective_js::utils::{ApiFuture, JsValueSerdeExt};
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
-use super::MainPanel;
+use super::{MainPanel, MainPanelMsg, MenuOrigin, MenuRequest};
 use crate::components::panel_menu::PanelCommand;
 use crate::js::{Layout, RegularLayout};
+use crate::queries::{
+    CommandLocation, CommandSource, ResolvedCommands, has_command_schema, resolve_commands,
+};
 use crate::renderer::SUBPIXEL_EPSILON;
 use crate::tasks::resize_callback;
+use crate::utils::PtrEqRc;
+use crate::workspace::PanelId;
 
 impl MainPanel {
     pub(super) fn on_pointer_event(
@@ -146,6 +153,7 @@ impl MainPanel {
         id: Option<String>,
         x: f64,
         y: f64,
+        origin: MenuOrigin,
     ) -> bool {
         // A frame-less right-click (status bar, sidebars) targets the
         // ACTIVE panel, validated against the workspace so a stale slot
@@ -154,7 +162,7 @@ impl MainPanel {
             ctx.props().renderer.slot_name().filter(|name| {
                 ctx.props()
                     .workspace
-                    .panel(&crate::workspace::PanelId::from(name.as_str()))
+                    .panel(&PanelId::from(name.as_str()))
                     .is_some()
             })
         });
@@ -165,13 +173,105 @@ impl MainPanel {
             ctx.props().on_activate_panel.emit(id.clone());
         }
 
-        self.context_menu = Some((x, y, id));
+        let panel = id
+            .as_deref()
+            .and_then(|id| ctx.props().workspace.panel(&PanelId::from(id)));
+
+        if !has_command_schema(&ctx.props().presentation, panel.as_ref()) {
+            self.pending_menu = None;
+            self.context_menu_commands = PtrEqRc::default();
+            self.context_menu = Some((x, y, id));
+            return true;
+        }
+
+        let request = Rc::new(MenuRequest { x, y, panel: id });
+        self.pending_menu = Some(request.clone());
+        let presentation = ctx.props().presentation.clone();
+        let link = ctx.link().clone();
+        ApiFuture::spawn(async move {
+            let commands = resolve_commands(
+                &presentation,
+                panel.as_ref(),
+                CommandLocation::ContextMenu,
+                (x, y),
+                origin == MenuOrigin::Body,
+            )
+            .await;
+
+            link.send_message(MainPanelMsg::ContextMenuResolved(request, commands));
+            Ok(())
+        });
+
+        false
+    }
+
+    /// Open the context menu for `request` unless a later gesture superseded
+    /// it or its panel has since closed.
+    pub(super) fn on_context_menu_resolved(
+        &mut self,
+        ctx: &Context<Self>,
+        request: Rc<MenuRequest>,
+        commands: ResolvedCommands,
+    ) -> bool {
+        let is_pending = self
+            .pending_menu
+            .as_ref()
+            .is_some_and(|pending| Rc::ptr_eq(pending, &request));
+
+        if !is_pending {
+            return false;
+        }
+
+        self.pending_menu = None;
+        let is_closed = request
+            .panel
+            .as_deref()
+            .is_some_and(|id| ctx.props().workspace.panel(&PanelId::from(id)).is_none());
+
+        if is_closed {
+            return false;
+        }
+
+        self.context_menu_commands = PtrEqRc::new(commands);
+        self.context_menu = Some((request.x, request.y, request.panel.clone()));
         true
     }
 
     pub(super) fn on_close_context_menu(&mut self) -> bool {
         self.context_menu = None;
         true
+    }
+
+    /// Deliver a picked custom command to the party that declared it.
+    pub(super) fn on_custom_command(
+        &mut self,
+        ctx: &Context<Self>,
+        source: CommandSource,
+        key: String,
+    ) -> bool {
+        let Some((_, _, target)) = self.context_menu.clone() else {
+            return false;
+        };
+
+        let context = self.context_menu_commands.context.clone();
+        match source {
+            CommandSource::App => ctx
+                .props()
+                .presentation
+                .command_invoked
+                .emit((key, context)),
+            CommandSource::Plugin => {
+                let plugin = target
+                    .and_then(|id| ctx.props().workspace.panel(&PanelId::from(id.as_str())))
+                    .and_then(|panel| panel.renderer.active_plugin());
+
+                if let Some(plugin) = plugin {
+                    ApiFuture::spawn(async move { plugin.execute_command(key, context).await });
+                }
+            },
+        }
+
+        false
     }
 
     pub(super) fn on_command(&mut self, ctx: &Context<Self>, cmd: PanelCommand) -> bool {

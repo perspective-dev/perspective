@@ -12,6 +12,7 @@
 
 import type { ColumnDataMap } from "../../data/view-reader.ts";
 import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { ClickTarget } from "../../event-detail.ts";
 import { TreeChartBase, firstNonMetadataColumn } from "../common/tree-chart.ts";
 import { NULL_NODE } from "../common/node-store.ts";
 import {
@@ -27,6 +28,7 @@ import {
     handleSunburstHover,
     handleSunburstClick,
     dismissSunburstPinnedTooltip,
+    sunburstClickTargetAt,
     type SunburstBreadcrumbRegion,
 } from "./sunburst-interact.ts";
 
@@ -133,6 +135,10 @@ export class SunburstChart extends TreeChartBase {
                 return true;
             },
         };
+    }
+
+    override clickTargetAt(mx: number, my: number): ClickTarget | null {
+        return sunburstClickTargetAt(this, mx, my);
     }
 
     async uploadAndRender(

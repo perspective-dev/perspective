@@ -18,6 +18,7 @@ import type {
     SortDir,
     ViewWindow,
     ViewConfigUpdate,
+    Scalar,
 } from "@perspective-dev/client";
 
 import type {
@@ -601,6 +602,9 @@ export interface CellConfigResult {
     row: Record<string, unknown>;
     column_names: string[];
     config: ViewConfigUpdate;
+    row_path: Scalar[];
+    column_path: Scalar[];
+    value?: Scalar;
 }
 
 // Custom event detail types

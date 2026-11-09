@@ -12,6 +12,11 @@
 
 import type { View } from "@perspective-dev/client";
 import type { PluginStaticConfig } from "../../dist/ts-rs/PluginStaticConfig.d.ts";
+import type { CommandSchema } from "../../dist/ts-rs/CommandSchema.d.ts";
+import type {
+    PerspectiveCommandContext,
+    PerspectiveHit,
+} from "../../dist/wasm/perspective-viewer.js";
 
 /**
  * The `IPerspectiveViewerPlugin` interface defines the necessary API for a
@@ -216,6 +221,28 @@ export interface IPerspectiveViewerPlugin {
      * selection UI may omit it.
      */
     deselect?(): Promise<void>;
+
+    /**
+     * Describe what this plugin rendered at a viewport point.
+     *
+     * @param x The point's `clientX`.
+     * @param y The point's `clientY`.
+     */
+    hit_test?(x: number, y: number): Promise<PerspectiveHit | undefined>;
+
+    /**
+     * The commands this plugin offers for `context`, as a synchronous
+     * function of `context` alone.
+     */
+    command_schema?(context: PerspectiveCommandContext): CommandSchema;
+
+    /**
+     * Run the command `key` this plugin declared for `context`.
+     */
+    execute_command?(
+        key: string,
+        context: PerspectiveCommandContext,
+    ): Promise<void>;
 
     /**
      * Free any resources acquired by this plugin and prepare to be deleted.

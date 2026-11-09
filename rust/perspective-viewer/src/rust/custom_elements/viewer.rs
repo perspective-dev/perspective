@@ -110,6 +110,10 @@ extern "C" {
     /// `save()` return: a single-panel config.
     #[wasm_bindgen(typescript_type = "Promise<ViewerConfig>")]
     pub type JsViewerConfigPromise;
+
+    /// `setCommandSchema()` argument: the app's command schema function.
+    #[wasm_bindgen(typescript_type = "PerspectiveCommandSchema")]
+    pub type JsCommandSchemaFn;
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -719,6 +723,7 @@ impl PerspectiveViewerElement {
     /// await viewer.delete();
     /// ```
     pub fn delete(self) -> ApiFuture<()> {
+        self.presentation.set_command_schema(None);
         let subs = std::mem::take(&mut *self.hosted_table_subs.borrow_mut());
         let teardown = delete_all(&self.workspace, &self.root);
         ApiFuture::new(async move {
@@ -2109,6 +2114,35 @@ impl PerspectiveViewerElement {
 
             receiver.await.map_err(|_| ApiError::new("Cancelled"))?
         })
+    }
+
+    /// Set the function that declares this viewer's custom commands, replacing
+    /// any previously set.
+    ///
+    /// # Arguments
+    ///
+    /// - `schema` - A synchronous function from a command context to a `{
+    ///   commands }` list, or `null` to remove the current one.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// viewer.setCommandSchema((ctx) => ({
+    ///     commands: [{ kind: "Command", key: "hello", label: "Hello" }],
+    /// }));
+    /// ```
+    #[wasm_bindgen]
+    pub fn setCommandSchema(&self, schema: Option<JsCommandSchemaFn>) -> ApiResult<()> {
+        let schema = schema
+            .map(|schema| {
+                schema
+                    .dyn_into::<js_sys::Function>()
+                    .map_err(|_| ApiError::new("`setCommandSchema` expects a function or `null`"))
+            })
+            .transpose()?;
+
+        self.presentation.set_command_schema(schema);
+        Ok(())
     }
 
     /// Create a new JavaScript Heap reference for this model instance.

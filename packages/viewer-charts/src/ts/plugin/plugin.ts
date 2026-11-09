@@ -15,6 +15,7 @@ import type { View } from "@perspective-dev/client";
 import type {
     HTMLPerspectiveViewerElement,
     IPerspectiveViewerPlugin,
+    PerspectiveHit,
     PluginStaticConfig,
 } from "@perspective-dev/viewer";
 import {
@@ -962,6 +963,23 @@ export class HTMLPerspectiveViewerWebGLPluginElement
      */
     async deselect(): Promise<void> {
         this._renderer?.deselect();
+    }
+
+    async hit_test(x: number, y: number): Promise<PerspectiveHit | undefined> {
+        const rect = this._glCanvas?.getBoundingClientRect();
+        const is_inside =
+            rect !== undefined &&
+            x >= rect.left &&
+            x <= rect.right &&
+            y >= rect.top &&
+            y <= rect.bottom;
+
+        if (!this._renderer || !is_inside) {
+            return undefined;
+        }
+
+        const hit = await this._renderer.hitTest(x - rect.left, y - rect.top);
+        return (hit ?? undefined) as PerspectiveHit | undefined;
     }
 
     async render(view: View): Promise<Blob> {

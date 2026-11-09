@@ -20,7 +20,9 @@ import {
     emitTreeNodeEvent,
     showTreePinnedTooltip,
     treeDrillTo,
+    treeNodeClickTarget,
 } from "../common/tree-interact.ts";
+import type { ClickTarget } from "../../event-detail.ts";
 
 interface HitResult {
     leafId: number;
@@ -167,6 +169,39 @@ export function handleTreemapHover(
 
         renderTreemapChromeOverlay(chart);
     }
+}
+
+/**
+ * The click target for the treemap node at `(mx, my)`, or `null` over the
+ * breadcrumbs or empty space.
+ */
+export function treemapClickTargetAt(
+    chart: TreemapChart,
+    mx: number,
+    my: number,
+): ClickTarget | null {
+    const in_breadcrumbs = chart._breadcrumbRegions.some(
+        (region) =>
+            mx >= region.x0 &&
+            mx <= region.x1 &&
+            my >= region.y0 &&
+            my <= region.y1,
+    );
+
+    if (in_breadcrumbs) {
+        return null;
+    }
+
+    const { leafId, branchId, inHeader } = hitTest(chart, mx, my);
+    if (branchId !== NULL_NODE && inHeader) {
+        return treeNodeClickTarget(chart, branchId, "branch");
+    } else if (leafId !== NULL_NODE) {
+        return treeNodeClickTarget(chart, leafId, "leaf");
+    } else if (branchId !== NULL_NODE) {
+        return treeNodeClickTarget(chart, branchId, "branch");
+    }
+
+    return null;
 }
 
 export function handleTreemapClick(

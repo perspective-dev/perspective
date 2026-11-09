@@ -18,7 +18,7 @@ use perspective_js::utils::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
-use crate::config::PluginStaticConfig;
+use crate::config::{CommandSchema, PluginStaticConfig};
 use crate::renderer::ColumnConfigMap;
 
 /// Perspective FFI
@@ -122,6 +122,15 @@ extern "C" {
 
     #[wasm_bindgen(method, catch, js_name = presize)]
     async fn _presize(this: &JsPerspectiveViewerPlugin, width: f64, height: f64) -> ApiResult<JsValue>;
+
+    #[wasm_bindgen(method, catch, js_name = hit_test)]
+    async fn _hit_test(this: &JsPerspectiveViewerPlugin, x: f64, y: f64) -> ApiResult<JsValue>;
+
+    #[wasm_bindgen(method, catch, js_name = command_schema)]
+    fn _command_schema(this: &JsPerspectiveViewerPlugin, context: &JsValue) -> ApiResult<JsValue>;
+
+    #[wasm_bindgen(method, catch, js_name = execute_command)]
+    async fn _execute_command(this: &JsPerspectiveViewerPlugin, key: String, context: JsValue) -> ApiResult<JsValue>;
 }
 
 impl From<JsPluginStaticConfig> for PluginStaticConfig {
@@ -145,6 +154,9 @@ pub struct PluginCapabilities {
     pub deselect: bool,
     pub presize: bool,
     pub render: bool,
+    pub hit_test: bool,
+    pub command_schema: bool,
+    pub execute_command: bool,
 }
 
 thread_local! {
@@ -169,6 +181,9 @@ impl PluginCapabilities {
             deselect: is_fn("deselect"),
             presize: is_fn("presize"),
             render: is_fn("render"),
+            hit_test: is_fn("hit_test"),
+            command_schema: is_fn("command_schema"),
+            execute_command: is_fn("execute_command"),
         }
     }
 }
@@ -320,5 +335,36 @@ impl JsPerspectiveViewerPlugin {
     pub async fn presize(&self, width: f64, height: f64) -> ApiResult<Option<js_sys::Function>> {
         let present = self._presize(width, height).await?;
         Ok(present.dyn_into::<js_sys::Function>().ok())
+    }
+
+    /// What this plugin rendered at the viewport point `(x, y)`, or `None`
+    /// when nothing is there or the plugin cannot say.
+    pub async fn hit_test(&self, x: f64, y: f64) -> ApiResult<Option<JsValue>> {
+        if self.capabilities().hit_test {
+            let hit = self._hit_test(x, y).await?;
+            Ok((!hit.is_null() && !hit.is_undefined()).then_some(hit))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// The commands this plugin declares for `context`, or `None` when it
+    /// declares no command schema.
+    pub fn command_schema(&self, context: &JsValue) -> ApiResult<Option<CommandSchema>> {
+        if self.capabilities().command_schema {
+            Ok(Some(self._command_schema(context)?.into_serde_ext()?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Run the command `key` this plugin declared for `context`, outside the
+    /// draw lock so the plugin may call back into the host's public API.
+    pub async fn execute_command(&self, key: String, context: JsValue) -> ApiResult<()> {
+        if self.capabilities().execute_command {
+            self._execute_command(key, context).await?;
+        }
+
+        Ok(())
     }
 }

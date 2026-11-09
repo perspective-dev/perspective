@@ -81,6 +81,8 @@ const App: React.FC = () => (
 | `onConfigUpdate` | `(config: ViewerConfigUpdate) => void`                        | Called when the user reconfigures the viewer through its UI.    |
 | `onClick`        | `(detail: PerspectiveClickEventDetail) => void`               | Called when the user clicks a datapoint.                        |
 | `onSelect`       | `(detail: PerspectiveSelectEventDetail) => void`              | Called when the user selects (or deselects) a datapoint or row. |
+| `commandSchema`  | `PerspectiveCommandSchema`                                    | Declares custom commands, applied via `setCommandSchema()`.     |
+| `onCommand`      | `(detail: PerspectiveCommandEventDetail) => void`             | Called when the user picks a custom command.                    |
 
 A subset of standard HTML attributes — `className`, `id`, `style`, `hidden`,
 `slot`, `tabIndex` and `title` — is forwarded to the underlying element.
