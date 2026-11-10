@@ -120,6 +120,103 @@ test.describe("wasm registry", () => {
         test.expect(result).toContain("server32 wasm is already initialized");
     });
 
+    test("re-registering initialized keys resolves the existing runtime", async ({
+        page,
+    }) => {
+        const result = await in_page(page, async ({ urls }) => {
+            const registry_url = urls.esm.replace(
+                "perspective.js",
+                "wasm/registry.js",
+            );
+
+            const perspective = await import(urls.esm);
+            const registry = await import(registry_url);
+            await perspective.init({
+                client: fetch(urls.client_wasm),
+                server: fetch(urls.wasm32),
+            });
+
+            await perspective.worker();
+            const before = registry.client_runtime();
+
+            // A second module evaluation of the same bundle, as anywidget
+            // does once per widget model, re-registers the same keys.
+            await perspective.init({
+                client: fetch(urls.client_wasm),
+                server: fetch(urls.wasm32),
+            });
+
+            const client = await perspective.worker();
+            const table = await client.table({ x: [1, 2, 3] });
+            return {
+                same_runtime:
+                    before !== undefined &&
+                    before === registry.client_runtime(),
+                size: await table.size(),
+            };
+        });
+
+        test.expect(result).toEqual({ same_runtime: true, size: 3 });
+    });
+
+    test("re-registration warns once per key", async ({ page }) => {
+        const result = await in_page(page, async ({ urls }) => {
+            const perspective = await import(urls.esm);
+            const warnings = [];
+            const warn = console.warn;
+            console.warn = (msg) => warnings.push(msg);
+            try {
+                await perspective.init({
+                    client: fetch(urls.client_wasm),
+                    server: fetch(urls.wasm32),
+                });
+
+                await perspective.worker();
+                await perspective.init({
+                    client: fetch(urls.client_wasm),
+                    server: fetch(urls.wasm32),
+                });
+
+                await perspective.init({
+                    client: fetch(urls.client_wasm),
+                    server: fetch(urls.wasm32),
+                });
+            } finally {
+                console.warn = warn;
+            }
+
+            return warnings.filter((msg) =>
+                msg.includes("wasm is already initialized"),
+            );
+        });
+
+        test.expect(result).toEqual([
+            "client, server wasm is already initialized; keeping the existing runtime (Perspective was loaded more than once on this page).",
+        ]);
+    });
+
+    test("init_server() still throws when replacing a consumed server", async ({
+        page,
+    }) => {
+        const result = await in_page(page, async ({ urls }) => {
+            const perspective = await import(urls.esm);
+            await perspective.init({
+                client: fetch(urls.client_wasm),
+                server: fetch(urls.wasm32),
+            });
+
+            await perspective.worker();
+            try {
+                perspective.init_server(fetch(urls.wasm32));
+                return "replaced";
+            } catch (e) {
+                return e.message;
+            }
+        });
+
+        test.expect(result).toContain("server wasm is already initialized");
+    });
+
     test("another version on the page imports, then rejects init()", async ({
         page,
     }) => {
