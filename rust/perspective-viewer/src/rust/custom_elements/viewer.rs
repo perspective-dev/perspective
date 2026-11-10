@@ -20,7 +20,7 @@ use futures::future::join_all;
 use js_sys::{Array, JsString};
 use perspective_client::config::ViewConfigUpdate;
 use perspective_js::utils::global;
-use perspective_js::{JsViewConfig, JsViewWindow, Table, View, apierror};
+use perspective_js::{JsResolvedViewConfig, JsViewWindow, Table, View, apierror, ts_promise};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_derive::try_from_js_option;
@@ -98,18 +98,23 @@ extern "C" {
     #[wasm_bindgen(typescript_type = "SaveWorkspaceOptions")]
     pub type JsSaveWorkspaceOptions;
 
-    /// `saveWorkspace()` return: a workspace config.
-    #[wasm_bindgen(typescript_type = "Promise<WorkspaceConfig>")]
-    pub type JsWorkspaceConfigPromise;
-
-    /// A `Promise<void>` return, used by the `restore` family (whose
-    /// `ApiFuture<()>` would otherwise erase to `Promise<any>`).
-    #[wasm_bindgen(typescript_type = "Promise<void>")]
-    pub type JsVoidPromise;
-
     /// `save()` return: a single-panel config.
-    #[wasm_bindgen(typescript_type = "Promise<ViewerConfig>")]
-    pub type JsViewerConfigPromise;
+    #[wasm_bindgen(typescript_type = "ViewerConfig")]
+    pub type JsViewerConfig;
+
+    /// `saveWorkspace()` return: a workspace config.
+    #[wasm_bindgen(typescript_type = "WorkspaceConfig")]
+    pub type JsWorkspaceConfig;
+
+    /// `export()` return, whose shape follows the `ExportMethod`.
+    #[wasm_bindgen(typescript_type = "ExportData")]
+    pub type JsExportData;
+}
+
+ts_promise! {
+    JsViewerConfig => JsViewerConfigPromise = "Promise<ViewerConfig>";
+    JsWorkspaceConfig => JsWorkspaceConfigPromise = "Promise<WorkspaceConfig>";
+    JsExportData => JsExportDataPromise = "Promise<ExportData>";
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -848,7 +853,10 @@ impl PerspectiveViewerElement {
     /// server (unlike [`PerspectiveViewerElement::getView`] followed by
     /// [`View::get_config`])
     #[wasm_bindgen]
-    pub fn getViewConfig(&self, options: Option<JsPanelOptions>) -> ApiFuture<JsViewConfig> {
+    pub fn getViewConfig(
+        &self,
+        options: Option<JsPanelOptions>,
+    ) -> ApiFuture<JsResolvedViewConfig> {
         let this = self.clone();
         ApiFuture::new(async move {
             let PanelOptions { panel: name } = parse_options(options)?;
@@ -1089,11 +1097,11 @@ impl PerspectiveViewerElement {
         &self,
         update: JsViewerConfigUpdate,
         options: Option<JsRestoreOptions>,
-    ) -> JsVoidPromise {
+    ) -> ApiFuture<()> {
         let effect = self.workspace.effects().guard();
         let this = self.clone();
         let saved = saved_version(&update);
-        let fut = ApiFuture::new_throttled(noting_saved_version(saved, async move {
+        ApiFuture::new_throttled(noting_saved_version(saved, async move {
             let RestoreOptions {
                 panel: name,
                 suppress_errors,
@@ -1209,9 +1217,7 @@ impl PerspectiveViewerElement {
                     Ok(())
                 },
             }
-        }));
-
-        js_sys::Promise::from(fut).unchecked_into()
+        }))
     }
 
     /// Apply a [`WorkspaceConfigUpdate`] to the element — the multi-panel
@@ -1243,11 +1249,11 @@ impl PerspectiveViewerElement {
         &self,
         update: JsWorkspaceConfigUpdate,
         options: Option<JsRestoreWorkspaceOptions>,
-    ) -> JsVoidPromise {
+    ) -> ApiFuture<()> {
         let effect = self.workspace.effects().guard();
         let this = self.clone();
         let saved = saved_version(&update);
-        let fut = ApiFuture::new(noting_saved_version(saved, async move {
+        ApiFuture::new(noting_saved_version(saved, async move {
             let _effect = effect;
             let RestoreWorkspaceOptions { wait_for_table } = parse_options(options)?;
             let missing = MissingTable::from_wait(wait_for_table);
@@ -1312,9 +1318,7 @@ impl PerspectiveViewerElement {
 
             ejected?;
             Ok(())
-        }));
-
-        js_sys::Promise::from(fut).unchecked_into()
+        }))
     }
 
     /// If this element is in an _errored_ state, this method will clear it and
@@ -1377,9 +1381,9 @@ impl PerspectiveViewerElement {
     ///     await viewer.restore(token);
     /// });
     /// ```
-    pub fn save(&self, options: Option<JsPanelOptions>) -> JsViewerConfigPromise {
+    pub fn save(&self, options: Option<JsPanelOptions>) -> ApiFuture<JsViewerConfig> {
         let this = self.clone();
-        let fut = ApiFuture::new(async move {
+        ApiFuture::new(async move {
             let PanelOptions { panel: name } = parse_options(options)?;
             this.workspace.effects().settle().await;
             let panel = this.resolve_panel(name)?;
@@ -1391,12 +1395,11 @@ impl PerspectiveViewerElement {
                 })
                 .await?;
 
-            viewer_config
+            Ok(viewer_config
                 .map_table(|name| this.workspace.inline_table_ref(&name))
-                .encode()
-        });
-
-        js_sys::Promise::from(fut).unchecked_into()
+                .encode()?
+                .unchecked_into())
+        })
     }
 
     /// Save the ENTIRE element to a [`WorkspaceConfig`]
@@ -1415,14 +1418,14 @@ impl PerspectiveViewerElement {
     pub fn saveWorkspace(
         &self,
         options: Option<JsSaveWorkspaceOptions>,
-    ) -> JsWorkspaceConfigPromise {
+    ) -> ApiFuture<JsWorkspaceConfig> {
         let this = self.clone();
-        let fut = ApiFuture::new(async move {
+        ApiFuture::new(async move {
             let SaveWorkspaceOptions { full_palette } = parse_options(options)?;
-            Self::workspace_config(this, full_palette.unwrap_or(false)).await
-        });
-
-        js_sys::Promise::from(fut).unchecked_into()
+            Ok(Self::workspace_config(this, full_palette.unwrap_or(false))
+                .await?
+                .unchecked_into())
+        })
     }
 
     /// Download this viewer's internal [`View`] data via a browser download
@@ -1491,7 +1494,7 @@ impl PerspectiveViewerElement {
     /// ```javascript
     /// const data = await viewer.export("plugin");
     /// ```
-    pub fn export(&self, options: Option<JsExportOptions>) -> ApiFuture<JsValue> {
+    pub fn export(&self, options: Option<JsExportOptions>) -> ApiFuture<JsExportData> {
         let this = self.clone();
         ApiFuture::new(async move {
             let ExportOptions {
@@ -1824,7 +1827,7 @@ impl PerspectiveViewerElement {
     /// await viewer.restyleElement();
     /// ```
     #[wasm_bindgen]
-    pub fn restyleElement(&self) -> ApiFuture<JsValue> {
+    pub fn restyleElement(&self) -> ApiFuture<()> {
         clone!(self.workspace);
         let effect = workspace.effects().guard();
         ApiFuture::new(async move {
@@ -1837,23 +1840,14 @@ impl PerspectiveViewerElement {
                 panel.renderer.restyle_all().await?;
             }
 
-            Ok(JsValue::UNDEFINED)
+            Ok(())
         })
     }
 
     #[wasm_bindgen]
-    pub fn getThemes(&self) -> ApiFuture<JsValue> {
+    pub fn getThemes(&self) -> ApiFuture<Vec<String>> {
         clone!(self.presentation);
-        ApiFuture::new(async move {
-            let x = presentation
-                .get_available_themes()
-                .await?
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>();
-
-            Ok(JsValue::from(x))
-        })
+        ApiFuture::new(async move { Ok(presentation.get_available_themes().await?.to_vec()) })
     }
 
     /// Set the available theme names available in the status bar UI.
@@ -1871,7 +1865,7 @@ impl PerspectiveViewerElement {
     /// viewer.resetThemes(["Pro Light", "Pro Dark"])
     /// ```
     #[wasm_bindgen]
-    pub fn resetThemes(&self, themes: Option<Box<[JsValue]>>) -> ApiFuture<JsValue> {
+    pub fn resetThemes(&self, themes: Option<Box<[JsValue]>>) -> ApiFuture<()> {
         clone!(self.workspace, self.presentation);
         let effect = workspace.effects().guard();
         ApiFuture::new(async move {
@@ -1911,7 +1905,7 @@ impl PerspectiveViewerElement {
             }
 
             presentation.publish_theme_config().await?;
-            Ok(JsValue::UNDEFINED)
+            Ok(())
         })
     }
 
@@ -1957,7 +1951,7 @@ impl PerspectiveViewerElement {
     /// await viewer.toggleConfig();
     /// ```
     #[wasm_bindgen]
-    pub fn toggleConfig(&self, force: Option<bool>) -> ApiFuture<JsValue> {
+    pub fn toggleConfig(&self, force: Option<bool>) -> ApiFuture<()> {
         let effect = self.workspace.effects().guard();
         let root = self.root.clone();
         ApiFuture::new(async move {
@@ -1968,7 +1962,8 @@ impl PerspectiveViewerElement {
                 PerspectiveViewerMsg::ToggleSettingsInit(force, true, Some(sender)),
             );
 
-            receiver.await.map_err(|_| JsValue::from("Cancelled"))?
+            receiver.await.map_err(|_| JsValue::from("Cancelled"))??;
+            Ok(())
         })
     }
 
@@ -2024,7 +2019,7 @@ impl PerspectiveViewerElement {
         &self,
         config: JsViewerConfigInitial,
         options: Option<JsAddPanelOptions>,
-    ) -> ApiFuture<JsValue> {
+    ) -> ApiFuture<String> {
         clone!(self.elem, self.presentation, self.workspace);
         let effect = workspace.effects().guard();
         let notify = self.layout_changed_notify();
@@ -2044,7 +2039,7 @@ impl PerspectiveViewerElement {
                 MissingTable::from_wait(wait_for_table),
             )
             .await?;
-            Ok(JsValue::from_str(id.as_str()))
+            Ok(id.as_str().to_owned())
         }))
     }
 
