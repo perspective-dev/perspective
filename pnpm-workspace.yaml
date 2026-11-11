@@ -59,7 +59,7 @@ catalog:
     "pro_self_extracting_wasm": "0.0.11"
     "react-dom": ">17 <20"
     "react": ">17 <20"
-    "regular-layout": "=0.7.0"
+    "regular-layout": "=0.8.0"
     "regular-table": "=0.9.2"
     "stoppable": "=1.1.0"
     "ws": "^8.17.0"
@@ -125,3 +125,4 @@ catalog:
 
 minimumReleaseAgeExclude:
     - pro_self_extracting_wasm@0.0.11
+    - regular-layout@0.8.0

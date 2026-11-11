@@ -33,20 +33,7 @@
 
 /// <reference lib="esnext.disposable" preserve="true" />
 
-// `regular-layout` self-registers the custom elements `regular-layout`,
-// `regular-layout-frame` and `regular-layout-tab` at import time, unguarded,
-// and this module may be evaluated more than once per page (anywidget
-// evaluates its `_esm` bundle once per widget model). Skip the duplicate
-// registration the way `custom_element.rs` skips Perspective's own elements
-// (#3192). A top-level `await` keeps the registration synchronous with module
-// evaluation, as the static `import "regular-layout"` it replaces was.
-if (customElements.get("regular-layout") === undefined) {
-    await import("regular-layout");
-} else {
-    console.warn(
-        'Custom element "regular-layout" is already registered; skipping duplicate registration (Perspective was loaded more than once on this page).',
-    );
-}
+import "regular-layout";
 
 export type { IPerspectiveViewerPlugin } from "./plugin.ts";
 export { HTMLPerspectiveViewerPluginElement } from "./plugin.ts";

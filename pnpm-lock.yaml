@@ -124,8 +124,8 @@ catalogs:
       specifier: '>17 <20'
       version: 18.3.1
     regular-layout:
-      specifier: '=0.7.0'
-      version: 0.7.0
+      specifier: '=0.8.0'
+      version: 0.8.0
     regular-table:
       specifier: '=0.9.2'
       version: 0.9.2
@@ -985,7 +985,7 @@ importers:
         version: 0.0.11
       regular-layout:
         specifier: 'catalog:'
-        version: 0.7.0
+        version: 0.8.0
     devDependencies:
       '@perspective-dev/esbuild-plugin':
         specifier: workspace:^
@@ -4444,8 +4444,8 @@ packages:
     resolution: {integrity: sha512-dYqgNSZbDwkaJ2ceRd9ojCGjBq+mOm9LmtXnAnEGyHhN/5R7iDW2TRw3h+o/jCFxus3P2LfWIIiwowAjANm7IA==}
     engines: {node: '>= 0.4'}
 
-  regular-layout@0.7.0:
-    resolution: {integrity: sha512-7L1Ba/g8xgTHaJUYlltC4j3vFGTZKIUlGUJrxkqb2bArAvmrltg1GhEyL8Hy6QO3X/61eO/cQLvYCR7Ut0fytg==}
+  regular-layout@0.8.0:
+    resolution: {integrity: sha512-WbnE7cyfjDqA13k8KmnOlfkWXq3TvpVoHr0ugAAExpl91D8qYDPicpnQl5dqppbb27t68YOHuDCgU+a7vaamIA==}
 
   regular-table@0.9.2:
     resolution: {integrity: sha512-E5EjrGEp6Pxo55nPCqv//gq4R6yyQZjUJby+PUT+k+eJd327MsZpar6Eem27fTTkzqV5I7BsvzArCySDnzl1Jg==}
@@ -9111,7 +9111,7 @@ snapshots:
       gopd: 1.2.0
       set-function-name: 2.0.2
 
-  regular-layout@0.7.0: {}
+  regular-layout@0.8.0: {}
 
   regular-table@0.9.2: {}
 
