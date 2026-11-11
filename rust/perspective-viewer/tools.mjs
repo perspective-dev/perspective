@@ -91,8 +91,12 @@ const DOCS_DTS_FILES = [
         "CustomNumberFormatConfig",
         "NumberFormatStyle",
         "Notation",
-        "CustomDatetimeStyleConfig",
-        "SimpleDatetimeStyleConfig",
+        "DatetimeFormat",
+        "SimpleDatetimeFormat",
+        "DatetimeTextPart",
+        "DatetimeNumericPart",
+        "DatetimeMonthPart",
+        "FractionalSecondDigits",
     ].map((x) => ({ file: `./dist/ts-rs/${x}.d.ts`, prefix: "Column Format" })),
     ...[
         "WorkspaceConfigUpdate",
@@ -114,7 +118,7 @@ function repoPath(file) {
 
 // Every page in the `SUMMARY.md` table of contents that is one of `roots`
 // or nested beneath one.
-function summarySubtrees(summary, roots) {
+function summarySubtrees(summary, roots, missing) {
     const files = [];
     const found = new Set();
     let depth = null;
@@ -138,7 +142,7 @@ function summarySubtrees(summary, roots) {
     }
 
     for (const root of roots.filter((x) => !found.has(x))) {
-        console.warn(`docs corpus: \`${root}\` is not in ${summary}`);
+        missing.push(`\`${root}\` is not in ${summary}`);
     }
 
     return files;
@@ -227,7 +231,7 @@ function declarationEnd(text, start, kind) {
 
 // The source text of each `scope` declaration (e.g. `"interface Foo"`),
 // including its leading JSDoc.
-function scopeDeclarations(file, text, scope) {
+function scopeDeclarations(file, text, scope, missing) {
     return scope
         .map((decl) => {
             const [kind, name] = decl.split(/\s+/);
@@ -237,7 +241,7 @@ function scopeDeclarations(file, text, scope) {
 
             const match = re.exec(text);
             if (!match) {
-                console.warn(`docs corpus: \`${decl}\` not found in ${file}`);
+                missing.push(`\`${decl}\` not found in ${file}`);
                 return "";
             }
 
@@ -391,14 +395,12 @@ function inlineMangledDefinitions(schema) {
     return out;
 }
 
-async function buildToolSchemas() {
+async function buildToolSchemas(missing) {
     const { createGenerator } = await import("ts-json-schema-generator");
     const schemas = {};
     for (const [type, path] of TOOL_SCHEMA_TYPES) {
         if (!fs.existsSync(path)) {
-            console.warn(
-                `docs corpus: ${path} missing, skipping ${type} schema`,
-            );
+            missing.push(`${path} (${type} tool schema)`);
             continue;
         }
 
@@ -417,14 +419,19 @@ async function buildToolSchemas() {
 
 /// Build the `dist/docs/perspective-docs.json` agent metadata bundle
 /// (`{schemas, chunks}`). Returns summary stats.
+///
+/// Every input is required: a missing file or scoped declaration (e.g. a
+/// ts-rs type renamed in Rust but not here) fails the build rather than
+/// silently dropping that API from the corpus.
 export async function buildDocsCorpus() {
     const chunks = [];
+    const missing = [];
     const md_files = [
-        ...summarySubtrees(DOCS_SUMMARY, DOCS_SUBTREES),
+        ...summarySubtrees(DOCS_SUMMARY, DOCS_SUBTREES, missing),
         ...DOCS_MD_FILES,
     ].filter((file) => {
         if (!fs.existsSync(file)) {
-            console.warn(`docs corpus: ${file} missing, skipping`);
+            missing.push(file);
             return false;
         }
 
@@ -438,15 +445,24 @@ export async function buildDocsCorpus() {
     for (const { file, prefix, scope } of DOCS_DTS_FILES) {
         if (fs.existsSync(file)) {
             const text = fs.readFileSync(file, "utf8");
-            const scoped = scope ? scopeDeclarations(file, text, scope) : text;
+            const scoped = scope
+                ? scopeDeclarations(file, text, scope, missing)
+                : text;
             chunks.push(...chunkDts(file, scoped, prefix));
         } else {
-            console.warn(`docs corpus: ${file} missing, skipping API chunks`);
+            missing.push(file);
         }
     }
 
+    const schemas = await buildToolSchemas(missing);
+    if (missing.length > 0) {
+        throw new Error(
+            `docs corpus: ${missing.length} input(s) missing - update DOCS_DTS_FILES / TOOL_SCHEMA_TYPES / DOCS_SUBTREES in tools.mjs:\n${missing.map((x) => `  ${x}`).join("\n")}`,
+        );
+    }
+
     const corpus = normalizeChunks(chunks);
-    const bundle = { schemas: await buildToolSchemas(), chunks: corpus };
+    const bundle = { schemas, chunks: corpus };
     const json = JSON.stringify(bundle);
     if (json.length > DOCS_RAW_BUDGET) {
         console.warn(
