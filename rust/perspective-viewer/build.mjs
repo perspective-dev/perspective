@@ -27,7 +27,9 @@ import {
     buildDocsCorpus,
     get_host,
     inlineUrlVisitor,
+    mixinVisitor,
     resolveNPM,
+    THEME_AT_RULES,
 } from "./tools.mjs";
 
 const IS_DEBUG =
@@ -162,6 +164,7 @@ export async function build_all() {
         "icons",
         "intl",
         "pro",
+        "pro-light",
         "pro-dark",
         "botanical",
         "monokai",
@@ -180,12 +183,20 @@ export async function build_all() {
         "themes",
     ];
 
+    const palettes = fs
+        .readdirSync("./src/themes/pro")
+        .map((name) => `./src/themes/pro/${name}`);
+
     for (const name of themes) {
         const filename = `./src/themes/${name}.css`;
         const { code } = await bundleAsyncCss({
             filename,
             minify: true,
-            visitor: inlineUrlVisitor(filename),
+            customAtRules: THEME_AT_RULES,
+            visitor: composeVisitors([
+                inlineUrlVisitor(filename),
+                mixinVisitor(palettes),
+            ]),
             resolver: resolveNPM(import.meta.url),
         });
 

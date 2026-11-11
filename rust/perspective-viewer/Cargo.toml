@@ -131,6 +131,8 @@ web-sys.features = [
   "CssRuleList",
   "CssRule",
   "CssStyleRule",
+  "CssGroupingRule",
+  "CssImportRule",
   "CustomEvent",
   "CustomEventInit",
   "DataTransfer",

@@ -1,0 +1,56 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ */
+
+@mixin pro-openlayers-light {
+    --psp-openlayers--tile-url: "http://{a-c}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png";
+    --psp-openlayers--element--background: #fff;
+    --psp-openlayers--category-1--color: #0366d6;
+    --psp-openlayers--category-2--color: #ff7f0e;
+    --psp-openlayers--category-3--color: #2ca02c;
+    --psp-openlayers--category-4--color: #d62728;
+    --psp-openlayers--category-5--color: #9467bd;
+    --psp-openlayers--category-6--color: #8c564b;
+    --psp-openlayers--category-7--color: #e377c2;
+    --psp-openlayers--category-8--color: #7f7f7f;
+    --psp-openlayers--category-9--color: #bcbd22;
+    --psp-openlayers--category-10--color: #17becf;
+    --psp-openlayers--gradient--background: linear-gradient(
+        #4d342f 0%,
+        #e4521b 22.5%,
+        #feeb65 42.5%,
+        #f0f0f0 50%,
+        #dcedc8 57.5%,
+        #42b3d5 67.5%,
+        #1a237e 100%
+    );
+}
+
+@mixin pro-openlayers-dark {
+    --psp-openlayers--tile-url: "http://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
+    --psp-openlayers--attribution--filter: invert(1) hue-rotate(180deg);
+    --psp-openlayers--element--background: #212c2f;
+    --psp-openlayers--category-1--color: rgb(71, 120, 194);
+    --psp-openlayers--category-2--color: rgb(204, 120, 48);
+    --psp-openlayers--category-3--color: rgb(158, 84, 192);
+    --psp-openlayers--category-4--color: rgb(51, 150, 153);
+    --psp-openlayers--category-5--color: rgb(102, 114, 143);
+    --psp-openlayers--category-6--color: rgb(211, 103, 189);
+    --psp-openlayers--category-7--color: rgb(109, 124, 77);
+    --psp-openlayers--category-8--color: rgb(221, 99, 103);
+    --psp-openlayers--category-9--color: rgb(120, 104, 206);
+    --psp-openlayers--category-10--color: rgb(23, 166, 123);
+    --psp-openlayers--gradient--background: linear-gradient(
+        #dd6367 0%,
+        #242526 50%,
+        #3289c8 100%
+    );
+}

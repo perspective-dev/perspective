@@ -1513,14 +1513,15 @@ impl PerspectiveViewerElement {
             };
 
             let panel = this.resolve_panel(name)?;
-            export_method_to_jsvalue(
+            Ok(export_method_to_jsvalue(
                 &panel.session,
                 &panel.renderer,
                 &this.presentation,
                 &this.workspace,
                 method,
             )
-            .await
+            .await?
+            .unchecked_into())
         })
     }
 
@@ -1816,7 +1817,8 @@ impl PerspectiveViewerElement {
     ///
     /// [`Self::restyleElement`] _must_ be called for many runtime changes to
     /// CSS properties to be reflected in an already-rendered
-    /// `<perspective-viewer>`.
+    /// `<perspective-viewer>`, including a `prefers-color-scheme` change
+    /// under a preference-aware theme such as `"Pro"`.
     ///
     /// </div>
     ///

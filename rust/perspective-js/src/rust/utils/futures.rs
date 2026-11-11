@@ -182,6 +182,7 @@ where
 impl<T> IntoWasmAbi for ApiFuture<T>
 where
     Result<T, JsValue>: IntoJsResult + 'static,
+    T: TsPromise,
 {
     type Abi = <js_sys::Promise as IntoWasmAbi>::Abi;
 
@@ -194,7 +195,7 @@ where
 impl<T> FromWasmAbi for ApiFuture<T>
 where
     Result<T, JsValue>: IntoJsResult + 'static,
-    T: From<JsValue> + Into<JsValue>,
+    T: From<JsValue> + Into<JsValue> + TsPromise,
 {
     type Abi = <js_sys::Promise as IntoWasmAbi>::Abi;
 

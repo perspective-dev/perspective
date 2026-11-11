@@ -24,7 +24,7 @@ test.beforeEach(async ({ page }) => {
         const viewer = document.querySelector("perspective-viewer")!;
         await viewer.restore({ plugin: "Debug" });
         // Explicitly register both themes so the memoized theme cache contains
-        // "Pro Dark" even though superstore.html only loads pro.css.
+        // "Pro Dark" even though superstore.html only loads pro-light.css.
         await viewer.resetThemes(["Pro Light", "Pro Dark"]);
     });
 });

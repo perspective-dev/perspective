@@ -1,0 +1,105 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ */
+
+@mixin pro {
+    --psp--color: light-dark(#161616, white);
+    color: var(--psp--color);
+    --psp-inactive--color: light-dark(#ababab, #61656e);
+    --psp-inactive--border-color: light-dark(#dadada, #4c505b);
+    --psp-active--color: light-dark(#2670a9, #2770a9);
+    --psp-error--color: light-dark(#ff471e, #ff9485);
+    --psp--background-color: light-dark(#ffffff, #242526);
+    --psp-icon-overflow-hint--color: rgba(0, 0, 0, 0.2);
+    --psp-select--background-color: none;
+    --psp-warning--background: light-dark(#042121, white);
+    --psp-warning--color: light-dark(#fdfffd, #242526);
+
+    --psp-icon-overflow-hint--color: #fdfffd;
+    --psp-placeholder--background: #8b868045;
+    --psp-dropdown--box-shadow: 5px 5px 0 #00000020;
+
+    --psp-button--font-size: 16px;
+    --psp-config-button--padding: 15px 8px 6px 8px;
+    --psp-column-selector--font-size: 16px;
+    --psp-column-type--width: 25px;
+    --psp-select--padding: 0px;
+    --psp-top-panel-row--display: inline-flex;
+    --psp-button--min-width: 33px;
+
+    font-family:
+        "ui-monospace", "SFMono-Regular", "SF Mono", "Menlo", "Consolas",
+        "Liberation Mono", monospace;
+    --psp-interface-monospace--font-family:
+        "ui-monospace", "SFMono-Regular", "SF Mono", "Menlo", "Consolas",
+        "Liberation Mono", monospace;
+
+    --psp-code-editor--symbol--color: light-dark(#242526, white);
+    --psp-code-editor--literal--color: light-dark(blue, #7dc3f0);
+    --psp-code-editor--operator--color: light-dark(green, rgb(23, 166, 123));
+    --psp-code-editor--comment--color: light-dark(orange, rgb(204, 120, 48));
+    --psp-code-editor--column--color: light-dark(purple, #e18ee1);
+
+    --psp-label--webgl-y1--content: "arrow_upward";
+    --psp-label--webgl-y2--content: "arrow_downward";
+    --psp-charts--treemap-axis--lines: none;
+    --psp-charts--tooltip--background: light-dark(#ffffff, rgb(42, 44, 47));
+    --psp-charts--tooltip--color: light-dark(#161616, white);
+    --psp-charts--tooltip--border-color: light-dark(#ababab, #242526);
+    --psp-charts--gridline--color: light-dark(#eaedef, #3b3f46);
+    --psp-charts--axis-ticks--color: light-dark(#161616, #c5c9d0);
+    --psp-charts--axis-lines--color: light-dark(#c5c9d0, #61656e);
+    --psp-charts--legend--color: light-dark(#161616, #c5c9d0);
+    --psp-charts--legend--background: var(--psp--background-color);
+    --psp-charts--series--color: light-dark(
+        rgba(31, 119, 180, 0.8),
+        rgb(71, 120, 194)
+    );
+    --psp-charts--series-1--color: light-dark(#0366d6, rgb(71, 120, 194));
+    --psp-charts--series-2--color: light-dark(#ff7f0e, rgb(204, 120, 48));
+    --psp-charts--series-3--color: light-dark(#2ca02c, rgb(158, 84, 192));
+    --psp-charts--series-4--color: light-dark(#d62728, rgb(51, 150, 153));
+    --psp-charts--series-5--color: light-dark(#9467bd, rgb(102, 114, 143));
+    --psp-charts--series-6--color: light-dark(#8c564b, rgb(211, 103, 189));
+    --psp-charts--series-7--color: light-dark(#e377c2, rgb(109, 124, 77));
+    --psp-charts--series-8--color: light-dark(#7f7f7f, rgb(221, 99, 103));
+    --psp-charts--series-9--color: light-dark(#bcbd22, rgb(120, 104, 206));
+    --psp-charts--series-10--color: light-dark(#17becf, rgb(23, 166, 123));
+    --psp-datagrid--series-1--color: light-dark(#0366d6, rgb(71, 120, 194));
+    --psp-datagrid--series-2--color: light-dark(#ff7f0e, rgb(204, 120, 48));
+    --psp-datagrid--series-3--color: light-dark(#2ca02c, rgb(158, 84, 192));
+    --psp-datagrid--series-4--color: light-dark(#d62728, rgb(51, 150, 153));
+    --psp-datagrid--series-5--color: light-dark(#9467bd, rgb(102, 114, 143));
+    --psp-datagrid--series-6--color: light-dark(#8c564b, rgb(211, 103, 189));
+    --psp-datagrid--series-7--color: light-dark(#e377c2, rgb(109, 124, 77));
+    --psp-datagrid--series-8--color: light-dark(#7f7f7f, rgb(221, 99, 103));
+    --psp-datagrid--series-9--color: light-dark(#bcbd22, rgb(120, 104, 206));
+    --psp-datagrid--series-10--color: light-dark(#17becf, rgb(23, 166, 123));
+    --psp-charts--gradient-stop-1--color: light-dark(#4d342f, #dd6367);
+    --psp-charts--gradient-stop-2--color: light-dark(#e4521b, #8a474a);
+    --psp-charts--gradient-stop-3--color: light-dark(#feeb65, #402e30);
+    --psp-charts--gradient-stop-4--color: light-dark(#f0f0f0, #242526);
+    --psp-charts--gradient-stop-5--color: light-dark(#dcedc8, #26343e);
+    --psp-charts--gradient-stop-6--color: light-dark(#42b3d5, #29485f);
+    --psp-charts--gradient-stop-7--color: light-dark(#1a237e, #3289c8);
+    --psp-charts--gradient--background: linear-gradient(
+        var(--psp-charts--gradient-stop-1--color) 0%,
+        var(--psp-charts--gradient-stop-2--color) 22.5%,
+        var(--psp-charts--gradient-stop-3--color) 42.5%,
+        var(--psp-charts--gradient-stop-4--color) 50%,
+        var(--psp-charts--gradient-stop-5--color) 57.5%,
+        var(--psp-charts--gradient-stop-6--color) 67.5%,
+        var(--psp-charts--gradient-stop-7--color) 100%
+    );
+
+    --psp-datagrid--pos-cell--color: light-dark(#338dcd, #7dc3f0);
+    --psp-datagrid--neg-cell--color: light-dark(#ff471e, #ff9485);
+}

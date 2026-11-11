@@ -102,9 +102,11 @@ function nestedArraysChanged<T>(a: T[][], b: T[][]): boolean {
     return false;
 }
 
+const UNSET_COLOR = "rgba(0, 0, 0, 0)";
+
 function get_rule(regular: HTMLElement, tag: string, def: string): string {
     const color = window.getComputedStyle(regular).getPropertyValue(tag).trim();
-    if (color.length > 0) {
+    if (color.length > 0 && color !== UNSET_COLOR) {
         return color;
     } else {
         return def;

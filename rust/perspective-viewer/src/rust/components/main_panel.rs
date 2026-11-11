@@ -19,11 +19,8 @@
 //!   tab/active sync, context menu).
 //! - [`presize`] — the `BeforeResize` pre-size-every-plugin algorithm.
 //! - [`reconcile`] — the `rendered` layout reconcile + per-panel theme stamp.
-//! - [`frame_theme`] — the `rendered` frame-background mirror (each
-//!   `<regular-layout-frame>`'s panel-theme background var).
 //! - [`render`] — the `view` (status bar, cells, tabs, menu).
 
-mod frame_theme;
 mod presize;
 mod reconcile;
 mod render;
@@ -241,17 +238,6 @@ pub struct MainPanel {
     /// Maximize/Restore menu label. Cleared when the panel leaves the layout.
     maximized: Option<String>,
 
-    /// Theme-name-keyed cache of backgrounds read off stamped plugin
-    /// elements, the mirror source for frames whose own plugin is unreadable
-    /// (see [`frame_theme`]). Cleared when the theme registry changes.
-    theme_backgrounds: HashMap<String, String>,
-
-    /// The inputs `stamp_frame_themes` last mirrored from; unchanged inputs
-    /// skip the pass (and its forced style recalcs) on unrelated re-renders.
-    /// `None` until the first *fully-resolved* pass — an unresolved frame
-    /// leaves it unlatched so the mirror retries each render.
-    stamped_frame_themes: Option<frame_theme::FrameThemeSnapshot>,
-
     /// `Workspace::staged_changed` → [`MainPanelMsg::StagedChanged`] on THIS
     /// component's scope (see the message doc for why not the root's).
     _staged_sub: crate::utils::Subscription,
@@ -388,8 +374,6 @@ impl Component for MainPanel {
             hidden_tabs: HashSet::new(),
             context_menu: None,
             maximized: None,
-            theme_backgrounds: HashMap::new(),
-            stamped_frame_themes: None,
             _staged_sub: staged_sub,
             _layout_staged_sub: layout_staged_sub,
         }
@@ -433,7 +417,6 @@ impl Component for MainPanel {
 
         self.size_staging_wrappers(ctx);
         self.reconcile(ctx);
-        self.stamp_frame_themes(ctx);
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {

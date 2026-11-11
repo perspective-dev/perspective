@@ -14,6 +14,426 @@
 @import "./icons.css";
 @import "./intl.css";
 
+@property --psp--background-color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-active--background {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-active--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--axis-lines--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--axis-ticks--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--gradient-stop-1--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--gradient-stop-2--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--gradient-stop-3--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--gradient-stop-4--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--gradient-stop-5--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--gradient-stop-6--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--gradient-stop-7--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--gridline--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--legend--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--legend-border--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series-1--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series-10--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series-11--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series-12--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series-2--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series-3--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series-4--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series-5--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series-6--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series-7--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series-8--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--series-9--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--tooltip--background {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--tooltip--border-color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--tooltip--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--treemap--hover-highlight {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-charts--treemap--labels {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-code-editor--column--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-code-editor--comment--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-code-editor--literal--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-code-editor--operator--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-code-editor--symbol--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-column-type--boolean--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-column-type--date--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-column-type--float--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-column-type--string--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--border-color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--hover--border-color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--neg-cell--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--pos-cell--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--series-1--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--series-10--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--series-11--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--series-12--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--series-2--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--series-3--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--series-4--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--series-5--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--series-6--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--series-7--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--series-8--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--series-9--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-datagrid--zebra--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-error--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-expression--function--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-expression--operator--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-expression--psp-error--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-icon-overflow-hint--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-inactive--border-color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-inactive--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-placeholder--background {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-warning--background {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
+@property --psp-warning--color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: transparent;
+}
+
 perspective-viewer,
 :where(perspective-viewer [theme]) {
     --psp-button--font-size: 16px;

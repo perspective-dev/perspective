@@ -68,6 +68,54 @@ impl Renderer {
             .find(|el| el.get_attribute("slot").as_deref() == Some(slot.as_str()))
     }
 
+    /// Record `theme` as the plugin's captured theme and mirror its
+    /// background onto the panel's layout frame.
+    fn capture_theme(&self, plugin: &JsPerspectiveViewerPlugin, theme: Option<String>) {
+        *self.0.captured_theme.borrow_mut() = Some(theme);
+        self.mirror_frame_background(plugin);
+    }
+
+    /// Mirror the active plugin's background onto a `<regular-layout-frame>`
+    /// that appeared after the plugin's last theme capture.
+    pub fn stamp_frame_background(&self) {
+        if let Some(plugin) = self.active_plugin() {
+            self.mirror_frame_background(&plugin);
+        }
+    }
+
+    /// Mirror the connected plugin's computed `--psp--background-color` onto
+    /// its `<regular-layout-frame>`, which lives in the viewer shadow where
+    /// document theme rules cannot reach it.
+    fn mirror_frame_background(&self, plugin: &JsPerspectiveViewerPlugin) {
+        let el = plugin.unchecked_ref::<Element>();
+        if !el.is_connected() {
+            return;
+        }
+
+        let Some(slot) = self.slot_name() else {
+            return;
+        };
+
+        let viewer = self.plugin_data.borrow().viewer_elem.clone();
+        let selector = format!("regular-layout-frame[name=\"{slot}\"]");
+        let Some(frame) = viewer
+            .shadow_root()
+            .and_then(|root| root.query_selector(&selector).ok().flatten())
+        else {
+            return;
+        };
+
+        let style = frame.unchecked_ref::<HtmlElement>().style();
+        match read_custom_property(el, "--psp--background-color") {
+            Some(color) => {
+                let _ = style.set_property("--psp--background-color", &color);
+            },
+            None => {
+                let _ = style.remove_property("--psp--background-color");
+            },
+        }
+    }
+
     /// Restyle the active plugin and re-draw.
     pub async fn restyle_all(&self) -> ApiResult<JsValue> {
         self.render_task(|guard| async move {
@@ -79,10 +127,11 @@ impl Renderer {
             let plugin = self.ensure_plugin_selected()?;
             let meta = self.metadata();
             let stamped_theme = self.theme();
+            stamp_page_color_scheme(&self.plugin_data.borrow().viewer_elem);
             self.stamp_theme(Some(&plugin));
             self.stamp_active(&plugin);
             plugin.restyle();
-            *self.0.captured_theme.borrow_mut() = Some(stamped_theme);
+            self.capture_theme(&plugin, stamped_theme);
             let dimensions = ctx.view.dimensions().await?;
             let mut limits = get_row_and_col_limits(
                 &dimensions,
@@ -486,7 +535,7 @@ impl Renderer {
         self.stamp_theme(Some(&plugin));
         if self.needs_restyle() {
             plugin.restyle();
-            *self.0.captured_theme.borrow_mut() = Some(stamped_theme.clone());
+            self.capture_theme(&plugin, stamped_theme.clone());
         }
 
         self.0.data_stale.set(false);
@@ -502,7 +551,7 @@ impl Renderer {
         if result.is_ok() {
             self.0.has_drawn.set(true);
             if first_paint {
-                *self.0.captured_theme.borrow_mut() = Some(stamped_theme);
+                self.capture_theme(&plugin, stamped_theme);
             }
         }
 

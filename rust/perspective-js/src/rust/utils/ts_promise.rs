@@ -11,7 +11,6 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 use wasm_bindgen::describe::WasmDescribe;
-use wasm_bindgen::prelude::*;
 
 /// The `Promise<T>` TypeScript type an [`super::ApiFuture<T>`] is declared
 /// as, carried by a `#[wasm_bindgen]` extern type whose `typescript_type`

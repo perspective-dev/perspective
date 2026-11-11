@@ -184,15 +184,16 @@ impl MainPanel {
                 continue;
             }
 
-            if layout.contains_panel(name) {
-                self.inserted.push(name.to_owned());
-                continue;
+            if !layout.contains_panel(name) {
+                let index = self.inserted.len();
+                let path = JsValue::from(js_sys::Array::of1(&JsValue::from_f64(index as f64)));
+                let _ = layout.insert_panel(name, path, JsValue::from_bool(true));
             }
 
-            let index = self.inserted.len();
-            let path = JsValue::from(js_sys::Array::of1(&JsValue::from_f64(index as f64)));
-            let _ = layout.insert_panel(name, path, JsValue::from_bool(true));
             self.inserted.push(name.to_owned());
+            if let Some(panel) = ctx.props().workspace.panel(id) {
+                panel.renderer.stamp_frame_background();
+            }
         }
 
         let mut pending = std::mem::take(&mut self.pending_removals);

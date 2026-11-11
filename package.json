@@ -71,6 +71,7 @@
         "build": "node tools/scripts/build.mjs",
         "build_python": "node tools/scripts/build.mjs",
         "bench": "node tools/scripts/bench.mjs",
+        "start": "npm run start --workspace",
         "setup": "node tools/scripts/setup.mjs",
         "once": "PSP_ONCE=1 node tools/scripts/setup.mjs",
         "docs": "node tools/scripts/docs.mjs",

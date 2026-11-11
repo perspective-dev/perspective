@@ -10,69 +10,110 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_js::utils::{ApiResult, ToApiError, global};
+use js_sys::{Array, Set};
+use perspective_js::utils::global;
 use wasm_bindgen::prelude::*;
 use web_sys::*;
 
-macro_rules! iter_index {
-    ($x:expr) => {
-        (0..$x.length()).map(|x| $x.item(x))
-    };
-}
+const THEME_NAME: &str = "--psp-theme-name";
 
-/// Search the document's `styleSheets` for rules which apply to `elem` and
-/// provide the `--psp-theme-name` CSS custom property.
-pub fn get_theme_names(elem: &HtmlElement) -> Result<Vec<String>, JsValue> {
-    let sheets = global::document().style_sheets();
-    let mut themes: Vec<String> = vec![];
-    for sheet in iter_index!(sheets) {
-        fill_sheet_theme_names(&mut themes, &sheet, elem)?;
+const SELECTOR_TOKEN: &str = "perspective-viewer";
+
+/// The theme names registered by every style rule reachable from `elem`'s
+/// document and hosting shadow root which declares `--psp-theme-name` and
+/// whose selector names `perspective-viewer`, in discovery order.
+pub fn get_theme_names(elem: &HtmlElement) -> Vec<String> {
+    let mut walk = Walk {
+        seen: Set::new(&JsValue::UNDEFINED),
+        names: vec![],
+    };
+
+    let document = global::document();
+    walk.visit_sheet_list(&document.style_sheets());
+    walk.visit_adopted(&document.adopted_style_sheets());
+    if let Some(root) = elem.get_root_node().dyn_ref::<ShadowRoot>() {
+        walk.visit_sheet_list(&root.style_sheets());
+        walk.visit_adopted(&root.adopted_style_sheets());
     }
 
-    Ok(themes)
+    walk.names
 }
 
-fn fill_rule_theme_names(
-    themes: &mut Vec<String>,
-    rule: &Option<CssRule>,
-    elem: &HtmlElement,
-) -> ApiResult<()> {
-    if let Some(rule) = rule.as_ref().into_apierror()?.dyn_ref::<CssStyleRule>() {
-        let txt = rule.selector_text();
-        if elem.matches(&txt)? {
-            let style = rule.style();
-            let x = (0..style.length()).map(|x| style.item(x));
-            for property in x {
-                if property == "--psp-theme-name" {
-                    let name = style.get_property_value("--psp-theme-name")?;
-                    let trimmed = name.trim();
-                    let theme = &trimmed[1..trimmed.len() - 1];
-                    if themes.iter().find(|x| x == &theme).is_none() {
-                        themes.push(theme.to_owned());
-                    }
-                }
+struct Walk {
+    seen: Set,
+    names: Vec<String>,
+}
+
+impl Walk {
+    fn visit_sheet_list(&mut self, sheets: &StyleSheetList) {
+        for i in 0..sheets.length() {
+            if let Some(sheet) = sheets.item(i) {
+                self.visit_sheet(sheet.unchecked_ref::<CssStyleSheet>());
             }
         }
     }
 
-    Ok(())
-}
-
-fn fill_sheet_theme_names(
-    themes: &mut Vec<String>,
-    sheet: &Option<StyleSheet>,
-    elem: &HtmlElement,
-) -> ApiResult<()> {
-    let sheet = sheet
-        .as_ref()
-        .into_apierror()?
-        .unchecked_ref::<CssStyleSheet>();
-
-    if let Ok(rules) = sheet.css_rules() {
-        for rule in iter_index!(&rules) {
-            fill_rule_theme_names(themes, &rule, elem).unwrap_or_default();
+    fn visit_adopted(&mut self, sheets: &Array) {
+        for sheet in sheets.iter() {
+            if let Some(sheet) = sheet.dyn_ref::<CssStyleSheet>() {
+                self.visit_sheet(sheet);
+            }
         }
     }
 
-    Ok(())
+    fn visit_sheet(&mut self, sheet: &CssStyleSheet) {
+        if self.seen.has(sheet) {
+            return;
+        }
+
+        self.seen.add(sheet);
+        if let Ok(rules) = sheet.css_rules() {
+            self.visit_rules(&rules);
+        }
+    }
+
+    fn visit_rules(&mut self, rules: &CssRuleList) {
+        for i in 0..rules.length() {
+            if let Some(rule) = rules.item(i) {
+                self.visit_rule(&rule);
+            }
+        }
+    }
+
+    fn visit_rule(&mut self, rule: &CssRule) {
+        if let Some(style) = rule.dyn_ref::<CssStyleRule>() {
+            self.register(style);
+        }
+
+        if let Some(import) = rule.dyn_ref::<CssImportRule>()
+            && let Some(sheet) = import.style_sheet()
+        {
+            self.visit_sheet(&sheet);
+        }
+
+        if let Some(group) = rule.dyn_ref::<CssGroupingRule>() {
+            self.visit_rules(&group.css_rules());
+        }
+    }
+
+    fn register(&mut self, rule: &CssStyleRule) {
+        let Ok(value) = rule.style().get_property_value(THEME_NAME) else {
+            return;
+        };
+
+        let value = value.trim();
+        if value.is_empty() || !rule.selector_text().contains(SELECTOR_TOKEN) {
+            return;
+        }
+
+        let name = value
+            .strip_prefix('"')
+            .and_then(|x| x.strip_suffix('"'))
+            .or_else(|| value.strip_prefix('\'').and_then(|x| x.strip_suffix('\'')))
+            .unwrap_or(value);
+
+        if !self.names.iter().any(|x| x == name) {
+            self.names.push(name.to_owned());
+        }
+    }
 }

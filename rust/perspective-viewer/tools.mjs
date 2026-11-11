@@ -13,7 +13,11 @@
 import { execSync } from "child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { bundle as bundleCss, composeVisitors } from "lightningcss";
+import {
+    bundle as bundleCss,
+    composeVisitors,
+    transform as transformCss,
+} from "lightningcss";
 
 import { createRequire } from "node:module";
 
@@ -480,6 +484,82 @@ export async function buildDocsCorpus() {
 }
 
 // Inline url() asset references as data URIs.
+/** The `@mixin`/`@apply` at-rules the theme sources share palettes with. */
+export const THEME_AT_RULES = {
+    mixin: { prelude: "<custom-ident>", body: "style-block" },
+    apply: { prelude: "<custom-ident>" },
+};
+
+/**
+ * A visitor expanding `@apply <name>;` to the body of `@mixin <name> {}`,
+ * with the mixins collected up front from `files` because the bundler visits
+ * each stylesheet as it finishes parsing, not in source order.
+ */
+export function mixinVisitor(files) {
+    const declared = new Map();
+    for (const filename of files) {
+        transformCss({
+            filename,
+            code: fs.readFileSync(filename),
+            customAtRules: THEME_AT_RULES,
+            visitor: {
+                Rule: {
+                    custom: {
+                        mixin(rule) {
+                            declared.set(
+                                rule.prelude.value,
+                                withoutNulls(rule.body.value),
+                            );
+                            return [];
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    return {
+        Rule: {
+            custom: {
+                mixin() {
+                    return [];
+                },
+                apply(rule) {
+                    const body = declared.get(rule.prelude.value);
+                    if (body === undefined) {
+                        throw new Error(
+                            `Unknown mixin "${rule.prelude.value}"`,
+                        );
+                    }
+
+                    return body;
+                },
+            },
+        },
+    };
+}
+
+/**
+ * Drop `null` fields from a lightningcss AST value, since the serializer emits
+ * them for absent `Option`s (such as a `var()` reference's css-modules `from`)
+ * and the deserializer rejects them on the way back in.
+ */
+function withoutNulls(value) {
+    if (Array.isArray(value)) {
+        value.forEach(withoutNulls);
+    } else if (value !== null && typeof value === "object") {
+        for (const key of Object.keys(value)) {
+            if (value[key] === null) {
+                delete value[key];
+            } else {
+                withoutNulls(value[key]);
+            }
+        }
+    }
+
+    return value;
+}
+
 export function inlineUrlVisitor(fromFile) {
     const dir = path.dirname(fromFile);
     return composeVisitors([
@@ -621,8 +701,39 @@ const CEM_CSS_SYNTAX = [
     [/--font-size$/, "<length>"],
 ];
 
-function cemCssDeclarations(file) {
-    const text = fs.readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+function cemStripComments(text) {
+    return text.replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+function cemCssMixins(files) {
+    const mixins = new Map();
+    for (const file of files) {
+        const text = cemStripComments(fs.readFileSync(file, "utf8"));
+        const re = /@mixin\s+([\w-]+)\s*\{/g;
+        let match;
+        while ((match = re.exec(text)) !== null) {
+            let depth = 1;
+            let i = re.lastIndex;
+            for (; i < text.length && depth > 0; i++) {
+                if (text[i] === "{") {
+                    depth += 1;
+                } else if (text[i] === "}") {
+                    depth -= 1;
+                }
+            }
+
+            mixins.set(match[1], text.slice(re.lastIndex, i - 1));
+        }
+    }
+
+    return mixins;
+}
+
+function cemCssDeclarations(file, mixins) {
+    const text = cemStripComments(fs.readFileSync(file, "utf8")).replace(
+        /@apply\s+([\w-]+)\s*;/g,
+        (_, name) => mixins.get(name) ?? "",
+    );
 
     const out = [];
     let depth = 0;
@@ -714,18 +825,19 @@ function cemCssProperties() {
 
     walk(CEM_THEMES_DIR);
     files.sort();
+    const mixins = cemCssMixins(files);
     const defaults = new Map();
     const names = new Set();
     for (const file of files) {
         const base = path.basename(file);
-        for (const { name, value } of cemCssDeclarations(file)) {
+        for (const { name, value } of cemCssDeclarations(file, mixins)) {
             if (CEM_PRIVATE_CSS_PREFIXES.some((x) => name.startsWith(x))) {
                 continue;
             }
 
             names.add(name);
             const rank =
-                base === "pro.css" ? 0 : base === "defaults.css" ? 1 : 2;
+                base === "pro-light.css" ? 0 : base === "defaults.css" ? 1 : 2;
             const prev = defaults.get(name);
             if (rank < 2 && (prev === undefined || rank < prev.rank)) {
                 defaults.set(name, { rank, value });

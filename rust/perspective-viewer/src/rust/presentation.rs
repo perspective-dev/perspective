@@ -74,7 +74,7 @@ pub struct PresentationHandle {
 
     /// The available themes as detected in the browser environment or set
     /// explicitly when CORS prevents detection.
-    themes: RefCell<Option<Vec<String>>>,
+    themes: RefCell<Option<PtrEqRc<Vec<String>>>>,
 
     /// Single-flight guard for the stylesheet parse that populates
     /// [`Self::themes`] (and exclusion against `reset_available_themes`) —
@@ -360,34 +360,39 @@ impl Presentation {
     }
 
     /// Get the available theme names from the browser environment by parsing
-    /// readable stylesheets.  This method is memoized - the state can be
-    /// flushed by calling `reset()`.
+    /// readable stylesheets once, memoized until the state is flushed by
+    /// `reset()`.
     pub async fn get_available_themes(&self) -> ApiResult<PtrEqRc<Vec<String>>> {
         let _guard = self.0.theme_init.lock().await;
         if self.0.themes.borrow().is_none() {
             await_dom_loaded().await?;
-            let themes = sheets::get_theme_names(&self.0.viewer_elem)?;
-            *self.0.themes.borrow_mut() = Some(themes);
+            let names = sheets::get_theme_names(&self.0.viewer_elem);
+            let mut slot = self.0.themes.borrow_mut();
+            if slot.as_ref().is_none_or(|x| **x != names) {
+                *slot = Some(names.into());
+            }
         }
 
-        Ok(self.0.themes.borrow().clone().unwrap().into())
+        Ok(self.0.themes.borrow().clone().unwrap())
     }
 
     /// Reset the state.  `styleSheets` will be re-parsed next time
-    /// `get_themes()` is called if the `themes` argument is `None`.
+    /// `get_themes()` is called if the `themes` argument is `None`, and an
+    /// explicit `themes` list is held until the next reset.
     ///
     /// # Returns
     /// A `bool` indicating whether the internal state changed.
     pub async fn reset_available_themes(&self, themes: Option<Vec<String>>) -> bool {
-        fn as_set(x: &Option<Vec<String>>) -> HashSet<&'_ String> {
-            x.as_ref()
-                .map(|x| x.iter().collect::<HashSet<_>>())
+        fn as_set(x: Option<&[String]>) -> HashSet<&'_ String> {
+            x.map(|x| x.iter().collect::<HashSet<_>>())
                 .unwrap_or_default()
         }
 
         let _guard = self.0.theme_init.lock().await;
-        let changed = as_set(&self.0.themes.borrow()) != as_set(&themes);
-        *self.0.themes.borrow_mut() = themes;
+        let current = self.0.themes.borrow();
+        let changed = as_set(current.as_ref().map(|x| x.as_slice())) != as_set(themes.as_deref());
+        drop(current);
+        *self.0.themes.borrow_mut() = themes.map(PtrEqRc::new);
         changed
     }
 
@@ -430,6 +435,7 @@ impl Presentation {
     }
 
     fn set_theme_attribute(&self, theme: Option<&str>) -> ApiResult<()> {
+        stamp_page_color_scheme(&self.0.viewer_elem);
         if let Some(theme) = theme {
             Ok(self.0.viewer_elem.set_attribute("theme", theme)?)
         } else {
