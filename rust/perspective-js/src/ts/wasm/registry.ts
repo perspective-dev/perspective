@@ -100,6 +100,7 @@ interface Entry {
 interface RegistryState {
     sources: Partial<Record<WasmKey, Entry>>;
     consumed: Set<WasmKey>;
+    warned_duplicates?: Set<WasmKey>;
     client_provider?: RuntimeProvider;
     viewer_provider?: RuntimeProvider;
     client?: Promise<ClientRuntime>;
@@ -276,9 +277,41 @@ export function register(
             );
         }
 
+        const duplicates: WasmKey[] = [];
         for (const key of keys) {
             if (s.consumed.has(key)) {
+                // A module which calls `init()` at module scope may be
+                // evaluated more than once per page (anywidget evaluates a
+                // widget's `_esm` once per widget model, each evaluation a
+                // fresh module instance over the page-wide registry).
+                // Re-registering a key whose runtime already exists then
+                // resolves to that runtime instead of throwing, in `user`
+                // mode only — `replace_server` (`init_server()`) still
+                // throws, as replacing a consumed engine remains an error.
+                if (mode === "user" && s.sources[key] !== undefined) {
+                    duplicates.push(key);
+                    continue;
+                }
+
                 throw new Error(`${key} wasm is already initialized`);
+            }
+        }
+
+        if (duplicates.length > 0) {
+            keys = keys.filter((key) => !duplicates.includes(key));
+            s.warned_duplicates ??= new Set();
+            const un_warned = duplicates.filter(
+                (key) => !s.warned_duplicates!.has(key),
+            );
+
+            if (un_warned.length > 0) {
+                for (const key of un_warned) {
+                    s.warned_duplicates!.add(key);
+                }
+
+                console.warn(
+                    `${un_warned.join(", ")} wasm is already initialized; keeping the existing runtime (Perspective was loaded more than once on this page).`,
+                );
             }
         }
 
@@ -333,6 +366,11 @@ export function register(
  * Register Perspective's WebAssembly binaries for this page, shared by every
  * copy of `@perspective-dev/client` and `@perspective-dev/viewer`, throwing if
  * another Perspective version has loaded on this page.
+ *
+ * Re-registering a key whose runtime already exists (e.g. a second module
+ * evaluation of the same bundle, as anywidget does per widget model) keeps
+ * the existing runtime and resolves rather than throwing; `init_server()`'s
+ * replacement mode still throws for a consumed key.
  *
  * # Arguments
  *
