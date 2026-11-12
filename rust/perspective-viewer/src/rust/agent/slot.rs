@@ -23,6 +23,7 @@ use futures::future::{AbortHandle, Abortable};
 use perspective_js::utils::{ApiError, ApiResult};
 
 use super::runtime::AgentRuntime;
+use super::sandbox::AgentSandbox;
 use crate::utils::PubSub;
 
 /// One rendered transcript entry. `Tool` entries are appended live as the
@@ -61,6 +62,7 @@ pub struct AgentSlot {
     pending: Rc<RefCell<Option<PendingTail>>>,
     busy: Rc<Cell<bool>>,
     abort: Rc<RefCell<Option<AbortHandle>>>,
+    sandbox: Rc<AgentSandbox>,
 
     /// Fires on any observable change: configuration, transcript append,
     /// streaming delta, busy-flag flip.
@@ -82,6 +84,12 @@ impl AgentSlot {
         self.transcript.borrow_mut().clear();
         *self.pending.borrow_mut() = None;
         self.on_update.emit(());
+    }
+
+    /// The scripts started by `run_script`, which outlive agent
+    /// reconfiguration.
+    pub fn sandbox(&self) -> Rc<AgentSandbox> {
+        self.sandbox.clone()
     }
 
     pub fn is_configured(&self) -> bool {

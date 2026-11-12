@@ -65,6 +65,13 @@ const PRESETS: Record<string, Preset> = {
 
 const ACCESS: Record<string, string[] | undefined> = {
     "Full (default)": undefined,
+    "Full + run scripts (experimental)": [
+        "read_view",
+        "configure_view",
+        "manage_layout",
+        "read_docs",
+        "execute_code",
+    ],
     "Read-only": ["read_view", "read_docs"],
 };
 
