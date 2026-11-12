@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8" />
+<script>
+    let started = false;
+    addEventListener("message", (event) => {
+        if (started || event.source !== parent || event.data?.t !== "start") {
+            return;
+        }
+
+        started = true;
+        const port = event.ports[0];
+        const harness = new Blob([event.data.harness], { type: "text/javascript" });
+        const worker = new Worker(URL.createObjectURL(harness));
+        worker.onmessage = ({ data }) => {
+            port.postMessage(data, data?.data instanceof ArrayBuffer ? [data.data] : []);
+        };
+
+        worker.onerror = (error) => {
+            error.preventDefault();
+            port.postMessage({
+                t: "error",
+                message: error.message || "The sandbox worker failed to start",
+            });
+        };
+
+        worker.postMessage({ t: "start", source: event.data.source });
+    });
+</script>

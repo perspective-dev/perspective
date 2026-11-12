@@ -61,6 +61,7 @@
     - [Configuration defaults](./how_to/javascript/config_defaults.md)
     - [Map tile sources](./how_to/javascript/map_tile_sources.md)
     - [Configuring the LLM agent](./how_to/javascript/agent.md)
+        - [Letting the agent load data with scripts](./how_to/javascript/agent_scripts.md)
 - [Virtual Servers](./how_to/javascript/virtual_server.md)
     - [DuckDB](./how_to/javascript/virtual_server/duckdb.md)
     - [ClickHouse](./how_to/javascript/virtual_server/clickhouse.md)

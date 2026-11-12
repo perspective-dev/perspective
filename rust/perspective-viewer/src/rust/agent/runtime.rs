@@ -83,6 +83,7 @@ impl AgentRuntime {
             docs: self.docs.clone(),
             bundle,
             entitlements: self.config.entitlements.clone(),
+            sandbox: self.elem.presentation.agent.sandbox(),
         };
 
         // The preamble is a SYSTEM message by default, but some engines

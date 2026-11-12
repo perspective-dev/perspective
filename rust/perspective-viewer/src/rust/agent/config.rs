@@ -52,7 +52,7 @@ struct AgentConfigFields {
     max_turns: Option<usize>,
 
     /// Access grants (snake_case [`Entitlement`] names); omitted ⇒ the
-    /// default set (everything except `read_data`).
+    /// default set (everything except `execute_code` and `read_data`).
     entitlements: Option<Vec<String>>,
 }
 

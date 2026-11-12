@@ -22,6 +22,7 @@ use wasm_bindgen::prelude::*;
 
 use super::client::protocol::{FunctionDef, ToolDef};
 use super::docs::{DocsBundle, DocsCell};
+use super::sandbox::AgentSandbox;
 use crate::config::{Alignment, ColumnConfigSchema, ControlSpec};
 use crate::custom_elements::viewer::PerspectiveViewerElement;
 use crate::queries::{
@@ -37,6 +38,7 @@ pub enum Entitlement {
     ConfigureView,
     ManageLayout,
     ReadDocs,
+    ExecuteCode,
 
     // TODO(texodus): unused
     ReadData,
@@ -44,9 +46,9 @@ pub enum Entitlement {
 
 impl Entitlement {
     pub const VALID: &'static str =
-        "read_view, configure_view, manage_layout, read_docs, read_data";
+        "read_view, configure_view, manage_layout, read_docs, execute_code, read_data";
 
-    /// The default grant: everything except raw data access.
+    /// The default grant: everything except code execution and raw data access.
     pub fn default_set() -> Vec<Self> {
         vec![
             Self::ReadView,
@@ -66,6 +68,7 @@ impl FromStr for Entitlement {
             "configure_view" => Ok(Self::ConfigureView),
             "manage_layout" => Ok(Self::ManageLayout),
             "read_docs" => Ok(Self::ReadDocs),
+            "execute_code" => Ok(Self::ExecuteCode),
             "read_data" => Ok(Self::ReadData),
             other => Err(format!(
                 "Unknown entitlement `{other}` - valid entitlements: {}",
@@ -80,6 +83,7 @@ pub struct ToolCtx {
     pub docs: Option<Rc<DocsCell>>,
     pub bundle: Option<Rc<Result<DocsBundle, String>>>,
     pub entitlements: Vec<Entitlement>,
+    pub sandbox: Rc<AgentSandbox>,
 }
 
 impl ToolCtx {
@@ -516,6 +520,103 @@ static TOOLS: &[Tool] = &[
         },
         call: |elem, ctx, args| Box::pin(elem.tool_search_docs(ctx, args)),
     },
+    Tool {
+        name: "run_script",
+        description: "Run a JavaScript ES module in an isolated sandbox to create (or replace) \
+                      the hosted table `name` from external data: fetch or poll an HTTP API, open \
+                      a WebSocket, or `import()` a client library from a CDN such as esm.sh. The \
+                      source is a whole module, NOT a function body: never `return` data (a \
+                      top-level `return` is a syntax error). Instead the module loads rows by \
+                      calling the global `psp.emit(data)` with an array of row objects, an object \
+                      of column arrays, a CSV string, or Arrow IPC bytes \
+                      (`ArrayBuffer`/`Uint8Array`). The first emit creates the table and infers \
+                      its column types; later emits append rows (or upsert by the table's \
+                      `index`), and `psp.emit(data, {replace: true})` swaps the entire contents - \
+                      use it to re-emit a polled snapshot that has no key column. Keep the table \
+                      live with `setInterval` or an open socket. `psp.log(...)` and `console.log` \
+                      lines are returned to you. The module runs in a Web Worker with a `null` \
+                      origin: there is NO DOM (`document`, `window` and `DOMParser` do not exist \
+                      - import an HTML parser from a CDN to read HTML), no access to this page, \
+                      and `fetch` only reaches servers whose CORS headers allow any origin. Once \
+                      the first emit has loaded, this tool's result reports the table's schema \
+                      and row count; if the module throws or finishes without emitting, the \
+                      result is an error with the script log. Display the table with `add_panel` \
+                      using `table: name`. Re-running an existing `name` stops its script and \
+                      replaces its table.",
+        entitlement: Entitlement::ExecuteCode,
+        available: always,
+        parameters: |_| {
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name of the table to create; also identifies the script"
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "The complete ES module source, NOT a function body. Top-level `await` and `import` work and `psp` is a global. Never `return` data - pass it to `psp.emit()`. Example: `const json = await (await fetch(\"https://example.com/data.json\")).json(); psp.emit(json.items.map((x) => ({ name: x.name, value: x.value })));`"
+                    },
+                    "table": {
+                        "type": "object",
+                        "description": "Table options: `index` (a column name, or a list of names, keying rows so re-emitted rows update in place) and `limit` (maximum rows kept, oldest dropped first)",
+                        "properties": {
+                            "index": {
+                                "anyOf": [
+                                    { "type": "string" },
+                                    { "type": "array", "items": { "type": "string" } }
+                                ]
+                            },
+                            "limit": { "type": "integer" }
+                        }
+                    },
+                    "start_timeout_ms": {
+                        "type": "integer",
+                        "description": "Milliseconds to wait for the first emit (default 30000, max 120000)"
+                    }
+                },
+                "required": ["name", "source"]
+            })
+        },
+        call: |elem, ctx, args| Box::pin(elem.tool_run_script(ctx, args)),
+    },
+    Tool {
+        name: "list_scripts",
+        description: "List the scripts started by `run_script`, each with its table name, status \
+                      (`running` = the module body is still executing; `finished` = the module \
+                      body completed, but timers and sockets it opened keep updating its table; \
+                      `stopped`), table schema and row count, emit count, last error and recent \
+                      log lines.",
+        entitlement: Entitlement::ExecuteCode,
+        available: always,
+        parameters: |_| json!({ "type": "object", "properties": {} }),
+        call: |elem, ctx, args| Box::pin(elem.tool_list_scripts(ctx, args)),
+    },
+    Tool {
+        name: "stop_script",
+        description: "Stop a script started by `run_script`. Its table keeps the rows already \
+                      loaded unless `drop_table` is true; dropping fails while a panel still \
+                      displays the table, so remove those panels first.",
+        entitlement: Entitlement::ExecuteCode,
+        available: always,
+        parameters: |_| {
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The script's table name"
+                    },
+                    "drop_table": {
+                        "type": "boolean",
+                        "description": "Also delete the script's table (default false)"
+                    }
+                },
+                "required": ["name"]
+            })
+        },
+        call: |elem, ctx, args| Box::pin(elem.tool_stop_script(ctx, args)),
+    },
 ];
 
 fn granted(tool: &Tool, ctx: &ToolCtx) -> bool {
@@ -683,6 +784,21 @@ struct SetWorkspaceArgs {
 struct SearchDocsArgs {
     query: String,
     limit: Option<usize>,
+}
+
+#[derive(Deserialize)]
+struct RunScriptArgs {
+    name: String,
+    source: String,
+    table: Option<Value>,
+    start_timeout_ms: Option<u32>,
+}
+
+#[derive(Deserialize)]
+struct StopScriptArgs {
+    name: String,
+    #[serde(default)]
+    drop_table: bool,
 }
 
 #[derive(Deserialize)]
@@ -897,6 +1013,40 @@ fn schema_object(schema: &ColumnConfigSchema) -> Value {
 }
 
 const SEARCH_DOCS_LIMIT: usize = 4;
+
+const SCRIPT_START_TIMEOUT_MS: u32 = 30_000;
+
+const SCRIPT_START_TIMEOUT_MAX_MS: u32 = 120_000;
+
+/// The fix for a script error caused by writing the module as a function body.
+fn script_error_hint(message: &str) -> Option<&'static str> {
+    const TOP_LEVEL_RETURN: [&str; 3] = [
+        "Illegal return statement",
+        "return not in function",
+        "Return statements are only valid inside functions",
+    ];
+
+    TOP_LEVEL_RETURN
+        .iter()
+        .any(|x| message.contains(x))
+        .then_some(
+            "`source` is an ES module, not a function body, so it cannot `return`. Remove the \
+             `return` and pass the rows to `psp.emit(rows)` instead; top-level `await` works \
+             without a wrapper function.",
+        )
+}
+
+/// A script failure message followed by the script's recent log lines.
+fn with_script_log(message: String, log: &[String]) -> ToolError {
+    if log.is_empty() {
+        ToolError(message)
+    } else {
+        ToolError(format!(
+            "{message}\nScript log (oldest first):\n{}",
+            log.join("\n")
+        ))
+    }
+}
 
 /// A `restoreWorkspace` update returning each field of `update` to its value
 /// in the `saveWorkspace` token `snapshot`.
@@ -1495,5 +1645,140 @@ impl PerspectiveViewerElement {
                 }
             },
         }
+    }
+
+    fn agent_client(&self) -> Result<perspective_client::Client, ToolError> {
+        self.workspace
+            .default_client()
+            .or_else(|| self.workspace.active_client())
+            .or_else(|| self.workspace.clients().into_iter().next())
+            .ok_or_else(|| ToolError("No Perspective client is attached to this viewer".to_owned()))
+    }
+
+    async fn tool_run_script(&self, ctx: &ToolCtx, args: Value) -> Result<Value, ToolError> {
+        let args: RunScriptArgs = serde_json::from_value(args)?;
+        let name = args.name.trim().to_owned();
+        if name.is_empty() {
+            return Err(ToolError("`name` must not be empty".to_owned()));
+        }
+
+        let mut options = match args.table {
+            Some(table) => serde_json::from_value::<perspective_client::TableInitOptions>(table)
+                .map_err(|err| ToolError(format!("Invalid `table` options: {err}")))?,
+            None => perspective_client::TableInitOptions::default(),
+        };
+
+        options.name = Some(name.clone());
+        options.format = None;
+        let client = self.agent_client()?;
+        let previous = match ctx.sandbox.remove(&name) {
+            Some(job) => {
+                job.terminate();
+                job.table()
+            },
+            None => {
+                if client
+                    .get_hosted_table_names()
+                    .await
+                    .map_err(ApiError::from)?
+                    .contains(&name)
+                {
+                    return Err(ToolError(format!(
+                        "A table named `{name}` already exists and was not created by \
+                         `run_script` - choose another `name`"
+                    )));
+                }
+
+                None
+            },
+        };
+
+        let (job, first) = ctx.sandbox.start(&args.source, client, options, previous)?;
+        let timeout = args
+            .start_timeout_ms
+            .unwrap_or(SCRIPT_START_TIMEOUT_MS)
+            .min(SCRIPT_START_TIMEOUT_MAX_MS);
+
+        let deadline = Box::pin(crate::utils::set_timeout(timeout as i32));
+        let failure = match futures::future::select(first, deadline).await {
+            futures::future::Either::Left((Ok(Ok(())), _)) => None,
+            futures::future::Either::Left((Ok(Err(err)), _)) => Some(err),
+            futures::future::Either::Left((Err(_), _)) => {
+                Some("The script was stopped before it emitted any rows".to_owned())
+            },
+            futures::future::Either::Right(_) if job.started() => Some(format!(
+                "No rows were emitted within {timeout}ms - call `psp.emit()` with the first batch \
+                 as soon as it is available, or raise `start_timeout_ms`"
+            )),
+            futures::future::Either::Right(_) => Some(
+                "The script sandbox did not start - the host page's Content-Security-Policy may \
+                 forbid sandboxed iframes or `blob:` workers"
+                    .to_owned(),
+            ),
+        };
+
+        if let Some(mut message) = failure {
+            if let Some(hint) = script_error_hint(&message) {
+                message = format!("{message} - {hint}");
+            }
+
+            job.terminate();
+            if job.table().is_none() {
+                ctx.sandbox.remove(&name);
+            }
+
+            return Err(with_script_log(message, &job.log_tail()));
+        }
+
+        Ok(job.summary().await)
+    }
+
+    async fn tool_list_scripts(&self, ctx: &ToolCtx, _args: Value) -> Result<Value, ToolError> {
+        let mut scripts = vec![];
+        for job in ctx.sandbox.jobs() {
+            scripts.push(job.summary().await);
+        }
+
+        Ok(json!({ "scripts": scripts }))
+    }
+
+    async fn tool_stop_script(&self, ctx: &ToolCtx, args: Value) -> Result<Value, ToolError> {
+        let args: StopScriptArgs = serde_json::from_value(args)?;
+        let job = ctx.sandbox.get(&args.name).ok_or_else(|| {
+            let names = ctx
+                .sandbox
+                .jobs()
+                .iter()
+                .map(|x| x.name().to_owned())
+                .collect::<Vec<_>>();
+
+            ToolError(format!(
+                "Unknown script `{}` - current scripts: {names:?}",
+                args.name
+            ))
+        })?;
+
+        job.terminate();
+        if args.drop_table {
+            if let Some(table) = job.table() {
+                table
+                    .delete(perspective_client::DeleteOptions::default())
+                    .await
+                    .map_err(|err| {
+                        ToolError(format!(
+                            "The script was stopped, but its table could not be dropped: {err} - \
+                             remove the panels that display it first"
+                        ))
+                    })?;
+            }
+
+            ctx.sandbox.remove(&args.name);
+        }
+
+        Ok(json!({
+            "name": args.name,
+            "status": "stopped",
+            "table_dropped": args.drop_table,
+        }))
     }
 }

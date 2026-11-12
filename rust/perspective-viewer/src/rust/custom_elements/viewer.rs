@@ -724,6 +724,8 @@ impl PerspectiveViewerElement {
     /// await viewer.delete();
     /// ```
     pub fn delete(self) -> ApiFuture<()> {
+        #[cfg(feature = "llm-agent")]
+        self.presentation.agent.sandbox().stop_all();
         let subs = std::mem::take(&mut *self.hosted_table_subs.borrow_mut());
         let teardown = delete_all(&self.workspace, &self.root);
         ApiFuture::new(async move {
@@ -2204,9 +2206,9 @@ impl PerspectiveViewerElement {
     ///   opening user turn.
     /// - `config.entitlements` - access grants limiting which tools the agent
     ///   is offered (and may call): any of `"read_view"`, `"configure_view"`,
-    ///   `"manage_layout"`, `"read_docs"`, `"read_data"`. Omitted, all but
-    ///   `"read_data"` are granted; `["read_view", "read_docs"]` yields a
-    ///   read-only agent.
+    ///   `"manage_layout"`, `"read_docs"`, `"execute_code"`, `"read_data"`.
+    ///   Omitted, all but `"execute_code"` and `"read_data"` are granted;
+    ///   `["read_view", "read_docs"]` yields a read-only agent.
     ///
     /// # JavaScript Examples
     ///
