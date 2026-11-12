@@ -38,15 +38,26 @@ const THEME_VARS = [
 ];
 
 /**
+ * The computed value of an unset `--psp-*` color, which the theme defaults
+ * register with `@property` so `light-dark()` resolves before it is read.
+ */
+const UNSET_COLOR = "rgba(0, 0, 0, 0)";
+
+/**
  * Capture every CSS variable the renderer cares about into a
  * structured-cloneable map. Series-palette colours are walked until the
  * first missing var.
  */
 export function snapshotThemeVars(el: Element): ThemeSnapshot {
     const style = getComputedStyle(el);
+    const read = (name: string) => {
+        const raw = style.getPropertyValue(name).trim();
+        return raw === UNSET_COLOR ? "" : raw;
+    };
+
     const out: ThemeSnapshot = {};
     for (const v of THEME_VARS) {
-        const raw = style.getPropertyValue(v).trim();
+        const raw = read(v);
         if (raw) {
             out[v] = raw;
         }
@@ -54,7 +65,7 @@ export function snapshotThemeVars(el: Element): ThemeSnapshot {
 
     for (let i = 1; ; i++) {
         const key = `--psp-charts--series-${i}--color`;
-        const raw = style.getPropertyValue(key).trim();
+        const raw = read(key);
         if (!raw) {
             break;
         }

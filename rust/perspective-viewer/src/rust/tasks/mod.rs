@@ -51,10 +51,10 @@ mod validate_expression;
 /// fallback for slow (e.g. remote) tables.
 pub(crate) const STAGING_DEADLINE_MS: i32 = 500;
 
-/// Fallback panel chrome `(width, height)` px (margin + border + titlebar)
+/// Fallback panel chrome `(width, height)` px (frame padding + titlebar)
 /// when no frame is available to measure live (see
 /// [`presize_panels::plugin_chrome`]).
-pub(crate) const CHROME_FALLBACK: (f64, f64) = (8.0, 33.0);
+pub(crate) const CHROME_FALLBACK: (f64, f64) = (9.0, 35.0);
 
 pub(crate) use self::apply_config_defaults::*;
 pub use self::apply_global_filters::*;

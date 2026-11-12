@@ -21,12 +21,23 @@
     cursor: pointer;
     font-size: 11px;
     white-space: nowrap;
-    overflow: hidden;
+
+    /* Clip overflowing content, but allow the 4px fill shadows and the 1px
+       separator lines (`::before`, 5px above/left of the tab) to paint
+       outside the tab. `overflow: hidden` would clip the lines (a child
+       box); `clip-path` clips at 6px out instead, 1px clear of the lines so
+       their edges aren't cut by an un-snapped clip. Content can show at most
+       6px past the tab, mostly under the fill. */
+    clip-path: inset(-6px);
+    position: relative;
     color: var(--psp--color, inherit);
     background: var(--psp-inactive--border-color, #ffffff) !important;
+    /* Whole-pixel fill reaching 4px up/left/right, so it abuts (never
+       overlaps) the frame's 1px separator lines and the 9px titlebar gap
+       (see viewer.css `.rl-panel`). */
     box-shadow:
-        2.25px -2.25px 0 2.25px var(--psp-inactive--border-color),
-        -2.25px -2.25px 0 2.25px var(--psp-inactive--border-color);
+        2px -2px 0 2px var(--psp-inactive--border-color),
+        -2px -2px 0 2px var(--psp-inactive--border-color);
 }
 
 :host([part~="tab"].visible) {
@@ -37,6 +48,37 @@
         -2.25px -2.25px 0 2.25px var(--psp--background-color),
         2.75px -2.75px 0 2.75px var(--psp-inactive--color),
         0 12.5px 0 -11.5px var(--psp-inactive--border-color); */
+}
+
+/* The panel's separator lines along the titlebar, in the panel's OWN theme
+   (the tab is in the light DOM, so per-panel theme rules reach it; the frame
+   can't). Real borders, snapped to device pixels like the plugin's outline.
+   Covers this tab's slice of the frame's TOP line (5px above the tab, out to
+   the middle of each 9px tab gap) and a LEFT line 5px left of the tab:
+
+   - FIRST tab in a stack: lands on the frame's left edge, continuing the
+     plugin outline's left line down the body.
+   - Other tabs: lands in the middle of the gap (4px fill + 1px line + 4px
+     neighbour fill), dividing it from the tab to its left.
+   - Frame's top-left corner: covered by the first tab's top line, which runs
+     to its left line.
+
+   The LAST tab's top line ends exactly at the frame's right edge (the frame's
+   4px right padding); the line beyond it is the right-hand neighbour's own
+   left line. Ignores the pointer, so the resize grab band still reaches the
+   layout. Inside the `clip-path: inset(-6px)` above. */
+:host([part~="tab"])::before {
+    content: "";
+    position: absolute;
+    top: -5px;
+    bottom: 0;
+    left: -5px;
+    right: -4px;
+    z-index: 1;
+    box-sizing: border-box;
+    border: 0 solid var(--psp-inactive--color);
+    border-width: 1px 0 0 1px;
+    pointer-events: none;
 }
 
 .psp-tab-grip {

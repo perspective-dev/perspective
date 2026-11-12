@@ -255,10 +255,10 @@ impl JsPerspectiveViewerPlugin {
     /// restyle-then-`update` pair when no other dispatch is coming
     /// (theme picker, `resetThemes`, default-theme discovery, restore
     /// tails). Exception: the public `restyleElement()` API restyles
-    /// unconditionally — it is the "my external CSS changed" affordance,
-    /// outside what captured-theme state can know. (Plus one
-    /// `mount_plugin` restyle on first light-DOM mount.) Tier fallback:
-    /// no-op — the plugin re-reads CSS at its next render.
+    /// unconditionally — it is the affordance for CSS that changed under an
+    /// unchanged theme name, such as host `style` edits or a
+    /// `prefers-color-scheme` flip under a preference-aware theme. Tier
+    /// fallback: no-op — the plugin re-reads CSS at its next render.
     pub fn restyle(&self) {
         if self.capabilities().restyle {
             self._restyle()

@@ -112,6 +112,13 @@ export type * from "../ts-rs/DatetimeFormat.d.ts";
 export type * from "../ts-rs/ConfigDefaultsOptions.d.ts";
 export type * from "../ts-rs/ColumnConfigDefaultsOptions.d.ts";
 
+export type ExportData =
+    | string
+    | ArrayBuffer
+    | Blob
+    | Record<string, unknown[]>
+    | ViewerConfig;
+
 import type {GetTableOptions} from "../ts-rs/GetTableOptions.d.ts";
 import type {PanelOptions} from "../ts-rs/PanelOptions.d.ts";
 import type {RestoreOptions} from "../ts-rs/RestoreOptions.d.ts";

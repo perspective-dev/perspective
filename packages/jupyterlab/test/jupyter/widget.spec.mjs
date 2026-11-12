@@ -388,7 +388,7 @@ async_table = await async_client.open_table(sync_table.get_name())`,
                     sort: [],
                     split_by: [],
                     table: expect.any(String),
-                    theme: "Pro Light",
+                    theme: "Pro",
                     title: null,
                 });
 
@@ -483,7 +483,7 @@ w.theme = "Pro Dark"`,
                     sort: [],
                     split_by: [],
                     table: expect.any(String),
-                    theme: "Pro Light",
+                    theme: "Pro",
                     title: null,
                 });
 
@@ -716,9 +716,7 @@ assert w2.group_by == ["bool"]
             async ({ page }) => {
                 await default_body(page);
                 await expect
-                    .poll(() =>
-                        page.locator("regular-table tbody tr").count(),
-                    )
+                    .poll(() => page.locator("regular-table tbody tr").count())
                     .toEqual(10);
             },
         );
@@ -824,9 +822,7 @@ assert w2.group_by == ["bool"]
                 const viewer = await default_body(page);
                 await expect
                     .poll(() =>
-                        viewer.evaluate(
-                            async (v) => (await v.save()).group_by,
-                        ),
+                        viewer.evaluate(async (v) => (await v.save()).group_by),
                     )
                     .toEqual(["date"]);
                 const columns = await viewer.evaluate(

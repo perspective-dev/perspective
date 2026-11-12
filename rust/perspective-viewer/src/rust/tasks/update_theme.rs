@@ -89,7 +89,10 @@ pub(crate) async fn seed_default_themes(presentation: &Presentation, workspace: 
 /// also redraws) is therefore scoped to panels whose captured CSS is
 /// actually STALE (`Renderer::needs_restyle` — effective theme vs. the one
 /// stamped at the plugin's last capture): the picked panel when the value
-/// is genuinely new, and never a panel that has yet to first-paint.
+/// is genuinely new, and never a panel that has yet to first-paint. CSS
+/// that changes under an UNCHANGED name (a `prefers-color-scheme` flip
+/// under a preference-aware theme) is outside this gate by design and is
+/// the embedder's `restyleElement()` call.
 pub fn update_theme(
     session: &Session,
     renderer: &Renderer,

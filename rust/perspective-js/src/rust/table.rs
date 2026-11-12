@@ -66,6 +66,9 @@ extern "C" {
     #[wasm_bindgen(typescript_type = "ViewConfigUpdate")]
     pub type JsViewConfig;
 
+    #[wasm_bindgen(typescript_type = "ViewConfig")]
+    pub type JsResolvedViewConfig;
+
     #[wasm_bindgen(typescript_type = "UpdateOptions")]
     pub type JsUpdateOptions;
 

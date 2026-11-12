@@ -83,25 +83,26 @@ export function measure_px(
     return Number.isFinite(px) && px > 0 ? Math.round(px) : fallback;
 }
 
+const UNSET_COLOR = "rgba(0, 0, 0, 0)";
+
 /**
  * The theme's zebra stripe color as opaque `#rrggbb`, a 6% blend of text
  * into background when the theme defines none.
  */
 export function default_zebra_color(elem: Element): string {
     const style = window.getComputedStyle(elem);
-    const own = style.getPropertyValue("--psp-datagrid--zebra--color").trim();
+    const read = (name: string) => {
+        const raw = style.getPropertyValue(name).trim();
+        return raw === UNSET_COLOR ? "" : raw;
+    };
+
+    const own = read("--psp-datagrid--zebra--color");
     if (own) {
         return rgbToHex(parseColor(own));
     }
 
-    const background = parseColor(
-        style.getPropertyValue("--psp--background-color").trim() || "#ffffff",
-    );
-
-    const color = parseColor(
-        style.getPropertyValue("--psp--color").trim() || "#000000",
-    );
-
+    const background = parseColor(read("--psp--background-color") || "#ffffff");
+    const color = parseColor(read("--psp--color") || "#000000");
     return rgbToHex(mixRgb(background, color, 0.06));
 }
 

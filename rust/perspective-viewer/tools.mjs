@@ -13,7 +13,11 @@
 import { execSync } from "child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { bundle as bundleCss, composeVisitors } from "lightningcss";
+import {
+    bundle as bundleCss,
+    composeVisitors,
+    transform as transformCss,
+} from "lightningcss";
 
 import { createRequire } from "node:module";
 
@@ -91,8 +95,12 @@ const DOCS_DTS_FILES = [
         "CustomNumberFormatConfig",
         "NumberFormatStyle",
         "Notation",
-        "CustomDatetimeStyleConfig",
-        "SimpleDatetimeStyleConfig",
+        "DatetimeFormat",
+        "SimpleDatetimeFormat",
+        "DatetimeTextPart",
+        "DatetimeNumericPart",
+        "DatetimeMonthPart",
+        "FractionalSecondDigits",
     ].map((x) => ({ file: `./dist/ts-rs/${x}.d.ts`, prefix: "Column Format" })),
     ...[
         "WorkspaceConfigUpdate",
@@ -114,7 +122,7 @@ function repoPath(file) {
 
 // Every page in the `SUMMARY.md` table of contents that is one of `roots`
 // or nested beneath one.
-function summarySubtrees(summary, roots) {
+function summarySubtrees(summary, roots, missing) {
     const files = [];
     const found = new Set();
     let depth = null;
@@ -138,7 +146,7 @@ function summarySubtrees(summary, roots) {
     }
 
     for (const root of roots.filter((x) => !found.has(x))) {
-        console.warn(`docs corpus: \`${root}\` is not in ${summary}`);
+        missing.push(`\`${root}\` is not in ${summary}`);
     }
 
     return files;
@@ -227,7 +235,7 @@ function declarationEnd(text, start, kind) {
 
 // The source text of each `scope` declaration (e.g. `"interface Foo"`),
 // including its leading JSDoc.
-function scopeDeclarations(file, text, scope) {
+function scopeDeclarations(file, text, scope, missing) {
     return scope
         .map((decl) => {
             const [kind, name] = decl.split(/\s+/);
@@ -237,7 +245,7 @@ function scopeDeclarations(file, text, scope) {
 
             const match = re.exec(text);
             if (!match) {
-                console.warn(`docs corpus: \`${decl}\` not found in ${file}`);
+                missing.push(`\`${decl}\` not found in ${file}`);
                 return "";
             }
 
@@ -391,14 +399,12 @@ function inlineMangledDefinitions(schema) {
     return out;
 }
 
-async function buildToolSchemas() {
+async function buildToolSchemas(missing) {
     const { createGenerator } = await import("ts-json-schema-generator");
     const schemas = {};
     for (const [type, path] of TOOL_SCHEMA_TYPES) {
         if (!fs.existsSync(path)) {
-            console.warn(
-                `docs corpus: ${path} missing, skipping ${type} schema`,
-            );
+            missing.push(`${path} (${type} tool schema)`);
             continue;
         }
 
@@ -417,14 +423,19 @@ async function buildToolSchemas() {
 
 /// Build the `dist/docs/perspective-docs.json` agent metadata bundle
 /// (`{schemas, chunks}`). Returns summary stats.
+///
+/// Every input is required: a missing file or scoped declaration (e.g. a
+/// ts-rs type renamed in Rust but not here) fails the build rather than
+/// silently dropping that API from the corpus.
 export async function buildDocsCorpus() {
     const chunks = [];
+    const missing = [];
     const md_files = [
-        ...summarySubtrees(DOCS_SUMMARY, DOCS_SUBTREES),
+        ...summarySubtrees(DOCS_SUMMARY, DOCS_SUBTREES, missing),
         ...DOCS_MD_FILES,
     ].filter((file) => {
         if (!fs.existsSync(file)) {
-            console.warn(`docs corpus: ${file} missing, skipping`);
+            missing.push(file);
             return false;
         }
 
@@ -438,15 +449,24 @@ export async function buildDocsCorpus() {
     for (const { file, prefix, scope } of DOCS_DTS_FILES) {
         if (fs.existsSync(file)) {
             const text = fs.readFileSync(file, "utf8");
-            const scoped = scope ? scopeDeclarations(file, text, scope) : text;
+            const scoped = scope
+                ? scopeDeclarations(file, text, scope, missing)
+                : text;
             chunks.push(...chunkDts(file, scoped, prefix));
         } else {
-            console.warn(`docs corpus: ${file} missing, skipping API chunks`);
+            missing.push(file);
         }
     }
 
+    const schemas = await buildToolSchemas(missing);
+    if (missing.length > 0) {
+        throw new Error(
+            `docs corpus: ${missing.length} input(s) missing - update DOCS_DTS_FILES / TOOL_SCHEMA_TYPES / DOCS_SUBTREES in tools.mjs:\n${missing.map((x) => `  ${x}`).join("\n")}`,
+        );
+    }
+
     const corpus = normalizeChunks(chunks);
-    const bundle = { schemas: await buildToolSchemas(), chunks: corpus };
+    const bundle = { schemas, chunks: corpus };
     const json = JSON.stringify(bundle);
     if (json.length > DOCS_RAW_BUDGET) {
         console.warn(
@@ -464,6 +484,82 @@ export async function buildDocsCorpus() {
 }
 
 // Inline url() asset references as data URIs.
+/** The `@mixin`/`@apply` at-rules the theme sources share palettes with. */
+export const THEME_AT_RULES = {
+    mixin: { prelude: "<custom-ident>", body: "style-block" },
+    apply: { prelude: "<custom-ident>" },
+};
+
+/**
+ * A visitor expanding `@apply <name>;` to the body of `@mixin <name> {}`,
+ * with the mixins collected up front from `files` because the bundler visits
+ * each stylesheet as it finishes parsing, not in source order.
+ */
+export function mixinVisitor(files) {
+    const declared = new Map();
+    for (const filename of files) {
+        transformCss({
+            filename,
+            code: fs.readFileSync(filename),
+            customAtRules: THEME_AT_RULES,
+            visitor: {
+                Rule: {
+                    custom: {
+                        mixin(rule) {
+                            declared.set(
+                                rule.prelude.value,
+                                withoutNulls(rule.body.value),
+                            );
+                            return [];
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    return {
+        Rule: {
+            custom: {
+                mixin() {
+                    return [];
+                },
+                apply(rule) {
+                    const body = declared.get(rule.prelude.value);
+                    if (body === undefined) {
+                        throw new Error(
+                            `Unknown mixin "${rule.prelude.value}"`,
+                        );
+                    }
+
+                    return body;
+                },
+            },
+        },
+    };
+}
+
+/**
+ * Drop `null` fields from a lightningcss AST value, since the serializer emits
+ * them for absent `Option`s (such as a `var()` reference's css-modules `from`)
+ * and the deserializer rejects them on the way back in.
+ */
+function withoutNulls(value) {
+    if (Array.isArray(value)) {
+        value.forEach(withoutNulls);
+    } else if (value !== null && typeof value === "object") {
+        for (const key of Object.keys(value)) {
+            if (value[key] === null) {
+                delete value[key];
+            } else {
+                withoutNulls(value[key]);
+            }
+        }
+    }
+
+    return value;
+}
+
 export function inlineUrlVisitor(fromFile) {
     const dir = path.dirname(fromFile);
     return composeVisitors([
@@ -605,8 +701,39 @@ const CEM_CSS_SYNTAX = [
     [/--font-size$/, "<length>"],
 ];
 
-function cemCssDeclarations(file) {
-    const text = fs.readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+function cemStripComments(text) {
+    return text.replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+function cemCssMixins(files) {
+    const mixins = new Map();
+    for (const file of files) {
+        const text = cemStripComments(fs.readFileSync(file, "utf8"));
+        const re = /@mixin\s+([\w-]+)\s*\{/g;
+        let match;
+        while ((match = re.exec(text)) !== null) {
+            let depth = 1;
+            let i = re.lastIndex;
+            for (; i < text.length && depth > 0; i++) {
+                if (text[i] === "{") {
+                    depth += 1;
+                } else if (text[i] === "}") {
+                    depth -= 1;
+                }
+            }
+
+            mixins.set(match[1], text.slice(re.lastIndex, i - 1));
+        }
+    }
+
+    return mixins;
+}
+
+function cemCssDeclarations(file, mixins) {
+    const text = cemStripComments(fs.readFileSync(file, "utf8")).replace(
+        /@apply\s+([\w-]+)\s*;/g,
+        (_, name) => mixins.get(name) ?? "",
+    );
 
     const out = [];
     let depth = 0;
@@ -698,18 +825,19 @@ function cemCssProperties() {
 
     walk(CEM_THEMES_DIR);
     files.sort();
+    const mixins = cemCssMixins(files);
     const defaults = new Map();
     const names = new Set();
     for (const file of files) {
         const base = path.basename(file);
-        for (const { name, value } of cemCssDeclarations(file)) {
+        for (const { name, value } of cemCssDeclarations(file, mixins)) {
             if (CEM_PRIVATE_CSS_PREFIXES.some((x) => name.startsWith(x))) {
                 continue;
             }
 
             names.add(name);
             const rank =
-                base === "pro.css" ? 0 : base === "defaults.css" ? 1 : 2;
+                base === "pro-light.css" ? 0 : base === "defaults.css" ? 1 : 2;
             const prev = defaults.get(name);
             if (rank < 2 && (prev === undefined || rank < prev.rank)) {
                 defaults.set(name, { rank, value });

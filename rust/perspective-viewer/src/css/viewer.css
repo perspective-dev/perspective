@@ -96,38 +96,37 @@
     position: absolute;
     inset: 0;
     background-color: var(--psp--background-color) !important;
+
+    /* Background FILL (in the panel's own theme) for the 4px of frame padding
+       around the plugin: reaches 4px left, right and down, 0px up (the
+       titlebar is above). Keep these whole pixels and ending exactly at the
+       frame edge. */
     box-shadow:
-        2.25px 2.25px 0 2.25px var(--psp--background-color),
-        /* down-right */ -2.25px 2.25px 0 2.25px var(--psp--background-color),
-        /* down-left */ 2.75px 2.75px 0 2.75px var(--psp-inactive--color),
-        -1.75px 2.75px 0 2.75px var(--psp-inactive--color);
+        2px 2px 0 2px var(--psp--background-color),
+        -2px 2px 0 2px var(--psp--background-color);
+
+    /* The panel's LEFT separator line beside the plugin body, in the panel's
+       own theme. Drawn here (not on the frame) because per-panel themes reach
+       only the light-DOM plugin + tab; the frame sits in the viewer's shadow
+       and would read the host (active panel's) theme. An outline (unlike a
+       box-shadow) has its width snapped to device pixels, like a border. The
+       4px offset puts it exactly on the frame's left edge; its right/bottom
+       sides fall outside the frame (clipped by `.rl-panel { overflow: clip }`)
+       and its top side is clipped by `clip-path` (the tab draws the top line).
+       The clip-path insets reach past the outline (-6px vs -5px) so the
+       outline's own edges are never cut by an un-snapped clip. */
+    outline: 1px solid var(--psp-inactive--color);
+    outline-offset: 4px;
+    clip-path: inset(0 -6px -6px -6px);
 }
 
-.overlay
-    ::slotted(
-        :not([slot^="statusbar-extra"]):not([slot^="tab-"]):not([slot="modal"])
-    ) {
-    box-shadow:
-        2.25px 2.25px 0 2.25px var(--psp--background-color),
-        -2.25px 2.25px 0 2.25px var(--psp--background-color),
-        2.75px 2.75px 0 2.75px var(--psp-inactive--color),
-        -2.75px 2.75px 0 2.75px var(--psp-inactive--color);
-}
-
+/* Tab fill: reaches 4px up, left and right, 0px down. The separator lines
+   along the titlebar (top, plus left of each tab) are real borders drawn by
+   the tab itself (`:host::before` in panel-tab.css), in the panel's theme. */
 ::slotted([part="tab"].visible) {
     box-shadow:
-        2.25px -2.25px 0 2.25px var(--psp--background-color),
-        -2.25px -2.25px 0 2.25px var(--psp--background-color),
-        3.5px -2.25px 0 2.25px var(--psp-inactive--color),
-        0 12.5px 0 -11.5px var(--psp-inactive--border-color);
-}
-
-.overlay ::slotted([part="tab"].visible) {
-    box-shadow:
-        2.25px -2.25px 0 2.25px var(--psp--background-color),
-        -2.25px -2.25px 0 2.25px var(--psp--background-color),
-        2.75px -2.75px 0 2.75px var(--psp-inactive--color),
-        -2.75px -2.75px 0 2.75px var(--psp-inactive--color),
+        2px -2px 0 2px var(--psp--background-color),
+        -2px -2px 0 2px var(--psp--background-color),
         0 12.5px 0 -11.5px var(--psp-inactive--border-color);
 }
 
@@ -373,20 +372,66 @@
             height: 100%;
         }
 
-        /* The layout engine hosting this panel's plugin fills the container. */
+        /* The layout engine hosting the panels fills the container.
+
+           Panel separators: frames TILE their grid cells (no margin) and each
+           panel draws a 1px line on its LEFT and TOP edge only, so every
+           internal boundary gets exactly one line (owned by the panel to its
+           right/below, in THAT panel's theme). The lines are drawn by the
+           light-DOM plugin (`outline`, beside the body) and tab (`::before`,
+           along the titlebar) - not the frame, which the per-panel theme
+           rules can't reach. Borders and outlines (unlike box-shadows) are
+           snapped to whole device pixels at any DPR. The leading inset (-4px)
+           pushes the outermost left/top lines outside `#main_panel_container`'s
+           `overflow: hidden`, so the layout itself has no outer border; the
+           trailing inset (-3px) leaves the plugins the same ~1px outer gutter
+           on every side. */
         & regular-layout {
             position: absolute;
-            inset: -4px -4px -4px -4px;
+            inset: -4px -3px -3px -4px;
             box-sizing: border-box;
             padding: 0px;
             background: var(--psp--background-color, transparent);
 
+            /* The padding is the resize grab band: regular-layout only starts
+               a divider drag when `event.target` is the layout itself, which
+               works because `regular-layout-frame` is `pointer-events: none`
+               outside its container/tabs. Do NOT set `pointer-events` here.
+               left/top = 1px line + 4px fill; right/bottom = 4px fill. */
             & > .rl-panel {
                 position: relative;
                 box-sizing: border-box;
                 background: none;
-                border: 1px solid transparent;
-                margin: var(--psp-panel--margin, 4px);
+                border: none;
+                margin: 0;
+                padding: 5px 4px 4px 5px;
+
+                /* Own stacking context, so the front tab's z-index (6) can't
+                   escape the frame and paint over a dragged (overlay) panel,
+                   and the overlay outline below can sit above the tab. */
+                isolation: isolate;
+
+                /* Clip to the grid cell. Every fill ends exactly at the frame
+                   edge; the only paint outside it is the plugin outline's
+                   right/bottom sides, which would double up on the
+                   neighbours' left/top lines. `clip`, not `hidden`: no scroll
+                   container. */
+                overflow: clip;
+            }
+
+            /* A dragged panel floats over the grid, so it needs all 4 sides,
+               including the titlebar's right edge, which no tab can draw (a
+               tab can't tell it's the last in its stack). Transient, so this
+               one uses the host theme's color. Painted over the outer pixel
+               of the 4px fill, so the plugin size doesn't change. */
+            & > .rl-panel.overlay::after {
+                content: "";
+                position: absolute;
+                inset: 0;
+                z-index: 7;
+                box-sizing: border-box;
+                border: 1px solid var(--psp-inactive--color);
+                pointer-events: none;
             }
 
             & > .rl-panel::part(container) {
@@ -395,8 +440,10 @@
                 /* box-shadow: 0 0 0 4.5px var(--psp--background-color); */
             }
 
+            /* 4px fill + 1px divider + 4px fill (see the tab box-shadows and
+               `:host::before` in panel-tab.css). */
             & > .rl-panel::part(titlebar-track) {
-                gap: 10px;
+                gap: 9px;
             }
 
             & > .rl-panel::part(titlebar) {

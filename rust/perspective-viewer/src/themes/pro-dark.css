@@ -11,6 +11,8 @@
  * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ */
 
 @import "./defaults.css";
+@import "./pro/palette.css";
+@import "./pro/openlayers.css";
 
 /* Register theme for auto-detection */
 perspective-viewer,
@@ -21,93 +23,8 @@ perspective-viewer [theme="Pro Dark"] {
 
 perspective-viewer[theme="Pro Dark"],
 perspective-viewer [theme="Pro Dark"] {
-    /* perspective-viewer-pro-dark--colors (overrides) */
-    background-color: #242526;
-    color: white;
     color-scheme: dark;
-    --psp--color: white;
-    --psp-active--color: #2770a9;
-    --psp-error--color: #ff9485;
-    --psp-inactive--color: #61656e;
-    --psp-inactive--border-color: #4c505b;
-    --psp--background-color: #242526;
-    --psp-active--background: rgba(39, 113, 170, 0.5);
-    --psp-expression--operator--color: #c5c9d0;
-    --psp-expression--function--color: #22a0ce;
-    --psp-expression--error--color: rgb(255, 136, 136);
-    --psp-calendar--filter: invert(1);
-    --psp-input--filter: invert(1);
-    --psp-warning--color: #242526;
-    --psp-warning--background: var(--psp--color);
-
-    /* Syntax */
-    --psp-code-editor--symbol--color: white;
-    --psp-code-editor--literal--color: #7dc3f0;
-    --psp-code-editor--operator--color: rgb(23, 166, 123);
-    --psp-code-editor--comment--color: rgb(204, 120, 48);
-    --psp-code-editor--column--color: #e18ee1;
-
-    /* perspective-viewer-pro-dark--datagrid (overrides) */
-    --psp-datagrid--pos-cell--color: #7dc3f0;
-    --psp-datagrid--neg-cell--color: #ff9485;
-
-    /* perspective-viewer-pro-dark--webgl (overrides) */
-    --psp-charts--legend--color: #c5c9d0;
-    --psp-charts--treemap--labels: white;
-    --psp-charts--treemap--hover-highlight: white;
-    --psp-charts--tooltip--color: white;
-    --psp-charts--axis-ticks--color: #c5c9d0;
-    --psp-charts--axis-lines--color: #61656e;
-    --psp-charts--gridline--color: #3b3f46;
-    --psp-charts--tooltip--background: rgba(42, 44, 47, 1);
-    --psp-charts--tooltip--border-color: #242526;
-    --psp-charts--legend--background: var(--psp--background-color);
-
-    --psp-charts--series--color: rgb(71, 120, 194);
-    --psp-charts--series-1--color: rgb(71, 120, 194);
-    --psp-charts--series-2--color: rgb(204, 120, 48);
-    --psp-charts--series-3--color: rgb(158, 84, 192);
-    --psp-charts--series-4--color: rgb(51, 150, 153);
-    --psp-charts--series-5--color: rgb(102, 114, 143);
-    --psp-charts--series-6--color: rgb(211, 103, 189);
-    --psp-charts--series-7--color: rgb(109, 124, 77);
-    --psp-charts--series-8--color: rgb(221, 99, 103);
-    --psp-charts--series-9--color: rgb(120, 104, 206);
-    --psp-charts--series-10--color: rgb(23, 166, 123);
-    --psp-datagrid--series-1--color: rgb(71, 120, 194);
-    --psp-datagrid--series-2--color: rgb(204, 120, 48);
-    --psp-datagrid--series-3--color: rgb(158, 84, 192);
-    --psp-datagrid--series-4--color: rgb(51, 150, 153);
-    --psp-datagrid--series-5--color: rgb(102, 114, 143);
-    --psp-datagrid--series-6--color: rgb(211, 103, 189);
-    --psp-datagrid--series-7--color: rgb(109, 124, 77);
-    --psp-datagrid--series-8--color: rgb(221, 99, 103);
-    --psp-datagrid--series-9--color: rgb(120, 104, 206);
-    --psp-datagrid--series-10--color: rgb(23, 166, 123);
-
-    --psp-charts--gradient--background: linear-gradient(
-        #dd6367 0%,
-        #242526 50%,
-        #3289c8 100%
-    );
-
-    /* perspective-viewer-pro-dark--openlayers (overrides) */
-    --psp-openlayers--tile-url: "http://{a-c}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
-    --psp-openlayers--attribution--filter: invert(1) hue-rotate(180deg);
-    --psp-openlayers--element--background: #212c2f;
-    --psp-openlayers--category-1--color: rgb(71, 120, 194);
-    --psp-openlayers--category-2--color: rgb(204, 120, 48);
-    --psp-openlayers--category-3--color: rgb(158, 84, 192);
-    --psp-openlayers--category-4--color: rgb(51, 150, 153);
-    --psp-openlayers--category-5--color: rgb(102, 114, 143);
-    --psp-openlayers--category-6--color: rgb(211, 103, 189);
-    --psp-openlayers--category-7--color: rgb(109, 124, 77);
-    --psp-openlayers--category-8--color: rgb(221, 99, 103);
-    --psp-openlayers--category-9--color: rgb(120, 104, 206);
-    --psp-openlayers--category-10--color: rgb(23, 166, 123);
-    --psp-openlayers--gradient--background: linear-gradient(
-        #dd6367 0%,
-        #242526 50%,
-        #3289c8 100%
-    );
+    background-color: #242526;
+    @apply pro;
+    @apply pro-openlayers-dark;
 }

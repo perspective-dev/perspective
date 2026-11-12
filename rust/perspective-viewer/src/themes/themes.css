@@ -11,6 +11,7 @@
  * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ */
 
 @import "./pro.css";
+@import "./pro-light.css";
 @import "./pro-dark.css";
 @import "./blueprint.css";
 @import "./botanical.css";

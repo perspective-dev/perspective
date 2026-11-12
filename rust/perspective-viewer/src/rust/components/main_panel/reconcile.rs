@@ -120,31 +120,17 @@ impl MainPanel {
         })
     }
 
-    /// Reconcile the `<regular-layout>` grid against `panel_ids`: `insertPanel`
-    /// newly-rendered cells (flipping each from `display:none` to a visible
-    /// grid cell) and `removePanel` cells whose panels are gone.
+    /// Reconcile the `<regular-layout>` grid against the live `Workspace`
+    /// panel set, never the `panel_ids` props snapshot, because Yew's
+    /// scheduler yield can run this hook after a `restoreWorkspace` staged a
+    /// layout the snapshot predates: `insertPanel` newly-rendered cells
+    /// (flipping each from `display:none` to a visible grid cell) and
+    /// `removePanel` cells whose panels are gone.
     pub(super) fn reconcile(&mut self, ctx: &Context<Self>) {
-        // The `<regular-layout>` element is rendered unconditionally and so is
-        // stable for this component's lifetime — zero panels is just another
-        // count (empty insert loop; the retain below removes the last cell,
-        // collapsing the layout tree to a childless split). Do NOT reset
-        // `listener_target`/`inserted` on empty: the listeners stay attached
-        // to the persistent element.
         let Some(el) = self.layout_ref.cast::<web_sys::HtmlElement>() else {
             return;
         };
 
-        // Attach the close-detection + active-panel-sync listeners once per
-        // ELEMENT (the `<regular-layout>` element is keyed into a fully-keyed
-        // sibling list, so Yew reuses one instance for this MainPanel's
-        // lifetime), and configure resize physics — `GRID_DIVIDER_SIZE` is the
-        // divider hit tolerance (0 by default → not resizable). The cell-edge
-        // band it grabs must be left uncovered: each `.rl-panel` carries a
-        // `margin` (viewer.css) so pointerdowns there reach `regular-layout`
-        // instead of the frame. Comparing the ELEMENT (not a latched bool)
-        // self-heals an instance swap: a fresh element boots an EMPTY layout
-        // tree with no listeners, so everything must be re-bound and every
-        // placed panel re-inserted (see `listener_target`).
         if self.listener_target.as_ref() != Some(&el) {
             if self.listener_target.is_some() {
                 self.inserted.clear();
@@ -175,14 +161,8 @@ impl MainPanel {
         }
 
         let layout: RegularLayout = el.unchecked_into();
-        let panel_ids = &ctx.props().panel_ids;
+        let panel_ids = ctx.props().workspace.panel_ids();
 
-        // `restoreWorkspace` stages its saved layout tree on the Workspace
-        // (the model; regular-layout is a slave view). Apply it here, BEFORE
-        // the insert reconcile, and seed `inserted` from its panel names — so
-        // restored panels mount directly at their saved positions in ONE
-        // layout commit, never transiting the synthetic equal-split inserts
-        // below.
         if let Some(tree) = ctx.props().workspace.take_pending_layout()
             && let Ok(js) = JsValue::from_serde_ext(&tree)
         {
@@ -194,39 +174,26 @@ impl MainPanel {
             }
         }
 
-        // Insert cells that are newly present.
-        for id in panel_ids {
+        for id in &panel_ids {
             let name = id.as_str();
             if self.inserted.iter().any(|n| n == name) {
                 continue;
             }
 
-            // STAGED panels are withheld from the layout: their first draw
-            // is completing in the hidden staging wrapper (see
-            // `PanelPhase::Staging`). The promote re-render flips the phase,
-            // and this loop then inserts the already-drawn panel.
             if ctx.props().workspace.is_staged(id) {
                 continue;
             }
 
-            // Already placed in the layout tree (the layout is the placement
-            // source of truth — e.g. a restored tree naming a panel this
-            // component hasn't tracked yet): record it, never re-split it.
-            if layout.contains_panel(name) {
-                self.inserted.push(name.to_owned());
-                continue;
+            if !layout.contains_panel(name) {
+                let index = self.inserted.len();
+                let path = JsValue::from(js_sys::Array::of1(&JsValue::from_f64(index as f64)));
+                let _ = layout.insert_panel(name, path, JsValue::from_bool(true));
             }
 
-            // Insert at this panel's index as a split (orientation = `true` →
-            // horizontal) rather than the default (path `[]`), which would
-            // *stack* into the root tab-layout — a stack only renders its
-            // selected tab, and without frame chrome there's no tab-bar to
-            // reach the others. Splitting keeps every panel visible
-            // side-by-side.
-            let index = self.inserted.len();
-            let path = JsValue::from(js_sys::Array::of1(&JsValue::from_f64(index as f64)));
-            let _ = layout.insert_panel(name, path, JsValue::from_bool(true));
             self.inserted.push(name.to_owned());
+            if let Some(panel) = ctx.props().workspace.panel(id) {
+                panel.renderer.stamp_frame_background();
+            }
         }
 
         let mut pending = std::mem::take(&mut self.pending_removals);

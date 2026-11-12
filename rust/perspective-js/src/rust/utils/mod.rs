@@ -21,6 +21,7 @@ mod local_poll_loop;
 mod serde;
 #[cfg(feature = "trace-allocator")]
 mod trace_allocator;
+mod ts_promise;
 
 pub use browser::*;
 pub use console_logger::*;
@@ -30,3 +31,4 @@ pub use local_poll_loop::*;
 pub use serde::*;
 #[cfg(feature = "trace-allocator")]
 pub(crate) use trace_allocator::get_used;
+pub use ts_promise::*;

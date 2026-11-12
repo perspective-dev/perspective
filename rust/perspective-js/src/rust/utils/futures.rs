@@ -24,6 +24,7 @@ use wasm_bindgen::describe::WasmDescribe;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, future_to_promise};
 
+use super::TsPromise;
 use super::errors::*;
 
 #[wasm_bindgen]
@@ -171,15 +172,17 @@ where
 impl<T> WasmDescribe for ApiFuture<T>
 where
     Result<T, JsValue>: IntoJsResult + 'static,
+    T: TsPromise,
 {
     fn describe() {
-        <js_sys::Promise as WasmDescribe>::describe()
+        <T::Promise as WasmDescribe>::describe()
     }
 }
 
 impl<T> IntoWasmAbi for ApiFuture<T>
 where
     Result<T, JsValue>: IntoJsResult + 'static,
+    T: TsPromise,
 {
     type Abi = <js_sys::Promise as IntoWasmAbi>::Abi;
 
@@ -192,7 +195,7 @@ where
 impl<T> FromWasmAbi for ApiFuture<T>
 where
     Result<T, JsValue>: IntoJsResult + 'static,
-    T: From<JsValue> + Into<JsValue>,
+    T: From<JsValue> + Into<JsValue> + TsPromise,
 {
     type Abi = <js_sys::Promise as IntoWasmAbi>::Abi;
 

@@ -43,8 +43,9 @@ impl MainPanel {
         false
     }
 
-    /// Report closed every panel this commit dropped from the layout, and
-    /// re-render so its frame leaves the DOM in the commit's paint.
+    /// Report closed every panel this commit dropped from the layout, judged
+    /// against the live `Workspace` panel set (see `reconcile`), and re-render
+    /// so its frame leaves the DOM in the commit's paint.
     pub(super) fn on_layout_updated(&mut self, ctx: &Context<Self>) -> bool {
         let Some(el) = self.layout_ref.cast::<web_sys::HtmlElement>() else {
             return false;
@@ -57,15 +58,14 @@ impl MainPanel {
         self.panel_resize_observers.clear();
 
         let layout: RegularLayout = el.unchecked_into();
+        let panel_ids = ctx.props().workspace.panel_ids();
         let mut closed = Vec::new();
         let on_screen = &mut self.on_screen;
         self.inserted.retain(|id| {
             if layout.contains_panel(id) {
                 on_screen.insert(id.clone());
                 true
-            } else if on_screen.remove(id)
-                || !ctx.props().panel_ids.iter().any(|p| p.as_str() == id)
-            {
+            } else if on_screen.remove(id) || !panel_ids.iter().any(|p| p.as_str() == id) {
                 closed.push(id.clone());
                 false
             } else {
@@ -85,7 +85,7 @@ impl MainPanel {
         // plugin to match its new cell size — same per-panel
         // `resize_callback` the insert path uses (idempotent, and each
         // `Renderer` debounces its own resize).
-        for id in ctx.props().panel_ids.iter() {
+        for id in &panel_ids {
             // Skip any panel regular-layout reports as absent — it's
             // leaving the layout (a close / drag-out in flight). Spawning
             // a resize draw for it would race its disposal, and spawned

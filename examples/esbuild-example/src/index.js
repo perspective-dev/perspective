@@ -15,7 +15,7 @@ import perspective_viewer from "@perspective-dev/viewer";
 import "@perspective-dev/viewer-datagrid";
 import "@perspective-dev/viewer-charts";
 
-import "@perspective-dev/viewer/dist/css/pro-dark.css";
+import "@perspective-dev/viewer/dist/css/themes.css";
 import "./index.css";
 
 import arrow from "superstore-arrow/superstore.lz4.arrow";
