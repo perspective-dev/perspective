@@ -15,6 +15,7 @@ mod config;
 mod docs;
 mod markdown;
 mod runtime;
+mod sandbox;
 mod slot;
 mod tools;
 
