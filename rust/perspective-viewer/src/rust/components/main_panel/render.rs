@@ -107,27 +107,6 @@ impl MainPanel {
                         class.push("single");
                     }
 
-                    // Activate this panel on pointerdown anywhere in it (body
-                    // or titlebar), so *working* in a panel
-                    // — not only clicking its tab — targets
-                    // it with the shared settings/toolbar. regular-layout
-                    // emits `regular-layout-select` on tab clicks only, which
-                    // left body interaction unable to
-                    // change the active panel. Tab clicks
-                    // still also fire `-select`, but that dispatch is async
-                    // (after `restore`) so it lands after
-                    // this synchronous handler — within a
-                    // stack, switching tabs still resolves to the clicked
-                    // panel. Re-activating the
-                    // already-active panel is a no-op upstream.
-                    let on_activate = ctx.props().on_activate_panel.clone();
-                    let activate_name = name.clone();
-                    let onpointerdown = Callback::from(move |_: web_sys::PointerEvent| {
-                        if !is_closing {
-                            on_activate.emit(activate_name.clone());
-                        }
-                    });
-
                     // Right-click anywhere in the panel opens the context menu.
                     // This is handled by the imperative
                     // `contextmenu` listener on the
@@ -157,12 +136,7 @@ impl MainPanel {
                     // themes through the native cascade instead
                     // of a scraped/inlined `--psp-*` block.
                     html! {
-                        <regular-layout-frame
-                            name={name.clone()}
-                            key={name.clone()}
-                            {class}
-                            {onpointerdown}
-                        >
+                        <regular-layout-frame name={name.clone()} key={name.clone()} {class}>
                             <slot name={name.clone()} />
                             <slot name={format!("tab-{name}")} slot="tab" />
                         </regular-layout-frame>

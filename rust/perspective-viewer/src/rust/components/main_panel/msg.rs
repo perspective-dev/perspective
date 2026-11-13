@@ -40,6 +40,9 @@ pub enum MainPanelMsg {
     /// panel within a stack.
     TabSelected(String),
 
+    /// A pointerdown landed inside the named panel's frame.
+    PanelPointerDown(String),
+
     /// The layout is about to resize its cells (fired by the cancelable
     /// `regular-layout-before-resize`). Carries the event so its
     /// `PresizeDetail` can pre-size each panel's plugin to its target box

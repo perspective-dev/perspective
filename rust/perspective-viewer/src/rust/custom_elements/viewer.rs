@@ -1525,8 +1525,8 @@ impl PerspectiveViewerElement {
         })
     }
 
-    /// Copy this viewer's `View` or `Table` data as CSV to the system
-    /// clipboard.
+    /// Copy this viewer's `View` or `Table` data to the system clipboard from
+    /// within a user gesture, rejecting if nothing could be written.
     ///
     /// # Arguments
     ///
@@ -1541,8 +1541,7 @@ impl PerspectiveViewerElement {
     /// })
     /// ```
     pub fn copy(&self, options: Option<JsExportOptions>) -> ApiFuture<()> {
-        let this = self.clone();
-        ApiFuture::new_throttled(async move {
+        let copied = (|| -> ApiResult<_> {
             let ExportOptions {
                 method,
                 panel: name,
@@ -1558,16 +1557,17 @@ impl PerspectiveViewerElement {
                 ExportMethod::Csv
             };
 
-            let panel = this.resolve_panel(name)?;
-            let js_task = export_method_to_blob(
+            let panel = self.resolve_panel(name)?;
+            Ok(copy_method_to_clipboard(
                 &panel.session,
                 &panel.renderer,
-                &this.presentation,
-                &this.workspace,
+                &self.presentation,
+                &self.workspace,
                 method,
-            );
-            copy_to_clipboard(js_task, MimeType::TextPlain).await
-        })
+            ))
+        })();
+
+        ApiFuture::new(async move { copied?.await })
     }
 
     /// Reset a panel's `ViewerConfig` to its data-relative default.

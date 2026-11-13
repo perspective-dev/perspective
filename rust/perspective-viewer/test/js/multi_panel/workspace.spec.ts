@@ -265,6 +265,35 @@ test.describe("Multi-panel API", () => {
         );
     });
 
+    test("a pointerdown in a panel's plugin body activates that panel", async ({
+        page,
+    }) => {
+        await restore(page, SPLIT_CONFIG);
+        const names = await panel_names(page);
+        await page.evaluate((name) => {
+            (
+                document.querySelector("perspective-viewer") as any
+            ).setActivePanel(name);
+        }, names[0]);
+
+        await page.waitForFunction(
+            (name) =>
+                (
+                    document.querySelector("perspective-viewer") as any
+                ).getActivePanel() === name,
+            names[0],
+        );
+
+        await page.locator(`perspective-viewer > [slot="${names[1]}"]`).click();
+        await page.waitForFunction(
+            (name) =>
+                (
+                    document.querySelector("perspective-viewer") as any
+                ).getActivePanel() === name,
+            names[1],
+        );
+    });
+
     test("restore creates the panel when the name is new (upsert)", async ({
         page,
     }) => {

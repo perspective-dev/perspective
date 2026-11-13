@@ -38,10 +38,9 @@ use crate::components::export_dropdown::ExportDropDownMenu;
 use crate::components::new_panel_menu::{HostedTables, NewPanelMenu, NewPanelPick, derived_counts};
 use crate::components::style::StyleSurface;
 use crate::config::*;
-use crate::js::copy_to_clipboard;
 use crate::presentation::Presentation;
 use crate::queries::fetch_hosted_tables;
-use crate::tasks::{can_derive, delete_derived, export_method_to_blob};
+use crate::tasks::{can_derive, copy_method_to_clipboard, delete_derived, export_method_to_blob};
 use crate::ui::{ContextMenu, ContextMenuEntry, ContextMenuItem, MODAL_SLOT, PortalModal};
 use crate::utils::*;
 use crate::workspace::{PanelId, Workspace};
@@ -452,16 +451,17 @@ impl PanelMenu {
                     let workspace = ctx.props().workspace.clone();
                     let link = ctx.link().clone();
                     Callback::from(move |file: ExportFile| {
-                        clone!(session, renderer, presentation, workspace, link);
+                        let task = copy_method_to_clipboard(
+                            &session,
+                            &renderer,
+                            &presentation,
+                            &workspace,
+                            file.method,
+                        );
+
+                        clone!(link);
                         ApiFuture::spawn(async move {
-                            let task = export_method_to_blob(
-                                &session,
-                                &renderer,
-                                &presentation,
-                                &workspace,
-                                file.method,
-                            );
-                            copy_to_clipboard(task, file.method.mimetype(file.is_chart)).await?;
+                            task.await?;
                             link.send_message(PanelMenuMsg::ClosePicker);
                             Ok(())
                         });

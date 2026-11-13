@@ -14,16 +14,17 @@
 //! supported [`ExportMethod`] formats and return a [`Blob`] / [`JsValue`].
 
 use std::collections::HashSet;
+use std::future::Future;
 
 use base64::prelude::*;
 use futures::join;
 use itertools::Itertools;
-use perspective_client::ViewWindow;
+use perspective_client::{ViewWindow, clone};
 use perspective_js::utils::*;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::config::{EncodeConfig, ExportMethod};
-use crate::js::JsPerspectiveViewerPlugin;
+use crate::js::{JsPerspectiveViewerPlugin, copy_to_clipboard};
 use crate::presentation::Presentation;
 use crate::queries::{export_app, get_viewer_config};
 use crate::renderer::Renderer;
@@ -107,7 +108,6 @@ pub async fn txt_as_jsvalue(
         .await
 }
 
-/// Generate a result `Blob` for all types of [`ExportMethod`].
 /// The `window` (or a default one) with Arrow IPC body compression `codec`.
 fn compressed(window: Option<ViewWindow>, codec: &str) -> Option<ViewWindow> {
     let mut window = window.unwrap_or_default();
@@ -115,15 +115,61 @@ fn compressed(window: Option<ViewWindow>, codec: &str) -> Option<ViewWindow> {
     Some(window)
 }
 
-pub async fn export_method_to_blob(
+/// Starts copying `method`'s export to the clipboard using the selection as of
+/// this call, so it must be called synchronously from within a user gesture.
+pub fn copy_method_to_clipboard(
     session: &Session,
     renderer: &Renderer,
     presentation: &Presentation,
     workspace: &Workspace,
     method: ExportMethod,
-) -> ApiResult<web_sys::Blob> {
-    let viewport = renderer.get_selection();
+) -> impl Future<Output = ApiResult<()>> + 'static {
+    let copied = (!method.is_selected() || renderer.get_selection().is_some()).then(|| {
+        copy_to_clipboard(
+            export_method_to_blob(session, renderer, presentation, workspace, method),
+            method.mimetype(renderer.is_chart()),
+        )
+    });
 
+    async move {
+        copied
+            .ok_or_else(|| ApiError::new("Nothing is selected"))?
+            .await
+    }
+}
+
+/// Generate a result `Blob` for all types of [`ExportMethod`], using the
+/// selection as of this call.
+pub fn export_method_to_blob(
+    session: &Session,
+    renderer: &Renderer,
+    presentation: &Presentation,
+    workspace: &Workspace,
+    method: ExportMethod,
+) -> impl Future<Output = ApiResult<web_sys::Blob>> + 'static {
+    let viewport = renderer.get_selection();
+    clone!(session, renderer, presentation, workspace);
+    async move {
+        export_selection_to_blob(
+            &session,
+            &renderer,
+            &presentation,
+            &workspace,
+            method,
+            viewport,
+        )
+        .await
+    }
+}
+
+async fn export_selection_to_blob(
+    session: &Session,
+    renderer: &Renderer,
+    presentation: &Presentation,
+    workspace: &Workspace,
+    method: ExportMethod,
+    viewport: Option<ViewWindow>,
+) -> ApiResult<web_sys::Blob> {
     match method {
         ExportMethod::Csv => crate::queries::csv_as_jsvalue(session, false, None)
             .await?
