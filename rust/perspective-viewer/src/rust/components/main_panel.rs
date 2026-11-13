@@ -193,6 +193,10 @@ pub struct MainPanel {
     /// chrome and slotted light DOM alike — on the composed path.
     _contextmenu_listener: Closure<dyn FnMut(web_sys::Event)>,
 
+    /// Bubble-phase `pointerdown` listener on the viewer host that activates
+    /// the panel whose frame is on the event's composed path.
+    _pointerdown_listener: Closure<dyn FnMut(web_sys::Event)>,
+
     /// The `<regular-layout>` ELEMENT the layout listeners are attached to.
     /// Compared by identity in `reconcile` — if the element is ever a
     /// different instance (it should never be: the render keys it into a
@@ -341,6 +345,17 @@ impl Component for MainPanel {
             contextmenu_cb.emit((panel_id, mouse.client_x() as f64, mouse.client_y() as f64));
         }) as Box<dyn FnMut(web_sys::Event)>);
 
+        let pointerdown_cb = ctx.link().callback(MainPanelMsg::PanelPointerDown);
+        let viewer_elem = ctx.props().presentation.viewer_elem().clone();
+        let pointerdown_listener = Closure::wrap(Box::new(move |event: web_sys::Event| {
+            if let Some(frame) = panel_frame_on_path(&event, viewer_elem.unchecked_ref())
+                && !frame.class_list().contains("closing")
+                && let Some(name) = frame.get_attribute("name")
+            {
+                pointerdown_cb.emit(name);
+            }
+        }) as Box<dyn FnMut(web_sys::Event)>);
+
         let staged_sub = {
             use crate::utils::AddListener;
             let cb = ctx.link().callback(|_: ()| MainPanelMsg::StagedChanged);
@@ -369,6 +384,7 @@ impl Component for MainPanel {
             _layout_select_listener: select_listener,
             _layout_before_resize_listener: before_resize_listener,
             _contextmenu_listener: contextmenu_listener,
+            _pointerdown_listener: pointerdown_listener,
             listener_target: None,
             panel_resize_observers: HashMap::new(),
             hidden_tabs: HashSet::new(),
@@ -386,6 +402,7 @@ impl Component for MainPanel {
             MainPanelMsg::LayoutStaged => true,
             MainPanelMsg::LayoutUpdated => self.on_layout_updated(ctx),
             MainPanelMsg::TabSelected(name) => self.on_tab_selected(ctx, name),
+            MainPanelMsg::PanelPointerDown(name) => self.on_panel_pointer_down(ctx, name),
             MainPanelMsg::ContextMenu(id, x, y) => self.on_context_menu(ctx, id, x, y),
             MainPanelMsg::CloseContextMenu => self.on_close_context_menu(),
             MainPanelMsg::Command(cmd) => self.on_command(ctx, cmd),
@@ -405,14 +422,16 @@ impl Component for MainPanel {
         // right-clicks reach it through their frames on the composed path;
         // everything else resolves to the active panel (or the stage menu).
         if first_render {
-            let _ = ctx
-                .props()
-                .presentation
-                .viewer_elem()
-                .add_event_listener_with_callback(
-                    "contextmenu",
-                    self._contextmenu_listener.as_ref().unchecked_ref(),
-                );
+            let viewer_elem = ctx.props().presentation.viewer_elem();
+            let _ = viewer_elem.add_event_listener_with_callback(
+                "contextmenu",
+                self._contextmenu_listener.as_ref().unchecked_ref(),
+            );
+
+            let _ = viewer_elem.add_event_listener_with_callback(
+                "pointerdown",
+                self._pointerdown_listener.as_ref().unchecked_ref(),
+            );
         }
 
         self.size_staging_wrappers(ctx);
@@ -425,17 +444,33 @@ impl Component for MainPanel {
 
     fn destroy(&mut self, ctx: &Context<Self>) {
         // The host element outlives this component (`delete()` tears down
-        // the Yew app, not the custom element), so the listener must not
-        // dangle into a dropped `Closure`.
-        let _ = ctx
-            .props()
-            .presentation
-            .viewer_elem()
-            .remove_event_listener_with_callback(
-                "contextmenu",
-                self._contextmenu_listener.as_ref().unchecked_ref(),
-            );
+        // the Yew app, not the custom element), so the listeners must not
+        // dangle into dropped `Closure`s.
+        let viewer_elem = ctx.props().presentation.viewer_elem();
+        let _ = viewer_elem.remove_event_listener_with_callback(
+            "contextmenu",
+            self._contextmenu_listener.as_ref().unchecked_ref(),
+        );
+
+        let _ = viewer_elem.remove_event_listener_with_callback(
+            "pointerdown",
+            self._pointerdown_listener.as_ref().unchecked_ref(),
+        );
     }
+}
+
+/// The innermost `regular-layout-frame` on `event`'s composed path below
+/// `viewer_elem`.
+fn panel_frame_on_path(
+    event: &web_sys::Event,
+    viewer_elem: &web_sys::Element,
+) -> Option<web_sys::Element> {
+    event
+        .composed_path()
+        .iter()
+        .filter_map(|node| node.dyn_into::<web_sys::Element>().ok())
+        .take_while(|el| el != viewer_elem)
+        .find(|el| el.tag_name().eq_ignore_ascii_case("regular-layout-frame"))
 }
 
 impl MainPanel {

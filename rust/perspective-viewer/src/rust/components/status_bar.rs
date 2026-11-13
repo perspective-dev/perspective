@@ -26,7 +26,6 @@ use crate::components::new_panel_menu::{
 };
 use crate::components::style::StyleSurface;
 use crate::config::*;
-use crate::js::*;
 use crate::presentation::{Presentation, PresentationProps};
 use crate::queries::fetch_hosted_tables;
 use crate::renderer::*;
@@ -356,25 +355,19 @@ impl Component for StatusBar {
             let props = ctx.props().clone();
             let link = ctx.link().clone();
             Callback::from(move |x: ExportFile| {
-                let props = props.clone();
+                let task = copy_method_to_clipboard(
+                    &props.session,
+                    &props.renderer,
+                    &props.presentation,
+                    &props.workspace,
+                    x.method,
+                );
+
                 let link = link.clone();
                 spawn_local(async move {
-                    let mime = x.method.mimetype(x.is_chart);
-                    let task = export_method_to_blob(
-                        &props.session,
-                        &props.renderer,
-                        &props.presentation,
-                        &props.workspace,
-                        x.method,
-                    );
-                    let result = copy_to_clipboard(task, mime).await;
-                    let r = (|| -> ApiResult<()> {
-                        result?;
-                        link.send_message(StatusBarMsg::CloseCopy);
-                        Ok(())
-                    })();
-                    if let Err(e) = r {
-                        web_sys::console::warn_1(&e.into());
+                    match task.await {
+                        Ok(()) => link.send_message(StatusBarMsg::CloseCopy),
+                        Err(e) => web_sys::console::warn_1(&e.into()),
                     }
                 })
             })

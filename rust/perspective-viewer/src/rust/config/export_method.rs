@@ -127,6 +127,19 @@ impl ExportMethod {
         }
     }
 
+    /// Whether this method exports only the selected region.
+    pub const fn is_selected(&self) -> bool {
+        matches!(
+            self,
+            Self::CsvSelected
+                | Self::JsonSelected
+                | Self::NdjsonSelected
+                | Self::ArrowSelected
+                | Self::ArrowLz4Selected
+                | Self::ArrowZstdSelected
+        )
+    }
+
     pub const fn mimetype(&self, is_chart: bool) -> MimeType {
         match self {
             Self::Plugin if is_chart => MimeType::ImagePng,

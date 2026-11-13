@@ -15,7 +15,6 @@
 //! - Relative imports should not fork
 
 mod clipboard;
-pub mod clipboard_item;
 mod intersection_observer;
 mod mimetype;
 pub mod plugin;

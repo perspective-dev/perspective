@@ -140,6 +140,11 @@ impl MainPanel {
         false
     }
 
+    pub(super) fn on_panel_pointer_down(&self, ctx: &Context<Self>, name: String) -> bool {
+        ctx.props().on_activate_panel.emit(name);
+        false
+    }
+
     pub(super) fn on_context_menu(
         &mut self,
         ctx: &Context<Self>,
