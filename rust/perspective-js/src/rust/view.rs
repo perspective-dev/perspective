@@ -12,13 +12,15 @@
 
 use js_sys::{Array, ArrayBuffer, Function, Object};
 use perspective_client::{
-    ColumnWindow, OnRemoveData, OnUpdateData, OnUpdateOptions, ViewWindow, assert_view_api,
+    ColumnWindow, OnRemoveData, OnUpdateData, OnUpdateOptions, TypedArrayWindow, ViewWindow,
+    assert_view_api,
 };
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 #[cfg(doc)]
 use crate::table::Table;
+use crate::typed_array::{JsTypedArrayWindow, call_with_typed_arrays};
 use crate::utils::{ApiFuture, ApiResult, JsValueSerdeExt, LocalPollLoop};
 
 #[wasm_bindgen]
@@ -290,19 +292,15 @@ impl View {
     #[wasm_bindgen]
     pub async fn with_typed_arrays(
         &self,
-        window: Option<crate::typed_array::JsTypedArrayWindow>,
+        window: Option<JsTypedArrayWindow>,
         callback: Function,
     ) -> ApiResult<()> {
-        let opts: crate::typed_array::TypedArrayWindow = window
-            .into_serde_ext::<Option<crate::typed_array::TypedArrayWindow>>()?
+        let window = window
+            .into_serde_ext::<Option<TypedArrayWindow>>()?
             .unwrap_or_default();
 
-        let float32 = opts.float32;
-        let mut view_window: ViewWindow = opts.into();
-        view_window.machine_column_names = Some(true);
-        let arrow = self.0.to_arrow(view_window).await?;
-        crate::typed_array::decode_and_call(&arrow, float32, &callback).await?;
-        Ok(())
+        let columns = self.0.to_typed_arrays(window).await?;
+        call_with_typed_arrays(&columns, &callback).await
     }
 
     /// Register a callback with this [`View`]. Whenever the view's underlying

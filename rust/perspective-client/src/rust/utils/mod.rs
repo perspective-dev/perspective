@@ -83,6 +83,9 @@ pub enum ClientError {
 
     #[error("{0}")]
     TimeError(#[from] SystemTimeError),
+
+    #[error("{0}")]
+    TypedArrayError(String),
 }
 
 pub type ClientResult<T> = Result<T, ClientError>;

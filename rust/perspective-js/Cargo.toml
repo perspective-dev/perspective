@@ -59,9 +59,6 @@ trace-allocator = []
 
 [dependencies]
 perspective-client = { version = "5.9.1", features = ["sendable"] }
-arrow-array = { version = "57.3.0", default-features = false }
-arrow-ipc = { version = "57.3.0", default-features = false }
-arrow-schema = { version = "57.3.0", default-features = false }
 bytes = "1.10.1"
 chrono = "0.4"
 derivative = "2.2.0"
