@@ -35,9 +35,8 @@ use perspective_client::config::*;
 use perspective_client::virtual_server::Features;
 use perspective_client::{
     ColumnWindow, DeleteOptions, JoinOptions, OnRemoveData, OnUpdateData, OnUpdateOptions,
-    SystemInfo, TableInitOptions, UpdateOptions, ViewWindow,
+    SystemInfo, TableInitOptions, TypedArrayWindow, UpdateOptions, ViewWindow,
 };
-use perspective_js::TypedArrayWindow;
 use perspective_viewer::config::{
     AddPanelOptions, ClientOptions, ColumnConfigDefaultsOptions, ConfigDefaultsOptions,
     CustomNumberFormatConfig, DatetimeFormat, ExportMethod, ExportOptions, GetClientOptions,

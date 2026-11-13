@@ -10,20 +10,16 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use std::io::Cursor;
-
-use arrow_array::cast::AsArray;
-use arrow_array::types::*;
-use arrow_array::{
-    Array as _, ArrayRef, ArrowPrimitiveType, DictionaryArray, PrimitiveArray, StringArray,
+use js_sys::{
+    Array, Float32Array, Float64Array, Function, Int32Array, JsString, Promise, Uint8Array,
+    Uint32Array,
 };
-use arrow_ipc::reader::StreamReader;
-use arrow_schema::{DataType, TimeUnit};
-use js_sys::{Array, Function, JsString, Uint8Array};
-use perspective_client::ViewWindow;
-use ts_rs::TS;
+use perspective_client::{TypedArrayColumn, TypedArrayValues};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::JsFuture;
+
+use crate::utils::ApiResult;
 
 #[wasm_bindgen]
 unsafe extern "C" {
@@ -32,355 +28,60 @@ unsafe extern "C" {
     pub type JsTypedArrayWindow;
 }
 
-/// Options for `with_typed_arrays`, extending `ViewWindow` with
-/// typed-array-specific options.
-#[derive(Default, serde::Deserialize, TS)]
-pub struct TypedArrayWindow {
-    #[serde(flatten)]
-    pub view_window: ViewWindow,
-
-    /// When `true`, Float64/Date32/Timestamp columns are output as
-    /// `Float32Array` instead of `Float64Array`.
-    #[serde(default)]
-    pub float32: bool,
-}
-
-impl From<TypedArrayWindow> for ViewWindow {
-    fn from(w: TypedArrayWindow) -> Self {
-        w.view_window
-    }
-}
-
-fn zero_invalid_slots<T: ArrowPrimitiveType>(arr: &PrimitiveArray<T>) {
-    let Some(nulls) = arr.nulls() else { return };
-    let ptr = arr.values().as_ptr() as *mut T::Native;
-    let chunks = nulls.inner().bit_chunks();
-    let mut base = 0;
-    for chunk in chunks.iter() {
-        if chunk != u64::MAX {
-            for bit in 0..64 {
-                if chunk & (1 << bit) == 0 {
-                    unsafe { ptr.add(base + bit).write(T::default_value()) };
-                }
-            }
-        }
-
-        base += 64;
-    }
-
-    let rem = chunks.remainder_bits();
-    for bit in 0..chunks.remainder_len() {
-        if rem & (1 << bit) == 0 {
-            unsafe { ptr.add(base + bit).write(T::default_value()) };
-        }
-    }
-}
-
-/// Emit a sub-32-bit integer column as an `Int32Array`. Every Arrow
-/// integer width the engine emits below 32 bits (`i8`/`u8`/`i16`/`u16`)
-/// widens losslessly, so consumers see ONE integer representation
-/// regardless of the column's storage width — and, like `Int32`, one
-/// the `float32` flag never narrows. Needs a copy; `Box<[i32]>` gives
-/// the stable data pointer the zero-copy `view` requires, exactly as
-/// the `f32`/`f64` conversion buffers do.
-fn set_widened_i32<T>(
-    col: &ArrayRef,
-    col_idx: usize,
-    js_values: &Array,
-    js_dicts: &Array,
-    storage: &mut Vec<Box<[i32]>>,
-) where
-    T: ArrowPrimitiveType,
-    T::Native: Into<i32>,
-{
-    let typed = col.as_primitive::<T>();
-    zero_invalid_slots(typed);
-    let vals: Box<[i32]> = typed.values().iter().map(|&v| v.into()).collect();
-
-    let arr = unsafe { js_sys::Int32Array::view(&vals) };
-    storage.push(vals);
-    js_values.set(col_idx as u32, arr.into());
-    js_dicts.set(col_idx as u32, JsValue::NULL);
-}
-
-/// Decode an Arrow IPC batch and call `callback` once with all columns.
-///
-/// Callback signature:
-/// ```js
-/// callback(names: string[], values: TypedArray[], validities: (Uint8Array|null)[], dictionaries: (string[]|null)[]) => void | Promise<void>
-/// ```
-///
-/// If the callback returns a `Promise`, it is awaited before the Arrow
-/// batch (and therefore the zero-copy typed-array views into it) is
-/// dropped. A synchronous callback returning `undefined` is supported
-/// with no promise-handling overhead.
-pub(crate) async fn decode_and_call(
-    arrow: &[u8],
-    float32: bool,
+/// Calls `callback` with zero-copy JS views of `columns`, awaiting a returned
+/// `Promise` before the views are released.
+pub(crate) async fn call_with_typed_arrays(
+    columns: &[TypedArrayColumn],
     callback: &Function,
-) -> Result<(), JsValue> {
-    let cursor = Cursor::new(arrow);
-    let reader = StreamReader::try_new(cursor, None)
-        .map_err(|e| JsValue::from_str(&format!("Arrow decode error: {e}")))?;
+) -> ApiResult<()> {
+    let names = Array::new();
+    let values = Array::new();
+    let validities = Array::new();
+    let dictionaries = Array::new();
+    for column in columns {
+        names.push(&JsString::from(column.name.as_str()));
+        values.push(&values_view(&column.values));
+        validities.push(&column.validity.as_ref().map_or(JsValue::NULL, |validity| {
+            unsafe { Uint8Array::view(validity.as_slice()) }.into()
+        }));
 
-    let batch = reader
-        .into_iter()
-        .next()
-        .ok_or_else(|| JsValue::from_str("Arrow IPC contained no record batches"))?
-        .map_err(|e| JsValue::from_str(&format!("Arrow batch error: {e}")))?;
-
-    let schema = batch.schema();
-    let num_cols = batch.num_columns();
-
-    let js_names = Array::new_with_length(num_cols as u32);
-    let js_values = Array::new_with_length(num_cols as u32);
-    let js_validities = Array::new_with_length(num_cols as u32);
-    let js_dicts = Array::new_with_length(num_cols as u32);
-
-    // Storage for type-conversion buffers (narrow-int/bool widening,
-    // Int64/UInt64/Date32/Timestamp and `float32` narrowing). These
-    // MUST outlive the callback because `js_sys::*Array::view()`
-    // creates zero-copy views into their heap memory. Using `Box<[T]>`
-    // (rather than `Vec<T>`) yields a stable data pointer that won't
-    // move when the outer Vec grows, so a view created before the push
-    // stays valid.
-    let mut i32_storage: Vec<Box<[i32]>> = Vec::new();
-    let mut f32_storage: Vec<Box<[f32]>> = Vec::new();
-    let mut f64_storage: Vec<Box<[f64]>> = Vec::new();
-
-    // The bytes under a NULL slot in the source Arrow are UNDEFINED —
-    // the perspective engine zero-fills them but e.g. DuckDB's Arrow
-    // output leaves NaN (which, unlike the garbage a consumer merely
-    // *displays* wrong, poisons any consumer that aggregates, e.g. the
-    // treemap's bottom-up value sums). `zero_invalid_slots` normalizes
-    // every column in place — forcing invalid slots to 0 so all backends
-    // present the same value contract — without giving up the zero-copy
-    // view.
-    for col_idx in 0..num_cols {
-        let field = schema.field(col_idx);
-        let col = batch.column(col_idx);
-        let validity = col.nulls().map(|nulls| nulls.validity());
-
-        js_names.set(col_idx as u32, JsString::from(field.name().as_str()).into());
-
-        match col.data_type() {
-            DataType::Int8 => {
-                set_widened_i32::<Int8Type>(col, col_idx, &js_values, &js_dicts, &mut i32_storage);
-            },
-            DataType::UInt8 => {
-                set_widened_i32::<UInt8Type>(col, col_idx, &js_values, &js_dicts, &mut i32_storage);
-            },
-            DataType::Int16 => {
-                set_widened_i32::<Int16Type>(col, col_idx, &js_values, &js_dicts, &mut i32_storage);
-            },
-            DataType::UInt16 => {
-                set_widened_i32::<UInt16Type>(
-                    col,
-                    col_idx,
-                    &js_values,
-                    &js_dicts,
-                    &mut i32_storage,
-                );
-            },
-            DataType::UInt32 => {
-                let typed = col.as_primitive::<UInt32Type>();
-                zero_invalid_slots(typed);
-                let arr = unsafe { js_sys::Uint32Array::view(typed.values().as_ref()) };
-                js_values.set(col_idx as u32, arr.into());
-                js_dicts.set(col_idx as u32, JsValue::NULL);
-            },
-            DataType::Int32 => {
-                let typed = col.as_primitive::<Int32Type>();
-                zero_invalid_slots(typed);
-                let arr = unsafe { js_sys::Int32Array::view(typed.values().as_ref()) };
-                js_values.set(col_idx as u32, arr.into());
-                js_dicts.set(col_idx as u32, JsValue::NULL);
-            },
-            DataType::Float32 => {
-                let typed = col.as_primitive::<Float32Type>();
-                zero_invalid_slots(typed);
-                let arr = unsafe { js_sys::Float32Array::view(typed.values().as_ref()) };
-                js_values.set(col_idx as u32, arr.into());
-                js_dicts.set(col_idx as u32, JsValue::NULL);
-            },
-            DataType::Float64 => {
-                let typed = col.as_primitive::<Float64Type>();
-                zero_invalid_slots(typed);
-                if float32 {
-                    let vals: Box<[f32]> = typed.values().iter().map(|&v| v as f32).collect();
-
-                    let arr = unsafe { js_sys::Float32Array::view(&vals) };
-                    f32_storage.push(vals);
-                    js_values.set(col_idx as u32, arr.into());
-                } else {
-                    let arr = unsafe { js_sys::Float64Array::view(typed.values().as_ref()) };
-
-                    js_values.set(col_idx as u32, arr.into());
-                }
-
-                js_dicts.set(col_idx as u32, JsValue::NULL);
-            },
-            DataType::Date32 => {
-                // Datetime values are always emitted as Float64 — narrowing
-                // epoch-ms to f32 collapses ~256 ms of resolution at modern
-                // timestamps, so the `float32` flag is intentionally ignored
-                // for date/timestamp columns.
-                let typed = col.as_primitive::<Date32Type>();
-                zero_invalid_slots(typed);
-                let vals: Box<[f64]> = typed
-                    .values()
-                    .iter()
-                    .map(|&v| v as f64 * 86_400_000.0)
-                    .collect();
-
-                let arr = unsafe { js_sys::Float64Array::view(&vals) };
-                f64_storage.push(vals);
-                js_values.set(col_idx as u32, arr.into());
-                js_dicts.set(col_idx as u32, JsValue::NULL);
-            },
-            DataType::Timestamp(TimeUnit::Millisecond, _) => {
-                let typed = col.as_primitive::<TimestampMillisecondType>();
-                zero_invalid_slots(typed);
-                let vals: Box<[f64]> = typed.values().iter().map(|&v| v as f64).collect();
-
-                let arr = unsafe { js_sys::Float64Array::view(&vals) };
-                f64_storage.push(vals);
-                js_values.set(col_idx as u32, arr.into());
-                js_dicts.set(col_idx as u32, JsValue::NULL);
-            },
-            DataType::Int64 => {
-                let typed = col.as_primitive::<Int64Type>();
-                zero_invalid_slots(typed);
-                if float32 {
-                    let vals: Box<[f32]> = typed.values().iter().map(|&v| v as f32).collect();
-
-                    let arr = unsafe { js_sys::Float32Array::view(&vals) };
-                    f32_storage.push(vals);
-                    js_values.set(col_idx as u32, arr.into());
-                } else {
-                    let vals: Box<[f64]> = typed.values().iter().map(|&v| v as f64).collect();
-
-                    let arr = unsafe { js_sys::Float64Array::view(&vals) };
-                    f64_storage.push(vals);
-                    js_values.set(col_idx as u32, arr.into());
-                }
-
-                js_dicts.set(col_idx as u32, JsValue::NULL);
-            },
-            // Neither `u64` nor `i64` fits `Int32Array`, so both widen
-            // to float (narrowed by `float32` like the other float
-            // columns) and lose exactness past 2^53. `UInt64` is not an
-            // exotic case: `get_simple_accumulator_type` promotes EVERY
-            // unsigned width to `DTYPE_UINT64`, so the `sum` of any
-            // unsigned column in a `group_by` view lands here.
-            DataType::UInt64 => {
-                let typed = col.as_primitive::<UInt64Type>();
-                zero_invalid_slots(typed);
-                if float32 {
-                    let vals: Box<[f32]> = typed.values().iter().map(|&v| v as f32).collect();
-
-                    let arr = unsafe { js_sys::Float32Array::view(&vals) };
-                    f32_storage.push(vals);
-                    js_values.set(col_idx as u32, arr.into());
-                } else {
-                    let vals: Box<[f64]> = typed.values().iter().map(|&v| v as f64).collect();
-
-                    let arr = unsafe { js_sys::Float64Array::view(&vals) };
-                    f64_storage.push(vals);
-                    js_values.set(col_idx as u32, arr.into());
-                }
-
-                js_dicts.set(col_idx as u32, JsValue::NULL);
-            },
-            DataType::Boolean => {
-                // Bit-packed, so `zero_invalid_slots` (a `PrimitiveArray`
-                // memory rewrite) cannot apply — the `is_valid` test
-                // below enforces the same "invalid slots read 0"
-                // contract while materializing.
-                let typed = col.as_boolean();
-                let vals: Box<[i32]> = (0..typed.len())
-                    .map(|i| i32::from(typed.is_valid(i) && typed.value(i)))
-                    .collect();
-
-                let arr = unsafe { js_sys::Int32Array::view(&vals) };
-                i32_storage.push(vals);
-                js_values.set(col_idx as u32, arr.into());
-                js_dicts.set(col_idx as u32, JsValue::NULL);
-            },
-            DataType::Dictionary(..) => {
-                let dict = col
-                    .as_any()
-                    .downcast_ref::<DictionaryArray<Int32Type>>()
-                    .ok_or_else(|| {
-                        JsValue::from_str(&format!(
-                            "Unsupported dictionary key type for typed array: {}",
-                            col.data_type()
-                        ))
-                    })?;
-
-                let keys = dict.keys();
-                zero_invalid_slots(keys);
-                let arr = unsafe { js_sys::Int32Array::view(keys.values().as_ref()) };
-                js_values.set(col_idx as u32, arr.into());
-
-                let values = dict
-                    .values()
-                    .as_any()
-                    .downcast_ref::<StringArray>()
-                    .ok_or_else(|| {
-                        JsValue::from_str(&format!(
-                            "Unsupported dictionary value type for typed array: {}",
-                            dict.values().data_type()
-                        ))
-                    })?;
-
-                let js_dict = Array::new_with_length(values.len() as u32);
-                for i in 0..values.len() {
-                    js_dict.set(i as u32, JsValue::from_str(values.value(i)));
-                }
-                js_dicts.set(col_idx as u32, js_dict.into());
-            },
-            dt => {
-                return Err(JsValue::from_str(&format!(
-                    "Unsupported column type for typed array: {dt}"
-                )));
-            },
-        }
-
-        // SAFETY: Validity bitmap is owned by `batch` which outlives the
-        // callback — safe to view zero-copy.
-        let js_validity = validity.map(|v| unsafe { Uint8Array::view(v) });
-        js_validities.set(
-            col_idx as u32,
-            js_validity
-                .as_ref()
-                .map(JsValue::from)
-                .unwrap_or(JsValue::NULL),
-        );
+        dictionaries.push(&dictionary(&column.values));
     }
 
     let ret = callback.call4(
         &JsValue::UNDEFINED,
-        &js_names.into(),
-        &js_values.into(),
-        &js_validities.into(),
-        &js_dicts.into(),
+        &names,
+        &values,
+        &validities,
+        &dictionaries,
     )?;
 
-    // If the callback returned a Promise, await it before releasing the
-    // batch — zero-copy TypedArray views into `batch` and the
-    // `i32`/`f32`/`f64` conversion buffers must remain valid for the
-    // full lifetime of the awaited work.
-    if ret.is_instance_of::<js_sys::Promise>() {
-        let promise: js_sys::Promise = ret.unchecked_into();
-        wasm_bindgen_futures::JsFuture::from(promise).await?;
+    if let Some(promise) = ret.dyn_ref::<Promise>() {
+        JsFuture::from(promise.clone()).await?;
     }
 
-    // Keep storage alive until after the callback (and its awaited
-    // promise, if any) returns.
-    drop(i32_storage);
-    drop(f32_storage);
-    drop(f64_storage);
-
     Ok(())
+}
+
+fn values_view(values: &TypedArrayValues) -> JsValue {
+    unsafe {
+        match values {
+            TypedArrayValues::Int32(values) => Int32Array::view(values).into(),
+            TypedArrayValues::UInt32(values) => Uint32Array::view(values).into(),
+            TypedArrayValues::Float32(values) => Float32Array::view(values).into(),
+            TypedArrayValues::Float64(values) => Float64Array::view(values).into(),
+            TypedArrayValues::Dictionary { keys, .. } => Int32Array::view(keys).into(),
+        }
+    }
+}
+
+fn dictionary(values: &TypedArrayValues) -> JsValue {
+    match values {
+        TypedArrayValues::Dictionary { values, .. } => values
+            .iter()
+            .map(|value| JsValue::from_str(value))
+            .collect::<Array>()
+            .into(),
+        _ => JsValue::NULL,
+    }
 }

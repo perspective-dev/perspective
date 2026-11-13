@@ -1949,6 +1949,7 @@ name = "perspective-client"
 version = "5.9.1"
 dependencies = [
  "arrow-array",
+ "arrow-buffer",
  "arrow-ipc",
  "arrow-schema",
  "arrow-select",
@@ -1977,9 +1978,6 @@ dependencies = [
 name = "perspective-js"
 version = "5.9.1"
 dependencies = [
- "arrow-array",
- "arrow-ipc",
- "arrow-schema",
  "bytes",
  "chrono",
  "derivative",
