@@ -52,6 +52,26 @@ struct PresizePath {
     view_window: JsValue,
 }
 
+#[derive(Default)]
+pub(super) struct DragSession {
+    observers: HashMap<String, PanelResizeObserverHandle>,
+    cells: HashMap<String, [f64; 4]>,
+}
+
+impl DragSession {
+    fn retain_moved(&mut self, cells: &mut Vec<(String, web_sys::DomRect)>) {
+        cells.retain(|(name, cell)| {
+            let next = [cell.left(), cell.top(), cell.width(), cell.height()];
+            let prev = self.cells.insert(name.clone(), next);
+            !prev.is_some_and(|prev| {
+                prev.iter()
+                    .zip(next)
+                    .all(|(a, b)| (a - b).abs() <= crate::renderer::SUBPIXEL_EPSILON)
+            })
+        });
+    }
+}
+
 /// The current screen origin of a frame's grid TRACK (its margin box — the
 /// coordinate space `real_coordinates` reports), measured live from the frame.
 /// `target_track − current_track` is the presize translate delta: the plugin's
@@ -90,24 +110,46 @@ impl MainPanel {
             .into_serde_ext()
             .unwrap_or_default();
 
-        // Bind a drag ResizeObserver on the panel being dragged: it's
-        // the one present in the layout but EXCLUDED from the presize
-        // paths. A STAGED panel is absent from the layout for a different
-        // reason than the dragged panel — never bind the per-drag observer
-        // to its staging wrapper.
-        for id in &ctx.props().panel_ids {
-            let name = id.as_str();
-            if !paths.contains_key(name)
-                && !self.panel_resize_observers.contains_key(name)
-                && !ctx.props().workspace.is_staged(id)
-                && let Some(panel) = ctx.props().workspace.panel(id)
-                && let Some(plugin) = panel.renderer.active_plugin()
-            {
-                let plugin_el = plugin.unchecked_ref::<web_sys::HtmlElement>();
-                self.panel_resize_observers.insert(
-                    name.to_owned(),
-                    PanelResizeObserverHandle::new(plugin_el, &panel.renderer),
-                );
+        let mut cells: Vec<(String, web_sys::DomRect)> = paths
+            .iter()
+            .map(|(name, path)| {
+                let cell = layout.real_coordinates(&path.view_window).unchecked_into();
+                (name.clone(), cell)
+            })
+            .collect();
+
+        if !detail.overlay().is_undefined() {
+            let drag = self.drag.get_or_insert_default();
+
+            // Bind a drag ResizeObserver on the panel being dragged: it's
+            // the one present in the layout but EXCLUDED from the presize
+            // paths. A STAGED panel is absent from the layout for a different
+            // reason than the dragged panel — never bind the per-drag observer
+            // to its staging wrapper.
+            for id in &ctx.props().panel_ids {
+                let name = id.as_str();
+                if !paths.contains_key(name)
+                    && !drag.observers.contains_key(name)
+                    && !ctx.props().workspace.is_staged(id)
+                    && let Some(panel) = ctx.props().workspace.panel(id)
+                    && let Some(plugin) = panel.renderer.active_plugin()
+                {
+                    let plugin_el = plugin.unchecked_ref::<web_sys::HtmlElement>();
+                    drag.observers.insert(
+                        name.to_owned(),
+                        PanelResizeObserverHandle::new(plugin_el, &panel.renderer),
+                    );
+                }
+            }
+
+            drag.retain_moved(&mut cells);
+            if cells.is_empty() {
+                ApiFuture::spawn(async move {
+                    layout.resume_resize();
+                    Ok(())
+                });
+
+                return false;
             }
         }
 
@@ -119,10 +161,7 @@ impl MainPanel {
             let mut targets: Vec<(Renderer, f64, f64, f64, f64)> = Vec::new();
             let mut tab_targets: Vec<(web_sys::HtmlElement, f64, f64)> = Vec::new();
             let mut last_chrome: Option<(f64, f64)> = None;
-            for (name, path) in &paths {
-                let cell: web_sys::DomRect =
-                    layout.real_coordinates(&path.view_window).unchecked_into();
-
+            for (name, cell) in &cells {
                 // Only presize panels with a drawn plugin. Critically,
                 // `insertPanel`/`removePanel` *also* fire `before-resize`
                 // (they `restore()` through the presize queue), and a

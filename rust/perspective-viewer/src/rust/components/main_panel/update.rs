@@ -51,12 +51,7 @@ impl MainPanel {
             return false;
         };
 
-        // A `regular-layout-update` ends any in-flight drag (it fires on
-        // the drop, not during the drag). Drop the drag ResizeObserver(s)
-        // bound in `BeforeResize`; the post-commit `resize_callback` loop
-        // below resizes the dropped panel to its final cell.
-        self.panel_resize_observers.clear();
-
+        self.drag = None;
         let layout: RegularLayout = el.unchecked_into();
         let panel_ids = ctx.props().workspace.panel_ids();
         let mut closed = Vec::new();

@@ -28,7 +28,7 @@ mod update;
 
 pub mod msg;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use perspective_js::utils::JsValueSerdeExt;
 use wasm_bindgen::prelude::*;
@@ -39,7 +39,6 @@ use super::panel_menu::PanelCommand;
 use crate::presentation::{Presentation, PresentationProps};
 use crate::renderer::*;
 use crate::session::{Session, SessionProps};
-use crate::tasks::PanelResizeObserverHandle;
 use crate::workspace::{PanelId, Workspace};
 
 #[derive(Clone, Properties)]
@@ -217,12 +216,9 @@ pub struct MainPanel {
     /// later commit can report closed.
     on_screen: HashSet<String>,
 
-    /// Per-panel `ResizeObserver`s, keyed by panel id, each observing that
-    /// panel's slotted plugin element and resizing only that panel's
-    /// `Renderer`. Bound in `BeforeResize` for the DRAGGED panel only (it is
-    /// excluded from the presize paths, and the `overlay` presize is disabled);
+    /// The in-flight panel drag, from its first `BeforeResize` until it is
     /// dropped on `LayoutUpdated` (the drop).
-    panel_resize_observers: HashMap<String, PanelResizeObserverHandle>,
+    drag: Option<presize::DragSession>,
 
     /// Panels currently *hidden* behind an unselected index of a tab stack,
     /// recomputed from the layout tree on every `regular-layout-update`.
@@ -386,7 +382,7 @@ impl Component for MainPanel {
             _contextmenu_listener: contextmenu_listener,
             _pointerdown_listener: pointerdown_listener,
             listener_target: None,
-            panel_resize_observers: HashMap::new(),
+            drag: None,
             hidden_tabs: HashSet::new(),
             context_menu: None,
             maximized: None,
