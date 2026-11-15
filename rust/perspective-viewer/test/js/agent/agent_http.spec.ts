@@ -221,6 +221,28 @@ test.describe("llm-agent http transport", () => {
         expect(error).toContain("Incorrect API key provided");
     });
 
+    test("transient HTTP errors are retried", async ({ page }) => {
+        const calls = [];
+        await scripted_route(
+            page,
+            [{ status: 503 }, { text: "Recovered." }],
+            calls,
+        );
+
+        const answer = await page.evaluate(async (base_url) => {
+            const viewer = document.querySelector("perspective-viewer");
+            await viewer.restore({ plugin: "Debug" });
+            viewer.agentConfig({
+                url: `${base_url}/chat/completions`,
+            });
+
+            return await viewer.agentPrompt("hello");
+        }, BASE_URL);
+
+        expect(answer).toEqual("Recovered.");
+        expect(calls.length).toEqual(2);
+    });
+
     test("stop aborts an in-flight fetch", async ({ page }) => {
         await scripted_route(page, [{ hang: true }], []);
         await page.evaluate(async (base_url) => {

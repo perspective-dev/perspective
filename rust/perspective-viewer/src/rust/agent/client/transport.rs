@@ -23,11 +23,17 @@
 //! Either way the caller receives ONE folded [`ChatMessage`], with
 //! incremental progress reported through `on_delta`.
 
+use llm_wasm::retry::RetryPolicy;
 use perspective_js::utils::{ApiError, ApiResult};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
 use super::protocol::{ChatChunk, ChatMessage, ChatRequest, ChatResponse, ChunkAccumulator};
+use crate::utils::set_timeout;
+
+/// Longest wait before a retry. A `Retry-After` asking for more than this
+/// is not honored; the error is returned instead, as before.
+const MAX_RETRY_DELAY_MS: u32 = 30_000;
 
 /// Live progress callback: `(content_so_far, reasoning_so_far)`.
 pub type OnDelta<'a> = &'a dyn Fn(&str, &str);
@@ -109,13 +115,36 @@ async fn fetch_completion(
     init.set_body(&JsValue::from_str(body));
     init.set_headers(&request_headers);
     init.set_signal(Some(&controller.signal()));
-    let request = web_sys::Request::new_with_str_and_init(url, &init)?;
     let window = web_sys::window().ok_or_else(|| ApiError::from("No `window`"))?;
-    let response: web_sys::Response = JsFuture::from(window.fetch_with_request(&request))
-        .await?
-        .unchecked_into();
 
-    if !response.ok() {
+    // Transient failures (429, 500, 502, 503, 504) are retried with jittered
+    // backoff, honoring a delta-seconds `Retry-After` when the response
+    // exposes one. Nothing has been streamed yet, so a retry is invisible to
+    // `on_delta`; the Stop button still cancels a pending wait.
+    let policy = RetryPolicy::exponential();
+    let mut attempt = 1;
+    let response = loop {
+        let request = web_sys::Request::new_with_str_and_init(url, &init)?;
+        let response: web_sys::Response = JsFuture::from(window.fetch_with_request(&request))
+            .await?
+            .unchecked_into();
+
+        if response.ok() {
+            break response;
+        }
+
+        if policy.should_retry(attempt, response.status()) {
+            let retry_after = response.headers().get("retry-after")?;
+            let delay =
+                policy.delay_for_response(attempt, retry_after.as_deref(), js_sys::Math::random());
+
+            if delay <= MAX_RETRY_DELAY_MS {
+                set_timeout(delay as i32).await?;
+                attempt += 1;
+                continue;
+            }
+        }
+
         let text = JsFuture::from(response.text()?)
             .await?
             .as_string()
@@ -127,7 +156,7 @@ async fn fetch_completion(
             response.status_text(),
             text
         )));
-    }
+    };
 
     let content_type = response
         .headers()

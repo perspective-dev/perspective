@@ -39,7 +39,7 @@ metadata = []
 default = ["llm-agent"]
 talc-allocator = ["perspective-js/talc-allocator"]
 trace-allocator = ["perspective-js/trace-allocator"]
-llm-agent = []
+llm-agent = ["dep:llm-wasm"]
 
 [build-dependencies]
 lightningcss = "1.0.0-alpha.71"
@@ -77,6 +77,9 @@ itertools = "0.14.0"
 js-sys = "0.3.85"
 
 macro_rules_attribute = "0.2.2"
+
+# Retry/backoff policy for the `llm-agent` completions transport
+llm-wasm = { version = "0.3.0", optional = true }
 
 # Parse ExprTK for syntax highlighting.
 nom = "7.1.1"
