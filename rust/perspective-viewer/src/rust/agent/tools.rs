@@ -32,7 +32,7 @@ use crate::workspace::{Panel, PanelId};
 
 /// Host-grantable access classes (`agentConfig({entitlements})`). A tool
 /// whose entitlement is withheld is neither advertised nor dispatchable.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Entitlement {
     ReadView,
     ConfigureView,
@@ -45,8 +45,15 @@ pub enum Entitlement {
 }
 
 impl Entitlement {
-    pub const VALID: &'static str =
-        "read_view, configure_view, manage_layout, read_docs, execute_code, read_data";
+    /// Every entitlement, in canonical order.
+    pub const ALL: [Self; 6] = [
+        Self::ReadView,
+        Self::ConfigureView,
+        Self::ManageLayout,
+        Self::ReadDocs,
+        Self::ExecuteCode,
+        Self::ReadData,
+    ];
 
     /// The default grant: everything except code execution and raw data access.
     pub fn default_set() -> Vec<Self> {
@@ -57,24 +64,71 @@ impl Entitlement {
             Self::ReadDocs,
         ]
     }
+
+    /// The `agentConfig({entitlements})` name of this entitlement.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::ReadView => "read_view",
+            Self::ConfigureView => "configure_view",
+            Self::ManageLayout => "manage_layout",
+            Self::ReadDocs => "read_docs",
+            Self::ExecuteCode => "execute_code",
+            Self::ReadData => "read_data",
+        }
+    }
 }
 
 impl FromStr for Entitlement {
     type Err = String;
 
     fn from_str(value: &str) -> Result<Self, String> {
-        match value {
-            "read_view" => Ok(Self::ReadView),
-            "configure_view" => Ok(Self::ConfigureView),
-            "manage_layout" => Ok(Self::ManageLayout),
-            "read_docs" => Ok(Self::ReadDocs),
-            "execute_code" => Ok(Self::ExecuteCode),
-            "read_data" => Ok(Self::ReadData),
-            other => Err(format!(
-                "Unknown entitlement `{other}` - valid entitlements: {}",
-                Self::VALID
-            )),
+        Self::ALL
+            .into_iter()
+            .find(|x| x.as_str() == value)
+            .ok_or_else(|| {
+                let valid = Self::ALL.map(|x| x.as_str()).join(", ");
+                format!("Unknown entitlement `{value}` - valid entitlements: {valid}")
+            })
+    }
+}
+
+/// The host's entitlement grant, which the user may narrow but never widen.
+pub struct EntitlementGrant(Vec<(Entitlement, bool)>);
+
+impl EntitlementGrant {
+    /// Enable every entitlement in `granted`, the only entitlements this grant
+    /// can ever hold.
+    pub fn new(granted: &[Entitlement]) -> Self {
+        Self(
+            Entitlement::ALL
+                .into_iter()
+                .filter(|x| granted.contains(x))
+                .map(|x| (x, true))
+                .collect(),
+        )
+    }
+
+    /// Enable or disable a granted entitlement; one outside the grant is
+    /// ignored.
+    pub fn set_enabled(&mut self, entitlement: Entitlement, enabled: bool) {
+        if let Some(entry) = self.0.iter_mut().find(|(x, _)| *x == entitlement) {
+            entry.1 = enabled;
         }
+    }
+
+    /// The enabled entitlements.
+    pub fn enabled(&self) -> Vec<Entitlement> {
+        self.0.iter().filter(|(_, x)| *x).map(|(x, _)| *x).collect()
+    }
+
+    /// The granted entitlements that gate at least one tool, with their
+    /// enabled state.
+    pub fn toggleable(&self) -> Vec<(Entitlement, bool)> {
+        self.0
+            .iter()
+            .filter(|(x, _)| !tool_names(*x).is_empty())
+            .copied()
+            .collect()
     }
 }
 
@@ -539,10 +593,10 @@ static TOOLS: &[Tool] = &[
                       - import an HTML parser from a CDN to read HTML), no access to this page, \
                       and `fetch` only reaches servers whose CORS headers allow any origin. Once \
                       the first emit has loaded, this tool's result reports the table's schema \
-                      and row count; if the module throws or finishes without emitting, the \
-                      result is an error with the script log. Display the table with `add_panel` \
-                      using `table: name`. Re-running an existing `name` stops its script and \
-                      replaces its table.",
+                      and row count; if the module throws, or emits nothing within \
+                      `start_timeout_ms`, the result is an error with the script log. Display the \
+                      table with `add_panel` using `table: name`. Re-running an existing `name` \
+                      stops its script and replaces its table.",
         entitlement: Entitlement::ExecuteCode,
         available: always,
         parameters: |_| {
@@ -621,6 +675,15 @@ static TOOLS: &[Tool] = &[
 
 fn granted(tool: &Tool, ctx: &ToolCtx) -> bool {
     ctx.entitlements.contains(&tool.entitlement) && (tool.available)(ctx)
+}
+
+/// The names of the tools `entitlement` gates.
+pub fn tool_names(entitlement: Entitlement) -> Vec<&'static str> {
+    TOOLS
+        .iter()
+        .filter(|x| x.entitlement == entitlement)
+        .map(|x| x.name)
+        .collect()
 }
 
 /// The tools advertised to the model for this turn.
@@ -1706,6 +1769,11 @@ impl PerspectiveViewerElement {
             futures::future::Either::Left((Err(_), _)) => {
                 Some("The script was stopped before it emitted any rows".to_owned())
             },
+            futures::future::Either::Right(_) if job.finished() => Some(format!(
+                "No rows were emitted within {timeout}ms and the module finished evaluating \
+                 without calling `psp.emit()` - a script with no timers or sockets will emit \
+                 nothing more"
+            )),
             futures::future::Either::Right(_) if job.started() => Some(format!(
                 "No rows were emitted within {timeout}ms - call `psp.emit()` with the first batch \
                  as soon as it is available, or raise `start_timeout_ms`"

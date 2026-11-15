@@ -133,6 +133,13 @@ perspective-viewer {
     --psp-label--chat-reasoning--content: "推理";
     --psp-label--chat-send--content: "发送";
     --psp-label--chat-stop--content: "停止";
+    --psp-label--chat-retry--content: "重试";
+    --psp-label--chat-entitlement--read-view--content: "读取";
+    --psp-label--chat-entitlement--configure-view--content: "配置";
+    --psp-label--chat-entitlement--manage-layout--content: "布局";
+    --psp-label--chat-entitlement--read-docs--content: "文档";
+    --psp-label--chat-entitlement--execute-code--content: "脚本";
+    --psp-label--chat-reset--content: "重置";
     --psp-label--chat-placeholder--content: "询问您的数据…";
 
     /* Plugin-declared pivot roles (PluginStaticConfig) */

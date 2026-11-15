@@ -16,4 +16,4 @@ pub mod turn;
 
 pub use protocol::ChatMessage;
 pub use transport::{AgentTransport, OnDelta};
-pub use turn::{TurnError, run_turn};
+pub use turn::run_turn;

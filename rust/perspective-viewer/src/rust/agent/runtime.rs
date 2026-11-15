@@ -10,15 +10,16 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use perspective_js::utils::{ApiError, ApiResult};
 use wasm_bindgen::prelude::*;
 
-use super::client::{AgentTransport, ChatMessage, OnDelta, TurnError, run_turn};
+use super::client::{AgentTransport, ChatMessage, OnDelta, run_turn};
 use super::config::{AgentConfig, SystemRole};
 use super::docs::DocsCell;
-use super::tools::ToolCtx;
+use super::tools::{Entitlement, EntitlementGrant, ToolCtx};
 use crate::custom_elements::viewer::PerspectiveViewerElement;
 
 /// The agent's system preamble — the ONE copy, authored as markdown and
@@ -43,32 +44,54 @@ const DEFAULT_MAX_TURNS: usize = 16;
 /// `prompt()` call. The history `Mutex` serializes concurrent prompts.
 pub struct AgentRuntime {
     config: AgentConfig,
+    transport: AgentTransport,
+    grant: RefCell<EntitlementGrant>,
     history: async_lock::Mutex<Vec<ChatMessage>>,
     elem: PerspectiveViewerElement,
     docs: Option<Rc<DocsCell>>,
 }
 
+/// How a turn ended without an answer.
+pub enum TurnError {
+    /// The conversation awaits no response, so there is no turn to retry.
+    Settled,
+
+    /// The turn failed with its messages committed, so it can be retried.
+    Failed(ApiError),
+}
+
 impl AgentRuntime {
     pub fn new(config: &JsValue, elem: PerspectiveViewerElement) -> ApiResult<Self> {
         let config = AgentConfig::from_js(config)?;
+        let transport = Self::transport(&config)?;
+        let grant = RefCell::new(EntitlementGrant::new(&config.entitlements));
         let docs = config.docs.clone().map(|x| Rc::new(DocsCell::new(x)));
         Ok(Self {
             config,
+            transport,
+            grant,
             history: async_lock::Mutex::new(vec![]),
             elem,
             docs,
         })
     }
 
-    /// Run one conversational turn (which may span many model requests and
-    /// tool calls) and return the final assistant text. History commits on
-    /// success — and on turn-budget exhaustion, whose transcript is coherent
-    /// and whose tool mutations persist in the viewer (see
-    /// [`TurnError::Budget`]); a transport-failed or aborted turn leaves the
-    /// conversation as it was.
-    pub async fn prompt(&self, prompt: String, on_delta: OnDelta<'_>) -> ApiResult<String> {
+    /// Run one conversational turn for `prompt`, or retry the failed turn
+    /// when `None`, committing its messages to history unless aborted.
+    pub async fn prompt(
+        &self,
+        prompt: Option<String>,
+        on_delta: OnDelta<'_>,
+    ) -> Result<String, TurnError> {
         let mut history = self.history.lock().await;
-        let transport = self.transport()?;
+        if prompt.is_none()
+            && !matches!(
+                history.last(),
+                Some(ChatMessage::User { .. } | ChatMessage::Tool { .. })
+            )
+        {
+            return Err(TurnError::Settled);
+        }
 
         // Resolve the docs metadata bundle BEFORE the first request so the
         // turn's tool definitions carry the generated parameter schemas
@@ -82,7 +105,7 @@ impl AgentRuntime {
         let ctx = ToolCtx {
             docs: self.docs.clone(),
             bundle,
-            entitlements: self.config.entitlements.clone(),
+            entitlements: self.grant.borrow().enabled(),
             sandbox: self.elem.presentation.agent.sandbox(),
         };
 
@@ -109,15 +132,18 @@ impl AgentRuntime {
         };
 
         messages.extend(history.iter().cloned());
-        let content = if preamble_len == 0 && history.is_empty() {
-            format!("{preamble}\n\n{prompt}")
-        } else {
-            prompt
-        };
+        if let Some(prompt) = prompt {
+            let content = if preamble_len == 0 && history.is_empty() {
+                format!("{preamble}\n\n{prompt}")
+            } else {
+                prompt
+            };
 
-        messages.push(ChatMessage::User { content });
+            messages.push(ChatMessage::User { content });
+        }
+
         let result = run_turn(
-            &transport,
+            &self.transport,
             self.config.model_name(),
             self.config.max_turns.unwrap_or(DEFAULT_MAX_TURNS),
             &self.elem,
@@ -128,22 +154,23 @@ impl AgentRuntime {
         )
         .await;
 
-        match result {
-            Ok(text) => {
-                *history = messages.split_off(preamble_len);
-                Ok(text)
-            },
-            Err(err @ TurnError::Budget { .. }) => {
-                *history = messages.split_off(preamble_len);
-                Err(err.into())
-            },
-            Err(err) => Err(err.into()),
-        }
+        *history = messages.split_off(preamble_len);
+        result.map_err(TurnError::Failed)
     }
 
     /// Clear the conversation history.
     pub async fn reset(&self) {
         self.history.lock().await.clear();
+    }
+
+    /// The user-toggleable entitlements of the host's grant.
+    pub fn entitlements(&self) -> Vec<(Entitlement, bool)> {
+        self.grant.borrow().toggleable()
+    }
+
+    /// Enable or disable a granted entitlement from the next turn on.
+    pub fn set_entitlement(&self, entitlement: Entitlement, enabled: bool) {
+        self.grant.borrow_mut().set_enabled(entitlement, enabled);
     }
 
     /// Connection/model badge text, e.g. `"anthropic · claude-haiku-4-5"`.
@@ -157,25 +184,23 @@ impl AgentRuntime {
 
     /// Connection fields → transport. `url` XOR `engine` was validated at
     /// configuration; `apiKey` is Bearer sugar and `headers` pass verbatim.
-    fn transport(&self) -> ApiResult<AgentTransport> {
-        if let Some(engine) = &self.config.engine {
+    fn transport(config: &AgentConfig) -> ApiResult<AgentTransport> {
+        if let Some(engine) = &config.engine {
             return Ok(AgentTransport::Engine(engine.clone()));
         }
 
-        let url = self
-            .config
+        let url = config
             .url
             .clone()
             .ok_or_else(|| ApiError::from("`url` or `engine` is required"))?;
 
-        let mut headers = self
-            .config
+        let mut headers = config
             .headers
             .clone()
             .map(|x| x.into_iter().collect::<Vec<_>>())
             .unwrap_or_default();
 
-        if let Some(key) = &self.config.api_key {
+        if let Some(key) = &config.api_key {
             headers.push(("authorization".to_owned(), format!("Bearer {key}")));
         }
 

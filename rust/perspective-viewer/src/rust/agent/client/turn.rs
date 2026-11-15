@@ -13,7 +13,7 @@
 //! The agentic loop: model request → dispatch any tool calls → repeat, until
 //! the model answers in text or the turn budget runs out.
 
-use perspective_js::utils::ApiError;
+use perspective_js::utils::{ApiError, ApiResult};
 use serde_json::json;
 
 use super::protocol::{ChatMessage, ChatRequest};
@@ -21,36 +21,6 @@ use super::transport::{AgentTransport, OnDelta};
 use crate::agent::config::SystemRole;
 use crate::agent::tools::{ToolCtx, tool_definitions, tool_dispatch};
 use crate::custom_elements::viewer::PerspectiveViewerElement;
-
-/// How a turn ended without a final assistant answer. The distinction
-/// matters to the caller's commit decision: on [`TurnError::Budget`] the
-/// transcript is *coherent* (every dispatched tool call has its result) and
-/// the dispatched tools may have mutated the viewer, so the transcript must
-/// be COMMITTED — discarding it would leave the next prompt blind to
-/// mutations that persist on screen (e.g. re-adding a panel the model does
-/// not know it created). [`TurnError::Api`] (transport/protocol failure)
-/// leaves the transcript mid-request and is discarded as before.
-pub enum TurnError {
-    Budget { max_turns: usize },
-    Api(ApiError),
-}
-
-impl From<ApiError> for TurnError {
-    fn from(err: ApiError) -> Self {
-        Self::Api(err)
-    }
-}
-
-impl From<TurnError> for ApiError {
-    fn from(err: TurnError) -> Self {
-        match err {
-            TurnError::Budget { max_turns } => ApiError::from(format!(
-                "Turn budget exhausted after {max_turns} model requests (see `maxTurns`)"
-            )),
-            TurnError::Api(err) => err,
-        }
-    }
-}
 
 /// Appended (transiently — never committed to the durable transcript) to
 /// the turn's final budgeted request, so the model answers instead of
@@ -62,9 +32,8 @@ const BUDGET_NUDGE: &str = "This is the final model request of this turn's budge
 /// Run one conversational turn, mutating `messages` (system prompt at index
 /// 0, then transcript) in place with everything the model and tools said.
 /// Tool *failures* are fed back to the model as error tool-results so it can
-/// self-correct; transport and protocol failures abort the turn mid-request,
-/// while turn-budget exhaustion ends it with a coherent transcript — see
-/// [`TurnError`] for the commit consequences.
+/// self-correct; transport, protocol and turn-budget failures all end the
+/// turn with `messages` coherent (every dispatched tool call has its result).
 #[allow(clippy::too_many_arguments)]
 pub async fn run_turn(
     transport: &AgentTransport,
@@ -75,7 +44,7 @@ pub async fn run_turn(
     messages: &mut Vec<ChatMessage>,
     system_role: SystemRole,
     on_delta: OnDelta<'_>,
-) -> Result<String, TurnError> {
+) -> ApiResult<String> {
     let defs = tool_definitions(ctx);
     for turn in 0..max_turns {
         // Each model request streams into a fresh tail — reset the live
@@ -119,9 +88,9 @@ pub async fn run_turn(
             reasoning_content,
         } = message
         else {
-            return Err(
-                ApiError::from("Completion response message role is not `assistant`").into(),
-            );
+            return Err(ApiError::from(
+                "Completion response message role is not `assistant`",
+            ));
         };
 
         if tool_calls.is_empty() {
@@ -170,5 +139,7 @@ pub async fn run_turn(
         }
     }
 
-    Err(TurnError::Budget { max_turns })
+    Err(ApiError::from(format!(
+        "Turn budget exhausted after {max_turns} model requests (see `maxTurns`)"
+    )))
 }

@@ -27,31 +27,7 @@
         }
 
         #debug-panel-controls {
-            display: flex;
-            flex: 0 0 auto;
-            gap: 0.333333em;
-            padding: 12px 8px 0px 0px;
-            align-items: center;
             button {
-                appearance: none;
-                background-color: transparent;
-                border-radius: 3px;
-                border: 1px solid var(--psp--color);
-                color: inherit;
-                cursor: pointer;
-                flex: 0 1 100px;
-                font-family: inherit;
-                font-size: 0.8333em;
-                text-transform: uppercase;
-                height: 24px;
-                text-overflow: ellipsis;
-                overflow: hidden;
-                width: 0px;
-                &:not([disabled]):hover {
-                    background-color: var(--psp--color);
-                    color: var(--psp--background-color);
-                }
-
                 &#debug-panel-apply:before {
                     content: var(
                         --psp-label--apply-button--content,
@@ -78,11 +54,6 @@
                         --psp-label--paste-button--content,
                         var(--psp-missing)
                     );
-                }
-
-                &[disabled] {
-                    cursor: not-allowed;
-                    opacity: 0.2;
                 }
             }
         }

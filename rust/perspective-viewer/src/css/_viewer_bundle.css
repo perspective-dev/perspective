@@ -35,6 +35,7 @@
 @import "status-bar.css";
 
 @import "ui/form/mirrored-textarea.css";
+@import "ui/form/sidebar-controls.css";
 @import "form/code-editor.css";
 @import "form/debug.css";
 

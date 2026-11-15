@@ -743,6 +743,61 @@
         padding: 12px 6px 6px 2px;
     }
 
+    button.chat-entitlement:not([disabled])[aria-pressed="false"]:hover {
+        background-color: transparent;
+        color: var(--psp--color);
+        border-color: var(--psp--color);
+        border-style: solid;
+    }
+
+    .chat-entitlement[data-entitlement="read_view"]:before {
+        content: var(
+            --psp-label--chat-entitlement--read-view--content,
+            var(--psp-missing)
+        );
+    }
+
+    .chat-entitlement[data-entitlement="configure_view"]:before {
+        content: var(
+            --psp-label--chat-entitlement--configure-view--content,
+            var(--psp-missing)
+        );
+    }
+
+    .chat-entitlement[data-entitlement="manage_layout"]:before {
+        content: var(
+            --psp-label--chat-entitlement--manage-layout--content,
+            var(--psp-missing)
+        );
+    }
+
+    .chat-entitlement[data-entitlement="read_docs"]:before {
+        content: var(
+            --psp-label--chat-entitlement--read-docs--content,
+            var(--psp-missing)
+        );
+    }
+
+    .chat-entitlement[data-entitlement="execute_code"]:before {
+        content: var(
+            --psp-label--chat-entitlement--execute-code--content,
+            var(--psp-missing)
+        );
+    }
+
+    #chat_header {
+        margin-right: 4px;
+    }
+
+    #chat_reset_button {
+        margin-left: auto;
+        flex: 0 0 45px;
+    }
+
+    #chat_reset_button:before {
+        content: var(--psp-label--chat-reset--content, var(--psp-missing));
+    }
+
     .chat-message {
         overflow-wrap: anywhere;
         border-radius: 3px;
@@ -870,6 +925,23 @@
         align-self: flex-start;
         color: var(--warning--color, #ff471e);
         border: 1px dashed var(--warning--color, #ff471e);
+    }
+
+    #chat_retry_button {
+        align-self: flex-start;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: var(--label--font-size, 0.75em);
+        text-transform: uppercase;
+        color: inherit;
+        background-color: #00000020;
+        border: 1px solid var(--psp-inactive--color, #6e6e6e);
+        border-radius: 3px;
+        padding: 4px 10px;
+    }
+
+    #chat_retry_button:before {
+        content: var(--psp-label--chat-retry--content, var(--psp-missing));
     }
 
     .chat-tool-chip {

@@ -114,15 +114,36 @@ test.beforeEach(async ({ page }) => {
     });
 });
 
-async function configure(page, script) {
-    await page.evaluate(async (script) => {
-        const viewer = document.querySelector("perspective-viewer");
-        viewer.agentConfig({
-            name: "webllm",
-            model: "fake-model",
-            engine: window["__MAKE_ENGINE__"](script),
-        });
-    }, script);
+async function configure(page, script, extra = {}) {
+    await page.evaluate(
+        async ({ script, extra }) => {
+            const viewer = document.querySelector("perspective-viewer");
+            viewer.agentConfig({
+                name: "webllm",
+                model: "fake-model",
+                engine: window["__MAKE_ENGINE__"](script),
+                ...extra,
+            });
+        },
+        { script, extra },
+    );
+}
+
+async function send(page, prompt) {
+    const input = page.locator("perspective-viewer #chat_input");
+    await input.fill(prompt);
+    await input.press("Enter");
+}
+
+async function entitlement_states(page) {
+    return await page
+        .locator("perspective-viewer .chat-entitlement")
+        .evaluateAll((xs) =>
+            xs.map((x) => [
+                x.getAttribute("data-entitlement"),
+                x.getAttribute("aria-pressed"),
+            ]),
+        );
 }
 
 test.describe("llm-agent chat panel", () => {
@@ -434,5 +455,206 @@ test.describe("llm-agent chat panel", () => {
         ).toHaveText("That expression is invalid.");
 
         await compareInnerHTMLToSnapshot(log);
+    });
+});
+
+test.describe("llm-agent chat entitlements and reset", () => {
+    test("entitlement toggles list only the host grant", async ({ page }) => {
+        await configure(page, []);
+        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await expect(
+            page.locator("perspective-viewer .chat-entitlement"),
+        ).toHaveCount(2);
+
+        expect(await entitlement_states(page)).toEqual([
+            ["configure_view", "true"],
+            ["manage_layout", "true"],
+        ]);
+
+        await configure(page, [], {
+            entitlements: [
+                "execute_code",
+                "configure_view",
+                "read_view",
+                "configure_view",
+            ],
+        });
+
+        await expect(
+            page.locator(
+                'perspective-viewer .chat-entitlement[data-entitlement="execute_code"]',
+            ),
+        ).toHaveCount(1);
+
+        expect(await entitlement_states(page)).toEqual([
+            ["configure_view", "true"],
+            ["execute_code", "true"],
+        ]);
+    });
+
+    test("switching an entitlement off withholds its tools from the next request", async ({
+        page,
+    }) => {
+        await configure(page, [{ text: "Done." }]);
+        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        const chip = page.locator(
+            'perspective-viewer .chat-entitlement[data-entitlement="configure_view"]',
+        );
+
+        await chip.click();
+        await expect(chip).toHaveAttribute("aria-pressed", "false");
+        await send(page, "hello");
+        const log = page.locator("perspective-viewer #chat_log");
+        await expect(
+            log.locator(".chat-assistant:not(.chat-pending)"),
+        ).toHaveText("Done.", { timeout: 10000 });
+
+        const requests = await page.evaluate(() => window["__REQUESTS__"]);
+        const names = requests[0].tools.map((x) => x.function.name);
+        expect(names).not.toContain("set_view_config");
+        expect(names).toContain("get_schema");
+    });
+
+    test("a call to a switched-off tool is refused", async ({ page }) => {
+        await configure(page, [
+            {
+                tool: "set_view_config",
+                args: { config: { group_by: ["State"] } },
+            },
+            { text: "Configuring is switched off." },
+        ]);
+
+        const before = await page.evaluate(async () => {
+            return await document.querySelector("perspective-viewer").save();
+        });
+
+        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await page
+            .locator(
+                'perspective-viewer .chat-entitlement[data-entitlement="configure_view"]',
+            )
+            .click();
+
+        await send(page, "Group by state");
+        const log = page.locator("perspective-viewer #chat_log");
+        await expect(
+            log.locator(".chat-assistant:not(.chat-pending)"),
+        ).toHaveText("Configuring is switched off.", { timeout: 10000 });
+
+        await expect(log.locator(".chat-tool-chip")).toHaveCount(0);
+        const requests = await page.evaluate(() => window["__REQUESTS__"]);
+        const result = requests[1].messages.find((x) => x.role === "tool");
+        expect(result.content).toContain("Unknown tool `set_view_config`");
+        const after = await page.evaluate(async () => {
+            return await document.querySelector("perspective-viewer").save();
+        });
+
+        expect(after.group_by).toEqual(before.group_by);
+    });
+
+    test("Reset is disabled on an empty conversation and controls are disabled while a turn runs", async ({
+        page,
+    }) => {
+        await configure(page, [{ hang: true }]);
+        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        const reset = page.locator("perspective-viewer #chat_reset_button");
+        const chips = page.locator("perspective-viewer .chat-entitlement");
+        await expect(reset).toBeDisabled();
+        for (const chip of await chips.all()) {
+            await expect(chip).toBeEnabled();
+        }
+
+        await send(page, "This will hang");
+        const log = page.locator("perspective-viewer #chat_log");
+        await expect(log.locator(".chat-pending")).toBeVisible();
+        await expect(reset).toBeDisabled();
+        for (const chip of await chips.all()) {
+            await expect(chip).toBeDisabled();
+        }
+
+        await page.locator("perspective-viewer #chat_stop_button").click();
+        await expect(log.locator(".chat-error")).toHaveText("Stopped");
+        await expect(reset).toBeEnabled();
+        for (const chip of await chips.all()) {
+            await expect(chip).toBeEnabled();
+        }
+    });
+
+    test("agentConfig() turns every entitlement back on", async ({ page }) => {
+        await configure(page, []);
+        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        const chip = page.locator(
+            'perspective-viewer .chat-entitlement[data-entitlement="manage_layout"]',
+        );
+
+        await chip.click();
+        await expect(chip).toHaveAttribute("aria-pressed", "false");
+        await configure(page, []);
+        await expect(chip).toHaveAttribute("aria-pressed", "true");
+        expect(await entitlement_states(page)).toEqual([
+            ["configure_view", "true"],
+            ["manage_layout", "true"],
+        ]);
+    });
+
+    test("with every entitlement off the request carries no tools", async ({
+        page,
+    }) => {
+        await configure(page, [{ text: "Just chatting." }], {
+            entitlements: ["configure_view", "manage_layout"],
+        });
+
+        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        const chips = page.locator("perspective-viewer .chat-entitlement");
+        for (const chip of await chips.all()) {
+            await chip.click();
+            await expect(chip).toHaveAttribute("aria-pressed", "false");
+        }
+
+        await send(page, "hello");
+        const log = page.locator("perspective-viewer #chat_log");
+        await expect(
+            log.locator(".chat-assistant:not(.chat-pending)"),
+        ).toHaveText("Just chatting.", { timeout: 10000 });
+
+        const requests = await page.evaluate(() => window["__REQUESTS__"]);
+        expect("tools" in requests[0]).toBe(false);
+    });
+
+    test("Reset clears the conversation and keeps the toggles", async ({
+        page,
+    }) => {
+        await configure(page, [{ text: "First." }, { text: "Second." }]);
+        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await send(page, "one");
+        const log = page.locator("perspective-viewer #chat_log");
+        await expect(
+            log.locator(".chat-assistant:not(.chat-pending)"),
+        ).toHaveText("First.", { timeout: 10000 });
+
+        const chip = page.locator(
+            'perspective-viewer .chat-entitlement[data-entitlement="manage_layout"]',
+        );
+
+        await chip.click();
+        const reset = page.locator("perspective-viewer #chat_reset_button");
+        await reset.click();
+        await expect(log.locator(".chat-message")).toHaveCount(0);
+        await expect(reset).toBeDisabled();
+        await expect(chip).toHaveAttribute("aria-pressed", "false");
+        await send(page, "two");
+        await expect(
+            log.locator(".chat-assistant:not(.chat-pending)"),
+        ).toHaveText("Second.");
+
+        const requests = await page.evaluate(() => window["__REQUESTS__"]);
+        expect(requests[1].messages.map((x) => x.role)).toEqual([
+            "system",
+            "user",
+        ]);
+
+        expect(requests[1].tools.map((x) => x.function.name)).not.toContain(
+            "add_panel",
+        );
     });
 });

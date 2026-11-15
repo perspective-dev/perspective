@@ -2460,7 +2460,8 @@ impl PerspectiveViewerElement {
     ///   is offered (and may call): any of `"read_view"`, `"configure_view"`,
     ///   `"manage_layout"`, `"read_docs"`, `"execute_code"`, `"read_data"`.
     ///   Omitted, all but `"execute_code"` and `"read_data"` are granted;
-    ///   `["read_view", "read_docs"]` yields a read-only agent.
+    ///   `["read_view", "read_docs"]` yields a read-only agent. Users may
+    ///   switch granted entitlements off from the chat panel, never on.
     ///
     /// # JavaScript Examples
     ///
@@ -2488,7 +2489,8 @@ impl PerspectiveViewerElement {
     /// conversation history (and the chat sidebar's transcript) until
     /// `agentReset()`; a call made while a turn is already running rejects.
     /// Tool activity is emitted as `perspective-agent-tool` CustomEvents on
-    /// this element.
+    /// this element. A failed turn rejects with an `Error` whose `retry()`
+    /// method retries it, returning a `Promise` that settles like this one.
     ///
     /// # JavaScript Examples
     ///

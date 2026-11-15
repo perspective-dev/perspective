@@ -82,10 +82,12 @@
         "@types/react": "catalog:",
         "@types/node": "catalog:",
         "@types/react-dom": "catalog:",
+        "@types/ws": "catalog:",
         "prettier": "catalog:",
         "ts-json-schema-generator": "^2.4.0",
         "typedoc": "catalog:",
         "typescript": "catalog:",
+        "ws": "catalog:",
         "zx": "catalog:"
     }
 }

@@ -166,6 +166,11 @@ impl ScriptJob {
         self.state.borrow().started
     }
 
+    /// Whether the module's top-level evaluation has completed.
+    pub fn finished(&self) -> bool {
+        self.state.borrow().status == ScriptStatus::Finished
+    }
+
     /// The most recent log lines, oldest first.
     pub fn log_tail(&self) -> Vec<String> {
         self.state.borrow().log.iter().cloned().collect()
@@ -278,12 +283,6 @@ impl ScriptJob {
                 let mut state = self.state.borrow_mut();
                 if state.status == ScriptStatus::Running {
                     state.status = ScriptStatus::Finished;
-                }
-
-                if !state.emitted {
-                    state.resolve_first(Err(
-                        "The script finished without calling `psp.emit()`".to_owned()
-                    ));
                 }
             },
             SandboxMessage::Error(message) => self.fail(message),

@@ -191,7 +191,7 @@ pub fn debug_panel(props: &DebugPanelProps) -> Html {
         <>
             <div id="debug-panel-overflow">
                 <div id="debug-panel" class="sidebar_column" ref={sizer}>
-                    <div id="debug-panel-controls">
+                    <div id="debug-panel-controls" class="sidebar-controls">
                         <button id="debug-panel-apply" disabled={!*modified} onclick={onapply} />
                         <button id="debug-panel-reset" disabled={!*modified} onclick={onreset} />
                         <button id="debug-panel-copy" onclick={oncopy} />

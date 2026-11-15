@@ -17,7 +17,7 @@
 
 use yew::prelude::*;
 
-use crate::agent::{AgentSlot, ChatEntry, render_markdown};
+use crate::agent::{AgentSlot, ChatEntry, Entitlement, render_markdown, tool_names};
 use crate::ui::MirroredTextarea;
 
 #[derive(Properties, PartialEq)]
@@ -178,6 +178,59 @@ fn ChatInput(props: &ChatInputProps) -> Html {
 }
 
 #[derive(Properties, PartialEq)]
+struct ChatHeaderProps {
+    agent: AgentSlot,
+    entitlements: Vec<(Entitlement, bool)>,
+    busy: bool,
+    empty: bool,
+}
+
+#[function_component]
+fn ChatHeader(props: &ChatHeaderProps) -> Html {
+    let chips = props
+        .entitlements
+        .iter()
+        .filter_map(|&(entitlement, enabled)| match entitlement {
+            Entitlement::ReadView | Entitlement::ReadDocs => None,
+            _ => {
+                let onclick = {
+                    let agent = props.agent.clone();
+                    Callback::from(move |_: MouseEvent| {
+                        agent.set_entitlement(entitlement, !enabled)
+                    })
+                };
+
+                Some(html! {
+                    <button
+                        class="chat-entitlement"
+                        data-entitlement={entitlement.as_str()}
+                        aria-pressed={enabled.to_string()}
+                        title={tool_names(entitlement).join(", ")}
+                        disabled={props.busy}
+                        {onclick}
+                    />
+                })
+            },
+        })
+        .collect::<Html>();
+
+    let onreset = {
+        let agent = props.agent.clone();
+        Callback::from(move |_: MouseEvent| {
+            let agent = agent.clone();
+            wasm_bindgen_futures::spawn_local(async move { agent.reset().await });
+        })
+    };
+
+    html! {
+        <div id="chat_header" class="sidebar-controls">
+            { chips }
+            <button id="chat_reset_button" disabled={props.busy || props.empty} onclick={onreset} />
+        </div>
+    }
+}
+
+#[derive(Properties, PartialEq)]
 pub struct ChatPanelProps {
     pub agent: AgentSlot,
 }
@@ -226,9 +279,20 @@ pub fn ChatPanel(props: &ChatPanelProps) -> Html {
     }
 
     let busy = props.agent.is_busy();
-    let entries = props
-        .agent
-        .transcript()
+    let transcript = props.agent.transcript();
+    let empty = transcript.is_empty();
+    let retryable = matches!(transcript.last(), Some(ChatEntry::Error(_)));
+    let onretry = {
+        let agent = props.agent.clone();
+        Callback::from(move |_: MouseEvent| {
+            let agent = agent.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                let _ = agent.retry().await;
+            });
+        })
+    };
+
+    let entries = transcript
         .into_iter()
         .map(|entry| match entry {
             ChatEntry::User(text) => html! {
@@ -255,6 +319,9 @@ pub fn ChatPanel(props: &ChatPanelProps) -> Html {
                 html! { <div {class} {title}>{ name }</div> }
             },
             ChatEntry::Error(text) => html! { <div class="chat-message chat-error">{ text }</div> },
+            ChatEntry::Stopped => {
+                html! { <div class="chat-message chat-error">{ "Stopped" }</div> }
+            },
         })
         .collect::<Html>();
 
@@ -276,11 +343,18 @@ pub fn ChatPanel(props: &ChatPanelProps) -> Html {
         _ if busy => html! {
             <div class="chat-message chat-assistant chat-pending"><span /><span /><span /></div>
         },
+        _ if retryable => html! { <button id="chat_retry_button" onclick={onretry} /> },
         _ => html! {},
     };
 
     html! {
         <div id="chat_panel">
+            <ChatHeader
+                agent={props.agent.clone()}
+                entitlements={props.agent.entitlements()}
+                {busy}
+                {empty}
+            />
             <div id="chat_log" class="scrollable" ref={log_ref} {onscroll}>{ entries }{ tail }</div>
             <ChatInput agent={props.agent.clone()} {busy} />
             <div id="chat_badge">{ props.agent.label().unwrap_or_default() }</div>

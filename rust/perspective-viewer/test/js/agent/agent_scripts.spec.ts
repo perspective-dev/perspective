@@ -10,6 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+import type { AddressInfo } from "node:net";
+import { WebSocketServer } from "ws";
 import { test, expect } from "../helpers.ts";
 
 const DATA = "https://fake-data.example";
@@ -360,39 +362,60 @@ setInterval(async () => psp.emit(await load(), { replace: true }), 50);`,
     test("a script streams WebSocket frames after a control message", async ({
         page,
     }) => {
-        await page.routeWebSocket("wss://fake-data.example/feed", (ws) => {
-            ws.onMessage((message) => {
+        const feed = new WebSocketServer({ port: 0 });
+        feed.on("connection", (socket) => {
+            socket.on("message", (message) => {
                 const request = JSON.parse(String(message));
                 if (request.op === "subscribe") {
-                    ws.send(JSON.stringify({ type: "trade", id: 1, p: 10.5 }));
-                    ws.send(JSON.stringify({ type: "trade", id: 2, p: 11.25 }));
-                    ws.send(JSON.stringify({ type: "trade", id: 1, p: 12.5 }));
+                    socket.send(
+                        JSON.stringify({ type: "trade", id: 1, p: 10.5 }),
+                    );
+                    socket.send(
+                        JSON.stringify({ type: "trade", id: 2, p: 11.25 }),
+                    );
+                    socket.send(
+                        JSON.stringify({ type: "trade", id: 1, p: 12.5 }),
+                    );
                 }
             });
         });
 
-        await runAgent(page, [
-            {
-                tool: "run_script",
-                args: {
-                    name: "trades",
-                    table: { index: "id" },
-                    source: `const socket = new WebSocket("wss://fake-data.example/feed");
+        await new Promise((resolve) => feed.once("listening", resolve));
+        const { port } = feed.address() as AddressInfo;
+        try {
+            await runAgent(page, [
+                {
+                    tool: "run_script",
+                    args: {
+                        name: "trades",
+                        table: { index: "id" },
+                        start_timeout_ms: 5000,
+                        source: `const socket = new WebSocket("ws://localhost:${port}/feed");
 socket.onopen = () => socket.send(JSON.stringify({ op: "subscribe" }));
 socket.onmessage = (event) => {
     const message = JSON.parse(event.data);
     psp.emit([{ id: message.id, price: message.p }]);
 };`,
+                    },
                 },
-            },
-            { text: "Streaming." },
-        ]);
+                { text: "Streaming." },
+            ]);
 
-        const results = await toolResults(page);
-        expect(results[0].schema).toEqual({ id: "integer", price: "float" });
-        await expect
-            .poll(async () => (await tableColumns(page, "trades")).price)
-            .toEqual([12.5, 11.25]);
+            const results = await toolResults(page);
+            expect(results[0].schema).toEqual({
+                id: "integer",
+                price: "float",
+            });
+            await expect
+                .poll(async () => (await tableColumns(page, "trades")).price)
+                .toEqual([12.5, 11.25]);
+        } finally {
+            for (const client of feed.clients) {
+                client.terminate();
+            }
+
+            feed.close();
+        }
     });
 
     test("a script imports a CDN module to parse a Wikipedia HTML table", async ({
@@ -469,7 +492,11 @@ psp.emit(body.map((row) => ({
         await runAgent(page, [
             {
                 tool: "run_script",
-                args: { name: "empty", source: 'psp.log("nothing to do");' },
+                args: {
+                    name: "empty",
+                    start_timeout_ms: 500,
+                    source: 'psp.log("nothing to do");',
+                },
             },
             { tool: "list_scripts" },
             { text: "done" },
@@ -477,7 +504,7 @@ psp.emit(body.map((row) => ({
 
         const results = await toolResults(page);
         expect(results[0].error).toContain(
-            "The script finished without calling `psp.emit()`",
+            "finished evaluating without calling `psp.emit()`",
         );
 
         expect(results[0].error).toContain("nothing to do");
@@ -585,6 +612,9 @@ psp.emit(body.map((row) => ({
     test("a fetch blocked by CORS fails the script", async ({ page }) => {
         await page.route(`${DATA}/private.json`, async (route) => {
             await route.fulfill({
+                headers: {
+                    "access-control-allow-origin": "https://other.example",
+                },
                 contentType: "application/json",
                 body: JSON.stringify([{ a: 1 }]),
             });

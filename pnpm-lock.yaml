@@ -1033,6 +1033,9 @@ importers:
       '@types/react-dom':
         specifier: 'catalog:'
         version: 18.3.7(@types/react@19.2.2)
+      '@types/ws':
+        specifier: 'catalog:'
+        version: 8.18.1
       lightningcss:
         specifier: 'catalog:'
         version: 1.33.0
@@ -1048,6 +1051,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      ws:
+        specifier: 'catalog:'
+        version: 8.18.3
       zx:
         specifier: 'catalog:'
         version: 8.8.5
