@@ -120,7 +120,8 @@ const BUILD = [
                     mangleProps: process.env.PSP_DEBUG
                         ? undefined
                         : /^[_#]|^(plotRect|paddedX(?:Min|Max)|paddedY(?:Min|Max)|dataToPixel|tickColor|labelColor|axisLineColor|gridlineColor|legendText|legendBorder|tooltipBg|tooltipText|tooltipBorder|areaOpacity|heatmapGapPx|sunburstGapPx|gradientStops|seriesPalette|bufferPool)$/,
-                    reserveProps: /(handle_response|__unsafe_open_view)/,
+                    reserveProps:
+                        /(handle_response|__unsafe_open_view|__ROW_PATH__)/,
                 },
             }),
             GlslMinify(),

@@ -16,6 +16,7 @@ import type { ColumnDataMap } from "../data/view-reader.ts";
 import type { WebGLContextManager } from "../webgl/context-manager.ts";
 import type { ZoomController } from "../interaction/zoom-controller.ts";
 import type { HostSink } from "../interaction/tooltip-controller.ts";
+import type { ChartHit } from "../event-detail.ts";
 
 export interface ChartImplementation {
     uploadAndRender(
@@ -74,6 +75,9 @@ export interface ChartImplementation {
      * underlying view no longer contains that row.
      */
     setView?(view: View): void;
+
+    /** Re-resolve the hover and the pinned tooltip against the build an upload just produced. */
+    refreshInteraction?(): void;
 
     /**
      * Set the gridline canvas (behind WebGL, for gridlines).
@@ -197,6 +201,12 @@ export interface ChartImplementation {
      * host's filter set.
      */
     deselect?(): void;
+
+    /**
+     * Describe the mark under canvas point `(mx, my)`, or `null` when
+     * there is none.
+     */
+    resolveHit?(mx: number, my: number): Promise<ChartHit | null>;
 
     repaintChrome?(): void;
 
@@ -552,6 +562,12 @@ export interface PluginConfig {
 
     /** Tooltip background/border alpha (0..1). */
     tooltip_opacity: number;
+
+    /**
+     * Whether a pinned tooltip shows the host's command buttons when its
+     * command schema is scoped to `"chart-tooltip"`.
+     */
+    tooltip_commands: boolean;
 }
 
 export type LegendAnchor =
@@ -593,4 +609,5 @@ export const DEFAULT_PLUGIN_CONFIG: PluginConfig = {
     legend_opacity: 0.8,
     tooltip_max_column_px: 160,
     tooltip_opacity: 0.8,
+    tooltip_commands: true,
 };

@@ -448,6 +448,7 @@ regular-table table {
     th.psp-tree-label,
     th.psp-tree-label,
     th.psp-tree-leaf,
+    th.psp-command-header-leaf,
     tbody tr:first-child th {
         border-style: solid;
         border-width: 0px;

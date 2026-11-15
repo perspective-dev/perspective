@@ -121,6 +121,7 @@ export const LEGEND_FIELDS: readonly PluginConfigField[] = [
 export const TOOLTIP_FIELDS: readonly PluginConfigField[] = [
     "tooltip_max_column_px",
     "tooltip_opacity",
+    "tooltip_commands",
 ];
 
 // Series charts paint bars / lines / scatter / area glyphs (selected

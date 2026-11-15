@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+        <title>Perspective Trading Terminal</title>
+
+        <link rel="preload" href="perspective-viewer.wasm" as="fetch" type="application/wasm" crossorigin="anonymous" />
+        <link rel="preload" href="perspective-server.wasm" as="fetch" type="application/wasm" crossorigin="anonymous" />
+
+        <script type="module" src="index.js"></script>
+        <link rel="stylesheet" href="index.css" />
+    </head>
+    <body>
+        <aside id="sidebar">
+            <section id="restricted-section">
+                <label for="restricted">Restricted securities</label>
+                <input id="restricted" type="text" autocomplete="off" spellcheck="false" placeholder="Comma-separated symbols" />
+            </section>
+            <section id="tickets-section">
+                <h2>
+                    Order tickets
+                    <span id="ticket-count">0</span>
+                    <button id="clear-tickets" type="button">Clear</button>
+                </h2>
+                <ol id="tickets"></ol>
+                <p id="tickets-empty">No orders yet.</p>
+            </section>
+        </aside>
+        <main>
+            <perspective-viewer id="viewer"></perspective-viewer>
+        </main>
+    </body>
+</html>

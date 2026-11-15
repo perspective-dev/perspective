@@ -36,6 +36,7 @@ import {
 } from "../event_handlers/select_region.ts";
 
 import { createConsolidatedStyleListener } from "../style_handlers/consolidated.ts";
+import { install_command_listeners } from "../commands.ts";
 
 import getCellConfig from "../get_cell_config.ts";
 
@@ -151,6 +152,7 @@ export async function activate(
             );
         };
 
+        install_command_listeners(this, this.regular_table);
         addAreaMouseSelection(this, this.regular_table, {
             className: "psp-select-region",
             onSelect,

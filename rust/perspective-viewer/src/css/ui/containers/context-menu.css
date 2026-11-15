@@ -114,6 +114,11 @@
     min-width: 120px;
 }
 
+.context-menu-separator {
+    margin: 2px 0;
+    border-top: 1px solid var(--psp-inactive--color, #ababab);
+}
+
 .context-menu-header {
     padding: 4px 12px 2px;
     cursor: default;

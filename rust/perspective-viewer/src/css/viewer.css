@@ -502,25 +502,23 @@
                 display: none;
             }
 
-            &:has(.overlay) > * {
-                opacity: 0.7;
-            }
+            /* &:has(.overlay) > * {
+                opacity: var(--psp-overlay--opacity, 1);
+                transition: opacity 1s ease-out 0.5s;
+            }  */
 
             &:has(.overlay) > .overlay {
                 opacity: 1;
+                box-shadow: var(--psp-dropdown--box-shadow);
             }
 
             & > .overlay {
-                /* background: var(
-                    --psp-panel-overlay--background,
-                    rgba(26, 125, 161, 0.15)
-                ); */
-
+                cursor: grab;
                 transition:
-                    top 0.1s ease-in-out,
-                    left 0.1s ease-in-out,
-                    width 0.1s ease-in-out,
-                    height 0.1s ease-in-out;
+                    top 0.15s ease-out,
+                    left 0.15s ease-out,
+                    width 0.15s ease-out,
+                    height 0.15s ease-out;
             }
         }
     }

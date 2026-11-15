@@ -22,7 +22,9 @@ import {
     emitTreeNodeEvent,
     showTreePinnedTooltip,
     treeDrillTo,
+    treeNodeClickTarget,
 } from "../common/tree-interact.ts";
+import type { ClickTarget } from "../../event-detail.ts";
 
 export type { BreadcrumbRegion as SunburstBreadcrumbRegion } from "../common/tree-chrome.ts";
 
@@ -210,6 +212,45 @@ export function handleSunburstHover(
 
         renderSunburstChromeOverlay(chart);
     }
+}
+
+/**
+ * The click target for the sunburst arc at `(mx, my)`, or `null` over the
+ * breadcrumbs, the center circle or empty space.
+ */
+export function sunburstClickTargetAt(
+    chart: SunburstChart,
+    mx: number,
+    my: number,
+): ClickTarget | null {
+    const in_breadcrumbs = chart._breadcrumbRegions.some(
+        (region) =>
+            mx >= region.x0 &&
+            mx <= region.x1 &&
+            my >= region.y0 &&
+            my <= region.y1,
+    );
+
+    if (in_breadcrumbs) {
+        return null;
+    }
+
+    const store = chart._nodeStore;
+    const ctx = facetUnderCursor(chart, mx, my);
+    if (ctx) {
+        const r = Math.hypot(mx - ctx.centerX, my - ctx.centerY);
+        if (r < store.r1[chart._rootId] + 0.001) {
+            return null;
+        }
+    }
+
+    const hit = polarHitTest(chart, mx, my);
+    if (hit === NULL_NODE) {
+        return null;
+    }
+
+    const kind = store.firstChild[hit] !== NULL_NODE ? "branch" : "leaf";
+    return treeNodeClickTarget(chart, hit, kind);
 }
 
 export function handleSunburstClick(

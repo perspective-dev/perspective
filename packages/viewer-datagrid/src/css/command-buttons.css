@@ -1,0 +1,80 @@
+/* Command buttons rendered from the host's command schema. */
+
+regular-table .psp-command-cell {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    min-width: 0;
+    height: 100%;
+}
+
+regular-table td .psp-command-cell {
+    justify-content: space-between;
+}
+
+regular-table .psp-command-cell > .psp-command-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+regular-table .psp-command-button {
+    flex: 1 1 auto;
+    display: block;
+    box-sizing: border-box;
+    min-width: 0;
+    margin: 0;
+    padding: 0 4px;
+    border: 1px solid var(--psp-inactive--border-color, #ababab);
+    border-radius: 3px;
+    background: var(--psp--background-color, transparent);
+    color: var(--psp--color, inherit);
+    font: inherit;
+    font-size: 10px;
+    line-height: 1;
+    text-align: start;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    user-select: none;
+}
+
+regular-table .psp-command-button:hover:not(:disabled) {
+    border-color: var(--psp--color);
+    color: var(--psp--background-color);
+    background-color: var(--psp--color);
+}
+
+regular-table .psp-command-button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+regular-table .psp-command-button[data-icon]::before {
+    content: "";
+    display: inline-block;
+    vertical-align: top;
+    width: 10px;
+    height: 10px;
+    margin-right: 3px;
+    background-color: currentColor;
+    -webkit-mask-image: var(--psp-command-button--mask-image);
+    mask-image: var(--psp-command-button--mask-image);
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+}
+
+regular-table th.psp-command-header {
+    padding: 0 4px;
+    writing-mode: horizontal-tb;
+}
+
+regular-table th.psp-command-header .psp-command-cell {
+    gap: 2px;
+}

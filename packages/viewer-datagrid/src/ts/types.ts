@@ -18,6 +18,7 @@ import type {
     SortDir,
     ViewWindow,
     ViewConfigUpdate,
+    Scalar,
 } from "@perspective-dev/client";
 
 import type {
@@ -383,12 +384,28 @@ export interface ResolvedColumnStyle
 /** What `restore()` stores under {@link PRIVATE_PLUGIN_SYMBOL}. */
 export type ResolvedColumnsConfig = Record<string, ResolvedColumnStyle>;
 
+/** Where the row command-button column is placed, or `"none"` to omit it. */
+export type CommandColumn = "none" | "left" | "right" | "tree";
+
 /**
  * Datagrid plugin-level configuration - the `plugin_config` slot of a
  * `ViewerConfigUpdate` when the Datagrid plugin is active (the
  * `save()`/`restore()` token).
  */
 export interface DatagridPluginConfig {
+    /**
+     * Where the per-row command buttons go when the host's command schema is
+     * scoped to `"datagrid-row"`: the far left (default), the far right,
+     * after the group columns, or `"none"` to show none.
+     */
+    command_column?: CommandColumn;
+
+    /**
+     * Whether cells show the per-cell command buttons when the host's
+     * command schema is scoped to `"datagrid-cell"` (default `true`).
+     */
+    command_cells?: boolean;
+
     /**
      * When `true`, the Datagrid keeps its scroll position pinned during
      * data updates instead of following appended rows.
@@ -536,6 +553,24 @@ export interface DatagridModel {
     _word_wrap: boolean;
     _column_menus: boolean;
 
+    /** `plugin_config.command_column`, mirrored from the plugin element. */
+    _command_column: CommandColumn;
+
+    /** `plugin_config.command_cells`, mirrored from the plugin element. */
+    _command_cells: boolean;
+
+    /** The row-header index of the command-button column, when rendered. */
+    _command_header_x?: number;
+
+    /** Whether the command column sits beside the data cells, after any tree, and so is bordered like them. */
+    _command_header_leaf?: boolean;
+
+    /** The command scopes and placement the last draw rendered. */
+    _command_drawn?: { row: boolean; cell: boolean; column: CommandColumn };
+
+    /** The command blocks of the last draw by viewport position, reused when unchanged. */
+    _command_blocks?: Map<string, HTMLElement>;
+
     /** `plugin_config.align`, mirrored from the plugin element. */
     _align?: Align;
     _tree_selection_id?: unknown[];
@@ -601,6 +636,9 @@ export interface CellConfigResult {
     row: Record<string, unknown>;
     column_names: string[];
     config: ViewConfigUpdate;
+    row_path: Scalar[];
+    column_path: Scalar[];
+    value?: Scalar;
 }
 
 // Custom event detail types
@@ -638,6 +676,8 @@ export interface DatagridPluginElement extends HTMLElement {
     _italic: boolean;
     _word_wrap: boolean;
     _column_menus: boolean;
+    _command_column: CommandColumn;
+    _command_cells: boolean;
     _align?: Align;
     _row_height?: number;
     _zebra_rows: number;

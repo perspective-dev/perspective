@@ -31,16 +31,14 @@ export async function expandCollapseHandler(
         "psp-tree-label-collapse",
     );
 
+    const depth = (meta.row_header as unknown[]).filter(
+        (x, i) => x !== undefined && i !== model._command_header_x,
+    ).length;
+
     if (event.shiftKey && is_collapse) {
-        model._view.set_depth(
-            (meta.row_header as unknown[]).filter((x) => x !== undefined)
-                .length - 2,
-        );
+        model._view.set_depth(depth - 2);
     } else if (event.shiftKey) {
-        model._view.set_depth(
-            (meta.row_header as unknown[]).filter((x) => x !== undefined)
-                .length - 1,
-        );
+        model._view.set_depth(depth - 1);
     } else if (is_collapse) {
         model._view.collapse(meta.y);
     } else {

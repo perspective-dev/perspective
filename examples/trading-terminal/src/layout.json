@@ -1,0 +1,141 @@
+{
+    "version": "5.9.1",
+    "active": "scatter",
+    "layout": {
+        "type": "split-layout",
+        "children": [
+            {
+                "type": "tab-layout",
+                "tabs": [
+                    "securities"
+                ],
+                "selected": 0
+            },
+            {
+                "type": "split-layout",
+                "children": [
+                    {
+                        "type": "tab-layout",
+                        "tabs": [
+                            "sectors"
+                        ],
+                        "selected": 0
+                    },
+                    {
+                        "type": "tab-layout",
+                        "tabs": [
+                            "scatter"
+                        ],
+                        "selected": 0
+                    }
+                ],
+                "sizes": [
+                    0.5,
+                    0.5
+                ],
+                "orientation": "vertical"
+            }
+        ],
+        "sizes": [
+            0.4507144856995175,
+            0.5492855143004824
+        ],
+        "orientation": "horizontal"
+    },
+    "panels": {
+        "scatter": {
+            "version": "5.9.1",
+            "columns_config": {},
+            "plugin": "X/Y Scatter",
+            "plugin_config": {},
+            "table": "securities",
+            "theme": "Pro",
+            "title": "Price vs Change",
+            "group_by": [
+                "symbol"
+            ],
+            "split_by": [],
+            "sort": [],
+            "filter": [],
+            "group_rollup_mode": "flat",
+            "split_rollup_mode": "flat",
+            "expressions": {},
+            "columns": [
+                "change",
+                "price",
+                null,
+                null,
+                "symbol",
+                null
+            ],
+            "aggregates": {
+                "change": "avg",
+                "symbol": "dominant",
+                "price": "avg"
+            }
+        },
+        "sectors": {
+            "version": "5.9.1",
+            "columns_config": {},
+            "plugin": "Y Bar",
+            "plugin_config": {
+                "band_inner_frac": 1,
+                "group_pad": 0.63
+            },
+            "table": "securities",
+            "theme": "Pro",
+            "title": "Volume by Sector",
+            "group_by": [
+                "exchange",
+                "sector"
+            ],
+            "split_by": [
+                "exchange"
+            ],
+            "sort": [],
+            "filter": [],
+            "group_rollup_mode": "flat",
+            "split_rollup_mode": "flat",
+            "expressions": {},
+            "columns": [
+                "volume"
+            ],
+            "aggregates": {}
+        },
+        "securities": {
+            "version": "5.9.1",
+            "columns_config": {},
+            "plugin": "Datagrid",
+            "plugin_config": {},
+            "table": "securities",
+            "theme": "Pro",
+            "title": "Securities",
+            "group_by": [
+                "sector",
+                "symbol"
+            ],
+            "split_by": [],
+            "sort": [],
+            "filter": [],
+            "group_rollup_mode": "rollup",
+            "split_rollup_mode": "flat",
+            "expressions": {},
+            "columns": [
+                "price",
+                "change",
+                "bid",
+                "ask",
+                "volume",
+                "last_updated"
+            ],
+            "aggregates": {
+                "last_updated": "last",
+                "bid": "avg",
+                "volume": "sum",
+                "ask": "avg",
+                "change": "avg",
+                "price": "avg"
+            }
+        }
+    }
+}

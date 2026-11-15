@@ -20,6 +20,7 @@ import {
     css_font_family,
     measure_px,
     parse_align,
+    parse_command_column,
     wrap_lines,
 } from "./plugin_config_schema.ts";
 import {
@@ -43,6 +44,8 @@ interface RestoreToken {
     edit_mode?: EditMode;
     scroll_lock?: boolean;
     column_menus?: unknown;
+    command_column?: unknown;
+    command_cells?: unknown;
     font_family?: unknown;
     font_size?: unknown;
     word_wrap?: unknown;
@@ -127,6 +130,15 @@ function restore_grid_style(
     this._font_size = positive_px(token.font_size);
     this._word_wrap = token.word_wrap === true;
     this._column_menus = token.column_menus !== false;
+    const command_column_before = this._command_column;
+    this._command_column = parse_command_column(token.command_column);
+    if (command_column_before !== this._command_column && this.model) {
+        this.regular_table.resetAutoSize();
+        this.model._projected.clear();
+        this.model._command_blocks = undefined;
+    }
+
+    this._command_cells = token.command_cells !== false;
     this._bold = token.bold === true;
     this._italic = token.italic === true;
     this._align = parse_align(token.align);
@@ -179,6 +191,8 @@ function restore_grid_style(
         this.model._row_height = this._row_height;
         this.model._word_wrap = this._word_wrap;
         this.model._column_menus = this._column_menus;
+        this.model._command_column = this._command_column;
+        this.model._command_cells = this._command_cells;
         this.model._align = this._align;
     }
 

@@ -28,6 +28,7 @@ use crate::proto::response::ClientResp;
 use crate::proto::*;
 #[cfg(doc)]
 use crate::table::Table;
+use crate::typed_array::{TypedArrayColumn, TypedArrayWindow, decode_typed_arrays};
 pub use crate::utils::*;
 
 /// Options for [`View::on_update`].
@@ -499,6 +500,22 @@ impl View {
             ClientResp::ViewToArrowResp(ViewToArrowResp { arrow }) => Ok(arrow.into()),
             resp => Err(resp.into()),
         }
+    }
+
+    /// Serializes a [`View`] to one flat numeric array per column, per the
+    /// options in [`TypedArrayWindow`].
+    pub async fn to_typed_arrays(
+        &self,
+        window: TypedArrayWindow,
+    ) -> ClientResult<Vec<TypedArrayColumn>> {
+        let TypedArrayWindow {
+            mut view_window,
+            float32,
+        } = window;
+
+        view_window.machine_column_names = Some(true);
+        let arrow = self.to_arrow(view_window).await?;
+        decode_typed_arrays(&arrow, float32)
     }
 
     /// Serializes this [`View`] to a string of JSON data. Useful if you want to

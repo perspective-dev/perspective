@@ -23,6 +23,7 @@ import type {
 } from "./protocol.ts";
 import {
     PerspectiveSelectDetail,
+    type ChartHit,
     type PerspectiveClickDetail,
 } from "../event-detail.ts";
 import { snapshotThemeVars } from "../theme/theme-snapshot.ts";
@@ -102,6 +103,7 @@ interface RendererHandle {
 
 type PendingRenderType =
     | "saveZoom"
+    | "hitTest"
     | "loadAndRender"
     | "snapshotPng"
     | "resize";
@@ -128,6 +130,9 @@ export class RendererTransport {
     private _proxySession: any = null;
     private _client: Client;
     private _view: View;
+
+    /** The name of the view the worker currently holds, from `init` or `setViewByName`. */
+    private _postedViewName: string | null = null;
     private _tableName: string | undefined;
     /** Source panel `slot`, tagged onto dispatched interaction events so the
      * host can route them (master/detail, global filter) to the right panel. */
@@ -219,6 +224,9 @@ export class RendererTransport {
      * unless a user interacts.
      */
     private _hostSink: DomHostSink | null = null;
+
+    /** `plugin_config.tooltip_commands`, applied to the host sink. */
+    private _tooltipCommands = true;
 
     /**
      * Last `insertConfig` accepted by a `userSelect { selected: true }`
@@ -352,6 +360,8 @@ export class RendererTransport {
             precompileShaders: this._precompileShaders,
         };
 
+        this._postedViewName = initMsg.viewName;
+
         this._lastPostedSize = {
             cssWidth: rect.width,
             cssHeight: rect.height,
@@ -409,10 +419,13 @@ export class RendererTransport {
 
     setView(view: View): void {
         this._view = view;
-        this._post({
-            kind: "setViewByName",
-            name: this._view.__unsafe_get_name(),
-        });
+        const name = view.__unsafe_get_name();
+        if (name === this._postedViewName) {
+            return;
+        }
+
+        this._postedViewName = name;
+        this._post({ kind: "setViewByName", name });
     }
 
     setColumnsConfig(cfg: Record<string, any>): void {
@@ -420,6 +433,12 @@ export class RendererTransport {
     }
 
     setPluginConfig(cfg: PluginConfig): void {
+        this._tooltipCommands = cfg.tooltip_commands !== false;
+        if (this._hostSink) {
+            this._hostSink.commandsEnabled = this._tooltipCommands;
+            this._hostSink.refreshCommands();
+        }
+
         this._post({
             kind: "setPluginConfig",
             cfg,
@@ -664,6 +683,16 @@ export class RendererTransport {
         return promise;
     }
 
+    /**
+     * The `{ frame, ref }` of the mark at canvas-relative `(mx, my)`, or
+     * `null` over nothing.
+     */
+    hitTest(mx: number, my: number): Promise<ChartHit | null> {
+        const { id, promise } = this._allocPending<ChartHit | null>("hitTest");
+        this._post({ kind: "hitTest", requestId: id, mx, my });
+        return promise;
+    }
+
     forwardInteraction(event: InteractionEvent): void {
         this._post({ kind: "interaction", event });
     }
@@ -748,6 +777,7 @@ export class RendererTransport {
                     msg.pos,
                     msg.bounds,
                     msg.style,
+                    msg.hit,
                 );
                 break;
             case "dismissTooltip":
@@ -835,6 +865,18 @@ export class RendererTransport {
                 break;
             case "resizeAck":
                 this._resolvePending(msg.msgId, "resize", undefined);
+                break;
+            case "hitTestReply":
+                if (msg.error !== undefined) {
+                    this._rejectPending(
+                        msg.requestId,
+                        "hitTest",
+                        new Error(msg.error),
+                    );
+                } else {
+                    this._resolvePending(msg.requestId, "hitTest", msg.hit);
+                }
+
                 break;
             case "snapshotPngReply":
                 if (msg.error !== undefined) {
@@ -966,6 +1008,7 @@ export class RendererTransport {
         }
 
         this._hostSink = new DomHostSink(this._hostGlCanvas, parent);
+        this._hostSink.commandsEnabled = this._tooltipCommands;
         return this._hostSink;
     }
 }

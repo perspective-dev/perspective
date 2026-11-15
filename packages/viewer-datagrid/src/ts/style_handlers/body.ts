@@ -111,14 +111,17 @@ function same_key(a: unknown, b: unknown): boolean {
     return a === b;
 }
 
-function row_header_depth(row_header: unknown[] | undefined): number {
+function row_header_depth(
+    row_header: unknown[] | undefined,
+    command_x: number | undefined,
+): number {
     if (!row_header) {
         return 0;
     }
 
     let n = 0;
     for (let i = 0; i < row_header.length; i++) {
-        if (row_header[i] !== undefined) {
+        if (row_header[i] !== undefined && i !== command_x) {
             n++;
         }
     }
@@ -286,7 +289,10 @@ export function applyBodyCellStyles(
                     ? false
                     : d - 1 <
                       Math.min(group_by_len, c.plugin?.aggregate_depth || 0))(
-                row_header_depth(metadata.row_header as unknown[] | undefined),
+                row_header_depth(
+                    metadata.row_header as unknown[] | undefined,
+                    model._command_header_x,
+                ),
             );
 
         // @ts-ignore

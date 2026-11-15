@@ -30,6 +30,7 @@ pub use self::column_locator::{
     ColumnLocator, ColumnSettingsTab, ColumnSettingsTarget, OpenColumnSettings,
 };
 pub use self::props::{DragDropProps, PresentationProps};
+use crate::config::CommandLocation;
 pub use crate::ui::{DragDropContainer, DragEndCallback};
 use crate::ui::{
     DragTargetState, PointerDownCallback, clear_document_selection, closest_draggable,
@@ -130,6 +131,26 @@ pub struct PresentationHandle {
     pub theme_config_updated: PubSub<(PtrEqRc<Vec<String>>, Option<usize>)>,
     pub on_eject: PubSub<()>,
     pub statusbar_pointer_event: PubSub<PointerEvent>,
+
+    /// The app's command schema function, as set by `setCommandSchema()`.
+    command_schema: RefCell<Option<js_sys::Function>>,
+
+    /// The surfaces the app's command schema is evaluated for.
+    command_scopes: RefCell<Vec<CommandLocation>>,
+
+    /// The `invalidate()` calls of the current task, run as one.
+    invalidation: RefCell<Option<Invalidation>>,
+
+    /// Fired with `(key, context)` when the user picks an app command.
+    pub command_invoked: PubSub<(String, JsValue)>,
+}
+
+/// The coalesced `invalidate()` calls of one task.
+#[derive(Debug, Default)]
+pub struct Invalidation {
+    pub all: bool,
+    pub panels: Vec<String>,
+    pub completions: Vec<Completion>,
 }
 
 /// State object responsible for the non-persistable/gui element state,
@@ -182,6 +203,10 @@ impl Presentation {
             host_pointerdown: Default::default(),
             source_dragend: Default::default(),
             drag_target: Default::default(),
+            command_schema: Default::default(),
+            command_scopes: Default::default(),
+            invalidation: Default::default(),
+            command_invoked: Default::default(),
         }));
 
         theme.register_host_pointerdown();
@@ -191,6 +216,59 @@ impl Presentation {
 
     pub fn viewer_elem(&self) -> &HtmlElement {
         &self.viewer_elem
+    }
+
+    /// The app's command schema function, when `location` is in its scopes.
+    pub fn command_schema_for(&self, location: CommandLocation) -> Option<js_sys::Function> {
+        if self.0.command_scopes.borrow().contains(&location) {
+            self.0.command_schema.borrow().clone()
+        } else {
+            None
+        }
+    }
+
+    /// Whether the app's command schema is evaluated for `location`.
+    pub fn is_command_scope(&self, location: CommandLocation) -> bool {
+        self.command_schema_for(location).is_some()
+    }
+
+    /// Replace the app's command schema function and scopes, or remove them
+    /// with `None`, returning whether either changed.
+    pub fn set_command_schema(
+        &self,
+        schema: Option<js_sys::Function>,
+        scopes: Vec<CommandLocation>,
+    ) -> bool {
+        let same_schema = match (&*self.0.command_schema.borrow(), &schema) {
+            (None, None) => true,
+            (Some(a), Some(b)) => AsRef::<JsValue>::as_ref(a) == AsRef::<JsValue>::as_ref(b),
+            _ => false,
+        };
+
+        let changed = !same_schema || *self.0.command_scopes.borrow() != scopes;
+        *self.0.command_schema.borrow_mut() = schema;
+        *self.0.command_scopes.borrow_mut() = scopes;
+        changed
+    }
+
+    /// Add an `invalidate()` call to the current task's batch, returning
+    /// `true` when it opened the batch.
+    pub fn queue_invalidation(&self, panel: Option<String>, completion: Completion) -> bool {
+        let mut pending = self.0.invalidation.borrow_mut();
+        let first = pending.is_none();
+        let batch = pending.get_or_insert_with(Default::default);
+        match panel {
+            Some(panel) => batch.panels.push(panel),
+            None => batch.all = true,
+        }
+
+        batch.completions.push(completion);
+        first
+    }
+
+    /// Take the current task's `invalidate()` batch.
+    pub fn take_invalidations(&self) -> Option<Invalidation> {
+        self.0.invalidation.borrow_mut().take()
     }
 
     pub fn is_visible(&self) -> bool {

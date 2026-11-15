@@ -12,6 +12,7 @@
 
 import type { ColumnDataMap } from "../../data/view-reader.ts";
 import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import { chartHitFromTarget, type ClickTarget } from "../../event-detail.ts";
 import type { ZoomConfig } from "../../interaction/zoom-controller.ts";
 import type { FacetGrid } from "../../layout/facet-grid.ts";
 import { CategoricalYChart } from "../common/categorical-y-chart.ts";
@@ -37,6 +38,8 @@ import {
     rebuildGlyphBuffers,
 } from "./series-render.ts";
 import {
+    type PinnedRecordKey,
+    findPinnedRecord,
     handleBarHover,
     handleBarLegendClick,
     showBarPinnedTooltip,
@@ -369,6 +372,9 @@ export class SeriesChart extends CategoricalYChart {
     _hoveredBarIdx = -1;
     _pinnedBarIdx = -1;
 
+    /** The identity of the pinned record, resolved again after each build. */
+    _pinnedKey: PinnedRecordKey | null = null;
+
     /**
      * Synthetic bar record for hover hits on line / scatter glyphs that
      * don't have a real `BarRecord` in `_bars`. At most one of
@@ -525,6 +531,27 @@ export class SeriesChart extends CategoricalYChart {
         };
     }
 
+    protected override repin(): boolean {
+        if (!this._pinnedKey) {
+            return false;
+        }
+
+        const found = findPinnedRecord(this, this._pinnedKey);
+        if (!found) {
+            return false;
+        }
+
+        const target = this._seriesClickTarget(found.rec);
+        const hit = target ? chartHitFromTarget(target) : undefined;
+        if (found.barIdx >= 0) {
+            showBarPinnedTooltip(this, found.barIdx, hit);
+        } else {
+            showBarPinnedTooltipForSample(this, found.rec, hit);
+        }
+
+        return true;
+    }
+
     /**
      * Resolve a clicked bar / point into a `PerspectiveClickDetail`
      * (via `buildClickDetail`) and emit both
@@ -539,8 +566,34 @@ export class SeriesChart extends CategoricalYChart {
      * the `|` delimiter the engine uses for pivoted column names.
      */
     private async _emitSeriesClickSelect(b: SeriesChartRecord): Promise<void> {
+        const target = this._seriesClickTarget(b);
+        if (target) {
+            await this.emitClickAndSelect(target);
+        }
+    }
+
+    override clickTargetAt(mx: number, my: number): ClickTarget | null {
+        handleBarHover(this, mx, my);
+        if (this._hoveredBarIdx >= 0) {
+            const rec = readBarRecord(
+                this._bars,
+                this._hoveredBarIdx,
+                this._splitPrefixes.length,
+                this._samples,
+                this._series.length,
+            );
+
+            return this._seriesClickTarget(rec);
+        }
+
+        return this._hoveredSample
+            ? this._seriesClickTarget(this._hoveredSample)
+            : null;
+    }
+
+    private _seriesClickTarget(b: SeriesChartRecord): ClickTarget | null {
         if (!this._aggregates[b.aggIdx]) {
-            return;
+            return null;
         }
 
         const groupByValues: (string | number | null)[] =
@@ -557,15 +610,13 @@ export class SeriesChart extends CategoricalYChart {
                 : -1;
 
             groupByValues.push(entry ? last.values[entry.value] : null);
-            await this.emitClickAndSelect({
+            return {
                 rowIdx: row >= 0 ? row : null,
                 columnName: this._aggregates[b.aggIdx],
                 groupByValues,
                 splitByValues:
                     entry && entry.facet !== "" ? entry.facet.split("|") : [],
-            });
-
-            return;
+            };
         }
 
         const splitByValues =
@@ -573,12 +624,12 @@ export class SeriesChart extends CategoricalYChart {
                 ? splitKey.split("|")
                 : [];
 
-        await this.emitClickAndSelect({
+        return {
             rowIdx: b.catIdx + this._rowOffset,
             columnName: this._aggregates[b.aggIdx],
             groupByValues,
             splitByValues,
-        });
+        };
     }
 
     async uploadAndRender(
@@ -841,6 +892,7 @@ export class SeriesChart extends CategoricalYChart {
         invalidateGlyphBuffers(this);
         rebuildGlyphBuffers(this, glManager);
 
+        this._tooltip.rehover();
         await this.requestRender(glManager);
     }
 

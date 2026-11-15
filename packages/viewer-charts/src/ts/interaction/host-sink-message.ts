@@ -17,6 +17,7 @@ import type {
     UserClickMsg,
     UserSelectMsg,
 } from "../transport/protocol.ts";
+import type { ChartHit } from "../event-detail.ts";
 import type {
     CssBounds,
     HostSink,
@@ -61,8 +62,9 @@ export class MessageHostSink implements HostSink {
         pos: { px: number; py: number },
         bounds: CssBounds,
         style: TooltipStyle = DEFAULT_TOOLTIP_STYLE,
+        hit?: ChartHit,
     ): void {
-        this._send({ kind: "pinTooltip", grid, style, pos, bounds });
+        this._send({ kind: "pinTooltip", grid, style, pos, bounds, hit });
     }
 
     dismiss(): void {

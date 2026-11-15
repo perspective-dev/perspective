@@ -12,6 +12,7 @@
 
 import type { ColumnDataMap } from "../../data/view-reader.ts";
 import type { WebGLContextManager } from "../../webgl/context-manager.ts";
+import type { ClickTarget } from "../../event-detail.ts";
 import { TreeChartBase, firstNonMetadataColumn } from "../common/tree-chart.ts";
 import { NULL_NODE } from "../common/node-store.ts";
 import {
@@ -26,6 +27,7 @@ import {
     handleTreemapClick,
     handleTreemapDblClick,
     dismissTreemapPinnedTooltip,
+    treemapClickTargetAt,
 } from "./treemap-interact.ts";
 
 export interface TreemapLocations {
@@ -125,6 +127,10 @@ export class TreemapChart extends TreeChartBase {
             onDblClick: (mx: number, my: number) =>
                 handleTreemapDblClick(this, mx, my),
         };
+    }
+
+    override clickTargetAt(mx: number, my: number): ClickTarget | null {
+        return treemapClickTargetAt(this, mx, my);
     }
 
     async uploadAndRender(

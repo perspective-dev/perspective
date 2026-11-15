@@ -39,6 +39,7 @@ mod session;
 mod table;
 mod table_data;
 mod table_ref;
+mod typed_array;
 mod view;
 pub mod virtual_server;
 
@@ -60,6 +61,7 @@ pub use crate::table::{
 };
 pub use crate::table_data::{TableData, UpdateData};
 pub use crate::table_ref::TableRef;
+pub use crate::typed_array::{TypedArrayColumn, TypedArrayValues, TypedArrayWindow};
 pub use crate::view::{
     ColumnWindow, OnRemoveData, OnUpdateData, OnUpdateMode, OnUpdateOptions, RemoveCause, View,
     ViewWindow,

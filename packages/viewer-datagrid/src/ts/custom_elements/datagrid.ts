@@ -19,6 +19,8 @@ import {
 import { activate } from "../plugin/activate.ts";
 import { restore, sync_wrap_lines } from "../plugin/restore.ts";
 import { save } from "../plugin/save.ts";
+import { hit_test } from "../plugin/hit_test.ts";
+import { command_scopes_changed } from "../commands.ts";
 import { draw } from "../plugin/draw.ts";
 import column_config_schema, {
     ColumnConfigSchema,
@@ -31,9 +33,11 @@ import type { ColumnWindow, View, ViewWindow } from "@perspective-dev/client";
 import type {
     HTMLPerspectiveViewerElement,
     IPerspectiveViewerPlugin,
+    PerspectiveHitTest,
     PluginStaticConfig,
 } from "@perspective-dev/viewer";
 import type {
+    CommandColumn,
     DatagridModel,
     DatagridToolbarElement,
     EditMode,
@@ -69,6 +73,8 @@ export class HTMLPerspectiveViewerDatagridPluginElement
     _italic: boolean = false;
     _word_wrap: boolean = false;
     _column_menus: boolean = true;
+    _command_column: CommandColumn = "left";
+    _command_cells: boolean = true;
     _align?: Align;
     _row_height?: number;
     _zebra_rows: number = 0;
@@ -241,7 +247,16 @@ export class HTMLPerspectiveViewerDatagridPluginElement
     async update(view: View): Promise<void> {
         if (this.model === undefined) {
             await this.draw(view);
-        } else if (this.model._config.split_by?.length > 0) {
+            return;
+        }
+
+        if (command_scopes_changed(this)) {
+            this.regular_table.resetAutoSize();
+            this.model._projected.clear();
+            this.model._command_blocks = undefined;
+        }
+
+        if (this.model._config.split_by?.length > 0) {
             const dimensions = await view.dimensions();
             this.model._num_rows = dimensions.num_view_rows;
             await this.regular_table.draw();
@@ -375,6 +390,13 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         if (this._initialized) {
             await this.regular_table.draw({ preserve_width: true });
         }
+    }
+
+    async hit_test(
+        x: number,
+        y: number,
+    ): Promise<PerspectiveHitTest | undefined> {
+        return await hit_test.call(this, x, y);
     }
 
     restyle(): void {

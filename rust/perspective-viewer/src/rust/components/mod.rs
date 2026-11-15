@@ -20,6 +20,7 @@ pub mod code_editor;
 pub mod column_dropdown;
 pub mod column_selector;
 pub mod column_settings_sidebar;
+pub mod command_menu;
 pub mod copy_dropdown;
 pub mod datetime_column_style;
 pub mod debug_panel;

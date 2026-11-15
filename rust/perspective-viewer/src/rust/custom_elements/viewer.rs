@@ -30,6 +30,7 @@ use yew::Callback;
 
 #[cfg(feature = "llm-agent")]
 use crate::agent::AgentRuntime;
+use crate::components::command_menu::show_command_menu;
 use crate::components::viewer::{PerspectiveViewerMsg, PerspectiveViewerProps};
 use crate::config::*;
 use crate::custom_events::*;
@@ -109,12 +110,54 @@ extern "C" {
     /// `export()` return, whose shape follows the `ExportMethod`.
     #[wasm_bindgen(typescript_type = "ExportData")]
     pub type JsExportData;
+
+    /// `setCommandSchema()` argument: the app's command schema function.
+    #[wasm_bindgen(typescript_type = "PerspectiveCommandSchema")]
+    pub type JsCommandSchemaFn;
+
+    /// `setCommandSchema()` options dict (`{ scopes?: CommandLocation[] }`).
+    #[wasm_bindgen(typescript_type = "CommandSchemaOptions")]
+    pub type JsCommandSchemaOptions;
+
+    /// `queryCommands()` argument: the surface being rendered.
+    #[wasm_bindgen(typescript_type = "PerspectiveCommandLocation")]
+    pub type JsCommandLocation;
+
+    /// `queryCommands()` argument: a plugin's viewport read.
+    #[wasm_bindgen(typescript_type = "PerspectiveViewFrame")]
+    pub type JsViewFrame;
+
+    /// `queryCommands()` argument: the locations to resolve.
+    #[wasm_bindgen(typescript_type = "PerspectiveHitRef[]")]
+    pub type JsHitRefs;
+
+    /// `queryCommands()` return: one entry per ref, or `undefined`.
+    #[wasm_bindgen(typescript_type = "PerspectiveCommands[] | undefined")]
+    pub type JsPerspectiveCommands;
+
+    /// A command context, as `queryCommands()` returned it.
+    #[wasm_bindgen(typescript_type = "PerspectiveCommandContext")]
+    pub type JsCommandContext;
+
+    /// `showCommandMenu()` argument: the commands to offer.
+    #[wasm_bindgen(typescript_type = "CommandSpec[]")]
+    pub type JsCommandSpecs;
+
+    /// Viewport coordinates.
+    #[wasm_bindgen(typescript_type = "{ x: number; y: number }")]
+    pub type JsPoint;
 }
 
 ts_promise! {
     JsViewerConfig => JsViewerConfigPromise = "Promise<ViewerConfig>";
     JsWorkspaceConfig => JsWorkspaceConfigPromise = "Promise<WorkspaceConfig>";
     JsExportData => JsExportDataPromise = "Promise<ExportData>";
+}
+
+#[derive(serde::Deserialize)]
+struct MenuPoint {
+    x: f64,
+    y: f64,
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -724,6 +767,7 @@ impl PerspectiveViewerElement {
     /// await viewer.delete();
     /// ```
     pub fn delete(self) -> ApiFuture<()> {
+        self.presentation.set_command_schema(None, vec![]);
         let subs = std::mem::take(&mut *self.hosted_table_subs.borrow_mut());
         let teardown = delete_all(&self.workspace, &self.root);
         ApiFuture::new(async move {
@@ -2105,6 +2149,214 @@ impl PerspectiveViewerElement {
                 .send_message(PerspectiveViewerMsg::ClosePanel(name, Some(completion)));
 
             receiver.await.map_err(|_| ApiError::new("Cancelled"))?
+        })
+    }
+
+    /// Set the function that declares this viewer's custom commands, replacing
+    /// any previously set, and re-query every plugin's command buttons when it
+    /// or its scopes changed.
+    ///
+    /// # Arguments
+    ///
+    /// - `schema` - A synchronous function from a command context to a `{
+    ///   commands }` list, or `null` to remove the current one.
+    /// - `options.scopes` - The surfaces the schema is evaluated for,
+    ///   `["context-menu"]` when omitted.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// await viewer.setCommandSchema(
+    ///     (ctx) => ({
+    ///         commands: [{ kind: "Command", key: "hello", label: "Hello" }],
+    ///     }),
+    ///     { scopes: ["context-menu", "datagrid-row"] },
+    /// );
+    /// ```
+    #[wasm_bindgen]
+    pub fn setCommandSchema(
+        &self,
+        schema: Option<JsCommandSchemaFn>,
+        options: Option<JsCommandSchemaOptions>,
+    ) -> ApiResult<ApiFuture<()>> {
+        let schema = schema
+            .map(|schema| {
+                schema
+                    .dyn_into::<js_sys::Function>()
+                    .map_err(|_| ApiError::new("`setCommandSchema` expects a function or `null`"))
+            })
+            .transpose()?;
+
+        let CommandSchemaOptions { scopes } = parse_options(options)?;
+        let scopes = scopes.unwrap_or_else(|| vec![CommandLocation::ContextMenu]);
+        if self.presentation.set_command_schema(schema, scopes) {
+            Ok(self.invalidate_panels(None))
+        } else {
+            Ok(ApiFuture::new(async { Ok(()) }))
+        }
+    }
+
+    /// Evaluate the app's command schema at `location` for each of `refs`,
+    /// resolved against `frame`, the viewport read of the panel plugin
+    /// `plugin`; `undefined` when `location` is outside the schema's scopes
+    /// or no schema is set.
+    ///
+    /// # Arguments
+    ///
+    /// - `plugin` - The calling plugin element, which identifies its panel.
+    /// - `location` - The surface being rendered.
+    /// - `frame` - The plugin's viewport read, as `to_columns_string({ id: true
+    ///   })` and `column_paths()` returned it.
+    /// - `refs` - One view row and/or column index per button.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// const results = viewer.queryCommands(this, "datagrid-row", frame, [{ y: 12 }]);
+    /// ```
+    #[wasm_bindgen]
+    pub fn queryCommands(
+        &self,
+        plugin: HtmlElement,
+        location: JsCommandLocation,
+        frame: JsViewFrame,
+        refs: JsHitRefs,
+    ) -> ApiResult<JsPerspectiveCommands> {
+        let location: CommandLocation = JsValue::from(location).into_serde_ext()?;
+        let panel = panel_for_plugin(&self.workspace, plugin.as_ref())
+            .ok_or_else(|| ApiError::new("`queryCommands` expects a panel's active plugin"))?;
+
+        let results = query_commands(
+            &self.presentation,
+            &panel,
+            location,
+            &frame.into(),
+            &refs.into(),
+        )?;
+
+        Ok(match results {
+            Some(results) => JsValue::from(results).unchecked_into(),
+            None => JsValue::UNDEFINED.unchecked_into(),
+        })
+    }
+
+    /// Dispatch `perspective-command` for the app command `key` picked against
+    /// `context`, as the context menu does.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// viewer.invokeCommand("ticket", result.context);
+    /// ```
+    #[wasm_bindgen]
+    pub fn invokeCommand(&self, key: String, context: JsCommandContext) -> ApiResult<()> {
+        self.presentation
+            .command_invoked
+            .emit((key, context.into()));
+        Ok(())
+    }
+
+    /// Redraw each panel's plugin from its current `View` without re-creating
+    /// the view, such as after a command changed state its buttons read; calls
+    /// within one task run as one.
+    ///
+    /// # Arguments
+    ///
+    /// - `options.panel` - Limits the redraw to one panel.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// viewer.addEventListener("perspective-command", (e) => {
+    ///     flagged.add(e.detail.context.hit.id);
+    ///     viewer.invalidate({ panel: e.detail.context.panel });
+    /// });
+    /// ```
+    #[wasm_bindgen]
+    pub fn invalidate(&self, options: Option<JsPanelOptions>) -> ApiResult<ApiFuture<()>> {
+        let PanelOptions { panel } = parse_options(options)?;
+        if let Some(name) = &panel {
+            self.resolve_panel(Some(name.clone()))?;
+        }
+
+        Ok(self.invalidate_panels(panel))
+    }
+
+    fn invalidate_panels(&self, panel: Option<String>) -> ApiFuture<()> {
+        let (completion, receiver) = Completion::new();
+        if self.presentation.queue_invalidation(panel, completion) {
+            clone!(self.presentation, self.workspace);
+            ApiFuture::spawn(async move {
+                JsFuture::from(js_sys::Promise::resolve(&JsValue::UNDEFINED)).await?;
+                let Some(batch) = presentation.take_invalidations() else {
+                    return Ok(());
+                };
+
+                let panels = if batch.all {
+                    workspace.panels()
+                } else {
+                    batch
+                        .panels
+                        .iter()
+                        .filter_map(|id| workspace.panel(&PanelId::from(id.as_str())))
+                        .collect()
+                };
+
+                let mut result = Ok(());
+                for panel in panels {
+                    if let Err(err) = panel.renderer.update().await {
+                        result = Err(err);
+                    }
+                }
+
+                for completion in batch.completions {
+                    let result = result.clone();
+                    completion.resolve_after(async move { result });
+                }
+
+                Ok(())
+            });
+        }
+
+        ApiFuture::new(async move { receiver.await.map_err(|_| ApiError::new("Cancelled"))? })
+    }
+
+    /// Open a menu of `commands` at viewport `point`, dispatching
+    /// `perspective-command` with `context` for a pick; resolves when the menu
+    /// closes.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// await viewer.showCommandMenu(result.context, group.commands, { x: e.clientX, y: e.clientY });
+    /// ```
+    #[wasm_bindgen]
+    pub fn showCommandMenu(
+        &self,
+        context: JsCommandContext,
+        commands: JsCommandSpecs,
+        point: JsPoint,
+    ) -> ApiFuture<()> {
+        let this = self.clone();
+        ApiFuture::new(async move {
+            let commands: Vec<CommandSpec> = JsValue::from(commands).into_serde_ext()?;
+            let point: MenuPoint = JsValue::from(point).into_serde_ext()?;
+            let context = JsValue::from(context);
+            let theme = js_sys::Reflect::get(&context, &"panel".into())
+                .ok()
+                .and_then(|panel| panel.as_string())
+                .and_then(|panel| this.workspace.panel(&PanelId::from(panel.as_str())))
+                .and_then(|panel| panel.renderer.theme());
+
+            show_command_menu(
+                &this.presentation,
+                context,
+                commands,
+                point.x,
+                point.y,
+                theme,
+            )
+            .await
         })
     }
 

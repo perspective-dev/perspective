@@ -60,6 +60,8 @@ export default async function getCellConfig(
         row: r[0] as Record<string, unknown>,
         column_names: [],
         config: { filter: [] },
+        row_path: group_by_values,
+        column_path: [],
     };
 
     let column_filters: Filter[] = [];
@@ -70,6 +72,10 @@ export default async function getCellConfig(
         })) as (Scalar | undefined)[][];
 
         result.column_names = [String(area[area.length - 1]?.[0] ?? "")];
+        result.value = r[0][column_paths] as Scalar;
+        result.column_path = split_by.map(
+            (_, index) => area[index]?.[0] ?? null,
+        );
         column_filters = split_by
             .map((pivot, index): Filter | undefined => {
                 const pivot_value = area[index]?.[0];

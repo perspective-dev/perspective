@@ -125,35 +125,61 @@ impl Renderer {
 
             let _pin = self.pin_context(&guard, ctx.clone());
             let plugin = self.ensure_plugin_selected()?;
-            let meta = self.metadata();
             let stamped_theme = self.theme();
             stamp_page_color_scheme(&self.plugin_data.borrow().viewer_elem);
             self.stamp_theme(Some(&plugin));
             self.stamp_active(&plugin);
             plugin.restyle();
             self.capture_theme(&plugin, stamped_theme);
-            let dimensions = ctx.view.dimensions().await?;
-            let mut limits = get_row_and_col_limits(
-                &dimensions,
-                &ctx.view,
-                &meta,
-                self.is_render_warning_enabled(),
-            )
-            .await?;
-
-            limits.is_update = true;
-            plugin
-                .update(
-                    ctx.view.clone().into(),
-                    limits.max_cols,
-                    limits.max_rows,
-                    false,
-                )
-                .await?;
-
+            self.update_plugin(&plugin, &ctx).await?;
             Ok(JsValue::UNDEFINED)
         })
         .await
+    }
+
+    /// Redraw the active plugin from its cached view without re-creating the
+    /// view.
+    pub async fn update(&self) -> ApiResult<()> {
+        self.render_task(|guard| async move {
+            let Some(ctx) = self.cached_context() else {
+                return Ok(());
+            };
+
+            let Some(plugin) = self.active_plugin() else {
+                return Ok(());
+            };
+
+            let _pin = self.pin_context(&guard, ctx.clone());
+            self.update_plugin(&plugin, &ctx).await
+        })
+        .await
+    }
+
+    /// Call `plugin.update()` with `ctx`'s view at its current row and column
+    /// limits.
+    async fn update_plugin(
+        &self,
+        plugin: &JsPerspectiveViewerPlugin,
+        ctx: &RenderContext,
+    ) -> ApiResult<()> {
+        let dimensions = ctx.view.dimensions().await?;
+        let mut limits = get_row_and_col_limits(
+            &dimensions,
+            &ctx.view,
+            &self.metadata(),
+            self.is_render_warning_enabled(),
+        )
+        .await?;
+
+        limits.is_update = true;
+        plugin
+            .update(
+                ctx.view.clone().into(),
+                limits.max_cols,
+                limits.max_rows,
+                false,
+            )
+            .await
     }
 
     pub async fn with_lock<T>(self, task: impl Future<Output = ApiResult<T>>) -> ApiResult<T> {

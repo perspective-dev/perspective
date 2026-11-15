@@ -22,9 +22,37 @@ export function cell_style_row_header(
     td: HTMLElement,
     metadata: CellMetadataRowHeader,
 ): void {
-    const x = metadata.row_header_x ?? 0;
+    const raw_x = metadata.row_header_x ?? 0;
+    const cmd_x = model._command_header_x;
+    const is_command = cmd_x !== undefined && raw_x === cmd_x;
+    td.classList.toggle("psp-command-header", is_command);
+    td.classList.toggle(
+        "psp-command-header-leaf",
+        is_command && !!model._command_header_leaf,
+    );
+
+    if (is_command) {
+        for (const name of [
+            "psp-tree-spacer",
+            "psp-tree-label",
+            "psp-tree-label-expand",
+            "psp-tree-label-collapse",
+            "psp-tree-leaf",
+        ]) {
+            td.classList.remove(name);
+        }
+
+        return;
+    }
+
+    const x = cmd_x !== undefined && raw_x > cmd_x ? raw_x - 1 : raw_x;
+    const row_header =
+        cmd_x === undefined
+            ? metadata.row_header
+            : metadata.row_header?.filter((_, i) => i !== cmd_x);
+
     const is_flat = model._config.group_rollup_mode === "flat";
-    const label_x = is_flat ? x : last_defined_index(metadata.row_header);
+    const label_x = is_flat ? x : last_defined_index(row_header);
     const is_label = metadata.value !== undefined && x === label_x;
     const is_spacer = !is_flat && x < label_x;
     const is_leaf = x >= model._config.group_by.length;

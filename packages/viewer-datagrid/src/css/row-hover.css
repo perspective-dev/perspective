@@ -21,6 +21,10 @@ regular-table {
             th.psp-tree-label:not(.psp-select-region):not(
                 .psp-select-region-inactive
             ),
+        tr:hover
+            th.psp-command-header-leaf:not(.psp-select-region):not(
+                .psp-select-region-inactive
+            ),
         tr:hover td:not(.psp-select-region):not(.psp-select-region-inactive),
         tr:hover:after {
             border-color: var(
@@ -62,14 +66,29 @@ regular-table {
             ),
         tr:hover
             + tr
+            th.psp-command-header-leaf:not(.psp-select-region):not(
+                .psp-select-region-inactive
+            ),
+        tr:hover
+            + tr
             td:not(.psp-select-region):not(.psp-select-region-inactive) {
             border-top-color: transparent;
         }
 
         tr {
-            th:first-child:not(.psp-tree-spacer),
-            th.psp-tree-spacer:first-child + th:not(.psp-tree-spacer),
-            th.psp-tree-spacer:first-child
+            th:first-child:not(
+                    .psp-tree-spacer,
+                    .psp-command-header:not(.psp-command-header-leaf)
+                ),
+            th:is(
+                    .psp-tree-spacer,
+                    .psp-command-header:not(.psp-command-header-leaf)
+                ):first-child
+                + th:not(.psp-tree-spacer),
+            th:is(
+                    .psp-tree-spacer,
+                    .psp-command-header:not(.psp-command-header-leaf)
+                ):first-child
                 ~ th.psp-tree-spacer
                 + th:not(.psp-tree-spacer),
             td:first-child {
@@ -87,9 +106,19 @@ regular-table {
         tr:hover {
             color: inherit;
 
-            th:first-child:not(.psp-tree-spacer),
-            th.psp-tree-spacer:first-child + th:not(.psp-tree-spacer),
-            th.psp-tree-spacer:first-child
+            th:first-child:not(
+                    .psp-tree-spacer,
+                    .psp-command-header:not(.psp-command-header-leaf)
+                ),
+            th:is(
+                    .psp-tree-spacer,
+                    .psp-command-header:not(.psp-command-header-leaf)
+                ):first-child
+                + th:not(.psp-tree-spacer),
+            th:is(
+                    .psp-tree-spacer,
+                    .psp-command-header:not(.psp-command-header-leaf)
+                ):first-child
                 ~ th.psp-tree-spacer
                 + th:not(.psp-tree-spacer),
             td:first-child {

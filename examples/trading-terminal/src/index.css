@@ -1,0 +1,260 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+:root {
+    --terminal-bg: #f4f5f7;
+    --terminal-panel: #ffffff;
+    --terminal-border: #d9dce1;
+    --terminal-text: #1f2328;
+    --terminal-muted: #6b7280;
+    --terminal-buy: #0f7b3f;
+    --terminal-buy-bg: #e6f4ec;
+    --terminal-sell: #b42318;
+    --terminal-sell-bg: #fbeae9;
+    --terminal-accent: #2563eb;
+}
+
+html,
+body {
+    margin: 0;
+    height: 100%;
+    background: var(--terminal-bg);
+    color: var(--terminal-text);
+    font-family:
+        "Inter",
+        "Helvetica Neue",
+        "Segoe UI",
+        system-ui,
+        -apple-system,
+        sans-serif;
+    font-size: 13px;
+}
+
+body {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    grid-template-rows: 100%;
+}
+
+#sidebar {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-right: 1px solid var(--terminal-border);
+    background: var(--terminal-panel);
+}
+
+#sidebar header {
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--terminal-border);
+}
+
+#sidebar h1 {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+#sidebar header p {
+    margin: 0;
+    color: var(--terminal-muted);
+    line-height: 1.4;
+}
+
+#restricted-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--terminal-border);
+}
+
+#restricted-section label {
+    font-weight: 600;
+}
+
+#restricted {
+    padding: 7px 9px;
+    border: 1px solid var(--terminal-border);
+    border-radius: 4px;
+    font: inherit;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    text-transform: uppercase;
+}
+
+#restricted:focus {
+    outline: 2px solid var(--terminal-accent);
+    outline-offset: -1px;
+}
+
+#tickets-section {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+}
+
+#tickets-section h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 12px 16px 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#ticket-count {
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--terminal-bg);
+    color: var(--terminal-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+#clear-tickets {
+    margin-left: auto;
+    padding: 3px 8px;
+    border: 1px solid var(--terminal-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--terminal-muted);
+    font: inherit;
+    cursor: pointer;
+}
+
+#clear-tickets:hover {
+    color: var(--terminal-text);
+}
+
+#tickets {
+    flex: 1;
+    margin: 0;
+    padding: 0 12px 12px;
+    list-style: none;
+    overflow-y: auto;
+}
+
+#tickets:empty + #tickets-empty {
+    display: block;
+}
+
+#tickets-empty {
+    display: none;
+    margin: 0;
+    padding: 0 16px;
+    color: var(--terminal-muted);
+}
+
+.ticket {
+    margin-bottom: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--terminal-border);
+    border-left-width: 4px;
+    border-radius: 0 4px 4px 0;
+    background: var(--terminal-panel);
+}
+
+.ticket.buy {
+    border-color: var(--terminal-buy);
+    background: var(--terminal-buy-bg);
+}
+
+.ticket.sell {
+    border-color: var(--terminal-sell);
+    background: var(--terminal-sell-bg);
+}
+
+.ticket-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.ticket-side {
+    border-radius: 3px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.ticket.buy .ticket-side {
+    color: var(--terminal-buy);
+}
+
+.ticket.sell .ticket-side {
+
+    color: var(--terminal-sell);
+}
+
+.ticket-target {
+    flex: 1;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ticket-time {
+    color: var(--terminal-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.ticket-summary {
+    margin-top: 4px;
+    color: var(--terminal-muted);
+}
+
+.ticket-excluded {
+    margin-top: 2px;
+    color: var(--terminal-sell);
+}
+
+.ticket-legs {
+    margin-top: 6px;
+}
+
+.ticket-legs summary {
+    color: var(--terminal-muted);
+    cursor: pointer;
+}
+
+.ticket-legs table {
+    width: 100%;
+    margin-top: 4px;
+    border-collapse: collapse;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ticket-legs td {
+    padding: 1px 0;
+}
+
+.ticket-legs td:not(:first-child) {
+    text-align: right;
+}
+
+main {
+    position: relative;
+    min-width: 0;
+}
+
+perspective-viewer {
+    position: absolute;
+    inset: 0;
+    --psp-icon--buy--mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M8 1.5 14 8.5h-3.5V14h-5V8.5H2z'/></svg>");
+    --psp-icon--sell--mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M8 14.5 2 7.5h3.5V2h5v5.5H14z'/></svg>");
+}
