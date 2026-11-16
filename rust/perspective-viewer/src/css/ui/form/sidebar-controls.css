@@ -1,0 +1,56 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+:host {
+    .sidebar-controls {
+        display: flex;
+        flex: 0 0 auto;
+        gap: 0.333333em;
+        padding: 12px 8px 0px 0px;
+        align-items: center;
+
+        button {
+            appearance: none;
+            background-color: transparent;
+            border-radius: 3px;
+            border: 1px solid var(--psp--color);
+            color: inherit;
+            cursor: pointer;
+            flex: 0 1 80px;
+            font-family: inherit;
+            font-size: 9px;
+            text-transform: uppercase;
+            height: 24px;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            width: 0px;
+
+            &:not([disabled]):hover {
+                background-color: var(--psp--color);
+                color: var(--psp--background-color);
+            }
+
+            &[aria-pressed="false"] {
+                color: var(--psp-inactive--color, #6e6e6e);
+                border-color: var(--psp-inactive--color, #6e6e6e);
+                border-style: dashed;
+                text-decoration: line-through;
+            }
+
+            &[disabled] {
+                cursor: not-allowed;
+                opacity: 0.2;
+            }
+        }
+    }
+}

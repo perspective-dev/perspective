@@ -20,9 +20,12 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use futures::future::{AbortHandle, Abortable};
-use perspective_js::utils::{ApiError, ApiResult};
+use perspective_js::utils::{ApiError, ApiFuture, ApiResult};
+use wasm_bindgen::prelude::*;
 
-use super::runtime::AgentRuntime;
+use super::runtime::{AgentRuntime, TurnError};
+use super::sandbox::AgentSandbox;
+use super::tools::Entitlement;
 use crate::utils::PubSub;
 
 /// One rendered transcript entry. `Tool` entries are appended live as the
@@ -46,6 +49,7 @@ pub enum ChatEntry {
         error: Option<String>,
     },
     Error(String),
+    Stopped,
 }
 
 /// The in-flight turn's live tail: `(content, reasoning)` accumulated so
@@ -61,6 +65,7 @@ pub struct AgentSlot {
     pending: Rc<RefCell<Option<PendingTail>>>,
     busy: Rc<Cell<bool>>,
     abort: Rc<RefCell<Option<AbortHandle>>>,
+    sandbox: Rc<AgentSandbox>,
 
     /// Fires on any observable change: configuration, transcript append,
     /// streaming delta, busy-flag flip.
@@ -84,6 +89,12 @@ impl AgentSlot {
         self.on_update.emit(());
     }
 
+    /// The scripts started by `run_script`, which outlive agent
+    /// reconfiguration.
+    pub fn sandbox(&self) -> Rc<AgentSandbox> {
+        self.sandbox.clone()
+    }
+
     pub fn is_configured(&self) -> bool {
         self.runtime.borrow().is_some()
     }
@@ -95,6 +106,24 @@ impl AgentSlot {
     /// Provider/model badge text for the chat UI.
     pub fn label(&self) -> Option<String> {
         self.runtime.borrow().as_ref().map(|x| x.label())
+    }
+
+    /// The user-toggleable entitlements of the host's grant.
+    pub fn entitlements(&self) -> Vec<(Entitlement, bool)> {
+        self.runtime
+            .borrow()
+            .as_ref()
+            .map(|x| x.entitlements())
+            .unwrap_or_default()
+    }
+
+    /// Enable or disable a granted entitlement from the next turn on.
+    pub fn set_entitlement(&self, entitlement: Entitlement, enabled: bool) {
+        if let Some(runtime) = self.runtime.borrow().as_ref() {
+            runtime.set_entitlement(entitlement, enabled);
+        }
+
+        self.on_update.emit(());
     }
 
     pub fn transcript(&self) -> Vec<ChatEntry> {
@@ -140,6 +169,15 @@ impl AgentSlot {
     /// transcript AND propagate to the caller. Rejects if a turn is already
     /// running.
     pub async fn run_prompt(&self, prompt: String) -> ApiResult<String> {
+        self.run(Some(prompt)).await
+    }
+
+    /// Retry the failed turn from its committed messages.
+    pub async fn retry(&self) -> ApiResult<String> {
+        self.run(None).await
+    }
+
+    async fn run(&self, prompt: Option<String>) -> ApiResult<String> {
         let runtime = self
             .runtime
             .borrow()
@@ -152,9 +190,16 @@ impl AgentSlot {
 
         let (handle, registration) = AbortHandle::new_pair();
         *self.abort.borrow_mut() = Some(handle);
-        self.transcript
-            .borrow_mut()
-            .push(ChatEntry::User(prompt.clone()));
+        {
+            let mut transcript = self.transcript.borrow_mut();
+            match &prompt {
+                Some(prompt) => transcript.push(ChatEntry::User(prompt.clone())),
+                None if matches!(transcript.last(), Some(ChatEntry::Error(_))) => {
+                    transcript.pop();
+                },
+                None => {},
+            }
+        }
 
         self.on_update.emit(());
         let on_delta = {
@@ -189,24 +234,40 @@ impl AgentSlot {
 
                 Ok(text)
             },
-            Ok(Err(err)) => {
+            Ok(Err(TurnError::Settled)) => Err(ApiError::from("No failed agent turn to retry")),
+            Ok(Err(TurnError::Failed(err))) => {
                 self.transcript
                     .borrow_mut()
                     .push(ChatEntry::Error(format!("{err}")));
 
-                Err(err)
+                Err(self.with_retry(err))
             },
             Err(futures::future::Aborted) => {
-                self.transcript
-                    .borrow_mut()
-                    .push(ChatEntry::Error("Stopped".to_owned()));
-
+                self.transcript.borrow_mut().push(ChatEntry::Stopped);
                 Err(ApiError::from("Stopped"))
             },
         };
 
         self.on_update.emit(());
         result
+    }
+
+    fn with_retry(&self, err: ApiError) -> ApiError {
+        let slot = self.clone();
+        let retry = Closure::<dyn Fn() -> js_sys::Promise>::new(move || {
+            let slot = slot.clone();
+            js_sys::Promise::from(ApiFuture::new(async move {
+                Ok(JsValue::from(slot.retry().await?))
+            }))
+        });
+
+        let _ = js_sys::Reflect::set(
+            &JsValue::from(err.clone()),
+            &JsValue::from_str("retry"),
+            &retry.into_js_value(),
+        );
+
+        err
     }
 
     /// Cancel the in-flight turn (no-op when idle).

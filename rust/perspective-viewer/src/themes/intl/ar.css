@@ -131,6 +131,13 @@ perspective-viewer {
     --psp-label--chat-reasoning--content: "الاستدلال";
     --psp-label--chat-send--content: "إرسال";
     --psp-label--chat-stop--content: "إيقاف";
+    --psp-label--chat-retry--content: "إعادة المحاولة";
+    --psp-label--chat-entitlement--read-view--content: "قراءة";
+    --psp-label--chat-entitlement--configure-view--content: "تكوين";
+    --psp-label--chat-entitlement--manage-layout--content: "التخطيط";
+    --psp-label--chat-entitlement--read-docs--content: "المستندات";
+    --psp-label--chat-entitlement--execute-code--content: "البرامج النصية";
+    --psp-label--chat-reset--content: "إعادة تعيين";
     --psp-label--chat-placeholder--content: "اسأل عن بياناتك…";
 
     --psp-label--role--x-axis--content: "المحور X";

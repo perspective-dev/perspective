@@ -94,11 +94,18 @@ pub struct FunctionDef {
 pub struct ChatRequest<'a> {
     pub model: &'a str,
     pub messages: &'a [ChatMessage],
+
+    /// Omitted when empty, which some providers reject.
+    #[serde(skip_serializing_if = "no_tools")]
     pub tools: &'a [ToolDef],
 
     /// Always `true`; servers that ignore it get the buffered fallback in
     /// `transport.rs`, so streaming needs no configuration surface.
     pub stream: bool,
+}
+
+fn no_tools(tools: &&[ToolDef]) -> bool {
+    tools.is_empty()
 }
 
 #[derive(Deserialize)]

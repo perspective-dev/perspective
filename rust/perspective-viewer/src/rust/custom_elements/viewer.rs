@@ -768,6 +768,8 @@ impl PerspectiveViewerElement {
     /// ```
     pub fn delete(self) -> ApiFuture<()> {
         self.presentation.set_command_schema(None, vec![]);
+        #[cfg(feature = "llm-agent")]
+        self.presentation.agent.sandbox().stop_all();
         let subs = std::mem::take(&mut *self.hosted_table_subs.borrow_mut());
         let teardown = delete_all(&self.workspace, &self.root);
         ApiFuture::new(async move {
@@ -2456,9 +2458,10 @@ impl PerspectiveViewerElement {
     ///   opening user turn.
     /// - `config.entitlements` - access grants limiting which tools the agent
     ///   is offered (and may call): any of `"read_view"`, `"configure_view"`,
-    ///   `"manage_layout"`, `"read_docs"`, `"read_data"`. Omitted, all but
-    ///   `"read_data"` are granted; `["read_view", "read_docs"]` yields a
-    ///   read-only agent.
+    ///   `"manage_layout"`, `"read_docs"`, `"execute_code"`, `"read_data"`.
+    ///   Omitted, all but `"execute_code"` and `"read_data"` are granted;
+    ///   `["read_view", "read_docs"]` yields a read-only agent. Users may
+    ///   switch granted entitlements off from the chat panel, never on.
     ///
     /// # JavaScript Examples
     ///
@@ -2486,7 +2489,8 @@ impl PerspectiveViewerElement {
     /// conversation history (and the chat sidebar's transcript) until
     /// `agentReset()`; a call made while a turn is already running rejects.
     /// Tool activity is emitted as `perspective-agent-tool` CustomEvents on
-    /// this element.
+    /// this element. A failed turn rejects with an `Error` whose `retry()`
+    /// method retries it, returning a `Promise` that settles like this one.
     ///
     /// # JavaScript Examples
     ///

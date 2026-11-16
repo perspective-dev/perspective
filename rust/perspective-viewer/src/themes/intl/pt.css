@@ -133,6 +133,13 @@ perspective-viewer {
     --psp-label--chat-reasoning--content: "Raciocínio";
     --psp-label--chat-send--content: "Enviar";
     --psp-label--chat-stop--content: "Parar";
+    --psp-label--chat-retry--content: "Tentar novamente";
+    --psp-label--chat-entitlement--read-view--content: "Ler";
+    --psp-label--chat-entitlement--configure-view--content: "Configurar";
+    --psp-label--chat-entitlement--manage-layout--content: "Layout";
+    --psp-label--chat-entitlement--read-docs--content: "Docs";
+    --psp-label--chat-entitlement--execute-code--content: "Scripts";
+    --psp-label--chat-reset--content: "Redefinir";
     --psp-label--chat-placeholder--content: "Pergunte sobre seus dados…";
 
     /* Plugin-declared pivot roles (PluginStaticConfig) */

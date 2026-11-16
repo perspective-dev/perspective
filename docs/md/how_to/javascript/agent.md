@@ -82,8 +82,8 @@ viewer.agentConfig({
 
 The agent acts only through tools, each gated by an _entitlement_. Pass
 `entitlements` to `agentConfig` to grant a subset; the default grants every
-entitlement except `read_data`. A tool whose entitlement is withheld is never
-offered to the model.
+entitlement except `execute_code` and `read_data`. A tool whose entitlement is
+withheld is never offered to the model.
 
 | Entitlement      | Tools                                                                                                                     |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -91,6 +91,7 @@ offered to the model.
 | `configure_view` | `set_view_config`                                                                                                         |
 | `manage_layout`  | `add_panel`, `remove_panel`, `activate_panel`, `set_workspace`                                                            |
 | `read_docs`      | `search_docs`                                                                                                             |
+| `execute_code`   | `run_script`, `list_scripts`, `stop_script`                                                                               |
 
 `manage_layout` covers the whole dashboard: adding and removing panels, and
 through `set_workspace` arranging them into a grid, defining derived tables,
@@ -104,6 +105,10 @@ viewer.agentConfig({
     entitlements: ["read_view", "configure_view", "read_docs"],
 });
 ```
+
+`execute_code` lets the agent write and run JavaScript that loads external data
+into new tables. It is experimental and never granted by default; see
+[Letting the agent load data with scripts](./agent_scripts.md).
 
 ## The documentation bundle
 

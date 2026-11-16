@@ -133,6 +133,13 @@ perspective-viewer {
     --psp-label--chat-reasoning--content: "推論";
     --psp-label--chat-send--content: "送信";
     --psp-label--chat-stop--content: "停止";
+    --psp-label--chat-retry--content: "再試行";
+    --psp-label--chat-entitlement--read-view--content: "読み取り";
+    --psp-label--chat-entitlement--configure-view--content: "設定";
+    --psp-label--chat-entitlement--manage-layout--content: "レイアウト";
+    --psp-label--chat-entitlement--read-docs--content: "ドキュメント";
+    --psp-label--chat-entitlement--execute-code--content: "スクリプト";
+    --psp-label--chat-reset--content: "リセット";
     --psp-label--chat-placeholder--content: "データについて質問…";
 
     /* Plugin-declared pivot roles (PluginStaticConfig) */

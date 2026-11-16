@@ -15,9 +15,11 @@ mod config;
 mod docs;
 mod markdown;
 mod runtime;
+mod sandbox;
 mod slot;
 mod tools;
 
 pub use markdown::render_markdown;
 pub use runtime::AgentRuntime;
 pub use slot::{AgentSlot, ChatEntry};
+pub use tools::{Entitlement, tool_names};

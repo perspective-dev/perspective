@@ -221,6 +221,152 @@ test.describe("llm-agent http transport", () => {
         expect(error).toContain("Incorrect API key provided");
     });
 
+    test("a failed turn rejects with a retry() that continues it", async ({
+        page,
+    }) => {
+        const calls = [];
+        await scripted_route(
+            page,
+            [
+                {
+                    tool: "set_view_config",
+                    args: { config: { group_by: ["State"] } },
+                },
+                { status: 503 },
+                { text: "Recovered." },
+            ],
+            calls,
+        );
+
+        const result = await page.evaluate(async (base_url) => {
+            const viewer = document.querySelector("perspective-viewer");
+            await viewer.restore({ plugin: "Debug" });
+            viewer.agentConfig({
+                url: `${base_url}/chat/completions`,
+            });
+
+            let error;
+            try {
+                await viewer.agentPrompt("Group by state");
+            } catch (e) {
+                error = e;
+            }
+
+            const answer = await error.retry();
+            let settled;
+            try {
+                await error.retry();
+            } catch (e) {
+                settled = e.message;
+            }
+
+            const config = await viewer.save();
+            return {
+                message: error.message,
+                answer,
+                settled,
+                group_by: config.group_by,
+            };
+        }, BASE_URL);
+
+        expect(result.message).toContain("503");
+        expect(result.answer).toEqual("Recovered.");
+        expect(result.settled).toEqual("No failed agent turn to retry");
+        expect(result.group_by).toEqual(["State"]);
+        expect(calls.length).toEqual(3);
+        expect(calls[2].body.messages).toEqual(calls[1].body.messages);
+        expect(calls[2].body.messages.map((x) => x.role)).toEqual([
+            "system",
+            "user",
+            "assistant",
+            "tool",
+        ]);
+    });
+
+    test("a prompt after a failed turn keeps the failed turn's messages", async ({
+        page,
+    }) => {
+        const calls = [];
+        await scripted_route(
+            page,
+            [{ tool: "get_schema" }, { status: 503 }, { text: "Done." }],
+            calls,
+        );
+
+        const answer = await page.evaluate(async (base_url) => {
+            const viewer = document.querySelector("perspective-viewer");
+            await viewer.restore({ plugin: "Debug" });
+            viewer.agentConfig({
+                url: `${base_url}/chat/completions`,
+            });
+
+            await viewer.agentPrompt("first").catch(() => {});
+            return await viewer.agentPrompt("second");
+        }, BASE_URL);
+
+        expect(answer).toEqual("Done.");
+        expect(calls[2].body.messages.map((x) => x.role)).toEqual([
+            "system",
+            "user",
+            "assistant",
+            "tool",
+            "user",
+        ]);
+    });
+
+    test("the retry button continues a failed turn", async ({ page }) => {
+        const calls = [];
+        await scripted_route(
+            page,
+            [
+                {
+                    status: 401,
+                    body: { error: { message: "Unauthorized" } },
+                },
+                {
+                    status: 401,
+                    body: { error: { message: "Still unauthorized" } },
+                },
+                { text: "Recovered." },
+            ],
+            calls,
+        );
+
+        await page.evaluate(async (base_url) => {
+            const viewer = document.querySelector("perspective-viewer");
+            await viewer.restore({ plugin: "Debug", settings: true });
+            viewer.agentConfig({
+                url: `${base_url}/chat/completions`,
+            });
+        }, BASE_URL);
+
+        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        const input = page.locator("perspective-viewer #chat_input");
+        await input.fill("hello");
+        await input.press("Enter");
+
+        const log = page.locator("perspective-viewer #chat_log");
+        await expect(log.locator(".chat-error")).toContainText("401");
+        await log.locator("#chat_retry_button").click();
+        await expect(log.locator(".chat-error")).toHaveText([
+            /Still unauthorized/,
+        ]);
+
+        await log.locator("#chat_retry_button").click();
+        await expect(
+            log.locator(".chat-assistant:not(.chat-pending)"),
+        ).toHaveText("Recovered.");
+
+        await expect(log.locator(".chat-error")).toHaveCount(0);
+        await expect(log.locator("#chat_retry_button")).toHaveCount(0);
+        await expect(log.locator(".chat-user")).toHaveCount(1);
+        expect(calls.length).toEqual(3);
+        expect(calls[2].body.messages.map((x) => x.role)).toEqual([
+            "system",
+            "user",
+        ]);
+    });
+
     test("stop aborts an in-flight fetch", async ({ page }) => {
         await scripted_route(page, [{ hang: true }], []);
         await page.evaluate(async (base_url) => {
@@ -241,6 +387,7 @@ test.describe("llm-agent http transport", () => {
         await page.locator("perspective-viewer #chat_stop_button").click();
         await expect(log.locator(".chat-error")).toHaveText("Stopped");
         await compareInnerHTMLToSnapshot(log, ["stopped"]);
+        await expect(log.locator("#chat_retry_button")).toHaveCount(0);
         await expect(input).toBeEnabled();
     });
 });
