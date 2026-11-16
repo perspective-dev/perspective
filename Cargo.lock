@@ -1920,7 +1920,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "perspective"
-version = "5.9.1"
+version = "5.9.2"
 dependencies = [
  "async-lock",
  "axum",
@@ -1946,7 +1946,7 @@ dependencies = [
 
 [[package]]
 name = "perspective-client"
-version = "5.9.1"
+version = "5.9.2"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -1976,7 +1976,7 @@ dependencies = [
 
 [[package]]
 name = "perspective-js"
-version = "5.9.1"
+version = "5.9.2"
 dependencies = [
  "bytes",
  "chrono",
@@ -2003,14 +2003,14 @@ dependencies = [
 
 [[package]]
 name = "perspective-lint"
-version = "5.9.1"
+version = "5.9.2"
 dependencies = [
  "yew-fmt",
 ]
 
 [[package]]
 name = "perspective-migrate"
-version = "5.9.1"
+version = "5.9.2"
 dependencies = [
  "perspective-client",
  "serde",
@@ -2022,7 +2022,7 @@ dependencies = [
 
 [[package]]
 name = "perspective-python"
-version = "5.9.1"
+version = "5.9.2"
 dependencies = [
  "async-lock",
  "bytes",
@@ -2048,7 +2048,7 @@ dependencies = [
 
 [[package]]
 name = "perspective-server"
-version = "5.9.1"
+version = "5.9.2"
 dependencies = [
  "async-lock",
  "cmake",
@@ -2068,7 +2068,7 @@ dependencies = [
 
 [[package]]
 name = "perspective-viewer"
-version = "5.9.1"
+version = "5.9.2"
 dependencies = [
  "anyhow",
  "async-lock",
@@ -2644,7 +2644,7 @@ dependencies = [
 
 [[package]]
 name = "rust-axum"
-version = "5.9.1"
+version = "5.9.2"
 dependencies = [
  "axum",
  "futures",
@@ -3715,7 +3715,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

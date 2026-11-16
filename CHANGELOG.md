@@ -1,3 +1,16 @@
+# [v5.9.2](https://github.com/perspective-dev/perspective/releases/tag/v5.9.2)
+
+_16 November 2026_ ([Full changelog](https://github.com/perspective-dev/perspective/compare/v5.9.1...v5.9.2))
+
+Features
+
+- Add `run_scripts` tool to Agent [#3289](https://github.com/perspective-dev/perspective/pull/3289)
+- Custom commands [#3284](https://github.com/perspective-dev/perspective/pull/3284)
+
+Fixes
+
+- Fix copy command [#3290](https://github.com/perspective-dev/perspective/pull/3290)
+
 # [v5.9.1](https://github.com/perspective-dev/perspective/releases/tag/v5.9.1)
 
 _12 November 2026_ ([Full changelog](https://github.com/perspective-dev/perspective/compare/v5.9.0...v5.9.1))
