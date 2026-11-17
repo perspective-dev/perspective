@@ -22,6 +22,7 @@ const URLS = {
     client_wasm: `${CLIENT}/dist/wasm/perspective-js.wasm`,
     wasm32: `${SERVER}/dist/wasm/perspective-server.wasm`,
     wasm64: `${SERVER}/dist/wasm/perspective-server.memory64.wasm`,
+    pkg: `${CLIENT}/package.json`,
 };
 
 async function in_page(page, fn, args = {}) {
@@ -237,6 +238,87 @@ test.describe("wasm registry", () => {
         test.expect(result).toContain(
             "cannot share a page with Perspective 0.0.0",
         );
+    });
+
+    test("another minor release on the page rejects init()", async ({
+        page,
+    }) => {
+        const result = await in_page(page, async ({ urls }) => {
+            const { version } = await (await fetch(urls.pkg)).json();
+            const [major, minor] = version.split(".");
+            const other = `${major}.${Number(minor) + 1}.0`;
+            globalThis[Symbol.for("@perspective-dev/wasm")] = new Map([
+                [
+                    `${major}.${Number(minor) + 1}`,
+                    {
+                        versions: new Set([other]),
+                        sources: {},
+                        consumed: new Set(),
+                    },
+                ],
+            ]);
+
+            const perspective = await import(urls.esm);
+            try {
+                await perspective.init({ server: fetch(urls.wasm32) });
+                return { other, message: "initialized" };
+            } catch (e) {
+                return { other, message: e.message };
+            }
+        });
+
+        test.expect(result.message).toContain(
+            `cannot share a page with Perspective ${result.other}`,
+        );
+    });
+
+    test("another patch of this minor release on the page warns once, then shares the registry", async ({
+        page,
+    }) => {
+        const result = await in_page(page, async ({ urls }) => {
+            const { version } = await (await fetch(urls.pkg)).json();
+            const [major, minor] = version.split(".");
+            const other = `${major}.${minor}.999`;
+            globalThis[Symbol.for("@perspective-dev/wasm")] = new Map([
+                [
+                    `${major}.${minor}`,
+                    {
+                        versions: new Set([other]),
+                        sources: {},
+                        consumed: new Set(),
+                    },
+                ],
+            ]);
+
+            const warnings = [];
+            const warn = console.warn;
+            console.warn = (...args) => {
+                warnings.push(args.join(" "));
+                warn(...args);
+            };
+
+            const perspective = await import(urls.esm);
+            await perspective.init({
+                client: fetch(urls.client_wasm),
+                server: fetch(urls.wasm32),
+            });
+
+            const client = await perspective.worker();
+            const table = await client.table({ x: [1, 2, 3] });
+            const size = await table.size();
+            console.warn = warn;
+            return {
+                other,
+                size,
+                warnings: warnings.filter((x) =>
+                    x.includes("is sharing a page with"),
+                ),
+            };
+        });
+
+        test.expect(result.size).toEqual(3);
+        test.expect(result.warnings).toHaveLength(1);
+        test.expect(result.warnings[0]).toContain(result.other);
     });
 
     test("another version on the page leaves this version's worker() working", async ({

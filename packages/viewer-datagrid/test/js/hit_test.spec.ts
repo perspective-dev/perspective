@@ -15,7 +15,27 @@ import type { Locator, Page } from "@playwright/test";
 
 const GRID = "perspective-viewer-datagrid regular-table";
 
-async function setup(page: Page, config: Record<string, unknown>) {
+interface TableFixture {
+    name: string;
+    data: Record<string, unknown[]>;
+    index: string[];
+}
+
+const COMPOSITE: TableFixture = {
+    name: "composite",
+    data: {
+        name: ["AAPL", "AAPL", "MSFT"],
+        sector: ["Tech", "Hardware", "Tech"],
+        price: [1, 3, 2],
+    },
+    index: ["name", "sector"],
+};
+
+async function setup(
+    page: Page,
+    config: Record<string, unknown>,
+    table?: TableFixture,
+) {
     await page.goto("/tools/test/src/html/basic-test.html");
     await page.evaluate(async () => {
         while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
@@ -23,16 +43,31 @@ async function setup(page: Page, config: Record<string, unknown>) {
         }
     });
 
-    await page.evaluate(async (config) => {
-        const viewer = document.querySelector("perspective-viewer") as any;
-        await viewer.restore({ plugin: "Datagrid", ...config });
-        await viewer.flush();
-        (window as any).__CONTEXTS__ = [];
-        await viewer.setCommandSchema((context) => {
-            (window as any).__CONTEXTS__.push(context);
-            return { commands: [] };
-        });
-    }, config);
+    await page.evaluate(
+        async ({ config, table }) => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            if (table) {
+                await (window as any).__TEST_WORKER__.table(table.data, {
+                    name: table.name,
+                    index: table.index,
+                });
+            }
+
+            await viewer.restore({
+                plugin: "Datagrid",
+                ...(table ? { table: table.name } : {}),
+                ...config,
+            });
+
+            await viewer.flush();
+            (window as any).__CONTEXTS__ = [];
+            await viewer.setCommandSchema((context) => {
+                (window as any).__CONTEXTS__.push(context);
+                return { commands: [] };
+            });
+        },
+        { config, table },
+    );
 }
 
 async function rightClick(
@@ -100,7 +135,13 @@ test.describe("Datagrid hit_test", () => {
         expect(hit.kind).toBe("cell");
         expect(hit.column_path).toEqual(["Central"]);
         expect(hit.column_names).toEqual(["Sales"]);
-        expect(hit.config).toEqual({ filter: [["Region", "==", "Central"]] });
+        expect(hit.id).toEqual([1]);
+        expect(hit.config).toEqual({
+            filter: [
+                ["Row ID", "==", 1],
+                ["Region", "==", "Central"],
+            ],
+        });
     });
 
     test("a column header reports its column without a row", async ({
@@ -189,5 +230,41 @@ test.describe("Datagrid hit_test", () => {
         });
 
         expect("hit" in context).toBe(false);
+    });
+
+    test("a composite-indexed cell reports its key tuple and selects by it", async ({
+        page,
+    }) => {
+        await setup(page, { columns: ["name", "sector", "price"] }, COMPOSITE);
+        const cell = page.locator(`${GRID} tbody tr`).first().locator("td");
+        const { hit } = await rightClick(page, cell.first());
+        expect(hit.kind).toBe("cell");
+        expect(hit.value).toBe("AAPL");
+        expect(hit.id).toEqual(["AAPL", "Hardware"]);
+        expect(hit.config).toEqual({
+            filter: [
+                ["name", "==", "AAPL"],
+                ["sector", "==", "Hardware"],
+            ],
+        });
+    });
+
+    test("a split_by-only composite-indexed row reports its key tuple", async ({
+        page,
+    }) => {
+        await setup(
+            page,
+            { columns: ["price"], split_by: ["sector"] },
+            COMPOSITE,
+        );
+
+        const cell = page.locator(`${GRID} tbody tr`).first().locator("td");
+        const { hit } = await rightClick(page, cell.first());
+        expect(hit.kind).toBe("cell");
+        expect(hit.id).toHaveLength(2);
+        expect(hit.config.filter.slice(0, 2)).toEqual([
+            ["name", "==", hit.id[0]],
+            ["sector", "==", hit.id[1]],
+        ]);
     });
 });

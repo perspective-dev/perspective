@@ -30,4 +30,9 @@ pub enum Notice {
         pointer: String,
         reason: &'static str,
     },
+
+    /// The object at `pointer` was written by `version`, a newer patch
+    /// release of this crate's `major.minor` schema, and was neither migrated
+    /// nor re-stamped.
+    NewerPatch { pointer: String, version: String },
 }

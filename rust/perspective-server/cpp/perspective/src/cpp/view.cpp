@@ -1784,7 +1784,7 @@ View<t_ctxunit>::get_row_path(t_uindex idx) const {
 template <typename CTX_T>
 std::vector<t_tscalar>
 View<CTX_T>::get_row_path(t_uindex idx) const {
-    return m_ctx->unity_get_row_path(idx);
+    return m_ctx->unity_get_row_path(idx + m_row_offset);
 }
 
 template <typename CTX_T>
@@ -2820,7 +2820,7 @@ View<t_ctx2>::to_columns(
         writer.StartArray();
         for (auto r = start_row; r < end_row; ++r) {
             writer.StartArray();
-            const auto row_path = m_ctx->get_row_path(r);
+            const auto row_path = get_row_path(r);
             for (auto entry = row_path.size(); entry > 0; entry--) {
                 const t_tscalar& scalar = row_path[entry - 1];
                 write_id_entry(scalar, is_formatted, writer);

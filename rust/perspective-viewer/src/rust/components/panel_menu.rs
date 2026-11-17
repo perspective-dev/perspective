@@ -322,9 +322,9 @@ impl PanelMenu {
                     } else {
                         item("Maximize", cmd(PanelCommand::Maximize), false)
                     },
-                    // Never gated: masters broadcast from ANY select/click event
-                    // (flat grids fall back to the clicked cell's `==` clause), not
-                    // just a grouped row tree.
+                    // Never gated: masters broadcast from ANY select/click
+                    // event (flat grids fall back to the clicked cell's `==`
+                    // clause), not just a grouped row tree.
                     item(
                         if is_master { "Detail" } else { "Master" },
                         cmd(PanelCommand::ToggleMaster),

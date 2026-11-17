@@ -670,7 +670,8 @@ impl<T: VirtualServerHandler> VirtualServer<T> {
                 respond!(msg, TableDeleteResp {})
             },
 
-            // Stub implementations for callback/update requests that VirtualServer doesn't support
+            // Stub implementations for callback/update requests that
+            // VirtualServer doesn't support
             TableOnDeleteReq(_) => {
                 respond!(msg, TableOnDeleteResp {})
             },

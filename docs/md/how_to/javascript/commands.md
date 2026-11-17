@@ -151,10 +151,13 @@ A chart mark is a `"cell"` of its measure column, without a `value`.
 
 `config.filter` is the panel's filter plus one clause per `group_by` level of
 the row and per `split_by` level of the column, and, when the view is not
-grouped and the table has an index, one clause per index column from `id`.
-`config.expressions` is the panel's expressions whenever it has any, so the
-patch is viewable when a filter names one. A flat row of an unindexed table has
-no stable identity, so its `config` selects only what the panel's filter does.
+grouped and the table has an index, one clause per index column from `id`. For a
+composite index, `id` is the key tuple in index order, such as
+`["AAPL", "Tech"]`, rather than the nested `[["AAPL", "Tech"]]` that
+`to_json({ id: true })` reports. `config.expressions` is the panel's expressions
+whenever it has any, so the patch is viewable when a filter names one. A flat
+row of an unindexed table has no stable identity, so its `config` selects only
+what the panel's filter does.
 
 The hit does not carry the row. A command that needs more of it fetches it in
 its listener, where `async` is available. `y` and `x` address the view as it was

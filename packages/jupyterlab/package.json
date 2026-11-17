@@ -49,11 +49,11 @@
         "test:jupyter:build": "node ./build.mjs"
     },
     "dependencies": {
-        "@perspective-dev/viewer-charts": "workspace:^",
-        "@perspective-dev/viewer-datagrid": "workspace:^",
-        "@perspective-dev/viewer": "workspace:^",
-        "@perspective-dev/client": "workspace:^",
-        "@perspective-dev/server": "workspace:^",
+        "@perspective-dev/viewer-charts": "workspace:~",
+        "@perspective-dev/viewer-datagrid": "workspace:~",
+        "@perspective-dev/viewer": "workspace:~",
+        "@perspective-dev/client": "workspace:~",
+        "@perspective-dev/server": "workspace:~",
         "@jupyterlab/application": ">2 <5",
         "@lumino/widgets": "<3"
     },

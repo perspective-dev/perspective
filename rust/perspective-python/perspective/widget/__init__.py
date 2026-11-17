@@ -15,16 +15,13 @@ import json
 import logging
 import os
 import pathlib
-import re
-import importlib.metadata
 import inspect
 
 from string import Template
 import anywidget
 from traitlets import observe
 from .viewer import PerspectiveViewer
-
-__version__ = re.sub(".dev[0-9]+", "", importlib.metadata.version("perspective-python"))
+from .viewer.viewer_traitlets import __version__
 
 __all__ = ["PerspectiveWidget"]
 

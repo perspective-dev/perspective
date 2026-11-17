@@ -196,8 +196,8 @@ pub struct CustomNumberFormatConfig {
 
     // see Digit Options
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat/NumberFormat#minimumintegerdigits
-    // these min/max props can all be specified but it results in possible conflicts
-    // may consider making them distinct options
+    // these min/max props can all be specified but it results in possible
+    // conflicts may consider making them distinct options
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional, as = "Option<_>")]
     pub minimum_integer_digits: Option<f64>,
@@ -224,7 +224,8 @@ pub struct CustomNumberFormatConfig {
 
     // specific values https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat/NumberFormat#roundingincrement
     // Only available with automatic rounding priority
-    // Cannot be mixed with sigfig rounding. (Does this mean max/min sigfig must be unset?)
+    // Cannot be mixed with sigfig rounding. (Does this mean max/min sigfig must
+    // be unset?)
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional, as = "Option<_>")]
     pub rounding_increment: Option<f64>,

@@ -109,5 +109,6 @@
 # Reference
 
 - [Benchmarks](./benchmarks.md)
+- [Versioning](./versioning.md)
 - [Glossary](./glossary.md)
 - [FAQ](./FAQ.md)

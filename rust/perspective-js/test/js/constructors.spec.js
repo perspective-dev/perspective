@@ -1391,6 +1391,43 @@ function validate_typed_array(typed_array, column_data) {
             table.delete();
         });
 
+        test("`__ID__` on a column-only view is each row's key", async function () {
+            const table = await perspective.table(data);
+            const indexed = await perspective.table(data, { index: "y" });
+            const view = await table.view({ split_by: ["z"] });
+            const indexed_view = await indexed.view({ split_by: ["z"] });
+            expect((await view.to_columns({ id: true })).__ID__).toEqual([
+                [0],
+                [1],
+                [2],
+                [3],
+            ]);
+
+            expect(
+                (await indexed_view.to_columns({ id: true })).__ID__,
+            ).toEqual([["a"], ["b"], ["c"], ["d"]]);
+
+            const rows = await indexed_view.to_json({ id: true });
+            expect(rows.map((row) => row.__ID__)).toEqual([
+                ["a"],
+                ["b"],
+                ["c"],
+                ["d"],
+            ]);
+
+            const tail = await indexed_view.to_columns({
+                id: true,
+                start_row: 2,
+                end_row: 4,
+            });
+
+            expect(tail.__ID__).toEqual([["c"], ["d"]]);
+            await indexed_view.delete();
+            await view.delete();
+            await indexed.delete();
+            await table.delete();
+        });
+
         test.skip("Handles inconsistent rows with same width", async function () {
             const int_to_float = [
                 { x: 1, y: 2 },

@@ -13,8 +13,9 @@
 from traitlets import HasTraits, Unicode, List, Bool, Dict, Enum
 
 import importlib.metadata
+import re
 
-__version__ = importlib.metadata.version("perspective-python")
+__version__ = re.sub(".dev[0-9]+", "", importlib.metadata.version("perspective-python"))
 
 
 class PerspectiveTraitlets(HasTraits):

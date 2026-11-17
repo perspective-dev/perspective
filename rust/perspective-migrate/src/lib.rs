@@ -165,9 +165,21 @@ impl Migrator {
         }
 
         let schema = self.schema_version();
-        let from = match value.get("version").and_then(Value::as_str).or(from) {
-            Some(version) => check_version(version, schema)?,
+        let mut versions = vec![];
+        let declared = value
+            .get("version")
+            .and_then(Value::as_str)
+            .or(from)
+            .map(str::to_owned);
+
+        let from = match &declared {
+            Some(version) => check_version(version, schema, "", &mut versions)?,
             None => Version::new(2, 0, 0),
+        };
+
+        let root_version = match declared {
+            Some(version) if from > schema => version,
+            _ => schema.to_string(),
         };
 
         let entries = self.entries();
@@ -177,16 +189,19 @@ impl Migrator {
             from,
             schema,
             known_plugins: &known_plugins,
+            versions,
             notices: vec![],
             steps: vec![],
         };
 
         run.apply(&entries, &mut value)?;
-        stamp(kind, &schema.to_string(), &mut value);
+        stamp(kind, schema, &root_version, &mut value);
         validate(kind, Form::Update, &value)?;
+        let mut notices = run.versions;
+        notices.extend(run.notices);
         Ok(Migrated {
             value,
-            notices: run.notices,
+            notices,
             steps: run.steps,
         })
     }
@@ -202,12 +217,12 @@ impl Migrator {
             .iter()
             .map(|x| x.step.at)
             .max()
-            .unwrap_or_else(Version::crate_version)
+            .unwrap_or_else(version::crate_version)
     }
 
     /// The newest release whose configs this migrator accepts.
     pub fn schema_version(&self) -> Version {
-        self.newest_step_version().max(Version::crate_version())
+        self.newest_step_version().max(version::crate_version())
     }
 
     fn plugin_names(&self) -> Vec<&'static str> {
@@ -253,7 +268,15 @@ impl Migrator {
     }
 }
 
-pub(crate) fn check_version(version: &str, schema: Version) -> Result<Version, MigrateError> {
+/// Parse the `version` of the object at `pointer`, accepting a newer patch
+/// release of `schema`'s `major.minor` with a [`Notice::NewerPatch`] in
+/// `notices`.
+pub(crate) fn check_version(
+    version: &str,
+    schema: Version,
+    pointer: &str,
+    notices: &mut Vec<Notice>,
+) -> Result<Version, MigrateError> {
     let parsed = Version::parse(version).ok_or_else(|| MigrateError::InvalidVersion {
         version: version.to_owned(),
     })?;
@@ -262,32 +285,50 @@ pub(crate) fn check_version(version: &str, schema: Version) -> Result<Version, M
         Err(MigrateError::Unsupported {
             version: version.to_owned(),
         })
-    } else if parsed > schema {
+    } else if parsed <= schema {
+        Ok(parsed)
+    } else if parsed.same_minor(&schema) {
+        let notice = Notice::NewerPatch {
+            pointer: pointer.to_owned(),
+            version: version.to_owned(),
+        };
+
+        if !notices.contains(&notice) {
+            notices.push(notice);
+        }
+
+        Ok(parsed)
+    } else {
         Err(MigrateError::FromFuture {
             version: version.to_owned(),
         })
-    } else {
-        Ok(parsed)
     }
 }
 
-fn stamp(kind: Kind, version: &str, value: &mut Value) {
-    let version = Value::from(version);
+/// Stamp `value` with `root` and each versioned panel with `schema`, leaving a
+/// panel written by a newer patch release as it is.
+fn stamp(kind: Kind, schema: Version, root: &str, value: &mut Value) {
+    let root = Value::from(root);
     match kind {
         Kind::View => {},
         Kind::Viewer | Kind::Panel => {
-            value["version"] = version;
+            value["version"] = root;
         },
         Kind::Workspace => {
+            let current = Value::from(schema.to_string());
             for pointer in panels(value) {
                 if let Some(Value::Object(panel)) = value.pointer_mut(&pointer)
-                    && panel.contains_key("version")
+                    && let Some(version) = panel.get("version")
+                    && !version
+                        .as_str()
+                        .and_then(Version::parse)
+                        .is_some_and(|x| x > schema)
                 {
-                    panel.insert("version".to_owned(), version.clone());
+                    panel.insert("version".to_owned(), current.clone());
                 }
             }
 
-            value["version"] = version;
+            value["version"] = root;
         },
     }
 }

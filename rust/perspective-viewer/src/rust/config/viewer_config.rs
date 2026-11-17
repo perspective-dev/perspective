@@ -12,6 +12,7 @@
 
 use std::sync::LazyLock;
 
+use perspective_client::Version;
 use perspective_client::config::viewer::{ViewerConfig, ViewerConfigInitial, ViewerConfigUpdate};
 use perspective_js::utils::*;
 use serde::{Deserialize, Serialize};
@@ -51,18 +52,29 @@ pub fn saved_version(config: &JsValue) -> Option<String> {
 }
 
 /// Await `result`, naming the release a config was `saved` by in its error
-/// when that is not this release.
+/// when that is outside this release's `major.minor`.
 pub async fn noting_saved_version<T>(
     saved: Option<String>,
     result: impl std::future::Future<Output = ApiResult<T>>,
 ) -> ApiResult<T> {
-    result.await.map_err(|error| match saved {
-        Some(version) if version != *API_VERSION => ApiError::new(format!(
-            "{error} (this config was saved by {version}, and this is {}; configs from older \
-             releases can be upgraded with `perspective-migrate`)",
-            *API_VERSION
-        )),
-        _ => error,
+    result.await.map_err(|error| {
+        let Some(saved) = saved else {
+            return error;
+        };
+
+        let current = Version::parse(&API_VERSION);
+        match (Version::parse(&saved), current) {
+            (Some(version), Some(current)) if version.same_minor(&current) => error,
+            (Some(version), Some(current)) if version < current => ApiError::new(format!(
+                "{error} (this config was saved by {saved}, and this is {}; configs from older \
+                 releases can be upgraded with `perspective-migrate`)",
+                *API_VERSION
+            )),
+            _ => ApiError::new(format!(
+                "{error} (this config was saved by {saved}, and this is {})",
+                *API_VERSION
+            )),
+        }
     })
 }
 

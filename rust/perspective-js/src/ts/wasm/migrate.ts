@@ -24,7 +24,8 @@ export type MigrateKind = "view" | "viewer" | "panel" | "workspace";
  */
 export type MigrateNotice =
     | { kind: "Dropped"; step: string; pointer: string; value: unknown }
-    | { kind: "Approximated"; step: string; pointer: string; reason: string };
+    | { kind: "Approximated"; step: string; pointer: string; reason: string }
+    | { kind: "NewerPatch"; pointer: string; version: string };
 
 /**
  * A config upgraded by `migrate()`, with what the upgrade dropped or

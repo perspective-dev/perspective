@@ -68,7 +68,7 @@
         "access": "public"
     },
     "dependencies": {
-        "@perspective-dev/client": "workspace:^",
+        "@perspective-dev/client": "workspace:~",
         "pro_self_extracting_wasm": "catalog:",
         "regular-layout": "catalog:"
     },

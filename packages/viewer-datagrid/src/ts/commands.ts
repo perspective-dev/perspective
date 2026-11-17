@@ -72,21 +72,27 @@ export function host_viewer(
 }
 
 /**
- * The app's commands for `refs` at `location`, or `undefined` when the
- * location is out of scope, no schema is set, or the host is too old to ask.
+ * The app's commands for `refs` at `location`, none for any ref when the host
+ * throws, or `undefined` when the location is out of scope, no schema is set,
+ * or the host is too old to ask.
  */
 export function query_commands(
     plugin: DatagridPluginElement,
     location: PerspectiveCommandLocation,
     frame: PerspectiveViewFrame,
     refs: PerspectiveHitRef[],
-): PerspectiveCommands[] | undefined {
+): (PerspectiveCommands | undefined)[] | undefined {
     const viewer = host_viewer(plugin);
     if (!viewer?.queryCommands || refs.length === 0) {
         return undefined;
     }
 
-    return viewer.queryCommands(plugin, location, frame, refs);
+    try {
+        return viewer.queryCommands(plugin, location, frame, refs);
+    } catch (error) {
+        console.error(`Failed to query "${location}" commands`, error);
+        return refs.map(() => undefined);
+    }
 }
 
 /**

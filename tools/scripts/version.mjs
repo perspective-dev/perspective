@@ -216,7 +216,7 @@ async function update_package_jsons() {
 
         for (const key of Object.keys(crate?.dependencies)) {
             if (key.startsWith("perspective")) {
-                crate.dependencies[key].version = NEW_VERSION;
+                crate.dependencies[key].version = `~${NEW_VERSION}`;
             }
         }
         fs.writeFileSync(`./${pkg}/Cargo.toml`, toml.stringify(crate));
