@@ -479,6 +479,34 @@ async function subscribe(view) {
                 await view.delete();
                 await cleanup();
             });
+
+            test("`__ID__` on a split_by-only view is each row's tuple", async function () {
+                const { table, cleanup } = await fixture(perspective);
+                const view = await table.view({
+                    split_by: ["sector"],
+                    columns: ["price"],
+                });
+
+                expect((await view.to_columns({ id: true })).__ID__).toEqual([
+                    [["AAPL", "Hardware"]],
+                    [["AAPL", "Tech"]],
+                    [["MSFT", "Tech"]],
+                ]);
+
+                const rows = await view.to_json({
+                    id: true,
+                    start_row: 1,
+                    end_row: 3,
+                });
+
+                expect(rows.map((row) => row.__ID__)).toEqual([
+                    [["AAPL", "Tech"]],
+                    [["MSFT", "Tech"]],
+                ]);
+
+                await view.delete();
+                await cleanup();
+            });
         });
 
         test.describe("ordering", function () {

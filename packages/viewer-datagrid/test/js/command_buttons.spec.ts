@@ -15,10 +15,27 @@ import type { Page } from "@playwright/test";
 
 const GRID = "perspective-viewer-datagrid regular-table";
 
+interface TableFixture {
+    name: string;
+    data: Record<string, unknown[]>;
+    index: string[];
+}
+
+const COMPOSITE: TableFixture = {
+    name: "composite",
+    data: {
+        name: ["AAPL", "AAPL", "MSFT"],
+        sector: ["Tech", "Hardware", "Tech"],
+        price: [1, 3, 2],
+    },
+    index: ["name", "sector"],
+};
+
 async function setup(
     page: Page,
     config: Record<string, unknown>,
     scopes: string[],
+    table?: TableFixture,
 ) {
     await page.goto("/tools/test/src/html/basic-test.html");
     await page.evaluate(async () => {
@@ -29,9 +46,20 @@ async function setup(
 
     const { plugin_config, ...view_config } = config;
     await page.evaluate(
-        async ({ config, plugin_config, scopes }) => {
+        async ({ config, plugin_config, scopes, table }) => {
             const viewer = document.querySelector("perspective-viewer") as any;
-            await viewer.restore({ plugin: "Datagrid", ...config });
+            if (table) {
+                await (window as any).__TEST_WORKER__.table(table.data, {
+                    name: table.name,
+                    index: table.index,
+                });
+            }
+
+            await viewer.restore({
+                plugin: "Datagrid",
+                ...(table ? { table: table.name } : {}),
+                ...config,
+            });
             await viewer.flush();
             const g = window as any;
             g.__CONTEXTS__ = [];
@@ -72,7 +100,7 @@ async function setup(
                 await viewer.flush();
             }
         },
-        { config: view_config, plugin_config, scopes },
+        { config: view_config, plugin_config, scopes, table },
     );
 }
 
@@ -648,5 +676,104 @@ test.describe("Datagrid command buttons", () => {
         expect(context.location).toBe("context-menu");
         expect(context.hit.kind).toBe("cell");
         expect(context.hit.y).toBe(1);
+    });
+
+    test("datagrid-row on a composite-indexed table resolves each row by its key tuple", async ({
+        page,
+    }) => {
+        await setup(
+            page,
+            { columns: ["name", "sector", "price"] },
+            ["datagrid-row"],
+            COMPOSITE,
+        );
+
+        await expect(page.locator(`${GRID} tbody tr`)).toHaveCount(3);
+        await expect(await rowButtons(page)).toHaveCount(3);
+        const context = await page.evaluate(
+            () => (window as any).__CONTEXTS__[0],
+        );
+
+        expect(context.hit.kind).toBe("row");
+        expect(context.hit.id).toEqual(["AAPL", "Hardware"]);
+        expect(context.hit.config).toEqual({
+            filter: [
+                ["name", "==", "AAPL"],
+                ["sector", "==", "Hardware"],
+            ],
+        });
+    });
+
+    test("datagrid-cell on a composite-indexed table renders the body with cell buttons", async ({
+        page,
+    }) => {
+        await setup(
+            page,
+            { columns: ["name", "sector", "price"] },
+            ["datagrid-cell"],
+            COMPOSITE,
+        );
+
+        const cell = page
+            .locator(`${GRID} tbody tr`)
+            .first()
+            .locator("td")
+            .first();
+
+        await expect(cell.locator(".psp-command-value")).toHaveText("AAPL");
+        await expect(cell.locator(".psp-command-button")).toHaveText("Flag");
+        const context = await page.evaluate(
+            () => (window as any).__CONTEXTS__[0],
+        );
+
+        expect(context.hit.kind).toBe("cell");
+        expect(context.hit.id).toEqual(["AAPL", "Hardware"]);
+    });
+
+    test("a throwing queryCommands still draws the grid with empty command blocks", async ({
+        page,
+    }) => {
+        await setup(page, { columns: ["State", "Sales"] }, ["datagrid-row"]);
+        await expect((await rowButtons(page)).first()).toHaveText("Flag");
+        const errors: string[] = [];
+        page.on("console", (message) => {
+            if (message.type() === "error") {
+                errors.push(message.text());
+            }
+        });
+
+        await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            const original = viewer.queryCommands.bind(viewer);
+            Object.defineProperty(viewer, "queryCommands", {
+                configurable: true,
+                value: (
+                    plugin: unknown,
+                    location: unknown,
+                    frame: unknown,
+                    refs: unknown[],
+                ) => {
+                    if (refs.length > 0) {
+                        throw new Error("queryCommands failed");
+                    }
+
+                    return original(plugin, location, frame, refs);
+                },
+            });
+
+            await viewer.invalidate();
+        });
+
+        const rows = page.locator(`${GRID} tbody tr`);
+        await expect(page.locator(`${GRID} .psp-command-button`)).toHaveCount(
+            0,
+        );
+
+        await expect(
+            page.locator(`${GRID} tbody tr th.psp-command-header`),
+        ).toHaveCount(await rows.count());
+
+        await expect(rows.first().locator("td").first()).not.toBeEmpty();
+        expect(errors.some((e) => e.includes("Failed to query"))).toBe(true);
     });
 });

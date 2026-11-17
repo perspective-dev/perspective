@@ -27,6 +27,15 @@ struct FrameMeta {
     column_paths: Vec<Vec<Scalar>>,
 }
 
+/// A row's `__ID__` cell, which wraps a composite index's key tuple in a
+/// one-element array.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RowId {
+    Flat(Vec<Scalar>),
+    Composite((Vec<Scalar>,)),
+}
+
 /// A plugin's viewport read, the source of every hit resolved against it.
 pub struct ViewFrame {
     meta: FrameMeta,
@@ -60,6 +69,17 @@ impl ViewFrame {
         } else {
             Ok(Some(value.into_serde_ext()?))
         }
+    }
+
+    fn row_id(&self, i: u32) -> ApiResult<Option<Vec<Scalar>>> {
+        let value = self.cell("__ID__", i)?;
+        if value.is_undefined() || value.is_null() {
+            return Ok(None);
+        }
+
+        Ok(Some(match value.into_serde_ext::<RowId>()? {
+            RowId::Flat(id) | RowId::Composite((id,)) => id,
+        }))
     }
 
     fn scalar(&self, key: &str, i: u32) -> ApiResult<Option<Scalar>> {
@@ -118,7 +138,7 @@ pub fn resolve_hit(
     let mut row_path = vec![];
     if let Some(y) = hit_ref.y {
         let i = frame.row_offset(y)?;
-        id = frame.scalars("__ID__", i)?;
+        id = frame.row_id(i)?;
         row_path = frame.scalars("__ROW_PATH__", i)?.unwrap_or_default();
         for (level, value) in config.group_by.iter().zip(row_path.iter()) {
             filter.push(key_filter(level, value));
