@@ -129,7 +129,13 @@ export class PerspectiveServer {
             this.module,
             polled,
             async (msg: ApiResponse) => {
-                await this.clients.get(msg.client_id)!(msg.data);
+                if (msg.client_id === 0) {
+                    for (const client of this.clients.values()) {
+                        await client(msg.data);
+                    }
+                } else {
+                    await this.clients.get(msg.client_id)!(msg.data);
+                }
             },
         );
 

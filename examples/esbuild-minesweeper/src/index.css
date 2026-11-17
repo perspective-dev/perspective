@@ -1,0 +1,89 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+html,
+body {
+    margin: 0;
+    height: 100%;
+    font-family:
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        sans-serif;
+    font-size: 13px;
+}
+
+body {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    background: #f4f5f7;
+    color: #1f2328;
+}
+
+header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 16px;
+    border-bottom: 1px solid #d9dce1;
+    background: #ffffff;
+}
+
+h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+#mines-left {
+    min-width: 3ch;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #1f2328;
+    color: #ff5a4f;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+body[data-state="won"] #status {
+    color: #0f7b3f;
+    font-weight: 600;
+}
+
+body[data-state="lost"] #status {
+    color: #b42318;
+    font-weight: 600;
+}
+
+#new-game {
+    margin-left: auto;
+    padding: 4px 10px;
+    border: 1px solid #d9dce1;
+    border-radius: 4px;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+}
+
+main {
+    position: relative;
+    min-height: 0;
+}
+
+perspective-viewer {
+    position: absolute;
+    inset: 0;
+    --psp-icon--flag--mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3.5 1h1.5v14H3.5z'/><path d='M5 1.5h8.5l-2.5 3.5 2.5 3.5H5z'/></svg>");
+    --psp-icon--mine--mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='4.75'/><rect x='7.25' y='0.5' width='1.5' height='15'/><rect x='0.5' y='7.25' width='15' height='1.5'/><rect x='7.25' y='2' width='1.5' height='12' transform='rotate(45 8 8)'/><rect x='7.25' y='2' width='1.5' height='12' transform='rotate(-45 8 8)'/></svg>");
+}

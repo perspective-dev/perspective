@@ -12,6 +12,8 @@
 
 #include <perspective/computed_expression.h>
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <functional>
 #include <utility>
@@ -297,6 +299,8 @@ struct t_computed_expression_cache {
         delete;
 
     std::shared_ptr<t_data_table> m_current_source_table;
+    std::shared_ptr<t_data_table> m_current_master_table;
+    const t_lookup_overlay* m_current_overlay = nullptr;
     t_uindex m_row_idx{0};
     std::vector<std::pair<std::string, t_tscalar>> m_values;
     std::vector<std::shared_ptr<t_column>> m_columns;
@@ -311,10 +315,12 @@ t_computed_expression::~t_computed_expression() = default;
 void
 t_computed_expression::compute(
     const std::shared_ptr<t_data_table>& source_table,
+    const std::shared_ptr<t_data_table>& master_table,
     const t_gstate::t_mapping& pkey_map,
     const std::shared_ptr<t_data_table>& destination_table,
     t_expression_vocab& vocab,
-    t_regex_mapping& regex_mapping
+    t_regex_mapping& regex_mapping,
+    const t_lookup_overlay* overlay
 ) const {
     auto num_input_columns = m_column_ids.size();
 
@@ -335,6 +341,8 @@ t_computed_expression::compute(
         auto& cache = *m_cache;
 
         cache.m_current_source_table = source_table;
+        cache.m_current_master_table = master_table;
+        cache.m_current_overlay = overlay;
         cache.m_sym_table.add_constants(); // pi, infinity, etc.
 
         // is_type_validator = false: we are computing values, not type-checking.
@@ -343,6 +351,8 @@ t_computed_expression::compute(
             regex_mapping,
             false,
             cache.m_current_source_table,
+            cache.m_current_master_table,
+            cache.m_current_overlay,
             pkey_map,
             cache.m_row_idx
         );
@@ -401,6 +411,8 @@ t_computed_expression::compute(
     // (the source table differs across the master/flattened/delta/prev/current
     // tables within a single update), and re-fetch this call's source columns.
     cache.m_current_source_table = source_table;
+    cache.m_current_master_table = master_table;
+    cache.m_current_overlay = overlay;
     for (t_uindex cidx = 0; cidx < num_input_columns; ++cidx) {
         cache.m_columns[cidx] =
             source_table->get_column(m_column_ids[cidx].second);
@@ -433,6 +445,31 @@ t_computed_expression::compute(
     // order()'s accumulator must still be reset at the end of every call.
     cache.m_function_store->clear_computed_function_state();
 };
+
+bool
+t_computed_expression::looks_up_rows() const {
+    std::string parsed = m_parsed_expression_string;
+    std::transform(parsed.begin(), parsed.end(), parsed.begin(), [](char c) {
+        return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    });
+
+    return parsed.find("vlookup") != std::string::npos;
+}
+
+std::optional<t_lookup_overlay>
+make_lookup_overlay(
+    const std::vector<std::shared_ptr<t_computed_expression>>& expressions,
+    const std::shared_ptr<t_data_table>& keys,
+    const std::shared_ptr<t_data_table>& values
+) {
+    for (const auto& expr : expressions) {
+        if (expr->looks_up_rows()) {
+            return make_lookup_overlay(keys, values);
+        }
+    }
+
+    return std::nullopt;
+}
 
 const std::string&
 t_computed_expression::get_expression_alias() const {
@@ -513,8 +550,16 @@ t_computed_expression_parser::precompute(
 
     // Create a function store, with is_type_validator set to true as we are
     // just getting the output types.
+    const t_lookup_overlay* overlay = nullptr;
     t_computed_function_store function_store(
-        vocab, regex_mapping, true, source_table, pkey_map, row_idx
+        vocab,
+        regex_mapping,
+        true,
+        source_table,
+        source_table,
+        overlay,
+        pkey_map,
+        row_idx
     );
     function_store.register_computed_functions(sym_table);
 
@@ -621,8 +666,16 @@ t_computed_expression_parser::get_dtype(
 
     // Create a function store, with is_type_validator set to true as we are
     // just validating the output types.
+    const t_lookup_overlay* overlay = nullptr;
     t_computed_function_store function_store(
-        vocab, regex_mapping, true, source_table, pkey_map, row_idx
+        vocab,
+        regex_mapping,
+        true,
+        source_table,
+        source_table,
+        overlay,
+        pkey_map,
+        row_idx
     );
     function_store.register_computed_functions(sym_table);
 
@@ -818,6 +871,8 @@ t_computed_function_store::t_computed_function_store(
     t_regex_mapping& regex_mapping,
     bool is_type_validator,
     const std::shared_ptr<t_data_table>& source_table,
+    const std::shared_ptr<t_data_table>& master_table,
+    const t_lookup_overlay* const& overlay,
     const t_gstate::t_mapping& pkey_map,
     t_uindex& row_idx
 ) :
@@ -849,7 +904,7 @@ t_computed_function_store::t_computed_function_store(
         computed_function::col(vocab, is_type_validator, source_table, row_idx)
     ),
     m_vlookup_fn(computed_function::vlookup(
-        vocab, is_type_validator, pkey_map, source_table, row_idx
+        vocab, is_type_validator, pkey_map, master_table, overlay, row_idx
     )) {}
 
 void

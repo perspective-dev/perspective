@@ -22,6 +22,7 @@
 #include <perspective/computed_function.h>
 #include <perspective/gnode_state.h>
 #include <date/date.h>
+#include <optional>
 #include <tsl/hopscotch_set.h>
 
 // a header that includes exprtk and overload definitions for `t_tscalar` so
@@ -172,11 +173,19 @@ public:
 
     void compute(
         const std::shared_ptr<t_data_table>& source_table,
+        const std::shared_ptr<t_data_table>& master_table,
         const t_gstate::t_mapping& pkey_map,
         const std::shared_ptr<t_data_table>& destination_table,
         t_expression_vocab& vocab,
-        t_regex_mapping& regex_mapping
+        t_regex_mapping& regex_mapping,
+        const t_lookup_overlay* overlay = nullptr
     ) const;
+
+    /**
+     * @brief Whether the expression calls `vlookup()`, and so reads rows
+     * other than its own.
+     */
+    bool looks_up_rows() const;
 
     const std::string& get_expression_alias() const;
     const std::string& get_expression_string() const;
@@ -199,6 +208,16 @@ private:
     // calls. Invalidated + rebuilt if an input column's dtype is promoted.
     mutable std::unique_ptr<t_computed_expression_cache> m_cache;
 };
+
+/**
+ * @brief The overlay for an update's `prev` pass when any of `expressions`
+ * calls `vlookup()`, else `std::nullopt`.
+ */
+PERSPECTIVE_EXPORT std::optional<t_lookup_overlay> make_lookup_overlay(
+    const std::vector<std::shared_ptr<t_computed_expression>>& expressions,
+    const std::shared_ptr<t_data_table>& keys,
+    const std::shared_ptr<t_data_table>& values
+);
 
 /**
  * @brief a `t_schema`-like container for validated expression results that
@@ -234,6 +253,8 @@ struct PERSPECTIVE_EXPORT t_computed_function_store {
         t_regex_mapping& regex_mapping,
         bool is_type_validator,
         const std::shared_ptr<t_data_table>& source_table,
+        const std::shared_ptr<t_data_table>& master_table,
+        const t_lookup_overlay* const& overlay,
         const t_gstate::t_mapping& pkey_map,
         t_uindex& row_idx
     );

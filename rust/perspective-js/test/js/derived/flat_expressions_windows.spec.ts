@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { test } from "@perspective-dev/test";
+import { test, expect } from "@perspective-dev/test";
 import perspective from "../perspective_client.ts";
 import { expect_flat_parity } from "./oracle.ts";
 import { make_source, rows } from "./fixtures.ts";
@@ -34,6 +34,41 @@ test.describe("Derived table carries expression and window columns", function ()
         ]);
 
         await expect_flat_parity(view, derived);
+        await derived.delete();
+        await view.delete();
+        await source.delete();
+    });
+
+    test("a vlookup column keeps child expression views live", async function () {
+        const source = await perspective.table(
+            { k: "integer", v: "integer", on: "boolean" },
+            { index: "k" },
+        );
+
+        await source.update({
+            k: [0, 1, 2],
+            v: [10, 20, 30],
+            on: [false, false, false],
+        });
+
+        const view = await source.view({
+            columns: ["k", "v", "on", "next"],
+            expressions: { next: `vlookup('v', integer("k" + 1))` },
+        });
+
+        const derived = await perspective.table(view);
+        const child = await derived.view({
+            columns: ["k", "lit"],
+            expressions: { lit: 'if ("on") { 1 } else { 0 }' },
+        });
+
+        await source.update([{ k: 1, on: true }]);
+        expect(await child.to_columns()).toEqual({
+            k: [0, 1, 2],
+            lit: [0, 1, 0],
+        });
+
+        await child.delete();
         await derived.delete();
         await view.delete();
         await source.delete();

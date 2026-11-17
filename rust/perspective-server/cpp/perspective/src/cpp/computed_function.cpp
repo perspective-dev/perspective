@@ -14,9 +14,30 @@
 #include <perspective/pkey_codec.h>
 #include <perspective/gnode_state.h>
 #include <perspective/column.h>
+#include <algorithm>
 #include <cmath>
 
 #include <utility>
+
+namespace perspective {
+
+t_lookup_overlay
+make_lookup_overlay(
+    const std::shared_ptr<t_data_table>& keys,
+    const std::shared_ptr<t_data_table>& values
+) {
+    t_lookup_overlay overlay{values, {}};
+    auto pkeys = keys->get_const_column("psp_pkey");
+    t_uindex num_rows = std::min(keys->size(), values->size());
+    overlay.m_rows.reserve(num_rows);
+    for (t_uindex ridx = 0; ridx < num_rows; ++ridx) {
+        overlay.m_rows[pkeys->get_scalar(ridx)] = ridx;
+    }
+
+    return overlay;
+}
+
+} // namespace perspective
 
 namespace perspective::computed_function {
 
@@ -2292,14 +2313,16 @@ vlookup::vlookup(
     t_expression_vocab& expression_vocab,
     bool is_type_validator,
     const t_pkey_mapping& pkey_map,
-    const std::shared_ptr<t_data_table>& source_table,
+    const std::shared_ptr<t_data_table>& master_table,
+    const t_lookup_overlay* const& overlay,
     t_uindex& row_idx
 ) :
     exprtk::igeneric_function<t_tscalar>("TT*"),
     m_expression_vocab(expression_vocab),
     m_is_type_validator(is_type_validator),
     m_pkey_map(pkey_map),
-    m_source_table(source_table),
+    m_master_table(master_table),
+    m_overlay(overlay),
     m_row_idx(row_idx) {}
 vlookup::~vlookup() = default;
 
@@ -2319,8 +2342,8 @@ vlookup::operator()(t_parameter_list parameters) {
         return rval;
     }
 
-    auto pkey_col = m_source_table->get_const_column("psp_pkey");
-    const auto& codec = m_source_table->get_pkey_codec();
+    auto pkey_col = m_master_table->get_const_column("psp_pkey");
+    const auto& codec = m_master_table->get_pkey_codec();
     t_tscalar index;
     std::string encoded;
     if (codec) {
@@ -2365,11 +2388,11 @@ vlookup::operator()(t_parameter_list parameters) {
     }
 
     std::string col_name_str = column_name.to_string();
-    if (!m_source_table->get_schema().has_column(col_name_str)) {
+    if (!m_master_table->get_schema().has_column(col_name_str)) {
         rval.m_status = STATUS_CLEAR;
         return rval;
     }
-    auto col = m_source_table->get_const_column(col_name_str);
+    auto col = m_master_table->get_const_column(col_name_str);
 
     if (m_is_type_validator) {
         rval.m_status = STATUS_VALID;
@@ -2377,22 +2400,28 @@ vlookup::operator()(t_parameter_list parameters) {
         return rval;
     }
 
-    if (codec) {
-        const auto it = m_pkey_map.find(index);
-        if (it != m_pkey_map.end()) {
-            rval.set(col->get_scalar(it->second));
-        }
-
-        rval.m_type = col->get_dtype();
-        return rval;
-    }
-
-    auto idx = index.to_uint64();
-    if (idx < col->size()) {
-        auto res = col->get_scalar(idx);
-        rval.set(res);
-    }
     rval.m_type = col->get_dtype();
+    if (m_overlay != nullptr) {
+        const auto row = m_overlay->m_rows.find(index);
+        if (row != m_overlay->m_rows.end()) {
+            const auto& table = *m_overlay->m_table;
+            if (table.get_schema().has_column(col_name_str)) {
+                auto prev = table.get_const_column(col_name_str);
+                if (row->second < prev->size() && prev->is_valid(row->second)) {
+                    rval.set(prev->get_scalar(row->second));
+                    rval.m_type = col->get_dtype();
+                }
+            }
+
+            return rval;
+        }
+    }
+
+    const auto it = m_pkey_map.find(index);
+    if (it != m_pkey_map.end() && it->second < col->size()) {
+        rval.set(col->get_scalar(it->second));
+        rval.m_type = col->get_dtype();
+    }
 
     return rval;
 }
