@@ -73,7 +73,7 @@
         "access": "public"
     },
     "dependencies": {
-        "@perspective-dev/server": "workspace:^",
+        "@perspective-dev/server": "workspace:*",
         "stoppable": "catalog:",
         "ws": "catalog:"
     },

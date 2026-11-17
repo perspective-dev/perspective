@@ -735,16 +735,16 @@ importers:
   packages/cli:
     dependencies:
       '@perspective-dev/client':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../rust/perspective-js
       '@perspective-dev/viewer':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../rust/perspective-viewer
       '@perspective-dev/viewer-charts':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../viewer-charts
       '@perspective-dev/viewer-datagrid':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../viewer-datagrid
       commander:
         specifier: 'catalog:'
@@ -766,19 +766,19 @@ importers:
         specifier: <3
         version: 2.7.1
       '@perspective-dev/client':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../rust/perspective-js
       '@perspective-dev/server':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../rust/perspective-server
       '@perspective-dev/viewer':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../rust/perspective-viewer
       '@perspective-dev/viewer-charts':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../viewer-charts
       '@perspective-dev/viewer-datagrid':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../viewer-datagrid
     devDependencies:
       '@jupyterlab/builder':
@@ -800,10 +800,10 @@ importers:
   packages/react:
     dependencies:
       '@perspective-dev/client':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../rust/perspective-js
       '@perspective-dev/viewer':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../rust/perspective-viewer
       '@types/react':
         specifier: 'catalog:'
@@ -861,10 +861,10 @@ importers:
   packages/viewer-datagrid:
     dependencies:
       '@perspective-dev/client':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../rust/perspective-js
       '@perspective-dev/viewer':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../rust/perspective-viewer
       regular-table:
         specifier: 'catalog:'
@@ -896,7 +896,7 @@ importers:
   rust/perspective-js:
     dependencies:
       '@perspective-dev/server':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../perspective-server
       stoppable:
         specifier: 'catalog:'
@@ -1000,7 +1000,7 @@ importers:
   rust/perspective-viewer:
     dependencies:
       '@perspective-dev/client':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../perspective-js
       pro_self_extracting_wasm:
         specifier: 'catalog:'

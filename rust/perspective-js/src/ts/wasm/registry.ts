@@ -33,6 +33,8 @@ export { resolve_package_wasm_url } from "./cdn.ts";
 
 declare const __PSP_VERSION__: string;
 
+const PSP_MINOR_VERSION = __PSP_VERSION__.split(".").slice(0, 2).join(".");
+
 /**
  * A WebAssembly binary in a form `init()` accepts.
  */
@@ -98,6 +100,7 @@ interface Entry {
 }
 
 interface RegistryState {
+    versions: Set<string>;
     sources: Partial<Record<WasmKey, Entry>>;
     consumed: Set<WasmKey>;
     warned_duplicates?: Set<WasmKey>;
@@ -137,19 +140,29 @@ function states(): Map<string, RegistryState> {
 
 function state(): RegistryState {
     const all = states();
-    let s = all.get(__PSP_VERSION__);
+    let s = all.get(PSP_MINOR_VERSION);
     if (s === undefined) {
-        s = { sources: {}, consumed: new Set() };
-        all.set(__PSP_VERSION__, s);
+        s = { versions: new Set(), sources: {}, consumed: new Set() };
+        all.set(PSP_MINOR_VERSION, s);
+    }
+
+    if (!s.versions.has(__PSP_VERSION__)) {
+        if (s.versions.size > 0) {
+            console.warn(
+                `Perspective ${__PSP_VERSION__} is sharing a page with Perspective ${[...s.versions].join(", ")}; releases of one major.minor are compatible, but every Perspective package on a page should be the same version.`,
+            );
+        }
+
+        s.versions.add(__PSP_VERSION__);
     }
 
     return s;
 }
 
-function assert_single_version() {
-    const others = [...states().keys()].filter(
-        (version) => version !== __PSP_VERSION__,
-    );
+function assert_single_minor_version() {
+    const others = [...states()]
+        .filter(([key]) => key !== PSP_MINOR_VERSION)
+        .flatMap(([key, s]) => (s.versions ? [...s.versions] : [key]));
 
     if (others.length > 0) {
         throw new Error(
@@ -244,7 +257,7 @@ export function register(
     mode: RegisterMode = "user",
 ) {
     if (mode !== "default") {
-        assert_single_version();
+        assert_single_minor_version();
     }
 
     const s = state();
@@ -365,7 +378,8 @@ export function register(
 /**
  * Register Perspective's WebAssembly binaries for this page, shared by every
  * copy of `@perspective-dev/client` and `@perspective-dev/viewer`, throwing if
- * another Perspective version has loaded on this page.
+ * a Perspective release of another `major.minor` has loaded on this page, and
+ * warning once per other patch release of this one.
  *
  * Re-registering a key whose runtime already exists (e.g. a second module
  * evaluation of the same bundle, as anywidget does per widget model) keeps
@@ -479,7 +493,8 @@ export function resolve_client(): Promise<ClientRuntime> {
  * The runtime backing every `Client`, if it has finished initializing.
  */
 export function client_runtime(): ClientRuntime | undefined {
-    return (globalThis as any)[STATE_KEY]?.get(__PSP_VERSION__)?.client_runtime;
+    return (globalThis as any)[STATE_KEY]?.get(PSP_MINOR_VERSION)
+        ?.client_runtime;
 }
 
 /**

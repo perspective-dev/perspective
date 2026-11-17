@@ -135,6 +135,7 @@ pub(crate) struct Run<'a> {
     pub from: Version,
     pub schema: Version,
     pub known_plugins: &'a [&'static str],
+    pub versions: Vec<Notice>,
     pub notices: Vec<Notice>,
     pub steps: Vec<&'static str>,
 }
@@ -150,7 +151,9 @@ impl Run<'_> {
                 };
 
                 let from = match target.get("version").and_then(Value::as_str) {
-                    Some(version) => check_version(version, self.schema)?,
+                    Some(version) => {
+                        check_version(version, self.schema, &pointer, &mut self.versions)?
+                    },
                     None => self.from,
                 };
 

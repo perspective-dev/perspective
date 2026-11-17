@@ -57,9 +57,9 @@ crate-type = ["cdylib"]
 pyo3-build-config = "0.29.0"
 
 [dependencies]
-perspective-client = { version = "5.9.2" }
-perspective-migrate = { version = "5.9.2" }
-perspective-server = { version = "5.9.2" }
+perspective-client = { version = "~5.9.2" }
+perspective-migrate = { version = "~5.9.2" }
+perspective-server = { version = "~5.9.2" }
 bytes = "1.10.1"
 chrono = "0.4"
 macro_rules_attribute = "0.2.2"

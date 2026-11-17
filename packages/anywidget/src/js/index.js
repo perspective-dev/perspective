@@ -77,6 +77,20 @@ function isEqual(a, b) {
     return true;
 }
 
+// `version` stamps name a release, and releases of one `major.minor` are
+// compatible, so a patch difference is not a config change in either direction.
+function minor_version(version) {
+    return typeof version === "string"
+        ? version.split(".").slice(0, 2).join(".")
+        : version;
+}
+
+function isEqualAttribute(name, a, b) {
+    return name === "version"
+        ? minor_version(a) === minor_version(b)
+        : isEqual(a, b);
+}
+
 async function render({ model, el }) {
     await ready;
 
@@ -178,7 +192,10 @@ async function render({ model, el }) {
         const config = normalize_config(await viewer.save());
         let changed = false;
         for (const name of PERSISTENT_ATTRIBUTES) {
-            if (name in config && !isEqual(config[name], model.get(name))) {
+            if (
+                name in config &&
+                !isEqualAttribute(name, config[name], model.get(name))
+            ) {
                 model.set(name, config[name]);
                 changed = true;
             }
@@ -198,7 +215,10 @@ async function render({ model, el }) {
             if (typeof value === "undefined") {
                 continue;
             }
-            if (!(name in config) || !isEqual(value, config[name])) {
+            if (
+                !(name in config) ||
+                !isEqualAttribute(name, value, config[name])
+            ) {
                 diff[name] = value;
             }
         }

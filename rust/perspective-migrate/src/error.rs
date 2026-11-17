@@ -24,7 +24,7 @@ pub enum MigrateError {
     /// `version` predates `2.0.0`.
     Unsupported { version: String },
 
-    /// `version` is newer than this crate's schema.
+    /// `version` is a newer major or minor release than this crate's schema.
     FromFuture { version: String },
 
     /// The config is not a JSON object.

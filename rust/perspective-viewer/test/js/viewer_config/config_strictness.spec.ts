@@ -73,6 +73,54 @@ test.describe("config strictness", () => {
         expect(error).toContain("perspective-migrate");
     });
 
+    test("a rejected config from another patch of this minor release names no release", async ({
+        page,
+    }) => {
+        const { error, saved } = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")! as any;
+            const [major, minor] = (await viewer.save()).version.split(".");
+            const saved = `${major}.${minor}.999`;
+            try {
+                await viewer.restore({
+                    version: saved,
+                    plugin: "Debug Styled",
+                    "row-pivots": ["State"],
+                });
+                return { error: null, saved };
+            } catch (e) {
+                return { error: e.message ?? `${e}`, saved };
+            }
+        });
+
+        expect(error).toContain("row-pivots");
+        expect(error).not.toContain(saved);
+        expect(error).not.toContain("perspective-migrate");
+    });
+
+    test("a rejected config from a newer minor release names it without perspective-migrate", async ({
+        page,
+    }) => {
+        const { error, saved } = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")! as any;
+            const [major, minor] = (await viewer.save()).version.split(".");
+            const saved = `${major}.${Number(minor) + 1}.0`;
+            try {
+                await viewer.restore({
+                    version: saved,
+                    plugin: "Debug Styled",
+                    "row-pivots": ["State"],
+                });
+                return { error: null, saved };
+            } catch (e) {
+                return { error: e.message ?? `${e}`, saved };
+            }
+        });
+
+        expect(error).toContain("row-pivots");
+        expect(error).toContain(saved);
+        expect(error).not.toContain("perspective-migrate");
+    });
+
     test("restore rejects a workspace config", async ({ page }) => {
         const error = await restoreError(page, "restore", {
             layout: null,

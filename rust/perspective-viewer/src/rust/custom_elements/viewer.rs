@@ -1651,7 +1651,8 @@ impl PerspectiveViewerElement {
                 let root = this.root.borrow();
                 let app = root.as_ref().ok_or("Already deleted")?;
                 match name {
-                    // Element-level: reset every panel + the cross-filter overlay.
+                    // Element-level: reset every panel + the cross-filter
+                    // overlay.
                     None => {
                         tracing::debug!("Resetting config");
                         app.send_message(PerspectiveViewerMsg::Reset(all, Some(completion)));

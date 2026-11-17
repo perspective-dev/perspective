@@ -74,6 +74,11 @@ class TestAnyWidgetSmoke:
         assert widget.theme == "Pro Dark"
         assert widget.version == "0.0.0"
 
+    def test_version_trait_is_the_published_release(self):
+        widget = PerspectiveWidget({"a": [1, 2, 3]})
+        assert widget.version == widget_module.__version__
+        assert ".dev" not in widget.version
+
     def test_not_a_labextension_widget(self):
         widget = PerspectiveWidget({"a": [1, 2, 3]})
         assert widget._model_module == "anywidget"

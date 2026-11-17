@@ -152,11 +152,11 @@ where
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            // When a dragover occurs and a new Column is inserted into the selector,
-            // the geometry of the selector may expand and cause a parent reflow,
-            // which annoyingly changes the drag status and glitchiness occurs.
-            // By using `Freeze` when a dragenter occurs, the element's width will be
-            // frozen until `drop` or `dragleave`.
+            // When a dragover occurs and a new Column is inserted into the
+            // selector, the geometry of the selector may expand and cause a
+            // parent reflow, which annoyingly changes the drag status and
+            // glitchiness occurs. By using `Freeze` when a dragenter occurs,
+            // the element's width will be frozen until `drop` or `dragleave`.
             DragDropListMsg::Freeze(freeze) => {
                 if freeze && self.frozen_size.is_none() {
                     let elem = self.elem.cast::<HtmlElement>().unwrap();
