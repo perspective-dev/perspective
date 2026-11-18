@@ -30,6 +30,25 @@
 
 namespace perspective {
 
+/**
+ * @brief The pre-update rows of one update batch keyed by primary key, which
+ * `vlookup()` reads before the master table while an expression is computed
+ * over the batch's `prev` table.
+ */
+struct PERSPECTIVE_EXPORT t_lookup_overlay {
+    std::shared_ptr<t_data_table> m_table;
+    t_pkey_mapping m_rows;
+};
+
+/**
+ * @brief The overlay pairing each `psp_pkey` of `keys` with the same row of
+ * `values`.
+ */
+PERSPECTIVE_EXPORT t_lookup_overlay make_lookup_overlay(
+    const std::shared_ptr<t_data_table>& keys,
+    const std::shared_ptr<t_data_table>& values
+);
+
 namespace computed_function {
 
     typedef typename exprtk::igeneric_function<t_tscalar>::parameter_list_t
@@ -233,7 +252,8 @@ namespace computed_function {
             t_expression_vocab& expression_vocab,
             bool is_type_validator,
             const t_pkey_mapping& pkey_map,
-            const std::shared_ptr<t_data_table>& source_table,
+            const std::shared_ptr<t_data_table>& master_table,
+            const t_lookup_overlay* const& overlay,
             t_uindex& row_idx
         );
         ~vlookup();
@@ -243,7 +263,8 @@ namespace computed_function {
         t_expression_vocab& m_expression_vocab;
         bool m_is_type_validator;
         const t_pkey_mapping& m_pkey_map;
-        const std::shared_ptr<t_data_table>& m_source_table;
+        const std::shared_ptr<t_data_table>& m_master_table;
+        const t_lookup_overlay* const& m_overlay;
         t_uindex& m_row_idx;
     };
 

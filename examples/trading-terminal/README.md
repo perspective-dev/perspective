@@ -1,5 +1,7 @@
 # Trading Terminal Example
 
+[Live demo](https://perspective-dev.github.io/examples/trading-terminal/)
+
 A simulated trading terminal demonstrating the `<perspective-viewer>` command
 schema API (`setCommandSchema()`, `perspective-command`, `invalidate()`) across
 every command surface except Datagrid cells:

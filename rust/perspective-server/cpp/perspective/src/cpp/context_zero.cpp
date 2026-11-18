@@ -775,6 +775,7 @@ t_ctx0::compute_expressions(
         // Compute the expressions on the master table.
         expr->compute(
             master,
+            master,
             pkey_map,
             master_expression_table,
             expression_vocab,
@@ -814,9 +815,11 @@ t_ctx0::compute_expressions(
     m_expression_tables->m_master->set_size(master_num_rows);
 
     const auto& expressions = m_config.get_expressions();
+    const auto overlay = make_lookup_overlay(expressions, flattened, prev);
     for (const auto& expr : expressions) {
         // master: compute based on latest state of the gnode state table
         expr->compute(
+            master,
             master,
             pkey_map,
             m_expression_tables->m_master,
@@ -827,6 +830,7 @@ t_ctx0::compute_expressions(
         // flattened: compute based on the latest update dataset
         expr->compute(
             flattened,
+            master,
             pkey_map,
             m_expression_tables->m_flattened,
             expression_vocab,
@@ -836,15 +840,18 @@ t_ctx0::compute_expressions(
         // prev: the values of the updated rows before this update was applied
         expr->compute(
             prev,
+            master,
             pkey_map,
             m_expression_tables->m_prev,
             expression_vocab,
-            regex_mapping
+            regex_mapping,
+            overlay ? &*overlay : nullptr
         );
 
         // current: the current values of the updated rows
         expr->compute(
             current,
+            master,
             pkey_map,
             m_expression_tables->m_current,
             expression_vocab,

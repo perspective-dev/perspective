@@ -20,13 +20,14 @@ import "./index.css";
 
 import SERVER_WASM from "@perspective-dev/server/dist/wasm/perspective-server.wasm?url";
 import CLIENT_WASM from "@perspective-dev/viewer/dist/wasm/perspective-viewer.wasm?url";
+import SUPERSTORE from "superstore-arrow/superstore.lz4.arrow?url";
 
 await perspective_viewer.init({
     server: fetch(SERVER_WASM),
     viewer: fetch(CLIENT_WASM),
 });
 
-const req = fetch("node_modules/superstore-arrow/superstore.lz4.arrow");
+const req = fetch(SUPERSTORE);
 const viewer = document.createElement("perspective-viewer");
 document.body.append(viewer);
 const worker = await perspective.worker();

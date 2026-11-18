@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "pnpm run mdbook && node build.config.mjs && node build.projects.mjs",
+        "build": "pnpm run mdbook && node build.config.mjs && node build.projects.mjs && node build.examples.mjs",
         "watch": "node build.config.mjs --watch",
         "dev": "docker compose up -d minio minio-init && node server.mjs",
         "start": "node server.mjs",
@@ -12,7 +12,8 @@
         "clean": "rm -rf dist && rm -rf static/projects",
         "deploy": "node deploy.mjs",
         "mdbook": "docker compose run --rm mdbook build",
-        "thumbnails": "node build.projects.mjs"
+        "thumbnails": "node build.projects.mjs",
+        "examples": "node build.examples.mjs"
     },
     "dependencies": {
         "@duckdb/duckdb-wasm": "catalog:",

@@ -3250,6 +3250,40 @@ import { joined_column_paths } from "../column_paths.js";
                 table.delete();
             });
 
+            test("Vlookup reads by key on an indexed table", async function () {
+                const table = await perspective.table(
+                    { k: [30, 10, 20], v: ["c", "a", "b"] },
+                    { index: "k" },
+                );
+                const view = await table.view({
+                    expressions: { look: "vlookup('v', integer(20))" },
+                });
+                const result = await view.to_columns();
+                expect(result.look).toEqual(["b", "b", "b"]);
+                view.delete();
+                table.delete();
+            });
+
+            test("Vlookup in a grouped view is correct after an update", async function () {
+                const table = await perspective.table(
+                    { k: [0, 1, 2], v: [10, 20, 30] },
+                    { index: "k" },
+                );
+                const view = await table.view({
+                    group_by: ["k"],
+                    columns: ["next"],
+                    aggregates: { next: "sum" },
+                    expressions: {
+                        next: `vlookup('v', integer(("k" + 1) % 3))`,
+                    },
+                });
+                await table.update({ k: [0, 1], v: [10, 25] });
+                const result = await view.to_columns();
+                expect(result.next).toEqual([65, 25, 30, 10]);
+                view.delete();
+                table.delete();
+            });
+
             test("Col should behave the same as direct column access", async function () {
                 const table = await perspective.table({
                     a: [1, 2, 3, 4],
