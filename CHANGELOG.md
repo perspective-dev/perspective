@@ -1,6 +1,18 @@
+# [v5.9.3](https://github.com/perspective-dev/perspective/releases/tag/v5.9.3)
+
+_18 November 2026_ ([Full changelog](https://github.com/perspective-dev/perspective/compare/v5.9.2...v5.9.3))
+
+Features
+
+- Versioning policy and docs [#3292](https://github.com/perspective-dev/perspective/pull/3292)
+
+Fixes
+
+- Minesweeper example and vlookup fix [#3293](https://github.com/perspective-dev/perspective/pull/3293)
+
 # [v5.9.2](https://github.com/perspective-dev/perspective/releases/tag/v5.9.2)
 
-_16 November 2026_ ([Full changelog](https://github.com/perspective-dev/perspective/compare/v5.9.1...v5.9.2))
+_15 November 2026_ ([Full changelog](https://github.com/perspective-dev/perspective/compare/v5.9.1...v5.9.2))
 
 Features
 
