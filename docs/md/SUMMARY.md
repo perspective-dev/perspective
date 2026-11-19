@@ -78,6 +78,7 @@
 - [Callbacks and events](./how_to/python/callbacks.md)
 - [Multithreading](./how_to/python/multithreading.md)
 - [Hosting a WebSocket server](./how_to/python/websocket.md)
+- [Connecting to a remote server](./how_to/python/remote_client.md)
 - [Joining Tables](./how_to/python/join.md)
 - [`PerspectiveWidget` for JupyterLab](./how_to/python/jupyterlab.md)
 - [Virtual Servers](./how_to/python/virtual_server.md)
