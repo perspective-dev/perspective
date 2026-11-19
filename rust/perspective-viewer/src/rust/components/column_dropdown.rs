@@ -255,7 +255,7 @@ fn ColumnDropDownView(props: &ColumnDropDownViewProps) -> Html {
 
                         let row = match value {
                             InPlaceColumn::Column(col) => html! {
-                                <span>{ col }</span>
+                                <span title={col.clone()}>{ col }</span>
                             },
                             InPlaceColumn::Expression(col) => html! {
                                 <span id="add-expression"><span class="icon" />{ col.name.clone() }</span>

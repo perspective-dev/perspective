@@ -29,6 +29,7 @@
     user-select: none;
     font-size: 12px;
     box-shadow: var(--psp-dropdown--box-shadow);
+    max-width: min(318px, calc(100vw - 18px));
 }
 
 .context-menu {
@@ -69,24 +70,28 @@
 
         &::after {
             content: "▸";
+            flex: none;
             margin-left: auto;
             padding-left: 12px;
         }
 
-        &:hover > .context-menu-submenu,
         & > .context-menu-submenu.open {
             display: flex;
         }
     }
 }
 
+.context-menu-label {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .context-menu-submenu {
     display: none;
-    position: absolute;
-    left: 100%;
-    top: -1px;
-    max-height: 50vh;
-    overflow-y: auto;
+    position: fixed;
+    max-width: min(318px, calc(100vw - 18px));
     background-color: var(--psp--background-color, white);
 
     /* The flyout is a CHILD of its (necessarily hovered, so inverted) parent
@@ -95,16 +100,6 @@
     color: var(--psp--color);
     border: 1px solid var(--psp-inactive--color);
     box-shadow: var(--psp-dropdown--box-shadow);
-
-    &.flip-x {
-        left: auto;
-        right: 100%;
-    }
-
-    &.flip-y {
-        top: auto;
-        bottom: -1px;
-    }
 }
 
 .context-menu-submenu > .new-panel-menu {

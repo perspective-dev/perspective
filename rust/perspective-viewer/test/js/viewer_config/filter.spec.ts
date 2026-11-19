@@ -230,3 +230,89 @@ test.describe("Filter Config", () => {
         });
     });
 });
+
+test.describe("Completion dropdown placement", () => {
+    test("the column dropdown of a 400-column table opened from the filter slot stays inside the viewport", async ({
+        page,
+    }) => {
+        await page.evaluate(async () => {
+            const schema = Object.fromEntries(
+                Array.from({ length: 400 }, (_, i) => [
+                    `c_${String(i).padStart(3, "0")}`,
+                    "float",
+                ]),
+            );
+
+            await window["__TEST_WORKER__"].table(schema, { name: "wide" });
+            const viewer = document.querySelector("perspective-viewer");
+            await viewer.restore({
+                table: "wide",
+                plugin: "Debug",
+                settings: true,
+                columns: ["c_000"],
+            });
+
+            await viewer.flush();
+        });
+
+        const input = page.locator(
+            "perspective-viewer #filter .column-empty-input",
+        );
+
+        await input.click();
+        await input.pressSequentially("c_");
+        const dropdown = page.locator("perspective-dropdown");
+        await expect(dropdown).toBeVisible();
+        const viewport = page.viewportSize()!;
+        await expect
+            .poll(async () => (await dropdown.boundingBox())!.y)
+            .toBeGreaterThanOrEqual(0);
+
+        const box = (await dropdown.boundingBox())!;
+        expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+    });
+
+    test("a filter dropdown with long values near the right edge keeps its width", async ({
+        page,
+    }) => {
+        await page.evaluate(async () => {
+            const values = Array.from(
+                { length: 12 },
+                (_, i) =>
+                    `v_${i} ` + "lorem ipsum dolor ".repeat(11).slice(0, 190),
+            );
+
+            await window["__TEST_WORKER__"].table(
+                { label: values },
+                { name: "long_values" },
+            );
+
+            const viewer = document.querySelector("perspective-viewer");
+            await viewer.restore({
+                table: "long_values",
+                plugin: "Debug",
+                settings: true,
+                filter: [["label", "in", []]],
+            });
+
+            await viewer.flush();
+        });
+
+        await page
+            .locator("perspective-viewer #filter input[type=search]")
+            .click();
+
+        const dropdown = page.locator("perspective-dropdown");
+        await expect(dropdown.locator("span").first()).toBeVisible();
+        const viewport = page.viewportSize()!;
+        await expect
+            .poll(async () => (await dropdown.boundingBox())!.y)
+            .toBeGreaterThanOrEqual(0);
+
+        const box = (await dropdown.boundingBox())!;
+        expect(box.width).toBeGreaterThan(250);
+        expect(box.height).toBeLessThan(400);
+        expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+        expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+    });
+});

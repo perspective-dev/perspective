@@ -99,4 +99,64 @@ test.describe("Status bar export and copy menus", () => {
         await viewer.locator("#status_bar #export").click();
         await expect(page.locator("perspective-export-menu")).toBeVisible();
     });
+
+    test("resizing the window closes the export menu", async ({ page }) => {
+        const viewer = page.locator("perspective-viewer");
+        await viewer.locator("#status_bar #export").click();
+        const menu = page.locator("perspective-export-menu");
+        await expect(menu).toBeVisible();
+        await page.setViewportSize({ width: 1000, height: 600 });
+        await expect(menu).toHaveCount(0);
+    });
+
+    test("scrolling the page closes the copy menu", async ({ page }) => {
+        await page.evaluate(() => {
+            document.body.style.height = "3000px";
+        });
+
+        const viewer = page.locator("perspective-viewer");
+        await viewer.locator("#status_bar #copy").click();
+        const menu = page.locator("perspective-copy-menu");
+        await expect(menu).toBeVisible();
+        await page.evaluate(() => window.scrollTo(0, 100));
+        await expect(menu).toHaveCount(0);
+    });
+
+    test("scrolling the height-limited New menu's own list keeps it open", async ({
+        page,
+    }) => {
+        await page.evaluate(async () => {
+            const worker = window["__TEST_WORKER__"];
+            await Promise.all(
+                Array.from({ length: 300 }, (_, i) =>
+                    worker.table({ x: [1] }, { name: `t_${i}` }),
+                ),
+            );
+        });
+
+        const viewer = page.locator("perspective-viewer");
+        await viewer.locator("#status_bar #new_panel").click();
+        const menu = page.locator("perspective-new-panel-menu");
+        await menu
+            .locator(".dropdown-menu-item", { hasText: "t_299" })
+            .waitFor({ state: "attached" });
+
+        await expect
+            .poll(() => menu.evaluate((el: HTMLElement) => el.style.maxHeight))
+            .not.toBe("");
+
+        await menu.evaluate((el) => {
+            el.scrollTop = 200;
+        });
+
+        await page.evaluate(
+            () =>
+                new Promise((resolve) =>
+                    requestAnimationFrame(() => requestAnimationFrame(resolve)),
+                ),
+        );
+
+        await expect(menu).toBeVisible();
+        expect(await menu.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    });
 });

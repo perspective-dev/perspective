@@ -10,10 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_js::utils::global;
 use wasm_bindgen::JsCast;
-use web_sys::{HtmlElement, MouseEvent, Node};
+use wasm_bindgen::prelude::*;
+use web_sys::{Element, Event, HtmlElement, MouseEvent, Node, ShadowRoot};
 use yew::prelude::*;
+
+use crate::utils::{Bounds, ModalSide, apply_placement};
 
 /// A single command row in a `ContextMenu`.
 #[derive(Clone, PartialEq)]
@@ -99,7 +101,14 @@ fn render_entry(entry: &ContextMenuEntry, on_close: &Callback<()>) -> Html {
             }
 
             let title = item.title.clone();
-            html! { <span {class} {onclick} {title}>{ item.label.clone() }</span> }
+            let label_title = title.is_none().then(|| item.label.clone());
+            html! {
+                <span {class} {onclick} {title}>
+                    <span class="context-menu-label" title={label_title}>
+                        { item.label.clone() }
+                    </span>
+                </span>
+            }
         },
         ContextMenuEntry::Header(label) => {
             html! { <span class="context-menu-header">{ label.clone() }</span> }
@@ -136,39 +145,62 @@ pub struct SubmenuProps {
 pub enum SubmenuMsg {
     Enter,
     Leave,
-    Measure,
 }
 
-/// A hover-opened flyout row that opens toward whichever side of its parent
-/// has room for it, tracked through the bubbling `mouseover`/`mouseout` pair
-/// because Chrome withholds `mouseenter` from listeners on a shadow root.
+/// A hover-opened flyout row placed beside its row inside the viewport,
+/// tracked through the bubbling `mouseover`/`mouseout` pair because Chrome
+/// withholds `mouseenter` from listeners on a shadow root.
 pub struct Submenu {
     flyout: NodeRef,
     open: bool,
-    flip_x: bool,
-    flip_y: bool,
+
+    /// Re-places the open flyout when the menu its row belongs to scrolls.
+    scroll: Option<ScrollWatch>,
+}
+
+struct ScrollWatch {
+    menu: Element,
+    listener: Closure<dyn FnMut(Event)>,
+}
+
+fn place_flyout(flyout: &NodeRef) -> Option<()> {
+    let flyout = flyout.cast::<HtmlElement>()?;
+    let row = flyout.parent_element()?;
+    let anchor = Bounds::from(&row.get_bounding_client_rect());
+    apply_placement(&flyout, &anchor, ModalSide::Beside);
+    Some(())
+}
+
+fn scrolling_menu(flyout: &NodeRef) -> Option<Element> {
+    let row = flyout.cast::<HtmlElement>()?.parent_element()?;
+    match row.closest(".context-menu-submenu").ok()? {
+        Some(parent) => Some(parent),
+        None => Some(row.get_root_node().dyn_into::<ShadowRoot>().ok()?.host()),
+    }
 }
 
 impl Submenu {
-    /// Which sides the flyout must open toward to stay on-screen, or `None`
-    /// while it is hidden and has no size to measure.
-    fn decide(&self) -> Option<(bool, bool)> {
-        let flyout = self.flyout.cast::<HtmlElement>()?;
-        let item = flyout.parent_element()?;
-        let flyout_rect = flyout.get_bounding_client_rect();
-        if flyout_rect.width() == 0.0 {
-            return None;
-        }
+    fn watch_scroll(&mut self) {
+        if self.scroll.is_none()
+            && let Some(menu) = scrolling_menu(&self.flyout)
+        {
+            let flyout = self.flyout.clone();
+            let listener = Closure::wrap(Box::new(move |_: Event| {
+                place_flyout(&flyout);
+            }) as Box<dyn FnMut(Event)>);
 
-        let window = global::window();
-        let inner_width = window.inner_width().unwrap().as_f64().unwrap();
-        let inner_height = window.inner_height().unwrap().as_f64().unwrap();
-        let item_rect = item.get_bounding_client_rect();
-        let over_x = inner_width < item_rect.right() + flyout_rect.width();
-        let over_y = inner_height < item_rect.top() - 1.0 + flyout_rect.height();
-        let flip_x = over_x && item_rect.left() > inner_width - item_rect.right();
-        let flip_y = over_y && item_rect.bottom() > inner_height - item_rect.top();
-        Some((flip_x, flip_y))
+            let _ =
+                menu.add_event_listener_with_callback("scroll", listener.as_ref().unchecked_ref());
+
+            self.scroll = Some(ScrollWatch { menu, listener });
+        }
+    }
+
+    fn unwatch_scroll(&mut self) {
+        if let Some(ScrollWatch { menu, listener }) = self.scroll.take() {
+            let _ = menu
+                .remove_event_listener_with_callback("scroll", listener.as_ref().unchecked_ref());
+        }
     }
 }
 
@@ -180,8 +212,7 @@ impl Component for Submenu {
         Self {
             flyout: NodeRef::default(),
             open: false,
-            flip_x: false,
-            flip_y: false,
+            scroll: None,
         }
     }
 
@@ -195,28 +226,21 @@ impl Component for Submenu {
             SubmenuMsg::Leave => {
                 let changed = self.open;
                 self.open = false;
+                self.unwatch_scroll();
                 changed
-            },
-            SubmenuMsg::Measure => match self.decide() {
-                Some((flip_x, flip_y)) => {
-                    let changed = (flip_x, flip_y) != (self.flip_x, self.flip_y);
-                    self.flip_x = flip_x;
-                    self.flip_y = flip_y;
-                    changed
-                },
-                None => false,
             },
         }
     }
 
-    fn rendered(&mut self, ctx: &Context<Self>, _first_render: bool) {
-        if self.open
-            && self
-                .decide()
-                .is_some_and(|d| d != (self.flip_x, self.flip_y))
-        {
-            ctx.link().send_message(SubmenuMsg::Measure);
+    fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
+        if self.open {
+            place_flyout(&self.flyout);
+            self.watch_scroll();
         }
+    }
+
+    fn destroy(&mut self, _ctx: &Context<Self>) {
+        self.unwatch_scroll();
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
@@ -251,14 +275,6 @@ impl Component for Submenu {
             class.push("open");
         }
 
-        if self.flip_x {
-            class.push("flip-x");
-        }
-
-        if self.flip_y {
-            class.push("flip-y");
-        }
-
         let children = props
             .entries
             .iter()
@@ -266,7 +282,9 @@ impl Component for Submenu {
 
         html! {
             <span class="context-menu-item has-submenu" {onclick} {onmouseover} {onmouseout}>
-                { props.label.clone() }
+                <span class="context-menu-label" title={props.label.clone()}>
+                    { props.label.clone() }
+                </span>
                 <div {class} ref={self.flyout.clone()}>{ for children }</div>
             </span>
         }

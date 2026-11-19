@@ -84,3 +84,174 @@ test.describe("Context menu at the viewport edge", () => {
         expect(box.x + box.width).toBeLessThanOrEqual(menu_box.x + 1);
     });
 });
+
+async function declareCommands(page, commands: unknown[]) {
+    await page.evaluate(async (commands) => {
+        const viewer = document.querySelector("perspective-viewer") as any;
+        window["__COMMANDS__"] = [];
+        viewer.addEventListener("perspective-command", (event) => {
+            window["__COMMANDS__"].push(event.detail.key);
+        });
+
+        await viewer.setCommandSchema(() => ({ commands }));
+    }, commands);
+}
+
+async function expectInsideViewport(page, locator) {
+    const viewport = page.viewportSize()!;
+    const box = (await locator.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+    expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+}
+
+test.describe("Context menu taller than the viewport", () => {
+    test("60 commands opened near the bottom edge stay inside the viewport with the last clickable", async ({
+        page,
+    }) => {
+        const commands = Array.from({ length: 60 }, (_, i) => ({
+            kind: "Command",
+            key: `command_${i}`,
+            label: `Command ${String(i).padStart(2, "0")}`,
+        }));
+
+        await declareCommands(page, commands);
+        const viewport = page.viewportSize()!;
+        await page.mouse.click(viewport.width / 2, viewport.height - 8, {
+            button: "right",
+        });
+
+        const menu = page.locator("perspective-context-menu");
+        await expect(menu).toBeVisible();
+        await twoFrames(page);
+        await expectInsideViewport(page, menu);
+        await menu
+            .locator(".context-menu-item", { hasText: "Command 59" })
+            .click({ timeout: 5000 });
+
+        await expect
+            .poll(() => page.evaluate(() => window["__COMMANDS__"]))
+            .toContain("command_59");
+    });
+
+    test("the New flyout with 300 tables stays inside the viewport with its last table clickable", async ({
+        page,
+    }) => {
+        await page.evaluate(async () => {
+            const worker = window["__TEST_WORKER__"];
+            await Promise.all(
+                Array.from({ length: 300 }, (_, i) =>
+                    worker.table(
+                        { x: [1] },
+                        { name: `t_${String(i).padStart(3, "0")}` },
+                    ),
+                ),
+            );
+        });
+
+        const viewport = page.viewportSize()!;
+        await page.mouse.click(viewport.width / 2, viewport.height / 2, {
+            button: "right",
+        });
+
+        const menu = page.locator("perspective-context-menu");
+        await menu.waitFor();
+        await menu
+            .locator(".context-menu-item.has-submenu", { hasText: "New" })
+            .hover();
+
+        const flyout = menu.locator(".context-menu-submenu");
+        await expect(flyout).toBeVisible();
+        const last = flyout.locator(".dropdown-menu-item", {
+            hasText: "t_299",
+        });
+
+        await last.waitFor({ state: "attached" });
+        await twoFrames(page);
+        await expectInsideViewport(page, flyout);
+        await last.click({ timeout: 5000 });
+        await expect
+            .poll(() =>
+                page.evaluate(async () => {
+                    const viewer = document.querySelector(
+                        "perspective-viewer",
+                    ) as any;
+
+                    const config = await viewer.saveWorkspace();
+                    return Object.values(config.panels).map(
+                        (panel: any) => panel.table,
+                    );
+                }),
+            )
+            .toContain("t_299");
+    });
+
+    test("a flyout nested in a flyout opens beside it and is clickable", async ({
+        page,
+    }) => {
+        await declareCommands(page, [
+            {
+                kind: "Group",
+                key: "outer",
+                label: "Outer",
+                commands: [
+                    { kind: "Command", key: "sibling", label: "Sibling" },
+                    {
+                        kind: "Group",
+                        key: "inner",
+                        label: "Inner",
+                        commands: [
+                            { kind: "Command", key: "leaf", label: "Leaf" },
+                        ],
+                    },
+                ],
+            },
+        ]);
+
+        const viewport = page.viewportSize()!;
+        await page.mouse.click(viewport.width / 2, viewport.height / 2, {
+            button: "right",
+        });
+
+        const menu = page.locator("perspective-context-menu");
+        await menu.waitFor();
+        const outer_row = menu.locator(".context-menu-item.has-submenu", {
+            hasText: "Outer",
+        });
+
+        await outer_row.hover();
+        const outer = outer_row.locator("> .context-menu-submenu");
+        await expect(outer).toBeVisible();
+        const inner_row = outer.locator(".context-menu-item.has-submenu");
+        await inner_row.hover();
+        const inner = inner_row.locator("> .context-menu-submenu");
+        await expect(inner).toBeVisible();
+        const outer_box = (await outer.boundingBox())!;
+        const inner_box = (await inner.boundingBox())!;
+        expect(await outer.evaluate((el) => el.scrollLeft)).toBe(0);
+        expect(inner_box.x).toBeGreaterThanOrEqual(
+            outer_box.x + outer_box.width - 2,
+        );
+
+        await expectInsideViewport(page, inner);
+        const unclipped = await inner.evaluate((el) => {
+            const rect = el.getBoundingClientRect();
+            const hit = (el.getRootNode() as ShadowRoot).elementFromPoint(
+                rect.left + rect.width / 2,
+                rect.top + rect.height / 2,
+            );
+
+            return el.contains(hit);
+        });
+
+        expect(unclipped).toBe(true);
+        await inner
+            .locator(".context-menu-item", { hasText: "Leaf" })
+            .click({ timeout: 5000 });
+
+        await expect
+            .poll(() => page.evaluate(() => window["__COMMANDS__"]))
+            .toContain("leaf");
+    });
+});

@@ -255,9 +255,11 @@ fn FilterDropDownView(props: &FilterDropDownViewProps) -> Html {
 
                         html! {
                             if idx == props.selected {
-                                <span onmousedown={click} class="selected">{ value }</span>
+                                <span onmousedown={click} class="selected" title={value.clone()}>
+                                    { value }
+                                </span>
                             } else {
-                                <span onmousedown={click}>{ value }</span>
+                                <span onmousedown={click} title={value.clone()}>{ value }</span>
                             }
                         }
                     }) }

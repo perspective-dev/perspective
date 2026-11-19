@@ -33,6 +33,10 @@
 
     span {
         cursor: pointer;
+        flex: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .no-results {
