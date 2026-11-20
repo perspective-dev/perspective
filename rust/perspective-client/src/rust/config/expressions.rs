@@ -161,9 +161,9 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 
+use schemars::JsonSchema;
 use serde::de::value::MapAccessDeserializer;
 use serde::de::{MapAccess, Visitor};
-use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 

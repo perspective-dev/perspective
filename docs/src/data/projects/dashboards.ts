@@ -281,7 +281,7 @@ export const DASHBOARD_PROJECTS: Project[] = [
         workspace: multiPanel(ORDER_FLOW, {
             depth: market("Depth Timeseries", "Vaporwave"),
             heat: market("Heatmap", "Solarized Dark"),
-            closed: market("Closed Orders", "Solarized Light"),
+            closed: market("Closed Orders", "Solarized"),
         }),
     },
     {

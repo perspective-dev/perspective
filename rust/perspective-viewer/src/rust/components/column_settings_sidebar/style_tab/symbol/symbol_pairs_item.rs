@@ -15,9 +15,9 @@ use std::rc::Rc;
 use yew::{Callback, Html, Properties, html};
 
 use crate::components::column_settings_sidebar::style_tab::symbol::row_selector::RowSelector;
-use crate::components::column_settings_sidebar::style_tab::symbol::symbol_selector::SymbolSelector;
 use crate::components::filter_dropdown::FilterDropDownElement;
 use crate::config::SymbolKVPair;
+use crate::ui::SymbolSelector;
 use crate::utils::PtrEqRc;
 
 #[derive(Properties, PartialEq)]

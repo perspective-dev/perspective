@@ -374,22 +374,24 @@ test.describe("Datagrid plugin_config text and row options", () => {
             await viewer.flush();
         });
 
-        const wrapped = await page.evaluate(async () => {
-            const datagrid = document.querySelector(
-                "perspective-viewer-datagrid",
-            ) as any;
+        await expect
+            .poll(() =>
+                page.evaluate(async () => {
+                    const datagrid = document.querySelector(
+                        "perspective-viewer-datagrid",
+                    ) as any;
 
-            const rows = [
-                ...datagrid.regular_table.querySelectorAll("tbody tr"),
-            ].slice(0, 3);
+                    const rows = [
+                        ...datagrid.regular_table.querySelectorAll("tbody tr"),
+                    ].slice(0, 3);
 
-            return rows.map(
-                (tr: Element) =>
-                    tr.children[0].querySelector(".psp-wrap") !== null,
-            );
-        });
-
-        expect(wrapped).toEqual([true, true, true]);
+                    return rows.map(
+                        (tr: Element) =>
+                            tr.children[0].querySelector(".psp-wrap") !== null,
+                    );
+                }),
+            )
+            .toEqual([true, true, true]);
     });
 
     test("double-clicking a narrowed column's handle unboxes it and restores auto width", async ({

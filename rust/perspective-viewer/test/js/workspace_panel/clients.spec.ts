@@ -65,13 +65,14 @@ test.describe("Workspace panel clients", () => {
         const lost = section(page, OTHER);
         await expect(lost).toHaveClass(/is-lost/);
         await expect(lost.locator(".ws-client-status")).toHaveClass(/errored/);
-        await expect(lost.locator(".ws-client-error")).toBeVisible();
-        await expect(lost.locator(".ws-client-reconnect")).toHaveCount(0);
         await expect(
-            page.locator(
-                "perspective-viewer #workspace_panel #status_reconnect",
-            ),
-        ).toHaveClass(/errored/);
+            lost.locator(".ws-client-error .error-dialog-message"),
+        ).toContainText("Worker terminated");
+        const stack = lost.locator(".ws-client-error .error-dialog-stack");
+        await expect(stack).toBeHidden();
+        await lost.locator(".ws-client-error summary").click();
+        await expect(stack).toBeVisible();
+        await expect(lost.locator(".error-dialog-reconnect")).toHaveCount(0);
 
         const open = section(page, TABLE);
         await expect(open).not.toHaveClass(/is-lost/);
@@ -127,6 +128,60 @@ test.describe("Workspace panel clients", () => {
         await expect(
             section(page, TABLE).locator(".ws-client-status"),
         ).toHaveClass(/connected/);
+    });
+
+    test("an errored panel marks its tab and disables its menu and settings", async ({
+        page,
+    }) => {
+        const id = await page.evaluate(async (table) => {
+            const viewer = document.querySelector("perspective-viewer")! as any;
+            return await viewer.addPanel({ table });
+        }, OTHER);
+
+        await terminate(page);
+        await expect(section(page, OTHER)).toHaveClass(/is-lost/);
+        await page
+            .locator("perspective-viewer #workspace_close_button")
+            .click();
+
+        const tab = page.locator(`perspective-viewer-tab[slot="tab-${id}"]`);
+        await expect(tab.locator(".psp-tab-caret")).toHaveClass(/errored/);
+
+        await tab.click({ button: "right" });
+        const menu = page.locator("perspective-context-menu");
+        await menu.waitFor();
+        await expect(
+            menu.locator(".context-menu-item", { hasText: "Export" }),
+        ).toHaveClass(/disabled/);
+        await expect(
+            menu.locator(".context-menu-item", { hasText: "Reset" }),
+        ).toHaveClass(/disabled/);
+        await expect(
+            menu.locator(".context-menu-item", { hasText: "Close" }),
+        ).not.toHaveClass(/disabled/);
+
+        await page.evaluate(async (id) => {
+            const viewer = document.querySelector("perspective-viewer")! as any;
+            await viewer.setActivePanel(id);
+            await viewer.toggleConfig(true);
+        }, id);
+
+        await expect(
+            page.locator("perspective-viewer #settings_panel"),
+        ).toHaveClass(/errored/);
+        await expect(
+            page.locator(
+                "perspective-viewer #settings_panel_error .error-dialog-message",
+            ),
+        ).toContainText("Worker terminated");
+
+        for (const button of ["#reset", "#export", "#copy"]) {
+            await expect(
+                page.locator("perspective-viewer #menu-bar .hover-target", {
+                    has: page.locator(button),
+                }),
+            ).toHaveClass(/disabled/);
+        }
     });
 
     test("the settings panel still toggles after a terminate", async ({

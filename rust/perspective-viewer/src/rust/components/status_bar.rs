@@ -10,8 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use std::rc::Rc;
-
 use perspective_client::config::Filter;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::*;
@@ -21,13 +19,10 @@ use super::status_indicator::StatusIndicator;
 use crate::components::copy_dropdown::CopyDropDownMenu;
 use crate::components::export_dropdown::ExportDropDownMenu;
 use crate::components::global_filter_bar::GlobalFilterBar;
-use crate::components::new_panel_menu::{
-    HostedTables, NewPanelMenu, NewPanelPick, PanelLabels, derived_counts,
-};
 use crate::components::style::StyleSurface;
 use crate::config::*;
 use crate::presentation::{Presentation, PresentationProps};
-use crate::queries::{WorkspaceStatus, fetch_hosted_tables};
+use crate::queries::WorkspaceStatus;
 use crate::renderer::*;
 use crate::session::*;
 use crate::tasks::*;
@@ -43,9 +38,6 @@ pub struct StatusBarProps {
 
     /// Fired when the reset button is clicked.
     pub on_reset: Callback<bool>,
-
-    /// The left-anchored "New" action, fired with the [`NewPanelMenu`] pick.
-    pub on_new_panel: Callback<NewPanelPick>,
 
     /// Snapshots threaded from root.  Component reads `has_table`,
     /// `has_table_cells`, `error` from session_props; `selected_theme`,
@@ -77,6 +69,10 @@ pub struct StatusBarProps {
     /// Whether this bar renders the `StatusIndicator`, which moves to the
     /// workspace panel's header while that panel is open.
     pub show_status: bool,
+
+    /// Whether the workspace panel is open, which keeps this bar docked.
+    #[prop_or_default]
+    pub is_workspace_open: bool,
 
     /// Fired when the `StatusIndicator` is clicked.
     pub on_status_click: Callback<()>,
@@ -112,28 +108,13 @@ impl PartialEq for StatusBarProps {
             && self.has_clients == other.has_clients
             && self.status == other.status
             && self.show_status == other.show_status
+            && self.is_workspace_open == other.is_workspace_open
             && self.global_filters == other.global_filters
     }
 }
 
 pub enum StatusBarMsg {
     Reset(MouseEvent),
-
-    /// The "New" button: fetch the hosted-table listing, then open the
-    /// dropdown.
-    NewPanel,
-
-    /// The listing resolved: open the dropdown anchored at the button, if
-    /// the generation is still the newest.
-    OpenNewPanel(u32, HostedTables),
-    CloseNewPanel,
-
-    /// A pick in the "New" dropdown.
-    NewPanelPick(NewPanelPick),
-
-    /// The hosted-table set changed: refresh the "New" dropdown's listing
-    /// in place, if it is open.
-    RefreshTables,
     Export,
     Copy,
     CloseExport,
@@ -148,59 +129,22 @@ pub enum StatusBarMsg {
 pub struct StatusBar {
     copy_ref: NodeRef,
     export_ref: NodeRef,
-    new_ref: NodeRef,
     statusbar_ref: NodeRef,
     copy_target: Option<HtmlElement>,
     export_target: Option<HtmlElement>,
-
-    /// The "New" dropdown's anchor and listings while it is open.
-    new_menu: Option<(HtmlElement, HostedTables, PanelLabels)>,
-
-    /// Keeps the [`Workspace::hosted_tables_changed`] listener attached for
-    /// the component's lifetime.
-    _tables_sub: Subscription,
-
-    /// Bumped per "New" click; a resolving fetch opens only if it is still
-    /// the newest one.
-    new_generation: u32,
-}
-
-impl StatusBar {
-    /// Fetch the hosted-table listing and (re)open the "New" dropdown with
-    /// it, guarded by `new_generation` against stale resolutions.
-    fn spawn_tables_fetch(&mut self, ctx: &Context<Self>) {
-        self.new_generation = self.new_generation.wrapping_add(1);
-        let generation = self.new_generation;
-        let workspace = ctx.props().workspace.clone();
-        let link = ctx.link().clone();
-        ApiFuture::spawn(async move {
-            let tables = fetch_hosted_tables(&workspace).await;
-            link.send_message(StatusBarMsg::OpenNewPanel(generation, Rc::new(tables)));
-            Ok(())
-        });
-    }
 }
 
 impl Component for StatusBar {
     type Message = StatusBarMsg;
     type Properties = StatusBarProps;
 
-    fn create(ctx: &Context<Self>) -> Self {
-        let _tables_sub = ctx.props().workspace.hosted_tables_changed().add_listener({
-            let link = ctx.link().clone();
-            move |_| link.send_message(StatusBarMsg::RefreshTables)
-        });
-
+    fn create(_ctx: &Context<Self>) -> Self {
         Self {
             copy_ref: NodeRef::default(),
             export_ref: NodeRef::default(),
-            new_ref: NodeRef::default(),
             statusbar_ref: NodeRef::default(),
             copy_target: None,
             export_target: None,
-            new_menu: None,
-            _tables_sub,
-            new_generation: 0,
         }
     }
 
@@ -210,54 +154,6 @@ impl Component for StatusBar {
                 let all = event.shift_key();
                 ctx.props().on_reset.emit(all);
                 false
-            },
-            StatusBarMsg::NewPanel => {
-                self.spawn_tables_fetch(ctx);
-                false
-            },
-            StatusBarMsg::RefreshTables => {
-                if self.new_menu.is_some() {
-                    self.spawn_tables_fetch(ctx);
-                }
-
-                false
-            },
-            StatusBarMsg::OpenNewPanel(generation, tables) => {
-                if generation != self.new_generation {
-                    return false;
-                }
-
-                match self.new_ref.cast::<HtmlElement>() {
-                    Some(target) => {
-                        let workspace = &ctx.props().workspace;
-                        let panels = Rc::new(
-                            workspace
-                                .panel_ids()
-                                .into_iter()
-                                .filter_map(|id| {
-                                    let panel = workspace.panel(&id)?;
-                                    let title = panel.session.get_title().filter(|t| !t.is_empty());
-                                    Some((id.as_str().to_owned(), title))
-                                })
-                                .collect::<Vec<_>>(),
-                        );
-
-                        self.new_menu = Some((target, tables, panels));
-                        true
-                    },
-                    None => false,
-                }
-            },
-            StatusBarMsg::CloseNewPanel => {
-                self.new_menu = None;
-                self.new_generation = self.new_generation.wrapping_add(1);
-                true
-            },
-            StatusBarMsg::NewPanelPick(pick) => {
-                ctx.props().on_new_panel.emit(pick);
-                self.new_menu = None;
-                self.new_generation = self.new_generation.wrapping_add(1);
-                true
             },
             StatusBarMsg::ResetTheme => {
                 update_theme(
@@ -333,6 +229,10 @@ impl Component for StatusBar {
             is_updating_class_name.push("updating");
         }
 
+        if !ctx.props().show_status {
+            is_updating_class_name.push("workspace-open");
+        }
+
         // TODO Memoizing these would reduce some vdom diffing later on
         let onclose = left_click(ctx.link().callback(|_| StatusBarMsg::Eject));
         let onpointerdown = ctx.link().callback(StatusBarMsg::PointerEvent);
@@ -340,42 +240,28 @@ impl Component for StatusBar {
             event.prevent_default();
             StatusBarMsg::Export
         }));
+
         let oncopy = left_click(ctx.link().callback(|event: MouseEvent| {
             event.prevent_default();
             StatusBarMsg::Copy
         }));
-        let onreset = left_click(ctx.link().callback(StatusBarMsg::Reset));
-        let onnew = left_click(ctx.link().callback(|event: MouseEvent| {
-            event.prevent_default();
-            StatusBarMsg::NewPanel
-        }));
-        let on_new_select = ctx.link().callback(StatusBarMsg::NewPanelPick);
-        let on_close_new = ctx.link().callback(|_| StatusBarMsg::CloseNewPanel);
-        let on_delete_derived = {
-            let workspace = ctx.props().workspace.clone();
-            Callback::from(move |name: String| {
-                let workspace = workspace.clone();
-                let effect = workspace.effects().guard();
-                ApiFuture::spawn(async move {
-                    let _effect = effect;
-                    delete_derived(&workspace, &name).await
-                });
-            })
-        };
 
+        let onreset = left_click(ctx.link().callback(StatusBarMsg::Reset));
         let extra_slot = ctx
             .props()
             .renderer
             .slot_name()
             .map(|id| format!("statusbar-extra-{id}"))
             .unwrap_or_else(|| "statusbar-extra".to_owned());
+
         let is_menu =
             !is_empty && matches!(has_table, Some(TableLoadState::Loaded)) && is_settings_open;
-        let is_panel_bar = ctx.props().has_clients;
+
         let is_settings = is_empty
             || !matches!(has_table, Some(TableLoadState::Loaded))
             || is_errored
-            || is_settings_open;
+            || is_settings_open
+            || ctx.props().is_workspace_open;
 
         let on_copy_select = {
             let props = ctx.props().clone();
@@ -441,16 +327,6 @@ impl Component for StatusBar {
                                 on_toggle={ctx.props().on_status_click.clone()}
                             />
                         }
-                        if is_panel_bar {
-                            <div id="panel-bar" class="section">
-                                <span ref={&self.new_ref} class="hover-target" onmousedown={onnew}>
-                                    <span id="new_panel" class="button">
-                                        <span class="icon" />
-                                        <span class="icon-label" />
-                                    </span>
-                                </span>
-                            </div>
-                        }
                         if !ctx.props().global_filters.is_empty() {
                             <GlobalFilterBar
                                 filters={ctx.props().global_filters.clone()}
@@ -460,11 +336,6 @@ impl Component for StatusBar {
                         }
                         <div id="spacer" />
                         if is_empty {
-                            // Empty stage: the theme is element-level (new
-                            // panels adopt it), but there is no data for
-                            // reset/export/copy or a plugin's extras.
-                            // Before any panel stamps a `theme` attribute, show
-                            // the registry default (what the first panel adopts).
                             <div id="menu-bar" class="section">
                                 <ThemeSelector
                                     theme={ctx.props().presentation_props.selected_theme.clone().or_else(|| {
@@ -485,16 +356,22 @@ impl Component for StatusBar {
                                     on_reset={ctx.link().callback(|_| StatusBarMsg::ResetTheme)}
                                 />
                                 <div id="plugin-settings"><slot name={extra_slot} /></div>
-                                <span class="hover-target">
-                                    <span id="reset" class="button" onmousedown={&onreset}>
+                                <span
+                                    class={classes!("hover-target", is_errored.then_some("disabled"))}
+                                >
+                                    <span
+                                        id="reset"
+                                        class="button"
+                                        onmousedown={(!is_errored).then_some(onreset)}
+                                    >
                                         <span class="icon shift-alt-icon" />
                                         <span class="icon-label" />
                                     </span>
                                 </span>
                                 <span
                                     ref={&self.export_ref}
-                                    class="hover-target"
-                                    onmousedown={onexport}
+                                    class={classes!("hover-target", is_errored.then_some("disabled"))}
+                                    onmousedown={(!is_errored).then_some(onexport)}
                                 >
                                     <span id="export" class="button">
                                         <span class="icon" />
@@ -503,8 +380,8 @@ impl Component for StatusBar {
                                 </span>
                                 <span
                                     ref={&self.copy_ref}
-                                    class="hover-target"
-                                    onmousedown={oncopy}
+                                    class={classes!("hover-target", is_errored.then_some("disabled"))}
+                                    onmousedown={(!is_errored).then_some(oncopy)}
                                 >
                                     <span id="copy" class="button">
                                         <span class="icon" />
@@ -519,24 +396,6 @@ impl Component for StatusBar {
                             </div>
                         }
                     </div>
-                    <PortalModal
-                        tag_name="perspective-new-panel-menu"
-                        sheet={StyleSurface::DropdownMenu.sheet()}
-                        target={self.new_menu.as_ref().map(|(target, ..)| target.clone())}
-                        own_focus=true
-                        on_close={on_close_new}
-                        theme={ctx.props().presentation_props.selected_theme.clone().unwrap_or_default()}
-                    >
-                        if let Some((_, tables, panels)) = &self.new_menu {
-                            <NewPanelMenu
-                                tables={Some(tables.clone())}
-                                panels={panels.clone()}
-                                callback={on_new_select}
-                                derived={derived_counts(&ctx.props().workspace)}
-                                on_delete={on_delete_derived}
-                            />
-                        }
-                    </PortalModal>
                     <PortalModal
                         tag_name="perspective-copy-menu"
                         sheet={StyleSurface::DropdownMenu.sheet()}

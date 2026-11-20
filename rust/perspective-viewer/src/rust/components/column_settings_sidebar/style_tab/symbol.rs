@@ -14,7 +14,6 @@ mod row_selector;
 
 mod symbol_pairs;
 mod symbol_pairs_item;
-mod symbol_selector;
 
 use std::collections::HashMap;
 use std::rc::Rc;

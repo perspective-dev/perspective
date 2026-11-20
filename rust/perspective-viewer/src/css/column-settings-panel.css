@@ -139,7 +139,7 @@
 
     .sidebar_pin_button {
         position: absolute;
-        right: 6px;
+        right: 12px;
         width: 14px;
         height: 14px;
         z-index: 8;

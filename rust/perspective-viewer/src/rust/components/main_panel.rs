@@ -84,9 +84,8 @@ pub struct MainPanelProps {
     /// Derived from root: `settings_open && (has_table_loaded || is_empty)`.
     pub is_settings_open: bool,
 
-    /// The element is an EMPTY STAGE (zero panels, no pending `load()`).
-    /// Renders the stand-alone open-settings button — the "invisible panel"
-    /// affordance — and switches the status bar to its empty-state chrome.
+    /// The element is an EMPTY STAGE (zero panels, no pending `load()`), which
+    /// switches the status bar to its empty-state chrome.
     pub is_empty: bool,
 
     /// Whether any `Client` is loaded (the status bar's "New" table menu).
@@ -99,6 +98,9 @@ pub struct MainPanelProps {
 
     /// Whether the `StatusBar` renders the status indicator.
     pub show_status: bool,
+
+    /// Whether the workspace panel is open, which keeps the `StatusBar` docked.
+    pub is_workspace_open: bool,
 
     /// Fired when the status indicator is clicked.
     pub on_status_click: Callback<()>,
@@ -154,6 +156,7 @@ impl PartialEq for MainPanelProps {
             && self.has_clients == rhs.has_clients
             && self.status == rhs.status
             && self.show_status == rhs.show_status
+            && self.is_workspace_open == rhs.is_workspace_open
             && self.panel_ids == rhs.panel_ids
             && self.panel_titles == rhs.panel_titles
             && self.panel_themes == rhs.panel_themes
@@ -244,6 +247,10 @@ pub struct MainPanel {
     /// every stack, not just the active panel). Empty until the first layout
     /// update — every panel starts visible.
     hidden_tabs: HashSet<String>,
+
+    /// The visible panel of the layout's top-left stack, recomputed with
+    /// `hidden_tabs`.
+    top_left_tab: Option<String>,
 
     /// Open context menu as `(client x, client y, target panel id)`; outer
     /// `None` when closed. A `None` *panel id* is the target-less menu (no
@@ -419,6 +426,7 @@ impl Component for MainPanel {
             listener_target: None,
             drag: None,
             hidden_tabs: HashSet::new(),
+            top_left_tab: None,
             context_menu: None,
             context_menu_commands: PtrEqRc::default(),
             pending_menu: None,

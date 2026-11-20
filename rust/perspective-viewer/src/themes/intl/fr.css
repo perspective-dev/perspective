@@ -67,6 +67,7 @@ perspective-viewer {
     --psp-label--new-from-panel--content: "Nouveau depuis un panneau";
     --psp-label--apply-button--content: "Appliquer";
     --psp-label--paste-button--content: "Coller";
+    --psp-label--formatted-button--content: "Formater";
     --psp-label--edit-mode-read-only--content: "Lecture seule";
     --psp-label--edit-mode-edit--content: "Édition de texte";
     --psp-label--edit-mode-select-row--content: "Sélectionner ligne";
@@ -135,9 +136,10 @@ perspective-viewer {
     --psp-label--client-default--content: "par défaut";
     --psp-label--client-reconnect--content: "Reconnecter";
     --psp-label--client-retry--content: "Réessayer";
+    --psp-label--error-details--content: "Détails";
     --psp-label--tables-loading--content: "Chargement des tables";
     --psp-label--tables-no-clients--content: "Aucun client";
-    --psp-label--derive-from-panel--content: "Dériver depuis un panneau";
+    --psp-label--views--content: "Vues";
     --psp-label--join-open--content: "Joindre";
     --psp-label--join-left--content: "Table de gauche";
     --psp-label--join-right--content: "Table de droite";
@@ -196,7 +198,6 @@ perspective-viewer {
     --psp-label--grid-columns--content: "Colonnes de la grille";
     --psp-label--grid-rows--content: "Lignes de la grille";
     --psp-label--chart-type--content: "Type de glyphe";
-    --psp-label--new-panel-button--content: "Nouveau";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "Axe Y double automatique";

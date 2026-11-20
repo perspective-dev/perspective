@@ -28,7 +28,7 @@ use super::wiring::{
     clear_active_callbacks, create_active_subscriptions, inject_active_callbacks,
     subscribe_panel_status, subscribe_panel_titles,
 };
-use crate::config::{DecodeConfig, ViewerConfigInitial};
+use crate::config::{DecodeConfig, SettingsUpdate, ViewerConfigInitial};
 use crate::derived::suggest_name;
 use crate::queries::*;
 use crate::renderer::Renderer;
@@ -212,15 +212,28 @@ impl PerspectiveViewer {
                 None => spawn_owned("close-panel", eject),
             }
 
+            self.close_settings_if_empty(ctx);
             return false;
         }
 
         match self.detach_panel(ctx, &id) {
             Some(panel) => {
                 spawn_owned("close-panel", eject_panel(panel, Disposal::Reject));
+                self.close_settings_if_empty(ctx);
                 true
             },
             None => false,
+        }
+    }
+
+    /// Close the settings sidebar once the last panel's close has committed.
+    fn close_settings_if_empty(&self, ctx: &Context<Self>) {
+        if ctx.props().workspace.is_empty_stage() && ctx.props().presentation.is_settings_open() {
+            ctx.link().send_message(ToggleSettingsInit(
+                Some(SettingsUpdate::Update(false)),
+                true,
+                None,
+            ));
         }
     }
 

@@ -83,6 +83,7 @@ pub fn NewPanelMenu(props: &NewPanelMenuProps) -> Html {
                             .map(|cb| {
                                 let table = table.clone();
                                 Callback::from(move |event: MouseEvent| {
+                                    event.prevent_default();
                                     event.stop_propagation();
                                     cb.emit(table.clone());
                                 })

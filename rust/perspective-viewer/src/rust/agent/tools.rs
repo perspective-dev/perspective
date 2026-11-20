@@ -206,10 +206,7 @@ fn spliced_config(
             original.remove("$schema");
             original.remove("title");
             let mut config = Value::Object(original.clone());
-            if let Some(properties) = config
-                .get_mut("properties")
-                .and_then(|x| x.as_object_mut())
-            {
+            if let Some(properties) = config.get_mut("properties").and_then(|x| x.as_object_mut()) {
                 for field in omit {
                     properties.remove(*field);
                 }

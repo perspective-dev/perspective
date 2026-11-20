@@ -10,6 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+mod element;
+
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -19,74 +21,11 @@ use wasm_bindgen::prelude::*;
 use web_sys::*;
 use yew::prelude::*;
 
+use self::element::{TAB_TAG, adopt_sheet, ensure_custom_element};
 use crate::components::rows_counter::RowsCounter;
+use crate::queries::WorkspaceStatus;
 use crate::session::{Session, ViewStats};
 use crate::utils::Subscription;
-
-#[wasm_bindgen(inline_js = r#"
-    export function define_panel_tab(name) {
-        if (!customElements.get(name)) {
-            customElements.define(name, class extends HTMLElement {});
-        }
-    }
-"#)]
-extern "C" {
-    #[wasm_bindgen(js_name = "define_panel_tab")]
-    fn define_panel_tab(name: &str);
-}
-
-/// The tag the tab host is created as (a custom element, so it can own a
-/// ShadowRoot for its contents).
-const TAB_TAG: &str = "perspective-viewer-tab";
-
-thread_local! {
-    /// Whether the `<perspective-viewer-tab>` custom element has been defined
-    /// (once per page; WASM is single-threaded).
-    static ELEMENT_DEFINED: Cell<bool> = const { Cell::new(false) };
-
-    /// The shared, constructed stylesheet adopted into every tab's ShadowRoot.
-    static TAB_SHEET: CssStyleSheet = {
-        let sheet = CssStyleSheet::new().unwrap();
-        // `tab-button.css` (the tab's icon buttons) is shared with the viewer
-        // sheet's empty-stage settings button, and goes FIRST so
-        // `panel-tab.css` may still override it.
-        sheet.replace_sync(concat!(
-            include_str!("../../css/tab-button.css"),
-            include_str!("../../css/panel-tab.css"),
-        ))
-            .unwrap();
-        sheet
-    };
-}
-
-/// Define the `<perspective-viewer-tab>` custom element once. It needs no
-/// lifecycle callbacks — it exists only to own a ShadowRoot into which each
-/// tab's contents are rendered (so the tab's structure CSS is encapsulated in
-/// its `adoptedStyleSheets` rather than injected into `document.head`).
-fn ensure_custom_element() {
-    ELEMENT_DEFINED.with(|defined| {
-        if !defined.get() {
-            define_panel_tab(TAB_TAG);
-            defined.set(true);
-        }
-    });
-}
-
-/// Adopt the shared tab stylesheet into `shadow_root.adoptedStyleSheets`
-/// (idempotent per root). Mirrors `StyleProvider`'s adopt-by-`Reflect`
-/// approach.
-fn adopt_sheet(shadow_root: &Element) {
-    let sheets = js_sys::Reflect::get(shadow_root.as_ref(), &"adoptedStyleSheets".into())
-        .unwrap()
-        .unchecked_into::<js_sys::Array>();
-
-    TAB_SHEET.with(|sheet| {
-        let sheet_val: &JsValue = sheet.as_ref();
-        if sheets.index_of(sheet_val, 0) < 0 {
-            sheets.push(sheet_val);
-        }
-    });
-}
 
 /// A panel's titlebar tab. The host is a `<perspective-viewer-tab>` custom
 /// element mounted in the viewer's **light DOM** and forwarded into its
@@ -124,6 +63,19 @@ pub struct PanelTabProps {
     /// panel, but only one panel in the whole layout is active.
     pub visible: bool,
 
+    /// The workspace status this tab shows in place of its drag indicator.
+    #[prop_or_default]
+    pub status: Option<WorkspaceStatus>,
+
+    /// `true` when this panel is errored; its caret shows an error mark unless
+    /// the active indicator takes precedence.
+    #[prop_or_default]
+    pub errored: bool,
+
+    /// Open the workspace panel, fired from the tab's status icon.
+    #[prop_or_default]
+    pub on_open_workspace: Callback<()>,
+
     /// `true` when this panel is a master (filter-source) panel — shows the
     /// broadcast badge to the left of the close button.
     pub is_master: bool,
@@ -134,8 +86,7 @@ pub struct PanelTabProps {
     /// e.g. the caret is hidden on a lone tab (see panel-tab.css).
     pub single: bool,
 
-    /// `false` for a lone panel (which can't be closed to zero) — hides the
-    /// close button.
+    /// `false` while this panel's close is in flight — hides the close button.
     pub closable: bool,
 
     /// `true` when the settings sidebar is open. When closed, the tab renders
@@ -287,11 +238,23 @@ impl PanelTab {
     /// its class is set imperatively). `visible` marks the front (selected)
     /// tab of every stack, not just the single active panel; `single`/`multi`
     /// reflect the host viewer's panel count. The shadow CSS keys off
-    /// `:host(.active)` / `:host(.visible)` / `:host(.single)`.
-    fn sync_class(&self, active: bool, visible: bool, single: bool, closing: bool) {
-        let mut class = Vec::with_capacity(4);
+    /// `:host(.active)` / `:host(.visible)` / `:host(.single)` /
+    /// `:host(.settings-closed)`.
+    fn sync_class(
+        &self,
+        active: bool,
+        visible: bool,
+        single: bool,
+        closing: bool,
+        is_settings_open: bool,
+    ) {
+        let mut class = Vec::with_capacity(5);
         if active {
             class.push("active");
+        }
+
+        if !is_settings_open {
+            class.push("settings-closed");
         }
 
         if visible {
@@ -466,6 +429,10 @@ impl Component for PanelTab {
             PanelTabMsg::OpenSettings
         });
 
+        let on_open_workspace = ctx.props().on_open_workspace.reform(|e: PointerEvent| {
+            e.stop_propagation();
+        });
+
         let title_html = if self.editing {
             let oninput = ctx.link().callback(|e: InputEvent| {
                 let value = e
@@ -514,7 +481,16 @@ impl Component for PanelTab {
 
         let content = html! {
             <>
-                <span class="psp-tab-caret" />
+                if let Some(status) = &ctx.props().status {
+                    <span
+                        class={classes!("psp-tab-status", status.state.class_name())}
+                        onpointerdown={on_open_workspace}
+                    />
+                } else {
+                    <span
+                        class={classes!("psp-tab-caret", ctx.props().errored.then_some("errored"))}
+                    />
+                }
                 // <span class="psp-tab-grip" />
                 { title_html }
                 if ctx.props().visible { <RowsCounter stats={self.stats.clone()} /> }
@@ -536,6 +512,7 @@ impl Component for PanelTab {
             ctx.props().visible,
             ctx.props().single,
             ctx.props().closing,
+            ctx.props().is_settings_open,
         );
         let theme = &ctx.props().theme;
         if self.stamped_theme.as_ref() != Some(theme) {

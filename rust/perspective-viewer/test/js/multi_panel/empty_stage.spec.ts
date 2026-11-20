@@ -11,11 +11,11 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 // The EMPTY STAGE (zero panels): the chrome a user can still drive before
-// any table or workspace is restored — the "invisible panel" settings
-// button, the settings sidebar (inert plugin menu + placeholders), the theme
-// picker, the stage error, and the "New" table menu.
+// any table or workspace is restored — the settings sidebar (inert plugin
+// menu + placeholders), the theme picker, the stage error, and the "New"
+// table menu.
 
-import { test, expect } from "../helpers.ts";
+import { test, expect, openWorkspaceTab } from "../helpers.ts";
 import { armInvariants } from "./harness.ts";
 
 const TABLE = "load-viewer-csv";
@@ -52,59 +52,29 @@ async function empty(page) {
 }
 
 async function open_empty_settings(page) {
-    const button = page.locator("perspective-viewer .psp-empty-settings");
-    await button.click();
+    await page.evaluate(async () => {
+        const viewer = document.querySelector("perspective-viewer")!;
+        // @ts-ignore
+        await viewer.toggleConfig(true);
+    });
+
     await expect(
         page.locator("perspective-viewer #settings_panel"),
     ).toBeVisible();
 }
 
-test.describe("Empty stage settings button", () => {
-    test("sits where a lone panel's tab settings button sits", async ({
-        page,
-    }) => {
-        const tab_button = page
-            .locator("perspective-viewer .psp-tab-settings:not(.psp-empty-settings)")
-            .first();
-        await expect(tab_button).toBeVisible();
-        const before = (await tab_button.boundingBox())!;
-
+test.describe("Empty stage settings access", () => {
+    test("has no open-settings button", async ({ page }) => {
         await empty(page);
-        const button = page.locator("perspective-viewer .psp-empty-settings");
-        await expect(button).toBeVisible();
-        const after = (await button.boundingBox())!;
-
-        // Same spot, same size, within subpixel rounding.
-        expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(2);
-        expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(2);
-        expect(Math.abs(after.width - before.width)).toBeLessThanOrEqual(1);
-        expect(Math.abs(after.height - before.height)).toBeLessThanOrEqual(1);
-
-        // No frame or tab is drawn around it.
+        await expect(
+            page.locator("perspective-viewer .psp-empty-settings"),
+        ).toHaveCount(0);
+        await expect(
+            page.locator("perspective-viewer .psp-tab-settings"),
+        ).toHaveCount(0);
         await expect(
             page.locator("perspective-viewer regular-layout-frame"),
         ).toHaveCount(0);
-        await expect(
-            page.locator("perspective-viewer perspective-viewer-tab"),
-        ).toHaveCount(0);
-    });
-
-    test("opens the sidebar; the sidebar's close button closes it", async ({
-        page,
-    }) => {
-        await empty(page);
-        await open_empty_settings(page);
-        await expect(
-            page.locator("perspective-viewer .psp-empty-settings"),
-        ).toHaveCount(0);
-
-        await page.locator("perspective-viewer #settings_close_button").click();
-        await expect(
-            page.locator("perspective-viewer #settings_panel"),
-        ).toHaveCount(0);
-        await expect(
-            page.locator("perspective-viewer .psp-empty-settings"),
-        ).toBeVisible();
     });
 
     test("toggleConfig() opens the sidebar at zero panels", async ({
@@ -126,22 +96,17 @@ test.describe("Empty stage settings button", () => {
         page,
     }) => {
         await empty(page);
-        await expect(
-            page.locator("perspective-viewer .psp-empty-settings"),
-        ).toBeVisible();
-
         const same_layout = await page.evaluate(async (table) => {
             const viewer = document.querySelector("perspective-viewer")!;
             const layout = viewer.shadowRoot!.querySelector("regular-layout");
             // @ts-ignore
             await viewer.restore({ table });
-            return viewer.shadowRoot!.querySelector("regular-layout") === layout;
+            return (
+                viewer.shadowRoot!.querySelector("regular-layout") === layout
+            );
         }, TABLE);
 
         expect(same_layout).toBe(true);
-        await expect(
-            page.locator("perspective-viewer .psp-empty-settings"),
-        ).toHaveCount(0);
         await expect(
             page.locator("perspective-viewer .psp-tab-settings").first(),
         ).toBeVisible();
@@ -179,6 +144,15 @@ test.describe("Empty stage settings sidebar", () => {
     test("plugin menu lists every plugin, is inert, and the first panel draws the default", async ({
         page,
     }) => {
+        await page.goto(
+            "/rust/perspective-viewer/test/html/superstore-debug.html",
+        );
+        await page.evaluate(async () => {
+            while (!window["__TEST_PERSPECTIVE_READY__"]) {
+                await new Promise((x) => setTimeout(x, 10));
+            }
+        });
+
         await empty(page);
         await open_empty_settings(page);
 
@@ -240,8 +214,12 @@ test.describe("Empty stage theme", () => {
         });
 
         await empty(page);
-        const select = page.locator("perspective-viewer #theme_selector");
-        await expect(select).toBeVisible();
+        await expect(
+            page.locator("perspective-viewer #status_bar #theme"),
+        ).toBeVisible();
+        await expect(
+            page.locator("perspective-viewer #theme_selector"),
+        ).toHaveCount(1);
 
         // Data-bound actions are absent on the empty stage.
         for (const id of ["#reset", "#export", "#copy"]) {
@@ -303,8 +281,8 @@ test.describe("Empty stage errors", () => {
             page.locator("perspective-viewer #status_reconnect.errored"),
         ).toBeVisible();
         await expect(
-            page.locator("perspective-viewer .error-dialog-message"),
-        ).toContainText("table");
+            page.locator("perspective-viewer #status_bar .error-dialog"),
+        ).toHaveCount(0);
     });
 
     test("resetError() clears it", async ({ page }) => {
@@ -362,36 +340,21 @@ test.describe("Empty stage errors", () => {
 });
 
 test.describe("Empty stage table menu", () => {
-    test("the New menu opens, closes, and creates the first panel", async ({
-        page,
-    }) => {
+    test("the Tables tab creates the first panel", async ({ page }) => {
         await empty(page);
-        const viewer = page.locator("perspective-viewer");
-        await viewer.locator("#status_bar #new_panel").click();
-        const menu = page.locator("perspective-new-panel-menu");
-        await menu.waitFor();
-        await menu.evaluate((el: HTMLElement) => el.blur());
-        await expect(menu).toHaveCount(0);
-        expect(await panel_names(page)).toEqual([]);
-
-        await viewer.locator("#status_bar #new_panel").click();
-        await menu.waitFor();
-        await menu
-            .locator(".dropdown-menu-item", { hasText: TABLE })
-            .first()
-            .click();
-
-        await page.waitForFunction(
-            () =>
-                // @ts-ignore
-                document.querySelector("perspective-viewer")!.getPanelNames()
-                    .length === 1,
+        await openWorkspaceTab(page, "tables");
+        const row = page.locator(
+            `perspective-viewer .ws-table[data-table="${TABLE}"]`,
         );
+
+        await row.hover();
+        await row.locator(".ws-table-new").click();
+        await expect.poll(() => panel_names(page)).toHaveLength(1);
     });
 });
 
 test.describe("Boots empty: table menu", () => {
-    test("load(client) at zero panels shows the New menu", async ({
+    test("load(client) at zero panels lists its tables in the Tables tab", async ({
         page,
     }) => {
         await page.goto("/rust/perspective-viewer/test/html/blank.html");
@@ -401,10 +364,6 @@ test.describe("Boots empty: table menu", () => {
                 window["WORKER"] !== undefined,
         );
 
-        const new_button = page.locator(
-            "perspective-viewer #status_bar #new_panel",
-        );
-        await expect(new_button).toHaveCount(0);
         await page.evaluate(async () => {
             const viewer = document.querySelector("perspective-viewer")!;
             const worker = await window["WORKER"];
@@ -413,14 +372,14 @@ test.describe("Boots empty: table menu", () => {
             await viewer.load(worker);
         });
 
-        await expect(new_button).toBeVisible();
-        await new_button.click();
-        const menu = page.locator("perspective-new-panel-menu");
-        await menu.waitFor();
-        await expect(
-            menu.locator(".dropdown-menu-item", {
-                hasText: "empty_stage_table",
-            }),
-        ).toBeVisible();
+        await openWorkspaceTab(page, "tables");
+        const row = page.locator(
+            'perspective-viewer .ws-table[data-table="empty_stage_table"]',
+        );
+
+        await expect(row).toBeVisible();
+        await row.hover();
+        await row.locator(".ws-table-new").click();
+        await expect.poll(() => panel_names(page)).toHaveLength(1);
     });
 });

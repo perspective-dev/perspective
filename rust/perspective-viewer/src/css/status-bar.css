@@ -22,13 +22,11 @@
     #status_bar.settings-closed {
         box-shadow: none;
         padding-right: 10px;
-    }
-
-    #status_bar.updating {
-        box-shadow: none;
+        box-shadow: 0 1px 0 0px var(--psp-inactive--color);
     }
 
     #status_bar.settings-closed.floating {
+        /* box-shadow: none; */
         transition: opacity 0.2s;
         opacity: 0;
         position: absolute;
@@ -56,31 +54,6 @@
         border-radius: var(--psp-status-bar--border-radius);
         #spacer {
             flex: 1 1000 auto;
-        }
-
-        #panel-bar {
-            flex: 0 0 auto;
-            height: 100%;
-        }
-
-        span#new_panel {
-            & > .icon {
-                -webkit-mask-image: var(--psp-icon--new-panel--mask-image);
-                mask-image: var(--psp-icon--new-panel--mask-image);
-                display: inline-flex;
-                &:before {
-                    line-height: 0;
-                    content: var(--psp-icon--new-panel--mask-image);
-                    visibility: hidden;
-                }
-            }
-
-            span:not(.icon):before {
-                content: var(
-                    --psp-label--new-panel-button--content,
-                    var(--psp-missing)
-                );
-            }
         }
 
         /* Exceptions when the menu bar is visible and the settings panel is closed. */
@@ -337,6 +310,11 @@
             display: inline-flex;
             height: 100%;
             align-items: center;
+
+            &.disabled {
+                pointer-events: none;
+                opacity: 0.5;
+            }
 
             &:focus-within,
             &:hover:not(.modal-target) {

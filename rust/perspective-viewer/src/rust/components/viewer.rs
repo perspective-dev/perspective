@@ -19,7 +19,10 @@
 //! pickers + maximize live in `MainPanel`/`PanelMenu`, which own the layout
 //! element.)
 
+mod column_settings;
+mod dividers;
 mod filters;
+mod listeners;
 mod msg;
 mod panels;
 mod render;
@@ -38,6 +41,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
+use self::listeners::*;
 pub use self::msg::PerspectiveViewerMsg;
 use self::msg::PerspectiveViewerMsg::*;
 use self::settings::SettingsGeometry;
@@ -217,8 +221,8 @@ impl Component for PerspectiveViewer {
         };
 
         let shift_listeners = install_shift_listeners(elem);
-        let global_filter_listener = wiring::global_filter_listener(ctx);
-        let master_click_listener = wiring::master_click_listener(ctx);
+        let global_filter_listener = listeners::global_filter_listener(ctx);
+        let master_click_listener = listeners::master_click_listener(ctx);
 
         Self {
             _subscriptions: subscriptions,
@@ -408,7 +412,6 @@ impl Component for PerspectiveViewer {
                 self.on_workspace_drawer_commit(ctx, resolve, waiters)
             },
             WorkspaceTabChanged(tab) => self.on_workspace_tab_changed(tab),
-            WorkspacePanelAutoWidth(w) => self.on_workspace_panel_auto_width(ctx, w),
             StatusIndicatorClicked => self.on_status_indicator_clicked(ctx),
 
             // Value-semantic snapshot plumbing (`snapshots.rs`)

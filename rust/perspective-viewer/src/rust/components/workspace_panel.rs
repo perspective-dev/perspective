@@ -10,16 +10,31 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+mod join_form;
+mod table_rows;
 mod tables_tab;
+
+use std::rc::Rc;
 
 use yew::prelude::*;
 
 use self::tables_tab::TablesTab;
 use crate::components::json_panel::{JsonPanel, JsonSource};
-use crate::components::new_panel_menu::PanelLabels;
-use crate::components::status_indicator::StatusIndicator;
 use crate::queries::WorkspaceStatus;
 use crate::tasks::WorkspaceHost;
+use crate::ui::SidebarCloseButton;
+
+/// A panel listed under its `Client` in the Tables tab's Views.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ViewLabel {
+    pub id: String,
+    pub title: Option<String>,
+
+    /// Whether a `Table` can be derived from this panel's `View` now.
+    pub derivable: bool,
+}
+
+pub type ViewLabels = Rc<Vec<ViewLabel>>;
 
 /// A tab of the [`WorkspacePanel`].
 #[derive(Debug, PartialEq, Clone, Copy, Default)]
@@ -36,16 +51,14 @@ pub struct WorkspacePanelProps {
     pub status: WorkspaceStatus,
     pub selected_tab: WorkspaceTab,
     pub is_pinned: bool,
-    pub auto_width: f64,
 
-    /// The panels a derived `Table` can be created from.
-    pub panels: PanelLabels,
+    /// The panels with a `Table`, listed as each `Client`'s Views.
+    pub panels: ViewLabels,
 
-    /// Fired when the status indicator is clicked.
-    pub on_toggle: Callback<()>,
+    /// Fired when the close button is clicked.
+    pub on_close: Callback<()>,
     pub on_toggle_pin: Callback<()>,
     pub on_select_tab: Callback<WorkspaceTab>,
-    pub on_auto_width: Callback<f64>,
 
     /// Fired with a panel id to derive a `Table` from its `View`.
     pub on_derive_panel: Callback<String>,
@@ -56,7 +69,6 @@ impl PartialEq for WorkspacePanelProps {
         self.status == rhs.status
             && self.selected_tab == rhs.selected_tab
             && self.is_pinned == rhs.is_pinned
-            && self.auto_width == rhs.auto_width
             && self.panels == rhs.panels
     }
 }
@@ -105,25 +117,17 @@ pub fn WorkspacePanel(props: &WorkspacePanelProps) -> Html {
     }
 
     let on_pin = props.on_toggle_pin.reform(|_: MouseEvent| ());
-    let width = props.auto_width;
     let body = match selected {
         WorkspaceTab::Tables => html! {
             <TablesTab
                 host={props.host.clone()}
                 status={props.status.clone()}
                 panels={props.panels.clone()}
-                initial_width={width}
-                on_auto_width={props.on_auto_width.clone()}
                 on_derive_panel={props.on_derive_panel.clone()}
             />
         },
         WorkspaceTab::Json => html! {
-            <JsonPanel
-                id="workspace-json"
-                source={JsonSource::Workspace(props.host.clone())}
-                initial_width={width}
-                on_auto_width={props.on_auto_width.clone()}
-            />
+            <JsonPanel id="workspace-json" source={JsonSource::Workspace(props.host.clone())} />
         },
         #[cfg(feature = "llm-agent")]
         WorkspaceTab::Chat => html! {
@@ -136,23 +140,28 @@ pub fn WorkspacePanel(props: &WorkspacePanelProps) -> Html {
     };
 
     html! {
-        <div id="workspace_panel" class="sidebar_column noselect">
-            <div id="workspace_panel_header">
-                <StatusIndicator status={props.status.clone()} on_toggle={props.on_toggle.clone()} />
-                <span
-                    id="workspace_pin_button"
-                    class={pin_class}
-                    title={if props.is_pinned { "Unpin" } else { "Pin" }}
-                    onclick={on_pin}
-                />
+        <>
+            <SidebarCloseButton
+                id="workspace_close_button"
+                on_close_sidebar={props.on_close.clone()}
+            />
+            <div id="workspace_panel" class="sidebar_column noselect">
+                <div id="workspace_panel_header">
+                    <span
+                        id="workspace_pin_button"
+                        class={pin_class}
+                        title={if props.is_pinned { "Unpin" } else { "Pin" }}
+                        onclick={on_pin}
+                    />
+                </div>
+                <div id="workspace_panel_divider" />
+                <div id="workspace_tab_bar">
+                    { tab(WorkspaceTab::Tables, "workspace_tables_tab") }
+                    { tab(WorkspaceTab::Json, "workspace_json_tab") }
+                    if has_chat { { tab(WorkspaceTab::Chat, "workspace_chat_tab") } }
+                </div>
+                { body }
             </div>
-            <div id="workspace_tab_bar">
-                { tab(WorkspaceTab::Tables, "workspace_tables_tab") }
-                { tab(WorkspaceTab::Json, "workspace_json_tab") }
-                if has_chat { { tab(WorkspaceTab::Chat, "workspace_chat_tab") } }
-            </div>
-            { body }
-            <div class="scroll-panel-auto-width" style={format!("width:{}px", width)} />
-        </div>
+        </>
     }
 }

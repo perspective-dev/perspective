@@ -211,6 +211,18 @@
     left: -21px;
 }
 
+:host #workspace_close_button {
+    right: -21px;
+
+    .sidebar_close_button_inner {
+        border-radius: 0 5px 5px 0;
+    }
+
+    .sidebar_close_button_inner .icon {
+        transform: scaleX(-1);
+    }
+}
+
 :host #debug_close_button.sidebar_close_button .sidebar_close_button_inner {
     background-attachment: fixed;
     background: var(--psp-sidebar--background);
@@ -354,13 +366,9 @@
         overflow: visible;
     }
 
-    #workspace_drawer > .split-panel-child {
-        overflow: hidden;
-    }
-
     #workspace_drawer > .split-panel-divider {
-        border-right: 1px solid var(--psp-inactive--color, #6e6e6e);
-        margin-left: -5px;
+        border-left: 1px solid var(--psp-inactive--color, #6e6e6e);
+        margin-right: -5px;
     }
 
     #status_bar {
@@ -417,34 +425,6 @@
             display: block;
             width: 100%;
             height: 100%;
-        }
-
-        /* EMPTY STAGE (zero panels): the open-settings button of an
-           "invisible panel" — exactly where a lone panel's tab button sits,
-           with no frame, titlebar or tab drawn around it. Icon + hover come
-           from `tab-button.css` (`.psp-tab-settings`), shared with the tab.
-
-           Geometry, mirroring a solo `.rl-panel` below: the layout's -4px
-           top / -3px right inset plus the frame's 5px top / 4px right
-           padding put the titlebar's top edge 1px below, and its right edge
-           1px inside, this container. The tab's 7px right padding
-           (`panel-tab.css` `:host`) then insets the button, which is
-           vertically centered in the titlebar. */
-        & > .psp-empty-settings {
-            --psp-empty-settings--size: 20px;
-            position: absolute;
-            z-index: 1;
-            margin: 0;
-            top: calc(
-                1px +
-                    (
-                        var(--psp-panel-titlebar--height, 26px) -
-                            var(--psp-empty-settings--size)
-                    ) /
-                    2
-            );
-            right: calc(1px + 7px);
-            height: var(--psp-empty-settings--size);
         }
 
         /* The layout engine hosting the panels fills the container.
@@ -607,6 +587,18 @@
             margin-right: 0px;
             flex: 0 0 4px;
         }
+    }
+
+    #settings_panel_error {
+        flex: 0 0 auto;
+        margin: 8px 8px 0 0;
+    }
+
+    #settings_panel.errored
+        > #settings_panel_error
+        ~ :not(.scroll-panel-auto-width, #debug-panel-overflow) {
+        pointer-events: none;
+        opacity: 0.5;
     }
 
     #column_settings_sidebar .split-panel-divider {
@@ -1193,7 +1185,7 @@
     }
 
     #chat_docs_status[data-loaded="true"] {
-        color: var(--psp-active--color, #1a7da1);
+        color: var(--psp-inactive--color);
         text-decoration: none;
     }
 

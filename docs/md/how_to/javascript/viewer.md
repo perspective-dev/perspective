@@ -94,7 +94,9 @@ The viewer provides an interactive side panel with:
 Clicking the status icon opens the workspace panel on the left, which lists
 each loaded `Client`'s tables, shows the element's `WorkspaceConfig` as
 editable JSON, and hosts the agent chat. It floats over the panels by default
-and can be pinned alongside them.
+and can be pinned alongside them. A `Client` whose connection is lost, or
+whose panels have failed, shows its error there with a Reconnect button when
+it can be recovered.
 
 ## Methods
 

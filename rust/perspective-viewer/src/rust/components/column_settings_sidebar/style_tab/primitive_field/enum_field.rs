@@ -10,29 +10,67 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use crate::workspace::Workspace;
+use std::rc::Rc;
 
-/// Every hosted `Table` name per loaded `Client`, as `(client name, sorted
-/// table names)` in registration order.
-pub async fn fetch_hosted_tables(workspace: &Workspace) -> Vec<(String, Vec<String>)> {
-    let clients = workspace.clients();
-    let mut tables = Vec::with_capacity(clients.len());
-    for client in clients {
-        let mut names = match client.get_hosted_table_names().await {
-            Ok(names) => names,
-            Err(err) => {
-                tracing::warn!(
-                    "Failed to list tables for `Client` \"{}\": {err}",
-                    client.get_name()
-                );
+use itertools::Itertools;
+use serde_json::Value;
+use web_sys::MouseEvent;
+use yew::{Callback, Html, Properties, function_component, html, use_callback};
 
-                vec![]
-            },
-        };
+use super::emit;
+use crate::config::{ColumnConfigFieldUpdate, EnumVariant};
+use crate::ui::{OptionalField, Select, SelectItem};
 
-        names.sort_unstable();
-        tables.push((client.get_name().to_owned(), names));
+#[derive(Properties, PartialEq)]
+pub struct EnumFieldProps {
+    pub field_key: String,
+    pub variants: Vec<EnumVariant>,
+    pub default: String,
+    pub current: Option<String>,
+    pub on_change: Callback<ColumnConfigFieldUpdate>,
+}
+
+#[function_component]
+pub fn EnumField(props: &EnumFieldProps) -> Html {
+    let selected = props
+        .current
+        .clone()
+        .unwrap_or_else(|| props.default.clone());
+
+    let checked = selected != props.default;
+    let values: Rc<Vec<SelectItem<String>>> = Rc::new(
+        props
+            .variants
+            .iter()
+            .map(|v| SelectItem::Option(v.value.clone()))
+            .collect_vec(),
+    );
+
+    let on_select = use_callback(
+        (
+            props.field_key.clone(),
+            props.default.clone(),
+            props.on_change.clone(),
+        ),
+        |value: String, (key, default, on_change)| {
+            if value == *default {
+                emit(on_change, key, None);
+            } else {
+                emit(on_change, key, Some(Value::String(value)));
+            }
+        },
+    );
+
+    let on_reset = use_callback(
+        (props.field_key.clone(), props.on_change.clone()),
+        |_: MouseEvent, (key, on_change)| emit(on_change, key, None),
+    );
+
+    html! {
+        <div class="row">
+            <OptionalField label={props.field_key.clone()} on_check={on_reset} {checked}>
+                <Select<String> {values} {selected} {on_select} />
+            </OptionalField>
+        </div>
     }
-
-    tables
 }

@@ -28,6 +28,7 @@ pub mod dragdrop_list;
 pub mod editable_header;
 pub mod empty_placeholder;
 pub mod empty_row;
+pub mod error_dialog;
 pub mod export_dropdown;
 pub mod expression_editor;
 pub mod filter_dropdown;

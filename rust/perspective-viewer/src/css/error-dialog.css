@@ -1,0 +1,86 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+:host {
+    .error-dialog {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 8px;
+        max-height: 300px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        color: var(--psp--background-color);
+        background: var(--psp--color);
+        border-radius: var(--psp-status-bar--border-radius, 3px);
+    }
+
+    .error-dialog-message {
+        flex: 0 0 auto;
+    }
+
+    .error-dialog-details {
+        flex: 0 1 auto;
+        min-height: 0;
+        font-size: 10px;
+
+        > summary {
+            cursor: pointer;
+            color: var(--psp-inactive--color);
+            min-height: 18px;
+            line-height: 18px;
+        }
+    }
+
+    .error-dialog-stack {
+        max-height: 200px;
+        margin-top: 8px;
+        overflow-y: auto;
+        color: var(--psp-inactive--color);
+
+        &.scrollable::-webkit-scrollbar-thumb,
+        &.scrollable:hover::-webkit-scrollbar-thumb {
+            box-shadow: inset 0px 0px 0 4px var(--psp--background-color);
+        }
+    }
+
+    .error-dialog-details:not([open]) .error-dialog-copy {
+        display: none;
+    }
+
+    .error-dialog-reconnect {
+        margin-left: 4px;
+    }
+
+    .error-dialog-reconnect,
+    .error-dialog-copy {
+        float: right;
+        appearance: none;
+        height: 18px;
+        padding: 0 8px;
+        border: 1px solid currentColor;
+        border-radius: 3px;
+        background-color: transparent;
+        color: var(--psp--background-color);
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 9px;
+        line-height: 16px;
+        text-transform: uppercase;
+
+        &:hover {
+            background-color: var(--psp--background-color);
+            color: var(--psp--color);
+        }
+    }
+}

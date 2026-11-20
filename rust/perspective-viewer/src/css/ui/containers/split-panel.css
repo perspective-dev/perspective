@@ -24,7 +24,9 @@
 
     #workspace_drawer.split-panel
         > .split-panel-child:not(:last-child):not(.is-width-override) {
-        max-width: 350px;
+        width: 300px;
+        min-width: 300px;
+        max-width: 300px;
     }
 
     .split-panel {

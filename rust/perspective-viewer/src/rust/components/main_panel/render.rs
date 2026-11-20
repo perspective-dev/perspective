@@ -18,12 +18,12 @@ use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
 use super::{MainPanel, MainPanelMsg, MainPanelProps, MenuOrigin};
-use crate::components::new_panel_menu::NewPanelPick;
-use crate::components::panel_menu::{PanelCommand, PanelMenu};
+use crate::components::panel_menu::PanelMenu;
 use crate::components::panel_tab::PanelTab;
 use crate::components::render_warning::RenderWarning;
 use crate::components::status_bar::StatusBar;
 use crate::js::RegularLayout;
+use crate::session::TableLoadState;
 use crate::tasks::dismiss_render_warning_callback;
 use crate::workspace::PanelId;
 
@@ -167,13 +167,11 @@ impl MainPanel {
             // `select` (the `regular-layout-select` listener picks
             // up activation).
             let viewer_elem = ctx.props().presentation.viewer_elem().clone();
-            // A lone panel can't be closed to zero, and has nowhere to be
-            // dragged — so it's neither closable nor draggable; its tab also
-            // carries the `single` panel-count class (which e.g. hides the
-            // caret).
-            let closable = placed_count > 1;
-            let draggable = closable;
-            let single = !closable;
+            // A lone panel has nowhere to be dragged, so it is not draggable;
+            // its tab also carries the `single` panel-count class (which e.g.
+            // hides the caret).
+            let draggable = placed_count > 1;
+            let single = !draggable;
             let on_select = {
                 let layout_ref = self.layout_ref.clone();
                 Callback::from(move |id: String| {
@@ -221,6 +219,29 @@ impl MainPanel {
                     on_settings.emit(());
                 })
             };
+            let is_bar_docked = is_settings_open
+                || ctx.props().is_workspace_open
+                || !matches!(
+                    ctx.props().session_props.has_table,
+                    Some(TableLoadState::Loaded)
+                )
+                || ctx.props().session_props.is_errored()
+                || ctx.props().renderer_props.render_error.is_some();
+
+            let status_tab = (!is_bar_docked && ctx.props().show_status)
+                .then(|| {
+                    let lone = single
+                        .then(|| ctx.props().panel_ids.first())
+                        .flatten()
+                        .map(|id| id.as_str().to_owned());
+
+                    self.maximized
+                        .clone()
+                        .or_else(|| self.top_left_tab.clone())
+                        .or(lone)
+                })
+                .flatten();
+
             let closing_tabs = closing.iter().filter_map(|id| {
                 let panel = ctx.props().workspace.closing_panel(id)?;
                 let title = panel.session.get_title().filter(|t| !t.is_empty());
@@ -256,10 +277,17 @@ impl MainPanel {
                     let active = !is_closing && active_slot.as_deref() == Some(name.as_str());
                     let visible = !self.hidden_tabs.contains(name.as_str());
                     let is_master = !is_closing && ctx.props().panel_masters.contains(id);
+                    let status = (!is_closing && status_tab.as_deref() == Some(name.as_str()))
+                        .then(|| ctx.props().status.clone());
+                    let errored = !is_closing
+                        && ctx.props().status.errored.iter().any(|(x, _)| x.as_str() == name);
 
                     html! {
                         <PanelTab
                             key={name.clone()}
+                            {status}
+                            {errored}
+                            on_open_workspace={ctx.props().on_status_click.clone()}
                             viewer={viewer_elem.clone()}
                             panel_id={name.clone()}
                             {title}
@@ -269,7 +297,7 @@ impl MainPanel {
                             {visible}
                             {is_master}
                             {single}
-                            closable={closable && !is_closing}
+                            closable={!is_closing}
                             {is_settings_open}
                             draggable={draggable && !is_closing}
                             closing={is_closing}
@@ -310,33 +338,8 @@ impl MainPanel {
                     }
                 });
 
-            // EMPTY STAGE: the open-settings affordance of an "invisible
-            // panel" — a lone `.psp-tab-settings` button placed where a solo
-            // panel's tab button sits (see `viewer.css`
-            // `.psp-empty-settings`), with no frame or titlebar around it.
-            // There is no panel to select/activate first, so it fires the
-            // bare `on_settings`. Hidden while the sidebar is open, exactly
-            // like a tab's button (the sidebar's own close button closes it).
-            let empty_settings = (ctx.props().is_empty && !is_settings_open).then(|| {
-                let on_settings = ctx.props().on_settings.clone();
-                let onpointerdown = Callback::from(move |event: web_sys::PointerEvent| {
-                    if event.button() == 0 {
-                        event.stop_propagation();
-                        on_settings.emit(());
-                    }
-                });
-
-                html! {
-                    <button
-                        key="__empty_settings__"
-                        class="psp-tab-settings psp-empty-settings"
-                        {onpointerdown}
-                    />
-                }
-            });
-
             // ONE flat FULLY-KEYED list: `<regular-layout>` + tabs + staging
-            // wrappers (+ the empty-stage settings button). Keying every
+            // wrappers. Keying every
             // sibling (the layout element included) routes Yew's list diff
             // through `apply_keyed`, which matches by key — the layout element
             // is REUSED across renders regardless of how the tab/staging
@@ -357,7 +360,6 @@ impl MainPanel {
             })
             .chain(tabs)
             .chain(staging)
-            .chain(empty_settings)
             .collect::<Html>()
         };
 
@@ -406,27 +408,11 @@ impl MainPanel {
             })
             .unwrap_or_default();
 
-        let on_new_panel = {
-            let on_command = ctx.props().on_panel_command.clone();
-            let id = renderer.slot_name().unwrap_or_default();
-            Callback::from(move |pick: NewPanelPick| {
-                let cmd = match pick {
-                    NewPanelPick::FromTable { client, table } => {
-                        PanelCommand::NewFrom { client, table }
-                    },
-                    NewPanelPick::FromPanel(source) => PanelCommand::NewFromPanel(source),
-                };
-
-                on_command.emit((id.clone(), cmd));
-            })
-        };
-
         html! {
             <div id="main_column">
                 <StatusBar
                     id="status_bar"
                     on_reset={ctx.props().on_reset.clone()}
-                    {on_new_panel}
                     session_props={ctx.props().session_props.clone()}
                     render_error={ctx.props().renderer_props.render_error.clone()}
                     presentation_props={ctx.props().presentation_props.clone()}
@@ -435,6 +421,7 @@ impl MainPanel {
                     has_clients={ctx.props().has_clients}
                     status={ctx.props().status.clone()}
                     show_status={ctx.props().show_status}
+                    is_workspace_open={ctx.props().is_workspace_open}
                     on_status_click={ctx.props().on_status_click.clone()}
                     global_filters={ctx.props().global_filters.clone()}
                     on_remove_global_filter={ctx.props().on_remove_global_filter.clone()}

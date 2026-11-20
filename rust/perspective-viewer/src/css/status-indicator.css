@@ -12,8 +12,7 @@
  */
 
 :host {
-    #status_bar,
-    #workspace_panel_header {
+    #status_bar {
         .section {
             display: flex;
             align-items: center;
@@ -74,44 +73,6 @@
             }
         }
 
-        .error-dialog {
-            position: absolute;
-            z-index: 1;
-            width: 100%;
-            flex-direction: column;
-            max-height: 300px;
-            top: 0;
-            left: 0;
-            padding: 0px 0px 0px 50px;
-            display: none;
-            white-space: pre-wrap;
-            color: var(--psp--background-color);
-            background: var(--psp--color);
-            border-radius: var(--psp-status-bar--border-radius);
-        }
-
-        .error-dialog-message {
-            white-space: nowrap;
-            overflow: hidden;
-            align-items: center;
-            display: flex;
-            padding-right: 17px;
-            height: var(--psp-status-bar--height, 38px);
-            min-height: var(--psp-status-bar--height, 38px);
-        }
-
-        .error-dialog-stack {
-            font-size: 10px;
-            padding-right: 17px;
-            color: var(--psp-inactive--color);
-            overflow-y: auto;
-            padding-bottom: 24px;
-        }
-
-        .section:hover .error-dialog {
-            display: flex;
-        }
-
         div#status_reconnect {
             z-index: 2;
             display: var(--status-indicator--display, flex);
@@ -123,11 +84,27 @@
                 var(--psp-status-icon--ok--border-color, transparent);
             cursor: var(--psp-status-icon--ok--cursor, pointer);
             pointer-events: var(--psp-status-icon--pointer-events, all);
-            &:hover {
+
+            &::before {
+                content: "";
+                position: absolute;
+                z-index: -1;
+                top: 0;
+                bottom: 0;
+                left: 0;
+                width: var(--psp-status-bar--height, 38px);
+                border-top-left-radius: var(--psp-status-bar--border-radius);
+                border-bottom-left-radius: var(--psp-status-bar--border-radius);
+            }
+
+            &:hover::before {
                 background-color: var(
                     --psp-status-icon--ok-hover--background-color,
                     transparent
                 );
+            }
+
+            &:hover {
                 border-color: var(
                     --psp-status-icon--ok-hover--border-color,
                     transparent
@@ -156,14 +133,6 @@
                 color: var(--psp--background-color);
                 &:before {
                     content: "!";
-                }
-            }
-
-            &.errored:hover {
-                background-color: var(--psp--color);
-                span#status.errored {
-                    color: var(--psp--color);
-                    background-color: var(--psp--background-color);
                 }
             }
         }
@@ -201,6 +170,33 @@
             animation-fill-mode: forwards;
             animation-iteration-count: 1;
             animation-duration: 0.3s;
+        }
+    }
+}
+
+:host {
+    #status_bar div#status_reconnect:hover {
+        span#status {
+            animation: none;
+            opacity: 1;
+            mask-image: var(--psp-icon--drawer-tab-inverted--mask-image);
+            -webkit-mask-image: var(
+                --psp-icon--drawer-tab-inverted--mask-image
+            );
+            transform: scaleX(-1);
+        }
+
+        span#status.errored {
+            border-radius: 0;
+
+            &:before {
+                visibility: hidden;
+            }
+        }
+
+        span#status_updating {
+            animation: none;
+            opacity: 0;
         }
     }
 }

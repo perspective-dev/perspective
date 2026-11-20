@@ -446,6 +446,33 @@ test.describe("Context menu custom commands", () => {
         expect(context.hit).not.toHaveProperty("row");
     });
 
+    test("queryCommands answers undefined for a plugin no panel owns", async ({
+        page,
+    }) => {
+        await declareCommands(page, [HELLO], {
+            scopes: ["context-menu", "datagrid-cell"],
+        });
+
+        const result = await page.evaluate((frame) => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            const orphan = document.createElement("perspective-viewer-plugin");
+            try {
+                return {
+                    results: viewer.queryCommands(
+                        orphan,
+                        "datagrid-cell",
+                        frame,
+                        [{ y: 11, x: 3 }],
+                    ),
+                };
+            } catch (err) {
+                return { error: `${(err as Error).message ?? err}` };
+            }
+        }, FRAME);
+
+        expect(result).toEqual({ results: undefined });
+    });
+
     test("queryCommands derives row and column hits from the ref's axes", async ({
         page,
     }) => {

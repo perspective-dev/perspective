@@ -15,7 +15,7 @@
     #workspace_panel {
         position: relative;
         flex: 1 1 auto;
-        min-width: 200px;
+        min-width: 0;
         box-sizing: border-box;
         overflow: hidden;
         margin: var(--psp-main-column--margin);
@@ -24,22 +24,31 @@
         border-radius: var(--psp-main-column--border-radius);
     }
 
+    #status_bar.workspace-open {
+        padding-left: 26px;
+    }
+
     #workspace_panel_header {
         position: relative;
         display: flex;
         flex: 0 0 auto;
         align-items: center;
         box-sizing: border-box;
-        box-shadow: 0 1px 0 0px var(--psp-inactive--color);
         padding: var(--psp-status-bar--padding, 0 26px 0 4px);
         height: var(--psp-status-bar--height, 38px);
         min-height: var(--psp-status-bar--height, 38px);
         max-height: var(--psp-status-bar--height, 38px);
     }
 
+    #workspace_panel_divider {
+        flex: 0 0 4px;
+        background-color: #00000020;
+        border-top: 1px solid var(--psp-inactive--color, #6e6e6e);
+        border-bottom: 1px solid var(--psp-inactive--color, #6e6e6e);
+    }
+
     #workspace_tab_bar {
         flex: 0 0 auto;
-        margin-top: 1px;
     }
 
     .ws-label:before {
@@ -52,13 +61,14 @@
         min-height: 0;
         overflow-x: hidden;
         overflow-y: auto;
+        scrollbar-gutter: stable;
     }
 
     #workspace-tables {
         display: flex;
         min-width: 150px;
-        padding: 8px 0;
-        gap: 8px;
+        margin-right: -6px;
+        padding: 0 0 8px 0;
 
         .error {
             color: var(--psp-error--color);
@@ -68,28 +78,72 @@
             overflow-wrap: anywhere;
         }
 
+        #workspace-tables-error {
+            margin: 8px 0;
+        }
+
         .no-results {
             padding: 6px 8px;
         }
 
-        .ws-client-header {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 0 8px;
-            font-weight: bold;
+        details.control-group.ws-client {
+            margin: 0;
+            padding: 0;
+            padding-right: 6px;
+
+            &:first-child {
+                margin-top: 0;
+            }
+
+            &[open] {
+                padding-bottom: 8px;
+            }
+
+            > summary {
+                gap: 6px;
+                padding: 8px 6px 8px 8px;
+            }
+
+            &:not([open]):hover .ws-client-status {
+                border-color: var(--psp--background-color);
+                color: var(--psp--color);
+            }
+
+            &:not([open]):hover .ws-client-status.errored {
+                background-color: var(--psp--background-color);
+            }
+
+            .error-dialog-details > summary:hover {
+                color: var(--psp-inactive--color);
+            }
         }
 
         .ws-client-status {
-            flex: 0 0 8px;
-            width: 8px;
-            height: 8px;
-            border-radius: 4px;
-            background-color: var(--psp--color);
+            flex: 0 0 14px;
+            width: 14px;
+            height: 14px;
+            border-radius: 7px;
+            border: 1px solid var(--psp--color);
+            /* background-color: var(--psp--color); */
         }
 
         .ws-client-status.errored {
-            background-color: var(--psp-error--color);
+            display: flex;
+            flex: 0 0 14px;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            border-radius: 7px;
+            color: var(--psp--background-color);
+            font-size: 10px;
+            font-weight: bold;
+            background-color: var(--psp--color);
+            line-height: 14px;
+
+            &::before {
+                content: "!";
+            }
         }
 
         .ws-client-status.loading,
@@ -97,7 +151,16 @@
             background-color: var(--psp-inactive--color);
         }
 
-        .ws-client.is-lost .ws-tables {
+        .ws-client-error {
+            margin: 0 8px;
+        }
+
+        .ws-tables,
+        .ws-views {
+            margin-left: 12px;
+        }
+
+        .ws-client.is-lost :is(.ws-tables, .ws-views) {
             opacity: 0.5;
         }
 
@@ -115,12 +178,13 @@
         .ws-table-consumers {
             flex: none;
             font-weight: normal;
+            font-size: 0.75em;
             opacity: 0.6;
         }
 
         .ws-client-panels:before,
         .ws-table-consumers:before {
-            content: "x";
+            content: "";
         }
 
         .sidebar-controls {
@@ -128,7 +192,7 @@
         }
 
         .ws-table,
-        .ws-derive-panel {
+        .ws-view {
             display: flex;
             align-items: center;
             gap: 4px;
@@ -151,25 +215,49 @@
             font-style: italic;
         }
 
+        .ws-table,
+        .ws-view {
+            min-height: 20px;
+        }
+
         .ws-table-new,
-        .ws-table-delete {
-            flex: none;
-            width: 12px;
-            height: 12px;
+        .ws-table-delete,
+        .ws-view-derive,
+        .ws-table-spacer {
+            flex: 0 0 20px;
+            width: 20px;
+            height: 20px;
+        }
+
+        .ws-table-spacer {
+            border: 1px dotted var(--psp-inactive--color);
+            border-radius: 2px;
+        }
+
+        .ws-table-new,
+        .ws-table-delete,
+        .ws-view-derive {
+            display: none;
             cursor: pointer;
-            opacity: 0;
+            opacity: 0.6;
             background-color: currentColor;
             -webkit-mask-size: cover;
             mask-size: cover;
         }
 
         .ws-table:hover .ws-table-new,
-        .ws-table:hover .ws-table-delete {
-            opacity: 0.6;
+        .ws-table:hover .ws-table-delete,
+        .ws-view:hover .ws-view-derive {
+            display: block;
+        }
+
+        :is(.ws-table, .ws-view).has-actions:hover .ws-table-spacer {
+            display: none;
         }
 
         .ws-table .ws-table-new:hover,
-        .ws-table .ws-table-delete:hover {
+        .ws-table .ws-table-delete:hover,
+        .ws-view .ws-view-derive:hover {
             opacity: 1;
         }
 
@@ -183,21 +271,33 @@
             mask-image: var(--psp-icon--close--mask-image);
         }
 
+        .ws-view-derive {
+            -webkit-mask-image: var(--psp-icon--add-expression--mask-image);
+            mask-image: var(--psp-icon--add-expression--mask-image);
+        }
+
+        .ws-view.is-disabled {
+            .ws-table-name {
+                color: var(--psp-inactive--color);
+            }
+
+            .ws-view-derive,
+            .ws-view-derive:hover {
+                cursor: not-allowed;
+                opacity: 0.2;
+            }
+        }
+
+        .ws-views {
+            padding-top: 6px;
+        }
+
         .ws-section-label {
             display: block;
             padding: 0 8px 2px 8px;
             font-size: var(--label--font-size, 0.75em);
             text-transform: uppercase;
-            color: var(--psp-inactive--color);
-        }
-
-        .ws-derive-panel {
-            cursor: pointer;
-        }
-
-        .ws-derive-panel:hover {
-            background-color: var(--psp--color);
-            color: var(--psp--background-color);
+            /* color: var(--psp-inactive--color); */
         }
 
         .ws-join-form {

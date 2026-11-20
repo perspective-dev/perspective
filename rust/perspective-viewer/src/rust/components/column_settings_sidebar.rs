@@ -11,7 +11,6 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 mod attributes_tab;
 
-mod save_settings;
 pub(crate) mod style_tab;
 mod window_tab;
 
@@ -26,7 +25,6 @@ use yew::{Callback, Component, Html, Properties, html, props};
 use self::attributes_tab::AttributesTabProps;
 use self::style_tab::StyleTabProps;
 use crate::components::column_settings_sidebar::attributes_tab::AttributesTab;
-use crate::components::column_settings_sidebar::save_settings::SaveSettingsProps;
 use crate::components::column_settings_sidebar::style_tab::StyleTab;
 use crate::components::column_settings_sidebar::window_tab::{WindowTab, WindowTabProps};
 use crate::components::editable_header::{EditableHeader, EditableHeaderProps};
@@ -40,7 +38,7 @@ use crate::session::{Session, SessionMetadataRc};
 use crate::tasks::{
     delete_expr, delete_window, save_expr, save_window, update_expr, update_window,
 };
-use crate::ui::{Sidebar, TabList};
+use crate::ui::{SaveSettingsProps, Sidebar, TabList};
 use crate::utils::PtrEqRc;
 use crate::workspace::Workspace;
 

@@ -89,9 +89,9 @@ impl Drop for StagedPresents {
 /// `#layout_area` width (the side settings pane is gone) AND to the full
 /// `#main_column` height — because the status bar switches to
 /// `position:absolute` when settings closes (see `status-bar.css`) and no
-/// longer consumes column height. Each factor defaults to `1.0` if it can't be
-/// measured.
-fn settings_close_grow_ratios(elem: &web_sys::HtmlElement) -> (f64, f64) {
+/// longer consumes column height, unless `bar_stays_docked`. Each factor
+/// defaults to `1.0` if it can't be measured.
+fn settings_close_grow_ratios(elem: &web_sys::HtmlElement, bar_stays_docked: bool) -> (f64, f64) {
     let measure = |sel: &str| -> Option<web_sys::DomRect> {
         elem.shadow_root()?
             .query_selector(sel)
@@ -112,10 +112,15 @@ fn settings_close_grow_ratios(elem: &web_sys::HtmlElement) -> (f64, f64) {
         measure("#layout_area").map(|r| r.width() - docked),
         mpc.as_ref().map(|r| r.width()),
     );
-    let height = ratio(
-        measure("#main_column").map(|r| r.height()),
-        mpc.as_ref().map(|r| r.height()),
-    );
+    let height = if bar_stays_docked {
+        1.0
+    } else {
+        ratio(
+            measure("#main_column").map(|r| r.height()),
+            mpc.as_ref().map(|r| r.height()),
+        )
+    };
+
     (width, height)
 }
 
@@ -123,12 +128,13 @@ fn settings_close_grow_ratios(elem: &web_sys::HtmlElement) -> (f64, f64) {
 /// settings pane collapses, so the pane collapses into an already-correct
 /// plugin — one clean resize instead of grow-then-resize. The cell grows in
 /// BOTH width (the side settings pane is gone) and height (the status bar goes
-/// floating).
+/// floating, unless `bar_stays_docked`).
 pub async fn presize_visible_panels_grown(
     workspace: &Workspace,
     elem: &web_sys::HtmlElement,
+    bar_stays_docked: bool,
 ) -> StagedPresents {
-    let (width_ratio, height_ratio) = settings_close_grow_ratios(elem);
+    let (width_ratio, height_ratio) = settings_close_grow_ratios(elem, bar_stays_docked);
     presize_visible_panels_scaled(workspace, elem, width_ratio, height_ratio).await
 }
 
@@ -343,6 +349,41 @@ pub fn measure_settings_open_deltas(elem: &web_sys::HtmlElement) -> Option<(f64,
         (layout_area.width() - docked_workspace_span(elem) - mpc.width()).max(0.0),
         (main_column.height() - mpc.height()).max(0.0),
     ))
+}
+
+/// The `#main_column` height the status bar takes when docked, read from the
+/// docked bar or, while it floats, from `--psp-status-bar--height`.
+pub fn measure_status_bar_height(elem: &web_sys::HtmlElement) -> f64 {
+    let Some(bar) = elem
+        .shadow_root()
+        .and_then(|root| root.query_selector("#status_bar").ok().flatten())
+    else {
+        return 0.0;
+    };
+
+    if !bar.class_list().contains("floating") {
+        return bar.get_bounding_client_rect().height();
+    }
+
+    let Some(style) = web_sys::window().and_then(|w| w.get_computed_style(&bar).ok().flatten())
+    else {
+        return 0.0;
+    };
+
+    if style
+        .get_property_value("--psp-status-bar--display")
+        .ok()
+        .as_deref()
+        == Some("none")
+    {
+        return 0.0;
+    }
+
+    style
+        .get_property_value("--psp-status-bar--height")
+        .ok()
+        .and_then(|x| x.trim().strip_suffix("px")?.trim().parse().ok())
+        .unwrap_or(38.0)
 }
 
 /// The width a drawer `SplitPanel` at `drawer_sel` occupies when docked, its

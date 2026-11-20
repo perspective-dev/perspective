@@ -33,8 +33,8 @@
 @import "plugin-selector.css";
 @import "render-warning.css";
 @import "status-bar.css";
-@import "tab-button.css";
 @import "status-indicator.css";
+@import "error-dialog.css";
 @import "workspace-panel.css";
 
 @import "ui/form/mirrored-textarea.css";

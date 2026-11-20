@@ -38,6 +38,9 @@ where
 
     pub presentation: Presentation,
     pub name: &'static str,
+
+    /// The drop zone this list is, sent with every [`DragListEvent`].
+    pub target: DragTarget,
     pub column_dropdown: ColumnDropDownElement,
     pub exclude: HashSet<String>,
     pub children: ChildrenWithProps<U>,
@@ -88,6 +91,7 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
+            && self.target == other.target
             && self.children == other.children
             && self.allow_duplicates == other.allow_duplicates
             && self.is_dragover == other.is_dragover
@@ -112,26 +116,25 @@ pub enum DragDropListMsg {
 ///
 /// Before you ask:  yes, `frozen_size` needs to be a float64 since `flex`
 /// containers can have fractional dimensions.
-pub struct DragDropList<T, U, V>
+pub struct DragDropList<T, U>
 where
     T: Component,
+    T::Message: From<DragListEvent>,
     U: Component,
     <U as Component>::Properties: DragDropListItemProps,
-    V: DragContext<T::Message> + 'static,
 {
     parent_type: PhantomData<T>,
     item_type: PhantomData<U>,
-    draggable_type: PhantomData<V>,
     elem: NodeRef,
     frozen_size: Option<f64>,
 }
 
-impl<T, U, V> Component for DragDropList<T, U, V>
+impl<T, U> Component for DragDropList<T, U>
 where
     T: Component,
+    T::Message: From<DragListEvent>,
     U: Component,
     <U as Component>::Properties: DragDropListItemProps,
-    V: DragContext<T::Message> + 'static,
 {
     type Message = DragDropListMsg;
     type Properties = DragDropListProps<T, U>;
@@ -140,7 +143,6 @@ where
         Self {
             parent_type: PhantomData,
             item_type: PhantomData,
-            draggable_type: PhantomData,
             elem: NodeRef::default(),
             frozen_size: None,
         }
@@ -188,6 +190,7 @@ where
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        let target = ctx.props().target;
         let dragover = Callback::from(|_event: DragEvent| _event.prevent_default());
 
         // On dragleave, signal the parent but no need to redraw as parent will
@@ -199,7 +202,7 @@ where
                 let link = ctx.link().clone();
                 move || {
                     link.send_message(DragDropListMsg::Freeze(true));
-                    parent.send_message(V::dragenter(total))
+                    parent.send_message(DragListEvent::DragEnter(target, total))
                 }
             },
             {
@@ -207,7 +210,7 @@ where
                 let link = ctx.link().clone();
                 move || {
                     link.send_message(DragDropListMsg::Freeze(false));
-                    parent.send_message(V::dragleave())
+                    parent.send_message(DragListEvent::DragLeave(target))
                 }
             },
         );
@@ -240,10 +243,14 @@ where
                 .props()
                 .presentation
                 .get_drag_target()
-                .map(|x| V::is_self_move(x))
+                .map(|x| x == target)
                 .unwrap_or_default();
 
-            let close = left_click(ctx.props().parent.callback(|_| V::close(0)));
+            let close = left_click(
+                ctx.props()
+                    .parent
+                    .callback(move |_| DragListEvent::Close(target, 0)),
+            );
             let dragenter = ctx.props().parent.callback({
                 let container_noderef = container_noderef.clone();
                 move |event: DragEvent| {
@@ -254,7 +261,7 @@ where
                     {
                         let _ = elem.dataset().set("safaridragleave", "true");
                     }
-                    V::dragenter(0)
+                    DragListEvent::DragEnter(target, 0)
                 }
             });
 
@@ -293,7 +300,7 @@ where
                     .props()
                     .presentation
                     .get_drag_target()
-                    .map(|x| V::is_self_move(x))
+                    .map(|x| x == target)
                     .unwrap_or_default();
 
                 let is_duplicate = columns
@@ -331,7 +338,11 @@ where
                 .into_iter()
                 .enumerate()
                 .map(|(idx, column)| {
-                    let close = left_click(ctx.props().parent.callback(move |_| V::close(idx)));
+                    let close = left_click(
+                        ctx.props()
+                            .parent
+                            .callback(move |_| DragListEvent::Close(target, idx)),
+                    );
                     let dragenter = ctx.props().parent.callback({
                         let link = ctx.link().clone();
                         let container_noderef = container_noderef.clone();
@@ -359,7 +370,7 @@ where
                                 let _ = elem.dataset().set("safaridragleave", "true");
                             }
                             link.send_message(DragDropListMsg::Freeze(true));
-                            V::dragenter(idx)
+                            DragListEvent::DragEnter(target, idx)
                         }
                     });
 
@@ -397,7 +408,10 @@ where
 
         let column_dropdown = ctx.props().column_dropdown.clone();
         let exclude = ctx.props().exclude.clone();
-        let on_select = ctx.props().parent.callback(V::create);
+        let on_select = ctx
+            .props()
+            .parent
+            .callback(move |col| DragListEvent::Create(target, col));
         let class = classes!("rrow");
         let is_enabled = true;
 
@@ -440,7 +454,7 @@ where
                                     </div>
                                     <span
                                         class="toggle-mode is_column_active"
-                                        onmousedown={left_click(ctx.props().parent.callback(move |_| V::close(0)))}
+                                        onmousedown={left_click(ctx.props().parent.callback(move |_| DragListEvent::Close(target, 0)))}
                                     />
                                 </div>
                             } else if show_empty {
@@ -464,10 +478,11 @@ pub trait DragDropListItemProps: Properties {
     fn get_item(&self) -> Self::Item;
 }
 
-pub trait DragContext<T> {
-    fn close(index: usize) -> T;
-    fn dragleave() -> T;
-    fn dragenter(index: usize) -> T;
-    fn create(col: InPlaceColumn) -> T;
-    fn is_self_move(effect: DragTarget) -> bool;
+/// A [`DragDropList`] interaction, sent to the parent `Component` as its
+/// `Message` via `From`.
+pub enum DragListEvent {
+    DragEnter(DragTarget, usize),
+    DragLeave(DragTarget),
+    Close(DragTarget, usize),
+    Create(DragTarget, InPlaceColumn),
 }

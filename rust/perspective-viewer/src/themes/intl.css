@@ -67,6 +67,7 @@ perspective-viewer {
     --psp-label--new-from-panel--content: "New from Panel";
     --psp-label--apply-button--content: "Apply";
     --psp-label--paste-button--content: "Paste";
+    --psp-label--formatted-button--content: "Format";
     --psp-label--edit-mode-read-only--content: "Read Only";
     --psp-label--edit-mode-edit--content: "Text Edit";
     --psp-label--edit-mode-select-row--content: "Select Row";
@@ -140,9 +141,10 @@ perspective-viewer {
     --psp-label--client-default--content: "default";
     --psp-label--client-reconnect--content: "Reconnect";
     --psp-label--client-retry--content: "Retry";
+    --psp-label--error-details--content: "Details";
     --psp-label--tables-loading--content: "Loading tables";
     --psp-label--tables-no-clients--content: "No clients";
-    --psp-label--derive-from-panel--content: "Derive from Panel";
+    --psp-label--views--content: "Views";
     --psp-label--join-open--content: "Join";
     --psp-label--join-left--content: "Left table";
     --psp-label--join-right--content: "Right table";
@@ -161,7 +163,7 @@ perspective-viewer {
     --psp-label--chat-entitlement--read-view--content: "Read";
     --psp-label--chat-entitlement--configure-view--content: "Config";
     --psp-label--chat-entitlement--manage-layout--content: "Layout";
-    --psp-label--chat-entitlement--read-docs--content: "Docs";
+    --psp-label--chat-entitlement--read-docs--content: "docs";
     --psp-label--chat-entitlement--execute-code--content: "Scripts";
     --psp-label--chat-reset--content: "Clear";
     --psp-label--chat-placeholder--content: "Ask Perspective ...";
@@ -209,7 +211,6 @@ perspective-viewer {
     --psp-label--grid-columns--content: "Grid columns";
     --psp-label--grid-rows--content: "Grid rows";
     --psp-label--chart-type--content: "Glyph type";
-    --psp-label--new-panel-button--content: "New";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "Auto Y axis";

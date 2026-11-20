@@ -159,7 +159,10 @@ pub fn generate_json_schemas() -> Result<(), Box<dyn Error>> {
     for (name, schema) in [
         ("ViewerConfigUpdate", root_schema::<ViewerConfigUpdate>()),
         ("ViewerConfigInitial", root_schema::<ViewerConfigInitial>()),
-        ("WorkspaceConfigUpdate", root_schema::<WorkspaceConfigUpdate>()),
+        (
+            "WorkspaceConfigUpdate",
+            root_schema::<WorkspaceConfigUpdate>(),
+        ),
     ] {
         let json = serde_json::to_string_pretty(&schema)?;
         fs::write(path.join(format!("{name}.json")), json)?;

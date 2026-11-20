@@ -22,11 +22,20 @@ use crate::config::{
 };
 use crate::derived::{DerivedSource, DerivedTable, suggest_name};
 use crate::presentation::Presentation;
+use crate::queries::{StatusState, panel_state};
 use crate::renderer::Renderer;
 use crate::session::{MissingTable, Session, probe_table};
 use crate::tasks::{RestoreErrors, RestoreMode, restore_panel};
 use crate::utils::PtrEqRc;
 use crate::workspace::Workspace;
+
+/// Whether this panel can derive a `Table` from its `View` now: it is not
+/// errored, it is pivoted, and its `Client` supports derivations.
+pub fn can_derive_view(session: &Session, renderer: &Renderer) -> bool {
+    let config = session.get_view_config();
+    let is_pivoted = !config.group_by.is_empty() || !config.split_by.is_empty();
+    is_pivoted && can_derive(session) && panel_state(session, renderer) != StatusState::Errored
+}
 
 /// Whether this panel's `Client` can derive a `Table` from a `View`.
 pub fn can_derive(session: &Session) -> bool {

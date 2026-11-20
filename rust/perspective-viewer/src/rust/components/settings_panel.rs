@@ -21,13 +21,14 @@ use super::plugin_selector::PluginSelector;
 use super::plugin_tab::PluginTab;
 use crate::components::debug_panel::DebugPanel;
 use crate::components::empty_placeholder::EmptyPlaceholder;
+use crate::components::error_dialog::ErrorDialog;
 use crate::config::{PluginStaticConfig, PluginUpdate};
 use crate::presentation::{ColumnLocator, ColumnSettingsTarget, OpenColumnSettings, Presentation};
-use crate::queries::{classify_column, is_pivot_column};
+use crate::queries::{StatusError, classify_column, is_pivot_column};
 use crate::renderer::*;
 use crate::session::column_defaults_update::*;
 use crate::session::*;
-use crate::tasks::update_plugin_and_render;
+use crate::tasks::{reconnect_client, update_plugin_and_render};
 use crate::ui::SidebarCloseButton;
 use crate::utils::*;
 use crate::workspace::Workspace;
@@ -42,6 +43,15 @@ pub struct SettingsPanelProps {
     /// panel), and the table-bound tabs render [`EmptyPlaceholder`].
     #[prop_or_default]
     pub is_empty: bool,
+
+    /// The active panel's error, shown as a dialog above its Query and Style
+    /// tabs, which are inert while it is set.
+    #[prop_or_default]
+    pub error: Option<StatusError>,
+
+    /// Whether the dialog offers Reconnect for the active panel's `Client`.
+    #[prop_or_default]
+    pub can_reconnect: bool,
     pub on_resize: Rc<PubSub<()>>,
     pub on_select_column: Callback<Option<ColumnSettingsTarget>>,
     pub on_debug: Callback<()>,
@@ -123,6 +133,8 @@ impl PartialEq for SettingsPanelProps {
     fn eq(&self, rhs: &Self) -> bool {
         self.is_debug == rhs.is_debug
             && self.is_empty == rhs.is_empty
+            && self.error == rhs.error
+            && self.can_reconnect == rhs.can_reconnect
             && self.plugin_name == rhs.plugin_name
             && self.available_plugins == rhs.available_plugins
             && self.has_table == rhs.has_table
@@ -157,6 +169,28 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
         session,
         ..
     } = &props;
+
+    let error = props.error.clone().filter(|_| !props.is_empty);
+    let on_reconnect = props.can_reconnect.then(|| {
+        let session = session.clone();
+        let workspace = props.workspace.clone();
+        let presentation = presentation.clone();
+        Callback::from(move |()| {
+            let Some(client) = session.get_client() else {
+                return;
+            };
+
+            let name = client.get_name().to_owned();
+            let workspace = workspace.clone();
+            let presentation = presentation.clone();
+            let effect = workspace.effects().guard();
+            ApiFuture::spawn(async move {
+                let _effect = effect;
+                let _ = reconnect_client(&workspace, &presentation, &name).await;
+                Ok(())
+            });
+        })
+    });
 
     let selected_column = {
         let config = &props.view_config;
@@ -311,7 +345,16 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
     });
 
     html! {
-        <div id="settings_panel" class="sidebar_column noselect split-panel orient-vertical">
+        <div
+            id="settings_panel"
+            class={classes!(
+                "sidebar_column",
+                "noselect",
+                "split-panel",
+                "orient-vertical",
+                error.is_some().then_some("errored")
+            )}
+        >
             if selected_column.is_none() {
                 <SidebarCloseButton
                     id="settings_close_button"
@@ -340,6 +383,9 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                     onpointerdown={set_debug}
                 />
             </div>
+            if let Some(error) = error {
+                <ErrorDialog id="settings_panel_error" {error} {on_reconnect} />
+            }
             if props.is_empty {
                 // Query/Plugin/Debug all read a panel's table, plugin
                 // schema or config, none of which exist at zero panels.
@@ -389,7 +435,10 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
             // Sibling sizer keeps the panel width pinned across tab
             // switches; lives outside the tab-body so it survives the
             // tab subtree's unmount.
-            <div class="scroll-panel-auto-width" style={format!("width:{}px", width)} />
+            <div
+                class="scroll-panel-auto-width"
+                style={format!("width:{}px", width)}
+            />
         </div>
     }
 }

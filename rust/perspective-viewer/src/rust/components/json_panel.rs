@@ -61,12 +61,25 @@ fn subscribe_panels(workspace: &Workspace, cb: &Callback<()>) -> Vec<Subscriptio
         .collect()
 }
 
-fn stringify<T: serde::Serialize>(config: &T) -> ApiResult<String> {
-    let json = JsValue::from_serde_ext(config)?;
-    let js_string =
-        js_sys::JSON::stringify_with_replacer_and_space(&json, &JsValue::NULL, &2.into())?;
+fn stringify_value(json: &JsValue, formatted: bool) -> ApiResult<String> {
+    let js_string = if formatted {
+        js_sys::JSON::stringify_with_replacer_and_space(json, &JsValue::NULL, &2.into())?
+    } else {
+        js_sys::JSON::stringify(json)?
+    };
 
     Ok(js_string.as_string().unwrap())
+}
+
+fn stringify<T: serde::Serialize>(config: &T, formatted: bool) -> ApiResult<String> {
+    stringify_value(&JsValue::from_serde_ext(config)?, formatted)
+}
+
+/// `source` re-indented (or compacted) to match `formatted`, or `None` when it
+/// does not parse.
+fn reformat(source: &str, formatted: bool) -> Option<String> {
+    let json = js_sys::JSON::parse(source).ok()?;
+    stringify_value(&json, formatted).ok()
 }
 
 fn parse<T: for<'a> serde::Deserialize<'a>>(source: &str) -> Result<T, (String, (u32, u32))> {
@@ -87,7 +100,7 @@ fn locate_error(source: &str, message: String) -> (String, (u32, u32)) {
 }
 
 impl JsonSource {
-    async fn read(&self) -> ApiResult<String> {
+    async fn read(&self, formatted: bool) -> ApiResult<String> {
         match self {
             Self::Viewer {
                 presentation,
@@ -99,11 +112,12 @@ impl JsonSource {
                     .await?
                     .map_table(|name| workspace.inline_table_ref(&name));
 
-                stringify(&config)
+                stringify(&config, formatted)
             },
-            Self::Workspace(host) => {
-                stringify(&crate::queries::get_workspace_config(host, false).await?)
-            },
+            Self::Workspace(host) => stringify(
+                &crate::queries::get_workspace_config(host, false).await?,
+                formatted,
+            ),
         }
     }
 
@@ -215,7 +229,11 @@ impl PartialEq for JsonPanelProps {
 /// `view_config_changed` nor an in-flight config read discards it.
 type Dirty = Rc<Cell<bool>>;
 
-/// A JSON editor over a [`JsonSource`], with apply, reset, copy and paste.
+/// Whether the editor shows indented JSON, read by every config read.
+type Formatted = Rc<Cell<bool>>;
+
+/// A JSON editor over a [`JsonSource`], with apply, reset, copy, paste and an
+/// indentation toggle.
 #[function_component(JsonPanel)]
 pub fn json_panel(props: &JsonPanelProps) -> Html {
     let expr = use_state_eq(|| Rc::new("".to_string()));
@@ -223,6 +241,8 @@ pub fn json_panel(props: &JsonPanelProps) -> Html {
     let select_all = use_memo((), |()| PubSub::default());
     let modified = use_state_eq(|| false);
     let dirty: Dirty = use_memo((), |()| Cell::new(false));
+    let formatted: Formatted = use_memo((), |()| Cell::new(true));
+    let is_formatted = use_state_eq(|| true);
 
     // Measure natural width on mount and route up to `SettingsPanel`.
     let sizer = use_node_ref();
@@ -237,17 +257,18 @@ pub fn json_panel(props: &JsonPanelProps) -> Html {
     });
 
     use_effect_with((), {
-        clone!(error, modified, dirty);
+        clone!(error, modified, dirty, formatted);
         let state = props.clone();
         let text = expr.setter();
         move |()| {
-            state.set_text(text.clone(), dirty.clone());
+            state.set_text(text.clone(), dirty.clone(), formatted.clone());
             error.set(None);
             let subs = state.source.subscribe(Callback::from(state.reset_callback(
                 text.clone(),
                 error.setter(),
                 modified.setter(),
                 dirty.clone(),
+                formatted.clone(),
             )));
 
             || drop(subs)
@@ -264,8 +285,10 @@ pub fn json_panel(props: &JsonPanelProps) -> Html {
     });
 
     let onsave = use_callback((expr.clone(), error.clone(), props.clone()), {
-        clone!(modified, dirty);
-        move |_, (text, error, props)| props.on_save(text, text.setter(), error, &modified, &dirty)
+        clone!(modified, dirty, formatted);
+        move |_, (text, error, props)| {
+            props.on_save(text, text.setter(), error, &modified, &dirty, &formatted)
+        }
     });
 
     let oncopy = use_callback(
@@ -285,24 +308,38 @@ pub fn json_panel(props: &JsonPanelProps) -> Html {
     );
 
     let onapply = use_callback((expr.clone(), error.clone(), props.clone()), {
-        clone!(modified, dirty);
-        move |_, (text, error, props)| props.on_save(text, text.setter(), error, &modified, &dirty)
+        clone!(modified, dirty, formatted);
+        move |_, (text, error, props)| {
+            props.on_save(text, text.setter(), error, &modified, &dirty, &formatted)
+        }
     });
 
     let onreset = use_callback((expr.setter(), error.clone(), props.clone()), {
-        clone!(modified, dirty);
+        clone!(modified, dirty, formatted);
         move |_, (text, error, props)| {
             dirty.set(false);
-            props.set_text(text.clone(), dirty.clone());
+            props.set_text(text.clone(), dirty.clone(), formatted.clone());
             error.set(None);
             modified.set(false);
         }
     });
 
+    let onformatted = use_callback((expr.clone(), is_formatted.clone()), {
+        clone!(formatted);
+        move |_, (text, is_formatted)| {
+            let next = !**is_formatted;
+            formatted.set(next);
+            is_formatted.set(next);
+            if let Some(source) = reformat(text, next) {
+                text.set(Rc::new(source));
+            }
+        }
+    });
+
     let onpaste = use_callback((expr.clone(), error.clone(), props.clone()), {
-        clone!(modified, dirty);
+        clone!(modified, dirty, formatted);
         move |_, (text, error, props)| {
-            clone!(text, error, props, modified, dirty);
+            clone!(text, error, props, modified, dirty, formatted);
             ApiFuture::spawn(async move {
                 if let Some(x) = paste_from_clipboard().await {
                     let x = Rc::new(x);
@@ -310,7 +347,7 @@ pub fn json_panel(props: &JsonPanelProps) -> Html {
                     modified.set(true);
                     error.set(None);
                     text.set(x.clone());
-                    props.on_save(&x, text.setter(), &error, &modified, &dirty);
+                    props.on_save(&x, text.setter(), &error, &modified, &dirty, &formatted);
                 }
 
                 Ok(())
@@ -328,12 +365,18 @@ pub fn json_panel(props: &JsonPanelProps) -> Html {
                         <button id={format!("{id}-reset")} disabled={!*modified} onclick={onreset} />
                         <button id={format!("{id}-copy")} onclick={oncopy} />
                         <button id={format!("{id}-paste")} onclick={onpaste} />
+                        <button
+                            id={format!("{id}-formatted")}
+                            aria-pressed={is_formatted.to_string()}
+                            onclick={onformatted}
+                        />
                     </div>
                     <div id={format!("{id}-editor")}>
                         <CodeEditor
                             expr={&*expr}
                             disabled=false
                             contained=true
+                            wordwrap={!*is_formatted}
                             {oninput}
                             {onsave}
                             select_all={select_all.subscriber()}
@@ -358,10 +401,10 @@ pub fn json_panel(props: &JsonPanelProps) -> Html {
 impl JsonPanelProps {
     /// Asynchronously read the source's config into the editor, unless the
     /// editor has unapplied text by the time the read lands.
-    fn set_text(&self, setter: UseStateSetter<Rc<String>>, dirty: Dirty) {
+    fn set_text(&self, setter: UseStateSetter<Rc<String>>, dirty: Dirty, formatted: Formatted) {
         let source = self.source.clone();
         ApiFuture::spawn(async move {
-            let text = source.read().await?;
+            let text = source.read(formatted.get()).await?;
             if !dirty.get() {
                 setter.set(Rc::new(text));
             }
@@ -376,6 +419,7 @@ impl JsonPanelProps {
         error: UseStateSetter<Option<ExprValidationError>>,
         modified: UseStateSetter<bool>,
         dirty: Dirty,
+        formatted: Formatted,
     ) -> impl Fn(()) + use<> {
         let props = self.clone();
         move |_| {
@@ -384,7 +428,7 @@ impl JsonPanelProps {
             }
 
             error.set(None);
-            props.set_text(text.clone(), dirty.clone());
+            props.set_text(text.clone(), dirty.clone(), formatted.clone());
             modified.set(false);
         }
     }
@@ -396,16 +440,17 @@ impl JsonPanelProps {
         error: &UseStateHandle<Option<ExprValidationError>>,
         modified: &UseStateHandle<bool>,
         dirty: &Dirty,
+        formatted: &Formatted,
     ) {
         let props = self.clone();
-        clone!(source, error, modified, dirty);
+        clone!(source, error, modified, dirty, formatted);
         ApiFuture::spawn(async move {
             match props.source.apply(&source).await {
                 Ok(()) => {
                     dirty.set(false);
                     error.set(None);
                     modified.set(false);
-                    props.set_text(text, dirty.clone());
+                    props.set_text(text, dirty.clone(), formatted);
                 },
                 Err((message, (line, column))) => {
                     dirty.set(true);

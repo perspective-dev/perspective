@@ -2122,8 +2122,9 @@ impl PerspectiveViewerElement {
 
     /// Evaluate the app's command schema at `location` for each of `refs`,
     /// resolved against `frame`, the viewport read of the panel plugin
-    /// `plugin`; `undefined` when `location` is outside the schema's scopes
-    /// or no schema is set.
+    /// `plugin`; `undefined` when `location` is outside the schema's scopes,
+    /// no schema is set, or `plugin` is not a live panel's (e.g. its panel is
+    /// closing while a draw is in flight).
     ///
     /// # Arguments
     ///
@@ -2147,8 +2148,9 @@ impl PerspectiveViewerElement {
         refs: JsHitRefs,
     ) -> ApiResult<JsPerspectiveCommands> {
         let location: CommandLocation = JsValue::from(location).into_serde_ext()?;
-        let panel = panel_for_plugin(&self.workspace, plugin.as_ref())
-            .ok_or_else(|| ApiError::new("`queryCommands` expects a panel's active plugin"))?;
+        let Some(panel) = panel_for_plugin(&self.workspace, plugin.as_ref()) else {
+            return Ok(JsValue::UNDEFINED.unchecked_into());
+        };
 
         let results = query_commands(
             &self.presentation,

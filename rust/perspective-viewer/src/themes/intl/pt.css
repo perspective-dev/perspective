@@ -67,6 +67,7 @@ perspective-viewer {
     --psp-label--new-from-panel--content: "Novo a partir de painel";
     --psp-label--apply-button--content: "Aplicar";
     --psp-label--paste-button--content: "Colar";
+    --psp-label--formatted-button--content: "Formatar";
     --psp-label--edit-mode-read-only--content: "Somente leitura";
     --psp-label--edit-mode-edit--content: "Edição de texto";
     --psp-label--edit-mode-select-row--content: "Selecionar linha";
@@ -135,9 +136,10 @@ perspective-viewer {
     --psp-label--client-default--content: "padrão";
     --psp-label--client-reconnect--content: "Reconectar";
     --psp-label--client-retry--content: "Tentar novamente";
+    --psp-label--error-details--content: "Detalhes";
     --psp-label--tables-loading--content: "Carregando tabelas";
     --psp-label--tables-no-clients--content: "Sem clientes";
-    --psp-label--derive-from-panel--content: "Derivar a partir de painel";
+    --psp-label--views--content: "Visualizações";
     --psp-label--join-open--content: "Juntar";
     --psp-label--join-left--content: "Tabela esquerda";
     --psp-label--join-right--content: "Tabela direita";
@@ -196,7 +198,6 @@ perspective-viewer {
     --psp-label--grid-columns--content: "Colunas da grade";
     --psp-label--grid-rows--content: "Linhas da grade";
     --psp-label--chart-type--content: "Tipo de glifo";
-    --psp-label--new-panel-button--content: "Novo";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "Eixo Y duplo automático";

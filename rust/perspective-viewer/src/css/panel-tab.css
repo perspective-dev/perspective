@@ -126,7 +126,7 @@
     mask-position: center;
 }
 
-:host([part~="tab"].active) .psp-tab-caret {
+:host([part~="tab"].active:not(.settings-closed)) .psp-tab-caret {
     display: block;
     -webkit-mask-image: var(--psp-icon--active-indicator--mask-image);
     mask-image: var(--psp-icon--active-indicator--mask-image);
@@ -141,6 +141,83 @@
  * the lone tab is also active. */
 :host([part~="tab"].single) .psp-tab-caret {
     display: none;
+}
+
+:host([part~="tab"]:not(.active)) .psp-tab-caret.errored,
+:host([part~="tab"].settings-closed) .psp-tab-caret.errored,
+:host([part~="tab"].single) .psp-tab-caret.errored {
+    display: block;
+    background-color: transparent;
+    -webkit-mask-image: none;
+    mask-image: none;
+    color: var(--psp--color);
+    font-weight: bold;
+    line-height: 12px;
+    text-align: center;
+}
+
+:host([part~="tab"]:not(.active)) .psp-tab-caret.errored::before,
+:host([part~="tab"].settings-closed) .psp-tab-caret.errored::before,
+:host([part~="tab"].single) .psp-tab-caret.errored::before {
+    content: "!";
+}
+
+.psp-tab-status {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin: 0 8px 0 -4px;
+    cursor: pointer;
+    background-color: var(--psp--color);
+    -webkit-mask-image: var(--psp-icon--status-ok--mask-image);
+    mask-image: var(--psp-icon--status-ok--mask-image);
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+}
+
+.psp-tab-status.updating {
+    -webkit-mask-image: var(--psp-icon--updating--mask-image);
+    mask-image: var(--psp-icon--updating--mask-image);
+}
+
+.psp-tab-status.loading {
+    -webkit-mask-image: var(--psp-icon--downloading--mask-image);
+    mask-image: var(--psp-icon--downloading--mask-image);
+}
+
+.psp-tab-status.pending {
+    background-color: var(--psp-inactive--color);
+    -webkit-mask-image: var(--psp-icon--status-pending--mask-image);
+    mask-image: var(--psp-icon--status-pending--mask-image);
+}
+
+.psp-tab-status.uninitialized {
+    background-color: transparent;
+}
+
+.psp-tab-status.errored {
+    border-radius: 10px;
+    color: var(--psp--background-color);
+    -webkit-mask-image: none;
+    mask-image: none;
+}
+
+.psp-tab-status.errored::before {
+    content: "!";
+}
+
+.psp-tab-status:not(.errored):hover {
+    background-color: var(--psp--color);
+    -webkit-mask-image: var(--psp-icon--drawer-tab-inverted--mask-image);
+    mask-image: var(--psp-icon--drawer-tab-inverted--mask-image);
+    transform: scaleX(-1);
 }
 
 .psp-tab-title {
@@ -212,5 +289,4 @@ span#rows span.total {
     content: var(--psp-broadcast--content, "[BROADCAST]");
 }
 
-/* `.psp-tab-close` / `.psp-tab-settings` live in `tab-button.css`, shared with
-   the viewer sheet's empty-stage settings button (`.psp-empty-settings`). */
+/* `.psp-tab-close` / `.psp-tab-settings` live in `tab-button.css`. */

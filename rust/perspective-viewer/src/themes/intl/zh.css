@@ -67,6 +67,7 @@ perspective-viewer {
     --psp-label--new-from-panel--content: "从面板新建";
     --psp-label--apply-button--content: "应用";
     --psp-label--paste-button--content: "粘贴";
+    --psp-label--formatted-button--content: "格式化";
     --psp-label--edit-mode-read-only--content: "只读";
     --psp-label--edit-mode-edit--content: "文本编辑";
     --psp-label--edit-mode-select-row--content: "选择行";
@@ -135,9 +136,10 @@ perspective-viewer {
     --psp-label--client-default--content: "默认";
     --psp-label--client-reconnect--content: "重新连接";
     --psp-label--client-retry--content: "重试";
+    --psp-label--error-details--content: "详情";
     --psp-label--tables-loading--content: "正在加载表";
     --psp-label--tables-no-clients--content: "无客户端";
-    --psp-label--derive-from-panel--content: "从面板派生";
+    --psp-label--views--content: "视图";
     --psp-label--join-open--content: "连接";
     --psp-label--join-left--content: "左表";
     --psp-label--join-right--content: "右表";
@@ -196,7 +198,6 @@ perspective-viewer {
     --psp-label--grid-columns--content: "网格列数";
     --psp-label--grid-rows--content: "网格行数";
     --psp-label--chart-type--content: "图元类型";
-    --psp-label--new-panel-button--content: "新建";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "自动双Y轴";

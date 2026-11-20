@@ -297,6 +297,7 @@ struct ClientRegistry {
     client_state_changed: Rc<PubSub<()>>,
     listings: BTreeMap<String, ClientListing>,
     losses: BTreeMap<String, ClientError>,
+    failures: BTreeMap<String, perspective_js::utils::ApiError>,
     table_subs: Vec<(Client, u32)>,
 }
 
@@ -323,6 +324,7 @@ impl ClientRegistry {
         self.clients.retain(|c| c.get_name() != name);
         self.listings.remove(name);
         self.losses.remove(name);
+        self.failures.remove(name);
         if self.default.as_ref().is_some_and(|c| c.get_name() == name) {
             self.default = None;
         }
@@ -1169,12 +1171,35 @@ impl Workspace {
         self.0.borrow().clients.losses.get(name).cloned()
     }
 
-    /// Record that `client`'s connection was lost.
+    /// Record that `client`'s connection was lost, superseding any earlier
+    /// reconnect failure.
     pub fn record_client_loss(&self, client: &Client, error: ClientError) {
         let mut data = self.0.borrow_mut();
+        data.clients.failures.remove(client.get_name());
         data.clients
             .losses
             .insert(client.get_name().to_owned(), error);
+    }
+
+    /// The error of the last reconnect of the [`Client`] named `name`, if it
+    /// failed.
+    pub fn client_failure(&self, name: &str) -> Option<perspective_js::utils::ApiError> {
+        self.0.borrow().clients.failures.get(name).cloned()
+    }
+
+    /// Record the outcome of a reconnect of the [`Client`] named `name`.
+    pub fn set_client_failure(&self, name: &str, failure: Option<perspective_js::utils::ApiError>) {
+        let pubsub = {
+            let mut data = self.0.borrow_mut();
+            match failure {
+                Some(error) => data.clients.failures.insert(name.to_owned(), error),
+                None => data.clients.failures.remove(name),
+            };
+
+            data.clients.client_state_changed.clone()
+        };
+
+        pubsub.emit(());
     }
 
     /// Record that the viewer recovered from `client`'s connection loss.

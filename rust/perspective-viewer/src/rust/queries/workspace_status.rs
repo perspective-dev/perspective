@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_client::{ClientError, Connection};
+use perspective_client::Connection;
 use perspective_js::utils::ApiError;
 
 use crate::renderer::{RenderError, Renderer};
@@ -27,6 +27,20 @@ pub enum StatusState {
     Pending,
     Loading,
     Errored,
+}
+
+impl StatusState {
+    /// The CSS class the status icon wears in this state.
+    pub fn class_name(self) -> &'static str {
+        match self {
+            Self::Errored => "errored",
+            Self::Normal => "connected",
+            Self::Updating => "updating",
+            Self::Loading => "loading",
+            Self::Pending => "pending",
+            Self::Uninitialized => "uninitialized",
+        }
+    }
 }
 
 /// The displayed parts of an error.
@@ -68,8 +82,7 @@ impl ClientStatus {
     }
 }
 
-fn connection_error(error: ClientError) -> StatusError {
-    let error = ApiError::from(error);
+fn status_error(error: &ApiError) -> StatusError {
     StatusError {
         message: error.message(),
         stack: error.stacktrace(),
@@ -83,6 +96,10 @@ pub struct WorkspaceStatus {
     pub state: StatusState,
     pub error: Option<StatusError>,
     pub clients: Vec<ClientStatus>,
+
+    /// The panels whose own state is [`StatusState::Errored`], with their
+    /// errors.
+    pub errored: Vec<(PanelId, StatusError)>,
 }
 
 struct PanelStatus {
@@ -121,6 +138,11 @@ fn panel_status(session: &Session, renderer: &Renderer) -> PanelStatus {
     PanelStatus { state, error: None }
 }
 
+/// The [`StatusState`] of one panel's `Session` and `Renderer`.
+pub fn panel_state(session: &Session, renderer: &Renderer) -> StatusState {
+    panel_status(session, renderer).state
+}
+
 /// Compute the [`WorkspaceStatus`] of `workspace` from its panels and
 /// `Client`s.
 pub fn workspace_status(workspace: &Workspace) -> WorkspaceStatus {
@@ -147,25 +169,47 @@ pub fn workspace_status(workspace: &Workspace) -> WorkspaceStatus {
                 .collect::<Vec<_>>();
 
             let worst = bound.iter().max_by_key(|(.., status)| status.state);
+            let panel_state = worst.map_or(StatusState::Normal, |(.., status)| status.state);
             let (lost, can_reconnect) = match client.connection() {
                 Connection::Lost { error, reconnect } => (Some(error), reconnect.is_some()),
-                Connection::Open => (workspace.client_loss(&name), true),
+                Connection::Open => match workspace.client_loss(&name) {
+                    Some(error) => (Some(error), true),
+                    None => (
+                        None,
+                        panel_state == StatusState::Errored
+                            || workspace.client_failure(&name).is_some(),
+                    ),
+                },
             };
 
             ClientStatus {
                 is_default: default.as_deref() == Some(name.as_str()),
                 is_open: lost.is_none(),
-                can_reconnect: lost.is_some() && can_reconnect,
-                error: match lost {
-                    Some(error) => Some(connection_error(error)),
-                    None => worst.and_then(|(.., status)| status.error.clone()),
-                },
-                panel_state: worst.map_or(StatusState::Normal, |(.., status)| status.state),
+                can_reconnect,
+                error: workspace
+                    .client_failure(&name)
+                    .map(|error| status_error(&error))
+                    .or_else(|| match lost {
+                        Some(error) => Some(status_error(&ApiError::from(error))),
+                        None => worst.and_then(|(.., status)| status.error.clone()),
+                    }),
+                panel_state,
                 panels: bound.iter().map(|(id, ..)| id.clone()).collect(),
                 name,
             }
         })
         .collect::<Vec<_>>();
+
+    if workspace.is_empty_stage()
+        && let Some(err) = workspace.stage_error()
+    {
+        return WorkspaceStatus {
+            state: StatusState::Errored,
+            error: Some(status_error(&err)),
+            clients,
+            errored: vec![],
+        };
+    }
 
     let worst = panels.iter().max_by_key(|(.., status)| status.state);
     let lost = clients.iter().find(|client| !client.is_open);
@@ -180,9 +224,15 @@ pub fn workspace_status(workspace: &Workspace) -> WorkspaceStatus {
         .and_then(|(.., status)| status.error.clone())
         .or_else(|| lost.and_then(|client| client.error.clone()));
 
+    let errored = panels
+        .iter()
+        .filter_map(|(id, _, status)| Some((id.clone(), status.error.clone()?)))
+        .collect();
+
     WorkspaceStatus {
         state,
         error,
         clients,
+        errored,
     }
 }

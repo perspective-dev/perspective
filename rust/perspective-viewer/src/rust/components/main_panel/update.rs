@@ -24,7 +24,7 @@ use yew::prelude::*;
 use super::{MainPanel, MainPanelMsg, MenuOrigin, MenuRequest};
 use crate::components::panel_menu::PanelCommand;
 use crate::config::CommandLocation;
-use crate::js::{Layout, RegularLayout};
+use crate::js::{Layout, LayoutExt, RegularLayout};
 use crate::queries::{ResolvedCommands, resolve_commands};
 use crate::renderer::SUBPIXEL_EPSILON;
 use crate::tasks::resize_callback;
@@ -118,18 +118,21 @@ impl MainPanel {
         // fire `regular-layout-update` — this is the single point of
         // truth for tab visibility. Re-render only when it changed, so
         // each `PanelTab` re-syncs its `visible` class.
-        let hidden = layout
-            .save()
-            .into_serde_ext::<Layout>()
+        let tree = layout.save().into_serde_ext::<Layout>().ok();
+        let hidden = tree
+            .as_ref()
             .map(|tree| tree.hidden_slot_names().into_iter().collect())
             .unwrap_or_default();
 
-        if hidden != self.hidden_tabs {
-            self.hidden_tabs = hidden;
-            true
-        } else {
-            closed_any
-        }
+        let top_left = tree
+            .as_ref()
+            .and_then(|tree| tree.top_left())
+            .map(str::to_owned);
+
+        let changed = hidden != self.hidden_tabs || top_left != self.top_left_tab;
+        self.hidden_tabs = hidden;
+        self.top_left_tab = top_left;
+        changed || closed_any
     }
 
     pub(super) fn on_tab_selected(&self, ctx: &Context<Self>, name: String) -> bool {

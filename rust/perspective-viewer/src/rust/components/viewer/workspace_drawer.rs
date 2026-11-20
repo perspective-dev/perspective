@@ -17,12 +17,12 @@ use perspective_client::clone;
 use yew::prelude::*;
 
 use super::PerspectiveViewer;
+use super::dividers::DividerPump;
 use super::msg::DrawerWaiters;
 use super::msg::PerspectiveViewerMsg::*;
-use super::settings::DividerPump;
 use crate::components::workspace_panel::WorkspaceTab;
 use crate::queries::StatusState;
-use crate::tasks::measure_drawer_span;
+use crate::tasks::{measure_drawer_span, measure_status_bar_height};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct DrawerState {
@@ -46,7 +46,6 @@ pub(super) struct WorkspaceDrawer {
     waiters: Vec<Sender<()>>,
     pub selected_tab: WorkspaceTab,
     pub width_override: Option<i32>,
-    pub auto_width: f64,
     docked_width: Option<f64>,
     pub divider: DividerPump,
 }
@@ -92,16 +91,20 @@ impl PerspectiveViewer {
             return false;
         }
 
-        let is_open = self.workspace_drawer.effective().open;
-        match self.workspace_status.state {
-            StatusState::Normal => self.active_session.status_indicator_clicked.emit(()),
-            StatusState::Errored if !is_open => {
-                self.workspace_drawer.selected_tab = WorkspaceTab::Tables;
-            },
-            _ => {},
+        let state = self.workspace_status.state;
+        if state == StatusState::Normal {
+            self.active_session.status_indicator_clicked.emit(());
         }
 
-        self.on_toggle_workspace_drawer(ctx, None, None)
+        if self.workspace_drawer.effective().open {
+            return false;
+        }
+
+        if state == StatusState::Errored {
+            self.workspace_drawer.selected_tab = WorkspaceTab::Tables;
+        }
+
+        self.on_toggle_workspace_drawer(ctx, Some(true), None)
     }
 
     fn request_workspace_drawer(
@@ -119,7 +122,9 @@ impl PerspectiveViewer {
             return false;
         }
 
-        if !pending && next.is_docked() == self.workspace_drawer.shown.is_docked() {
+        let shown = self.workspace_drawer.shown;
+        let delta_h = self.workspace_drawer_bar_delta(ctx, shown, next);
+        if !pending && next.is_docked() == shown.is_docked() && delta_h == 0.0 {
             self.apply_workspace_drawer(ctx, next);
             self.on_rendered.extend(resolve);
             return true;
@@ -132,7 +137,12 @@ impl PerspectiveViewer {
         }
 
         self.workspace_drawer.commit_pending = true;
-        let delta_w = self.workspace_drawer_delta(ctx, next);
+        let delta_w = if next.is_docked() == shown.is_docked() {
+            Some(0.0)
+        } else {
+            self.workspace_drawer_delta(ctx, next)
+        };
+
         let waiters = DrawerWaiters::default();
         let on_settled = Callback::from({
             clone!(waiters);
@@ -145,7 +155,7 @@ impl PerspectiveViewer {
 
         self.presize_pane_shift(
             ctx,
-            delta_w,
+            delta_w.map(|w| (w, delta_h)),
             move |resolve| WorkspaceDrawerCommit(resolve, waiters.clone()),
             on_settled,
         );
@@ -161,6 +171,23 @@ impl PerspectiveViewer {
         let span = measure_drawer_span(&ctx.props().elem, "#workspace_drawer")?;
         self.workspace_drawer.docked_width = Some(span);
         Some(if next.is_docked() { span } else { -span })
+    }
+
+    /// The signed `#main_column` height delta of the status bar docking or
+    /// floating as the drawer goes from `shown` to `next`.
+    fn workspace_drawer_bar_delta(
+        &self,
+        ctx: &Context<Self>,
+        shown: DrawerState,
+        next: DrawerState,
+    ) -> f64 {
+        let was = self.is_status_bar_docked(ctx, self.settings_open, shown.open);
+        let will = self.is_status_bar_docked(ctx, self.settings_open, next.open);
+        match (was, will) {
+            (false, true) => measure_status_bar_height(&ctx.props().elem),
+            (true, false) => -measure_status_bar_height(&ctx.props().elem),
+            _ => 0.0,
+        }
     }
 
     fn apply_workspace_drawer(&mut self, ctx: &Context<Self>, next: DrawerState) {
@@ -197,18 +224,5 @@ impl PerspectiveViewer {
         let changed = tab != self.workspace_drawer.selected_tab;
         self.workspace_drawer.selected_tab = tab;
         changed
-    }
-
-    pub(super) fn on_workspace_panel_auto_width(&mut self, ctx: &Context<Self>, w: f64) -> bool {
-        if w > self.workspace_drawer.auto_width {
-            self.workspace_drawer.auto_width = w;
-            if self.workspace_drawer.shown.is_docked() {
-                self.resize_for_ratchet(ctx);
-            }
-
-            true
-        } else {
-            false
-        }
     }
 }

@@ -126,7 +126,21 @@
             #textarea_editable,
             #content {
                 white-space: pre-wrap;
-                word-wrap: break-word;
+                overflow-wrap: anywhere;
+            }
+
+            .editor-inner,
+            #line_numbers {
+                overflow: visible;
+            }
+
+            .editor-inner {
+                min-width: 0;
+            }
+
+            #textarea_editable {
+                overflow: hidden;
+                padding-right: 6px;
             }
         }
     }

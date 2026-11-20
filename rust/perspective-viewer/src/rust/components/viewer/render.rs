@@ -30,7 +30,7 @@ use crate::components::main_panel::MainPanel;
 use crate::components::panel_menu::PanelCommand;
 use crate::components::settings_panel::SettingsPanel;
 use crate::components::style::StyleSurface;
-use crate::components::workspace_panel::WorkspacePanel;
+use crate::components::workspace_panel::{ViewLabel, WorkspacePanel};
 use crate::config::SettingsUpdate;
 use crate::presentation::ColumnSettingsTarget;
 use crate::queries::*;
@@ -116,11 +116,29 @@ impl PerspectiveViewer {
         let metadata = self.session_props.metadata.clone();
         let on_select_tab = ctx.link().callback(SettingsPanelTabChanged);
         let on_auto_width = ctx.link().callback(SettingsPanelAutoWidth);
+        let active_id = ctx.props().workspace.active_id();
+        let panel_error = active_id.as_ref().and_then(|id| {
+            self.workspace_status
+                .errored
+                .iter()
+                .find(|(x, _)| x == id)
+                .map(|(_, error)| error.clone())
+        });
+
+        let can_reconnect = active_id.as_ref().is_some_and(|id| {
+            self.workspace_status
+                .clients
+                .iter()
+                .any(|client| client.can_reconnect && client.panels.contains(id))
+        });
+
         let settings_panel = if is_settings_open {
             html! {
                 <SettingsPanel
                     on_close={on_close_settings}
                     {is_empty}
+                    error={panel_error}
+                    {can_reconnect}
                     on_resize={&self.on_resize}
                     on_select_column={on_open_expr_panel}
                     is_debug={self.debug_open}
@@ -208,21 +226,15 @@ impl PerspectiveViewer {
 
         let drawer = self.workspace_drawer.shown;
         let workspace_drawer = drawer.open.then(|| {
-            let auto_width = match self.workspace_drawer.width_override {
-                None => self.workspace_drawer.auto_width,
-                Some(_) => 0.0,
-            };
-
             let workspace = &ctx.props().workspace;
             let panels = workspace
                 .panels()
                 .into_iter()
-                .filter(|panel| {
-                    crate::tasks::can_derive(&panel.session) && panel.session.get_table().is_some()
-                })
-                .map(|panel| {
-                    let title = panel.session.get_title().filter(|t| !t.is_empty());
-                    (panel.id.as_str().to_owned(), title)
+                .filter(|panel| panel.session.get_table().is_some())
+                .map(|panel| ViewLabel {
+                    id: panel.id.as_str().to_owned(),
+                    title: panel.session.get_title().filter(|t| !t.is_empty()),
+                    derivable: crate::tasks::can_derive_view(&panel.session, &panel.renderer),
                 })
                 .collect::<Vec<_>>();
 
@@ -243,12 +255,10 @@ impl PerspectiveViewer {
                         status={self.workspace_status.clone()}
                         selected_tab={self.workspace_drawer.selected_tab}
                         is_pinned={drawer.pinned}
-                        {auto_width}
                         panels={std::rc::Rc::new(panels)}
-                        on_toggle={ctx.link().callback(|()| StatusIndicatorClicked)}
+                        on_close={ctx.link().callback(|()| ToggleWorkspaceDrawer(Some(false), None))}
                         on_toggle_pin={ctx.link().callback(|()| ToggleWorkspaceDrawerPin)}
                         on_select_tab={ctx.link().callback(WorkspaceTabChanged)}
-                        on_auto_width={ctx.link().callback(WorkspacePanelAutoWidth)}
                         on_derive_panel={ctx.link().callback(DerivePanel)}
                     />
                     <></>
@@ -296,6 +306,7 @@ impl PerspectiveViewer {
                 has_clients={!ctx.props().workspace.clients().is_empty()}
                 status={self.workspace_status.clone()}
                 show_status={!drawer.open}
+                is_workspace_open={drawer.open}
                 on_status_click={ctx.link().callback(|()| StatusIndicatorClicked)}
                 panel_ids={ctx.props().workspace.panel_ids()}
                 panel_titles={ctx.props()

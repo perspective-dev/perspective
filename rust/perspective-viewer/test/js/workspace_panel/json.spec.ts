@@ -32,6 +32,70 @@ test.describe("Workspace panel JSON tab", () => {
             .toEqual(await saveWorkspace(page));
     });
 
+    test("the Format toggle switches between indented and compact JSON", async ({
+        page,
+    }) => {
+        const textarea = page.locator(
+            "perspective-viewer #workspace-json-editor textarea",
+        );
+
+        const toggle = page.locator(
+            "perspective-viewer #workspace-json-formatted",
+        );
+
+        await expect(textarea).not.toHaveValue("");
+        await expect(toggle).toHaveAttribute("aria-pressed", "true");
+        const indented = await textarea.inputValue();
+        expect(indented).toContain("\n");
+
+        await toggle.click();
+        await expect(toggle).toHaveAttribute("aria-pressed", "false");
+        await expect(textarea).not.toHaveValue(/\n/);
+        expect(JSON.parse(await textarea.inputValue())).toEqual(
+            JSON.parse(indented),
+        );
+
+        const editor = page.locator(
+            "perspective-viewer #workspace-json-editor #editor",
+        );
+
+        await expect(editor).toHaveClass(/wordwrap/);
+        const widths = await editor.evaluate((elem) => {
+            const content = (x: Element) => {
+                const style = getComputedStyle(x);
+                return (
+                    x.clientWidth -
+                    parseFloat(style.paddingLeft) -
+                    parseFloat(style.paddingRight)
+                );
+            };
+
+            return [
+                content(elem.querySelector("#textarea_editable")!),
+                content(elem.querySelector("#content")!),
+            ];
+        });
+
+        expect(widths[0]).toBe(widths[1]);
+        const height = await editor.evaluate(
+            (elem) => elem.querySelector("#content")!.scrollHeight,
+        );
+
+        expect(height).toBeGreaterThan(40);
+        const scrolled = await editor.evaluate((elem) => {
+            elem.parentElement!.style.maxHeight = "60px";
+            elem.scrollTop = 30;
+            return elem.scrollTop;
+        });
+
+        expect(scrolled).toBeGreaterThan(0);
+
+        await toggle.click();
+        await expect(toggle).toHaveAttribute("aria-pressed", "true");
+        await expect(textarea).toHaveValue(indented);
+        await expect(editor).not.toHaveClass(/wordwrap/);
+    });
+
     test("applying an edit replaces the panel set and keeps the tab", async ({
         page,
     }) => {

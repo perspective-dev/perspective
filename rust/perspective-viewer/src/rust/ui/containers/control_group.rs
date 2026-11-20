@@ -13,8 +13,8 @@
 use wasm_bindgen::JsCast;
 use web_sys::{Event, MouseEvent};
 use yew::{
-    Callback, Html, Properties, function_component, html, use_callback, use_effect_with,
-    use_mut_ref, use_node_ref,
+    Callback, Classes, Html, Properties, classes, function_component, html, use_callback,
+    use_effect_with, use_mut_ref, use_node_ref,
 };
 
 use crate::ui::form::intl_label::IntlLabel;
@@ -25,7 +25,15 @@ pub struct ControlGroupProps {
 
     pub open: bool,
 
+    #[prop_or_default]
     pub on_toggle: Callback<(String, bool)>,
+
+    /// The summary content, in place of the `group_key` intl label.
+    #[prop_or_default]
+    pub summary: Option<Html>,
+
+    #[prop_or_default]
+    pub class: Classes,
 
     pub children: Html,
 }
@@ -58,7 +66,12 @@ pub fn ControlGroup(props: &ControlGroupProps) -> Html {
             return;
         };
 
-        let Some(scope) = details.closest(".tab-section").ok().flatten() else {
+        let Some(scope) = details
+            .closest(".tab-section")
+            .ok()
+            .flatten()
+            .or_else(|| details.parent_element())
+        else {
             return;
         };
 
@@ -101,11 +114,16 @@ pub fn ControlGroup(props: &ControlGroupProps) -> Html {
     }
 
     let open = *use_mut_ref(|| props.open).borrow();
+    let class = classes!("control-group", props.class.clone());
+    let summary = props.summary.clone().unwrap_or_else(|| {
+        html! { <IntlLabel name={props.group_key.clone()} group=true /> }
+    });
+
     html! {
-        <details ref={details_ref} class="control-group" {open} {ontoggle}>
+        <details ref={details_ref} {class} {open} {ontoggle}>
             <summary {onclick}>
                 <span class="control-group-chevron shift-alt-icon" />
-                <IntlLabel name={props.group_key.clone()} group=true />
+                { summary }
             </summary>
             { props.children.clone() }
         </details>

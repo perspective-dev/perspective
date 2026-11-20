@@ -113,6 +113,17 @@ pub enum ConfigSelectorMsg {
     UpdateSplitRollupMode(SplitRollupMode),
 }
 
+impl From<DragListEvent> for ConfigSelectorMsg {
+    fn from(event: DragListEvent) -> Self {
+        match event {
+            DragListEvent::DragEnter(target, index) => Self::DragOver(index, target),
+            DragListEvent::DragLeave(target) => Self::DragLeave(target),
+            DragListEvent::Close(target, index) => Self::Close(index, target),
+            DragListEvent::Create(target, column) => Self::New(target, column),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ConfigSelector {
     filter_dropdown: FilterDropDownElement,
@@ -689,8 +700,9 @@ impl Component for ConfigSelector {
                         }
                     </div>
                     if features.group_by {
-                        <GroupBySelector
+                        <PivotSelector
                             name="group_by"
+                            target={DragTarget::GroupBy}
                             role_label={plugin_roles.0.clone()}
                             disabled={config.group_rollup_mode == GroupRollupMode::Total}
                             is_invalid={!accepts_group_by(ctx.props())}
@@ -715,7 +727,7 @@ impl Component for ConfigSelector {
                                     </PivotColumn>
                                 }
                             }) }
-                        </GroupBySelector>
+                        </PivotSelector>
                     }
                     if features.split_by {
                         if !config.split_by.is_empty() || split_rollups.len() > 1 {
@@ -745,8 +757,9 @@ impl Component for ConfigSelector {
                                 }
                             </div>
                         }
-                        <SplitBySelector
+                        <PivotSelector
                             name="split_by"
+                            target={DragTarget::SplitBy}
                             role_label={plugin_roles.1.clone()}
                             parent={ctx.link().clone()}
                             column_dropdown={column_dropdown.clone()}
@@ -768,11 +781,12 @@ impl Component for ConfigSelector {
                                 </PivotColumn>
                             }
                         }) }
-                        </SplitBySelector>
+                        </PivotSelector>
                     }
                     if features.sort {
                         <SortSelector
                             name="sort"
+                            target={DragTarget::Sort}
                             allow_duplicates=true
                             parent={ctx.link().clone()}
                             column_dropdown={column_dropdown.clone()}
@@ -800,6 +814,7 @@ impl Component for ConfigSelector {
                     if !features.filter_ops.is_empty() {
                         <FilterSelector
                             name="filter"
+                            target={DragTarget::Filter}
                             allow_duplicates=true
                             parent={ctx.link().clone()}
                             {column_dropdown}
@@ -852,100 +867,6 @@ impl ConfigSelectorProps {
     }
 }
 
-struct GroupByContext {}
-struct SplitByContext {}
-struct SortDragContext {}
-struct FilterDragContext {}
-
-impl DragContext<ConfigSelectorMsg> for GroupByContext {
-    fn dragenter(index: usize) -> ConfigSelectorMsg {
-        ConfigSelectorMsg::DragOver(index, DragTarget::GroupBy)
-    }
-
-    fn close(index: usize) -> ConfigSelectorMsg {
-        ConfigSelectorMsg::Close(index, DragTarget::GroupBy)
-    }
-
-    fn dragleave() -> ConfigSelectorMsg {
-        ConfigSelectorMsg::DragLeave(DragTarget::GroupBy)
-    }
-
-    fn create(col: InPlaceColumn) -> ConfigSelectorMsg {
-        ConfigSelectorMsg::New(DragTarget::GroupBy, col)
-    }
-
-    fn is_self_move(target: DragTarget) -> bool {
-        target == DragTarget::GroupBy
-    }
-}
-
-impl DragContext<ConfigSelectorMsg> for SplitByContext {
-    fn dragenter(index: usize) -> ConfigSelectorMsg {
-        ConfigSelectorMsg::DragOver(index, DragTarget::SplitBy)
-    }
-
-    fn close(index: usize) -> ConfigSelectorMsg {
-        ConfigSelectorMsg::Close(index, DragTarget::SplitBy)
-    }
-
-    fn dragleave() -> ConfigSelectorMsg {
-        ConfigSelectorMsg::DragLeave(DragTarget::SplitBy)
-    }
-
-    fn create(col: InPlaceColumn) -> ConfigSelectorMsg {
-        ConfigSelectorMsg::New(DragTarget::SplitBy, col)
-    }
-
-    fn is_self_move(target: DragTarget) -> bool {
-        target == DragTarget::SplitBy
-    }
-}
-
-impl DragContext<ConfigSelectorMsg> for SortDragContext {
-    fn dragenter(index: usize) -> ConfigSelectorMsg {
-        ConfigSelectorMsg::DragOver(index, DragTarget::Sort)
-    }
-
-    fn close(index: usize) -> ConfigSelectorMsg {
-        ConfigSelectorMsg::Close(index, DragTarget::Sort)
-    }
-
-    fn dragleave() -> ConfigSelectorMsg {
-        ConfigSelectorMsg::DragLeave(DragTarget::Sort)
-    }
-
-    fn create(col: InPlaceColumn) -> ConfigSelectorMsg {
-        ConfigSelectorMsg::New(DragTarget::Sort, col)
-    }
-
-    fn is_self_move(target: DragTarget) -> bool {
-        target == DragTarget::Sort
-    }
-}
-
-impl DragContext<ConfigSelectorMsg> for FilterDragContext {
-    fn dragenter(index: usize) -> ConfigSelectorMsg {
-        ConfigSelectorMsg::DragOver(index, DragTarget::Filter)
-    }
-
-    fn close(index: usize) -> ConfigSelectorMsg {
-        ConfigSelectorMsg::Close(index, DragTarget::Filter)
-    }
-
-    fn dragleave() -> ConfigSelectorMsg {
-        ConfigSelectorMsg::DragLeave(DragTarget::Filter)
-    }
-
-    fn create(col: InPlaceColumn) -> ConfigSelectorMsg {
-        ConfigSelectorMsg::New(DragTarget::Filter, col)
-    }
-
-    fn is_self_move(target: DragTarget) -> bool {
-        target == DragTarget::Filter
-    }
-}
-
-type GroupBySelector = DragDropList<ConfigSelector, PivotColumn, GroupByContext>;
-type SplitBySelector = DragDropList<ConfigSelector, PivotColumn, SplitByContext>;
-type SortSelector = DragDropList<ConfigSelector, SortColumn, SortDragContext>;
-type FilterSelector = DragDropList<ConfigSelector, FilterColumn, FilterDragContext>;
+type PivotSelector = DragDropList<ConfigSelector, PivotColumn>;
+type SortSelector = DragDropList<ConfigSelector, SortColumn>;
+type FilterSelector = DragDropList<ConfigSelector, FilterColumn>;

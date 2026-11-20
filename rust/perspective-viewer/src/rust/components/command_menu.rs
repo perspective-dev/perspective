@@ -22,11 +22,12 @@ use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
 use yew::prelude::*;
 
-use crate::components::panel_menu::session_anchor;
 use crate::components::style::StyleSurface;
 use crate::config::CommandSpec;
 use crate::presentation::Presentation;
-use crate::ui::{ContextMenu, ContextMenuEntry, ContextMenuItem, MODAL_SLOT, PortalModal};
+use crate::ui::{
+    ContextMenu, ContextMenuEntry, ContextMenuItem, MODAL_SLOT, PortalModal, session_anchor,
+};
 use crate::utils::*;
 
 #[derive(Properties, PartialEq)]

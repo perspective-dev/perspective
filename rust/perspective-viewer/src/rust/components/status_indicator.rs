@@ -12,7 +12,7 @@
 
 use yew::prelude::*;
 
-use crate::queries::{StatusState, WorkspaceStatus};
+use crate::queries::WorkspaceStatus;
 
 #[derive(PartialEq, Properties)]
 pub struct StatusIndicatorProps {
@@ -27,14 +27,7 @@ pub struct StatusIndicatorProps {
 /// panel when clicked.
 #[function_component]
 pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
-    let class_name = match props.status.state {
-        StatusState::Errored => "errored",
-        StatusState::Normal => "connected",
-        StatusState::Updating => "updating",
-        StatusState::Loading => "loading",
-        StatusState::Pending => "pending",
-        StatusState::Uninitialized => "uninitialized",
-    };
+    let class_name = props.status.state.class_name();
 
     let onclick = props.on_toggle.reform(|_: MouseEvent| ());
     html! {
@@ -44,14 +37,6 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
                     <span id="status" class={class_name} />
                     <span id="status_updating" class={class_name} />
                 </div>
-                if let Some(error) = &props.status.error {
-                    <div class="error-dialog">
-                        <div class="error-dialog-message">
-                            { format!("{} {}", error.kind, error.message) }
-                        </div>
-                        <div class="error-dialog-stack">{ &error.stack }</div>
-                    </div>
-                }
             </div>
         </>
     }

@@ -95,7 +95,6 @@ pub enum PerspectiveViewerMsg {
     /// `Sender` on the render commit.
     WorkspaceDrawerCommit(Sender<()>, DrawerWaiters),
     WorkspaceTabChanged(WorkspaceTab),
-    WorkspacePanelAutoWidth(f64),
 
     /// The status indicator was clicked.
     StatusIndicatorClicked,

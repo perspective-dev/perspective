@@ -57,9 +57,20 @@ async fn recover_panels(workspace: &Workspace, ids: Vec<PanelId>) -> ApiResult<(
     Ok(())
 }
 
-/// Reconnect the `Client` named `name` if its connection is lost, then
-/// re-subscribe its hosted tables and recover its panels.
+/// Reconnect the `Client` named `name` if its connection is lost, re-subscribe
+/// its hosted tables if the viewer saw that loss, then recover its panels,
+/// recording a failure as that client's error.
 pub async fn reconnect_client(
+    workspace: &Workspace,
+    presentation: &Presentation,
+    name: &str,
+) -> ApiResult<()> {
+    let result = reconnect_step(workspace, presentation, name).await;
+    workspace.set_client_failure(name, result.as_ref().err().cloned());
+    result
+}
+
+async fn reconnect_step(
     workspace: &Workspace,
     presentation: &Presentation,
     name: &str,
@@ -72,44 +83,15 @@ pub async fn reconnect_client(
         }
     }
 
-    workspace.clear_client_loss(&client);
-    let subscribed = subscribe_client(workspace, presentation, &client).await;
-    workspace.client_state_changed().emit(());
+    let subscribed = if workspace.client_loss(name).is_some() {
+        workspace.clear_client_loss(&client);
+        let subscribed = subscribe_client(workspace, presentation, &client).await;
+        workspace.client_state_changed().emit(());
+        subscribed
+    } else {
+        Ok(())
+    };
+
     let recovered = recover_panels(workspace, workspace.panels_for_client(name)).await;
     subscribed.and(recovered)
-}
-
-/// Reconnect every lost `Client` which can be, and recover every errored
-/// panel of an open one, reporting the first failure once all have finished.
-pub async fn recover_workspace(
-    workspace: &Workspace,
-    presentation: &Presentation,
-) -> ApiResult<()> {
-    let clients = workspace.clients();
-    let lost = clients
-        .iter()
-        .filter(|client| match client.connection() {
-            Connection::Open => workspace.client_loss(client.get_name()).is_some(),
-            Connection::Lost { reconnect, .. } => reconnect.is_some(),
-        })
-        .map(|client| reconnect_client(workspace, presentation, client.get_name()));
-
-    let reconnected = join_all(lost).await;
-    let open = workspace
-        .panels()
-        .into_iter()
-        .filter(|panel| {
-            panel
-                .session
-                .get_client()
-                .is_none_or(|client| client.connection().is_open())
-        })
-        .map(|panel| panel.id)
-        .collect();
-
-    let recovered = recover_panels(workspace, open).await;
-    reconnected
-        .into_iter()
-        .collect::<ApiResult<Vec<_>>>()
-        .and(recovered)
 }

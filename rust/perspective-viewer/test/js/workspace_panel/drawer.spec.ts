@@ -16,7 +16,7 @@ import { iconRect, ready, toggle } from "./helpers.ts";
 test.beforeEach(ready);
 
 test.describe("Workspace panel drawer", () => {
-    test("the status icon toggles the panel and keeps its position", async ({
+    test("the status icon opens the panel and only the close button closes it", async ({
         page,
     }) => {
         const icon = page.locator("perspective-viewer #status_reconnect");
@@ -26,23 +26,17 @@ test.describe("Workspace panel drawer", () => {
 
         await icon.click();
         await expect(panel).toBeVisible();
-        await expect(icon).toHaveCount(1);
-        await expect(
-            page.locator(
-                "perspective-viewer #workspace_panel_header #status_reconnect",
-            ),
-        ).toHaveCount(1);
-
-        expect(await iconRect(page)).toEqual(closed);
+        await expect(icon).toHaveCount(0);
 
         await page.locator("perspective-viewer #workspace_pin_button").click();
         await expect(
             page.locator("perspective-viewer #workspace_drawer"),
         ).toHaveClass(/pinned/);
 
-        expect(await iconRect(page)).toEqual(closed);
-
-        await icon.click();
+        await expect(panel).toBeVisible();
+        await page
+            .locator("perspective-viewer #workspace_close_button")
+            .click();
         await expect(panel).toHaveCount(0);
         await expect(
             page.locator("perspective-viewer #status_bar #status_reconnect"),
@@ -127,9 +121,7 @@ test.describe("Workspace panel drawer", () => {
         expect(reopened.width).toBeCloseTo(pinned.width, 0);
     });
 
-    test("the panel outlives a settings close, which removes its opener", async ({
-        page,
-    }) => {
+    test("the panel outlives a settings close", async ({ page }) => {
         await toggle(page, true);
         await page.evaluate(async () => {
             const viewer = document.querySelector("perspective-viewer")! as any;
@@ -139,14 +131,72 @@ test.describe("Workspace panel drawer", () => {
         const panel = page.locator("perspective-viewer #workspace_panel");
         await expect(panel).toBeVisible();
         await page
-            .locator(
-                "perspective-viewer #workspace_panel_header #status_reconnect",
-            )
+            .locator("perspective-viewer #workspace_close_button")
             .click();
 
         await expect(panel).toHaveCount(0);
         await expect(
             page.locator("perspective-viewer #status_reconnect"),
         ).toHaveCount(0);
+    });
+
+    test("with settings closed the status bar docks while the panel is open", async ({
+        page,
+    }) => {
+        await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")! as any;
+            await viewer.toggleConfig(false);
+        });
+
+        const bar = page.locator("perspective-viewer #status_bar");
+        const height = () =>
+            page.evaluate(
+                () =>
+                    document
+                        .querySelector("perspective-viewer")!
+                        .shadowRoot!.querySelector("#main_panel_container")!
+                        .getBoundingClientRect().height,
+            );
+
+        await expect(bar).toHaveClass(/floating/);
+        const closed = await height();
+
+        await toggle(page, true);
+        await expect(bar).not.toHaveClass(/floating/);
+        expect(await height()).toBeLessThan(closed);
+
+        await toggle(page, false);
+        await expect(bar).toHaveClass(/floating/);
+        expect(await height()).toEqual(closed);
+    });
+
+    test("with settings closed the top-left tab carries the status icon", async ({
+        page,
+    }) => {
+        await page.evaluate(async (table) => {
+            const viewer = document.querySelector("perspective-viewer")! as any;
+            await viewer.addPanel({ table });
+            await viewer.toggleConfig(false);
+        }, "load-viewer-csv");
+
+        const status = page.locator(
+            "perspective-viewer perspective-viewer-tab .psp-tab-status",
+        );
+
+        const tabs = page.locator("perspective-viewer perspective-viewer-tab");
+        await expect(tabs).toHaveCount(2);
+        await expect(status).toHaveCount(1);
+        await expect(status).toHaveClass(/connected/);
+        await status.click();
+
+        const panel = page.locator("perspective-viewer #workspace_panel");
+        await expect(panel).toBeVisible();
+        await expect(status).toHaveCount(0);
+        await page
+            .locator("perspective-viewer #workspace_close_button")
+            .click();
+
+        await expect(panel).toHaveCount(0);
+        await expect(status).toHaveCount(1);
     });
 });
