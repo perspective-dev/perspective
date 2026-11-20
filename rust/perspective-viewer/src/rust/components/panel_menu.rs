@@ -40,7 +40,8 @@ use crate::components::new_panel_menu::{HostedTables, NewPanelMenu, NewPanelPick
 use crate::components::style::StyleSurface;
 use crate::config::*;
 use crate::presentation::Presentation;
-use crate::queries::{ResolvedCommands, fetch_hosted_tables};
+use crate::queries::ResolvedCommands;
+use crate::tasks::refresh_listings;
 use crate::tasks::{can_derive, copy_method_to_clipboard, delete_derived, export_method_to_blob};
 use crate::ui::{ContextMenu, ContextMenuEntry, ContextMenuItem, MODAL_SLOT, PortalModal};
 use crate::utils::*;
@@ -170,7 +171,7 @@ pub enum PanelMenuMsg {
     /// The per-client hosted-table-name fetch (spawned at menu open, feeding
     /// the "New" sub-menu) resolved: `(client name, its table names)` per
     /// loaded client.
-    TablesLoaded(Vec<(String, Vec<String>)>),
+    TablesChanged,
 }
 
 pub struct PanelMenu {
@@ -182,9 +183,8 @@ pub struct PanelMenu {
     picker: Option<PickerKind>,
 
     /// The "New" sub-menu's data: `(client name, its hosted table names)` per
-    /// loaded client, in registration order. `None` while the fetch spawned at
-    /// menu open is still in flight.
-    tables: Option<HostedTables>,
+    /// open client, in registration order.
+    tables: HostedTables,
 
     /// Keeps the [`Workspace::hosted_tables_changed`] listener attached for
     /// the menu session, so the open listing tracks table creates/deletes.
@@ -196,25 +196,11 @@ impl Component for PanelMenu {
     type Properties = PanelMenuProps;
 
     fn create(ctx: &Context<Self>) -> Self {
-        let fetch = {
-            let workspace = ctx.props().workspace.clone();
-            let link = ctx.link().clone();
-            move || {
-                clone!(workspace, link);
-                ApiFuture::spawn(async move {
-                    let tables = fetch_hosted_tables(&workspace).await;
-                    link.send_message(PanelMenuMsg::TablesLoaded(tables));
-                    Ok(())
-                });
-            }
-        };
-
-        fetch();
-        let _tables_sub = ctx
-            .props()
-            .workspace
+        let workspace = &ctx.props().workspace;
+        refresh_listings(workspace);
+        let _tables_sub = workspace
             .hosted_tables_changed()
-            .add_listener(move |_| fetch());
+            .add_notify_listener(&ctx.link().callback(|()| PanelMenuMsg::TablesChanged));
 
         Self {
             anchor: session_anchor(
@@ -223,7 +209,7 @@ impl Component for PanelMenu {
                 ctx.props().y,
             ),
             picker: None,
-            tables: None,
+            tables: Rc::new(workspace.open_hosted_tables()),
             _tables_sub,
         }
     }
@@ -257,8 +243,8 @@ impl Component for PanelMenu {
                 ctx.props().on_close.emit(());
                 false
             },
-            PanelMenuMsg::TablesLoaded(tables) => {
-                self.tables = Some(Rc::new(tables));
+            PanelMenuMsg::TablesChanged => {
+                self.tables = Rc::new(ctx.props().workspace.open_hosted_tables());
                 self.picker.is_none()
             },
         }
@@ -442,7 +428,7 @@ impl PanelMenu {
 
         html! {
             <NewPanelMenu
-                tables={self.tables.clone()}
+                tables={Some(self.tables.clone())}
                 {panels}
                 {callback}
                 derived={derived_counts(&ctx.props().workspace)}

@@ -274,15 +274,7 @@ impl PerspectiveViewer {
                 let _effect = effect;
                 let config = PtrEqRc::new(panel.session.get_view_config().clone());
                 let table = panel.session.get_table().map(|x| x.get_name().to_owned());
-                let name = suggest_name(
-                    &fetch_hosted_tables(&workspace)
-                        .await
-                        .into_iter()
-                        .flat_map(|(_, tables)| tables)
-                        .collect(),
-                    &config,
-                    &table,
-                );
+                let name = suggest_name(&workspace.probe_table_names().await, &config, &table);
 
                 create_derived(
                     &panel.session,

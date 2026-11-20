@@ -13,11 +13,11 @@
 //! The multi-panel model backing a single `<perspective-viewer>`.
 
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
-use perspective_client::Client;
 use perspective_client::config::Filter;
+use perspective_client::{Client, ClientError};
 
 use crate::config::{DerivedTableConfig, TableRef, UnknownKeys};
 use crate::derived::{DerivedRegistry, DerivedTable};
@@ -276,6 +276,16 @@ pub struct JoinTable {
     pub table: perspective_client::Table,
 }
 
+/// The last answer a [`Client`] gave for its hosted `Table` names.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ClientListing {
+    /// The names last listed, kept through a later failure.
+    pub tables: Option<Vec<String>>,
+
+    /// Why the latest listing failed.
+    pub error: Option<String>,
+}
+
 /// The loaded-[`Client`]s registry and the default-client designation. The
 /// invariant "the default is always a registered client" holds in this one
 /// impl: every default assignment registers first, and removal clears both.
@@ -284,6 +294,10 @@ struct ClientRegistry {
     clients: Vec<Client>,
     default: Option<Client>,
     client_registered: Rc<PubSub<Client>>,
+    client_state_changed: Rc<PubSub<()>>,
+    listings: BTreeMap<String, ClientListing>,
+    losses: BTreeMap<String, ClientError>,
+    table_subs: Vec<(Client, u32)>,
 }
 
 impl ClientRegistry {
@@ -307,6 +321,8 @@ impl ClientRegistry {
     /// referred to it.
     fn remove(&mut self, name: &str) {
         self.clients.retain(|c| c.get_name() != name);
+        self.listings.remove(name);
+        self.losses.remove(name);
         if self.default.as_ref().is_some_and(|c| c.get_name() == name) {
             self.default = None;
         }
@@ -1136,6 +1152,132 @@ impl Workspace {
         clients
     }
 
+    /// The loaded [`Client`] named `name`.
+    pub fn client(&self, name: &str) -> Option<Client> {
+        self.clients().into_iter().find(|c| c.get_name() == name)
+    }
+
+    /// A handle to the PubSub emitted when a loaded [`Client`]'s connection
+    /// is lost or recovered.
+    pub fn client_state_changed(&self) -> Rc<PubSub<()>> {
+        self.0.borrow().clients.client_state_changed.clone()
+    }
+
+    /// The error of the connection loss of the [`Client`] named `name` which
+    /// the viewer has not yet recovered from.
+    pub fn client_loss(&self, name: &str) -> Option<ClientError> {
+        self.0.borrow().clients.losses.get(name).cloned()
+    }
+
+    /// Record that `client`'s connection was lost.
+    pub fn record_client_loss(&self, client: &Client, error: ClientError) {
+        let mut data = self.0.borrow_mut();
+        data.clients
+            .losses
+            .insert(client.get_name().to_owned(), error);
+    }
+
+    /// Record that the viewer recovered from `client`'s connection loss.
+    pub fn clear_client_loss(&self, client: &Client) {
+        self.0.borrow_mut().clients.losses.remove(client.get_name());
+    }
+
+    /// The last hosted-table listing recorded for the [`Client`] named
+    /// `name`.
+    pub fn client_listing(&self, name: &str) -> ClientListing {
+        self.0
+            .borrow()
+            .clients
+            .listings
+            .get(name)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// The listed `Table` names of every open [`Client`], in registration
+    /// order.
+    pub fn open_hosted_tables(&self) -> Vec<(String, Vec<String>)> {
+        self.open_clients()
+            .into_iter()
+            .map(|client| {
+                let name = client.get_name().to_owned();
+                let tables = self.client_listing(&name).tables.unwrap_or_default();
+                (name, tables)
+            })
+            .collect()
+    }
+
+    fn record_listing(&self, name: &str, result: Result<Vec<String>, String>) {
+        let is_changed = {
+            let mut data = self.0.borrow_mut();
+            let listing = data.clients.listings.entry(name.to_owned()).or_default();
+            let next = match result {
+                Ok(mut tables) => {
+                    tables.sort_unstable();
+                    ClientListing {
+                        tables: Some(tables),
+                        error: None,
+                    }
+                },
+                Err(error) => ClientListing {
+                    tables: listing.tables.clone(),
+                    error: Some(error),
+                },
+            };
+
+            let is_changed = *listing != next;
+            *listing = next;
+            is_changed
+        };
+
+        if is_changed {
+            self.hosted_tables_changed().emit(());
+        }
+    }
+
+    /// Ask `client` for its hosted `Table` names and record the answer.
+    pub async fn list_tables(&self, client: &Client) -> Option<Vec<String>> {
+        let result = client.get_hosted_table_names().await;
+        self.record_listing(client.get_name(), result.clone().map_err(|x| x.to_string()));
+
+        result.ok()
+    }
+
+    /// The loaded [`Client`]s whose connection is open, in registration
+    /// order.
+    pub fn open_clients(&self) -> Vec<Client> {
+        self.clients()
+            .into_iter()
+            .filter(|client| client.connection().is_open())
+            .collect()
+    }
+
+    /// Every `Table` name hosted by an open [`Client`], asking each in turn.
+    pub async fn probe_table_names(&self) -> BTreeSet<String> {
+        let mut names = BTreeSet::new();
+        for client in self.open_clients() {
+            names.extend(self.list_tables(&client).await.into_iter().flatten());
+        }
+
+        names
+    }
+
+    /// Record `client`'s hosted-tables subscription `id`, replacing an
+    /// earlier one for the same client.
+    pub fn set_table_sub(&self, client: Client, id: u32) {
+        let mut data = self.0.borrow_mut();
+        data.clients
+            .table_subs
+            .retain(|(c, _)| c.get_name() != client.get_name());
+
+        data.clients.table_subs.push((client, id));
+    }
+
+    /// Take every hosted-tables subscription, for removal at `delete()`.
+    pub fn take_table_subs(&self) -> Vec<(Client, u32)> {
+        std::mem::take(&mut self.0.borrow_mut().clients.table_subs)
+    }
+
     /// Resolve which loaded [`Client`] a panel should bind to serve the `Table`
     /// named `table_name`, given its `current` binding (if any).
     pub async fn resolve_client_for_table(
@@ -1151,11 +1293,11 @@ impl Workspace {
         }
 
         let mut host = None;
-        for client in &clients {
-            if let Ok(names) = client.get_hosted_table_names().await
+        for client in self.open_clients() {
+            if let Some(names) = self.list_tables(&client).await
                 && names.iter().any(|n| n.as_str() == table_name)
             {
-                host = Some(client.clone());
+                host = Some(client);
                 break;
             }
         }

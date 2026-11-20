@@ -22,7 +22,6 @@ use crate::config::{
 };
 use crate::derived::{DerivedSource, DerivedTable, suggest_name};
 use crate::presentation::Presentation;
-use crate::queries::fetch_hosted_tables;
 use crate::renderer::Renderer;
 use crate::session::{MissingTable, Session, probe_table};
 use crate::tasks::{RestoreErrors, RestoreMode, restore_panel};
@@ -68,11 +67,7 @@ pub async fn resolve_table_ref(
     };
 
     let mut pending = workspace.derived_pending();
-    let mut taken = fetch_hosted_tables(workspace)
-        .await
-        .into_iter()
-        .flat_map(|(_, tables)| tables)
-        .collect::<std::collections::BTreeSet<_>>();
+    let mut taken = workspace.probe_table_names().await;
 
     taken.extend(pending.keys().cloned());
     let mut parent = base;

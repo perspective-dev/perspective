@@ -139,6 +139,8 @@ perspective-viewer {
     --psp-label--tables-tab--content: "Tables";
     --psp-label--client-default--content: "default";
     --psp-label--client-reconnect--content: "Reconnect";
+    --psp-label--client-retry--content: "Retry";
+    --psp-label--tables-loading--content: "Loading tables";
     --psp-label--tables-no-clients--content: "No clients";
     --psp-label--derive-from-panel--content: "Derive from Panel";
     --psp-label--join-open--content: "Join";

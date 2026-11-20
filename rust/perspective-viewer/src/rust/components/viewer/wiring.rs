@@ -429,6 +429,7 @@ pub(super) fn create_shared_subscriptions(ctx: &Context<PerspectiveViewer>) -> V
         let workspace = &ctx.props().workspace;
         [
             workspace.client_registered().add_notify_listener(&cb),
+            workspace.client_state_changed().add_notify_listener(&cb),
             workspace.bindings_changed().add_notify_listener(&cb),
             workspace.stage_error_changed().add_notify_listener(&cb),
         ]

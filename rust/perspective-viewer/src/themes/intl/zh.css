@@ -134,6 +134,8 @@ perspective-viewer {
     --psp-label--tables-tab--content: "表";
     --psp-label--client-default--content: "默认";
     --psp-label--client-reconnect--content: "重新连接";
+    --psp-label--client-retry--content: "重试";
+    --psp-label--tables-loading--content: "正在加载表";
     --psp-label--tables-no-clients--content: "无客户端";
     --psp-label--derive-from-panel--content: "从面板派生";
     --psp-label--join-open--content: "连接";

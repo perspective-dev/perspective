@@ -10,11 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use perspective_client::utils::PerspectiveResultExt;
-use perspective_client::{Client, clone};
+use perspective_client::{Client, ClientError, Connection, clone};
 use perspective_js::utils::{ApiFuture, ApiResult, LocalPollLoop};
 use wasm_bindgen::JsValue;
 
@@ -25,78 +22,139 @@ use crate::presentation::Presentation;
 use crate::utils::{AddListener, Subscription};
 use crate::workspace::{Panel, Workspace};
 
-/// The per-client hosted-tables-update subscriptions this element holds, for
-/// removal at `delete()`.
-pub(crate) type HostedTableSubs = Rc<RefCell<Vec<(Client, u32)>>>;
-
-/// Wire reactive table binding for an element: subscribe every registered
-/// [`Client`]'s hosted-tables updates (current and future registrations) to
-/// [`sweep_table_bindings`]. Returns the registration listener (owned for the
-/// element's lifetime) and the accumulated client subscriptions (removed at
-/// element `delete()`).
+/// Wire the table lifecycle for an element: every registered [`Client`] is
+/// watched for connection loss and has its hosted-tables updates subscribed to
+/// [`sweep_client`].
 pub(crate) fn wire_table_lifecycle(
     workspace: &Workspace,
     presentation: &Presentation,
-) -> (Subscription, HostedTableSubs) {
-    let subs: HostedTableSubs = Rc::default();
-    let sub = workspace.client_registered().add_listener({
-        clone!(workspace, presentation, subs);
+) -> Subscription {
+    workspace.client_registered().add_listener({
+        clone!(workspace, presentation);
         move |client: Client| {
-            clone!(workspace, presentation, subs);
+            clone!(workspace, presentation);
             ApiFuture::spawn(async move {
-                let poll_loop = LocalPollLoop::new({
-                    clone!(workspace, presentation);
-                    move |()| {
-                        clone!(workspace, presentation);
-                        ApiFuture::spawn(async move {
-                            sweep_table_bindings(&workspace, &presentation).await
-                        });
-
-                        Ok(JsValue::UNDEFINED)
-                    }
-                });
-
-                let id = client
-                    .on_hosted_tables_update(move || {
-                        let poll_loop = poll_loop.clone();
-                        async move {
-                            poll_loop.poll(()).await;
-                        }
-                    })
-                    .await?;
-
-                subs.borrow_mut().push((client, id));
-
-                // A table created between this client's registration and the
-                // subscription above fired no callback — sweep NOW, after
-                // subscribing, so no creation can be missed.
-                sweep_table_bindings(&workspace, &presentation).await
+                watch_client(&workspace, &client).await?;
+                subscribe_client(&workspace, &presentation, &client).await
             })
+        }
+    })
+}
+
+/// Mark every panel bound to `client` lost whenever its connection is.
+async fn watch_client(workspace: &Workspace, client: &Client) -> ApiResult<()> {
+    let poll_loop = LocalPollLoop::new({
+        clone!(workspace, client);
+        move |()| {
+            mark_client_lost(&workspace, &client);
+            Ok(JsValue::UNDEFINED)
         }
     });
 
-    (sub, subs)
+    client
+        .on_error(Box::new(move |_: ClientError, _| {
+            let poll_loop = poll_loop.clone();
+            async move {
+                poll_loop.poll(()).await;
+                Ok(())
+            }
+        }))
+        .await?;
+
+    if !client.connection().is_open() {
+        mark_client_lost(workspace, client);
+    }
+
+    Ok(())
 }
 
-/// One reconciliation pass over every panel's table binding vs. the loaded
-/// clients' hosted sets: releases first (a delete and a re-create in the same
-/// update settle as suspend-then-rebind), then completes pending binds.
-/// Per-panel failures are logged, never aborting the sweep.
-pub(crate) async fn sweep_table_bindings(
+/// Record `client`'s lost connection on each panel bound to one of its
+/// `Table`s and announce the change.
+fn mark_client_lost(workspace: &Workspace, client: &Client) {
+    if let Connection::Lost { error, .. } = client.connection() {
+        workspace.record_client_loss(client, error);
+    }
+
+    for id in workspace.panels_for_client(client.get_name()) {
+        if let Some(panel) = workspace.panel(&id)
+            && panel.session.get_table().is_some()
+        {
+            panel.session.mark_lost(client);
+        }
+    }
+
+    workspace.client_state_changed().emit(());
+}
+
+/// Subscribe `client`'s hosted-tables updates to [`sweep_client`], replacing
+/// any earlier subscription, then sweep once.
+pub(crate) async fn subscribe_client(
     workspace: &Workspace,
     presentation: &Presentation,
+    client: &Client,
+) -> ApiResult<()> {
+    let poll_loop = LocalPollLoop::new({
+        clone!(workspace, presentation, client);
+        move |()| {
+            clone!(workspace, presentation, client);
+            ApiFuture::spawn(async move { sweep_client(&workspace, &presentation, &client).await });
+
+            Ok(JsValue::UNDEFINED)
+        }
+    });
+
+    let subscribed = client
+        .on_hosted_tables_update(move || {
+            let poll_loop = poll_loop.clone();
+            async move {
+                poll_loop.poll(()).await;
+            }
+        })
+        .await;
+
+    match subscribed {
+        Ok(id) => workspace.set_table_sub(client.clone(), id),
+        Err(_) => {
+            workspace.list_tables(client).await;
+            workspace.client_state_changed().emit(());
+        },
+    }
+
+    subscribed?;
+    sweep_client(workspace, presentation, client).await
+}
+
+/// Refresh the hosted-table listing of every open [`Client`], each
+/// independently of the others.
+pub(crate) fn refresh_listings(workspace: &Workspace) {
+    for client in workspace.open_clients() {
+        clone!(workspace);
+        ApiFuture::spawn(async move {
+            workspace.list_tables(&client).await;
+            Ok(())
+        });
+    }
+}
+
+/// Reconcile the panels bound to `client` against its hosted set, then
+/// complete every pending bind.
+pub(crate) async fn sweep_client(
+    workspace: &Workspace,
+    presentation: &Presentation,
+    client: &Client,
 ) -> ApiResult<()> {
     if let Err(err) = super::resume_derived(workspace).await {
         tracing::warn!("Failed to resume derived tables: {err}");
     }
 
-    for panel in workspace.panels() {
-        if let Some(name) = panel.session.get_table().map(|t| t.get_name().to_owned())
-            && let Some(client) = panel.session.get_client()
-            && let Ok(hosted) = client.get_hosted_table_names().await
-            && !hosted.iter().any(|n| n == &name)
-        {
-            suspend_panel(&panel).await.unwrap_or_log();
+    if let Some(hosted) = workspace.list_tables(client).await {
+        for id in workspace.panels_for_client(client.get_name()) {
+            if let Some(panel) = workspace.panel(&id)
+                && let Some(name) = panel.session.get_table().map(|t| t.get_name().to_owned())
+                && !hosted.iter().any(|n| n == &name)
+            {
+                suspend_panel(&panel).await.unwrap_or_log();
+            }
         }
     }
 

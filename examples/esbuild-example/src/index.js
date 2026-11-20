@@ -32,7 +32,12 @@ const req = fetch(arrow);
 const viewer = document.createElement("perspective-viewer");
 document.body.append(viewer);
 const worker = await perspective.worker();
+const worker2 = await perspective.worker();
 const resp = await req;
 const buffer = await resp.arrayBuffer();
-const table = worker.table(buffer);
-viewer.load(table);
+await worker.table(buffer, { name: "superstore1" });
+await worker2.table(buffer, { name: "superstore2" });
+viewer.load(worker);
+viewer.load(worker2);
+
+window.TEST = worker2;

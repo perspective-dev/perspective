@@ -97,6 +97,10 @@
             background-color: var(--psp-inactive--color);
         }
 
+        .ws-client.is-lost .ws-tables {
+            opacity: 0.5;
+        }
+
         .ws-client-name,
         .ws-table-name {
             flex: 1 1 auto;

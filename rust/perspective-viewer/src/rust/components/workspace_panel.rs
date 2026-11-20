@@ -47,9 +47,6 @@ pub struct WorkspacePanelProps {
     pub on_select_tab: Callback<WorkspaceTab>,
     pub on_auto_width: Callback<f64>,
 
-    /// Fired with `(client, table)` to create a panel on a hosted `Table`.
-    pub on_new_panel: Callback<(String, String)>,
-
     /// Fired with a panel id to derive a `Table` from its `View`.
     pub on_derive_panel: Callback<String>,
 }
@@ -112,12 +109,11 @@ pub fn WorkspacePanel(props: &WorkspacePanelProps) -> Html {
     let body = match selected {
         WorkspaceTab::Tables => html! {
             <TablesTab
-                workspace={props.host.workspace.clone()}
+                host={props.host.clone()}
                 status={props.status.clone()}
                 panels={props.panels.clone()}
                 initial_width={width}
                 on_auto_width={props.on_auto_width.clone()}
-                on_new_panel={props.on_new_panel.clone()}
                 on_derive_panel={props.on_derive_panel.clone()}
             />
         },

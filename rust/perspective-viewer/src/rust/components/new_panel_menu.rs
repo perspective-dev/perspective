@@ -22,8 +22,8 @@ pub enum NewPanelPick {
     FromPanel(String),
 }
 
-/// `(client name, its hosted table names)` per loaded client — the resolved
-/// output of `queries::fetch_hosted_tables`.
+/// `(client name, its hosted table names)` per open client, as
+/// `Workspace::open_hosted_tables` lists them.
 pub type HostedTables = Rc<Vec<(String, Vec<String>)>>;
 
 /// `(panel id, title)` per panel, in layout-insertion order.

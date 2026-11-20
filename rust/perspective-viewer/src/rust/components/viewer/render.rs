@@ -249,7 +249,6 @@ impl PerspectiveViewer {
                         on_toggle_pin={ctx.link().callback(|()| ToggleWorkspaceDrawerPin)}
                         on_select_tab={ctx.link().callback(WorkspaceTabChanged)}
                         on_auto_width={ctx.link().callback(WorkspacePanelAutoWidth)}
-                        on_new_panel={ctx.link().callback(|(client, table)| NewPanelFrom { client, table })}
                         on_derive_panel={ctx.link().callback(DerivePanel)}
                     />
                     <></>

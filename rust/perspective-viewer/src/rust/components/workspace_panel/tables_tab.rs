@@ -11,7 +11,6 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::rc::Rc;
 
 use perspective_client::JoinType;
 use perspective_js::utils::*;
@@ -19,22 +18,25 @@ use wasm_bindgen::JsCast;
 use web_sys::{HtmlElement, HtmlInputElement, HtmlSelectElement};
 use yew::prelude::*;
 
-use crate::components::new_panel_menu::{HostedTables, PanelLabels};
-use crate::config::DerivedTableConfig;
-use crate::queries::{ClientStatus, StatusState, WorkspaceStatus, fetch_hosted_tables};
-use crate::tasks::{JoinSpec, create_join, delete_derived, delete_join, reconnect_client};
+use crate::components::new_panel_menu::PanelLabels;
+use crate::components::viewer::PerspectiveViewerMsg;
+use crate::config::{DerivedTableConfig, ViewerConfigInitial};
+use crate::queries::{ClientStatus, StatusState, WorkspaceStatus};
+use crate::session::MissingTable;
+use crate::tasks::{
+    JoinSpec, WorkspaceHost, create_join, create_panel, delete_derived, delete_join,
+    reconnect_client, refresh_listings,
+};
 use crate::ui::intl_content_style;
 use crate::utils::*;
-use crate::workspace::Workspace;
 
 #[derive(Clone, Properties)]
 pub struct TablesTabProps {
-    pub workspace: Workspace,
+    pub host: WorkspaceHost,
     pub status: WorkspaceStatus,
     pub panels: PanelLabels,
     pub initial_width: f64,
     pub on_auto_width: Callback<f64>,
-    pub on_new_panel: Callback<(String, String)>,
     pub on_derive_panel: Callback<String>,
 }
 
@@ -57,13 +59,18 @@ pub enum JoinField {
 }
 
 pub enum TablesTabMsg {
-    /// The hosted-table set changed.
-    Refresh,
-    Loaded(HostedTables),
+    /// A `Client`'s listing or a table's consumers changed.
+    Changed,
 
-    /// A table's consumers changed.
-    BindingsChanged,
+    /// A `Client` was loaded.
+    ClientRegistered,
     Reconnect(String),
+
+    /// List the named `Client`'s tables again.
+    Retry(String),
+
+    /// Create a panel for the `Table` (second) of the `Client` (first).
+    NewPanel(String, String),
     Delete(String),
     Failed(String),
     OpenJoin(String),
@@ -106,9 +113,6 @@ struct TableRow {
 /// The workspace panel's Tables tab, listing each `Client`'s hosted `Table`s
 /// with their status and lineage.
 pub struct TablesTab {
-    tables: Option<HostedTables>,
-    fetching: bool,
-    stale: bool,
     join: Option<JoinForm>,
     error: Option<String>,
     sizer: NodeRef,
@@ -203,13 +207,7 @@ fn table_rows(
 
 impl TablesTab {
     fn fetch_columns(&self, ctx: &Context<Self>, client: &str, table: String) {
-        let Some(client) = ctx
-            .props()
-            .workspace
-            .clients()
-            .into_iter()
-            .find(|x| x.get_name() == client)
-        else {
+        let Some(client) = ctx.props().host.workspace.client(client) else {
             return;
         };
 
@@ -221,17 +219,17 @@ impl TablesTab {
         });
     }
 
-    fn client_tables(&self, client: &str) -> Vec<String> {
-        self.tables
-            .iter()
-            .flat_map(|tables| tables.iter())
-            .find(|(name, _)| name == client)
-            .map(|(_, tables)| tables.clone())
+    fn client_tables(ctx: &Context<Self>, client: &str) -> Vec<String> {
+        ctx.props()
+            .host
+            .workspace
+            .client_listing(client)
+            .tables
             .unwrap_or_default()
     }
 
-    fn view_join(&self, ctx: &Context<Self>, form: &JoinForm) -> Html {
-        let tables = self.client_tables(&form.client);
+    fn view_join(&self, ctx: &Context<Self>, form: &JoinForm, is_open: bool) -> Html {
+        let tables = Self::client_tables(ctx, &form.client);
         let input = |field: JoinField| {
             ctx.link()
                 .callback(move |event: Event| TablesTabMsg::JoinInput(field, input_value(&event)))
@@ -308,7 +306,7 @@ impl TablesTab {
                         id="workspace-join-create"
                         class="ws-label"
                         style={label("join-create")}
-                        disabled={!is_valid || form.submitting}
+                        disabled={!is_valid || !is_open || form.submitting}
                         onclick={ctx.link().callback(|_| TablesTabMsg::SubmitJoin)}
                     />
                     <button
@@ -322,18 +320,21 @@ impl TablesTab {
         }
     }
 
-    fn view_client(
-        &self,
-        ctx: &Context<Self>,
-        client: &ClientStatus,
-        tables: &[String],
-        orphans: bool,
-    ) -> Html {
-        let workspace = &ctx.props().workspace;
+    fn view_client(&self, ctx: &Context<Self>, client: &ClientStatus, orphans: bool) -> Html {
+        let workspace = &ctx.props().host.workspace;
+        let listing = workspace.client_listing(&client.name);
+        let has_actions = client.is_open && listing.error.is_none();
+        let is_listed = !client.is_open || listing.error.is_none();
+        let tables = listing
+            .tables
+            .clone()
+            .filter(|_| is_listed)
+            .unwrap_or_default();
+
         let derived = workspace.derived_configs();
         let pending = workspace.derived_pending().into_keys().collect();
         let joins = workspace.joins().into_keys().collect();
-        let rows = table_rows(tables, &derived, &pending, &joins, orphans)
+        let rows = table_rows(&tables, &derived, &pending, &joins, orphans && is_listed)
             .into_iter()
             .map(|row| {
                 let consumers = workspace.table_consumers(&row.name);
@@ -345,15 +346,15 @@ impl TablesTab {
                     TableKind::Join => "is-join",
                 });
 
-                let on_new = (row.kind != TableKind::Pending).then(|| {
+                let on_new = (has_actions && row.kind != TableKind::Pending).then(|| {
                     let pick = (client.name.clone(), row.name.clone());
-                    ctx.props()
-                        .on_new_panel
-                        .reform(move |_: MouseEvent| pick.clone())
+                    ctx.link().callback(move |_: MouseEvent| {
+                        TablesTabMsg::NewPanel(pick.0.clone(), pick.1.clone())
+                    })
                 });
 
                 let is_owned = matches!(row.kind, TableKind::Derived | TableKind::Join);
-                let on_delete = (is_owned && consumers == 0).then(|| {
+                let on_delete = (has_actions && is_owned && consumers == 0).then(|| {
                     let name = row.name.clone();
                     ctx.link()
                         .callback(move |_: MouseEvent| TablesTabMsg::Delete(name.clone()))
@@ -375,7 +376,7 @@ impl TablesTab {
             })
             .collect::<Html>();
 
-        let status_class = match client.state {
+        let status_class = match client.state() {
             StatusState::Errored => "errored",
             StatusState::Loading => "loading",
             StatusState::Pending => "pending",
@@ -389,15 +390,28 @@ impl TablesTab {
                 .callback(move |_: MouseEvent| TablesTabMsg::Reconnect(name.clone()))
         });
 
+        let on_retry = (client.is_open && listing.error.is_some()).then(|| {
+            let name = client.name.clone();
+            ctx.link()
+                .callback(move |_: MouseEvent| TablesTabMsg::Retry(name.clone()))
+        });
+
         let on_join = {
             let name = client.name.clone();
             ctx.link()
                 .callback(move |_: MouseEvent| TablesTabMsg::OpenJoin(name.clone()))
         };
 
+        let is_loading = client.is_open && listing.tables.is_none() && listing.error.is_none();
+        let listing_error = listing.error.clone().filter(|_| client.is_open);
         let form = self.join.as_ref().filter(|form| form.client == client.name);
+        let mut class = classes!("ws-client");
+        if !client.is_open {
+            class.push("is-lost");
+        }
+
         html! {
-            <div class="ws-client" data-client={client.name.clone()}>
+            <div {class} data-client={client.name.clone()}>
                 <div class="ws-client-header">
                     <span class={classes!("ws-client-status", status_class)} />
                     <span class="ws-client-name" title={client.name.clone()}>{ &client.name }</span>
@@ -415,6 +429,9 @@ impl TablesTab {
                         { format!("{} {}", error.kind, error.message) }
                     </div>
                 }
+                if let Some(error) = listing_error {
+                    <div class="ws-client-listing-error error">{ error }</div>
+                }
                 <div
                     class="sidebar-controls"
                 >
@@ -425,15 +442,25 @@ impl TablesTab {
                             {onclick}
                         />
                     }
+                    if let Some(onclick) = on_retry {
+                        <button
+                            class="ws-client-retry ws-label"
+                            style={label("client-retry")}
+                            {onclick}
+                        />
+                    }
                     <button
                         class="ws-client-join ws-label"
                         style={label("join-open")}
-                        disabled={form.is_some() || tables.is_empty()}
+                        disabled={!has_actions || form.is_some() || tables.is_empty()}
                         onclick={on_join}
                     />
                 </div>
+                if is_loading {
+                    <span class="ws-client-loading no-results ws-label" style={label("tables-loading")} />
+                }
                 <div class="ws-tables">{ rows }</div>
-                if let Some(form) = form { { self.view_join(ctx, form) } }
+                if let Some(form) = form { { self.view_join(ctx, form, has_actions) } }
             </div>
         }
     }
@@ -444,22 +471,21 @@ impl Component for TablesTab {
     type Properties = TablesTabProps;
 
     fn create(ctx: &Context<Self>) -> Self {
-        let workspace = &ctx.props().workspace;
-        let refresh = ctx.link().callback(|()| TablesTabMsg::Refresh);
-        let bindings = ctx.link().callback(|()| TablesTabMsg::BindingsChanged);
+        let workspace = &ctx.props().host.workspace;
+        let changed = ctx.link().callback(|()| TablesTabMsg::Changed);
+        let registered = ctx.link().callback(|()| TablesTabMsg::ClientRegistered);
         let subs = vec![
             workspace
                 .hosted_tables_changed()
-                .add_notify_listener(&refresh),
-            workspace.client_registered().add_notify_listener(&refresh),
-            workspace.bindings_changed().add_notify_listener(&bindings),
+                .add_notify_listener(&changed),
+            workspace
+                .client_registered()
+                .add_notify_listener(&registered),
+            workspace.bindings_changed().add_notify_listener(&changed),
         ];
 
-        ctx.link().send_message(TablesTabMsg::Refresh);
+        refresh_listings(workspace);
         Self {
-            tables: None,
-            fetching: false,
-            stale: false,
             join: None,
             error: None,
             sizer: NodeRef::default(),
@@ -469,42 +495,77 @@ impl Component for TablesTab {
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            TablesTabMsg::Refresh => {
-                if self.fetching {
-                    self.stale = true;
-                    return false;
+            TablesTabMsg::Changed => true,
+            TablesTabMsg::ClientRegistered => {
+                refresh_listings(&ctx.props().host.workspace);
+                true
+            },
+            TablesTabMsg::Retry(client) => {
+                let workspace = ctx.props().host.workspace.clone();
+                if let Some(client) = workspace.client(&client) {
+                    ApiFuture::spawn(async move {
+                        workspace.list_tables(&client).await;
+                        Ok(())
+                    });
                 }
-
-                self.fetching = true;
-                let workspace = ctx.props().workspace.clone();
-                let link = ctx.link().clone();
-                ApiFuture::spawn(async move {
-                    let tables = fetch_hosted_tables(&workspace).await;
-                    link.send_message(TablesTabMsg::Loaded(Rc::new(tables)));
-                    Ok(())
-                });
 
                 false
             },
-            TablesTabMsg::Loaded(tables) => {
-                self.fetching = false;
-                if std::mem::take(&mut self.stale) {
-                    ctx.link().send_message(TablesTabMsg::Refresh);
-                    return false;
-                }
-
-                self.tables = Some(tables);
-                true
-            },
-            TablesTabMsg::BindingsChanged => true,
-            TablesTabMsg::Reconnect(client) => {
+            TablesTabMsg::NewPanel(client, table) => {
                 self.error = None;
-                let workspace = ctx.props().workspace.clone();
+                let host = ctx.props().host.clone();
+                let Some(client) = host
+                    .workspace
+                    .client(&client)
+                    .filter(|x| x.connection().is_open())
+                else {
+                    self.error = Some(format!("`Client` \"{client}\" is not connected"));
+                    return true;
+                };
+
                 let link = ctx.link().clone();
-                let effect = workspace.effects().guard();
+                let effect = host.workspace.effects().guard();
                 ApiFuture::spawn(async move {
                     let _effect = effect;
-                    if let Err(err) = reconnect_client(&workspace, &client).await {
+                    let notify = host
+                        .dispatch
+                        .reform(|()| PerspectiveViewerMsg::LayoutChanged);
+
+                    let created = create_panel(
+                        &host.elem,
+                        &host.presentation,
+                        &host.workspace,
+                        &notify,
+                        None,
+                        ViewerConfigInitial::new(table),
+                        Some(client),
+                        MissingTable::Error,
+                    )
+                    .await;
+
+                    match created {
+                        Ok(id) => host
+                            .dispatch
+                            .emit(PerspectiveViewerMsg::SetActivePanel(id.to_string(), None)),
+                        Err(err) => link.send_message(TablesTabMsg::Failed(format!("{err}"))),
+                    }
+
+                    Ok(())
+                });
+
+                true
+            },
+            TablesTabMsg::Reconnect(client) => {
+                self.error = None;
+                let host = ctx.props().host.clone();
+                let link = ctx.link().clone();
+                let effect = host.workspace.effects().guard();
+                ApiFuture::spawn(async move {
+                    let _effect = effect;
+                    let reconnected =
+                        reconnect_client(&host.workspace, &host.presentation, &client).await;
+
+                    if let Err(err) = reconnected {
                         link.send_message(TablesTabMsg::Failed(format!("{err}")));
                     }
 
@@ -515,7 +576,7 @@ impl Component for TablesTab {
             },
             TablesTabMsg::Delete(name) => {
                 self.error = None;
-                let workspace = ctx.props().workspace.clone();
+                let workspace = ctx.props().host.workspace.clone();
                 let link = ctx.link().clone();
                 let effect = workspace.effects().guard();
                 ApiFuture::spawn(async move {
@@ -540,7 +601,7 @@ impl Component for TablesTab {
                 true
             },
             TablesTabMsg::OpenJoin(client) => {
-                let tables = self.client_tables(&client);
+                let tables = Self::client_tables(ctx, &client);
                 let left = tables.first().cloned().unwrap_or_default();
                 let right = tables.get(1).cloned().unwrap_or_else(|| left.clone());
                 self.fetch_columns(ctx, &client, left.clone());
@@ -618,7 +679,7 @@ impl Component for TablesTab {
                 };
 
                 let client = form.client.clone();
-                let workspace = ctx.props().workspace.clone();
+                let workspace = ctx.props().host.workspace.clone();
                 let link = ctx.link().clone();
                 let effect = workspace.effects().guard();
                 ApiFuture::spawn(async move {
@@ -661,10 +722,7 @@ impl Component for TablesTab {
         let sections = clients
             .iter()
             .enumerate()
-            .map(|(index, client)| {
-                let tables = self.client_tables(&client.name);
-                self.view_client(ctx, client, &tables, index == 0)
-            })
+            .map(|(index, client)| self.view_client(ctx, client, index == 0))
             .collect::<Html>();
 
         let panels = ctx

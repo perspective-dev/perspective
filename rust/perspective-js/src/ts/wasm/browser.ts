@@ -105,6 +105,7 @@ export async function worker(
         async () => {
             console.debug("Closing WebWorker");
             close();
+            await client.handle_error("Worker terminated");
         },
     );
 
@@ -112,6 +113,17 @@ export async function worker(
     port.onmessage = (json: MessageEvent<Uint8Array>) => {
         client.handle_response(json.data);
     };
+
+    port.onmessageerror = () => {
+        client.handle_error("Worker message error");
+    };
+
+    if (!(webworker instanceof MessagePort)) {
+        webworker.onerror = (event: Event) => {
+            const msg = (event as ErrorEvent).message || "Worker error";
+            client.handle_error(msg);
+        };
+    }
 
     return client;
 }

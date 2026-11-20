@@ -116,7 +116,6 @@ async fn plan_binding(
     let reset = !fresh && rebind == Rebind::Replace;
     Ok(Some(match table {
         Some(table) => BindPlan::Bind {
-            client,
             table: Box::new(table),
             reset,
         },

@@ -133,6 +133,8 @@ perspective-viewer {
     --psp-label--tables-tab--content: "الجداول";
     --psp-label--client-default--content: "افتراضي";
     --psp-label--client-reconnect--content: "إعادة الاتصال";
+    --psp-label--client-retry--content: "إعادة المحاولة";
+    --psp-label--tables-loading--content: "جارٍ تحميل الجداول";
     --psp-label--tables-no-clients--content: "لا يوجد عملاء";
     --psp-label--derive-from-panel--content: "اشتقاق من لوحة";
     --psp-label--join-open--content: "ربط";

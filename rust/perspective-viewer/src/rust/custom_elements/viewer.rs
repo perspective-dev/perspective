@@ -218,7 +218,6 @@ pub struct PerspectiveViewerElement {
     pub(crate) root: Root<components::viewer::PerspectiveViewer>,
     resize_handle: Rc<RefCell<Option<ResizeObserverHandle>>>,
     intersection_handle: Rc<RefCell<Option<AutoPauseHandle>>>,
-    hosted_table_subs: HostedTableSubs,
     _subscriptions: Rc<[Subscription; 2]>,
     _custom_event_subs: Rc<Vec<Subscription>>,
 }
@@ -363,7 +362,7 @@ impl PerspectiveViewerElement {
 
         let resize_handle = ResizeObserverHandle::new(&elem, &workspace, &presentation, &root);
         let intersect_handle = AutoPauseHandle::new(&elem, &presentation, &workspace);
-        let (lifecycle_sub, hosted_table_subs) = wire_table_lifecycle(&workspace, &presentation);
+        let lifecycle_sub = wire_table_lifecycle(&workspace, &presentation);
 
         Self {
             elem,
@@ -372,7 +371,6 @@ impl PerspectiveViewerElement {
             workspace,
             resize_handle: Rc::new(RefCell::new(Some(resize_handle))),
             intersection_handle: Rc::new(RefCell::new(Some(intersect_handle))),
-            hosted_table_subs,
             _subscriptions: Rc::new([eject_sub, lifecycle_sub]),
             _custom_event_subs: Rc::new(custom_event_subs),
         }
@@ -556,7 +554,6 @@ impl PerspectiveViewerElement {
                             .await?
                             {
                                 Some(table) => BindPlan::Bind {
-                                    client: inner_client,
                                     table: Box::new(table),
                                     reset: true,
                                 },
@@ -693,7 +690,7 @@ impl PerspectiveViewerElement {
         self.presentation.set_command_schema(None, vec![]);
         #[cfg(feature = "llm-agent")]
         self.presentation.agent.sandbox().stop_all();
-        let subs = std::mem::take(&mut *self.hosted_table_subs.borrow_mut());
+        let subs = self.workspace.take_table_subs();
         let teardown = delete_all(&self.workspace, &self.root);
         ApiFuture::new(async move {
             for (client, id) in subs {

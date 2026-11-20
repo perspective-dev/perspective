@@ -581,6 +581,7 @@ export async function worker(worker: Promise<MessagePort>) {
         async () => {
             console.debug("Closing WebWorker");
             port.close();
+            await client.handle_error("Worker terminated");
         },
     );
 

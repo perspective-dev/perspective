@@ -134,6 +134,8 @@ perspective-viewer {
     --psp-label--tables-tab--content: "テーブル";
     --psp-label--client-default--content: "既定";
     --psp-label--client-reconnect--content: "再接続";
+    --psp-label--client-retry--content: "再試行";
+    --psp-label--tables-loading--content: "テーブルを読み込み中";
     --psp-label--tables-no-clients--content: "クライアントなし";
     --psp-label--derive-from-panel--content: "パネルから派生";
     --psp-label--join-open--content: "結合";
