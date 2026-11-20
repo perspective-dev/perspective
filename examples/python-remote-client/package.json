@@ -1,7 +1,7 @@
 {
     "name": "python-remote-client",
     "private": true,
-    "version": "5.9.3",
+    "version": "5.9.4",
     "description": "An example of a `perspective-python` client connected to a `perspective-python` server in another process.",
     "scripts": {
         "start": "PYTHONPATH=../../python/perspective python3 server.py",

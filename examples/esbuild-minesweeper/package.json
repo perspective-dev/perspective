@@ -1,7 +1,7 @@
 {
     "name": "esbuild-minesweeper",
     "private": true,
-    "version": "5.9.3",
+    "version": "5.9.4",
     "description": "Minesweeper played in a `<perspective-viewer>` Datagrid, with its rules in ExprTK expressions.",
     "scripts": {
         "build": "node build.js",

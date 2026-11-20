@@ -1,7 +1,7 @@
 {
     "name": "esbuild-clickhouse-virtual",
     "private": true,
-    "version": "5.9.3",
+    "version": "5.9.4",
     "type": "module",
     "description": "Example of a custom VirtualServer for ClickHouse running in a Web Worker",
     "scripts": {

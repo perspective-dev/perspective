@@ -1,7 +1,7 @@
 {
     "name": "trading-terminal",
     "private": true,
-    "version": "5.9.3",
+    "version": "5.9.4",
     "description": "A simulated trading terminal built on `<perspective-viewer>` command schemas.",
     "scripts": {
         "build": "node build.js",

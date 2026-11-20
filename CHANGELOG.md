@@ -1,6 +1,14 @@
+# [v5.9.4](https://github.com/perspective-dev/perspective/releases/tag/v5.9.4)
+
+_20 November 2026_ ([Full changelog](https://github.com/perspective-dev/perspective/compare/v5.9.3...v5.9.4))
+
+Features
+
+- Fix modal geometry & positioning near viewport borders [#3295](https://github.com/perspective-dev/perspective/pull/3295)
+
 # [v5.9.3](https://github.com/perspective-dev/perspective/releases/tag/v5.9.3)
 
-_18 November 2026_ ([Full changelog](https://github.com/perspective-dev/perspective/compare/v5.9.2...v5.9.3))
+_17 November 2026_ ([Full changelog](https://github.com/perspective-dev/perspective/compare/v5.9.2...v5.9.3))
 
 Features
 

@@ -12,7 +12,7 @@
 
 [package]
 name = "perspective-js"
-version = "5.9.3"
+version = "5.9.4"
 authors = ["Andrew Stein <steinlink@gmail.com>"]
 edition = "2024"
 description = "JavaScript/WebAssembly client for Perspective, a streaming query engine for data grids, pivot tables and charts."
@@ -58,7 +58,7 @@ talc-allocator = ["perspective-client/talc-allocator"]
 trace-allocator = []
 
 [dependencies]
-perspective-client = { version = "~5.9.3", features = ["sendable"] }
+perspective-client = { version = "~5.9.4", features = ["sendable"] }
 bytes = "1.10.1"
 chrono = "0.4"
 derivative = "2.2.0"
