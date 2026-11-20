@@ -90,7 +90,9 @@ pub fn NewPanelMenu(props: &NewPanelMenuProps) -> Html {
 
                         html! {
                             <span {class} {onmousedown}>
-                                { table }
+                                <span class="dropdown-menu-label" title={table.clone()}>
+                                    { table }
+                                </span>
                                 if let Some(count) = consumers.filter(|x| *x > 0) {
                                     <span class="derived_consumers">{ count }</span>
                                 }
@@ -133,7 +135,11 @@ pub fn NewPanelMenu(props: &NewPanelMenuProps) -> Html {
             .map(|(id, title)| {
                 let onmousedown = pick(NewPanelPick::FromPanel(id.clone()));
                 let label = title.clone().unwrap_or_else(|| id.clone());
-                html! { <span class="dropdown-menu-item" {onmousedown}>{ label }</span> }
+                html! {
+                    <span class="dropdown-menu-item" {onmousedown}>
+                        <span class="dropdown-menu-label" title={label.clone()}>{ label }</span>
+                    </span>
+                }
             })
             .collect::<Html>()
     };

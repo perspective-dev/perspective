@@ -156,3 +156,32 @@ test.describe("Context menu Export/Copy pickers", () => {
         await assertCoherent(page);
     });
 });
+
+test.describe("Context menu picker placement", () => {
+    test("the Export picker opened at mid-height stays inside the viewport", async ({
+        page,
+    }) => {
+        const viewport = page.viewportSize()!;
+        await page.mouse.click(viewport.width / 2, viewport.height / 2, {
+            button: "right",
+        });
+
+        const menu = page.locator("perspective-context-menu");
+        await menu.waitFor();
+        await menu
+            .locator(".context-menu > .context-menu-item", {
+                hasText: /^Export$/,
+            })
+            .click();
+
+        const picker = page.locator("perspective-export-menu");
+        await expect(picker.locator("code").first()).toBeVisible();
+        await expect
+            .poll(async () => (await picker.boundingBox())!.y)
+            .toBeGreaterThanOrEqual(0);
+
+        const box = (await picker.boundingBox())!;
+        expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+        expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+    });
+});

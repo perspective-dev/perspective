@@ -183,6 +183,11 @@ impl From<ExportFile> for Html {
             None
         };
 
-        html! { <code {class}>{ x.name }{ x.method.as_filename(x.is_chart) }</code> }
+        html! {
+            <code {class}>
+                <span class="export-name">{ x.name }</span>
+                { x.method.as_filename(x.is_chart) }
+            </code>
+        }
     }
 }

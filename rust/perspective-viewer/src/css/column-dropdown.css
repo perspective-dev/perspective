@@ -55,6 +55,10 @@
     span {
         cursor: pointer;
         padding: 4px 5px;
+        flex: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .no-results {

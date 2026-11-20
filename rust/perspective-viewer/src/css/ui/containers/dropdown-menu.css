@@ -27,6 +27,7 @@
     display: flex;
     flex-direction: column;
     min-width: 80px;
+    max-width: min(302px, calc(100vw - 34px));
 
     code {
         font-family: var(--psp-interface-monospace--font-family), monospace;

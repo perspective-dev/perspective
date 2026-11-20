@@ -110,3 +110,101 @@ test.describe("the New menu tracks the hosted set while open", () => {
         ).toHaveCount(1);
     });
 });
+
+async function openSettings(page: Page) {
+    await page.evaluate(async () => {
+        const viewer = document.querySelector("perspective-viewer") as any;
+        await viewer.restore({ plugin: "Debug", settings: true });
+        await viewer.flush();
+    });
+}
+
+async function addTables(page: Page, names: string[]) {
+    await page.evaluate(async (names) => {
+        const worker = window["__TEST_WORKER__"];
+        await Promise.all(
+            names.map((name) => worker.table({ x: [1] }, { name })),
+        );
+    }, names);
+}
+
+async function panelTables(page: Page): Promise<string[]> {
+    return await page.evaluate(async () => {
+        const viewer = document.querySelector("perspective-viewer") as any;
+        const config = await viewer.saveWorkspace();
+        return Object.values(config.panels).map((panel: any) => panel.table);
+    });
+}
+
+test.describe("the New menu fits the viewport", () => {
+    test("300 tables keep it under its button and inside the viewport with the last table clickable", async ({
+        page,
+    }) => {
+        const names = Array.from(
+            { length: 300 },
+            (_, i) => `t_${String(i).padStart(3, "0")}`,
+        );
+
+        await addTables(page, names);
+        await openSettings(page);
+        await page.locator("perspective-viewer #status_bar #new_panel").click();
+        const menu = page.locator("perspective-new-panel-menu");
+        await menu
+            .locator(".dropdown-menu-item", { hasText: "t_299" })
+            .waitFor({ state: "attached" });
+
+        const button = (await page
+            .locator("perspective-viewer #status_bar #new_panel")
+            .locator("xpath=..")
+            .boundingBox())!;
+
+        const viewport = page.viewportSize()!;
+        await expect
+            .poll(async () => {
+                const box = (await menu.boundingBox())!;
+                return box.y + box.height;
+            })
+            .toBeLessThanOrEqual(viewport.height);
+
+        const box = (await menu.boundingBox())!;
+        expect(box.y).toBeGreaterThanOrEqual(button.y + button.height - 2);
+        expect(box.y).toBeLessThanOrEqual(button.y + button.height + 2);
+        await menu
+            .locator(".dropdown-menu-item", { hasText: "t_299" })
+            .click({ timeout: 5000 });
+
+        await expect.poll(() => panelTables(page)).toContain("t_299");
+    });
+
+    test("a short table list is not height-limited", async ({ page }) => {
+        await openSettings(page);
+        await page.locator("perspective-viewer #status_bar #new_panel").click();
+        const menu = page.locator("perspective-new-panel-menu");
+        await expect(menu.locator(".dropdown-menu-item").first()).toBeVisible();
+        const style = await menu.evaluate((el: HTMLElement) => ({
+            max_height: el.style.maxHeight,
+            overflow: getComputedStyle(el).overflowY,
+        }));
+
+        expect(style).toEqual({ max_height: "", overflow: "visible" });
+    });
+
+    test("a 200-character table name is truncated at 320px with its full name in the title", async ({
+        page,
+    }) => {
+        const name = "lorem_ipsum_dolor_".repeat(12).slice(0, 200);
+        await addTables(page, [name]);
+        await openSettings(page);
+        await page.locator("perspective-viewer #status_bar #new_panel").click();
+        const menu = page.locator("perspective-new-panel-menu");
+        const label = menu.locator(".dropdown-menu-label", { hasText: name });
+        await expect(label).toHaveAttribute("title", name);
+        const box = (await menu.boundingBox())!;
+        expect(box.width).toBeLessThanOrEqual(320.5);
+        const truncated = await label.evaluate(
+            (el) => el.scrollWidth > el.clientWidth,
+        );
+
+        expect(truncated).toBe(true);
+    });
+});

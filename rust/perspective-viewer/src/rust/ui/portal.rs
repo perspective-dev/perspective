@@ -10,9 +10,6 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use std::cell::Cell;
-use std::rc::Rc;
-
 use perspective_js::utils::global;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -83,14 +80,14 @@ pub enum PortalModalMsg {
 pub struct PortalModal {
     host: HtmlElement,
     shadow_root: Element,
-    top: f64,
-    left: f64,
     visible: bool,
     rev_vert: ModalOrientation,
-    anchor: Rc<Cell<ModalAnchor>>,
     /// The `own_focus` light-dismiss listeners (document-level, capture),
     /// present only while the modal is open.
     _dismiss: Option<DismissHandlers>,
+
+    /// The scroll, wheel and resize listeners that close any open modal.
+    _viewport: Option<ViewportHandlers>,
 }
 
 /// The dismiss closures of an open `own_focus` modal: outside `pointerdown`
@@ -99,6 +96,46 @@ struct DismissHandlers {
     pointerdown: Closure<dyn FnMut(PointerEvent)>,
     keydown: Closure<dyn FnMut(KeyboardEvent)>,
     blur: Closure<dyn FnMut(FocusEvent)>,
+}
+
+/// The closures that close an open modal when its surroundings scroll or the
+/// window resizes, and the viewer shadow root the second scroll listener is on.
+struct ViewportHandlers {
+    scroll: Closure<dyn FnMut(Event)>,
+    wheel: Closure<dyn FnMut(Event)>,
+    resize: Closure<dyn FnMut(Event)>,
+    viewer_root: Option<ShadowRoot>,
+}
+
+fn is_same_node(event: &Event, elem: &HtmlElement) -> bool {
+    event
+        .target()
+        .and_then(|target| target.dyn_into::<Node>().ok())
+        .is_some_and(|node| elem.is_same_node(Some(&node)))
+}
+
+/// Whether the scrolled element is one a user can scroll, which excludes the
+/// `overflow: hidden` boxes a browser nudges to keep a caret in view.
+fn is_user_scroll(event: &Event) -> bool {
+    let Some(elem) = event
+        .target()
+        .and_then(|target| target.dyn_into::<Element>().ok())
+    else {
+        return true;
+    };
+
+    let Ok(Some(style)) = global::window().get_computed_style(&elem) else {
+        return true;
+    };
+
+    let is_fixed = |axis: &str| {
+        matches!(
+            style.get_property_value(axis).as_deref(),
+            Ok("hidden") | Ok("clip")
+        )
+    };
+
+    !(is_fixed("overflow-x") && is_fixed("overflow-y"))
 }
 
 impl PortalModal {
@@ -127,6 +164,7 @@ impl PortalModal {
 
     fn detach(&mut self) {
         self.remove_dismiss_handlers();
+        self.remove_viewport_handlers();
         if self.host.is_connected() {
             let _ = self.host.hide_popover();
             self.host.remove();
@@ -134,36 +172,128 @@ impl PortalModal {
     }
 
     fn position_against_target(&mut self, target: &HtmlElement) {
-        let target_rect = target.get_bounding_client_rect();
-        if !self.visible {
-            self.top = target_rect.top() + target_rect.height() - 1.0;
-            self.left = target_rect.left();
+        let anchor = Bounds::from(&target.get_bounding_client_rect());
+        if self.visible {
+            let placement = apply_placement(&self.host, &anchor, ModalSide::Below);
+            self.rev_vert.set(placement.flipped_vertical);
         } else {
-            let modal_rect = self.host.get_bounding_client_rect();
-            let anchor = calc_relative_position(&target_rect, &modal_rect);
-            self.anchor.set(anchor);
-            let (new_top, new_left) = calc_anchor_position(anchor, &target_rect, &modal_rect);
-            self.top = new_top;
-            self.left = new_left;
-            self.rev_vert.set(anchor.is_rev_vert());
+            let style = self.host.style();
+            let _ = style.set_property("top", &format!("{}px", anchor.bottom - 1.0));
+            let _ = style.set_property("left", &format!("{}px", anchor.left));
+        }
+    }
+
+    fn close_callback(ctx: &Context<Self>) -> Callback<()> {
+        let target = ctx.props().target.clone();
+        ctx.props().on_close.reform(move |_| {
+            if let Some(target) = &target {
+                target.class_list().remove_1("modal-target").unwrap();
+            }
+        })
+    }
+
+    /// Close on a window resize, on a user-scrollable element other than the
+    /// modal or its invoker scrolling, and on a wheel outside the modal.
+    fn setup_viewport_handlers(&mut self, ctx: &Context<Self>, target: &HtmlElement) {
+        let on_close = Self::close_callback(ctx);
+        let scroll = Closure::wrap(Box::new({
+            clone!(on_close, self.host, target);
+            move |event: Event| {
+                if !is_same_node(&event, &host)
+                    && !is_same_node(&event, &target)
+                    && is_user_scroll(&event)
+                {
+                    on_close.emit(());
+                }
+            }
+        }) as Box<dyn FnMut(Event)>);
+
+        let wheel = Closure::wrap(Box::new({
+            clone!(on_close, self.host);
+            move |event: Event| {
+                if !event.composed_path().includes(host.as_ref(), 0) {
+                    on_close.emit(());
+                }
+            }
+        }) as Box<dyn FnMut(Event)>);
+
+        let resize = Closure::wrap(Box::new(move |_: Event| {
+            on_close.emit(());
+        }) as Box<dyn FnMut(Event)>);
+
+        let window = global::window();
+        let _ = window.add_event_listener_with_callback_and_bool(
+            "scroll",
+            scroll.as_ref().unchecked_ref(),
+            true,
+        );
+
+        let _ = window.add_event_listener_with_callback_and_bool(
+            "wheel",
+            wheel.as_ref().unchecked_ref(),
+            true,
+        );
+
+        let _ = window.add_event_listener_with_callback("resize", resize.as_ref().unchecked_ref());
+        let viewer_root = self
+            .host
+            .parent_element()
+            .and_then(|viewer| viewer.shadow_root());
+
+        if let Some(root) = &viewer_root {
+            let _ = root.add_event_listener_with_callback_and_bool(
+                "scroll",
+                scroll.as_ref().unchecked_ref(),
+                true,
+            );
         }
 
-        let style = self.host.style();
-        let _ = style.set_property("top", &format!("{}px", self.top));
-        let _ = style.set_property("left", &format!("{}px", self.left));
+        self._viewport = Some(ViewportHandlers {
+            scroll,
+            wheel,
+            resize,
+            viewer_root,
+        });
+    }
+
+    fn remove_viewport_handlers(&mut self) {
+        if let Some(ViewportHandlers {
+            scroll,
+            wheel,
+            resize,
+            viewer_root,
+        }) = self._viewport.take()
+        {
+            let window = global::window();
+            let _ = window.remove_event_listener_with_callback_and_bool(
+                "scroll",
+                scroll.as_ref().unchecked_ref(),
+                true,
+            );
+
+            let _ = window.remove_event_listener_with_callback_and_bool(
+                "wheel",
+                wheel.as_ref().unchecked_ref(),
+                true,
+            );
+
+            let _ = window
+                .remove_event_listener_with_callback("resize", resize.as_ref().unchecked_ref());
+
+            if let Some(root) = viewer_root {
+                let _ = root.remove_event_listener_with_callback_and_bool(
+                    "scroll",
+                    scroll.as_ref().unchecked_ref(),
+                    true,
+                );
+            }
+        }
     }
 
     /// This component's light-dismiss for `own_focus` modals: an outside
     /// `pointerdown` (document capture) or Escape.
     fn setup_dismiss_handlers(&mut self, ctx: &Context<Self>) {
-        let on_close = {
-            let target = ctx.props().target.clone();
-            ctx.props().on_close.reform(move |_| {
-                if let Some(target) = &target {
-                    target.class_list().remove_1("modal-target").unwrap();
-                }
-            })
-        };
+        let on_close = Self::close_callback(ctx);
 
         let host = self.host.clone();
         let pointerdown = Closure::wrap(Box::new({
@@ -268,12 +398,10 @@ impl Component for PortalModal {
         Self {
             host,
             shadow_root,
-            top: 0.0,
-            left: 0.0,
             visible: false,
             rev_vert: Default::default(),
-            anchor: Default::default(),
             _dismiss: None,
+            _viewport: None,
         }
     }
 
@@ -294,6 +422,7 @@ impl Component for PortalModal {
             (None, Some(_)) => {
                 self.visible = false;
                 self.remove_dismiss_handlers();
+                self.remove_viewport_handlers();
             },
             (Some(old), None) => {
                 let _ = old.class_list().remove_1("modal-target");
@@ -341,6 +470,7 @@ impl Component for PortalModal {
 
                 self.position_against_target(target);
                 self.attach(ctx, target);
+                self.setup_viewport_handlers(ctx, target);
                 target.class_list().add_1("modal-target").unwrap();
                 if ctx.props().own_focus {
                     self.host.set_attribute("tabindex", "0").unwrap();

@@ -640,6 +640,51 @@ test.describe("Datagrid command buttons", () => {
         ).toHaveCount(1);
     });
 
+    test("command_column restored with a new panel after the schema is set is kept", async ({
+        page,
+    }) => {
+        await page.goto("/tools/test/src/html/basic-test.html");
+        await page.evaluate(async () => {
+            while (!(window as any)["__TEST_PERSPECTIVE_READY__"]) {
+                await new Promise((x) => setTimeout(x, 10));
+            }
+        });
+
+        const saved = await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            const { table } = await viewer.save();
+            await viewer.setCommandSchema(
+                () => ({
+                    commands: [{ kind: "Command", key: "flag", label: "Flag" }],
+                }),
+                { scopes: ["datagrid-row"] },
+            );
+
+            await viewer.restoreWorkspace({
+                layout: { type: "tab-layout", tabs: ["fresh"], selected: 0 },
+                panels: {
+                    fresh: {
+                        table,
+                        plugin: "Datagrid",
+                        columns: ["State", "Sales"],
+                        plugin_config: { command_column: "right" },
+                    },
+                },
+            });
+
+            await viewer.flush();
+            const token = await viewer.saveWorkspace();
+            return token.panels.fresh.plugin_config.command_column;
+        });
+
+        expect(saved).toBe("right");
+        const row = page.locator(`${GRID} tbody tr`).first();
+        await expect(row.locator("th .psp-command-button")).toHaveCount(0);
+        await expect(
+            row.locator("td").last().locator(".psp-command-button"),
+        ).toHaveText("Flag");
+    });
+
     test("invalidate re-renders the buttons from the new schema result", async ({
         page,
     }) => {

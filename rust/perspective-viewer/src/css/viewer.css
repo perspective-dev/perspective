@@ -372,20 +372,6 @@
             height: 100%;
         }
 
-        /* The layout engine hosting the panels fills the container.
-
-           Panel separators: frames TILE their grid cells (no margin) and each
-           panel draws a 1px line on its LEFT and TOP edge only, so every
-           internal boundary gets exactly one line (owned by the panel to its
-           right/below, in THAT panel's theme). The lines are drawn by the
-           light-DOM plugin (`outline`, beside the body) and tab (`::before`,
-           along the titlebar) - not the frame, which the per-panel theme
-           rules can't reach. Borders and outlines (unlike box-shadows) are
-           snapped to whole device pixels at any DPR. The leading inset (-4px)
-           pushes the outermost left/top lines outside `#main_panel_container`'s
-           `overflow: hidden`, so the layout itself has no outer border; the
-           trailing inset (-3px) leaves the plugins the same ~1px outer gutter
-           on every side. */
         & regular-layout {
             position: absolute;
             inset: -4px -3px -3px -4px;
@@ -393,11 +379,10 @@
             padding: 0px;
             background: var(--psp--background-color, transparent);
 
-            /* The padding is the resize grab band: regular-layout only starts
-               a divider drag when `event.target` is the layout itself, which
-               works because `regular-layout-frame` is `pointer-events: none`
-               outside its container/tabs. Do NOT set `pointer-events` here.
-               left/top = 1px line + 4px fill; right/bottom = 4px fill. */
+            & > regular-layout-frame {
+                --rl-tab--width: 1fr !important;
+            }
+
             & > .rl-panel {
                 position: relative;
                 box-sizing: border-box;
@@ -410,20 +395,9 @@
                    escape the frame and paint over a dragged (overlay) panel,
                    and the overlay outline below can sit above the tab. */
                 isolation: isolate;
-
-                /* Clip to the grid cell. Every fill ends exactly at the frame
-                   edge; the only paint outside it is the plugin outline's
-                   right/bottom sides, which would double up on the
-                   neighbours' left/top lines. `clip`, not `hidden`: no scroll
-                   container. */
                 overflow: clip;
             }
 
-            /* A dragged panel floats over the grid, so it needs all 4 sides,
-               including the titlebar's right edge, which no tab can draw (a
-               tab can't tell it's the last in its stack). Transient, so this
-               one uses the host theme's color. Painted over the outer pixel
-               of the 4px fill, so the plugin size doesn't change. */
             & > .rl-panel.overlay::after {
                 content: "";
                 position: absolute;

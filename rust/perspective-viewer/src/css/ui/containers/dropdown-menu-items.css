@@ -50,9 +50,30 @@
     padding: 0 8px;
 }
 
+.dropdown-menu-label {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dropdown-menu-item code {
+    display: flex;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.dropdown-menu-item .export-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .dropdown-menu-item {
     cursor: pointer;
     min-height: 22px;
+    min-width: 0;
     &:hover {
         background-color: var(--psp--color);
         color: var(--psp--background-color);
@@ -71,6 +92,7 @@
 }
 
 .dropdown-menu-item .derived_consumers {
+    flex: none;
     opacity: 0.6;
 }
 
@@ -79,6 +101,7 @@
 }
 
 .dropdown-menu-item .derived_delete {
+    flex: none;
     margin-left: auto;
     -webkit-mask-image: var(--psp-icon--close--mask-image);
     mask-image: var(--psp-icon--close--mask-image);

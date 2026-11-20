@@ -104,7 +104,7 @@ export function is_command_scope(
     location: PerspectiveCommandLocation,
 ): boolean {
     const viewer = host_viewer(plugin);
-    if (!viewer?.queryCommands || !plugin.model) {
+    if (!viewer?.queryCommands) {
         return false;
     }
 
