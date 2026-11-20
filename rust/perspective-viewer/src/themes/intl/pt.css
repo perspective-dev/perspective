@@ -23,6 +23,7 @@ perspective-viewer {
 
     /* Plugin names */
     --psp-plugin-name--datagrid--content: "Grade de dados";
+    --psp-plugin-name--summary--content: "Resumo";
     --psp-plugin-name--treemap--content: "Mapa de árvore";
     --psp-plugin-name--sunburst--content: "Sunburst";
     --psp-plugin-name--heatmap--content: "Mapa de calor";
@@ -59,7 +60,6 @@ perspective-viewer {
     --psp-label--copy-button--content: "Copiar";
     --psp-label--export-button--content: "Exportar";
     --psp-label--reset-button--content: "Redefinir";
-    --psp-label--new-panel-button--content: "Novo";
     --psp-label--new-from-table--content: "Novo a partir de tabela";
     --psp-label--new-from-panel--content: "Novo a partir de painel";
     --psp-label--apply-button--content: "Aplicar";
@@ -150,6 +150,7 @@ perspective-viewer {
     --psp-label--role--facets--content: "Facetas";
     --psp-label--role--row-groups--content: "Grupos de linhas";
     --psp-label--role--column-groups--content: "Grupos de colunas";
+    --psp-label--role--breakdown--content: "Detalhamento";
 
     /* Plugin settings */
     --psp-label--edit-mode--content: "Modo de edição";
@@ -171,6 +172,9 @@ perspective-viewer {
     --psp-label--row-height--content: "Altura da linha";
     --psp-label--zebra-rows--content: "Linhas zebradas";
     --psp-label--zebra-color--content: "Cor zebrada";
+    --psp-label--label-position--content: "Posição do rótulo";
+    --psp-label--value-fit--content: "Tamanho do valor";
+    --psp-label--breakdown--content: "Detalhamento";
     --psp-label--chart-type--content: "Tipo de glifo";
 
     /* Plugin settings — viewer-charts */

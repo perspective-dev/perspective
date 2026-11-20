@@ -236,6 +236,7 @@ impl CustomElementMetadata for PerspectiveViewerElement {
         "getColumnConfigDefaults",
     ]
     .as_slice();
+    const STATIC_GETTERS: &'static [&'static str] = ["plugin_utils"].as_slice();
 }
 
 impl PerspectiveViewerElement {

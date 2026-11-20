@@ -9,25 +9,24 @@
 // ┃ This file is part of the Perspective library, distributed under the terms ┃
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-import { CellMetadata } from "regular-table/dist/esm/types.js";
 import {
     rgbaToRgb,
     infer_foreground_from_background,
     type RGB,
-} from "../../color_utils.ts";
+} from "../color.ts";
 import {
     parse_bg_mode,
     parse_fg_mode,
-    type DatagridModel,
     type ResolvedColumnStyle,
-} from "../../types.ts";
+} from "../column_style.ts";
+import type { CellStyleMeta, CellStyleModel } from "./types.ts";
 
 /** Apply a datetime column's foreground and background modes independently. */
 export function cell_style_datetime(
-    model: DatagridModel,
+    model: CellStyleModel,
     plugin: ResolvedColumnStyle | undefined,
     td: HTMLElement,
-    metadata: CellMetadata,
+    metadata: CellStyleMeta,
 ): void {
     const fg_mode = parse_fg_mode("datetime", plugin?.fg_mode) ?? "disabled";
     const bg_mode = parse_bg_mode("datetime", plugin?.bg_mode) ?? "disabled";

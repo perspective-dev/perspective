@@ -181,12 +181,12 @@ pub enum SignDisplay {
 
 /// A numeric column's `number_format` (`columns_config` value) —
 /// `Intl.NumberFormat`-shaped options, written by the Style tab's number
-/// format editor and read by `createNumberFormatter`. The `style` and
+/// format editor and read by `plugin_utils.formatter()`. The `style` and
 /// `notation` families ([`NumberFormatStyle`] / [`Notation`]) are serde-
 /// FLATTENED into this object but `#[ts(skip)]`'d (ts-rs cannot flatten
 /// `Option<enum>`) — the package's `NumberFormatConfig` re-composes the
 /// full wire type as `CustomNumberFormatConfig & Partial<NumberFormatStyle>
-/// & Partial<Notation>` (see `column-format.ts`).
+/// & Partial<Notation>` (see `plugin_utils/native.ts`).
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, Clone, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CustomNumberFormatConfig {

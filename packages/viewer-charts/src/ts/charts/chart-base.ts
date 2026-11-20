@@ -11,17 +11,12 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { View } from "@perspective-dev/client";
-import {
-    createNumberFormatter,
-    createDatetimeFormatter,
-    createDateFormatter,
-    dateFormatModifiers,
-    hasDateFormatShape,
-    sourceColumn,
-    type NumberFormatConfig,
-    type DateFormatConfig,
-    type DateFormatModifiers,
-} from "@perspective-dev/viewer/column-format";
+import type {
+    DateFormatConfig,
+    DateFormatModifiers,
+    NumberFormatConfig,
+} from "@perspective-dev/viewer";
+import { plugin_utils } from "../plugin_utils.ts";
 import type { ColumnDataMap } from "../data/view-reader.ts";
 import { LazyRowFetcher } from "../data/lazy-row.ts";
 import {
@@ -65,27 +60,41 @@ import { requestRender as scheduleRender } from "../render/scheduler.ts";
  * Fallback formatter applied to numeric tooltip / legend values when the
  * column has no `number_format` configured.
  */
-const DEFAULT_VALUE_FORMATTER: (v: number) => string = ((): ((
-    v: number,
-) => string) => {
-    const intl = createNumberFormatter(
-        "float",
-        undefined,
-        CHART_NUMBER_DEFAULTS,
-    );
-    return (v) => intl.format(v);
-})();
+let DEFAULT_VALUE_FORMATTER: ((v: number) => string) | undefined;
+
+function default_value_formatter(): (v: number) => string {
+    if (DEFAULT_VALUE_FORMATTER === undefined) {
+        const formatter = plugin_utils().formatter(
+            "float",
+            undefined,
+            CHART_NUMBER_DEFAULTS,
+        )!;
+
+        DEFAULT_VALUE_FORMATTER = (v) => formatter.format(v);
+    }
+
+    return DEFAULT_VALUE_FORMATTER;
+}
 
 /**
  * Fallback formatter for datetime tooltip / legend values when the
  * column has no `date_format` configured.
  */
-const DEFAULT_DATETIME_FORMATTER: (v: number) => string = ((): ((
-    v: number,
-) => string) => {
-    const intl = createDatetimeFormatter(undefined, CHART_DATETIME_DEFAULTS);
-    return (v) => intl.format(v);
-})();
+let DEFAULT_DATETIME_FORMATTER: ((v: number) => string) | undefined;
+
+function default_datetime_formatter(): (v: number) => string {
+    if (DEFAULT_DATETIME_FORMATTER === undefined) {
+        const formatter = plugin_utils().formatter(
+            "datetime",
+            undefined,
+            CHART_DATETIME_DEFAULTS,
+        )!;
+
+        DEFAULT_DATETIME_FORMATTER = (v) => formatter.format(v);
+    }
+
+    return DEFAULT_DATETIME_FORMATTER;
+}
 
 /**
  * Base class for WebGL chart implementations. Owns the common lifecycle
@@ -214,7 +223,7 @@ export abstract class AbstractChart implements ChartImplementation {
     /**
      * Pre-compiled per-column value formatters, keyed by the **source**
      * column name (synthetic split-by paths are normalized via
-     * `sourceColumn`). Rebuilt by `setColumnsConfig` from the active
+     * `source_column`). Rebuilt by `setColumnsConfig` from the active
      * plugin's `column_config_schema` output, then consulted by axis /
      * tooltip / legend paths via {@link getColumnFormatter}.
      *
@@ -480,6 +489,7 @@ export abstract class AbstractChart implements ChartImplementation {
      * can arrive in any order. Idempotent.
      */
     private _rebuildColumnFormatters(): void {
+        const utils = plugin_utils();
         this._columnFormatters = new Map();
         this._columnDateModifiers = new Map();
         this._columnValueFormatters = new Map();
@@ -500,15 +510,18 @@ export abstract class AbstractChart implements ChartImplementation {
                 | DateFormatConfig
                 | undefined;
 
-            const modifiers = dateFormatModifiers(dateFormat);
+            const modifiers = utils.date_format_modifiers(dateFormat);
             if (type === "datetime" && modifiers && !fmt) {
                 this._columnDateModifiers.set(name, modifiers);
-                const intl = createDatetimeFormatter(
+                const formatter = utils.formatter(
+                    "datetime",
                     dateFormat,
                     CHART_DATETIME_DEFAULTS,
-                );
+                )!;
 
-                this._columnValueFormatters.set(name, (v) => intl.format(v));
+                this._columnValueFormatters.set(name, (v) =>
+                    formatter.format(v),
+                );
             }
         }
     }
@@ -521,6 +534,7 @@ export abstract class AbstractChart implements ChartImplementation {
             return undefined;
         }
 
+        const utils = plugin_utils();
         if (type === "integer" || type === "float") {
             const numberFormat = cfg.number_format as
                 | NumberFormatConfig
@@ -529,35 +543,43 @@ export abstract class AbstractChart implements ChartImplementation {
                 return undefined;
             }
 
-            const intl = createNumberFormatter(
+            const formatter = utils.formatter(
                 type,
                 numberFormat,
                 CHART_NUMBER_DEFAULTS,
-            );
-            return (v) => intl.format(v);
+            )!;
+
+            return (v) => formatter.format(v);
         }
 
         if (type === "datetime") {
             const dateFormat = cfg.date_format as DateFormatConfig | undefined;
-            if (!hasDateFormatShape(dateFormat)) {
+            if (!utils.has_date_format_shape(dateFormat)) {
                 return undefined;
             }
 
-            const intl = createDatetimeFormatter(
+            const formatter = utils.formatter(
+                "datetime",
                 dateFormat,
                 CHART_DATETIME_DEFAULTS,
-            );
-            return (v) => intl.format(v);
+            )!;
+
+            return (v) => formatter.format(v);
         }
 
         if (type === "date") {
             const dateFormat = cfg.date_format as DateFormatConfig | undefined;
-            if (!hasDateFormatShape(dateFormat)) {
+            if (!utils.has_date_format_shape(dateFormat)) {
                 return undefined;
             }
 
-            const intl = createDateFormatter(dateFormat, CHART_DATE_DEFAULTS);
-            return (v) => intl.format(v);
+            const formatter = utils.formatter(
+                "date",
+                dateFormat,
+                CHART_DATE_DEFAULTS,
+            )!;
+
+            return (v) => formatter.format(v);
         }
 
         return undefined;
@@ -593,7 +615,7 @@ export abstract class AbstractChart implements ChartImplementation {
     ): ((v: number) => string) | undefined {
         if (columnName) {
             const formatter = this._columnFormatters.get(
-                sourceColumn(columnName),
+                plugin_utils().source_column(columnName),
             );
             if (formatter) {
                 return formatter;
@@ -605,7 +627,9 @@ export abstract class AbstractChart implements ChartImplementation {
         }
 
         const valueFormatter = columnName
-            ? this._columnValueFormatters.get(sourceColumn(columnName))
+            ? this._columnValueFormatters.get(
+                  plugin_utils().source_column(columnName),
+              )
             : undefined;
 
         if (valueFormatter) {
@@ -616,16 +640,18 @@ export abstract class AbstractChart implements ChartImplementation {
         // key group_by source columns (their post-aggregate form is
         // `__ROW_PATH_N__`); fall back to `_groupByTypes` so date /
         // datetime group_by axes don't get formatted as numbers.
-        const sourceName = columnName ? sourceColumn(columnName) : undefined;
+        const sourceName = columnName
+            ? plugin_utils().source_column(columnName)
+            : undefined;
         const type = sourceName
             ? (this._columnTypes[sourceName] ?? this._groupByTypes[sourceName])
             : undefined;
 
         if (type === "date" || type === "datetime") {
-            return DEFAULT_DATETIME_FORMATTER;
+            return default_datetime_formatter();
         }
 
-        return DEFAULT_VALUE_FORMATTER;
+        return default_value_formatter();
     }
 
     /**
@@ -636,7 +662,9 @@ export abstract class AbstractChart implements ChartImplementation {
         columnName: string | null | undefined,
     ): DateFormatModifiers | undefined {
         return columnName
-            ? this._columnDateModifiers.get(sourceColumn(columnName))
+            ? this._columnDateModifiers.get(
+                  plugin_utils().source_column(columnName),
+              )
             : undefined;
     }
 

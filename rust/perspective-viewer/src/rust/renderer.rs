@@ -463,7 +463,7 @@ impl Renderer {
     }
 
     pub fn is_chart(&self) -> bool {
-        self.metadata().name.as_str() != "Datagrid"
+        !self.metadata().renders_text
     }
 
     /// Whether the active plugin opts into per-column style controls.
@@ -830,7 +830,7 @@ impl Renderer {
         if has_plugin {
             let config = self.metadata();
             let plugin_name = Some(config.name.clone());
-            let is_chart = config.name.as_str() != "Datagrid";
+            let is_chart = !config.renders_text;
             let available_plugins = self
                 .get_all_plugin_configs()
                 .into_iter()

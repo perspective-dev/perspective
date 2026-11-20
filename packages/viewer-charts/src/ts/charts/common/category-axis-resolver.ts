@@ -16,8 +16,12 @@ import type {
     CategoricalLevel,
 } from "../../axis/categorical-axis.ts";
 import { buildGroupRuns } from "../../axis/categorical-axis-core.ts";
-import { formatTickValue, formatDateTickValue } from "../../layout/ticks.ts";
-import type { DateFormatModifiers } from "@perspective-dev/viewer/column-format";
+import {
+    formatTickValue,
+    formatDateTickValue,
+    formatDateTickValues,
+} from "../../layout/ticks.ts";
+import type { DateFormatModifiers } from "@perspective-dev/viewer";
 
 export interface CategoryAxisResult {
     /**
@@ -225,6 +229,29 @@ export function formatLevelValue(
     return String(value);
 }
 
+/** {@link formatLevelValue} over every one of `values`, all of them valid. */
+function formatLevelValues(
+    values: number[],
+    levelType: string,
+    dateModifiers?: DateFormatModifiers,
+): string[] {
+    if (levelType !== "date" && levelType !== "datetime") {
+        return values.map((v) =>
+            formatLevelValue(v, true, levelType, dateModifiers),
+        );
+    }
+
+    const present = values.map((v) => v != null && !Number.isNaN(v));
+    const labels = formatDateTickValues(
+        values.filter((_, i) => present[i]),
+        undefined,
+        levelType === "datetime" ? dateModifiers : undefined,
+    );
+
+    let next = 0;
+    return present.map((ok) => (ok ? labels[next++] : ""));
+}
+
 /**
  * Synthesize a `(indices, dictionary)` pair from a non-string row-path
  * column so the rest of the categorical axis machinery (label
@@ -246,29 +273,39 @@ export function synthesizeStringLevel(
     seen.set("", 0);
 
     const valueIdx = new Map<number, number>();
-
+    const distinct: number[] = [];
     for (let r = 0; r < numRows; r++) {
         const isValid = valid ? !!((valid[r >> 3] >> (r & 7)) & 1) : true;
         if (!isValid) {
-            indices[r] = 0;
+            indices[r] = -1;
             continue;
         }
 
         const v = values[r] as number;
-        let dictIdx = valueIdx.get(v);
-        if (dictIdx === undefined) {
-            const label = formatLevelValue(v, true, levelType, dateModifiers);
-            dictIdx = seen.get(label);
-            if (dictIdx === undefined) {
-                dictIdx = dictionary.length;
-                dictionary.push(label);
-                seen.set(label, dictIdx);
-            }
-
-            valueIdx.set(v, dictIdx);
+        let slot = valueIdx.get(v);
+        if (slot === undefined) {
+            slot = distinct.length;
+            distinct.push(v);
+            valueIdx.set(v, slot);
         }
 
-        indices[r] = dictIdx;
+        indices[r] = slot;
+    }
+
+    const labels = formatLevelValues(distinct, levelType, dateModifiers);
+    const dictIdx = labels.map((label) => {
+        let idx = seen.get(label);
+        if (idx === undefined) {
+            idx = dictionary.length;
+            dictionary.push(label);
+            seen.set(label, idx);
+        }
+
+        return idx;
+    });
+
+    for (let r = 0; r < numRows; r++) {
+        indices[r] = indices[r] < 0 ? 0 : dictIdx[indices[r]];
     }
 
     return { indices, dictionary };

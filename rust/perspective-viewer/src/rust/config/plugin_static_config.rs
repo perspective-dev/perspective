@@ -162,6 +162,14 @@ pub struct PluginStaticConfig {
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub connects_row_order: bool,
+
+    /// `true` when this plugin's `render()` resolves to text rather than an
+    /// image, which makes the copy and export menus offer `.txt` in place of
+    /// `.png`.
+    #[serde(default)]
+    #[ts(as = "Option<_>")]
+    #[ts(optional)]
+    pub renders_text: bool,
 }
 
 impl PluginStaticConfig {
@@ -202,6 +210,13 @@ impl PluginStaticConfig {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// Whether this plugin accepts a `group_rollup_mode` other than `total`,
+    /// the one mode a `group_by` cannot have.
+    pub fn accepts_group_by(&self, rollup_features: &[GroupRollupMode]) -> bool {
+        let modes = self.get_group_rollups(rollup_features);
+        modes.is_empty() || modes.iter().any(|x| *x != GroupRollupMode::Total)
     }
 
     pub fn get_split_rollups(&self, rollup_features: &[SplitRollupMode]) -> Vec<SplitRollupMode> {

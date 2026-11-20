@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import { PRIVATE_PLUGIN_SYMBOL } from "../types.ts";
-import { isMetaColumn } from "../model/meta_columns.ts";
+import { plugin_utils } from "../plugin_utils.ts";
 import { reconcile_column_widths } from "../model/column_overrides.ts";
 import {
     column_name,
@@ -19,7 +19,7 @@ import {
     write_area,
     write_flat_area,
 } from "../model/column_path_area.ts";
-import { format_cell } from "./format_cell.ts";
+import { format_column } from "./format_cell.ts";
 import {
     COMMAND_COLUMN_PATH,
     build_frame,
@@ -146,6 +146,7 @@ export function createDataListener(
             // `__ID__` (the previous filter) misses the per-level
             // form and the virtual server's columns leak into the
             // visible grid.
+            const { isMetaColumn } = plugin_utils().column_style;
             const new_col_paths = y.filter((x) => !isMetaColumn(x));
 
             let changed_cols = false;
@@ -377,18 +378,20 @@ export function createDataListener(
                 this._config.group_by.length,
             );
 
+            const formatted = format_column.call(
+                this,
+                name,
+                column,
+                columns_config,
+            );
+
             data.push(
-                column.map((x, i) => {
+                column.map((_, i) => {
                     if ((columns?.__ROW_PATH__?.[i]?.length ?? 0) < agg_depth) {
                         return "";
                     }
 
-                    const cell = format_cell.call(
-                        this,
-                        name,
-                        x,
-                        columns_config,
-                    ) as string | HTMLElement;
+                    const cell = formatted[i] as string | HTMLElement;
 
                     const content = wrap ? wrap_cell(cell) : cell;
                     if (!cell_results || i >= n_fetched) {

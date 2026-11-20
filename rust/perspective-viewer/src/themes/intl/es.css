@@ -23,6 +23,7 @@ perspective-viewer {
 
     /* Plugin names */
     --psp-plugin-name--datagrid--content: "Cuadrícula de datos";
+    --psp-plugin-name--summary--content: "Resumen";
     --psp-plugin-name--treemap--content: "Mapa de árbol";
     --psp-plugin-name--sunburst--content: "Sunburst";
     --psp-plugin-name--heatmap--content: "Mapa de calor";
@@ -59,7 +60,6 @@ perspective-viewer {
     --psp-label--copy-button--content: "Copiar";
     --psp-label--export-button--content: "Exportar";
     --psp-label--reset-button--content: "Restablecer";
-    --psp-label--new-panel-button--content: "Nuevo";
     --psp-label--new-from-table--content: "Nuevo desde tabla";
     --psp-label--new-from-panel--content: "Nuevo desde panel";
     --psp-label--apply-button--content: "Aplicar";
@@ -150,6 +150,7 @@ perspective-viewer {
     --psp-label--role--facets--content: "Facetas";
     --psp-label--role--row-groups--content: "Grupos de filas";
     --psp-label--role--column-groups--content: "Grupos de columnas";
+    --psp-label--role--breakdown--content: "Desglose";
 
     /* Plugin settings */
     --psp-label--edit-mode--content: "Modo de edición";
@@ -171,6 +172,9 @@ perspective-viewer {
     --psp-label--row-height--content: "Altura de fila";
     --psp-label--zebra-rows--content: "Filas cebra";
     --psp-label--zebra-color--content: "Color cebra";
+    --psp-label--label-position--content: "Posición de etiqueta";
+    --psp-label--value-fit--content: "Tamaño del valor";
+    --psp-label--breakdown--content: "Desglose";
     --psp-label--chart-type--content: "Tipo de glifo";
 
     /* Plugin settings — viewer-charts */

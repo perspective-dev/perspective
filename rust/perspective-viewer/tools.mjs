@@ -77,9 +77,24 @@ const DOCS_DTS_FILES = [
         prefix: "Datagrid Plugin",
         scope: [
             "type EditMode",
-            "type Align",
             "interface ColumnConfig",
             "interface DatagridPluginConfig",
+        ],
+    },
+    {
+        file: "./src/ts/plugin_utils/schema.ts",
+        prefix: "Plugin Config",
+        scope: ["type Align"],
+    },
+    {
+        file: "../../packages/viewer-summary/src/ts/types.ts",
+        prefix: "Summary Plugin",
+        scope: [
+            "type LabelPosition",
+            "type ValueFit",
+            "type Breakdown",
+            "interface ColumnConfig",
+            "interface SummaryPluginConfig",
         ],
     },
     {
@@ -953,6 +968,30 @@ function cemKnownTypes() {
 
     for (const name of stems("./dist/ts-rs")) {
         known.set(name, "@perspective-dev/viewer");
+    }
+
+    const plugin_utils = "./src/ts/plugin_utils";
+    const exported = [
+        ...fs
+            .readFileSync(path.join(plugin_utils, "index.ts"), "utf8")
+            .matchAll(/export type \* from "\.\/(\w+)\.ts";/g),
+    ].map((x) => path.join(plugin_utils, `${x[1]}.ts`));
+
+    for (const file of [path.join(plugin_utils, "index.ts"), ...exported]) {
+        const text = fs.readFileSync(file, "utf8");
+        for (const [, name] of text.matchAll(
+            /^export (?:interface|type|class) (\w+)/gm,
+        )) {
+            known.set(name, "@perspective-dev/viewer");
+        }
+
+        for (const [, names] of text.matchAll(/^export type \{([^}]*)\}/gm)) {
+            for (const name of names.split(",")) {
+                if (name.trim()) {
+                    known.set(name.trim(), "@perspective-dev/viewer");
+                }
+            }
+        }
     }
 
     return known;

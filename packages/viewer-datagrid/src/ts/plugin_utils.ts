@@ -10,16 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-#[global_allocator]
-static TALC: talc::TalckWasm = unsafe { talc::TalckWasm::new_global() };
+import type { PluginUtils } from "@perspective-dev/viewer";
 
-pub fn get_used() -> (usize, usize) {
-    return {
-        let counters = TALC.lock();
-        (
-            counters.get_counters().allocated_bytes,
-            (counters.get_counters().available_bytes + counters.get_counters().allocated_bytes)
-                as usize,
-        )
-    };
+let UTILS: PluginUtils | undefined;
+
+/** The code `<perspective-viewer>` shares with its plugins. */
+export function plugin_utils(): PluginUtils {
+    UTILS ??= customElements.get("perspective-viewer").plugin_utils;
+    return UTILS;
 }

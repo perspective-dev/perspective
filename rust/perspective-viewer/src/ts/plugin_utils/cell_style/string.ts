@@ -14,13 +14,13 @@ import {
     parseColor,
     rgbaToRgb,
     type RGB,
-} from "../../color_utils.ts";
+} from "../color.ts";
 import {
     parse_bg_mode,
     parse_fg_mode,
-    type DatagridModel,
     type ResolvedColumnStyle,
-} from "../../types.ts";
+} from "../column_style.ts";
+import type { CellStyleModel } from "./types.ts";
 
 interface CellMetaWithExtras {
     _is_hidden_by_aggregate_depth?: boolean;
@@ -33,7 +33,7 @@ interface CellMetaWithExtras {
  * distinct values in encounter order.
  */
 function series_seed(
-    model: DatagridModel,
+    model: CellStyleModel,
     column_name: string,
     value: string,
 ): number {
@@ -53,7 +53,7 @@ function series_seed(
 }
 
 function series_color(
-    model: DatagridModel,
+    model: CellStyleModel,
     palette_colors: string[] | undefined,
     seed: number,
 ): string {
@@ -67,7 +67,7 @@ function series_color(
 
 /** Apply a string column's foreground and background modes independently. */
 export function cell_style_string(
-    model: DatagridModel,
+    model: CellStyleModel,
     plugin: ResolvedColumnStyle | undefined,
     td: HTMLElement,
     metadata: CellMetaWithExtras,

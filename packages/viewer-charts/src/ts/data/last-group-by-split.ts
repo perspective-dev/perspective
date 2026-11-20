@@ -12,7 +12,7 @@
 
 import type { ColumnData, ColumnDataMap } from "./view-reader";
 import { formatLevelValue } from "../charts/common/category-axis-resolver";
-import type { DateFormatModifiers } from "@perspective-dev/viewer/column-format";
+import type { DateFormatModifiers } from "@perspective-dev/viewer";
 
 export interface LastGroupBySplit {
     columns: ColumnDataMap;

@@ -23,6 +23,7 @@ perspective-viewer {
 
     /* Plugin names */
     --psp-plugin-name--datagrid--content: "Datagrid";
+    --psp-plugin-name--summary--content: "Summary";
     --psp-plugin-name--treemap--content: "Treemap";
     --psp-plugin-name--sunburst--content: "Sunburst";
     --psp-plugin-name--heatmap--content: "Heatmap";
@@ -59,7 +60,6 @@ perspective-viewer {
     --psp-label--copy-button--content: "Copy";
     --psp-label--export-button--content: "Export";
     --psp-label--reset-button--content: "Reset";
-    --psp-label--new-panel-button--content: "New";
     --psp-label--new-from-table--content: "New from Table";
     --psp-label--new-from-panel--content: "New from Panel";
     --psp-label--apply-button--content: "Apply";
@@ -155,6 +155,7 @@ perspective-viewer {
     --psp-label--role--facets--content: "Facets";
     --psp-label--role--row-groups--content: "Row Groups";
     --psp-label--role--column-groups--content: "Column Groups";
+    --psp-label--role--breakdown--content: "Breakdown";
 
     /* Window editor */
     --psp-label--window-source--content: "Column";
@@ -184,6 +185,9 @@ perspective-viewer {
     --psp-label--row-height--content: "Row height";
     --psp-label--zebra-rows--content: "Zebra rows";
     --psp-label--zebra-color--content: "Zebra color";
+    --psp-label--label-position--content: "Label position";
+    --psp-label--value-fit--content: "Value size";
+    --psp-label--breakdown--content: "Breakdown";
     --psp-label--chart-type--content: "Glyph type";
 
     /* Plugin settings — viewer-charts */

@@ -22,6 +22,7 @@ use crate::step::StepCx;
 
 pub(crate) const REGISTRATION_ORDER: &[&str] = &[
     "Datagrid",
+    "Summary",
     "X Bar",
     "Y Bar",
     "Y Line",
