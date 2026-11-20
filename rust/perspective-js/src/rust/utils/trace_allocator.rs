@@ -10,8 +10,8 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-//! A wrapper around the default allocator which counts allocations, useful for
-//! instrumenting the `Client` as an alternative to switching to `talc`.
+//! A wrapper around the default allocator which counts allocations, for the
+//! `Client`'s heap metrics in `Client::system_info`.
 //!
 //! Lifted from https://stackoverflow.com/questions/78246635/how-do-i-log-wasm-heap-memory-usage-from-rust
 //! or as its popular to refer to these days, "AI".
@@ -93,6 +93,3 @@ pub(crate) fn get_used() -> (usize, usize) {
 
     (ALLOCATOR.allocated_now(), client_heap as usize)
 }
-
-#[cfg(all(feature = "talc-allocator", feature = "trace-allocator"))]
-compile_error!("Cannot enable both `talc-allocator` and `trace-allocator` features");

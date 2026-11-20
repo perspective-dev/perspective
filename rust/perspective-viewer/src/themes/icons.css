@@ -92,6 +92,7 @@ perspective-viewer-tab {
     --psp-plugin-selector--y-line--content: url(../svg/mega-menu-icons-y-line.svg);
     --psp-plugin-selector--y-scatter--content: url(../svg/mega-menu-icons-y-scatter.svg);
     --psp-plugin-selector--datagrid--content: url(../svg/mega-menu-icons-datagrid.svg);
+    --psp-plugin-selector--summary--content: url(../svg/mega-menu-icons-summary.svg);
 
     /* Datagrid */
     /* `regular-table` icons */

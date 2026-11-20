@@ -28,6 +28,22 @@ unsafe extern "C" {
     pub type JsTypedArrayWindow;
 }
 
+#[wasm_bindgen(inline_js = "
+    export function split_strings(text, ends) {
+        const out = new Array(ends.length);
+        let start = 0;
+        for (let i = 0; i < ends.length; i++) {
+            out[i] = text.substring(start, ends[i]);
+            start = ends[i];
+        }
+
+        return out;
+    }
+")]
+extern "C" {
+    fn split_strings(text: &str, ends: &Uint32Array) -> Array;
+}
+
 /// Calls `callback` with zero-copy JS views of `columns`, awaiting a returned
 /// `Promise` before the views are released.
 pub(crate) async fn call_with_typed_arrays(
@@ -75,13 +91,26 @@ fn values_view(values: &TypedArrayValues) -> JsValue {
     }
 }
 
+/// The strings of a dictionary column as a JS `Array`, passed to JS as one
+/// string and split there to avoid decoding each separately.
 fn dictionary(values: &TypedArrayValues) -> JsValue {
-    match values {
-        TypedArrayValues::Dictionary { values, .. } => values
-            .iter()
-            .map(|value| JsValue::from_str(value))
-            .collect::<Array>()
-            .into(),
-        _ => JsValue::NULL,
+    let TypedArrayValues::Dictionary { values, .. } = values else {
+        return JsValue::NULL;
+    };
+
+    let mut text = String::with_capacity(values.iter().map(String::len).sum());
+    let mut ends = Vec::with_capacity(values.len());
+    let mut end = 0;
+    for value in values {
+        text.push_str(value);
+        end += if value.is_ascii() {
+            value.len() as u32
+        } else {
+            value.encode_utf16().count() as u32
+        };
+
+        ends.push(end);
     }
+
+    split_strings(&text, &Uint32Array::from(ends.as_slice())).into()
 }

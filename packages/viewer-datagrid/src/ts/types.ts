@@ -22,9 +22,15 @@ import type {
 } from "@perspective-dev/client";
 
 import type {
+    Align,
+    BgMode,
+    ColorRecord,
     DateFormatConfig,
+    FgMode,
+    GradientStopRgb,
     HTMLPerspectiveViewerElement,
     NumberFormatConfig,
+    Resolved,
     ViewerConfig,
 } from "@perspective-dev/viewer";
 
@@ -34,7 +40,6 @@ import type {
     CellScalar,
     DataResponse,
 } from "regular-table/dist/esm/types.js";
-import type { GradientStopRgb } from "./color_utils.ts";
 
 // Re-export types from regular-table for use throughout the codebase
 export type { RegularTableElement as RegularTable };
@@ -57,12 +62,6 @@ export function get_psp_type(
 // Edit mode for the datagrid
 
 /**
- * Where in the `ViewConfig` a column being configured appears, which is a
- * different axis from its plugin column slot.
- */
-export type ColumnRole = "column" | "group_by" | "split_by";
-
-/**
  * Datagrid cell interaction mode (`plugin_config.edit_mode`):
  * `"READ_ONLY"` (default), `"EDIT"` (cells editable, writing back to the
  * `Table` - requires an editable table), or the `"SELECT_*"` modes which
@@ -75,17 +74,6 @@ export type EditMode =
     | "SELECT_ROW"
     | "SELECT_REGION"
     | "SELECT_ROW_TREE";
-
-// Color record for styling - tuple returned by make_color_record
-export type ColorRecord = [
-    string, // hex color
-    number, // red
-    number, // green
-    number, // blue
-    string, // gradient
-    string, // rgba solid
-    string, // rgba transparent
-];
 
 export type SortTerm = [string, SortDir];
 
@@ -110,120 +98,6 @@ export interface SelectedPosition {
     x: number;
     y: number;
     content?: string;
-}
-
-/**
- * A cell of the 3×3 alignment grid: corners `"top-left"` etc., edges
- * `"top"`/`"left"`/`"right"`/`"bottom"`, or `"center"`.
- */
-export type Align =
-    | "top-left"
-    | "top"
-    | "top-right"
-    | "left"
-    | "center"
-    | "right"
-    | "bottom-left"
-    | "bottom"
-    | "bottom-right";
-
-/** Foreground treatments of an integer / float column. */
-export const NUMBER_FG_MODES = [
-    "disabled",
-    "color",
-    "bar",
-    "label-bar",
-] as const;
-
-/** Background treatments of an integer / float column. */
-export const NUMBER_BG_MODES = [
-    "disabled",
-    "color",
-    "gradient",
-    "pulse",
-] as const;
-
-/** Foreground and background treatments of a string column. */
-export const STRING_MODES = ["disabled", "color", "series"] as const;
-
-/** Foreground and background treatments of a date / datetime column. */
-export const DATETIME_MODES = ["disabled", "color"] as const;
-
-export type NumberFgMode = (typeof NUMBER_FG_MODES)[number];
-export type NumberBgMode = (typeof NUMBER_BG_MODES)[number];
-export type StringMode = (typeof STRING_MODES)[number];
-export type DatetimeMode = (typeof DATETIME_MODES)[number];
-
-/**
- * Every foreground treatment some column type accepts. The subset a given
- * column accepts is `fg_modes_for(type)`; `column_config_schema()`
- * advertises exactly that subset, and the viewer rejects any other value.
- */
-export type FgMode = NumberFgMode | StringMode | DatetimeMode;
-
-/** Every background treatment some column type accepts, as {@link FgMode}. */
-export type BgMode = NumberBgMode | StringMode | DatetimeMode;
-
-/** The `fg_mode` values a column of `type` accepts, empty for boolean. */
-export function fg_modes_for(type: ColumnType): readonly FgMode[] {
-    switch (type) {
-        case "integer":
-        case "float":
-            return NUMBER_FG_MODES;
-        case "string":
-            return STRING_MODES;
-        case "date":
-        case "datetime":
-            return DATETIME_MODES;
-        default:
-            return [];
-    }
-}
-
-/** The `bg_mode` values a column of `type` accepts, empty for boolean. */
-export function bg_modes_for(type: ColumnType): readonly BgMode[] {
-    switch (type) {
-        case "integer":
-        case "float":
-            return NUMBER_BG_MODES;
-        case "string":
-            return STRING_MODES;
-        case "date":
-        case "datetime":
-            return DATETIME_MODES;
-        default:
-            return [];
-    }
-}
-
-/** The `fg_mode` an omitted key stands for: colored text for numbers. */
-export function default_fg_mode(type: ColumnType): FgMode {
-    return type === "integer" || type === "float" ? "color" : "disabled";
-}
-
-/** The `bg_mode` an omitted key stands for. */
-export function default_bg_mode(_type: ColumnType): BgMode {
-    return "disabled";
-}
-
-/** `raw` as an `fg_mode` a column of `type` accepts, else `undefined`. */
-export function parse_fg_mode(
-    type: ColumnType,
-    raw: unknown,
-): FgMode | undefined {
-    return (fg_modes_for(type) as readonly unknown[]).includes(raw)
-        ? (raw as FgMode)
-        : undefined;
-}
-
-/** `raw` as a `bg_mode` a column of `type` accepts, else `undefined`. */
-export function parse_bg_mode(
-    type: ColumnType,
-    raw: unknown,
-): BgMode | undefined {
-    return (bg_modes_for(type) as readonly unknown[]).includes(raw)
-        ? (raw as BgMode)
-        : undefined;
 }
 
 /**
@@ -343,43 +217,21 @@ export interface ColumnConfig {
     number_format?: NumberFormatConfig;
 }
 
-// The format-object types are the VIEWER's exported contract - its
-// `createNumberFormatter` / `createDatetimeFormatter` consume them and its
-// style editors write them - so they are imported, not redefined.
 export type {
-    NumberFormatConfig,
+    Align,
+    BgMode,
+    CellStyleModel,
+    ColorRecord,
+    ColumnRole,
     DateFormatConfig,
+    FgMode,
+    NumberFormatConfig,
 } from "@perspective-dev/viewer";
 
 export type ColumnsConfig = Record<string, ColumnConfig>;
 
-/**
- * A column's {@link ColumnConfig} with its `fg_color` / `bg_color` strings
- * parsed once at `restore()`. Column types are not known at restore time,
- * so every reader runs and each parsed form is present when its grammar
- * matched; the per-type cell style handlers pick the form their mode
- * needs.
- */
-export interface ResolvedColumnStyle
-    extends Omit<ColumnConfig, "fg_color" | "bg_color"> {
-    /** `fg_color` as a single color (string / datetime `"color"` mode). */
-    fg_color?: ColorRecord;
-    bg_color?: ColorRecord;
-
-    /** `fg_color` as gradient stops (numeric columns), t-ordered. */
-    fg_stops?: GradientStopRgb[];
-    bg_stops?: GradientStopRgb[];
-
-    /** End colors of `fg_stops` / `bg_stops`: the last stop is positive. */
-    pos_fg_color?: ColorRecord;
-    neg_fg_color?: ColorRecord;
-    pos_bg_color?: ColorRecord;
-    neg_bg_color?: ColorRecord;
-
-    /** `fg_color` as a palette (string `"series"` mode), `#rrggbb` each. */
-    fg_palette?: string[];
-    bg_palette?: string[];
-}
+/** A column's {@link ColumnConfig} with its color strings parsed at `restore()`. */
+export type ResolvedColumnStyle = Resolved<ColumnConfig>;
 
 /** What `restore()` stores under {@link PRIVATE_PLUGIN_SYMBOL}. */
 export type ResolvedColumnsConfig = Record<string, ResolvedColumnStyle>;
@@ -623,13 +475,6 @@ export interface ProjectedWidth {
     path: string;
     px: number | undefined;
 }
-
-// Formatter cache types
-export interface FormatterCacheEntry {
-    format(value: unknown): string;
-}
-
-export type FormatterCache = Map<string, FormatterCacheEntry>;
 
 // Cell config result from getCellConfig
 export interface CellConfigResult {

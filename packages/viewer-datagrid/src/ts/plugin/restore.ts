@@ -17,26 +17,15 @@ import {
 } from "../model/toolbar.ts";
 import { PRIVATE_PLUGIN_SYMBOL } from "../model/index.ts";
 import {
-    css_font_family,
     measure_px,
-    parse_align,
     parse_command_column,
     wrap_lines,
 } from "./plugin_config_schema.ts";
-import {
-    make_color_record,
-    parseCssColorList,
-    parseCssGradientStops,
-    rgbToHex,
-    type GradientStopRgb,
-} from "../color_utils.ts";
+import { plugin_utils } from "../plugin_utils.ts";
 import type {
-    ColumnConfig,
-    ColorRecord,
     ColumnsConfig,
     DatagridPluginElement,
     EditMode,
-    ResolvedColumnStyle,
     ResolvedColumnsConfig,
 } from "../types.ts";
 
@@ -117,6 +106,7 @@ function restore_grid_style(
     token: RestoreToken,
     columns: ColumnsConfig,
 ): boolean {
+    const { schema } = plugin_utils();
     const font_before = [this._font_family, this._font_size];
     const row_height_before = this._row_height;
     const column_font_before = column_font_state(this._columns_config);
@@ -141,7 +131,7 @@ function restore_grid_style(
     this._command_cells = token.command_cells !== false;
     this._bold = token.bold === true;
     this._italic = token.italic === true;
-    this._align = parse_align(token.align);
+    this._align = schema.parse_align(token.align);
 
     this._row_height = positive_px(token.row_height);
     this._zebra_rows = Math.max(
@@ -158,7 +148,9 @@ function restore_grid_style(
     set_grid_font(
         grid,
         "font-family",
-        this._font_family ? css_font_family(this._font_family) : undefined,
+        this._font_family
+            ? schema.css_font_family(this._font_family)
+            : undefined,
     );
 
     set_grid_font(
@@ -208,71 +200,6 @@ function restore_grid_style(
     );
 }
 
-/**
- * Every parsed form of one `fg_color` / `bg_color` string. Column types
- * are unknown here (`restore()` may run before the model exists), so each
- * reader runs and the style handlers pick the form their mode needs.
- */
-interface ParsedColor {
-    color?: ColorRecord;
-    stops?: GradientStopRgb[];
-    palette?: string[];
-}
-
-function parse_color_value(raw: unknown): ParsedColor {
-    if (typeof raw !== "string") {
-        return {};
-    }
-
-    const stops = parseCssGradientStops(raw) ?? undefined;
-    const palette = parseCssColorList(raw)?.map(rgbToHex) ?? undefined;
-    return {
-        color: is_single_color(raw) ? make_color_record(raw) : undefined,
-        stops,
-        palette,
-    };
-}
-
-/** A bare CSS color, as opposed to a `linear-gradient(…)` list. */
-function is_single_color(raw: string): boolean {
-    return !raw.trim().toLowerCase().startsWith("linear-gradient(");
-}
-
-function end_records(
-    stops: GradientStopRgb[] | undefined,
-): [neg: ColorRecord | undefined, pos: ColorRecord | undefined] {
-    if (!stops) {
-        return [undefined, undefined];
-    }
-
-    return [
-        make_color_record(rgbToHex(stops[0].rgb)),
-        make_color_record(rgbToHex(stops[stops.length - 1].rgb)),
-    ];
-}
-
-/** `config` with its color strings parsed into every form a handler reads. */
-function resolve_column_style(config: ColumnConfig): ResolvedColumnStyle {
-    const { fg_color, bg_color, ...rest } = config;
-    const fg = parse_color_value(fg_color);
-    const bg = parse_color_value(bg_color);
-    const [neg_fg_color, pos_fg_color] = end_records(fg.stops);
-    const [neg_bg_color, pos_bg_color] = end_records(bg.stops);
-    return {
-        ...rest,
-        fg_color: fg.color,
-        bg_color: bg.color,
-        fg_stops: fg.stops,
-        bg_stops: bg.stops,
-        pos_fg_color,
-        neg_fg_color,
-        pos_bg_color,
-        neg_bg_color,
-        fg_palette: fg.palette,
-        bg_palette: bg.palette,
-    };
-}
-
 export function restore(
     this: DatagridPluginElement,
     token: RestoreToken,
@@ -294,9 +221,10 @@ export function restore(
     }
 
     this._columns_config = structuredClone(columns);
+    const utils = plugin_utils();
     const styles: ResolvedColumnsConfig = {};
     for (const [col_name, controls] of Object.entries(columns)) {
-        styles[col_name] = resolve_column_style(controls);
+        styles[col_name] = utils.column_style.resolve_column_style(controls);
     }
 
     // `echo = false`: this `restore()` IS the host delivering the config —
@@ -326,6 +254,10 @@ export function restore(
             row_height: true,
         });
     }
+
+    utils.format.free_formatters(
+        (this.regular_table as any)[PRIVATE_PLUGIN_SYMBOL] ?? {},
+    );
 
     (this.regular_table as any)[PRIVATE_PLUGIN_SYMBOL] = styles;
 }

@@ -10,10 +10,23 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { ColorRecord } from "./types.ts";
+import type {
+    GradientStopRgb,
+    RGB,
+} from "../../../dist/wasm/perspective-viewer.js";
 
-/** 8-bit sRGB color as `[r, g, b]` with each channel in `[0, 255]`. */
-export type RGB = [number, number, number];
+export type { GradientStopRgb, RGB };
+
+/** A color and the strings derived from it, as `make_color_record` builds them. */
+export type ColorRecord = [
+    string, // hex color
+    number, // red
+    number, // green
+    number, // blue
+    string, // gradient
+    string, // rgba solid
+    string, // rgba transparent
+];
 
 /** HSL color as `[h, s, l]` with `h` in degrees `[0, 360)` and `s`, `l` in `[0, 1]`. */
 export type HSL = [number, number, number];
@@ -99,15 +112,6 @@ function toHex(c: number): string {
 /** Format an `RGB` triple as a `#rrggbb` hex string. Channels are clamped to `[0, 255]`. */
 export function rgbToHex([r, g, b]: RGB): string {
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
-
-/**
- * One stop of a resolved color scale: an `RGB` triple at
- * `offset` ∈ [0, 1].
- */
-export interface GradientStopRgb {
-    rgb: RGB;
-    offset: number;
 }
 
 /**
@@ -253,216 +257,6 @@ export function infer_foreground_from_background([r, g, b]: [
     return Math.sqrt(r * r * 0.299 + g * g * 0.587 + b * b * 0.114) > 130
         ? "#161616"
         : "#ffffff";
-}
-
-/**
- * A color literal — `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()` or
- * `rgba()` — or `null` for anything else.
- */
-export function parseColorStrict(input: string): RGB | null {
-    const s = input.trim();
-    if (s.startsWith("#")) {
-        return /^#[0-9a-f]+$/i.test(s) ? parse_hex(s) : null;
-    }
-
-    const m = s.match(/^rgba?\(([^)]*)\)$/i);
-    if (!m) {
-        return null;
-    }
-
-    const tokens = m[1]
-        .split("/")[0]
-        .split(/[\s,]+/)
-        .filter((x) => x.length > 0);
-    if (tokens.length < 3 || tokens.length > 4) {
-        return null;
-    }
-
-    const channel = (token: string): number | null => {
-        const pct = token.endsWith("%");
-        const n = parseFloat(pct ? token.slice(0, -1) : token);
-        if (!isFinite(n)) {
-            return null;
-        }
-
-        return Math.max(
-            0,
-            Math.min(255, Math.round(pct ? (n / 100) * 255 : n)),
-        );
-    };
-
-    const r = channel(tokens[0]);
-    const g = channel(tokens[1]);
-    const b = channel(tokens[2]);
-    return r === null || g === null || b === null ? null : [r, g, b];
-}
-
-/**
- * The shared `linear-gradient(...)` tokenizer of the viewer's CSS-valued
- * config grammar.
- */
-export function tokenizeLinearGradient(
-    src: string,
-): Array<[RGB, number | null]> | null {
-    const m = src.trim().match(/^linear-gradient\s*\((.*)\)$/is);
-    if (!m) {
-        return null;
-    }
-
-    const body = m[1];
-    const parts: string[] = [];
-    let depth = 0;
-    let start = 0;
-    for (let i = 0; i < body.length; i++) {
-        const ch = body[i];
-        if (ch === "(") {
-            depth++;
-        } else if (ch === ")") {
-            depth--;
-        } else if (ch === "," && depth === 0) {
-            parts.push(body.substring(start, i));
-            start = i + 1;
-        }
-    }
-
-    parts.push(body.substring(start));
-    const out: Array<[RGB, number | null]> = [];
-    for (let i = 0; i < parts.length; i++) {
-        const piece = parts[i].trim();
-        if (!piece) {
-            return null;
-        }
-
-        const lower = piece.toLowerCase();
-        if (
-            i === 0 &&
-            (lower.startsWith("to ") ||
-                /^[-\d.]+(deg|rad|grad|turn)$/.test(lower))
-        ) {
-            continue;
-        }
-
-        const posMatch = piece.match(/\s([^\s)]+)$/);
-        let color = piece;
-        let offset: number | null = null;
-        if (posMatch) {
-            const tail = posMatch[1];
-            if (tail.endsWith("%")) {
-                const n = parseFloat(tail.slice(0, -1));
-                if (!isFinite(n)) {
-                    return null;
-                }
-
-                color = piece.substring(0, posMatch.index).trim();
-                offset = n / 100;
-            } else if (/^[-\d.]/.test(tail)) {
-                return null;
-            }
-        }
-
-        const rgb = parseColorStrict(color);
-        if (!rgb) {
-            return null;
-        }
-
-        out.push([rgb, offset]);
-    }
-
-    return out;
-}
-
-/**
- * Strict gradient reader (numeric `fg_color`/`bg_color`): ≥ 2 stops, positions
- * optional, clamped to `[0, 1]` and sorted, or `null` on malformed
- * input.
- */
-export function parseCssGradientStops(src: string): GradientStopRgb[] | null {
-    const entries = tokenizeLinearGradient(src);
-    if (!entries || entries.length < 2) {
-        return null;
-    }
-
-    const offsets: Array<number | null> = entries.map(([, p]) => p);
-    const last = offsets.length - 1;
-    if (offsets[0] === null) {
-        offsets[0] = 0;
-    }
-
-    if (offsets[last] === null) {
-        offsets[last] = 1;
-    }
-
-    for (let i = 1; i < last; i++) {
-        if (offsets[i] !== null) {
-            continue;
-        }
-
-        let j = i + 1;
-        while (offsets[j] === null) {
-            j++;
-        }
-
-        const before = offsets[i - 1]!;
-        const after = offsets[j]!;
-        const span = j - (i - 1);
-        for (let k = i; k < j; k++) {
-            offsets[k] = before + ((k - (i - 1)) / span) * (after - before);
-        }
-
-        i = j - 1;
-    }
-
-    const stops: GradientStopRgb[] = entries.map(([rgb], i) => ({
-        rgb,
-        offset: Math.max(0, Math.min(1, offsets[i]!)),
-    }));
-
-    stops.sort((a, b) => a.offset - b.offset);
-    return stops;
-}
-
-/**
- * Strict palette reader (string `series` `fg_color`/`bg_color`): ≥ 1 colors
- * with no positions, or
- * `null` on malformed input.
- */
-export function parseCssColorList(src: string): RGB[] | null {
-    const entries = tokenizeLinearGradient(src);
-    if (!entries || entries.length === 0) {
-        return null;
-    }
-
-    const out: RGB[] = [];
-    for (const [rgb, offset] of entries) {
-        if (offset !== null) {
-            return null;
-        }
-
-        out.push(rgb);
-    }
-
-    return out;
-}
-
-/** The viewer's canonical gradient string: `linear-gradient(to right, #rrggbb P%, …)`, sorted, 0.1% positions. */
-export function stopsToCss(
-    stops: Array<{ color: string; offset: number }>,
-): string {
-    const body = [...stops]
-        .sort((a, b) => a.offset - b.offset)
-        .map((stop) => {
-            const pct =
-                Math.round(Math.max(0, Math.min(1, stop.offset)) * 1000) / 10;
-            return `${stop.color} ${pct}%`;
-        })
-        .join(", ");
-
-    return `linear-gradient(to right, ${body})`;
-}
-
-/** The viewer's canonical palette string: `linear-gradient(to right, #rrggbb, …)` — no positions. */
-export function colorsToCss(colors: string[]): string {
-    return `linear-gradient(to right, ${colors.join(", ")})`;
 }
 
 /** Build a CSS `linear-gradient` that fans `rgb` ±15° in hue, used as the negative-value swatch in column color pickers. */

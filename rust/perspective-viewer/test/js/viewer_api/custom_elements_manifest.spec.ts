@@ -113,7 +113,12 @@ test.describe("Custom elements manifest", () => {
                         .filter(visible)
                         .sort(),
                     statics: Object.getOwnPropertyNames(cls)
-                        .filter((x) => typeof cls[x] === "function")
+                        .filter(
+                            (x) =>
+                                typeof cls[x] === "function" ||
+                                Object.getOwnPropertyDescriptor(cls, x)?.get !==
+                                    undefined,
+                        )
                         .filter(visible)
                         .sort(),
                 };

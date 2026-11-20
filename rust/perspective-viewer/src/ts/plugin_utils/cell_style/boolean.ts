@@ -10,18 +10,15 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { CellMetadata } from "regular-table/dist/esm/types.js";
-import type {
-    DatagridModel,
-    ResolvedColumnStyle,
-    ColorRecord,
-} from "../../types.ts";
+import type { ColorRecord } from "../color.ts";
+import type { ResolvedColumnStyle } from "../column_style.ts";
+import type { CellStyleMeta, CellStyleModel } from "./types.ts";
 
 export function cell_style_boolean(
-    model: DatagridModel,
+    model: CellStyleModel,
     _plugin: ResolvedColumnStyle | undefined,
     td: HTMLElement,
-    metadata: CellMetadata,
+    metadata: CellStyleMeta,
 ): void {
     // @ts-ignore
     if (metadata._is_hidden_by_aggregate_depth) {

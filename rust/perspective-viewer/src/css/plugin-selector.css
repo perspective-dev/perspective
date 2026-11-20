@@ -283,6 +283,17 @@
                     visibility: hidden;
                 }
             }
+
+            .plugin-select-item[data-plugin="Summary"] > .icon {
+                -webkit-mask-image: var(
+                    --psp-plugin-selector--summary--content
+                );
+                mask-image: var(--psp-plugin-selector--summary--content);
+                &:before {
+                    content: var(--psp-plugin-selector--summary--content);
+                    visibility: hidden;
+                }
+            }
         }
 
         #plugin_selector {

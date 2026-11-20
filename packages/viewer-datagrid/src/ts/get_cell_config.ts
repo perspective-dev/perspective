@@ -12,7 +12,7 @@
 
 import type { View, ViewConfig, Filter, Scalar } from "@perspective-dev/client";
 import type { CellConfigResult } from "./types.ts";
-import { isMetaColumn } from "./model/meta_columns.ts";
+import { plugin_utils } from "./plugin_utils.ts";
 
 interface ModelWithViewAndConfig {
     _view: View;
@@ -54,6 +54,7 @@ export default async function getCellConfig(
     // `__ROW_PATH__` sidecar, so the previous `+1` skip (which
     // assumed exactly one leading meta column) lands on a meta key
     // when group_by has multiple levels.
+    const { isMetaColumn } = plugin_utils().column_style;
     const user_keys = Object.keys(r[0]).filter((k) => !isMetaColumn(k));
     const column_paths = col_idx === undefined ? undefined : user_keys[col_idx];
     const result: CellConfigResult = {

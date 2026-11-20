@@ -36,7 +36,9 @@ pub mod custom_elements;
 mod custom_events;
 mod derived;
 pub mod exprtk;
+mod format;
 mod js;
+mod plugin_utils;
 mod presentation;
 mod root;
 
@@ -50,10 +52,6 @@ pub mod tasks;
 pub mod ui;
 pub mod utils;
 mod workspace;
-
-#[macro_use]
-extern crate macro_rules_attribute;
-extern crate alloc;
 
 use std::cell::RefCell;
 
@@ -125,6 +123,10 @@ export type ExportData =
     | Record<string, unknown[]>
     | ViewerConfig;
 
+import type {CustomNumberFormatConfig} from "../ts-rs/CustomNumberFormatConfig.d.ts";
+import type {NumberFormatStyle} from "../ts-rs/NumberFormatStyle.d.ts";
+import type {Notation} from "../ts-rs/Notation.d.ts";
+import type {DatetimeFormat} from "../ts-rs/DatetimeFormat.d.ts";
 import type {GetTableOptions} from "../ts-rs/GetTableOptions.d.ts";
 import type {PanelOptions} from "../ts-rs/PanelOptions.d.ts";
 import type {RestoreOptions} from "../ts-rs/RestoreOptions.d.ts";
@@ -148,6 +150,68 @@ import type {CommandLocation} from "../ts-rs/CommandLocation.d.ts";
 import type {CommandSchemaOptions} from "../ts-rs/CommandSchemaOptions.d.ts";
 import type {PerspectiveHit} from "../ts-rs/PerspectiveHit.d.ts";
 import type {PerspectiveHitRef} from "../ts-rs/PerspectiveHitRef.d.ts";
+
+/** A column of formatted values: one string and the UTF-16 end offset of each value in it. */
+export interface FormattedColumn {
+    text: string;
+    ends: Uint32Array;
+}
+
+/**
+ * A numeric column's `number_format`, as the Style tab writes it: the ts-rs
+ * `CustomNumberFormatConfig` with its flattened `style` and `notation`
+ * families, which ts-rs cannot flatten and exports separately.
+ */
+export type NumberFormatConfig = CustomNumberFormatConfig &
+    Partial<NumberFormatStyle> &
+    Partial<Notation>;
+
+/** A datetime column's `date_format`, a subset of `Intl.DateTimeFormatOptions`. */
+export type DateFormatConfig = DatetimeFormat;
+
+/** The `date_format` options that apply individually rather than as one group. */
+export type DateFormatModifiers = Pick<DateFormatConfig, "timeZone" | "hour12">;
+
+/**
+ * A formatter for the values of a column of `column_type`, or `undefined` for
+ * a type whose values are not formatted, given the column's `number_format`
+ * or `date_format` and the calling plugin's default for the same key.
+ *
+ * @example
+ * ```javascript
+ * const formatter = viewer.plugin_utils.formatter("float", { style: "percent" });
+ * console.log(formatter.format(0.25));
+ * ```
+ */
+export function formatter(
+    column_type: ColumnType,
+    format?: NumberFormatConfig | DateFormatConfig,
+    defaults?: NumberFormatConfig | DateFormatConfig,
+): Formatter | undefined;
+
+/**
+ * Whether the `date_format` `format` sets any of the keys that apply as one
+ * group (a preset or any date or time part), rather than only `timeZone` or
+ * `hour12`.
+ */
+export function has_date_format_shape(format?: DateFormatConfig): boolean;
+
+/**
+ * The keys of the `date_format` `format` that apply individually, `timeZone`
+ * and `hour12`, or `undefined` when it sets neither.
+ */
+export function date_format_modifiers(
+    format?: DateFormatConfig,
+): DateFormatModifiers | undefined;
+
+/** A color's red, green and blue channels, each in `[0, 255]`. */
+export type RGB = [number, number, number];
+
+/** One stop of a color scale: a color at `offset` in `[0, 1]`. */
+export interface GradientStopRgb {
+    rgb: RGB;
+    offset: number;
+}
 
 /** A surface a command schema is evaluated for. */
 export type PerspectiveCommandLocation = CommandLocation;
@@ -335,9 +399,14 @@ pub fn getColumnConfigDefaults() -> ApiResult<JsColumnConfigDefaultsSlots> {
 /// preserve backwards-compatible synchronous API).
 #[cfg(not(feature = "external-bootstrap"))]
 #[wasm_bindgen(js_name = "init")]
-pub fn js_init(module: js_sys::WebAssembly::Module, url: web_sys::Url) {
+pub fn js_init(
+    module: js_sys::WebAssembly::Module,
+    url: web_sys::Url,
+    #[wasm_bindgen(unchecked_param_type = "unknown")] plugin_utils: JsValue,
+) {
     console_error_panic_hook::set_once();
     perspective_js::utils::set_global_logging();
+    crate::plugin_utils::set_plugin_utils(plugin_utils);
     define_web_components!("export * as psp from '../../perspective-viewer.js'");
     MODULE.with_borrow_mut(|f| {
         *f = Some((module, url));

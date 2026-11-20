@@ -21,7 +21,7 @@ import {
     drawYTickColumn,
 } from "./axis-primitives.ts";
 import type { Theme } from "../theme/theme.ts";
-import type { DateFormatModifiers } from "@perspective-dev/viewer/column-format";
+import type { DateFormatModifiers } from "@perspective-dev/viewer";
 
 export interface AxisDomain {
     min: number;

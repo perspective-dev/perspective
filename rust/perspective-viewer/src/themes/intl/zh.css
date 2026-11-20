@@ -23,6 +23,7 @@ perspective-viewer {
 
     /* Plugin names */
     --psp-plugin-name--datagrid--content: "数据网格";
+    --psp-plugin-name--summary--content: "摘要";
     --psp-plugin-name--treemap--content: "树形图";
     --psp-plugin-name--sunburst--content: "旭日图";
     --psp-plugin-name--heatmap--content: "热力图";
@@ -59,7 +60,6 @@ perspective-viewer {
     --psp-label--copy-button--content: "复制";
     --psp-label--export-button--content: "导出";
     --psp-label--reset-button--content: "重置";
-    --psp-label--new-panel-button--content: "新建";
     --psp-label--new-from-table--content: "从表新建";
     --psp-label--new-from-panel--content: "从面板新建";
     --psp-label--apply-button--content: "应用";
@@ -150,6 +150,7 @@ perspective-viewer {
     --psp-label--role--facets--content: "分面";
     --psp-label--role--row-groups--content: "行分组";
     --psp-label--role--column-groups--content: "列分组";
+    --psp-label--role--breakdown--content: "细分";
 
     /* Plugin settings */
     --psp-label--edit-mode--content: "编辑模式";
@@ -171,6 +172,9 @@ perspective-viewer {
     --psp-label--row-height--content: "行高";
     --psp-label--zebra-rows--content: "斑马行";
     --psp-label--zebra-color--content: "斑马色";
+    --psp-label--label-position--content: "标签位置";
+    --psp-label--value-fit--content: "数值大小";
+    --psp-label--breakdown--content: "细分";
     --psp-label--chart-type--content: "图元类型";
 
     /* Plugin settings — viewer-charts */
