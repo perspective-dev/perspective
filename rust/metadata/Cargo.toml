@@ -29,6 +29,13 @@ artifact = ["bin"]
 version = "11.0.1"
 features = ["serde-json-impl", "no-serde-warnings"]
 
+[dependencies.schemars]
+version = "1.2.3"
+features = ["preserve_order"]
+
+[dependencies.serde_json]
+version = "1.0.107"
+
 [dependencies.perspective-server]
 path = "../perspective-server"
 features = ["external-cpp", "disable-cpp"]

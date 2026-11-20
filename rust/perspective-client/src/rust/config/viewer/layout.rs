@@ -14,7 +14,9 @@ use serde::{Deserialize, Serialize};
 
 /// The direction a [`SplitLayout`] divides its space in: `horizontal` places
 /// children side by side as columns, `vertical` stacks them as rows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema, ts_rs::TS,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Orientation {
     /// Children side by side, as columns.
@@ -26,7 +28,7 @@ pub enum Orientation {
 
 /// A dashboard's panel arrangement: nested splits whose leaves are tab stacks
 /// of panel ids, naming each panel at most once.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema, ts_rs::TS)]
 #[serde(tag = "type")]
 pub enum Layout {
     /// Space divided among children, side-by-side or stacked.
@@ -39,7 +41,7 @@ pub enum Layout {
 }
 
 /// A row or column of child layouts, nested to form a grid.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema, ts_rs::TS)]
 pub struct SplitLayout {
     /// Child layouts, in left-to-right or top-to-bottom order.
     pub children: Vec<Layout>,
@@ -54,7 +56,7 @@ pub struct SplitLayout {
 }
 
 /// A stack of panels shown as tabs, one visible at a time.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema, ts_rs::TS)]
 pub struct TabLayout {
     /// Panel ids (slot names) in this stack.
     pub tabs: Vec<String>,

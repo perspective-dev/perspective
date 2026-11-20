@@ -13,6 +13,7 @@
 use std::fmt::Display;
 
 use itertools::Itertools;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -21,7 +22,7 @@ use crate::proto::scalar;
 
 /// This type represents the ViewConfig serializable type, which must be JSON
 /// safe.
-#[derive(Clone, Default, Deserialize, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Default, Deserialize, Debug, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(untagged)]
 pub enum Scalar {
     Float(f64),
@@ -51,7 +52,7 @@ impl Display for Scalar {
     }
 }
 
-#[derive(Clone, Deserialize, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Deserialize, Debug, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(untagged)]
 pub enum FilterTerm {
     Array(Vec<Scalar>),
@@ -97,7 +98,7 @@ impl FilterTerm {
     }
 }
 
-#[derive(Clone, Deserialize, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Deserialize, Debug, JsonSchema, PartialEq, Serialize, TS)]
 #[serde()]
 pub struct Filter(String, String, #[serde(default)] FilterTerm);
 
@@ -143,7 +144,7 @@ impl Filter {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
 pub enum FilterReducer {
     #[default]
     #[serde(rename = "and")]

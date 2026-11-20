@@ -86,23 +86,23 @@ pub(super) struct DividerPump {
     pub finish_pending: bool,
 }
 
-impl SettingsGeometry {
+impl PerspectiveViewer {
     fn pump_mut(&mut self, divider: Divider) -> &mut DividerPump {
         match divider {
-            Divider::Settings => &mut self.settings_divider,
-            Divider::ColumnSettings => &mut self.column_settings_divider,
+            Divider::Settings => &mut self.settings_geometry.settings_divider,
+            Divider::ColumnSettings => &mut self.settings_geometry.column_settings_divider,
+            Divider::Workspace => &mut self.workspace_drawer.divider,
         }
     }
 
     fn is_divider_deferred(&self, divider: Divider) -> bool {
         match divider {
             Divider::Settings => true,
-            Divider::ColumnSettings => self.column_settings_pinned,
+            Divider::ColumnSettings => self.settings_geometry.column_settings_pinned,
+            Divider::Workspace => self.workspace_drawer.shown.pinned,
         }
     }
-}
 
-impl PerspectiveViewer {
     pub(super) fn on_toggle_settings_init(
         &mut self,
         ctx: &Context<Self>,
@@ -269,7 +269,7 @@ impl PerspectiveViewer {
     }
 
     fn apply_pane_target(&mut self, divider: Divider, target: PaneTarget) -> bool {
-        let deferred = self.settings_geometry.is_divider_deferred(divider);
+        let deferred = self.is_divider_deferred(divider);
         match (divider, target) {
             (Divider::Settings, PaneTarget::Width(w)) => {
                 self.settings_geometry.pane_width_override = Some(w);
@@ -290,6 +290,15 @@ impl PerspectiveViewer {
                 self.settings_geometry.column_settings_auto_width = 0.0;
                 true
             },
+            (Divider::Workspace, PaneTarget::Width(w)) => {
+                self.workspace_drawer.width_override = Some(w);
+                deferred
+            },
+            (Divider::Workspace, PaneTarget::Natural) => {
+                self.workspace_drawer.width_override = None;
+                self.workspace_drawer.auto_width = 0.0;
+                true
+            },
         }
     }
 
@@ -299,7 +308,7 @@ impl PerspectiveViewer {
         divider: Divider,
         target: PaneTarget,
     ) -> bool {
-        if !self.settings_geometry.is_divider_deferred(divider) {
+        if !self.is_divider_deferred(divider) {
             return self.apply_pane_target(divider, target);
         }
 
@@ -307,7 +316,7 @@ impl PerspectiveViewer {
         // idle. Intermediate targets that arrive while a presize is in
         // flight are dropped (mirrors `PresizeQueue`'s single queued
         // slot) — the pane tracks the pointer at content-render rate.
-        let pump = self.settings_geometry.pump_mut(divider);
+        let pump = self.pump_mut(divider);
         pump.target = Some(target);
         if !pump.pumping {
             pump.pumping = true;
@@ -319,7 +328,7 @@ impl PerspectiveViewer {
 
     pub(super) fn on_divider_pump(&mut self, ctx: &Context<Self>, divider: Divider) -> bool {
         let workspace = ctx.props().workspace.clone();
-        let pump = self.settings_geometry.pump_mut(divider);
+        let pump = self.pump_mut(divider);
         let Some(target) = pump.target.take() else {
             pump.pumping = false;
             if std::mem::take(&mut pump.finish_pending) {
@@ -373,7 +382,7 @@ impl PerspectiveViewer {
         // `size`, in the same task as the presizes' inline clears.
         self.apply_pane_target(divider, target);
         if target == PaneTarget::Natural {
-            self.settings_geometry.pump_mut(divider).finish_pending = true;
+            self.pump_mut(divider).finish_pending = true;
         }
 
         ctx.link().send_message(DividerPump(divider));
@@ -381,11 +390,11 @@ impl PerspectiveViewer {
     }
 
     pub(super) fn on_divider_finish(&mut self, ctx: &Context<Self>, divider: Divider) -> bool {
-        if !self.settings_geometry.is_divider_deferred(divider) {
+        if !self.is_divider_deferred(divider) {
             return false;
         }
 
-        let pump = self.settings_geometry.pump_mut(divider);
+        let pump = self.pump_mut(divider);
         if pump.pumping {
             pump.finish_pending = true;
         } else {
@@ -399,7 +408,7 @@ impl PerspectiveViewer {
         false
     }
 
-    fn resize_for_ratchet(&self, ctx: &Context<Self>) {
+    pub(super) fn resize_for_ratchet(&self, ctx: &Context<Self>) {
         let workspace = ctx.props().workspace.clone();
         ApiFuture::spawn(async move {
             resize_visible_panels(&workspace).await;
@@ -510,7 +519,12 @@ impl PerspectiveViewer {
             self.settings_geometry.column_settings_docked_width = Some(delta_w.abs());
         }
 
-        self.presize_column_settings_shift(ctx, delta_w, ToggleColumnSettingsPinComplete);
+        self.presize_pane_shift(
+            ctx,
+            delta_w,
+            ToggleColumnSettingsPinComplete,
+            Callback::noop(),
+        );
         false
     }
 
@@ -521,16 +535,17 @@ impl PerspectiveViewer {
         true
     }
 
-    /// Shared presize choreography for a column-settings geometry shift:
+    /// Shared presize choreography for a drawer geometry shift:
     /// pre-size every visible panel by `delta_w` (`None` = no sweep, commit
     /// only), send `commit_msg` to apply the deferred state on the render
     /// commit, reveal the staged frames in that same paint, then reactively
-    /// finalize at the exact settled cells (I6).
-    fn presize_column_settings_shift(
+    /// finalize at the exact settled cells (I6) and emit `on_settled`.
+    pub(super) fn presize_pane_shift(
         &self,
         ctx: &Context<Self>,
         delta_w: Option<f64>,
-        commit_msg: fn(Sender<()>) -> super::msg::PerspectiveViewerMsg,
+        commit_msg: impl Fn(Sender<()>) -> super::msg::PerspectiveViewerMsg + 'static,
+        on_settled: Callback<()>,
     ) {
         let workspace = ctx.props().workspace.clone();
         let elem = ctx.props().elem.clone();
@@ -546,6 +561,7 @@ impl PerspectiveViewer {
             rendered.await?;
             presents.reveal();
             resize_visible_panels(&workspace).await;
+            on_settled.emit(());
             Ok(())
         });
     }
@@ -621,7 +637,7 @@ impl PerspectiveViewer {
             self.settings_geometry.column_settings_docked_width
         };
 
-        self.presize_column_settings_shift(ctx, delta_w, UpdateColumnSettingsCommit);
+        self.presize_pane_shift(ctx, delta_w, UpdateColumnSettingsCommit, Callback::noop());
         false
     }
 

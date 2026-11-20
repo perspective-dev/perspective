@@ -12,16 +12,17 @@
 
 use std::fmt::Display;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::proto;
 
-#[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize, TS)]
+#[derive(Clone, Deserialize, Debug, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde()]
 pub struct Sort(pub String, pub SortDir);
 
-#[derive(Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, TS)]
+#[derive(Clone, Copy, Deserialize, Debug, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde()]
 pub enum SortDir {
     #[serde(rename = "none")]

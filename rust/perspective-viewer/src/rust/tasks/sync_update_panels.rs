@@ -41,8 +41,8 @@ pub type SyncUpdatePanelsResult = (
 /// field-wise, replacing the panel set only when `panels` is present, and
 /// return the fresh panels to restore plus the eject tasks.
 pub fn sync_update_panels(
-    this: &PerspectiveViewerElement,
-    update: JsWorkspaceConfigUpdate,
+    this: &WorkspaceHost,
+    update: WorkspaceConfigUpdate,
 ) -> ApiResult<SyncUpdatePanelsResult> {
     let WorkspaceConfigUpdate {
         version,
@@ -54,7 +54,7 @@ pub fn sync_update_panels(
         masters,
         palette,
         unknown: UnknownKeys,
-    } = update.into_serde_ext()?;
+    } = update;
 
     let _ = version;
 
@@ -188,10 +188,9 @@ pub fn sync_update_panels(
         None
     };
 
-    if let Some(target) = commit_target
-        && let Some(app) = this.root.borrow().as_ref()
-    {
-        app.send_message(PerspectiveViewerMsg::CommitWorkspaceRestore(target));
+    if let Some(target) = commit_target {
+        this.dispatch
+            .emit(PerspectiveViewerMsg::CommitWorkspaceRestore(target));
     }
 
     let settings = if replace {
@@ -204,12 +203,10 @@ pub fn sync_update_panels(
         }
     };
 
-    if let Some(open) = settings
-        && let Some(app) = this.root.borrow().as_ref()
-    {
+    if let Some(open) = settings {
         // Silent (`announce: false`): each restored panel's own view-config
         // commit dispatch announces the config, settings field included.
-        app.send_message(PerspectiveViewerMsg::ToggleSettingsInit(
+        this.dispatch.emit(PerspectiveViewerMsg::ToggleSettingsInit(
             Some(SettingsUpdate::Update(open)),
             false,
             None,

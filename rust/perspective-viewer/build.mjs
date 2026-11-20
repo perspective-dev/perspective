@@ -60,7 +60,8 @@ export async function build_all() {
     }
 
     // The agent metadata bundle: `search_docs` corpus + tool parameter
-    // schemas (needs the freshly-emitted `.d.ts` / ts-rs output).
+    // schemas (needs the freshly-emitted `.d.ts`, plus the `dist/ts-rs` and
+    // `rust/target/json_schema` output of the metadata build).
     const docs_stats = await buildDocsCorpus();
     console.log(
         `docs corpus: ${docs_stats.chunks} chunks / ${docs_stats.bytes} bytes from ${docs_stats.files} files`,

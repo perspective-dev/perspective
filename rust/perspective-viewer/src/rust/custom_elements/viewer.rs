@@ -16,7 +16,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use futures::channel::oneshot::channel;
-use futures::future::join_all;
 use js_sys::{Array, JsString};
 use perspective_client::config::ViewConfigUpdate;
 use perspective_js::utils::global;
@@ -260,105 +259,19 @@ impl PerspectiveViewerElement {
         })
     }
 
-    /// Re-stamp the global-filter overlay on every panel not in `fresh` and
-    /// re-render those whose overlay changed.
-    async fn rerender_retained_overlays(&self, fresh: &[PanelId]) -> ApiResult<()> {
-        let retained = self
-            .workspace
-            .panels()
-            .into_iter()
-            .filter(|panel| !fresh.contains(&panel.id))
-            .collect::<Vec<_>>();
-
-        join_all(
-            retained
-                .iter()
-                .map(|panel| broadcast_overlay(&self.workspace, panel)),
-        )
-        .await
-        .into_iter()
-        .collect::<ApiResult<Vec<_>>>()?;
-
-        Ok(())
-    }
-
-    fn layout_element(&self) -> Option<RegularLayout> {
-        self.elem
-            .shadow_root()?
-            .query_selector(RegularLayout::TAG_NAME)
-            .ok()
-            .flatten()
-            .map(|el| el.unchecked_into())
-    }
-
-    async fn workspace_config(this: Self, full_palette: bool) -> ApiResult<JsValue> {
-        this.workspace.effects().settle().await;
-        let mut panels: std::collections::BTreeMap<String, PanelViewerConfig<String, String>> =
-            Default::default();
-        for id in &this.workspace.panel_ids() {
-            let panel = this.workspace.panel(id).into_apierror()?;
-            let config = panel
-                .renderer
-                .clone()
-                .with_lock(async {
-                    get_viewer_config(&panel.session, &panel.renderer, &this.presentation).await
-                })
-                .await?;
-
-            panels.insert(id.as_str().to_owned(), config.panel);
+    /// The capabilities workspace save and restore run against.
+    pub(crate) fn host(&self) -> WorkspaceHost {
+        let root = self.root.clone();
+        WorkspaceHost {
+            elem: self.elem.clone(),
+            presentation: self.presentation.clone(),
+            workspace: self.workspace.clone(),
+            dispatch: Callback::from(move |msg| {
+                if let Some(app) = root.borrow().as_ref() {
+                    app.send_message(msg);
+                }
+            }),
         }
-
-        let mut palette = palette_set(&this.workspace, &this.presentation);
-        let mut referenced = std::collections::BTreeSet::new();
-        for (id, item) in styles_in_use(&this.workspace) {
-            let Some(name) = palette_name_for(&palette, item.kind, &item.literal) else {
-                continue;
-            };
-
-            if let Some(entry) = panels
-                .get_mut(id.as_str())
-                .and_then(|panel| panel.columns_config.get_mut(&item.column))
-            {
-                entry.insert(item.key, serde_json::Value::String(format_var_ref(&name)));
-                referenced.insert(name);
-            }
-        }
-
-        if !full_palette {
-            palette.retain(|name, _| referenced.contains(name));
-        }
-
-        let active = this
-            .presentation
-            .is_settings_open()
-            .then(|| this.workspace.active_id())
-            .flatten()
-            .map(|id| id.as_str().to_owned());
-
-        let layout = match this.workspace.pending_layout() {
-            Some(layout) => Some(layout),
-            None => this
-                .layout_element()
-                .map(|l| l.save().into_serde_ext::<crate::js::Layout>())
-                .transpose()?,
-        };
-
-        Ok(JsValue::from_serde_ext(&WorkspaceConfig {
-            version: API_VERSION.to_string(),
-            active,
-            layout,
-            panels,
-            derived_tables: this.workspace.derived_configs(),
-            global_filters: this.workspace.global_filters(),
-            masters: this
-                .workspace
-                .masters()
-                .iter()
-                .map(|id| id.as_str().to_owned())
-                .collect(),
-            palette,
-            unknown: UnknownKeys,
-        })?)
     }
 }
 
@@ -1333,67 +1246,8 @@ impl PerspectiveViewerElement {
             let _effect = effect;
             let RestoreWorkspaceOptions { wait_for_table } = parse_options(options)?;
             let missing = MissingTable::from_wait(wait_for_table);
-            let (contents, eject_tasks, derived_tables) = sync_update_panels(&this, update)?;
-
-            // The outgoing panels' ejects must settle BEFORE the derived
-            // pass: a stale derivation is undeletable (and so cannot be
-            // redefined or pruned) while an ejecting panel still holds a
-            // `View` on it. Their errors are surfaced LAST, after the
-            // replacement set is in place.
-            let ejected = join_all(eject_tasks)
-                .await
-                .into_iter()
-                .collect::<ApiResult<Vec<_>>>();
-
-            if let Some(derived_tables) = derived_tables.clone() {
-                crate::tasks::apply_derived_tables(&this.workspace, derived_tables).await?;
-            }
-
-            let fresh = contents
-                .iter()
-                .map(|(id, ..)| id.clone())
-                .collect::<Vec<_>>();
-            let results = join_all(contents.into_iter().map(|(id, session, renderer, config)| {
-                let presentation = this.presentation.clone();
-                let workspace = this.workspace.clone();
-                let notify = this.layout_changed_notify();
-                async move {
-                    let result = restore_panel(
-                        &session,
-                        &renderer,
-                        &presentation,
-                        &workspace,
-                        RestoreMode::Fresh,
-                        config,
-                        crate::tasks::RestoreErrors::Publish,
-                        missing,
-                        None,
-                    )
-                    .await;
-
-                    if discard_rejected(&workspace, &id, &session, &result).await? {
-                        notify.emit(());
-                    }
-
-                    result?;
-                    if workspace.is_master(&id) {
-                        set_edit_mode(&session, &renderer, "SELECT_ROW_TREE");
-                    }
-
-                    Ok(())
-                }
-            }))
-            .await;
-
-            results.into_iter().collect::<ApiResult<Vec<_>>>()?;
-            this.rerender_retained_overlays(&fresh).await?;
-            if let Some(derived_tables) = derived_tables {
-                let keep = derived_tables.keys().cloned().collect();
-                crate::tasks::prune_derived(&this.workspace, &keep).await?;
-            }
-
-            ejected?;
-            Ok(())
+            let update = JsValue::from(update).into_serde_ext()?;
+            restore_workspace(&this.host(), update, missing, RestoreErrors::Publish).await
         };
 
         ApiFuture::new(noting_saved_version(saved, async move {
@@ -1506,9 +1360,8 @@ impl PerspectiveViewerElement {
         let this = self.clone();
         ApiFuture::new(async move {
             let SaveWorkspaceOptions { full_palette } = parse_options(options)?;
-            Ok(Self::workspace_config(this, full_palette.unwrap_or(false))
-                .await?
-                .unchecked_into())
+            let config = get_workspace_config(&this.host(), full_palette.unwrap_or(false)).await?;
+            Ok(JsValue::from_serde_ext(&config)?.unchecked_into())
         })
     }
 
@@ -2054,6 +1907,34 @@ impl PerspectiveViewerElement {
         })
     }
 
+    /// Toggle (or force) the workspace panel open/closed.
+    ///
+    /// # Arguments
+    ///
+    /// - `force` - Force the state of the panel open or closed, or `None` to
+    ///   toggle.
+    ///
+    /// # JavaScript Examples
+    ///
+    /// ```javascript
+    /// await viewer.toggleWorkspaceConfig();
+    /// ```
+    #[wasm_bindgen]
+    pub fn toggleWorkspaceConfig(&self, force: Option<bool>) -> ApiFuture<()> {
+        let effect = self.workspace.effects().guard();
+        let root = self.root.clone();
+        ApiFuture::new(async move {
+            let _effect = effect;
+            let (sender, receiver) = channel::<()>();
+            root.borrow().as_ref().into_apierror()?.send_message(
+                PerspectiveViewerMsg::ToggleWorkspaceDrawer(force, Some(sender)),
+            );
+
+            receiver.await.map_err(|_| JsValue::from("Cancelled"))?;
+            Ok(())
+        })
+    }
+
     /// Get an `Array` of all of the plugin custom elements registered for this
     /// element. This may not include plugins which called
     /// [`registerPlugin`] after the host has rendered for the first time.
@@ -2465,6 +2346,10 @@ impl PerspectiveViewerElement {
     /// Configure the embedded LLM agent (see `prompt()`), replacing any prior
     /// configuration and conversation.
     ///
+    /// Throws on an invalid `config`. Otherwise the agent is configured
+    /// immediately, and the returned `Promise` resolves once `config.docs`
+    /// (if any) has loaded, rejecting if it fails to.
+    ///
     /// The agent core is provider-agnostic: one OpenAI-chat-completions
     /// protocol over primitive connection fields. Exactly one of
     /// `config.url` or `config.engine` is required; the `providers` presets
@@ -2521,10 +2406,11 @@ impl PerspectiveViewerElement {
     /// });
     /// ```
     #[wasm_bindgen(js_name = "agentConfig")]
-    pub fn agent_config(&self, config: JsValue) -> ApiResult<()> {
+    pub fn agent_config(&self, config: JsValue) -> ApiResult<ApiFuture<()>> {
         let runtime = AgentRuntime::new(&config, self.clone())?;
-        self.presentation.agent.configure(runtime);
-        Ok(())
+        let agent = self.presentation.agent.clone();
+        agent.configure(runtime);
+        Ok(ApiFuture::new(async move { agent.load_docs().await }))
     }
 
     /// Run one conversational turn of the embedded LLM agent (configured via

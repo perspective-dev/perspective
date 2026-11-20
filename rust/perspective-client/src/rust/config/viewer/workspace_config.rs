@@ -22,7 +22,10 @@ use crate::config::{Filter, ViewConfig};
 /// the config of that `View`; generic over the `table` slot, which is a name
 /// in the workspace `derived_tables` map and a recursive [`TableRef`] when
 /// inlined in a single-panel config.
-#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize, ts_rs::TS)]
+#[derive(
+    Clone, Debug, PartialEq, schemars::JsonSchema, serde::Deserialize, serde::Serialize, ts_rs::TS,
+)]
+#[schemars(inline)]
 pub struct DerivedTableConfig<T: ts_rs::TS = String> {
     /// The `Table` this derivation reads, which may itself be another
     /// derived `Table`.
@@ -35,13 +38,14 @@ pub struct DerivedTableConfig<T: ts_rs::TS = String> {
     /// Rejects keys no field above consumed.
     #[serde(flatten, skip_serializing)]
     #[ts(skip)]
+    #[schemars(skip)]
     pub unknown: UnknownKeys,
 }
 
 /// What may occupy a `table` position in a single-panel config: a hosted
 /// `Table`'s name, or an inline derived-table definition recursing through
 /// its own `table` field until a concrete name.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, schemars::JsonSchema, serde::Serialize)]
 #[serde(untagged)]
 pub enum TableRef {
     /// A hosted `Table`'s name.
@@ -239,7 +243,8 @@ pub struct WorkspaceConfig {
 /// key is unchanged, `null` resets and a value replaces.
 ///
 /// [`ViewerConfigUpdate`]: super::ViewerConfigUpdate
-#[derive(serde::Deserialize, ts_rs::TS)]
+#[derive(schemars::JsonSchema, serde::Deserialize, ts_rs::TS)]
+#[schemars(deny_unknown_fields)]
 pub struct WorkspaceConfigUpdate {
     /// The `@perspective-dev/viewer` version a saved workspace was written
     /// by, named in the error when such a workspace is rejected.
@@ -299,6 +304,7 @@ pub struct WorkspaceConfigUpdate {
     /// Rejects keys no field above consumed.
     #[serde(flatten)]
     #[ts(skip)]
+    #[schemars(skip)]
     pub unknown: UnknownKeys,
 }
 

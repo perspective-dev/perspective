@@ -357,80 +357,50 @@ function normalizeChunks(chunks) {
     return out;
 }
 
-// JSON Schemas for tool parameters, generated from the ts-rs `.d.ts` output
+// JSON Schemas (draft 2020-12) for tool parameters, emitted from the Rust
+// config types by `rust/metadata` (`generate_json_schemas`) into the cargo
+// target dir — an intermediate, read only here and bundled into
+// `dist/docs/perspective-docs.json`.
 const TOOL_SCHEMA_TYPES = [
-    ["ViewerConfigUpdate", "dist/ts-rs/ViewerConfigUpdate.d.ts"],
-    ["ViewerConfigInitial", "dist/ts-rs/ViewerConfigInitial.d.ts"],
-    ["WorkspaceConfigUpdate", "dist/ts-rs/WorkspaceConfigUpdate.d.ts"],
+    ["ViewerConfigUpdate", "../target/json_schema/ViewerConfigUpdate.json"],
+    ["ViewerConfigInitial", "../target/json_schema/ViewerConfigInitial.json"],
+    [
+        "WorkspaceConfigUpdate",
+        "../target/json_schema/WorkspaceConfigUpdate.json",
+    ],
 ];
 
-// Inline every definition whose GENERATED NAME is not a legible
-// identifier, replacing each `$ref` to it with the type itself.
-function inlineMangledDefinitions(schema) {
-    const defs = schema.definitions ?? {};
-    const mangled = new Map(
-        Object.entries(defs).filter(
-            ([name]) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name),
-        ),
-    );
-
-    if (mangled.size === 0) {
-        return schema;
-    }
-
-    const walk = (node) => {
-        if (Array.isArray(node)) {
-            return node.map(walk);
-        }
-
-        if (!node || typeof node !== "object") {
-            return node;
-        }
-
-        const ref = node["$ref"];
-        if (typeof ref === "string" && ref.startsWith("#/definitions/")) {
-            const name = decodeURIComponent(ref.slice("#/definitions/".length));
-
-            if (mangled.has(name)) {
-                // Sibling keys (`description`) win over the inlined body.
-                const { $ref, ...rest } = node;
-                return {
-                    ...walk(JSON.parse(JSON.stringify(mangled.get(name)))),
-                    ...rest,
-                };
-            }
-        }
-
-        return Object.fromEntries(
-            Object.entries(node).map(([k, v]) => [k, walk(v)]),
-        );
-    };
-
-    const out = walk(schema);
-    for (const name of mangled.keys()) {
-        delete out.definitions[name];
-    }
-
-    return out;
-}
-
+// Read each tool schema and check it is valid draft 2020-12 — the draft the
+// Anthropic API enforces on tool `input_schema`, rejecting the WHOLE request
+// otherwise. `validateSchema` checks the schema against the 2020-12
+// meta-schema; `compile` additionally resolves every `$ref`. Formats are
+// annotations here (schemars emits e.g. `uint32`), so they are not validated.
 async function buildToolSchemas(missing) {
-    const { createGenerator } = await import("ts-json-schema-generator");
+    const { default: Ajv2020 } = await import("ajv/dist/2020.js");
     const schemas = {};
     for (const [type, path] of TOOL_SCHEMA_TYPES) {
         if (!fs.existsSync(path)) {
-            missing.push(`${path} (${type} tool schema)`);
+            missing.push(
+                `${path} (${type} tool schema; run the metadata build)`,
+            );
             continue;
         }
 
-        schemas[type] = inlineMangledDefinitions(
-            createGenerator({
-                path,
-                type,
-                skipTypeCheck: true,
-                topRef: true,
-            }).createSchema(type),
-        );
+        const schema = JSON.parse(fs.readFileSync(path, "utf8"));
+        const ajv = new Ajv2020({ strict: false, validateFormats: false });
+        if (!ajv.validateSchema(schema)) {
+            throw new Error(
+                `${path}: not a valid JSON Schema 2020-12: ${ajv.errorsText(ajv.errors)}`,
+            );
+        }
+
+        try {
+            ajv.compile(schema);
+        } catch (e) {
+            throw new Error(`${path}: ${e.message}`);
+        }
+
+        schemas[type] = schema;
     }
 
     return schemas;

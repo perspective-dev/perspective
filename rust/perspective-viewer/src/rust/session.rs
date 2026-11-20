@@ -132,10 +132,9 @@ pub struct SessionHandle {
     /// `session_props.has_table_cells` for the active panel.
     pub on_stats_changed: RefCell<Option<Callback<()>>>,
 
-    /// Injected callback from the root component, replacing the former
-    /// `table_errored: PubSub` field.  Fires when an error is set on the
-    /// session (table load failure, client disconnect, invalid config, etc.).
-    pub on_table_errored: RefCell<Option<Callback<()>>>,
+    /// Fires when an error is set on the session (table load failure,
+    /// client disconnect, invalid config, etc.).
+    pub table_errored: PubSub<()>,
 }
 
 impl Deref for SessionHandle {
@@ -689,7 +688,6 @@ impl Session {
     /// Record a connection error on `client` as this panel's lost binding — for
     /// as long as `client` is the one the panel is bound through.
     async fn watch_client(&self, client: &Client) -> ApiResult<()> {
-        let on_error = self.on_table_errored.borrow().clone();
         let session = self.clone();
         let watched = client.clone();
         let poll_loop = LocalPollLoop::new(move |(message, reconnect): (ApiError, _)| {
@@ -702,9 +700,7 @@ impl Session {
                 .state
                 .with_lost(TableErrorState(message, reconnect));
             session.borrow_mut().swap(next);
-            if let Some(cb) = &on_error {
-                cb.emit(());
-            }
+            session.table_errored.emit(());
             if let Some(sub) = session.borrow_mut().view_sub.take() {
                 sub.dismiss();
             }
@@ -750,9 +746,7 @@ impl Session {
         let next = self.borrow().state.with_lost(error);
         self.borrow_mut().swap(next);
 
-        if let Some(cb) = self.on_table_errored.borrow().as_ref() {
-            cb.emit(());
-        }
+        self.table_errored.emit(());
 
         let sub = self.borrow_mut().view_sub.take();
         if reset_table {
@@ -792,6 +786,11 @@ impl Session {
     /// Whether the binding is lost.
     pub(crate) fn is_errored(&self) -> bool {
         self.borrow().error().is_some()
+    }
+
+    /// The lost binding's error, if any.
+    pub(crate) fn error_state(&self) -> Option<TableErrorState> {
+        self.borrow().error().cloned()
     }
 
     pub(crate) fn get_error(&self) -> Option<ApiError> {

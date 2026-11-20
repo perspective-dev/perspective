@@ -209,6 +209,15 @@ impl DocsCell {
         }
     }
 
+    /// Whether the source has resolved successfully, without waiting.
+    /// [`Self::bundle`] holds the cache lock for the whole resolve, so a
+    /// held lock means "not yet".
+    pub fn is_loaded(&self) -> bool {
+        self.cache
+            .try_lock()
+            .is_some_and(|cache| matches!(cache.as_deref(), Some(Ok(_))))
+    }
+
     pub async fn bundle(&self) -> Rc<Result<DocsBundle, String>> {
         let mut cache = self.cache.lock().await;
         if let Some(cached) = &*cache {

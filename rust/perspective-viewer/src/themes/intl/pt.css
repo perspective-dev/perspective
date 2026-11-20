@@ -131,6 +131,20 @@ perspective-viewer {
     --psp-label--plugin-tab--content: "Plugin";
     --psp-label--debug-tab--content: "JSON";
     --psp-label--chat-tab--content: "Conversa";
+    --psp-label--tables-tab--content: "Tabelas";
+    --psp-label--client-default--content: "padrão";
+    --psp-label--client-reconnect--content: "Reconectar";
+    --psp-label--tables-no-clients--content: "Sem clientes";
+    --psp-label--derive-from-panel--content: "Derivar a partir de painel";
+    --psp-label--join-open--content: "Juntar";
+    --psp-label--join-left--content: "Tabela esquerda";
+    --psp-label--join-right--content: "Tabela direita";
+    --psp-label--join-on--content: "Em";
+    --psp-label--join-right-on--content: "Em (direita)";
+    --psp-label--join-type--content: "Tipo";
+    --psp-label--join-name--content: "Nome";
+    --psp-label--join-create--content: "Criar";
+    --psp-label--join-cancel--content: "Cancelar";
 
     /* Chat panel */
     --psp-label--chat-reasoning--content: "Raciocínio";

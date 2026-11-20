@@ -433,9 +433,9 @@ impl MainPanel {
                     is_settings_open={ctx.props().is_settings_open}
                     is_empty={ctx.props().is_empty}
                     has_clients={ctx.props().has_clients}
-                    stage_error={ctx.props().stage_error.clone()}
-                    on_dismiss_stage_error={ctx.props().on_dismiss_stage_error.clone()}
-                    update_count={ctx.props().update_count}
+                    status={ctx.props().status.clone()}
+                    show_status={ctx.props().show_status}
+                    on_status_click={ctx.props().on_status_click.clone()}
                     global_filters={ctx.props().global_filters.clone()}
                     on_remove_global_filter={ctx.props().on_remove_global_filter.clone()}
                     on_clear_global_filters={ctx.props().on_clear_global_filters.clone()}

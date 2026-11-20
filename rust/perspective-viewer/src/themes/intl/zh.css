@@ -131,6 +131,20 @@ perspective-viewer {
     --psp-label--plugin-tab--content: "插件";
     --psp-label--debug-tab--content: "JSON";
     --psp-label--chat-tab--content: "聊天";
+    --psp-label--tables-tab--content: "表";
+    --psp-label--client-default--content: "默认";
+    --psp-label--client-reconnect--content: "重新连接";
+    --psp-label--tables-no-clients--content: "无客户端";
+    --psp-label--derive-from-panel--content: "从面板派生";
+    --psp-label--join-open--content: "连接";
+    --psp-label--join-left--content: "左表";
+    --psp-label--join-right--content: "右表";
+    --psp-label--join-on--content: "连接键";
+    --psp-label--join-right-on--content: "右连接键";
+    --psp-label--join-type--content: "类型";
+    --psp-label--join-name--content: "名称";
+    --psp-label--join-create--content: "创建";
+    --psp-label--join-cancel--content: "取消";
 
     /* Chat panel */
     --psp-label--chat-reasoning--content: "推理";

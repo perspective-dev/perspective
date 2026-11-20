@@ -10,7 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { test, expect, compareInnerHTMLToSnapshot } from "../helpers.ts";
+import {
+    test,
+    expect,
+    compareInnerHTMLToSnapshot,
+    openWorkspaceTab,
+} from "../helpers.ts";
 
 test.beforeEach(async ({ page }) => {
     await page.goto("/rust/perspective-viewer/test/html/superstore.html");
@@ -60,7 +65,7 @@ async function render(page, text) {
         });
     }, text);
 
-    await page.locator("perspective-viewer #chat_tabbar_tab").click();
+    await openWorkspaceTab(page, "chat");
     const input = page.locator("perspective-viewer #chat_input");
     await input.fill("Go");
     await input.press("Enter");

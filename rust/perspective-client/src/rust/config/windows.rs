@@ -22,6 +22,7 @@
 
 use std::collections::HashMap;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -41,7 +42,7 @@ pub enum WindowFrame {
 /// A window's order direction. A dedicated two-variant enum rather than
 /// [`crate::config::SortDir`] - the column-sort extras (`col asc`, `abs`,
 /// `none`) are meaningless inside a window frame and unrepresentable here.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize, TS)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum WindowSortDir {
     #[default]
@@ -61,15 +62,19 @@ impl std::fmt::Display for WindowSortDir {
 /// The `Table` column which orders each partition, with its direction -
 /// serialized as a two-element array (`["ts", "desc"]`), symmetric with the
 /// `ViewConfig`'s `sort` field.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct WindowSort(pub String, pub WindowSortDir);
 
 /// The window columns of a `ViewConfig`, keyed by output column alias -
 /// symmetric with `expressions` (`{"name": {...spec}}`). An alias must not
 /// collide with a `Table` column, expression alias, or another window's
 /// key.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, TS)]
-pub struct Windows(#[ts(as = "HashMap<String, RawWindowSpec>")] pub HashMap<String, WindowSpec>);
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct Windows(
+    #[ts(as = "HashMap<String, RawWindowSpec>")]
+    #[schemars(with = "HashMap<String, RawWindowSpec>")]
+    pub HashMap<String, WindowSpec>,
+);
 
 impl std::ops::Deref for Windows {
     type Target = HashMap<String, WindowSpec>;
@@ -100,9 +105,10 @@ pub struct WindowSpec {
 }
 
 /// The serialized form of [`WindowSpec`].
-#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 #[ts(rename = "WindowSpec")]
+#[schemars(rename = "WindowSpec")]
 struct RawWindowSpec {
     /// The input column - either a real `Table` column or an expression
     /// alias from the same `ViewConfig`.

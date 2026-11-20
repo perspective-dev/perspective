@@ -173,12 +173,15 @@ fn panel_property() -> Value {
     })
 }
 
-/// The `config` property node + root `definitions` for tools taking a
-/// config argument (`key` = the generated schema's type name, e.g.
-/// `"ViewerConfigUpdate"`): the generated schema (from the docs metadata
-/// bundle) when available, else a permissive object. `require` lists
-/// config properties the AGENT contract requires beyond the public type
-/// (unioned into the definition's `required`, stated outright in the
+/// The JSON pointer prefix of a schema's shared definitions (draft 2020-12).
+const DEFS_PREFIX: &str = "#/$defs/";
+
+/// The `config` property node + root `$defs` for tools taking a config
+/// argument (`key` = the schema's type name, e.g. `"ViewerConfigUpdate"`):
+/// the type's draft 2020-12 JSON Schema (from the docs metadata bundle, as
+/// emitted by `rust/metadata`) when available, else a permissive object.
+/// `require` lists config properties the AGENT contract requires beyond the
+/// public type (unioned into the schema's `required`, stated outright in the
 /// fallback) — the tool body must enforce the same fields at dispatch.
 /// `omit` lists public properties the agent contract withholds.
 fn spliced_config(
@@ -188,20 +191,25 @@ fn spliced_config(
     require: &[&str],
     omit: &[&str],
 ) -> (Value, Option<Value>) {
-    match schemas.and_then(|x| x.get(key)) {
+    match schemas.and_then(|x| x.get(key)).and_then(|x| x.as_object()) {
         Some(schema) => {
-            let mut definitions = schema
-                .get("definitions")
-                .and_then(|x| x.as_object())
-                .cloned()
-                .unwrap_or_default();
+            // The bundle schema is a root document: the type's own schema,
+            // `$schema`/`title` metadata, and its `$defs`. Spliced in as a
+            // property it keeps only the type schema; the `$defs` move to
+            // the tool parameters' root, where `#/$defs/...` still resolves.
+            let mut original = schema.clone();
+            let mut definitions = match original.remove("$defs") {
+                Some(Value::Object(x)) => x,
+                _ => serde_json::Map::new(),
+            };
 
-            let original = definitions.remove(key);
-            let mut config = original
-                .clone()
-                .unwrap_or_else(|| json!({ "type": "object" }));
-
-            if let Some(properties) = config["properties"].as_object_mut() {
+            original.remove("$schema");
+            original.remove("title");
+            let mut config = Value::Object(original.clone());
+            if let Some(properties) = config
+                .get_mut("properties")
+                .and_then(|x| x.as_object_mut())
+            {
                 for field in omit {
                     properties.remove(*field);
                 }
@@ -221,12 +229,18 @@ fn spliced_config(
 
             config["description"] = json!(description);
 
-            // A self-recursive config type still needs its own entry.
-            if let Some(original) = original
-                && serde_json::to_string(&definitions)
-                    .unwrap_or_default()
-                    .contains(&format!("#/definitions/{key}"))
-            {
+            // A self-reference to the root (`"#"`) would point at the tool
+            // parameters once spliced, so a self-recursive config type is
+            // re-homed under its own `$defs` entry.
+            let target = format!("{DEFS_PREFIX}{key}");
+            let mut recursive = retarget_root_refs(&mut config, &target);
+            for definition in definitions.values_mut() {
+                recursive |= retarget_root_refs(definition, &target);
+            }
+
+            if recursive {
+                let mut original = Value::Object(original);
+                retarget_root_refs(&mut original, &target);
                 definitions.insert(key.to_owned(), original);
             }
 
@@ -246,14 +260,37 @@ fn spliced_config(
     }
 }
 
+/// Point every root self-reference (`"$ref": "#"`) under `node` at
+/// `target`, returning whether there were any.
+fn retarget_root_refs(node: &mut Value, target: &str) -> bool {
+    let mut found = false;
+    match node {
+        Value::Object(map) => {
+            for (key, value) in map.iter_mut() {
+                if key == "$ref" && value.as_str() == Some("#") {
+                    *value = Value::from(target);
+                    found = true;
+                } else {
+                    found |= retarget_root_refs(value, target);
+                }
+            }
+        },
+        Value::Array(values) => {
+            for value in values {
+                found |= retarget_root_refs(value, target);
+            }
+        },
+        _ => {},
+    }
+
+    found
+}
+
 fn definition_refs(node: &Value, out: &mut Vec<String>) {
     match node {
         Value::Object(map) => {
             for (key, value) in map {
-                match value
-                    .as_str()
-                    .and_then(|x| x.strip_prefix("#/definitions/"))
-                {
+                match value.as_str().and_then(|x| x.strip_prefix(DEFS_PREFIX)) {
                     Some(name) if key == "$ref" => out.push(name.to_owned()),
                     _ => definition_refs(value, out),
                 }
@@ -311,7 +348,7 @@ fn config_parameters(
     });
 
     if let Some(definitions) = definitions {
-        parameters["definitions"] = definitions;
+        parameters["$defs"] = definitions;
     }
 
     parameters

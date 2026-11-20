@@ -22,6 +22,9 @@
 //!     - Recurisvely set external proto on `perspective-client`
 //! - `perspective-server`
 //!     - Copy `cpp` and `cmake` to local root
+//! - `perspective-viewer`
+//!     - TypeScript types
+//!     - JSON Schema (draft 2020-12) for the agent's tool parameters
 //!
 //! The `metadata` binary must be run for these assets to be updated in
 //! your local dev tree!
@@ -129,6 +132,42 @@ pub fn generate_type_bindings_viewer() -> Result<(), Box<dyn Error>> {
     into_declarations(&path)
 }
 
+/// One JSON Schema per config type the `<perspective-viewer>` agent accepts
+/// as a tool argument, as `rust/target/json_schema/<Type>.json` — a build
+/// intermediate (cleaned and git-ignored with the rest of `rust/target`).
+/// The viewer build's `tools.mjs` bundles them into
+/// `dist/docs/perspective-docs.json`, from which the agent splices them into
+/// its tool parameters. Draft 2020-12 is pinned explicitly (it is also
+/// schemars' current default) because the Anthropic API rejects anything
+/// else.
+pub fn generate_json_schemas() -> Result<(), Box<dyn Error>> {
+    let path = std::env::current_dir()?.join("../target/json_schema");
+
+    // 100% generated: wipe so a type dropped from this list cannot linger as
+    // a stale file.
+    if path.exists() {
+        fs::remove_dir_all(&path)?;
+    }
+
+    fs::create_dir_all(&path)?;
+    fn root_schema<T: schemars::JsonSchema>() -> schemars::Schema {
+        schemars::generate::SchemaSettings::draft2020_12()
+            .into_generator()
+            .into_root_schema_for::<T>()
+    }
+
+    for (name, schema) in [
+        ("ViewerConfigUpdate", root_schema::<ViewerConfigUpdate>()),
+        ("ViewerConfigInitial", root_schema::<ViewerConfigInitial>()),
+        ("WorkspaceConfigUpdate", root_schema::<WorkspaceConfigUpdate>()),
+    ] {
+        let json = serde_json::to_string_pretty(&schema)?;
+        fs::write(path.join(format!("{name}.json")), json)?;
+    }
+
+    Ok(())
+}
+
 fn generate_exprtk_docs() -> Result<(), Box<dyn Error>> {
     let mut txt = "<br/>\n\n# Perspective ExprTK Extensions\n\n".to_string();
     for rec in perspective_client::config::COMPLETIONS {
@@ -191,6 +230,7 @@ pub fn generate_python_cargo_licenses() -> Result<(), Box<dyn Error>> {
 fn main() -> Result<(), Box<dyn Error>> {
     generate_type_bindings_js()?;
     generate_type_bindings_viewer()?;
+    generate_json_schemas()?;
     generate_exprtk_docs()?;
     generate_python_cargo_licenses()?;
     Ok(())

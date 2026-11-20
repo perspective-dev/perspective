@@ -267,6 +267,15 @@ impl LayoutEmitter {
     }
 }
 
+/// A session-only join `Table` created from the workspace panel.
+#[derive(Clone)]
+pub struct JoinTable {
+    pub client: String,
+    pub left: String,
+    pub right: String,
+    pub table: perspective_client::Table,
+}
+
 /// The loaded-[`Client`]s registry and the default-client designation. The
 /// invariant "the default is always a registered client" holds in this one
 /// impl: every default assignment registers first, and removal clears both.
@@ -343,6 +352,9 @@ struct WorkspaceData {
     /// The live derived `Table`s this workspace owns.
     derived: DerivedRegistry,
 
+    /// The session-only join `Table`s this workspace created, by name.
+    joins: BTreeMap<String, JoinTable>,
+
     /// Monotonic counter backing [`Workspace::generate_id`].
     next_id: usize,
 
@@ -403,6 +415,7 @@ impl Workspace {
             bindings_changed: Rc::new(PubSub::default()),
             clients: ClientRegistry::default(),
             derived: DerivedRegistry::default(),
+            joins: BTreeMap::new(),
             next_id: 0,
             reservation: Reservation::Idle,
             pending_layout: None,
@@ -1230,6 +1243,40 @@ impl Workspace {
             .count();
 
         bound + data.derived.children(name).len()
+    }
+
+    /// Every session-only join `Table` this workspace created, by name.
+    pub fn joins(&self) -> BTreeMap<String, JoinTable> {
+        self.0.borrow().joins.clone()
+    }
+
+    /// How many panels, derivations and joins read `name`.
+    pub fn table_consumers(&self, name: &str) -> usize {
+        let joins = self
+            .0
+            .borrow()
+            .joins
+            .values()
+            .filter(|join| join.left == name || join.right == name)
+            .count();
+
+        self.derived_consumers(name) + joins
+    }
+
+    pub fn register_join(&self, name: String, join: JoinTable) {
+        self.0.borrow_mut().joins.insert(name, join);
+        self.hosted_tables_changed().emit(());
+    }
+
+    /// Take a join out of the registry so the caller can await its deletion
+    /// outside the borrow.
+    pub fn take_join(&self, name: &str) -> Option<JoinTable> {
+        let join = self.0.borrow_mut().joins.remove(name);
+        if join.is_some() {
+            self.hosted_tables_changed().emit(());
+        }
+
+        join
     }
 
     pub fn register_derived(&self, name: String, table: DerivedTable) {

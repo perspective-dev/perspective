@@ -131,6 +131,20 @@ perspective-viewer {
     --psp-label--plugin-tab--content: "プラグイン";
     --psp-label--debug-tab--content: "JSON";
     --psp-label--chat-tab--content: "チャット";
+    --psp-label--tables-tab--content: "テーブル";
+    --psp-label--client-default--content: "既定";
+    --psp-label--client-reconnect--content: "再接続";
+    --psp-label--tables-no-clients--content: "クライアントなし";
+    --psp-label--derive-from-panel--content: "パネルから派生";
+    --psp-label--join-open--content: "結合";
+    --psp-label--join-left--content: "左テーブル";
+    --psp-label--join-right--content: "右テーブル";
+    --psp-label--join-on--content: "結合キー";
+    --psp-label--join-right-on--content: "右の結合キー";
+    --psp-label--join-type--content: "種類";
+    --psp-label--join-name--content: "名前";
+    --psp-label--join-create--content: "作成";
+    --psp-label--join-cancel--content: "キャンセル";
 
     /* Chat panel */
     --psp-label--chat-reasoning--content: "推論";

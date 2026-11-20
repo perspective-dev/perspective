@@ -269,6 +269,28 @@ pub(super) fn subscribe_panel_titles(ctx: &Context<PerspectiveViewer>) -> Vec<Su
         .collect()
 }
 
+/// One status subscription set per panel, feeding the root's
+/// [`crate::queries::WorkspaceStatus`] snapshot.
+pub(super) fn subscribe_panel_status(ctx: &Context<PerspectiveViewer>) -> Vec<Subscription> {
+    let cb = ctx.link().callback(|_| UpdateWorkspaceStatus);
+    ctx.props()
+        .workspace
+        .panels()
+        .into_iter()
+        .flat_map(|p| {
+            [
+                p.session.table_loaded.add_notify_listener(&cb),
+                p.session.table_unloaded.add_notify_listener(&cb),
+                p.session.table_errored.add_notify_listener(&cb),
+                p.session.commit_reconciled.add_notify_listener(&cb),
+                p.session.stats_changed.add_notify_listener(&cb),
+                p.session.config_runs.changed().add_notify_listener(&cb),
+                p.renderer.failure_changed.add_notify_listener(&cb),
+            ]
+        })
+        .collect()
+}
+
 /// Per-active-panel subscriptions: reflect the *active* panel's
 /// session/renderer PubSub events into the root's snapshots. Dropped +
 /// recreated against the new active panel on `SetActivePanel` (pair with
@@ -289,11 +311,7 @@ pub(super) fn create_active_subscriptions(
         let sub3 = session.commit_reconciled.add_notify_listener(&cb);
         let sub4 = session.view_config_changed.add_notify_listener(&cb);
         let sub5 = session.title_changed.add_notify_listener(&cb);
-        let sub6 = session
-            .config_runs
-            .changed()
-            .add_listener(ctx.link().callback(UpdateInFlight));
-
+        let sub6 = session.table_errored.add_notify_listener(&cb);
         let sub7 = session.column_stats_changed.add_notify_listener(&cb);
         vec![sub1, sub2, sub3, sub4, sub5, sub6, sub7]
     };
@@ -334,7 +352,13 @@ pub(super) fn create_active_subscriptions(
             .config_defaults_changed
             .add_listener(cb_config_defaults);
 
-        vec![sub1, sub2, sub3, sub4]
+        let cb_failure = ctx.link().callback({
+            let renderer = renderer.clone();
+            move |()| UpdateRenderer(Box::new(renderer.to_props(None)))
+        });
+
+        let sub5 = renderer.failure_changed.add_listener(cb_failure);
+        vec![sub1, sub2, sub3, sub4, sub5]
     };
 
     let mut subscriptions = Vec::new();
@@ -398,27 +422,23 @@ pub(super) fn create_shared_subscriptions(ctx: &Context<PerspectiveViewer>) -> V
             .add_notify_listener(&cb)
     };
 
-    // The `Workspace`-owned stage error → the root's render snapshot.
-    let stage_error_sub = {
-        let cb = ctx.link().callback(|_: ()| UpdateStageError);
-        ctx.props()
-            .workspace
-            .stage_error_changed()
-            .add_notify_listener(&cb)
-    };
-
-    // Client registration → a re-render, so the "New" table menu appears.
-    let clients_sub = {
-        let cb = ctx.link().callback(|_| ClientsChanged);
-        ctx.props().workspace.client_registered().add_listener(cb)
+    // Client registration, binding changes and the `Workspace`-owned stage
+    // error (shown at zero panels) all feed the aggregate status.
+    let status_subs = {
+        let cb = ctx.link().callback(|_: ()| UpdateWorkspaceStatus);
+        let workspace = &ctx.props().workspace;
+        [
+            workspace.client_registered().add_notify_listener(&cb),
+            workspace.bindings_changed().add_notify_listener(&cb),
+            workspace.stage_error_changed().add_notify_listener(&cb),
+        ]
     };
 
     let mut subscriptions = Vec::new();
     subscriptions.extend(presentation_props_sub);
     subscriptions.push(filters_sub);
     subscriptions.push(staged_sub);
-    subscriptions.push(stage_error_sub);
-    subscriptions.push(clients_sub);
+    subscriptions.extend(status_subs);
     subscriptions
 }
 
@@ -438,16 +458,6 @@ pub(super) fn inject_active_callbacks(
             .callback(move |_: ()| UpdateSessionStats(s.has_table_cells(), s.has_table()));
 
         *session.on_stats_changed.borrow_mut() = Some(cb);
-    }
-
-    // Session: on_table_errored
-    {
-        let s = session.clone();
-        let cb = ctx
-            .link()
-            .callback(move |_: ()| UpdateSession(Box::new(s.to_props())));
-
-        *session.on_table_errored.borrow_mut() = Some(cb);
     }
 
     // Renderer: on_render_limits_changed (combines UpdateRenderer + column
@@ -476,24 +486,13 @@ pub(super) fn inject_active_callbacks(
 
         *renderer.on_render_limits_changed.borrow_mut() = Some(cb);
     }
-
-    {
-        let r = renderer.clone();
-        let cb = ctx
-            .link()
-            .callback(move |_: ()| UpdateRenderer(Box::new(r.to_props(None))));
-
-        *renderer.on_render_failure_changed.borrow_mut() = Some(cb);
-    }
 }
 
 /// Clear the active panel's session/renderer direct callbacks so a
 /// no-longer-active panel stops driving the root's snapshots.
 pub(super) fn clear_active_callbacks(session: &Session, renderer: &Renderer) {
     *session.on_stats_changed.borrow_mut() = None;
-    *session.on_table_errored.borrow_mut() = None;
     *renderer.on_render_limits_changed.borrow_mut() = None;
-    *renderer.on_render_failure_changed.borrow_mut() = None;
 }
 
 /// Inject element-level (shared) presentation callbacks. Created once at

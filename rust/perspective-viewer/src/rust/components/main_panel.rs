@@ -93,14 +93,15 @@ pub struct MainPanelProps {
     /// A value snapshot so client registration re-renders the status bar.
     pub has_clients: bool,
 
-    /// The element-level stage error, `Some` only while `is_empty`.
-    pub stage_error: Option<RenderError>,
+    /// The workspace's aggregate status, threaded to `StatusBar`. At zero
+    /// panels this carries the element-level stage error.
+    pub status: crate::queries::WorkspaceStatus,
 
-    /// Dismiss the stage error (the empty-state status indicator's click).
-    pub on_dismiss_stage_error: Callback<()>,
+    /// Whether the `StatusBar` renders the status indicator.
+    pub show_status: bool,
 
-    /// Root-managed in-flight render counter (not engine state).
-    pub update_count: u32,
+    /// Fired when the status indicator is clicked.
+    pub on_status_click: Callback<()>,
 
     /// Ids of every layout panel, in order; one `<regular-layout>` cell is
     /// rendered per id. Drives re-render when panels are added/removed.
@@ -151,8 +152,8 @@ impl PartialEq for MainPanelProps {
             && self.is_settings_open == rhs.is_settings_open
             && self.is_empty == rhs.is_empty
             && self.has_clients == rhs.has_clients
-            && self.stage_error == rhs.stage_error
-            && self.update_count == rhs.update_count
+            && self.status == rhs.status
+            && self.show_status == rhs.show_status
             && self.panel_ids == rhs.panel_ids
             && self.panel_titles == rhs.panel_titles
             && self.panel_themes == rhs.panel_themes

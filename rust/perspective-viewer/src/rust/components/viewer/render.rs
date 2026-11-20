@@ -16,7 +16,9 @@
 //! INVARIANT: the `SplitPanel` is ALWAYS rendered with `main_panel` as its
 //! last (flex-fill) pane — toggling the settings sidebar only adds/removes the
 //! leading pane, never reparents `main_panel` (a remount would tear down
-//! `<regular-layout>` + the plugin `<slot>`s).
+//! `<regular-layout>` + the plugin `<slot>`s). The children of
+//! `#main_column_container` are FULLY KEYED for the same reason: the
+//! workspace drawer mounts ahead of `main_panel`.
 
 use yew::prelude::*;
 
@@ -28,6 +30,7 @@ use crate::components::main_panel::MainPanel;
 use crate::components::panel_menu::PanelCommand;
 use crate::components::settings_panel::SettingsPanel;
 use crate::components::style::StyleSurface;
+use crate::components::workspace_panel::WorkspacePanel;
 use crate::config::SettingsUpdate;
 use crate::presentation::ColumnSettingsTarget;
 use crate::queries::*;
@@ -163,9 +166,10 @@ impl PerspectiveViewer {
         let is_pinned = self.settings_geometry.column_settings_pinned;
         // No columns exist at zero panels; never mount the drawer there.
         let selected_column = selected_column.filter(|_| !is_empty);
-        let column_settings_panel = html! {
-            if let Some(selected_column) = selected_column {
+        let column_settings_panel = selected_column.map(|selected_column| {
+            html! {
                 <SplitPanel
+                    key="column_settings"
                     id="modal_panel"
                     class={classes!(is_pinned.then_some("pinned"))}
                     reverse=true
@@ -200,11 +204,63 @@ impl PerspectiveViewer {
                     <></>
                 </SplitPanel>
             }
-        };
+        });
+
+        let drawer = self.workspace_drawer.shown;
+        let workspace_drawer = drawer.open.then(|| {
+            let auto_width = match self.workspace_drawer.width_override {
+                None => self.workspace_drawer.auto_width,
+                Some(_) => 0.0,
+            };
+
+            let workspace = &ctx.props().workspace;
+            let panels = workspace
+                .panels()
+                .into_iter()
+                .filter(|panel| {
+                    crate::tasks::can_derive(&panel.session) && panel.session.get_table().is_some()
+                })
+                .map(|panel| {
+                    let title = panel.session.get_title().filter(|t| !t.is_empty());
+                    (panel.id.as_str().to_owned(), title)
+                })
+                .collect::<Vec<_>>();
+
+            html! {
+                <SplitPanel
+                    key="workspace"
+                    id="workspace_drawer"
+                    class={classes!(drawer.pinned.then_some("pinned"))}
+                    deferred={drawer.pinned}
+                    size={self.workspace_drawer.width_override}
+                    initial_size={self.workspace_drawer.width_override}
+                    on_reset={ctx.link().callback(|_| DividerMove(Divider::Workspace, PaneTarget::Natural))}
+                    on_resize={ctx.link().callback(|(x, _): (i32, i32)| DividerMove(Divider::Workspace, PaneTarget::Width(x)))}
+                    on_resize_finished={ctx.link().callback(|_| DividerFinish(Divider::Workspace))}
+                >
+                    <WorkspacePanel
+                        host={self.host.clone()}
+                        status={self.workspace_status.clone()}
+                        selected_tab={self.workspace_drawer.selected_tab}
+                        is_pinned={drawer.pinned}
+                        {auto_width}
+                        panels={std::rc::Rc::new(panels)}
+                        on_toggle={ctx.link().callback(|()| StatusIndicatorClicked)}
+                        on_toggle_pin={ctx.link().callback(|()| ToggleWorkspaceDrawerPin)}
+                        on_select_tab={ctx.link().callback(WorkspaceTabChanged)}
+                        on_auto_width={ctx.link().callback(WorkspacePanelAutoWidth)}
+                        on_new_panel={ctx.link().callback(|(client, table)| NewPanelFrom { client, table })}
+                        on_derive_panel={ctx.link().callback(DerivePanel)}
+                    />
+                    <></>
+                </SplitPanel>
+            }
+        });
 
         let on_reset = ctx.link().callback(|all| ResetPanel(None, all, None));
         let main_panel = html! {
             <MainPanel
+                key="main"
                 {on_settings}
                 {on_reset}
                 on_activate_panel={ctx.link().callback(|id| SetActivePanel(id, None))}
@@ -239,12 +295,9 @@ impl PerspectiveViewer {
                 {is_settings_open}
                 {is_empty}
                 has_clients={!ctx.props().workspace.clients().is_empty()}
-                stage_error={self.stage_error.clone().filter(|_| is_empty)}
-                on_dismiss_stage_error={{
-                    let workspace = ctx.props().workspace.clone();
-                    Callback::from(move |()| workspace.set_stage_error(None))
-                }}
-                update_count={self.update_count}
+                status={self.workspace_status.clone()}
+                show_status={!drawer.open}
+                on_status_click={ctx.link().callback(|()| StatusIndicatorClicked)}
                 panel_ids={ctx.props().workspace.panel_ids()}
                 panel_titles={ctx.props()
                     .workspace
@@ -306,8 +359,7 @@ impl PerspectiveViewer {
                         >
                             { settings_panel }
                             <div id="main_column_container">
-                                { main_panel }
-                                { column_settings_panel }
+                                { for workspace_drawer.into_iter().chain([main_panel]).chain(column_settings_panel) }
                             </div>
                         </SplitPanel>
                     </div>

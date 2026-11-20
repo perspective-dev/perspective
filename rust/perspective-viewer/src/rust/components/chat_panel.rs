@@ -357,7 +357,10 @@ pub fn ChatPanel(props: &ChatPanelProps) -> Html {
             />
             <div id="chat_log" class="scrollable" ref={log_ref} {onscroll}>{ entries }{ tail }</div>
             <ChatInput agent={props.agent.clone()} {busy} />
-            <div id="chat_badge">{ props.agent.label().unwrap_or_default() }</div>
+            <div id="chat_badge">
+                <span id="chat_badge_label">{ props.agent.label().unwrap_or_default() }</span>
+                <span id="chat_docs_status" data-loaded={props.agent.docs_loaded().to_string()} />
+            </div>
         </div>
     }
 }

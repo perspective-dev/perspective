@@ -158,6 +158,25 @@ impl AgentRuntime {
         result.map_err(TurnError::Failed)
     }
 
+    /// Resolve the `docs` source now rather than on the first turn, so a
+    /// failure can reject `agentConfig()`. The result is cached, so the
+    /// first turn reuses it; a failure is cached too and still surfaces
+    /// through `search_docs`.
+    pub async fn load_docs(&self) -> ApiResult<()> {
+        if let Some(docs) = &self.docs
+            && let Err(err) = &*docs.bundle().await
+        {
+            return Err(ApiError::from(format!("Failed to load `docs`: {err}")));
+        }
+
+        Ok(())
+    }
+
+    /// Whether a `docs` source is configured and has loaded successfully.
+    pub fn docs_loaded(&self) -> bool {
+        self.docs.as_ref().is_some_and(|x| x.is_loaded())
+    }
+
     /// Clear the conversation history.
     pub async fn reset(&self) {
         self.history.lock().await.clear();

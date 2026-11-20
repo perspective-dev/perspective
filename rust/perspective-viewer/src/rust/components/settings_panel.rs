@@ -147,11 +147,6 @@ pub enum SelectedTab {
     Query,
     Plugin,
     Debug,
-
-    /// The embedded LLM agent's chat panel. The variant exists in every
-    /// build; its tab button and body render only under the `llm-agent`
-    /// feature, and only once `agentConfig()` has been called.
-    Chat,
 }
 
 #[function_component]
@@ -311,52 +306,6 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
         }
     };
 
-    // The chat tab is zero-affordance until `agentConfig()` is called; the
-    // subscription re-renders this panel when that happens (and as the
-    // transcript updates while the chat body is mounted).
-    #[cfg(feature = "llm-agent")]
-    let (chat_tab_button, chat_body) = {
-        let update = use_force_update();
-        let agent = presentation.agent.clone();
-        use_effect_with((), move |_| {
-            let sub = agent
-                .on_update
-                .add_notify_listener(&Callback::from(move |_| update.force_update()));
-
-            move || drop(sub)
-        });
-
-        let button = if presentation.agent.is_configured() {
-            let on_select_column = props.on_select_column.clone();
-            let set_chat = {
-                let on_select_tab = props.on_select_tab.clone();
-                Callback::from(move |_: PointerEvent| {
-                    on_select_tab.emit(SelectedTab::Chat);
-                    on_select_column.emit(None)
-                })
-            };
-
-            html! {
-                <div
-                    id="chat_tabbar_tab"
-                    class={tab_class(selected, SelectedTab::Chat)}
-                    onpointerdown={set_chat}
-                />
-            }
-        } else {
-            html! {}
-        };
-
-        let body = html! {
-            <crate::components::chat_panel::ChatPanel agent={presentation.agent.clone()} />
-        };
-
-        (button, body)
-    };
-
-    #[cfg(not(feature = "llm-agent"))]
-    let (chat_tab_button, chat_body) = (html! {}, html! {});
-
     let on_open_expr_panel = use_callback(props.on_select_column.clone(), |c, on_select| {
         on_select.emit(Some(c))
     });
@@ -390,13 +339,8 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                     class={tab_class(selected, SelectedTab::Debug)}
                     onpointerdown={set_debug}
                 />
-                { chat_tab_button }
             </div>
-            if selected == SelectedTab::Chat {
-                // Element-level (not panel-bound), so it works on an empty
-                // stage too.
-                { chat_body }
-            } else if props.is_empty {
+            if props.is_empty {
                 // Query/Plugin/Debug all read a panel's table, plugin
                 // schema or config, none of which exist at zero panels.
                 <EmptyPlaceholder />
@@ -445,10 +389,7 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
             // Sibling sizer keeps the panel width pinned across tab
             // switches; lives outside the tab-body so it survives the
             // tab subtree's unmount.
-            <div
-                class="scroll-panel-auto-width"
-                style={format!("width:{}px", width)}
-            />
+            <div class="scroll-panel-auto-width" style={format!("width:{}px", width)} />
         </div>
     }
 }

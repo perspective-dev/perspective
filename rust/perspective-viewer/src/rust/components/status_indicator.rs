@@ -10,117 +10,33 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-use perspective_client::config::ViewConfigUpdate;
-use perspective_js::utils::ApiError;
-use web_sys::*;
 use yew::prelude::*;
 
-use crate::renderer::{RenderError, Renderer};
-use crate::session::{Session, SessionProps, TableLoadState};
-use crate::tasks::apply_and_render;
-use crate::utils::*;
+use crate::queries::{StatusState, WorkspaceStatus};
 
-/// Value-prop version: no PubSub subscriptions, no reducer.
-/// The parent (`StatusBar`) re-renders this component whenever
-/// `session_props.error/has_table/has_table_cells` or `update_count` change
-/// (via root's `UpdateInFlight` / `UpdateSession` messages).
 #[derive(PartialEq, Properties)]
 pub struct StatusIndicatorProps {
-    pub renderer: Renderer,
-    pub session: Session,
+    pub status: WorkspaceStatus,
 
-    /// TODO(texodus): remove this
-    pub update_count: u32,
-    pub session_props: SessionProps,
-    pub render_error: Option<RenderError>,
-
-    /// The element-level stage error (empty stage only — zero panels, so
-    /// `session`/`renderer` are the detached empty engines). Takes
-    /// precedence over every other state; clicking DISMISSES it rather than
-    /// reconnecting (there is no panel to reconnect).
-    #[prop_or_default]
-    pub stage_error: Option<RenderError>,
-
-    /// Dismiss the stage error.
-    #[prop_or_default]
-    pub on_dismiss_stage_error: Callback<()>,
+    /// Fired when the indicator is clicked, in every state.
+    pub on_toggle: Callback<()>,
 }
 
-/// An indicator component which displays the current status of the perspective
-/// server as an icon. This indicator also functions as a button to invoke the
-/// reconnect callback when in an error state.
+/// An indicator component which displays the worst status across the
+/// workspace's panels and clients as an icon, and toggles the workspace
+/// panel when clicked.
 #[function_component]
 pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
-    let has_table_cells = props.session_props.has_table_cells;
-    let is_stage_error = props.stage_error.is_some();
-    let state = if let Some(RenderError(err)) = &props.stage_error {
-        StatusIconState::Errored(err.message(), err.stacktrace(), err.kind(), true)
-    } else if let Some(err) = &props.session_props.error {
-        StatusIconState::Errored(
-            err.message(),
-            err.stacktrace(),
-            err.kind(),
-            err.is_reconnect(),
-        )
-    } else if let Some(RenderError(err)) = &props.render_error {
-        StatusIconState::Errored(err.message(), err.stacktrace(), err.kind(), true)
-    } else if !has_table_cells
-        && matches!(props.session_props.has_table, Some(TableLoadState::Loading))
-    {
-        StatusIconState::Loading
-    } else if matches!(props.session_props.has_table, Some(TableLoadState::Pending)) {
-        StatusIconState::Pending
-    } else if props.update_count > 0 {
-        StatusIconState::Updating
-    } else if has_table_cells {
-        StatusIconState::Normal
-    } else {
-        StatusIconState::Uninitialized
+    let class_name = match props.status.state {
+        StatusState::Errored => "errored",
+        StatusState::Normal => "connected",
+        StatusState::Updating => "updating",
+        StatusState::Loading => "loading",
+        StatusState::Pending => "pending",
+        StatusState::Uninitialized => "uninitialized",
     };
 
-    let class_name = match &state {
-        StatusIconState::Errored(_, _, _, true) => "errored",
-        StatusIconState::Errored(_, _, _, false) => "errored disabled",
-        StatusIconState::Normal => "connected",
-        StatusIconState::Updating => "updating",
-        StatusIconState::Loading => "loading",
-        StatusIconState::Pending => "pending",
-        StatusIconState::Uninitialized => "uninitialized",
-    };
-
-    let onclick = use_async_callback(
-        (
-            props.session.clone(),
-            props.renderer.clone(),
-            state.clone(),
-            is_stage_error,
-            props.on_dismiss_stage_error.clone(),
-        ),
-        async move |_: MouseEvent, (session, renderer, state, is_stage_error, on_dismiss)| {
-            if *is_stage_error {
-                on_dismiss.emit(());
-                return Ok(());
-            }
-
-            match &state {
-                StatusIconState::Errored(..) => {
-                    if renderer.failure().is_some() {
-                        session.reset_failed_config().await?;
-                    }
-
-                    session.reconnect().await?;
-                    apply_and_render(session, renderer, ViewConfigUpdate::default())?.await?;
-                },
-                StatusIconState::Normal => {
-                    session.status_indicator_clicked.emit(());
-                },
-                _ => {},
-            };
-
-            Ok::<_, ApiError>(())
-        },
-    );
-
+    let onclick = props.on_toggle.reform(|_: MouseEvent| ());
     html! {
         <>
             <div class="section">
@@ -128,23 +44,15 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
                     <span id="status" class={class_name} />
                     <span id="status_updating" class={class_name} />
                 </div>
-                if let StatusIconState::Errored(err, stack, kind, _) = &state {
+                if let Some(error) = &props.status.error {
                     <div class="error-dialog">
-                        <div class="error-dialog-message">{ format!("{} {}", kind, err) }</div>
-                        <div class="error-dialog-stack">{ stack }</div>
+                        <div class="error-dialog-message">
+                            { format!("{} {}", error.kind, error.message) }
+                        </div>
+                        <div class="error-dialog-stack">{ &error.stack }</div>
                     </div>
                 }
             </div>
         </>
     }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum StatusIconState {
-    Loading,
-    Pending,
-    Updating,
-    Errored(String, String, &'static str, bool),
-    Normal,
-    Uninitialized,
 }

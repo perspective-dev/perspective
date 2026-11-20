@@ -21,7 +21,7 @@ use yew::prelude::*;
 
 use super::PerspectiveViewer;
 use crate::presentation::{DragDropProps, PresentationProps};
-use crate::renderer::{RenderError, RendererProps};
+use crate::renderer::RendererProps;
 use crate::session::{SessionProps, TableLoadState};
 use crate::tasks::{resize_visible_panels, submit_theme};
 
@@ -146,16 +146,10 @@ impl PerspectiveViewer {
         changed
     }
 
-    pub(super) fn on_update_stage_error(&mut self, ctx: &Context<Self>) -> bool {
-        let error = ctx.props().workspace.stage_error().map(RenderError);
-        let changed = error != self.stage_error;
-        self.stage_error = error;
-        changed
-    }
-
-    pub(super) fn on_update_in_flight(&mut self, count: u32) -> bool {
-        let changed = count != self.update_count;
-        self.update_count = count;
+    pub(super) fn on_update_workspace_status(&mut self, ctx: &Context<Self>) -> bool {
+        let status = crate::queries::workspace_status(&ctx.props().workspace);
+        let changed = status != self.workspace_status;
+        self.workspace_status = status;
         changed
     }
 }

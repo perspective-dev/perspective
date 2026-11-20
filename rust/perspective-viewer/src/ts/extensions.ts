@@ -361,6 +361,13 @@ export interface PerspectiveViewerElementExt {
         options?: { signal: AbortSignal },
     ): void;
 
+    /** Fires when the workspace panel opens or closes, with whether it is now open. */
+    addEventListener(
+        name: "perspective-toggle-workspace-settings",
+        cb: (e: CustomEvent<boolean>) => void,
+        options?: { signal: AbortSignal },
+    ): void;
+
     /** Fires with the original `pointerdown` as its detail when the status bar is pressed. */
     addEventListener(
         name: "perspective-statusbar-pointerdown",
@@ -417,6 +424,10 @@ export interface PerspectiveViewerElementExt {
     ): void;
     removeEventListener(
         name: "perspective-toggle-column-settings",
+        cb: any,
+    ): void;
+    removeEventListener(
+        name: "perspective-toggle-workspace-settings",
         cb: any,
     ): void;
     removeEventListener(name: "perspective-config-update", cb: any): void;

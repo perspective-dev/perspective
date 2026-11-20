@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -24,7 +25,7 @@ use super::windows::*;
 use crate::proto;
 use crate::proto::{ColumnType, columns_update};
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
 pub enum GroupRollupMode {
     #[default]
     #[serde(rename = "rollup")]
@@ -73,7 +74,7 @@ impl From<GroupRollupMode> for proto::GroupRollupMode {
 /// subtotal column groups in "totals before" order. There is no `Total`
 /// variant - an empty `split_by` already expresses a single grand-total
 /// column group.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
 pub enum SplitRollupMode {
     #[default]
     #[serde(rename = "flat")]
@@ -110,7 +111,7 @@ impl From<SplitRollupMode> for proto::SplitRollupMode {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, Default, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ViewConfig {
     #[serde(default)]
@@ -158,7 +159,7 @@ fn is_default_value<A: Default + PartialEq>(value: &A) -> bool {
     value == &A::default()
 }
 
-#[derive(Clone, Debug, Deserialize, Default, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, Default, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ViewConfigUpdate {
     /// A group by _groups_ the dataset by the unique values of each column used

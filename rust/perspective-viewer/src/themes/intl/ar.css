@@ -130,6 +130,20 @@ perspective-viewer {
     --psp-label--plugin-tab--content: "الإضافة";
     --psp-label--debug-tab--content: "JSON";
     --psp-label--chat-tab--content: "الدردشة";
+    --psp-label--tables-tab--content: "الجداول";
+    --psp-label--client-default--content: "افتراضي";
+    --psp-label--client-reconnect--content: "إعادة الاتصال";
+    --psp-label--tables-no-clients--content: "لا يوجد عملاء";
+    --psp-label--derive-from-panel--content: "اشتقاق من لوحة";
+    --psp-label--join-open--content: "ربط";
+    --psp-label--join-left--content: "الجدول الأيسر";
+    --psp-label--join-right--content: "الجدول الأيمن";
+    --psp-label--join-on--content: "على";
+    --psp-label--join-right-on--content: "على (الأيمن)";
+    --psp-label--join-type--content: "النوع";
+    --psp-label--join-name--content: "الاسم";
+    --psp-label--join-create--content: "إنشاء";
+    --psp-label--join-cancel--content: "إلغاء";
 
     --psp-label--chat-reasoning--content: "الاستدلال";
     --psp-label--chat-send--content: "إرسال";

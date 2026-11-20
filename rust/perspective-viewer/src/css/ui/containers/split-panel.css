@@ -22,6 +22,11 @@
         max-width: 300px;
     }
 
+    #workspace_drawer.split-panel
+        > .split-panel-child:not(:last-child):not(.is-width-override) {
+        max-width: 350px;
+    }
+
     .split-panel {
         display: flex;
         height: 100%;

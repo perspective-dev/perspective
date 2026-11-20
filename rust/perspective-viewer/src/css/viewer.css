@@ -332,6 +332,37 @@
         margin-right: -5px;
     }
 
+    #workspace_drawer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 7;
+        overflow: hidden;
+        pointer-events: none;
+        & > * {
+            pointer-events: all;
+        }
+    }
+
+    #workspace_drawer.pinned {
+        position: static;
+        flex: 0 0 auto;
+        width: auto;
+        pointer-events: all;
+        overflow: visible;
+    }
+
+    #workspace_drawer > .split-panel-child {
+        overflow: hidden;
+    }
+
+    #workspace_drawer > .split-panel-divider {
+        border-right: 1px solid var(--psp-inactive--color, #6e6e6e);
+        margin-left: -5px;
+    }
+
     #status_bar {
         height: var(--psp-status-bar--height, 38px);
     }
@@ -657,7 +688,8 @@
         margin-left: -8px;
     }
 
-    #settings_tab_bar {
+    #settings_tab_bar,
+    #workspace_tab_bar {
         display: flex;
         &:after {
             content: " ";
@@ -744,7 +776,15 @@
         content: var(--psp-label--debug-tab--content, var(--psp-missing));
     }
 
-    #chat_tabbar_tab:before {
+    #workspace_tables_tab:before {
+        content: var(--psp-label--tables-tab--content, var(--psp-missing));
+    }
+
+    #workspace_json_tab:before {
+        content: var(--psp-label--debug-tab--content, var(--psp-missing));
+    }
+
+    #workspace_chat_tab:before {
         content: var(--psp-label--chat-tab--content, var(--psp-missing));
     }
 }
@@ -1130,12 +1170,38 @@
 
     #chat_badge {
         flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
         font-size: 0.66em;
         color: var(--psp-inactive--color, #6e6e6e);
-        overflow: hidden;
         white-space: nowrap;
-        text-overflow: ellipsis;
         margin-bottom: 6px;
+    }
+
+    #chat_badge_label {
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* The translated "Docs" label: struck through until `docs` loads. */
+    #chat_docs_status {
+        flex: 0 0 auto;
+        text-decoration: line-through;
+    }
+
+    #chat_docs_status[data-loaded="true"] {
+        color: var(--psp-active--color, #1a7da1);
+        text-decoration: none;
+    }
+
+    #chat_docs_status:before {
+        content: var(
+            --psp-label--chat-entitlement--read-docs--content,
+            var(--psp-missing)
+        );
     }
 }
 

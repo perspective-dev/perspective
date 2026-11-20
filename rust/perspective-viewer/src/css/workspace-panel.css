@@ -1,0 +1,239 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+:host {
+    #workspace_panel {
+        position: relative;
+        flex: 1 1 auto;
+        min-width: 200px;
+        box-sizing: border-box;
+        overflow: hidden;
+        margin: var(--psp-main-column--margin);
+        border: var(--psp-main-column--border);
+        border-width: var(--psp-main-column--border-width);
+        border-radius: var(--psp-main-column--border-radius);
+    }
+
+    #workspace_panel_header {
+        position: relative;
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        box-sizing: border-box;
+        box-shadow: 0 1px 0 0px var(--psp-inactive--color);
+        padding: var(--psp-status-bar--padding, 0 26px 0 4px);
+        height: var(--psp-status-bar--height, 38px);
+        min-height: var(--psp-status-bar--height, 38px);
+        max-height: var(--psp-status-bar--height, 38px);
+    }
+
+    #workspace_tab_bar {
+        flex: 0 0 auto;
+        margin-top: 1px;
+    }
+
+    .ws-label:before {
+        content: var(--psp-label--content, var(--psp-missing));
+    }
+
+    #workspace-tables-overflow {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #workspace-tables {
+        display: flex;
+        min-width: 150px;
+        padding: 8px 0;
+        gap: 8px;
+
+        .error {
+            color: var(--psp-error--color);
+            font-size: 10px;
+            padding: 0 8px;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+
+        .no-results {
+            padding: 6px 8px;
+        }
+
+        .ws-client-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0 8px;
+            font-weight: bold;
+        }
+
+        .ws-client-status {
+            flex: 0 0 8px;
+            width: 8px;
+            height: 8px;
+            border-radius: 4px;
+            background-color: var(--psp--color);
+        }
+
+        .ws-client-status.errored {
+            background-color: var(--psp-error--color);
+        }
+
+        .ws-client-status.loading,
+        .ws-client-status.pending {
+            background-color: var(--psp-inactive--color);
+        }
+
+        .ws-client-name,
+        .ws-table-name {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .ws-client-default,
+        .ws-client-panels,
+        .ws-table-consumers {
+            flex: none;
+            font-weight: normal;
+            opacity: 0.6;
+        }
+
+        .ws-client-panels:before,
+        .ws-table-consumers:before {
+            content: "x";
+        }
+
+        .sidebar-controls {
+            padding: 6px 8px 4px 8px;
+        }
+
+        .ws-table,
+        .ws-derive-panel {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+        }
+
+        .ws-table.is-derived .ws-table-name:before,
+        .ws-table.is-pending .ws-table-name:before {
+            content: "\21B3\00A0";
+            opacity: 0.6;
+        }
+
+        .ws-table.is-join .ws-table-name:before {
+            content: "\22C8\00A0";
+            opacity: 0.6;
+        }
+
+        .ws-table.is-pending {
+            color: var(--psp-inactive--color);
+            font-style: italic;
+        }
+
+        .ws-table-new,
+        .ws-table-delete {
+            flex: none;
+            width: 12px;
+            height: 12px;
+            cursor: pointer;
+            opacity: 0;
+            background-color: currentColor;
+            -webkit-mask-size: cover;
+            mask-size: cover;
+        }
+
+        .ws-table:hover .ws-table-new,
+        .ws-table:hover .ws-table-delete {
+            opacity: 0.6;
+        }
+
+        .ws-table .ws-table-new:hover,
+        .ws-table .ws-table-delete:hover {
+            opacity: 1;
+        }
+
+        .ws-table-new {
+            -webkit-mask-image: var(--psp-icon--new-panel--mask-image);
+            mask-image: var(--psp-icon--new-panel--mask-image);
+        }
+
+        .ws-table-delete {
+            -webkit-mask-image: var(--psp-icon--close--mask-image);
+            mask-image: var(--psp-icon--close--mask-image);
+        }
+
+        .ws-section-label {
+            display: block;
+            padding: 0 8px 2px 8px;
+            font-size: var(--label--font-size, 0.75em);
+            text-transform: uppercase;
+            color: var(--psp-inactive--color);
+        }
+
+        .ws-derive-panel {
+            cursor: pointer;
+        }
+
+        .ws-derive-panel:hover {
+            background-color: var(--psp--color);
+            color: var(--psp--background-color);
+        }
+
+        .ws-join-form {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 4px 8px;
+
+            label {
+                font-size: var(--label--font-size, 0.75em);
+                margin-top: 4px;
+            }
+
+            select,
+            input {
+                min-width: 0;
+                font-family: inherit;
+                font-size: inherit;
+                color: inherit;
+                background-color: var(--psp--background-color);
+                border: 1px solid var(--psp-inactive--color);
+                border-radius: 2px;
+                padding: 2px 4px;
+            }
+
+            .error {
+                padding: 4px 0 0 0;
+            }
+
+            .sidebar-controls {
+                padding: 8px 0 0 0;
+            }
+        }
+    }
+
+    #workspace-json {
+        padding-left: 8px;
+    }
+
+    #workspace_panel > #chat_panel {
+        padding-left: 6px;
+    }
+}

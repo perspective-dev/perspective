@@ -27,7 +27,7 @@ use crate::components::new_panel_menu::{
 use crate::components::style::StyleSurface;
 use crate::config::*;
 use crate::presentation::{Presentation, PresentationProps};
-use crate::queries::fetch_hosted_tables;
+use crate::queries::{WorkspaceStatus, fetch_hosted_tables};
 use crate::renderer::*;
 use crate::session::*;
 use crate::tasks::*;
@@ -70,17 +70,16 @@ pub struct StatusBarProps {
     #[prop_or_default]
     pub has_clients: bool,
 
-    /// The element-level stage error (empty stage only), shown by the
-    /// status indicator.
-    #[prop_or_default]
-    pub stage_error: Option<RenderError>,
+    /// The workspace's aggregate status, threaded to `StatusIndicator`. At
+    /// zero panels this carries the element-level stage error.
+    pub status: WorkspaceStatus,
 
-    /// Dismiss the stage error.
-    #[prop_or_default]
-    pub on_dismiss_stage_error: Callback<()>,
+    /// Whether this bar renders the `StatusIndicator`, which moves to the
+    /// workspace panel's header while that panel is open.
+    pub show_status: bool,
 
-    /// In-flight render counter, threaded to `StatusIndicator`.
-    pub update_count: u32,
+    /// Fired when the `StatusIndicator` is clicked.
+    pub on_status_click: Callback<()>,
 
     /// Element-level global filters (fed by master/detail selection); rendered
     /// as removable chips between the row stats and the menu icons.
@@ -111,8 +110,8 @@ impl PartialEq for StatusBarProps {
             && self.is_settings_open == other.is_settings_open
             && self.is_empty == other.is_empty
             && self.has_clients == other.has_clients
-            && self.stage_error == other.stage_error
-            && self.update_count == other.update_count
+            && self.status == other.status
+            && self.show_status == other.show_status
             && self.global_filters == other.global_filters
     }
 }
@@ -321,7 +320,8 @@ impl Component for StatusBar {
         let is_empty = ctx.props().is_empty;
         let is_errored = ctx.props().session_props.is_errored()
             || ctx.props().render_error.is_some()
-            || ctx.props().stage_error.is_some();
+            // At zero panels `status` carries only the stage error.
+            || (is_empty && ctx.props().status.error.is_some());
         let is_settings_open = ctx.props().is_settings_open;
 
         let mut is_updating_class_name = classes!();
@@ -435,15 +435,12 @@ impl Component for StatusBar {
                         class={is_updating_class_name}
                         {onpointerdown}
                     >
-                        <StatusIndicator
-                            {renderer}
-                            {session}
-                            update_count={ctx.props().update_count}
-                            session_props={ctx.props().session_props.clone()}
-                            render_error={ctx.props().render_error.clone()}
-                            stage_error={ctx.props().stage_error.clone()}
-                            on_dismiss_stage_error={ctx.props().on_dismiss_stage_error.clone()}
-                        />
+                        if ctx.props().show_status {
+                            <StatusIndicator
+                                status={ctx.props().status.clone()}
+                                on_toggle={ctx.props().on_status_click.clone()}
+                            />
+                        }
                         if is_panel_bar {
                             <div id="panel-bar" class="section">
                                 <span ref={&self.new_ref} class="hover-target" onmousedown={onnew}>

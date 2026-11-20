@@ -108,9 +108,8 @@ pub struct RendererData {
     state: RefCell<Rc<RendererState>>,
     outcome: RefCell<RenderOutcome>,
 
-    /// Injected callback from the root component, fired when a render failure
-    /// is raised or cleared.
-    pub on_render_failure_changed: RefCell<Option<Callback<()>>>,
+    /// Fires when a render failure is raised or cleared.
+    pub failure_changed: PubSub<()>,
     staged: Rc<StagedEdits>,
     plugin_data: RefCell<RendererMutData>,
     draw_lock: DebounceMutex,
@@ -260,7 +259,7 @@ impl Renderer {
         Self(Rc::new(RendererData {
             state: RefCell::default(),
             outcome: RefCell::default(),
-            on_render_failure_changed: RefCell::default(),
+            failure_changed: Default::default(),
             staged: Rc::default(),
             plugin_data: RefCell::new(RendererMutData {
                 viewer_elem: viewer_elem.clone(),
@@ -344,10 +343,8 @@ impl Renderer {
         let was_failed = self.failure().is_some();
         let is_failed = matches!(next, RenderOutcome::Failed(_));
         *self.0.outcome.borrow_mut() = next;
-        if was_failed != is_failed
-            && let Some(cb) = self.0.on_render_failure_changed.borrow().as_ref()
-        {
-            cb.emit(());
+        if was_failed != is_failed {
+            self.0.failure_changed.emit(());
         }
     }
 

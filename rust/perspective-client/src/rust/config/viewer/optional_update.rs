@@ -10,6 +10,9 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+use std::borrow::Cow;
+
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
@@ -63,6 +66,28 @@ impl<T: Clone> From<Option<T>> for OptionalUpdate<T> {
             Some(v) => Self::Update(v),
             None => Self::SetDefault,
         }
+    }
+}
+
+/// Hand-written because the derived (untagged) schema would list both unit
+/// variants. On the wire this is exactly `Option<T>` — `null` resets, a value
+/// replaces — and "absent" is the containing field's `#[serde(default)]`,
+/// which already makes the property optional.
+impl<T: Clone + JsonSchema> JsonSchema for OptionalUpdate<T> {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> Cow<'static, str> {
+        format!("OptionalUpdate_{}", T::schema_name()).into()
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        format!("OptionalUpdate<{}>", T::schema_id()).into()
+    }
+
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        <Option<T> as JsonSchema>::json_schema(generator)
     }
 }
 

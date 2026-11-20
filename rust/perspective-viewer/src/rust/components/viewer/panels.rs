@@ -26,7 +26,7 @@ use super::PerspectiveViewer;
 use super::msg::PerspectiveViewerMsg::*;
 use super::wiring::{
     clear_active_callbacks, create_active_subscriptions, inject_active_callbacks,
-    subscribe_panel_titles,
+    subscribe_panel_status, subscribe_panel_titles,
 };
 use crate::config::{DecodeConfig, ViewerConfigInitial};
 use crate::derived::suggest_name;
@@ -38,8 +38,14 @@ use crate::utils::{Completion, PtrEqRc, spawn_owned};
 use crate::workspace::{Panel, PanelId};
 
 impl PerspectiveViewer {
-    pub(super) fn on_layout_changed(&mut self, ctx: &Context<Self>) -> bool {
+    fn resubscribe_panels(&mut self, ctx: &Context<Self>) {
         self._title_subscriptions = subscribe_panel_titles(ctx);
+        self._status_subscriptions = subscribe_panel_status(ctx);
+        self.workspace_status = workspace_status(&ctx.props().workspace);
+    }
+
+    pub(super) fn on_layout_changed(&mut self, ctx: &Context<Self>) -> bool {
+        self.resubscribe_panels(ctx);
         self.resync_active(ctx);
         true
     }
@@ -137,7 +143,7 @@ impl PerspectiveViewer {
     /// `rendered` pass applies the staged layout and mounts every cell in
     /// this one commit.
     pub(super) fn on_commit_workspace_restore(&mut self, ctx: &Context<Self>, id: String) -> bool {
-        self._title_subscriptions = subscribe_panel_titles(ctx);
+        self.resubscribe_panels(ctx);
         self.on_set_active_panel(ctx, id, None);
         true
     }
@@ -170,7 +176,7 @@ impl PerspectiveViewer {
         }
 
         apply_global_filters(&ctx.props().workspace);
-        self._title_subscriptions = subscribe_panel_titles(ctx);
+        self.resubscribe_panels(ctx);
         Some(removed)
     }
 
@@ -380,16 +386,14 @@ impl PerspectiveViewer {
 
     /// Re-point the root's per-active engine wiring + snapshots from the
     /// current active panel to a new one: clear the old panel's direct
-    /// callbacks, set up the new panel's callbacks + subscriptions, refresh
-    /// the snapshots, and reset the in-flight render counter (which tracked
-    /// the old panel).
+    /// callbacks, set up the new panel's callbacks + subscriptions, and
+    /// refresh the snapshots.
     fn retarget_active(&mut self, ctx: &Context<Self>, session: Session, renderer: Renderer) {
         clear_active_callbacks(&self.active_session, &self.active_renderer);
         inject_active_callbacks(ctx, &session, &renderer);
         self._active_subscriptions = create_active_subscriptions(ctx, &session, &renderer);
         self.session_props = session.to_props();
         self.renderer_props = renderer.to_props(None);
-        self.update_count = session.config_runs.count();
         self.active_session = session;
         self.active_renderer = renderer;
         let presentation = ctx.props().presentation.clone();

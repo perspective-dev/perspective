@@ -107,8 +107,9 @@ fn settings_close_grow_ratios(elem: &web_sys::HtmlElement) -> (f64, f64) {
     }
 
     let mpc = measure("#main_panel_container");
+    let docked = docked_workspace_span(elem);
     let width = ratio(
-        measure("#layout_area").map(|r| r.width()),
+        measure("#layout_area").map(|r| r.width() - docked),
         mpc.as_ref().map(|r| r.width()),
     );
     let height = ratio(
@@ -339,9 +340,33 @@ pub fn measure_settings_open_deltas(elem: &web_sys::HtmlElement) -> Option<(f64,
     let layout_area = shadow_rect(elem, "#layout_area")?;
     let main_column = shadow_rect(elem, "#main_column")?;
     Some((
-        (layout_area.width() - mpc.width()).max(0.0),
+        (layout_area.width() - docked_workspace_span(elem) - mpc.width()).max(0.0),
         (main_column.height() - mpc.height()).max(0.0),
     ))
+}
+
+/// The width a drawer `SplitPanel` at `drawer_sel` occupies when docked, its
+/// pane plus the overlapping divider, or `None` when it isn't mounted.
+pub fn measure_drawer_span(elem: &web_sys::HtmlElement, drawer_sel: &str) -> Option<f64> {
+    let pane = shadow_rect(
+        elem,
+        &format!("{drawer_sel} > .split-panel-child:first-child"),
+    )?;
+
+    let divider = shadow_rect(elem, &format!("{drawer_sel} > .split-panel-divider"));
+    let left = divider
+        .as_ref()
+        .map_or(pane.left(), |x| x.left().min(pane.left()));
+
+    let right = divider
+        .as_ref()
+        .map_or(pane.right(), |x| x.right().max(pane.right()));
+
+    Some((right - left).max(0.0))
+}
+
+fn docked_workspace_span(elem: &web_sys::HtmlElement) -> f64 {
+    measure_drawer_span(elem, "#workspace_drawer.pinned").unwrap_or(0.0)
 }
 
 /// The signed `#main_panel_container` width delta a column-settings pin
@@ -354,11 +379,7 @@ pub fn measure_column_settings_pin_delta(
     elem: &web_sys::HtmlElement,
     is_pinned: bool,
 ) -> Option<f64> {
-    let drawer = shadow_rect(elem, "#modal_panel > .split-panel-child:first-child")?;
-    let divider_left = shadow_rect(elem, "#modal_panel > .split-panel-divider")
-        .map(|r| r.left())
-        .unwrap_or_else(|| drawer.left());
-    let width = (drawer.right() - divider_left).max(0.0);
+    let width = measure_drawer_span(elem, "#modal_panel")?;
     Some(if is_pinned { -width } else { width })
 }
 
