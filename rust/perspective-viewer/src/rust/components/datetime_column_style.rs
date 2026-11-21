@@ -18,9 +18,6 @@ use std::rc::Rc;
 use std::sync::LazyLock;
 
 use derivative::Derivative;
-use perspective_js::json;
-use perspective_js::utils::global::navigator;
-use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
 use crate::components::datetime_column_style::custom::DatetimeStyleCustom;
@@ -288,47 +285,17 @@ fn inherited_time_zone(format: &DatetimeFormat) -> String {
     format
         .time_zone
         .clone()
-        .unwrap_or_else(|| (*USER_TIMEZONE).clone())
+        .unwrap_or_else(|| crate::plugin_utils::local_time_zone().to_owned())
 }
 
 fn inherited_hour12(format: &DatetimeFormat) -> bool {
     format.hour12.unwrap_or(*USER_HOUR12)
 }
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_name = supportedValuesOf, js_namespace = Intl)]
-    pub fn supported_values_of(s: &JsValue) -> js_sys::Array;
-}
-
 thread_local! {
-    static ALL_TIMEZONES: LazyLock<Rc<Vec<String>>> = LazyLock::new(|| {
-        Rc::new(
-            supported_values_of(&JsValue::from("timeZone"))
-                .iter()
-                .map(|x| x.as_string().unwrap())
-                .collect(),
-        )
-    });
+    static ALL_TIMEZONES: LazyLock<Rc<Vec<String>>> =
+        LazyLock::new(|| Rc::new(crate::plugin_utils::time_zones()));
 }
 
-static USER_TIMEZONE: LazyLock<String> = LazyLock::new(|| {
-    js_sys::Reflect::get(
-        &js_sys::Intl::DateTimeFormat::new(&navigator().languages(), &json!({})).resolved_options(),
-        &JsValue::from("timeZone"),
-    )
-    .unwrap()
-    .as_string()
-    .unwrap()
-});
-
-static USER_HOUR12: LazyLock<bool> = LazyLock::new(|| {
-    js_sys::Reflect::get(
-        &js_sys::Intl::DateTimeFormat::new(&navigator().languages(), &json!({"hour": "numeric"}))
-            .resolved_options(),
-        &JsValue::from("hour12"),
-    )
-    .ok()
-    .and_then(|x| x.as_bool())
-    .unwrap_or(true)
-});
+static USER_HOUR12: LazyLock<bool> =
+    LazyLock::new(|| crate::format::prefers_hour12(crate::plugin_utils::languages()));

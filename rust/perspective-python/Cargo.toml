@@ -62,7 +62,6 @@ perspective-migrate = { version = "~5.9.4" }
 perspective-server = { version = "~5.9.4" }
 bytes = "1.10.1"
 chrono = "0.4"
-macro_rules_attribute = "0.2.2"
 async-lock = "2.5.0"
 pollster = "0.3.0"
 extend = "1.1.2"

@@ -13,6 +13,7 @@
 import "@perspective-dev/viewer";
 import "@perspective-dev/viewer-datagrid";
 import "@perspective-dev/viewer-charts";
+import "@perspective-dev/viewer-summary";
 
 import { initAboutDialog } from "./components/about_dialog.js";
 import { initAgentDialog } from "./components/agent_dialog.js";

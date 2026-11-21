@@ -27,6 +27,7 @@ import type {
 
 // @ts-ignore
 import * as worker_url from "./perspective-viewer.worker.ts";
+import { create_plugin_utils } from "./plugin_utils/index.ts";
 
 export type {
     InitOptions,
@@ -79,7 +80,7 @@ provide_viewer_runtime(async (wasm) => {
     ]);
 
     await glue.default({ module_or_path: module });
-    await glue.init(module, url);
+    await glue.init(module, url, create_plugin_utils(glue));
     return { glue: glue as ClientRuntime["glue"], module };
 });
 

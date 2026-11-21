@@ -162,6 +162,14 @@ pub struct PluginStaticConfig {
     #[ts(as = "Option<_>")]
     #[ts(optional)]
     pub connects_row_order: bool,
+
+    /// `true` when this plugin's `render()` resolves to text rather than an
+    /// image, which makes the copy and export menus offer `.txt` in place of
+    /// `.png`.
+    #[serde(default)]
+    #[ts(as = "Option<_>")]
+    #[ts(optional)]
+    pub renders_text: bool,
 }
 
 impl PluginStaticConfig {

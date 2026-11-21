@@ -1,0 +1,76 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+@keyframes pulse_pos {
+    0% {
+        background-color: var(
+            --pulse--background-color-start,
+            rgba(0, 128, 255, 0.5)
+        );
+    }
+
+    100% {
+        background-color: var(
+            --pulse--background-color-end,
+            rgba(0, 128, 255, 0)
+        );
+    }
+}
+
+@keyframes pulse_pos2 {
+    0% {
+        background-color: var(
+            --pulse--background-color-start,
+            rgba(0, 128, 255, 0.5)
+        );
+    }
+
+    100% {
+        background-color: var(
+            --pulse--background-color-end,
+            rgba(0, 128, 255, 0)
+        );
+    }
+}
+
+@keyframes pulse_neg {
+    0% {
+        background-color: var(
+            --pulse--background-color-start,
+            rgba(255, 25, 0, 0.5)
+        );
+    }
+
+    100% {
+        background-color: var(
+            --pulse--background-color-end,
+            rgba(255, 25, 0, 0)
+        );
+    }
+}
+
+@keyframes pulse_neg2 {
+    0% {
+        background-color: var(
+            --pulse--background-color-start,
+            rgba(255, 25, 0, 0.5)
+        );
+    }
+
+    100% {
+        background-color: var(
+            --pulse--background-color-end,
+            rgba(255, 25, 0, 0)
+        );
+    }
+}

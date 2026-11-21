@@ -10,20 +10,20 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 import { style_cell_flash } from "./cell_flash.ts";
-import { format_raw } from "../../data_listener/format_cell.ts";
+import { format_raw } from "../format.ts";
 import {
     infer_foreground_from_background,
     rgbaToRgb,
     rgbToHex,
     sampleGradientRgb,
-} from "../../color_utils.ts";
+} from "../color.ts";
+import type { ColorRecord } from "../color.ts";
 import {
     parse_bg_mode,
     parse_fg_mode,
-    type ColorRecord,
-    type DatagridModel,
     type ResolvedColumnStyle,
-} from "../../types.ts";
+} from "../column_style.ts";
+import type { CellStyleModel } from "./types.ts";
 import type { ColumnType } from "@perspective-dev/client";
 
 const MAX_BAR_WIDTH_PCT = 1;
@@ -82,7 +82,7 @@ function style_cell_bar(
     }
 }
 
-function neutral_record(model: DatagridModel): ColorRecord {
+function neutral_record(model: CellStyleModel): ColorRecord {
     return [
         "",
         model._plugin_background[0],
@@ -95,7 +95,7 @@ function neutral_record(model: DatagridModel): ColorRecord {
 }
 
 export function cell_style_numeric(
-    model: DatagridModel,
+    model: CellStyleModel,
     plugin: ResolvedColumnStyle | undefined,
     type: ColumnType | undefined,
     td: HTMLElement,

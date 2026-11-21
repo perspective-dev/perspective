@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { DateFormatModifiers } from "@perspective-dev/viewer/column-format";
+import type { DateFormatModifiers } from "@perspective-dev/viewer";
 import type { ColumnDataMap } from "../../data/view-reader.ts";
 import { buildSplitGroups } from "../../data/split-groups.ts";
 import type {

@@ -10,7 +10,7 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { DateFormatModifiers } from "@perspective-dev/viewer/column-format";
+import type { DateFormatModifiers } from "@perspective-dev/viewer";
 import type { HeatmapChart } from "./heatmap.ts";
 import type { HeatmapCell } from "./heatmap-build.ts";
 import { renderCanvasTooltip } from "../../interaction/tooltip-controller.ts";

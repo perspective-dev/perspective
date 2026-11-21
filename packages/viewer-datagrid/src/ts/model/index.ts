@@ -11,7 +11,7 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 export { PRIVATE_PLUGIN_SYMBOL } from "../types.ts";
-export { createModel, readThemeStyle } from "./create.ts";
+export { createModel } from "./create.ts";
 export { toggle_edit_mode, toggle_scroll_lock } from "./toolbar.ts";
 export {
     reconcile_column_widths,

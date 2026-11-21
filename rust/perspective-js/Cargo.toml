@@ -48,13 +48,8 @@ external-cpp = [
     "perspective-client/protobuf-src",
 ]
 
-# Should `talc` be used as a global allocator? Allows enhanced runtime metrics
-# via `Client::system_info`. Mutually exclusive to `trace-allocator`
-talc-allocator = ["perspective-client/talc-allocator"]
-
 # Should global allocation be traced?  Allows enhanced runtime metrics via
-# `Client::system_info`. Mutually exclusive to `talc-allocator`, which does
-# not requires a `wasm_bindgen` call to get available heap size.
+# `Client::system_info`.
 trace-allocator = []
 
 [dependencies]

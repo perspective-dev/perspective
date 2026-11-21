@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 viewBox="0 0 80 70" style="enable-background:new 0 0 80 70;" xml:space="preserve" width="40" height="35">
+<style type="text/css">
+	.st0{fill:#042121;}
+</style>
+<path class="st0" fill-rule="evenodd" d="M10,10h60c1.1,0,2,0.9,2,2v46c0,1.1-0.9,2-2,2H10c-1.1,0-2-0.9-2-2V12C8,10.9,8.9,10,10,10z
+	 M10,12v46h29V12H10z M41,12v46h29V12H41z"/>
+<rect class="st0" x="15" y="21" width="12" height="3"/>
+<rect class="st0" x="15" y="30" width="6" height="10"/>
+<rect class="st0" x="22" y="30" width="6" height="10"/>
+<rect class="st0" x="29" y="30" width="6" height="10"/>
+<rect class="st0" x="46" y="21" width="12" height="3"/>
+<rect class="st0" x="46" y="30" width="6" height="10"/>
+<rect class="st0" x="53" y="30" width="6" height="10"/>
+<rect class="st0" x="60" y="30" width="6" height="10"/>
+</svg>

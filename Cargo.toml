@@ -36,7 +36,7 @@ members = [
 
 [profile.dev]
 panic = "abort"
-opt-level = "s"
+opt-level = 2
 
 [profile.release]
 panic = "abort"
@@ -45,16 +45,42 @@ codegen-units = 1
 lto = true
 strip = true
 
+# The crates `perspective-viewer`'s number and datetime formatters spend their
+# time in, optimized for speed under an otherwise size-optimized profile.
+[profile.release.package]
+calendrical_calculations = { opt-level = 3 }
+core_maths = { opt-level = 3 }
+fixed_decimal = { opt-level = 3 }
+icu_calendar = { opt-level = 3 }
+icu_datetime = { opt-level = 3 }
+icu_decimal = { opt-level = 3 }
+icu_experimental = { opt-level = 3 }
+icu_locale_core = { opt-level = 3 }
+icu_pattern = { opt-level = 3 }
+icu_plurals = { opt-level = 3 }
+icu_provider = { opt-level = 3 }
+icu_time = { opt-level = 3 }
+libm = { opt-level = 3 }
+litemap = { opt-level = 3 }
+potential_utf = { opt-level = 3 }
+ryu = { opt-level = 3 }
+smallvec = { opt-level = 3 }
+tinystr = { opt-level = 3 }
+writeable = { opt-level = 3 }
+yoke = { opt-level = 3 }
+zerofrom = { opt-level = 3 }
+zerotrie = { opt-level = 3 }
+zerovec = { opt-level = 3 }
+
 [profile.fast]
 inherits = "release"
-opt-level = 1
+opt-level = "s"
 codegen-units = 256
 lto = "off"
 incremental = true
 
 # These are only respected when `cargo` is invoked from the project root
 [patch.crates-io]
-# simd-adler32 = { git = "https://github.com/mcountryman/simd-adler32.git", rev = "b279034d9eb554c3e5e0af523db044f08d8297ba" }
 protobuf-src = { git = "https://github.com/carlocorradini/rust-protobuf-native.git", rev = "1aba500e469f8bdc384a0fe9e69c189fda72e059" }
 perspective-client = { path = "rust/perspective-client" }
 perspective-server = { path = "rust/perspective-server" }
