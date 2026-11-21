@@ -23,6 +23,7 @@ test.describe("Datagrid column style control groups", function () {
     });
 
     async function openNumericStyleTab(page: any, view: PspViewer) {
+        await view.restore({ plugin_config: { column_menus: true } });
         await view.openSettingsPanel();
         const editBtn = view.dataGrid.regularTable.editBtnRow
             .locator("th.psp-menu-enabled span")

@@ -189,6 +189,7 @@ perspective-viewer {
     --psp-label--value-fit--content: "Value size";
     --psp-label--breakdown--content: "Breakdown";
     --psp-label--chart-type--content: "Glyph type";
+    --psp-label--new-panel-button--content: "New";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "Auto Y axis";

@@ -15,8 +15,6 @@ import { rgbToHex } from "./color.ts";
 import { native } from "./native.ts";
 import {
     bg_modes_for,
-    default_bg_mode,
-    default_fg_mode,
     fg_modes_for,
     parse_bg_mode,
     parse_fg_mode,
@@ -58,11 +56,6 @@ export const ALIGNS: readonly Align[] = [
     "bottom",
     "bottom-right",
 ];
-
-/** An `align` value from a token, or `undefined` for anything else. */
-export function parse_align(raw: unknown): Align | undefined {
-    return ALIGNS.includes(raw as Align) ? (raw as Align) : undefined;
-}
 
 /** CSS generic font families, which are never quoted when applied. */
 export const GENERIC_FONT_FAMILIES: readonly string[] = [
@@ -118,16 +111,15 @@ export function color_group(
         return undefined;
     }
 
-    const fg_mode =
-        parse_fg_mode(type, current_value?.fg_mode) ?? default_fg_mode(type);
+    const default_fg: FgMode =
+        type === "integer" || type === "float" ? "color" : "disabled";
 
-    const bg_mode =
-        parse_bg_mode(type, current_value?.bg_mode) ?? default_bg_mode(type);
-
+    const fg_mode = parse_fg_mode(type, current_value?.fg_mode) ?? default_fg;
+    const bg_mode = parse_bg_mode(type, current_value?.bg_mode) ?? "disabled";
     const color_fields: ControlSpec[] = [
-        mode_spec("fg_mode", fg_modes, default_fg_mode(type)),
+        mode_spec("fg_mode", fg_modes, default_fg),
         ...value_specs(type, "fg", fg_mode, theme),
-        mode_spec("bg_mode", bg_modes, default_bg_mode(type)),
+        mode_spec("bg_mode", bg_modes, "disabled"),
         ...value_specs(type, "bg", bg_mode, theme),
     ];
 
@@ -159,11 +151,8 @@ function mode_spec(
 }
 
 /**
- * The controls a foreground or background `mode` gates in for a column of
- * `type`: the `fg_color` / `bg_color` value control in the grammar the
- * (type, mode) pair reads - gradient stops for numbers, a color for
- * string / datetime `"color"`, a palette for string `"series"` - plus the
- * numeric scale extent. Nothing for `"disabled"`.
+ * The value controls a foreground or background `mode` gates in for a column of
+ * `type`, none for `"disabled"`.
  */
 function value_specs(
     type: ColumnType,

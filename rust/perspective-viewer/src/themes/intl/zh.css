@@ -176,6 +176,7 @@ perspective-viewer {
     --psp-label--value-fit--content: "数值大小";
     --psp-label--breakdown--content: "细分";
     --psp-label--chart-type--content: "图元类型";
+    --psp-label--new-panel-button--content: "新建";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "自动双Y轴";

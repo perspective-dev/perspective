@@ -11,7 +11,11 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 import type { ColumnType } from "@perspective-dev/client";
-import type { ColumnConfigSchema, ControlSpec } from "@perspective-dev/viewer";
+import type {
+    Align,
+    ColumnConfigSchema,
+    ControlSpec,
+} from "@perspective-dev/viewer";
 import { plugin_utils } from "../plugin_utils.ts";
 import { measure_px } from "./plugin_config_schema.ts";
 import { positive_px } from "./restore.ts";
@@ -64,7 +68,9 @@ export default function column_config_schema(
                   font_size: positive_px(plugin_config.font_size),
                   bold: plugin_config.bold === true,
                   italic: plugin_config.italic === true,
-                  align: schema.parse_align(plugin_config.align),
+                  align: schema.ALIGNS.includes(plugin_config.align as Align)
+                      ? (plugin_config.align as Align)
+                      : undefined,
                   word_wrap: plugin_config.word_wrap === true,
               };
 
@@ -122,7 +128,9 @@ export default function column_config_schema(
             {
                 kind: "Alignment",
                 key: "align" satisfies keyof ColumnConfig,
-                ...(grid.align !== undefined ? { default: grid.align } : {}),
+                default:
+                    grid.align ??
+                    (type === "integer" || type === "float" ? "right" : "left"),
             },
             {
                 kind: "Bool",

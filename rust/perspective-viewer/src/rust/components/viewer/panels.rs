@@ -76,6 +76,10 @@ impl PerspectiveViewer {
     ) -> bool {
         let id = PanelId::from(id);
         let prev = ctx.props().workspace.active_id();
+        if prev.as_ref() != Some(&id) && ctx.props().workspace.panel(&id).is_some() {
+            ctx.props().presentation.set_open_column_settings(None);
+        }
+
         if prev.as_ref() == Some(&id) || !ctx.props().workspace.set_active(id.clone()) {
             let resynced = self.resync_active(ctx);
             if let Some(completion) = completion {
@@ -142,6 +146,10 @@ impl PerspectiveViewer {
     /// its engines still alive, or `None` for an unknown id.
     fn detach_panel(&mut self, ctx: &Context<Self>, id: &PanelId) -> Option<Panel> {
         let was_active = ctx.props().workspace.active_id().as_ref() == Some(id);
+        if was_active {
+            ctx.props().presentation.set_open_column_settings(None);
+        }
+
         let removed = ctx.props().workspace.remove_panel(id)?;
         if was_active {
             if let Some(next) = ctx.props().workspace.panel_ids().first().cloned() {

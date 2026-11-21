@@ -29,6 +29,7 @@ test.describe("Localization", function () {
 
     test("labels > renders no visible label text", async function ({ page }) {
         const view = new PspViewer(page);
+        await view.restore({ plugin_config: { column_menus: true } });
         await view.openSettingsPanel();
         const editBtn = view.dataGrid.regularTable.editBtnRow
             .locator("th.psp-menu-enabled span")

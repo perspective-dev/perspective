@@ -68,6 +68,12 @@ pub enum PanelCommand {
     Restore,
     ToggleMaster,
     Close,
+
+    /// Open the settings of the named column of the panel.
+    ColumnSettings(String),
+
+    /// Open the settings sidebar on the panel.
+    PanelSettings,
 }
 
 /// Which format-picker dropdown the context menu spawned in place of itself.
@@ -105,6 +111,14 @@ pub struct PanelMenuProps {
     /// Maximize/Restore item).
     pub maximized: bool,
 
+    /// Whether the settings sidebar is open on the active panel.
+    #[prop_or_default]
+    pub is_settings_open: bool,
+
+    /// The column whose settings are open on the active panel, if any.
+    #[prop_or_default]
+    pub open_column: Option<String>,
+
     /// The custom commands rendered above the built-in items.
     #[prop_or_default]
     pub commands: PtrEqRc<ResolvedCommands>,
@@ -129,6 +143,8 @@ impl PartialEq for PanelMenuProps {
             && self.panel_id == rhs.panel_id
             && self.theme == rhs.theme
             && self.maximized == rhs.maximized
+            && self.is_settings_open == rhs.is_settings_open
+            && self.open_column == rhs.open_column
             && self.commands == rhs.commands
     }
 }
@@ -296,42 +312,70 @@ impl PanelMenu {
                     is_pivoted && can_derive(&x.session)
                 });
 
-                vec![
-                    ContextMenuEntry::Submenu {
-                        label: "New".to_owned(),
-                        on_select: Some(cmd(PanelCommand::New)),
-                        entries: vec![ContextMenuEntry::Custom(self.new_submenu_body(ctx))],
-                    },
-                    item("Duplicate", cmd(PanelCommand::Duplicate), false),
-                    item("Derive Table", cmd(PanelCommand::Derive), !can_derive_view),
-                    item("Reset", cmd(PanelCommand::Reset), false),
-                    item(
-                        "Export",
-                        ctx.link()
-                            .callback(|_| PanelMenuMsg::OpenPicker(PickerKind::Export)),
-                        false,
-                    ),
-                    item(
-                        "Copy",
-                        ctx.link()
-                            .callback(|_| PanelMenuMsg::OpenPicker(PickerKind::Copy)),
-                        false,
-                    ),
-                    if ctx.props().maximized {
-                        item("Restore", cmd(PanelCommand::Restore), false)
-                    } else {
-                        item("Maximize", cmd(PanelCommand::Maximize), false)
-                    },
-                    // Never gated: masters broadcast from ANY select/click
-                    // event (flat grids fall back to the clicked cell's `==`
-                    // clause), not just a grouped row tree.
-                    item(
-                        if is_master { "Detail" } else { "Master" },
-                        cmd(PanelCommand::ToggleMaster),
-                        false,
-                    ),
-                    item("Close", cmd(PanelCommand::Close), !can_close),
-                ]
+                let is_active = ctx.props().workspace.active_id() == Some(PanelId::from(panel_id));
+                let column_settings = ctx
+                    .props()
+                    .commands
+                    .column
+                    .clone()
+                    .filter(|column| !is_active || ctx.props().open_column.as_ref() != Some(column))
+                    .map(|column| {
+                        item(
+                            format!("\"{column}\' Settings").as_str(),
+                            cmd(PanelCommand::ColumnSettings(column)),
+                            false,
+                        )
+                    });
+
+                let panel_settings = (!is_active || !ctx.props().is_settings_open)
+                    .then(|| item("Panel Settings", cmd(PanelCommand::PanelSettings), false));
+
+                let mut entries: Vec<ContextMenuEntry> =
+                    column_settings.into_iter().chain(panel_settings).collect();
+
+                if !entries.is_empty() {
+                    entries.push(ContextMenuEntry::Separator);
+                }
+
+                entries
+                    .into_iter()
+                    .chain([
+                        ContextMenuEntry::Submenu {
+                            label: "New".to_owned(),
+                            on_select: Some(cmd(PanelCommand::New)),
+                            entries: vec![ContextMenuEntry::Custom(self.new_submenu_body(ctx))],
+                        },
+                        item("Duplicate", cmd(PanelCommand::Duplicate), false),
+                        item("Derive Table", cmd(PanelCommand::Derive), !can_derive_view),
+                        item("Reset", cmd(PanelCommand::Reset), false),
+                        item(
+                            "Export",
+                            ctx.link()
+                                .callback(|_| PanelMenuMsg::OpenPicker(PickerKind::Export)),
+                            false,
+                        ),
+                        item(
+                            "Copy",
+                            ctx.link()
+                                .callback(|_| PanelMenuMsg::OpenPicker(PickerKind::Copy)),
+                            false,
+                        ),
+                        if ctx.props().maximized {
+                            item("Restore", cmd(PanelCommand::Restore), false)
+                        } else {
+                            item("Maximize", cmd(PanelCommand::Maximize), false)
+                        },
+                        // Never gated: masters broadcast from ANY select/click
+                        // event (flat grids fall back to the clicked cell's
+                        // `==` clause), not just a grouped row tree.
+                        item(
+                            if is_master { "Detail" } else { "Master" },
+                            cmd(PanelCommand::ToggleMaster),
+                            false,
+                        ),
+                        item("Close", cmd(PanelCommand::Close), !can_close),
+                    ])
+                    .collect()
             },
         };
 

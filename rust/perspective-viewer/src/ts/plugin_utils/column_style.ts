@@ -53,9 +53,8 @@ export type StringMode = (typeof STRING_MODES)[number];
 export type DatetimeMode = (typeof DATETIME_MODES)[number];
 
 /**
- * Every foreground treatment some column type accepts. The subset a given
- * column accepts is `fg_modes_for(type)`; `column_config_schema()`
- * advertises exactly that subset, and the viewer rejects any other value.
+ * Every foreground treatment some column type accepts, of which a column
+ * accepts `fg_modes_for(type)`.
  */
 export type FgMode = NumberFgMode | StringMode | DatetimeMode;
 
@@ -92,16 +91,6 @@ export function bg_modes_for(type: ColumnType): readonly BgMode[] {
         default:
             return [];
     }
-}
-
-/** The `fg_mode` an omitted key stands for: colored text for numbers. */
-export function default_fg_mode(type: ColumnType): FgMode {
-    return type === "integer" || type === "float" ? "color" : "disabled";
-}
-
-/** The `bg_mode` an omitted key stands for. */
-export function default_bg_mode(_type: ColumnType): BgMode {
-    return "disabled";
 }
 
 /** `raw` as an `fg_mode` a column of `type` accepts, else `undefined`. */
@@ -162,18 +151,14 @@ export interface ResolvedColors {
 export type Resolved<T> = Omit<T, "fg_color" | "bg_color"> & ResolvedColors;
 
 /**
- * A column's {@link ColumnStyleConfig} with its `fg_color` / `bg_color`
- * strings parsed once at `restore()`. Column types are not known at restore
- * time, so every reader runs and each parsed form is present when its
- * grammar matched; the per-type cell style handlers pick the form their
- * mode needs.
+ * A column's {@link ColumnStyleConfig} with its `fg_color` / `bg_color` strings
+ * parsed once at `restore()`.
  */
 export type ResolvedColumnStyle = Resolved<ColumnStyleConfig>;
 
 /**
- * Every parsed form of one `fg_color` / `bg_color` string. Column types
- * are unknown here (`restore()` may run before the model exists), so each
- * reader runs and the style handlers pick the form their mode needs.
+ * Every form one `fg_color` / `bg_color` string parses as, for each mode's
+ * style handler to pick from.
  */
 interface ParsedColor {
     color?: ColorRecord;

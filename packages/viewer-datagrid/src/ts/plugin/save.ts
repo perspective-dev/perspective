@@ -19,7 +19,7 @@ export function save(
         const token: DatagridPluginConfig = {
             scroll_lock: !!this._is_scroll_lock,
             edit_mode: this._edit_mode,
-            column_menus: this._column_menus ? undefined : false,
+            column_menus: this._column_menus ? true : undefined,
             command_column:
                 this._command_column === "left"
                     ? undefined

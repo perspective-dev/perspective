@@ -266,7 +266,7 @@ export interface DatagridPluginConfig {
 
     /**
      * Whether the header shows the per-column edit-button row while the
-     * settings panel is open (default `true`).
+     * settings panel is open (default `false`).
      */
     column_menus?: boolean;
 

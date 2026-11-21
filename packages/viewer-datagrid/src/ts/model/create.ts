@@ -237,7 +237,7 @@ export async function createModel(
         _edit_mode,
         _row_height: this?._row_height,
         _word_wrap: this?._word_wrap ?? false,
-        _column_menus: this?._column_menus ?? true,
+        _column_menus: this?._column_menus ?? false,
         _command_column: this?._command_column ?? "left",
         _command_cells: this?._command_cells ?? true,
         _align: this?._align,

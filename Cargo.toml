@@ -45,8 +45,6 @@ codegen-units = 1
 lto = true
 strip = true
 
-# The crates `perspective-viewer`'s number and datetime formatters spend their
-# time in, optimized for speed under an otherwise size-optimized profile.
 [profile.release.package]
 calendrical_calculations = { opt-level = 3 }
 core_maths = { opt-level = 3 }

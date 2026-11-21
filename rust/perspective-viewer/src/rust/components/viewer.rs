@@ -349,8 +349,8 @@ impl Component for PerspectiveViewer {
             ToggleSettingsInit(update, announce, resolve) => {
                 self.on_toggle_settings_init(ctx, update, announce, resolve)
             },
-            ToggleSettingsComplete(update, resolve) => {
-                self.on_toggle_settings_complete(ctx, update, resolve)
+            ToggleSettingsComplete(update, column, resolve) => {
+                self.on_toggle_settings_complete(ctx, update, column, resolve)
             },
             DividerMove(divider, target) => self.on_divider_move(ctx, divider, target),
             DividerPump(divider) => self.on_divider_pump(ctx, divider),
@@ -363,6 +363,7 @@ impl Component for PerspectiveViewer {
                 sender,
                 toggle,
             } => self.on_open_column_settings(ctx, target, sender, toggle),
+            OpenSettingsWithColumn(target) => self.on_open_settings_with_column(ctx, target),
             ColumnSettingsPanelAutoWidth(w) => self.on_column_settings_panel_auto_width(ctx, w),
             ToggleColumnSettingsPin => self.on_toggle_column_settings_pin(ctx),
             ToggleColumnSettingsPinComplete(resolve) => {

@@ -25,6 +25,10 @@ test.describe("Datagrid Column Styles", function () {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
+        await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            await viewer.restore({ plugin_config: { column_menus: true } });
+        });
     });
 
     test("Interacting with column settings does not override column width", async function ({
@@ -220,6 +224,10 @@ runTests("Datagrid Column Styles", () => {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
+        await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            await viewer.restore({ plugin_config: { column_menus: true } });
+        });
     });
 
     // These tests only check that a connection is made between the column settings sidebar
@@ -338,6 +346,10 @@ runTests("Datagrid Column Styles - Split-by", () => {
                 await new Promise((x) => setTimeout(x, 10));
             }
         });
+        await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            await viewer.restore({ plugin_config: { column_menus: true } });
+        });
     });
 
     test("Datagrid Column Styles - Only edit buttons get styled", async ({
@@ -351,6 +363,7 @@ runTests("Datagrid Column Styles - Split-by", () => {
             }
         });
         const viewer = new PspViewer(page);
+        await viewer.restore({ plugin_config: { column_menus: true } });
         const headers = viewer.dataGrid.regularTable.table
             .locator("thead")
             .filter({
@@ -388,6 +401,7 @@ runTests("Datagrid Column Styles - Split-by", () => {
             group_by: [],
             split_by: [],
             settings: true,
+            plugin_config: { column_menus: true },
         });
         const btn = await table.getEditBtnByName("Sales");
         await btn.locator("span:not(.rt-column-resize)").click();

@@ -35,9 +35,6 @@ path = "src/rust/lib.rs"
 
 [features]
 external-bootstrap = []
-
-# Look up time zone rules and time zone, currency and unit names in linked
-# locale data rather than in the browser, for builds that run outside one.
 bundled-locale-data = ["dep:jiff"]
 metadata = []
 default = ["llm-agent"]
@@ -70,7 +67,6 @@ derivative = "2.2.0"
 # Easy way to define & implement a singleton trait (type extension)
 extend = "1.1.2"
 
-# Locale-aware number and date formatting, pinned as parts are pre-stable
 fixed_decimal = { version = "=0.7.3", features = ["ryu"] }
 icu_calendar = { version = "=2.4.0" }
 icu_datetime = { version = "=2.4.0" }

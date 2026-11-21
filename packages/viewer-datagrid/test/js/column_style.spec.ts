@@ -66,6 +66,7 @@ test.describe("Column Style Tests", () => {
         await page.evaluate(async () => {
             await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
+                plugin_config: { column_menus: true },
             });
         });
 
@@ -222,6 +223,7 @@ test.describe("Column Style Tests", () => {
         await page.evaluate(async () => {
             await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
+                plugin_config: { column_menus: true },
             });
         });
 
@@ -300,6 +302,7 @@ test.describe("Column Style Tests", () => {
         await page.evaluate(async () => {
             await document.querySelector("perspective-viewer")!.restore({
                 plugin: "Datagrid",
+                plugin_config: { column_menus: true },
             });
         });
 
@@ -422,6 +425,7 @@ test.describe("Column Style Tests", () => {
                 plugin: "Datagrid",
                 columns: ["Row ID", "Profit"],
                 settings: true,
+                plugin_config: { column_menus: true },
                 columns_config: {
                     Profit: { bg_mode: "gradient" },
                 },
@@ -931,6 +935,7 @@ test.describe("Column Style Tests", () => {
                 plugin: "Datagrid",
                 group_by: ["State"],
                 settings: true,
+                plugin_config: { column_menus: true },
             });
             await viewer.flush();
         });

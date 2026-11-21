@@ -179,6 +179,7 @@ perspective-viewer {
     --psp-label--value-fit--content: "حجم القيمة";
     --psp-label--breakdown--content: "تفصيل";
     --psp-label--chart-type--content: "نوع الشكل";
+    --psp-label--new-panel-button--content: "جديد";
 
     --psp-label--auto-alt-y-axis--content: "محور Y تلقائي";
     --psp-label--facet-mode--content: "وضع التقسيم";

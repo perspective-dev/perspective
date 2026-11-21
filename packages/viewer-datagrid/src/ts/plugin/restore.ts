@@ -21,6 +21,7 @@ import {
     parse_command_column,
     wrap_lines,
 } from "./plugin_config_schema.ts";
+import type { Align } from "@perspective-dev/viewer";
 import { plugin_utils } from "../plugin_utils.ts";
 import type {
     ColumnsConfig,
@@ -119,7 +120,7 @@ function restore_grid_style(
 
     this._font_size = positive_px(token.font_size);
     this._word_wrap = token.word_wrap === true;
-    this._column_menus = token.column_menus !== false;
+    this._column_menus = token.column_menus === true;
     const command_column_before = this._command_column;
     this._command_column = parse_command_column(token.command_column);
     if (command_column_before !== this._command_column && this.model) {
@@ -131,7 +132,9 @@ function restore_grid_style(
     this._command_cells = token.command_cells !== false;
     this._bold = token.bold === true;
     this._italic = token.italic === true;
-    this._align = schema.parse_align(token.align);
+    this._align = schema.ALIGNS.includes(token.align as Align)
+        ? (token.align as Align)
+        : undefined;
 
     this._row_height = positive_px(token.row_height);
     this._zebra_rows = Math.max(

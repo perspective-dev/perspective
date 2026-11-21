@@ -176,6 +176,7 @@ perspective-viewer {
     --psp-label--value-fit--content: "Tamanho do valor";
     --psp-label--breakdown--content: "Detalhamento";
     --psp-label--chart-type--content: "Tipo de glifo";
+    --psp-label--new-panel-button--content: "Novo";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "Eixo Y duplo automático";

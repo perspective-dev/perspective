@@ -64,14 +64,7 @@ interface ColState {
 
 const HEADER_ALIGNMENT: ColumnAlignment = { text: "left", vertical: "middle" };
 
-function resolve_alignment(
-    align: Align | undefined,
-    is_numeric: boolean,
-): ColumnAlignment {
-    if (align === undefined) {
-        return { text: is_numeric ? "right" : "left", vertical: "middle" };
-    }
-
+function resolve_alignment(align: Align): ColumnAlignment {
     return {
         text: align.endsWith("left")
             ? "left"
@@ -280,7 +273,11 @@ export function applyBodyCellStyles(
                 size_key,
                 isHeader
                     ? HEADER_ALIGNMENT
-                    : resolve_alignment(c.align ?? model._align, c.is_numeric),
+                    : resolve_alignment(
+                          c.align ??
+                              model._align ??
+                              (c.is_numeric ? "right" : "left"),
+                      ),
             );
         }
 

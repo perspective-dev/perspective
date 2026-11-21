@@ -45,6 +45,7 @@ async function select_mode(
     key: "fg_mode" | "bg_mode",
     value: string,
 ) {
+    await view.restore({ plugin_config: { column_menus: true } });
     await view.openSettingsPanel();
     await view.dataGrid.regularTable.editBtnRow
         .locator("th.psp-menu-enabled span")

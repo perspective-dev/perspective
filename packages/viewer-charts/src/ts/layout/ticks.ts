@@ -132,9 +132,8 @@ export function formatTickValue(val: number): string {
 }
 
 /**
- * Cached formatter per option shape, as building one parses its options.
- * Keyed by precision tier and date options; the locale is fixed for the
- * lifetime of the worker, so entries never invalidate.
+ * Formatters by precision tier and date modifiers, never invalidated as the
+ * worker's locale is fixed.
  */
 const DATE_FORMAT_CACHE = new Map<string, Formatter>();
 
@@ -235,8 +234,8 @@ function dateTickFormatter(
 }
 
 /**
- * Format a timestamp (ms since epoch) as a human-readable date/time label.
- * Adapts precision based on the tick spacing.
+ * Format a timestamp (ms since epoch) as a date/time label whose precision
+ * suits the tick spacing.
  */
 export function formatDateTickValue(
     val: number,

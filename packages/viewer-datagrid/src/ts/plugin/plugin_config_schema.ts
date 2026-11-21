@@ -139,7 +139,7 @@ export default function plugin_config_schema(
     fields.push({
         kind: "Bool",
         key: "column_menus" satisfies keyof DatagridPluginConfig,
-        default: true,
+        default: false,
     });
 
     if (is_command_scope(this, "datagrid-row")) {

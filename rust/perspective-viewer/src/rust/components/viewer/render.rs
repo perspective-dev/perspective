@@ -28,6 +28,8 @@ use crate::components::main_panel::MainPanel;
 use crate::components::panel_menu::PanelCommand;
 use crate::components::settings_panel::SettingsPanel;
 use crate::components::style::StyleSurface;
+use crate::config::SettingsUpdate;
+use crate::presentation::ColumnSettingsTarget;
 use crate::queries::*;
 use crate::session::TableLoadState;
 use crate::ui::{FontLoader, SplitPanel, StyleProvider};
@@ -186,6 +188,14 @@ impl PerspectiveViewer {
                         PanelCommand::Reset => vec![ResetPanel(Some(id), false, None)],
                         PanelCommand::ToggleMaster => vec![ToggleMaster(id)],
                         PanelCommand::Close => vec![ClosePanel(id, None)],
+                        PanelCommand::ColumnSettings(column) => vec![
+                            SetActivePanel(id, None),
+                            OpenSettingsWithColumn(ColumnSettingsTarget::Column(column)),
+                        ],
+                        PanelCommand::PanelSettings => vec![
+                            SetActivePanel(id, None),
+                            ToggleSettingsInit(Some(SettingsUpdate::Update(true)), true, None),
+                        ],
                         PanelCommand::Maximize | PanelCommand::Restore => vec![],
                     }
                 })}

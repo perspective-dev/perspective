@@ -69,7 +69,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
     _bold: boolean = false;
     _italic: boolean = false;
     _word_wrap: boolean = false;
-    _column_menus: boolean = true;
+    _column_menus: boolean = false;
     _command_column: CommandColumn = "left";
     _command_cells: boolean = true;
     _align?: Align;

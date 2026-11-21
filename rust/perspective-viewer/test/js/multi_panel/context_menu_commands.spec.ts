@@ -103,6 +103,11 @@ async function openMenu(page, selector = "perspective-viewer-plugin") {
     return menu;
 }
 
+async function expectBuiltinOnly(menu) {
+    await expect(menu.locator(TOP_LEVEL).nth(0)).toHaveText("Panel Settings");
+    await expect(menu.locator(".context-menu-separator")).toHaveCount(1);
+}
+
 async function commandCount(page): Promise<number> {
     return await page.evaluate(() => window["__COMMANDS__"].length);
 }
@@ -116,14 +121,18 @@ test.describe("Context menu custom commands", () => {
         const rows = menu.locator(TOP_LEVEL);
         await expect(rows.nth(0)).toHaveText("Hello");
         await expect(rows.nth(1)).toHaveClass(/context-menu-separator/);
-        await expect(rows.nth(2)).toContainText("New");
+        await expect(rows.nth(2)).toHaveText("Panel Settings");
+        await expect(rows.nth(3)).toHaveClass(/context-menu-separator/);
+        await expect(rows.nth(4)).toContainText("New");
     });
 
-    test("an empty command list adds no separator", async ({ page }) => {
+    test("an empty command list adds no rows above the built-in items", async ({
+        page,
+    }) => {
         await declareCommands(page, []);
         const menu = await openMenu(page);
-        await expect(menu.locator(".context-menu-separator")).toHaveCount(0);
-        await expect(menu.locator(TOP_LEVEL).nth(0)).toContainText("New");
+        await expectBuiltinOnly(menu);
+        await expect(menu.locator(TOP_LEVEL).nth(2)).toContainText("New");
     });
 
     test("a disabled command dispatches nothing", async ({ page }) => {
@@ -186,7 +195,7 @@ test.describe("Context menu custom commands", () => {
         ]);
 
         const menu = await openMenu(page);
-        await expect(menu.locator(".context-menu-separator")).toHaveCount(0);
+        await expectBuiltinOnly(menu);
         await expect(
             menu.locator(".context-menu-item", { hasText: "Empty" }),
         ).toHaveCount(0);
@@ -312,7 +321,7 @@ test.describe("Context menu custom commands", () => {
         });
 
         const menu = await openMenu(page);
-        await expect(menu.locator(".context-menu-separator")).toHaveCount(0);
+        await expectBuiltinOnly(menu);
         await expect(
             menu.locator(".context-menu-item", { hasText: "Hello" }),
         ).toHaveCount(0);
@@ -351,7 +360,7 @@ test.describe("Context menu custom commands", () => {
         });
 
         const menu = await openMenu(page);
-        await expect(menu.locator(".context-menu-separator")).toHaveCount(0);
+        await expectBuiltinOnly(menu);
         await expect(
             menu.locator(".context-menu-item", { hasText: "Duplicate" }),
         ).toBeVisible();
@@ -368,7 +377,7 @@ test.describe("Context menu custom commands", () => {
 
         await declareCommands(page, [{ kind: "Bogus", key: "x", label: "X" }]);
         const menu = await openMenu(page);
-        await expect(menu.locator(".context-menu-separator")).toHaveCount(0);
+        await expectBuiltinOnly(menu);
         await expect(
             menu.locator(".context-menu-item", { hasText: "Duplicate" }),
         ).toBeVisible();
@@ -379,7 +388,7 @@ test.describe("Context menu custom commands", () => {
     }) => {
         await declareCommands(page, [HELLO], { scopes: ["datagrid-row"] });
         const menu = await openMenu(page);
-        await expect(menu.locator(".context-menu-separator")).toHaveCount(0);
+        await expectBuiltinOnly(menu);
         expect(await page.evaluate(() => window["__CONTEXTS__"].length)).toBe(
             0,
         );

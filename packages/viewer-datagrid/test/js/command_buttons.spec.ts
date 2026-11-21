@@ -212,7 +212,7 @@ test.describe("Datagrid command buttons", () => {
             page,
             {
                 columns: ["State", "Sales"],
-                plugin_config: { command_column: "right" },
+                plugin_config: { command_column: "right", column_menus: true },
             },
             ["datagrid-row"],
         );

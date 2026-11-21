@@ -39,7 +39,6 @@ perspective-viewer,
     .psp-menu-enabled {
         padding: 0 6px;
         font-size: 8px;
-        border-radius: 3px 3px 0 0;
     }
 
     .psp-menu-enabled:hover,
@@ -47,7 +46,20 @@ perspective-viewer,
         color: var(--psp--background-color);
         background-color: var(--psp--color);
         border-bottom-color: var(--psp--color);
+        box-shadow: 5px 0px 0px var(--psp-box-shadow--color);
         cursor: pointer;
+    }
+
+    tr:not([id]),
+    tr#psp-column-titles {
+        th.psp-menu-open {
+            border-radius: 3px 3px 0 0;
+            box-shadow:
+                inset -1px 0px 0px var(--psp--color),
+                inset 1px 0px 0px var(--psp--color),
+                inset 0px 1px 0px var(--psp--color),
+                10px 5px 0px -5px var(--psp-box-shadow--color);
+        }
     }
 
     tr:not(.rt-autosize) th.psp-menu-open {
@@ -69,8 +81,9 @@ perspective-viewer,
 
     td.psp-menu-open {
         box-shadow:
-            inset -2px 0px 0px var(--psp--color),
-            inset 2px 0px 0px var(--psp--color);
+            inset -1px 0px 0px var(--psp--color),
+            inset 1px 0px 0px var(--psp--color),
+            5px 0px 0px var(--psp-box-shadow--color);
     }
 
     tr:first-child td.psp-menu-open {
@@ -79,9 +92,10 @@ perspective-viewer,
 
     tr:last-child td.psp-menu-open {
         box-shadow:
-            inset -2px 0px 0px var(--psp--color),
-            inset 2px 0px 0px var(--psp--color),
-            inset 0px -2px 0px var(--psp--color);
+            inset -1px 0px 0px var(--psp--color),
+            inset 1px 0px 0px var(--psp--color),
+            inset 0px -1px 0px var(--psp--color),
+            5px 0px 0px var(--psp-box-shadow--color);
     }
 
     regular-table table tbody td,
@@ -484,16 +498,18 @@ regular-table tbody tr:hover {
     td.psp-select-region.psp-menu-open {
         &:not(.psp-select-region-inactive) {
             box-shadow:
-                inset -2px 0px 0px var(--psp--background-color),
-                inset 2px 0px 0px var(--psp--background-color);
+                inset -1px 0px 0px var(--psp--background-color),
+                inset 1px 0px 0px var(--psp--background-color),
+                5px 0px 0px var(--psp-box-shadow--color);
         }
     }
 }
 
 :host([settings]) td.psp-select-region.psp-menu-open {
     box-shadow:
-        inset -2px 0px 0px var(--psp--background-color),
-        inset 2px 0px 0px var(--psp--background-color);
+        inset -1px 0px 0px var(--psp--background-color),
+        inset 1px 0px 0px var(--psp--background-color),
+        5px 0px 0px var(--psp-box-shadow--color);
 }
 
 /* This is a design/architecture bug. When the datagrid draws during a sidepanel */

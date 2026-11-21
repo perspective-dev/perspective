@@ -180,6 +180,47 @@ test.describe("Alignment control", () => {
         expect(await checked_cells(font, "align")).toEqual(["top-left"]);
     });
 
+    test("column grid ghosts its type's alignment while the grid's is unset", async ({
+        page,
+    }) => {
+        const view = new PageView(page);
+        await view.restore({
+            settings: true,
+            plugin: "Datagrid",
+            columns: ["Sales", "Region"],
+        });
+
+        const sales = await open_group(
+            await open_style_tab(view, "Sales"),
+            page,
+            "font",
+        );
+
+        await expect(cell(sales, "align", "right")).toHaveAttribute(
+            "aria-checked",
+            "true",
+        );
+
+        expect(await checked_cells(sales, "align")).toEqual(["right"]);
+        await expect(cell(sales, "align", "right")).toHaveClass(/is-default/);
+        await cell(sales, "align", "right").click();
+        expect(((await view.save()) as any).columns_config).toEqual({});
+
+        const region = await open_group(
+            await open_style_tab(view, "Region"),
+            page,
+            "font",
+        );
+
+        await expect(cell(region, "align", "left")).toHaveAttribute(
+            "aria-checked",
+            "true",
+        );
+
+        expect(await checked_cells(region, "align")).toEqual(["left"]);
+        await expect(cell(region, "align", "left")).toHaveClass(/is-default/);
+    });
+
     test("charts legend anchor is corners-only with a ghost default", async ({
         page,
     }) => {

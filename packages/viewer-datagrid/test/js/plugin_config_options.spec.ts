@@ -510,7 +510,7 @@ test.describe("Datagrid plugin_config text and row options", () => {
         expect(variants.unsupported).toContain("READ_ONLY");
     });
 
-    test("column_menus hides the header edit row while settings are open", async ({
+    test("column_menus shows the header edit row while settings are open", async ({
         page,
     }) => {
         await goto_ready(page);
@@ -533,20 +533,9 @@ test.describe("Datagrid plugin_config text and row options", () => {
             });
 
         expect(await header()).toEqual({
-            rows: 2,
-            menus: 2,
-            ids: ["psp-column-titles", "psp-column-edit-buttons"],
-        });
-
-        await restore_plugin_config(page, { column_menus: false });
-        expect(await header()).toEqual({
             rows: 1,
             menus: 0,
             ids: [""],
-        });
-
-        expect(await saved_plugin_config(page)).toEqual({
-            column_menus: false,
         });
 
         await restore_plugin_config(page, { column_menus: true });
@@ -554,6 +543,17 @@ test.describe("Datagrid plugin_config text and row options", () => {
             rows: 2,
             menus: 2,
             ids: ["psp-column-titles", "psp-column-edit-buttons"],
+        });
+
+        expect(await saved_plugin_config(page)).toEqual({
+            column_menus: true,
+        });
+
+        await restore_plugin_config(page, { column_menus: false });
+        expect(await header()).toEqual({
+            rows: 1,
+            menus: 0,
+            ids: [""],
         });
 
         expect(await saved_plugin_config(page)).toEqual({});
@@ -1050,7 +1050,7 @@ test.describe("Datagrid plugin_config text and row options", () => {
             font_family: "inherit",
             font_size: expect.any(Number),
             word_wrap: false,
-            align: undefined,
+            align: "left",
         });
 
         expect(pick(defaults.custom)).toEqual({

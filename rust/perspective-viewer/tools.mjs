@@ -92,7 +92,7 @@ const DOCS_DTS_FILES = [
         scope: [
             "type LabelPosition",
             "type ValueFit",
-            "type Breakdown",
+            "type LayoutMode",
             "interface ColumnConfig",
             "interface SummaryPluginConfig",
         ],

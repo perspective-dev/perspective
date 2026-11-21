@@ -117,15 +117,15 @@ impl PerspectiveViewer {
                 false
             },
             (Some(SettingsUpdate::SetDefault), resolve) => {
-                self.init_toggle_settings_task(ctx, Some(false), announce, resolve);
+                self.init_toggle_settings_task(ctx, Some(false), announce, resolve, None);
                 false
             },
             (Some(SettingsUpdate::Update(force)), resolve) => {
-                self.init_toggle_settings_task(ctx, Some(force), announce, resolve);
+                self.init_toggle_settings_task(ctx, Some(force), announce, resolve, None);
                 false
             },
             (None, resolve) => {
-                self.init_toggle_settings_task(ctx, None, announce, resolve);
+                self.init_toggle_settings_task(ctx, None, announce, resolve, None);
                 false
             },
         }
@@ -135,6 +135,7 @@ impl PerspectiveViewer {
         &mut self,
         ctx: &Context<Self>,
         update: SettingsUpdate,
+        column: Option<ColumnSettingsTarget>,
         resolve: Sender<()>,
     ) -> bool {
         match update {
@@ -145,7 +146,21 @@ impl PerspectiveViewer {
                 true
             },
             SettingsUpdate::Update(force) if force != self.settings_open => {
-                ctx.props().presentation.set_open_column_settings(None);
+                let ocs = column
+                    .filter(|_| force)
+                    .map(|target| self.column_settings_for(Some(target)));
+
+                if ocs.is_some() {
+                    self.settings_geometry.selected_tab = SelectedTab::Query;
+                }
+
+                ctx.props()
+                    .presentation
+                    .set_open_column_settings(ocs.clone());
+                if let Some(ocs) = ocs {
+                    self.presentation_props.open_column_settings = ocs;
+                }
+
                 self.settings_open = force;
                 self.on_rendered.push(resolve);
                 true
@@ -184,6 +199,7 @@ impl PerspectiveViewer {
         force: Option<bool>,
         announce: bool,
         sender: Option<Sender<ApiResult<JsValue>>>,
+        column: Option<ColumnSettingsTarget>,
     ) {
         let is_open = ctx.props().presentation.is_settings_open();
         match force {
@@ -197,7 +213,7 @@ impl PerspectiveViewer {
                 let force = !is_open;
                 let callback = ctx.link().callback(move |resolve| {
                     let update = SettingsUpdate::Update(force);
-                    ToggleSettingsComplete(update, resolve)
+                    ToggleSettingsComplete(update, column.clone(), resolve)
                 });
 
                 if is_open {
@@ -407,6 +423,36 @@ impl PerspectiveViewer {
         }
     }
 
+    /// The open column settings of `target`, on the tab its column opens to.
+    fn column_settings_for(&self, target: Option<ColumnSettingsTarget>) -> OpenColumnSettings {
+        let tab = match &target {
+            Some(ColumnSettingsTarget::NewExpression) => Some(ColumnSettingsTab::Attributes),
+            Some(ColumnSettingsTarget::Column(name)) => {
+                Some(if self.session_props.is_column_active(name) {
+                    ColumnSettingsTab::Style
+                } else {
+                    ColumnSettingsTab::Attributes
+                })
+            },
+            None => None,
+        };
+
+        OpenColumnSettings { target, tab }
+    }
+
+    pub(super) fn on_open_settings_with_column(
+        &mut self,
+        ctx: &Context<Self>,
+        target: ColumnSettingsTarget,
+    ) -> bool {
+        if self.settings_open {
+            self.on_open_column_settings(ctx, Some(target), None, false)
+        } else {
+            self.init_toggle_settings_task(ctx, Some(true), true, None, Some(target));
+            false
+        }
+    }
+
     pub(super) fn on_open_column_settings(
         &mut self,
         ctx: &Context<Self>,
@@ -414,25 +460,13 @@ impl PerspectiveViewer {
         sender: Option<Sender<()>>,
         toggle: bool,
     ) -> bool {
-        let mut open_column_settings = ctx.props().presentation.get_open_column_settings();
+        let open_column_settings = ctx.props().presentation.get_open_column_settings();
         if target == open_column_settings.target {
             if toggle {
                 ctx.props().presentation.set_open_column_settings(None);
             }
         } else {
-            open_column_settings.target.clone_from(&target);
-            open_column_settings.tab = match &target {
-                Some(ColumnSettingsTarget::NewExpression) => Some(ColumnSettingsTab::Attributes),
-                Some(ColumnSettingsTarget::Column(name)) => {
-                    Some(if self.session_props.is_column_active(name) {
-                        ColumnSettingsTab::Style
-                    } else {
-                        ColumnSettingsTab::Attributes
-                    })
-                },
-                None => None,
-            };
-
+            let open_column_settings = self.column_settings_for(target.clone());
             ctx.props()
                 .presentation
                 .set_open_column_settings(Some(open_column_settings));

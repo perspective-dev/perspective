@@ -134,7 +134,6 @@ impl MainPanel {
         if self.listener_target.as_ref() != Some(&el) {
             if self.listener_target.is_some() {
                 self.inserted.clear();
-                self.on_screen.clear();
             }
 
             let _ = el.add_event_listener_with_callback(

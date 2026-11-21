@@ -164,10 +164,14 @@ async function openMenu(page, selector: string) {
 }
 
 test.describe("Context menu custom commands with a hit-testing plugin", () => {
-    test("no schema means the plugin is never hit-tested", async ({ page }) => {
+    test("a body right-click hit-tests the plugin without a schema", async ({
+        page,
+    }) => {
         await loadHitPlugin(page);
         await openMenu(page, "regular-layout-frame");
-        expect(await page.evaluate(() => window["__HIT_TESTS__"])).toEqual([]);
+        expect(await page.evaluate(() => window["__HIT_TESTS__"].length)).toBe(
+            1,
+        );
     });
 
     test("a body right-click carries the plugin's hit at the click point", async ({

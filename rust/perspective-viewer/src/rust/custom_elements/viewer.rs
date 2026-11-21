@@ -335,10 +335,13 @@ impl PerspectiveViewerElement {
             .flatten()
             .map(|id| id.as_str().to_owned());
 
-        let layout = this
-            .layout_element()
-            .map(|l| l.save().into_serde_ext::<crate::js::Layout>())
-            .transpose()?;
+        let layout = match this.workspace.pending_layout() {
+            Some(layout) => Some(layout),
+            None => this
+                .layout_element()
+                .map(|l| l.save().into_serde_ext::<crate::js::Layout>())
+                .transpose()?,
+        };
 
         Ok(JsValue::from_serde_ext(&WorkspaceConfig {
             version: API_VERSION.to_string(),

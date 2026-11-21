@@ -49,6 +49,60 @@ async function twoPanelsSecondActive(page) {
 }
 
 test.describe("Viewer-wide context menu", () => {
+    test("a right-click leaves the active panel and offers Panel Settings", async ({
+        page,
+    }) => {
+        await restoreWorkspace(page, {
+            layout: {
+                type: "split-layout",
+                orientation: "horizontal",
+                sizes: [0.5, 0.5],
+                children: [
+                    { type: "tab-layout", tabs: ["one"], selected: 0 },
+                    { type: "tab-layout", tabs: ["two"], selected: 0 },
+                ],
+            },
+            panels: {
+                one: { table: TABLE, plugin: "Debug" },
+                two: { table: TABLE, plugin: "Debug" },
+            },
+        });
+
+        await openSettings(page);
+        await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer") as any;
+            await viewer.setActivePanel("two");
+        });
+
+        await page
+            .locator('perspective-viewer perspective-viewer-plugin[slot="one"]')
+            .click({ button: "right" });
+
+        const menu = page.locator("perspective-context-menu");
+        await menu.waitFor();
+        expect(
+            await page.evaluate(() =>
+                (
+                    document.querySelector("perspective-viewer") as any
+                ).getActivePanel(),
+            ),
+        ).toBe("two");
+
+        await menu
+            .locator(".context-menu-item", { hasText: "Panel Settings" })
+            .click();
+
+        await expect
+            .poll(async () =>
+                page.evaluate(() =>
+                    (
+                        document.querySelector("perspective-viewer") as any
+                    ).getActivePanel(),
+                ),
+            )
+            .toBe("one");
+    });
+
     test("a status bar right-click targets the active panel", async ({
         page,
     }) => {

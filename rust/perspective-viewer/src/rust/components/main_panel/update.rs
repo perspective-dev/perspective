@@ -49,9 +49,9 @@ impl MainPanel {
         false
     }
 
-    /// Report closed every panel this commit dropped from the layout, judged
-    /// against the live `Workspace` panel set (see `reconcile`), and re-render
-    /// so its frame leaves the DOM in the commit's paint.
+    /// Report closed every panel gone from the `Workspace` whose cell this
+    /// commit removed, and re-render so its frame leaves the DOM in the
+    /// commit's paint.
     pub(super) fn on_layout_updated(&mut self, ctx: &Context<Self>) -> bool {
         let Some(el) = self.layout_ref.cast::<web_sys::HtmlElement>() else {
             return false;
@@ -61,17 +61,13 @@ impl MainPanel {
         let layout: RegularLayout = el.unchecked_into();
         let panel_ids = ctx.props().workspace.panel_ids();
         let mut closed = Vec::new();
-        let on_screen = &mut self.on_screen;
         self.inserted.retain(|id| {
-            if layout.contains_panel(id) {
-                on_screen.insert(id.clone());
-                true
-            } else if on_screen.remove(id) || !panel_ids.iter().any(|p| p.as_str() == id) {
+            let kept = layout.contains_panel(id) || panel_ids.iter().any(|p| p.as_str() == id);
+            if !kept {
                 closed.push(id.clone());
-                false
-            } else {
-                true
             }
+
+            kept
         });
 
         let closed_any = !closed.is_empty();
@@ -166,20 +162,16 @@ impl MainPanel {
             })
         });
 
-        // Make the right-clicked panel active so active-targeting
-        // commands (e.g. Reset) act on it; then show the menu.
-        if let Some(id) = &id {
-            ctx.props().on_activate_panel.emit(id.clone());
-        }
-
         let panel = id
             .as_deref()
             .and_then(|id| ctx.props().workspace.panel(&PanelId::from(id)));
 
-        if !ctx
-            .props()
-            .presentation
-            .is_command_scope(CommandLocation::ContextMenu)
+        let is_body = origin == MenuOrigin::Body;
+        if !is_body
+            && !ctx
+                .props()
+                .presentation
+                .is_command_scope(CommandLocation::ContextMenu)
         {
             self.pending_menu = None;
             self.context_menu_commands = PtrEqRc::default();
@@ -197,7 +189,7 @@ impl MainPanel {
                 panel.as_ref(),
                 CommandLocation::ContextMenu,
                 (x, y),
-                origin == MenuOrigin::Body,
+                is_body,
             )
             .await;
 

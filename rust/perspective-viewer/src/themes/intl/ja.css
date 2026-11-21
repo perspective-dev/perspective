@@ -176,6 +176,7 @@ perspective-viewer {
     --psp-label--value-fit--content: "値のサイズ";
     --psp-label--breakdown--content: "内訳";
     --psp-label--chart-type--content: "グリフの種類";
+    --psp-label--new-panel-button--content: "新規";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "自動デュアルY軸";

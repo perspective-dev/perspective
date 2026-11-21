@@ -176,6 +176,7 @@ perspective-viewer {
     --psp-label--value-fit--content: "Wertgröße";
     --psp-label--breakdown--content: "Aufschlüsselung";
     --psp-label--chart-type--content: "Glyphentyp";
+    --psp-label--new-panel-button--content: "Neu";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "Automatische duale Y-Achse";
