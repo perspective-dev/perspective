@@ -26,3 +26,17 @@ test("get_features() reports the native engine's features", async () => {
     expect(Object.keys(features.aggregates)).toContain("integer");
     await table.delete();
 });
+
+test("get_features() accepts float, date and datetime arguments to min by and max by", async () => {
+    const table = await perspective.table({ x: [1, 2, 3] });
+    const features = await table.get_features();
+    for (const type of ["string", "integer", "float"]) {
+        for (const agg of ["min by", "max by"]) {
+            for (const arg of ["float", "date", "datetime"]) {
+                expect(features.aggregates[type]).toContainEqual([agg, [arg]]);
+            }
+        }
+    }
+
+    await table.delete();
+});

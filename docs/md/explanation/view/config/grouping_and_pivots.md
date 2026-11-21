@@ -256,7 +256,7 @@ accumulate as `integer`, `float` columns as `float`.
 | Aggregate | Description | Result type |
 | --- | --- | --- |
 | `min`, `max` | Smallest and largest of the group's current values | input type |
-| `min by`, `max by` | The value from the row at which a **second column**, supplied as an argument, is smallest or largest | input type |
+| `min by`, `max by` | The value from the row at which a **second column**, supplied as an argument, is smallest or largest; the argument may be an `integer`, `float`, `date` or `datetime` column | input type |
 | `high`, `low` | High and low _water mark_ — the largest and smallest value this `View` has ever observed for the group, which never moves back when rows are updated or removed | input type |
 | `high minus low` | `max - min` of the group's current values, i.e. its range. Despite the name this uses `min`/`max`, not the water marks | input type |
 | `median`, `q1`, `q3` | The value at the 50%, 25% and 75% position of the group's values; on `float` columns an exact split averages the two adjacent values | input type |
@@ -266,13 +266,24 @@ accumulate as `integer`, `float` columns as `float`.
 | Aggregate | Description | Result type |
 | --- | --- | --- |
 | `first` | Value from the group's earliest row | input type |
-| `last by index` | Value from the group's latest row | input type |
+| `last by index` | Value from the group's latest row, out of every row in the group | input type |
 | `last minus first` | `last by index` minus `first` | input type |
-| `last` | Value from the group's most recently _updated_ row | input type |
+| `last` | On leaf rows, the same as `last by index`. On parent rows, the `last` of the group's most recently _created_ leaf group | input type |
 
-"Earliest" and "latest" are by the `Table`'s `index` column, or by row order
-when the `Table` is unindexed. This is not the same as `last`, which tracks
-update recency rather than position.
+"Earliest" and "latest" are by the `Table`'s `index` — compared column by
+column for a multi-column `index` — or by insertion order when the `Table` is
+unindexed. On an indexed `Table`, an `update()` that overwrites an existing row
+does not make that row the latest; neither `last` nor `last by index` tracks
+update recency.
+
+`last` differs from `last by index` only on parent rows, including the total
+row. Rather than reading every row in the group, it takes the latest row of
+whichever leaf group (deepest `group_by` level) was created most recently. The
+groups created by one `update()`, or by the initial load, are created in
+ascending order of their `group_by` values. For the unindexed rows
+`{x: 1, z: true}`, `{x: 2, z: false}`, `{x: 3, z: true}`, `{x: 4, z: false}`
+grouped by `z`, the total row's `last by index` is `4` but its `last` is `3`,
+because the `true` group sorts after, and so was created after, `false`.
 
 ### Cardinality and identity
 
@@ -335,7 +346,10 @@ column's underlying numeric representation — not a date.</div>
 ### Argument-taking aggregates
 
 `weighted mean`, `min by` and `max by` each read a second column, and are
-written as a `[name, [argument]]` pair rather than a bare string:
+written as a `[name, [argument]]` pair rather than a bare string. The argument
+to `weighted mean` must be numeric; the argument to `min by` and `max by` may
+also be a `date` or `datetime` column, e.g. `["max by", ["timestamp"]]` for
+each group's most recent value:
 
 <div class="javascript">
 

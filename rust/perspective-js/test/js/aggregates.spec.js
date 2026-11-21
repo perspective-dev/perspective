@@ -952,6 +952,88 @@ const std = (nums) => {
             await table.delete();
         });
 
+        test("max_by and min_by with a date argument", async () => {
+            const table = await perspective.table({
+                b: "integer",
+                c: "string",
+                e: "string",
+                d: "date",
+            });
+
+            await table.update({
+                b: [0, 1, 0, 1, 0, 1],
+                c: ["a", "b", "c", "d", "e", "f"],
+                e: ["a", "b", "c", "d", "e", "f"],
+                d: [
+                    new Date(2024, 0, 1),
+                    new Date(2023, 11, 31),
+                    new Date(2023, 1, 28),
+                    new Date(2024, 2, 15),
+                    new Date(2022, 10, 30),
+                    new Date(2023, 0, 31),
+                ],
+            });
+
+            const view = await table.view({
+                columns: ["c", "e"],
+                aggregates: {
+                    c: ["max by", ["d"]],
+                    e: ["min by", ["d"]],
+                },
+                group_by: ["b"],
+            });
+
+            expect(await view.to_columns()).toEqual({
+                __ROW_PATH__: [[], [0], [1]],
+                c: ["d", "a", "d"],
+                e: ["e", "e", "f"],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
+        test("max_by and min_by with a datetime argument", async () => {
+            const table = await perspective.table({
+                b: "integer",
+                c: "float",
+                e: "float",
+                t: "datetime",
+            });
+
+            await table.update({
+                b: [0, 1, 0, 1, 0, 1],
+                c: [1.5, 2.5, 3.5, 4.5, 5.5, 6.5],
+                e: [1.5, 2.5, 3.5, 4.5, 5.5, 6.5],
+                t: [
+                    new Date(Date.UTC(2024, 0, 1, 0, 0, 1)),
+                    new Date(Date.UTC(2023, 11, 31, 23, 59, 59)),
+                    new Date(Date.UTC(2024, 0, 1, 0, 0, 0)),
+                    new Date(Date.UTC(2024, 0, 1, 12, 0, 0)),
+                    new Date(Date.UTC(2023, 5, 15, 8, 30, 0)),
+                    new Date(Date.UTC(2023, 11, 31, 23, 59, 58)),
+                ],
+            });
+
+            const view = await table.view({
+                columns: ["c", "e"],
+                aggregates: {
+                    c: ["max by", ["t"]],
+                    e: ["min by", ["t"]],
+                },
+                group_by: ["b"],
+            });
+
+            expect(await view.to_columns()).toEqual({
+                __ROW_PATH__: [[], [0], [1]],
+                c: [4.5, 1.5, 4.5],
+                e: [5.5, 5.5, 6.5],
+            });
+
+            await view.delete();
+            await table.delete();
+        });
+
         test("max_by with empty filter", async () => {
             const data = {
                 a: [1, 2, 3, 4, 5, 6, 7, 8],
