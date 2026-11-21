@@ -1,0 +1,198 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+:host {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: inherit;
+    color: var(--psp--color);
+}
+
+#tiles {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 1px;
+    overflow: hidden;
+    background-color: var(--psp--background-color);
+}
+
+#tiles.scroll {
+    overflow-y: auto;
+}
+
+.tile {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: var(--psp-summary--v, center);
+    align-items: stretch;
+    flex: 1 1
+        calc(
+            (100% - (var(--psp-summary--cols, 1) - 1) * 1px) /
+                var(--psp-summary--cols, 1) - 1px
+        );
+    height: calc(
+        (100% - (var(--psp-summary--rows, 1) - 1) * 1px) /
+            var(--psp-summary--rows, 1)
+    );
+    min-width: 0;
+    padding: var(--psp-summary--padding, 4px);
+    overflow: hidden;
+    cursor: default;
+    box-shadow:
+        1px 0 0 0 var(--psp-inactive--border-color),
+        0 1px 0 0 var(--psp-inactive--border-color);
+}
+
+#tiles.scroll .tile {
+    height: var(--psp-summary--tile-height);
+}
+
+#tiles.label-left .tile,
+#tiles.label-right .tile {
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: var(--psp-summary--v, center);
+}
+
+.label {
+    flex: 0 0 auto;
+    font-size: var(--psp-summary--label-size, 10px);
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: var(--psp-summary--t, center);
+    color: var(--psp-summary--label--color, var(--psp--color));
+    opacity: 0.7;
+}
+
+#tiles.label-bottom .label,
+#tiles.label-right .label {
+    order: 2;
+}
+
+#tiles.label-none .label {
+    display: none;
+}
+
+#tiles.label-left .label {
+    max-width: 40%;
+    margin-right: 0.75em;
+}
+
+#tiles.label-right .label {
+    max-width: 40%;
+    margin-left: 0.75em;
+}
+
+.body {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: var(--psp-summary--h, center);
+    min-width: 0;
+}
+
+#tiles.label-left .body,
+#tiles.label-right .body {
+    flex: 1 1 0;
+}
+
+.value {
+    max-width: 100%;
+    font-size: var(--psp-summary--value-size, 14px);
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.psp-null .value {
+    opacity: 0.4;
+}
+
+.track {
+    display: none;
+}
+
+.psp-color-mode-bar .track {
+    display: block;
+    align-self: stretch;
+    height: calc(var(--psp-summary--value-size, 14px) * 0.12);
+    margin-top: calc(var(--psp-summary--value-size, 14px) * 0.08);
+    background-color: color-mix(in srgb, currentColor 15%, transparent);
+    background-image: var(--psp-label-bar-color);
+    background-repeat: no-repeat;
+    background-size: var(--psp-bar-size, 0%) 100%;
+    background-position-x: var(--psp-bar-anchor, 0%);
+}
+
+.tile.psp-color-mode-label-bar {
+    background-image: var(--psp-label-bar-color);
+    background-repeat: no-repeat;
+    background-size: var(--psp-bar-size, 0%) 100%;
+    background-position-x: var(--psp-bar-anchor, 0%);
+}
+
+.breakdown {
+    display: none;
+}
+
+.has-breakdown .breakdown {
+    display: block;
+    align-self: stretch;
+    height: calc(var(--psp-summary--value-size, 14px) * 0.45);
+    margin-top: calc(var(--psp-summary--value-size, 14px) * 0.05);
+    overflow: visible;
+}
+
+.breakdown .line {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5px;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.breakdown .area {
+    fill: currentColor;
+    opacity: 0.15;
+}
+
+.breakdown .bar {
+    fill: currentColor;
+    opacity: 0.55;
+}
+
+.breakdown .bar:hover {
+    opacity: 1;
+}
+
+.breakdown .hit {
+    fill: currentColor;
+    opacity: 0;
+}
+
+.breakdown .hit:hover {
+    opacity: 0.12;
+}

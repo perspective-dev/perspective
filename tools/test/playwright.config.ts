@@ -86,7 +86,12 @@ const SUITE_DEVICES: Record<string, string[]> = {
 const SUITE_DEVICE_LIST = (SUITE_DEVICES[BROWSER_SUITE] ??
     SUITE_DEVICES.full) as (keyof typeof DEVICE_OPTIONS)[];
 
-const FIREFOX_SUITE_PACKAGES = ["viewer", "viewer-datagrid", "viewer-charts"];
+const FIREFOX_SUITE_PACKAGES = [
+    "viewer",
+    "viewer-datagrid",
+    "viewer-charts",
+    "viewer-summary",
+];
 
 const DEVICE_OPTIONS = {
     "Desktop Chrome": {
@@ -145,6 +150,10 @@ const BROWSER_PACKAGES = [
     {
         packageName: "viewer-charts",
         testDir: "packages/viewer-charts/test/ts",
+    },
+    {
+        packageName: "viewer-summary",
+        testDir: "packages/viewer-summary/test/js",
     },
     {
         packageName: "jupyterlab",

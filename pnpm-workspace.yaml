@@ -6,6 +6,7 @@ packages:
     - "tools/esbuild-plugin"
     - "packages/viewer-datagrid"
     - "packages/viewer-charts"
+    - "packages/viewer-summary"
     - "packages/workspace"
     - "packages/anywidget"
     - "packages/jupyterlab"

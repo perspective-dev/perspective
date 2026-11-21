@@ -41,6 +41,7 @@ const PACKAGES = [
     },
     { dir: "packages/viewer-datagrid" },
     { dir: "packages/viewer-charts" },
+    { dir: "packages/viewer-summary" },
     { dir: "packages/react" },
 ];
 

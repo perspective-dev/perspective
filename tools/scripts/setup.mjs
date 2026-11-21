@@ -183,6 +183,11 @@ async function focus_package() {
             value: "viewer-charts",
         },
         {
+            key: "u",
+            name: "@perspective-dev/viewer-summary",
+            value: "viewer-summary",
+        },
+        {
             key: "i",
             name: "@perspective-dev/jupyterlab",
             value: "jupyterlab",
