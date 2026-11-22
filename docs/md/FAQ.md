@@ -324,7 +324,8 @@ Or import just the dark theme directly:
 
 The datagrid plugin supports per-column styling (colors, bars, gradients,
 number and date formats, fonts and alignment) via a panel's `columns_config`,
-grid-wide options via `plugin_config`, and CSS custom properties — see the
+grid-wide options via `plugin_config`, and CSS custom properties — see
+[Datagrid column styles](./how_to/javascript/datagrid_column_styles.md) and the
 `ColumnConfig` and `DatagridPluginConfig` types in
 [`@perspective-dev/viewer-datagrid`](https://github.com/perspective-dev/perspective/blob/master/packages/viewer-datagrid/src/ts/types.ts).
 Custom cell renderers require building a custom plugin.

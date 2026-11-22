@@ -60,6 +60,7 @@
     - [Adding custom commands](./how_to/javascript/commands.md)
     - [Plugin render limits](./how_to/javascript/plugin_settings.md)
     - [Configuration defaults](./how_to/javascript/config_defaults.md)
+    - [Datagrid column styles](./how_to/javascript/datagrid_column_styles.md)
     - [Map tile sources](./how_to/javascript/map_tile_sources.md)
     - [Configuring the LLM agent](./how_to/javascript/agent.md)
         - [Letting the agent load data with scripts](./how_to/javascript/agent_scripts.md)
