@@ -81,6 +81,7 @@ The viewer provides an interactive side panel with:
   columns via the [expression language](../../explanation/view/config/expressions.md).
 - **Plugin selector** - switch between the visualization plugins registered on
   the page. `@perspective-dev/viewer-datagrid` provides `Datagrid`;
+  `@perspective-dev/viewer-summary` provides `Summary`;
   `@perspective-dev/viewer-charts` provides `X Bar`, `Y Bar`, `Y Line`,
   `Y Scatter`, `Y Area`, `X/Y Scatter`, `X/Y Line`, `Density`, `Treemap`,
   `Sunburst`, `Heatmap`, `Candlestick`, `OHLC`, `Map Scatter`, `Map Line` and

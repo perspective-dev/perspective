@@ -25,7 +25,8 @@
 
     --psp-icon-overflow-hint--color: #fdfffd;
     --psp-placeholder--background: #8b868045;
-    --psp-dropdown--box-shadow: 5px 5px 0 #00000020;
+    --psp-box-shadow--color: light-dark(#00000020, #ffffff20);
+    --psp-dropdown--box-shadow: 5px 5px 0 var(--psp-box-shadow--color);
 
     --psp-button--font-size: 16px;
     --psp-config-button--padding: 15px 8px 6px 8px;

@@ -19,6 +19,8 @@ perspective-viewer {
     --psp-label--transpose-button--content: "スワップ";
     --psp-label--config-button--content: "設定";
     --psp-label--all-columns--content: "すべての列";
+    --psp-label--add-all-columns--content: "+ すべて";
+    --psp-label--clear-columns--content: "クリア";
     --psp-label--untitled--content: "無題";
 
     /* Plugin names */
@@ -150,7 +152,6 @@ perspective-viewer {
     --psp-label--role--facets--content: "ファセット";
     --psp-label--role--row-groups--content: "行グループ";
     --psp-label--role--column-groups--content: "列グループ";
-    --psp-label--role--breakdown--content: "内訳";
 
     /* Plugin settings */
     --psp-label--edit-mode--content: "編集モード";
@@ -174,7 +175,9 @@ perspective-viewer {
     --psp-label--zebra-color--content: "縞模様の色";
     --psp-label--label-position--content: "ラベル位置";
     --psp-label--value-fit--content: "値のサイズ";
-    --psp-label--breakdown--content: "内訳";
+    --psp-label--layout-mode--content: "レイアウト";
+    --psp-label--grid-columns--content: "グリッドの列数";
+    --psp-label--grid-rows--content: "グリッドの行数";
     --psp-label--chart-type--content: "グリフの種類";
     --psp-label--new-panel-button--content: "新規";
 

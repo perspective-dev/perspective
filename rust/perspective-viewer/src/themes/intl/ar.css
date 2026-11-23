@@ -18,6 +18,8 @@ perspective-viewer {
     --psp-label--transpose-button--content: "تبديل";
     --psp-label--config-button--content: "تكوين";
     --psp-label--all-columns--content: "كل الأعمدة";
+    --psp-label--add-all-columns--content: "+ الكل";
+    --psp-label--clear-columns--content: "مسح";
     --psp-label--untitled--content: "بدون عنوان";
 
     --psp-plugin-name--datagrid--content: "شبكة البيانات";
@@ -147,7 +149,6 @@ perspective-viewer {
     --psp-label--role--facets--content: "الأوجه";
     --psp-label--role--row-groups--content: "مجموعات الصفوف";
     --psp-label--role--column-groups--content: "مجموعات الأعمدة";
-    --psp-label--role--breakdown--content: "تفصيل";
 
     --psp-label--window-source--content: "العمود";
     --psp-label--window-order-by--content: "ترتيب حسب";
@@ -177,7 +178,9 @@ perspective-viewer {
     --psp-label--zebra-color--content: "لون التناوب";
     --psp-label--label-position--content: "موضع التسمية";
     --psp-label--value-fit--content: "حجم القيمة";
-    --psp-label--breakdown--content: "تفصيل";
+    --psp-label--layout-mode--content: "التخطيط";
+    --psp-label--grid-columns--content: "أعمدة الشبكة";
+    --psp-label--grid-rows--content: "صفوف الشبكة";
     --psp-label--chart-type--content: "نوع الشكل";
     --psp-label--new-panel-button--content: "جديد";
 

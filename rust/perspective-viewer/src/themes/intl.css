@@ -19,6 +19,8 @@ perspective-viewer {
     --psp-label--transpose-button--content: "Swap";
     --psp-label--config-button--content: "configure";
     --psp-label--all-columns--content: "All Columns";
+    --psp-label--add-all-columns--content: "Add";
+    --psp-label--clear-columns--content: "Clear";
     --psp-label--untitled--content: "untitled";
 
     /* Plugin names */
@@ -155,7 +157,6 @@ perspective-viewer {
     --psp-label--role--facets--content: "Facets";
     --psp-label--role--row-groups--content: "Row Groups";
     --psp-label--role--column-groups--content: "Column Groups";
-    --psp-label--role--breakdown--content: "Breakdown";
 
     /* Window editor */
     --psp-label--window-source--content: "Column";
@@ -187,7 +188,9 @@ perspective-viewer {
     --psp-label--zebra-color--content: "Zebra color";
     --psp-label--label-position--content: "Label position";
     --psp-label--value-fit--content: "Value size";
-    --psp-label--breakdown--content: "Breakdown";
+    --psp-label--layout-mode--content: "Layout";
+    --psp-label--grid-columns--content: "Grid columns";
+    --psp-label--grid-rows--content: "Grid rows";
     --psp-label--chart-type--content: "Glyph type";
     --psp-label--new-panel-button--content: "New";
 

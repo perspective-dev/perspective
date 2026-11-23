@@ -1,0 +1,65 @@
+{
+    "name": "@perspective-dev/viewer-summary",
+    "version": "5.9.4",
+    "description": "Summary (KPI tile) plugin for `<perspective-viewer>`, showing each column's total as fitted text.",
+    "keywords": [
+        "perspective",
+        "summary",
+        "kpi",
+        "big-number",
+        "single-value",
+        "stat",
+        "visualization",
+        "dashboard",
+        "analytics",
+        "bi",
+        "streaming",
+        "real-time",
+        "wasm",
+        "webassembly",
+        "arrow",
+        "web-component"
+    ],
+    "homepage": "https://perspective-dev.github.io",
+    "unpkg": "dist/cdn/perspective-viewer-summary.js",
+    "jsdelivr": "dist/cdn/perspective-viewer-summary.js",
+    "exports": {
+        ".": {
+            "types": "./dist/esm/index.d.ts",
+            "default": "./dist/esm/perspective-viewer-summary.js"
+        },
+        "./dist/*": "./dist/*",
+        "./package.json": "./package.json"
+    },
+    "type": "module",
+    "types": "dist/esm/index.d.ts",
+    "files": [
+        "dist/**/*"
+    ],
+    "scripts": {
+        "build": "node ./build.mjs",
+        "clean": "node ./clean.mjs"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/perspective-dev/perspective.git",
+        "directory": "packages/viewer-summary"
+    },
+    "author": "",
+    "license": "Apache-2.0",
+    "dependencies": {
+        "@perspective-dev/client": "workspace:~",
+        "@perspective-dev/viewer": "workspace:~"
+    },
+    "devDependencies": {
+        "lightningcss": "catalog:",
+        "@perspective-dev/esbuild-plugin": "workspace:^",
+        "@perspective-dev/test": "workspace:^",
+        "prettier": "catalog:",
+        "typescript": "catalog:",
+        "zx": "catalog:"
+    }
+}

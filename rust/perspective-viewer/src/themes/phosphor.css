@@ -49,6 +49,7 @@ perspective-viewer [theme="Phosphor"] {
     --psp-input--filter: invert(1) hue-rotate(70deg);
     --psp-warning--color: var(--theme-bg0);
     --psp-warning--background: var(--theme-amber);
+    --psp-box-shadow--color: #00ff4120;
 
     /* Syntax */
     --psp-code-editor--symbol--color: var(--theme-green-mid);

@@ -19,6 +19,7 @@
         "@duckdb/duckdb-wasm": "catalog:",
         "@perspective-dev/viewer-charts": "workspace:^",
         "@perspective-dev/viewer-datagrid": "workspace:^",
+        "@perspective-dev/viewer-summary": "workspace:^",
         "@perspective-dev/viewer": "workspace:^",
         "@perspective-dev/client": "workspace:^",
         "@perspective-dev/server": "workspace:^",

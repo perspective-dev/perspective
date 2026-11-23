@@ -1,0 +1,251 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+:host {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: inherit;
+    color: var(--psp--color);
+}
+
+#tiles {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 1px;
+    overflow: hidden;
+    background-color: var(--psp--background-color);
+    container-type: size;
+}
+
+#tiles.tile-fit .tile {
+    container-type: size;
+}
+
+#tiles.scroll {
+    overflow-y: auto;
+}
+
+.tile {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: var(--psp-summary--v, center);
+    align-items: stretch;
+    flex: 1 1
+        calc(
+            (100% - (var(--psp-summary--cols, 1) - 1) * 1px) /
+                var(--psp-summary--cols, 1) - 1px
+        );
+    height: calc(
+        (100% - (var(--psp-summary--rows, 1) - 1) * 1px) /
+            var(--psp-summary--rows, 1)
+    );
+    min-width: 0;
+    padding: var(--psp-summary--padding, 4px);
+    overflow: hidden;
+    cursor: default;
+    box-shadow:
+        1px 0 0 0 var(--psp-inactive--border-color),
+        0 1px 0 0 var(--psp-inactive--border-color);
+}
+
+#tiles.hierarchy .tile {
+    box-shadow: none;
+}
+
+#tiles.scroll .tile {
+    height: var(--psp-summary--tile-height);
+}
+
+#tiles.hierarchy,
+.group-body {
+    display: grid;
+    grid-template-columns: repeat(
+        var(--psp-summary--tracks, 1),
+        minmax(0, 1fr)
+    );
+    grid-template-rows: repeat(var(--psp-summary--rows, 1), minmax(0, 1fr));
+    gap: 4px;
+}
+
+#tiles.hierarchy.leaf,
+.group-body.leaf {
+    gap: 1px;
+}
+
+#tiles.hierarchy.split-rows,
+.group-body.split-rows {
+    grid-template-rows: var(--psp-summary--split);
+}
+
+#tiles.hierarchy.split-columns,
+.group-body.split-columns {
+    grid-template-columns: var(--psp-summary--split);
+}
+
+#tiles.hierarchy > *,
+.group-body > * {
+    grid-column: span var(--psp-summary--span, 1);
+    min-width: 0;
+    min-height: 0;
+}
+
+#tiles.hierarchy > .last-row,
+.group-body > .last-row {
+    grid-column: span var(--psp-summary--last-span, 1);
+}
+
+#tiles.hierarchy .tile {
+    flex: none;
+    height: auto;
+}
+
+.group {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--psp-inactive--border-color);
+    padding: 0 3px 3px;
+}
+
+.group.headless {
+    border: none;
+    padding: 0;
+}
+
+.group-header {
+    flex: 0 0 19px;
+    line-height: 19px;
+    padding: 0 1px;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.7;
+}
+
+.group-body {
+    flex: 1 1 0;
+}
+
+#tiles.hierarchy.scroll,
+#tiles.hierarchy.scroll .group-body {
+    grid-template-rows: none;
+    grid-auto-rows: auto;
+    align-content: start;
+}
+
+#tiles.hierarchy.scroll.leaf,
+#tiles.hierarchy.scroll .group-body.leaf {
+    grid-auto-rows: var(--psp-summary--tile-height);
+}
+
+#tiles.hierarchy.scroll .group-body {
+    flex: 0 0 auto;
+}
+
+.tile.label-left,
+.tile.label-right {
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: var(--psp-summary--v, center);
+}
+
+.label {
+    flex: 0 0 auto;
+    font-size: var(--psp-summary--label-size, 10px);
+    line-height: 1.3;
+    white-space: pre;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: var(--psp-summary--t, center);
+    color: var(--psp-summary--label--color, var(--psp--color));
+    opacity: 0.7;
+}
+
+.tile.label-bottom .label,
+.tile.label-right .label {
+    order: 2;
+}
+
+.tile.label-none .label {
+    display: none;
+}
+
+.tile.label-left .label {
+    max-width: 40%;
+    margin-right: 0.75em;
+}
+
+.tile.label-right .label {
+    max-width: 40%;
+    margin-left: 0.75em;
+}
+
+.body {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: var(--psp-summary--h, center);
+    min-width: 0;
+}
+
+.tile.label-left .body,
+.tile.label-right .body {
+    flex: 1 1 0;
+}
+
+.value {
+    max-width: 100%;
+    font-size: var(--psp-summary--value-size, 14px);
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.psp-null .value {
+    opacity: 0.4;
+}
+
+.track {
+    display: none;
+}
+
+.psp-color-mode-bar .track {
+    display: block;
+    align-self: stretch;
+    height: calc(var(--psp-summary--value-size, 14px) * 0.12);
+    margin-top: calc(var(--psp-summary--value-size, 14px) * 0.08);
+    background-color: color-mix(in srgb, currentColor 15%, transparent);
+    background-image: var(--psp-label-bar-color);
+    background-repeat: no-repeat;
+    background-size: var(--psp-bar-size, 0%) 100%;
+    background-position-x: var(--psp-bar-anchor, 0%);
+}
+
+.tile.psp-color-mode-label-bar {
+    background-image: var(--psp-label-bar-color);
+    background-repeat: no-repeat;
+    background-size: var(--psp-bar-size, 0%) 100%;
+    background-position-x: 0%;
+}

@@ -19,6 +19,8 @@ perspective-viewer {
     --psp-label--transpose-button--content: "Trocar";
     --psp-label--config-button--content: "Configurar";
     --psp-label--all-columns--content: "Todas as colunas";
+    --psp-label--add-all-columns--content: "+ Todas";
+    --psp-label--clear-columns--content: "Limpar";
     --psp-label--untitled--content: "Sem título";
 
     /* Plugin names */
@@ -150,7 +152,6 @@ perspective-viewer {
     --psp-label--role--facets--content: "Facetas";
     --psp-label--role--row-groups--content: "Grupos de linhas";
     --psp-label--role--column-groups--content: "Grupos de colunas";
-    --psp-label--role--breakdown--content: "Detalhamento";
 
     /* Plugin settings */
     --psp-label--edit-mode--content: "Modo de edição";
@@ -174,7 +175,9 @@ perspective-viewer {
     --psp-label--zebra-color--content: "Cor zebrada";
     --psp-label--label-position--content: "Posição do rótulo";
     --psp-label--value-fit--content: "Tamanho do valor";
-    --psp-label--breakdown--content: "Detalhamento";
+    --psp-label--layout-mode--content: "Disposição";
+    --psp-label--grid-columns--content: "Colunas da grade";
+    --psp-label--grid-rows--content: "Linhas da grade";
     --psp-label--chart-type--content: "Tipo de glifo";
     --psp-label--new-panel-button--content: "Novo";
 

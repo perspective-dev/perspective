@@ -19,6 +19,8 @@ perspective-viewer {
     --psp-label--transpose-button--content: "交换";
     --psp-label--config-button--content: "配置";
     --psp-label--all-columns--content: "所有列";
+    --psp-label--add-all-columns--content: "+ 全部";
+    --psp-label--clear-columns--content: "清除";
     --psp-label--untitled--content: "无标题";
 
     /* Plugin names */
@@ -150,7 +152,6 @@ perspective-viewer {
     --psp-label--role--facets--content: "分面";
     --psp-label--role--row-groups--content: "行分组";
     --psp-label--role--column-groups--content: "列分组";
-    --psp-label--role--breakdown--content: "细分";
 
     /* Plugin settings */
     --psp-label--edit-mode--content: "编辑模式";
@@ -174,7 +175,9 @@ perspective-viewer {
     --psp-label--zebra-color--content: "斑马色";
     --psp-label--label-position--content: "标签位置";
     --psp-label--value-fit--content: "数值大小";
-    --psp-label--breakdown--content: "细分";
+    --psp-label--layout-mode--content: "布局";
+    --psp-label--grid-columns--content: "网格列数";
+    --psp-label--grid-rows--content: "网格行数";
     --psp-label--chart-type--content: "图元类型";
     --psp-label--new-panel-button--content: "新建";
 

@@ -28,6 +28,7 @@ import {
 } from "@perspective-dev/viewer";
 import "@perspective-dev/viewer-datagrid";
 import "@perspective-dev/viewer-charts";
+import "@perspective-dev/viewer-summary";
 import { PerspectiveViewer } from "@perspective-dev/react";
 import type { DuckDBHandler } from "@perspective-dev/client/virtual_servers/duckdb";
 import type { ClickhouseHandler } from "@perspective-dev/client/virtual_servers/clickhouse";

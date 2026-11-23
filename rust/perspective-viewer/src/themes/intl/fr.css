@@ -19,6 +19,8 @@ perspective-viewer {
     --psp-label--transpose-button--content: "Échanger";
     --psp-label--config-button--content: "Configurer";
     --psp-label--all-columns--content: "Toutes les colonnes";
+    --psp-label--add-all-columns--content: "+ Toutes";
+    --psp-label--clear-columns--content: "Effacer";
     --psp-label--untitled--content: "Sans titre";
 
     /* Plugin names */
@@ -150,7 +152,6 @@ perspective-viewer {
     --psp-label--role--facets--content: "Facettes";
     --psp-label--role--row-groups--content: "Groupes de lignes";
     --psp-label--role--column-groups--content: "Groupes de colonnes";
-    --psp-label--role--breakdown--content: "Répartition";
 
     /* Plugin settings */
     --psp-label--edit-mode--content: "Mode édition";
@@ -174,7 +175,9 @@ perspective-viewer {
     --psp-label--zebra-color--content: "Couleur zébrée";
     --psp-label--label-position--content: "Position du libellé";
     --psp-label--value-fit--content: "Taille de la valeur";
-    --psp-label--breakdown--content: "Répartition";
+    --psp-label--layout-mode--content: "Disposition";
+    --psp-label--grid-columns--content: "Colonnes de la grille";
+    --psp-label--grid-rows--content: "Lignes de la grille";
     --psp-label--chart-type--content: "Type de glyphe";
     --psp-label--new-panel-button--content: "Nouveau";
 

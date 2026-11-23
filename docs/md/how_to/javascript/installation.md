@@ -22,6 +22,9 @@ separately and must be imported individually.
 - `@perspective-dev/viewer-charts`
   A set of charting components base on WebGL.
 
+- `@perspective-dev/viewer-summary`
+  A grid of tiles showing each column's total as large fitted text.
+
 When imported after `@perspective-dev/viewer`, the plugin modules will register
 themselves automatically, and the renderers they export will be available in the
 `plugin` dropdown in the `<perspective-viewer>` UI.

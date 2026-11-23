@@ -171,7 +171,7 @@ jobs:
             - name: WebAssembly Build
               run: pnpm run build --ci
               env:
-                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,react,anywidget"
+                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,viewer-summary,react,anywidget"
                   PSP_USE_CCACHE: "1"
 
             - name: Run df -h
@@ -188,6 +188,7 @@ jobs:
                       rust/perspective-viewer/src
                       packages/viewer-charts/dist
                       packages/viewer-datagrid/dist
+                      packages/viewer-summary/dist
                       packages/react/dist
 
             # The `PerspectiveWidget` anywidget JS/CSS bundle, needed by any
@@ -890,7 +891,7 @@ jobs:
               id: run_tests
               run: pnpm run test -- --fetch-snapshots
               env:
-                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,react"
+                  PACKAGE: "server,client,viewer,viewer-datagrid,viewer-charts,viewer-summary,react"
                   PSP_BROWSER_SUITE: chrome
                   PSP_SNAPSHOT_REPO: ${{ vars.PSP_SNAPSHOT_REPO }}
                   PSP_SNAPSHOT_TOKEN: ${{ secrets.PSP_SNAPSHOT_TOKEN }}
@@ -954,7 +955,7 @@ jobs:
               env:
                   # TODO(texodus): no GL firefox on GHA
                   # PACKAGE: "viewer,viewer-datagrid,viewer-charts"
-                  PACKAGE: "viewer,viewer-datagrid"
+                  PACKAGE: "viewer,viewer-datagrid,viewer-summary"
                   PSP_BROWSER_SUITE: firefox
                   PSP_SNAPSHOT_REPO: ${{ vars.PSP_SNAPSHOT_REPO }}
                   PSP_SNAPSHOT_TOKEN: ${{ secrets.PSP_SNAPSHOT_TOKEN }}
@@ -1356,6 +1357,9 @@ jobs:
 
             - run: pnpm pack --pack-destination=../..
               working-directory: ./packages/viewer-charts
+
+            - run: pnpm pack --pack-destination=../..
+              working-directory: ./packages/viewer-summary
 
             - run: pnpm pack --pack-destination=../..
               working-directory: ./packages/react
