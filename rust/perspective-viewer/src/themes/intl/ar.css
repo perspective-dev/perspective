@@ -20,6 +20,7 @@ perspective-viewer {
     --psp-label--all-columns--content: "كل الأعمدة";
     --psp-label--add-all-columns--content: "+ الكل";
     --psp-label--clear-columns--content: "مسح";
+    --psp-label--no-table--content: "لم يتم تحميل أي جدول";
     --psp-label--untitled--content: "بدون عنوان";
 
     --psp-plugin-name--datagrid--content: "شبكة البيانات";

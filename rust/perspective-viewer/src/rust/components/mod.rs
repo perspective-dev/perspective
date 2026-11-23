@@ -26,6 +26,7 @@ pub mod datetime_column_style;
 pub mod debug_panel;
 pub mod dragdrop_list;
 pub mod editable_header;
+pub mod empty_placeholder;
 pub mod empty_row;
 pub mod export_dropdown;
 pub mod expression_editor;

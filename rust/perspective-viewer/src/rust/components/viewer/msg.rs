@@ -237,6 +237,16 @@ pub enum PerspectiveViewerMsg {
     /// filter set (dispatched by its `filters_changed` PubSub).
     UpdateGlobalFilters,
 
+    /// Refresh the root's render snapshot of the `Workspace`-owned stage
+    /// error (dispatched by its `stage_error_changed` PubSub) — the error
+    /// the empty-state status indicator shows at zero panels.
+    UpdateStageError,
+
+    /// A `Client` was registered with the `Workspace`; re-render so the
+    /// status bar's "New" table menu appears (notably at zero panels, where
+    /// nothing else re-renders after `load(client)`).
+    ClientsChanged,
+
     /// The active panel's in-flight config-run count changed. LEVEL-
     /// triggered: the payload is the ABSOLUTE count (RAII-settled — see
     /// `Session::begin_config_run`), which the handler ASSIGNS to

@@ -61,6 +61,24 @@ pub struct StatusBarProps {
     /// visibility.
     pub is_settings_open: bool,
 
+    /// The element is an EMPTY STAGE (zero panels). Shows the theme picker
+    /// without the data-bound actions (reset/export/copy/plugin extras).
+    #[prop_or_default]
+    pub is_empty: bool,
+
+    /// Whether any `Client` is loaded — gates the "New" table menu.
+    #[prop_or_default]
+    pub has_clients: bool,
+
+    /// The element-level stage error (empty stage only), shown by the
+    /// status indicator.
+    #[prop_or_default]
+    pub stage_error: Option<RenderError>,
+
+    /// Dismiss the stage error.
+    #[prop_or_default]
+    pub on_dismiss_stage_error: Callback<()>,
+
     /// In-flight render counter, threaded to `StatusIndicator`.
     pub update_count: u32,
 
@@ -91,6 +109,9 @@ impl PartialEq for StatusBarProps {
             && self.session_props == other.session_props
             && self.presentation_props == other.presentation_props
             && self.is_settings_open == other.is_settings_open
+            && self.is_empty == other.is_empty
+            && self.has_clients == other.has_clients
+            && self.stage_error == other.stage_error
             && self.update_count == other.update_count
             && self.global_filters == other.global_filters
     }
@@ -297,8 +318,10 @@ impl Component for StatusBar {
         } = ctx.props();
 
         let has_table = ctx.props().session_props.has_table.clone();
-        let is_errored =
-            ctx.props().session_props.is_errored() || ctx.props().render_error.is_some();
+        let is_empty = ctx.props().is_empty;
+        let is_errored = ctx.props().session_props.is_errored()
+            || ctx.props().render_error.is_some()
+            || ctx.props().stage_error.is_some();
         let is_settings_open = ctx.props().is_settings_open;
 
         let mut is_updating_class_name = classes!();
@@ -346,10 +369,13 @@ impl Component for StatusBar {
             .slot_name()
             .map(|id| format!("statusbar-extra-{id}"))
             .unwrap_or_else(|| "statusbar-extra".to_owned());
-        let is_menu = matches!(has_table, Some(TableLoadState::Loaded)) && is_settings_open;
-        let is_panel_bar = !ctx.props().workspace.clients().is_empty();
-        let is_settings =
-            !matches!(has_table, Some(TableLoadState::Loaded)) || is_errored || is_settings_open;
+        let is_menu =
+            !is_empty && matches!(has_table, Some(TableLoadState::Loaded)) && is_settings_open;
+        let is_panel_bar = ctx.props().has_clients;
+        let is_settings = is_empty
+            || !matches!(has_table, Some(TableLoadState::Loaded))
+            || is_errored
+            || is_settings_open;
 
         let on_copy_select = {
             let props = ctx.props().clone();
@@ -415,6 +441,8 @@ impl Component for StatusBar {
                             update_count={ctx.props().update_count}
                             session_props={ctx.props().session_props.clone()}
                             render_error={ctx.props().render_error.clone()}
+                            stage_error={ctx.props().stage_error.clone()}
+                            on_dismiss_stage_error={ctx.props().on_dismiss_stage_error.clone()}
                         />
                         if is_panel_bar {
                             <div id="panel-bar" class="section">
@@ -434,6 +462,23 @@ impl Component for StatusBar {
                             />
                         }
                         <div id="spacer" />
+                        if is_empty {
+                            // Empty stage: the theme is element-level (new
+                            // panels adopt it), but there is no data for
+                            // reset/export/copy or a plugin's extras.
+                            // Before any panel stamps a `theme` attribute, show
+                            // the registry default (what the first panel adopts).
+                            <div id="menu-bar" class="section">
+                                <ThemeSelector
+                                    theme={ctx.props().presentation_props.selected_theme.clone().or_else(|| {
+                                        ctx.props().presentation_props.available_themes.first().cloned()
+                                    })}
+                                    themes={ctx.props().presentation_props.available_themes.clone()}
+                                    on_change={ctx.link().callback(StatusBarMsg::SetTheme)}
+                                    on_reset={ctx.link().callback(|_| StatusBarMsg::ResetTheme)}
+                                />
+                            </div>
+                        }
                         if is_menu {
                             <div id="menu-bar" class="section">
                                 <ThemeSelector

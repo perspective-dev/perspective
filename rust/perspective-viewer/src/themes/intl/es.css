@@ -21,6 +21,7 @@ perspective-viewer {
     --psp-label--all-columns--content: "Todas las columnas";
     --psp-label--add-all-columns--content: "+ Todas";
     --psp-label--clear-columns--content: "Borrar";
+    --psp-label--no-table--content: "No hay ninguna tabla cargada";
     --psp-label--untitled--content: "Sin título";
 
     /* Plugin names */

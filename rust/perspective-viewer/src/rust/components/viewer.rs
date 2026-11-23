@@ -110,6 +110,15 @@ pub struct PerspectiveViewer {
     /// this when non-empty.
     global_filters: Vec<Filter>,
 
+    /// Render snapshot of the `Workspace`-owned stage error (see
+    /// `Workspace::stage_error`); refreshed by `UpdateStageError`. Shown by
+    /// the status indicator only while the element is an empty stage.
+    stage_error: Option<RenderError>,
+
+    /// Value-cached registry plugin names for the empty-stage plugin
+    /// selector (see `render::registry_plugin_names`).
+    registry_plugins: std::cell::RefCell<PtrEqRc<Vec<String>>>,
+
     /// The settings sidebar's geometry state (pane/drawer width overrides,
     /// divider presize pump, open-state deltas cache) — see
     /// [`settings::SettingsGeometry`].
@@ -217,6 +226,8 @@ impl Component for PerspectiveViewer {
             settings_open: false,
             pending_closes: HashMap::new(),
             global_filters: Vec::new(),
+            stage_error: ctx.props().workspace.stage_error().map(RenderError),
+            registry_plugins: std::cell::RefCell::new(PtrEqRc::new(vec![])),
             settings_geometry: Default::default(),
             session_props,
             renderer_props,
@@ -376,6 +387,8 @@ impl Component for PerspectiveViewer {
             UpdateSession(props) => self.on_update_session(ctx, *props),
             UpdateSessionStats(stats, has_table) => self.on_update_session_stats(stats, has_table),
             UpdateGlobalFilters => self.on_update_global_filters(ctx),
+            UpdateStageError => self.on_update_stage_error(ctx),
+            ClientsChanged => true,
             UpdateRenderer(props) => self.on_update_renderer(*props),
             UpdatePresentation(props) => self.on_update_presentation(ctx, *props),
             UpdateSettingsOpen(open) => self.on_update_settings_open(open),

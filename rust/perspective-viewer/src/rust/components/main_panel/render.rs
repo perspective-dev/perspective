@@ -310,17 +310,42 @@ impl MainPanel {
                     }
                 });
 
+            // EMPTY STAGE: the open-settings affordance of an "invisible
+            // panel" — a lone `.psp-tab-settings` button placed where a solo
+            // panel's tab button sits (see `viewer.css`
+            // `.psp-empty-settings`), with no frame or titlebar around it.
+            // There is no panel to select/activate first, so it fires the
+            // bare `on_settings`. Hidden while the sidebar is open, exactly
+            // like a tab's button (the sidebar's own close button closes it).
+            let empty_settings = (ctx.props().is_empty && !is_settings_open).then(|| {
+                let on_settings = ctx.props().on_settings.clone();
+                let onpointerdown = Callback::from(move |event: web_sys::PointerEvent| {
+                    if event.button() == 0 {
+                        event.stop_propagation();
+                        on_settings.emit(());
+                    }
+                });
+
+                html! {
+                    <button
+                        key="__empty_settings__"
+                        class="psp-tab-settings psp-empty-settings"
+                        {onpointerdown}
+                    />
+                }
+            });
+
             // ONE flat FULLY-KEYED list: `<regular-layout>` + tabs + staging
-            // wrappers. Keying every sibling (the layout element included)
-            // routes Yew's list diff through `apply_keyed`, which matches by
-            // key — the layout element is REUSED across renders regardless of
-            // how the tab/staging population shifts around it. The prior
-            // shape (`<regular-layout>` + nested `{tabs}`/`{staging}` lists,
-            // layout unkeyed) took `apply_unkeyed`, whose back-to-front
-            // positional pairing REPLACED the layout element whenever the
-            // trailing lists changed length — orphaning its committed tree
-            // and attached listeners, and silently re-booting the layout
-            // from `EMPTY_PANEL` (see `listener_target`).
+            // wrappers (+ the empty-stage settings button). Keying every
+            // sibling (the layout element included) routes Yew's list diff
+            // through `apply_keyed`, which matches by key — the layout element
+            // is REUSED across renders regardless of how the tab/staging
+            // population shifts around it. The prior shape (`<regular-layout>`
+            // + nested `{tabs}`/`{staging}` lists, layout unkeyed) took
+            // `apply_unkeyed`, whose back-to-front positional pairing REPLACED
+            // the layout element whenever the trailing lists changed length —
+            // orphaning its committed tree and attached listeners, and silently
+            // re-booting the layout from `EMPTY_PANEL` (see `listener_target`).
             std::iter::once(html! {
                 <regular-layout
                     key="__regular_layout__"
@@ -332,6 +357,7 @@ impl MainPanel {
             })
             .chain(tabs)
             .chain(staging)
+            .chain(empty_settings)
             .collect::<Html>()
         };
 
@@ -405,6 +431,10 @@ impl MainPanel {
                     render_error={ctx.props().renderer_props.render_error.clone()}
                     presentation_props={ctx.props().presentation_props.clone()}
                     is_settings_open={ctx.props().is_settings_open}
+                    is_empty={ctx.props().is_empty}
+                    has_clients={ctx.props().has_clients}
+                    stage_error={ctx.props().stage_error.clone()}
+                    on_dismiss_stage_error={ctx.props().on_dismiss_stage_error.clone()}
                     update_count={ctx.props().update_count}
                     global_filters={ctx.props().global_filters.clone()}
                     on_remove_global_filter={ctx.props().on_remove_global_filter.clone()}

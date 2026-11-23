@@ -21,6 +21,7 @@ perspective-viewer {
     --psp-label--all-columns--content: "すべての列";
     --psp-label--add-all-columns--content: "+ すべて";
     --psp-label--clear-columns--content: "クリア";
+    --psp-label--no-table--content: "テーブルが読み込まれていません";
     --psp-label--untitled--content: "無題";
 
     /* Plugin names */

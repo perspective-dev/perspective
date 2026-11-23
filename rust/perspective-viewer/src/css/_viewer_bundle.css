@@ -33,6 +33,7 @@
 @import "plugin-selector.css";
 @import "render-warning.css";
 @import "status-bar.css";
+@import "tab-button.css";
 
 @import "ui/form/mirrored-textarea.css";
 @import "ui/form/sidebar-controls.css";

@@ -33,6 +33,17 @@ pub struct StatusIndicatorProps {
     pub update_count: u32,
     pub session_props: SessionProps,
     pub render_error: Option<RenderError>,
+
+    /// The element-level stage error (empty stage only — zero panels, so
+    /// `session`/`renderer` are the detached empty engines). Takes
+    /// precedence over every other state; clicking DISMISSES it rather than
+    /// reconnecting (there is no panel to reconnect).
+    #[prop_or_default]
+    pub stage_error: Option<RenderError>,
+
+    /// Dismiss the stage error.
+    #[prop_or_default]
+    pub on_dismiss_stage_error: Callback<()>,
 }
 
 /// An indicator component which displays the current status of the perspective
@@ -41,7 +52,10 @@ pub struct StatusIndicatorProps {
 #[function_component]
 pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
     let has_table_cells = props.session_props.has_table_cells;
-    let state = if let Some(err) = &props.session_props.error {
+    let is_stage_error = props.stage_error.is_some();
+    let state = if let Some(RenderError(err)) = &props.stage_error {
+        StatusIconState::Errored(err.message(), err.stacktrace(), err.kind(), true)
+    } else if let Some(err) = &props.session_props.error {
         StatusIconState::Errored(
             err.message(),
             err.stacktrace(),
@@ -75,8 +89,19 @@ pub fn StatusIndicator(props: &StatusIndicatorProps) -> Html {
     };
 
     let onclick = use_async_callback(
-        (props.session.clone(), props.renderer.clone(), state.clone()),
-        async move |_: MouseEvent, (session, renderer, state)| {
+        (
+            props.session.clone(),
+            props.renderer.clone(),
+            state.clone(),
+            is_stage_error,
+            props.on_dismiss_stage_error.clone(),
+        ),
+        async move |_: MouseEvent, (session, renderer, state, is_stage_error, on_dismiss)| {
+            if *is_stage_error {
+                on_dismiss.emit(());
+                return Ok(());
+            }
+
             match &state {
                 StatusIconState::Errored(..) => {
                     if renderer.failure().is_some() {

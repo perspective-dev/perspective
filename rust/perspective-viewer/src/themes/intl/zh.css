@@ -21,6 +21,7 @@ perspective-viewer {
     --psp-label--all-columns--content: "所有列";
     --psp-label--add-all-columns--content: "+ 全部";
     --psp-label--clear-columns--content: "清除";
+    --psp-label--no-table--content: "未加载表";
     --psp-label--untitled--content: "无标题";
 
     /* Plugin names */

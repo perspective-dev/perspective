@@ -746,7 +746,13 @@ impl PerspectiveViewerElement {
             }
         });
 
-        Ok(ApiFuture::new_throttled(ticket.settle()))
+        // The table-less eviction above leaves the element empty; surface its
+        // rejection on the empty-state status indicator.
+        let stage = self.workspace.clone();
+        let settle = ticket.settle();
+        Ok(ApiFuture::new_throttled(async move {
+            stage.surface_stage_error(settle.await)
+        }))
     }
 
     /// Delete all internal [`View`]s and all associated state, rendering this
@@ -1151,12 +1157,22 @@ impl PerspectiveViewerElement {
         let effect = self.workspace.effects().guard();
         let this = self.clone();
         let saved = saved_version(&update);
-        ApiFuture::new_throttled(noting_saved_version(saved, async move {
+        let options: ApiResult<RestoreOptions> = parse_options(options);
+        let publish = !matches!(
+            &options,
+            Ok(RestoreOptions {
+                suppress_errors: Some(true),
+                ..
+            })
+        );
+
+        let workspace = self.workspace.clone();
+        let restore = async move {
             let RestoreOptions {
                 panel: name,
                 suppress_errors,
                 wait_for_table,
-            } = parse_options(options)?;
+            } = options?;
 
             let errors = if suppress_errors.unwrap_or_default() {
                 RestoreErrors::Suppress
@@ -1267,6 +1283,15 @@ impl PerspectiveViewerElement {
                     Ok(())
                 },
             }
+        };
+
+        ApiFuture::new_throttled(noting_saved_version(saved, async move {
+            let result: ApiResult<()> = restore.await;
+            if publish {
+                workspace.surface_stage_error(result)
+            } else {
+                result
+            }
         }))
     }
 
@@ -1303,7 +1328,8 @@ impl PerspectiveViewerElement {
         let effect = self.workspace.effects().guard();
         let this = self.clone();
         let saved = saved_version(&update);
-        ApiFuture::new(noting_saved_version(saved, async move {
+        let workspace = self.workspace.clone();
+        let restore = async move {
             let _effect = effect;
             let RestoreWorkspaceOptions { wait_for_table } = parse_options(options)?;
             let missing = MissingTable::from_wait(wait_for_table);
@@ -1368,6 +1394,11 @@ impl PerspectiveViewerElement {
 
             ejected?;
             Ok(())
+        };
+
+        ApiFuture::new(noting_saved_version(saved, async move {
+            let result: ApiResult<()> = restore.await;
+            workspace.surface_stage_error(result)
         }))
     }
 
@@ -1375,7 +1406,10 @@ impl PerspectiveViewerElement {
     /// re-render. Calling this method is equivalent to clicking the error reset
     /// button in the UI.
     pub fn resetError(&self) -> ApiFuture<()> {
+        // At zero panels the only error state is the element-level stage
+        // error (see `Workspace::stage_error`).
         let Some(panel) = self.workspace.active_panel() else {
+            self.workspace.set_stage_error(None);
             return ApiFuture::new_throttled(async move { Ok(()) });
         };
 
@@ -2079,20 +2113,25 @@ impl PerspectiveViewerElement {
         let saved = saved_version(&config);
         ApiFuture::new(noting_saved_version(saved, async move {
             let _effect = effect;
-            let AddPanelOptions { wait_for_table } = parse_options(options)?;
-            let config = ViewerConfigInitial::decode(&config)?;
-            let id = create_panel(
-                &elem,
-                &presentation,
-                &workspace,
-                &notify,
-                None,
-                config,
-                None,
-                MissingTable::from_wait(wait_for_table),
-            )
-            .await?;
-            Ok(id.as_str().to_owned())
+            let result: ApiResult<String> = async {
+                let AddPanelOptions { wait_for_table } = parse_options(options)?;
+                let config = ViewerConfigInitial::decode(&config)?;
+                let id = create_panel(
+                    &elem,
+                    &presentation,
+                    &workspace,
+                    &notify,
+                    None,
+                    config,
+                    None,
+                    MissingTable::from_wait(wait_for_table),
+                )
+                .await?;
+                Ok(id.as_str().to_owned())
+            }
+            .await;
+
+            workspace.surface_stage_error(result)
         }))
     }
 

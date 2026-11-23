@@ -47,7 +47,13 @@ thread_local! {
     /// The shared, constructed stylesheet adopted into every tab's ShadowRoot.
     static TAB_SHEET: CssStyleSheet = {
         let sheet = CssStyleSheet::new().unwrap();
-        sheet.replace_sync(include_str!("../../css/panel-tab.css"))
+        // `tab-button.css` (the tab's icon buttons) is shared with the viewer
+        // sheet's empty-stage settings button, and goes FIRST so
+        // `panel-tab.css` may still override it.
+        sheet.replace_sync(concat!(
+            include_str!("../../css/tab-button.css"),
+            include_str!("../../css/panel-tab.css"),
+        ))
             .unwrap();
         sheet
     };

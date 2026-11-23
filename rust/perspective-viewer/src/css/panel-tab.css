@@ -212,47 +212,5 @@ span#rows span.total {
     content: var(--psp-broadcast--content, "[BROADCAST]");
 }
 
-.psp-tab-close,
-.psp-tab-settings {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-left: 4px;
-    padding: 0;
-    border: none;
-    background: none;
-    cursor: pointer;
-    color: inherit;
-}
-
-.psp-tab-close:hover::before,
-.psp-tab-settings:hover::before {
-    background-color: var(--psp--color);
-}
-
-.psp-tab-close::before,
-.psp-tab-settings::before {
-    content: "";
-
-    /* TODO don't hard-code dimensions */
-    width: 20px;
-    height: 20px;
-    background-color: var(--psp-inactive--color);
-    -webkit-mask-size: contain;
-    mask-size: contain;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    -webkit-mask-position: center;
-    mask-position: center;
-}
-
-.psp-tab-close::before {
-    -webkit-mask-image: var(--psp-icon--close--mask-image);
-    mask-image: var(--psp-icon--close--mask-image);
-}
-
-.psp-tab-settings::before {
-    -webkit-mask-image: var(--psp-icon--drawer-tab-inverted--mask-image);
-    mask-image: var(--psp-icon--drawer-tab-inverted--mask-image);
-}
+/* `.psp-tab-close` / `.psp-tab-settings` live in `tab-button.css`, shared with
+   the viewer sheet's empty-stage settings button (`.psp-empty-settings`). */

@@ -81,8 +81,23 @@ pub struct MainPanelProps {
     pub renderer_props: RendererProps,
     pub presentation_props: PresentationProps,
 
-    /// Derived from root: `settings_open && has_table_loaded`.
+    /// Derived from root: `settings_open && (has_table_loaded || is_empty)`.
     pub is_settings_open: bool,
+
+    /// The element is an EMPTY STAGE (zero panels, no pending `load()`).
+    /// Renders the stand-alone open-settings button — the "invisible panel"
+    /// affordance — and switches the status bar to its empty-state chrome.
+    pub is_empty: bool,
+
+    /// Whether any `Client` is loaded (the status bar's "New" table menu).
+    /// A value snapshot so client registration re-renders the status bar.
+    pub has_clients: bool,
+
+    /// The element-level stage error, `Some` only while `is_empty`.
+    pub stage_error: Option<RenderError>,
+
+    /// Dismiss the stage error (the empty-state status indicator's click).
+    pub on_dismiss_stage_error: Callback<()>,
 
     /// Root-managed in-flight render counter (not engine state).
     pub update_count: u32,
@@ -134,6 +149,9 @@ impl PartialEq for MainPanelProps {
             && self.renderer_props == rhs.renderer_props
             && self.presentation_props == rhs.presentation_props
             && self.is_settings_open == rhs.is_settings_open
+            && self.is_empty == rhs.is_empty
+            && self.has_clients == rhs.has_clients
+            && self.stage_error == rhs.stage_error
             && self.update_count == rhs.update_count
             && self.panel_ids == rhs.panel_ids
             && self.panel_titles == rhs.panel_titles

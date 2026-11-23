@@ -356,7 +356,7 @@ impl PerspectiveViewer {
         let effect = workspace.effects().guard();
         ApiFuture::spawn(async move {
             let _effect = effect;
-            let new_id = create_panel(
+            let result = create_panel(
                 &elem,
                 &presentation,
                 &workspace,
@@ -366,8 +366,11 @@ impl PerspectiveViewer {
                 Some(client),
                 crate::session::MissingTable::Error,
             )
-            .await?;
+            .await;
 
+            // Picked from the empty-state "New" menu, a failure leaves no
+            // panel to show it on.
+            let new_id = workspace.surface_stage_error(result)?;
             activate.emit(new_id.to_string());
             Ok(())
         });

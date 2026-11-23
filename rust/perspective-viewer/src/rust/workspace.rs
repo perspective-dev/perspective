@@ -369,6 +369,17 @@ struct WorkspaceData {
     /// commit.
     closing: Vec<Panel>,
 
+    /// The element-level "stage" error: the failure of a public call that
+    /// left the element with ZERO panels (a rejected creating `restore`,
+    /// `addPanel`, `restoreWorkspace`, the table-less `load` eviction), so
+    /// there is no panel `Session` to hold it. Shown by the empty-state
+    /// status indicator; cleared when a panel is inserted, by `resetError()`,
+    /// or by dismissing it in the UI.
+    stage_error: Option<perspective_js::utils::ApiError>,
+
+    /// Fires when [`Self::stage_error`] changes.
+    stage_error_changed: Rc<PubSub<()>>,
+
     /// Coalesced `layout_changed`/`active_changed` delivery (see
     /// [`LayoutEmitter`]).
     emitter: LayoutEmitter,
@@ -400,7 +411,67 @@ impl Workspace {
             layout_staged: Rc::new(PubSub::default()),
             closing: Vec::new(),
             emitter: LayoutEmitter::default(),
+            stage_error: None,
+            stage_error_changed: Rc::new(PubSub::default()),
         })))
+    }
+
+    /// Whether the element is an EMPTY STAGE: zero panels (placed or
+    /// staged) and no pending `load()` reservation. A reservation means a
+    /// `load()` is in flight, which is a loading state, not an empty one.
+    pub fn is_empty_stage(&self) -> bool {
+        let data = self.0.borrow();
+        data.panels.is_empty() && !matches!(data.reservation, Reservation::Pending(_))
+    }
+
+    /// The element-level stage error, if any (see
+    /// [`WorkspaceData::stage_error`]).
+    pub fn stage_error(&self) -> Option<perspective_js::utils::ApiError> {
+        self.0.borrow().stage_error.clone()
+    }
+
+    /// Fires when the stage error is set or cleared.
+    pub fn stage_error_changed(&self) -> Rc<PubSub<()>> {
+        self.0.borrow().stage_error_changed.clone()
+    }
+
+    /// Set (or, with `None`, clear) the stage error, notifying
+    /// [`Self::stage_error_changed`] when the value actually changes.
+    pub fn set_stage_error(&self, error: Option<perspective_js::utils::ApiError>) {
+        let pubsub = {
+            let mut data = self.0.borrow_mut();
+            let changed = match (&data.stage_error, &error) {
+                (None, None) => false,
+                (Some(a), Some(b)) => a.to_string() != b.to_string(),
+                _ => true,
+            };
+
+            data.stage_error = error;
+            changed.then(|| data.stage_error_changed.clone())
+        };
+
+        if let Some(pubsub) = pubsub {
+            pubsub.emit(());
+        }
+    }
+
+    /// Record `result`'s error as the stage error when the call left the
+    /// element an empty stage, so a failure with no panel to show it on is
+    /// still visible. Cancellations (`View not found`) are ignored. Returns
+    /// `result` unchanged.
+    pub fn surface_stage_error<T>(
+        &self,
+        result: perspective_js::utils::ApiResult<T>,
+    ) -> perspective_js::utils::ApiResult<T> {
+        use perspective_js::utils::*;
+        if let Err(e) = &result
+            && self.is_empty_stage()
+            && Err::<(), _>(e.clone()).ignore_view_delete().is_err()
+        {
+            self.set_stage_error(Some(e.clone()));
+        }
+
+        result
     }
 
     /// The element's in-flight effect ledger (see [`EffectLedger`]).
@@ -764,6 +835,8 @@ impl Workspace {
             pubsub.emit(());
         }
 
+        // A panel now exists to carry its own errors.
+        self.set_stage_error(None);
         self.bindings_changed().emit(());
     }
 

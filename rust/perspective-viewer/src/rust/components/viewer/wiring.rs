@@ -398,10 +398,27 @@ pub(super) fn create_shared_subscriptions(ctx: &Context<PerspectiveViewer>) -> V
             .add_notify_listener(&cb)
     };
 
+    // The `Workspace`-owned stage error → the root's render snapshot.
+    let stage_error_sub = {
+        let cb = ctx.link().callback(|_: ()| UpdateStageError);
+        ctx.props()
+            .workspace
+            .stage_error_changed()
+            .add_notify_listener(&cb)
+    };
+
+    // Client registration → a re-render, so the "New" table menu appears.
+    let clients_sub = {
+        let cb = ctx.link().callback(|_| ClientsChanged);
+        ctx.props().workspace.client_registered().add_listener(cb)
+    };
+
     let mut subscriptions = Vec::new();
     subscriptions.extend(presentation_props_sub);
     subscriptions.push(filters_sub);
     subscriptions.push(staged_sub);
+    subscriptions.push(stage_error_sub);
+    subscriptions.push(clients_sub);
     subscriptions
 }
 

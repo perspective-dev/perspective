@@ -31,10 +31,30 @@ use crate::components::style::StyleSurface;
 use crate::config::SettingsUpdate;
 use crate::presentation::ColumnSettingsTarget;
 use crate::queries::*;
+use crate::renderer::{LocalKeyRcRefCellVecPluginRecordExt, PLUGIN_REGISTRY};
 use crate::session::TableLoadState;
 use crate::ui::{FontLoader, SplitPanel, StyleProvider};
+use crate::utils::PtrEqRc;
 
 impl PerspectiveViewer {
+    /// The registered plugin names, for the empty-stage plugin selector.
+    /// Cached by VALUE so an unchanged registry keeps the same `PtrEqRc`
+    /// (which compares by pointer) and does not re-render `SettingsPanel`.
+    fn registry_plugin_names(&self) -> PtrEqRc<Vec<String>> {
+        let names = PLUGIN_REGISTRY
+            .plugin_configs()
+            .iter()
+            .map(|c| c.name.clone())
+            .collect::<Vec<_>>();
+
+        let mut cached = self.registry_plugins.borrow_mut();
+        if **cached != names {
+            *cached = PtrEqRc::new(names);
+        }
+
+        cached.clone()
+    }
+
     pub(super) fn render(&self, ctx: &Context<Self>) -> Html {
         // The settings panel + status bar bind to the *active* panel's engines;
         // `presentation` is element-level (shared).
@@ -42,8 +62,12 @@ impl PerspectiveViewer {
         let renderer = &self.active_renderer;
         let session = &self.active_session;
 
+        // EMPTY STAGE: zero panels and no pending `load()`. The chrome binds
+        // the detached `empty_*` engines, which have no table — so the
+        // table-loaded gates below also admit this mode explicitly.
+        let is_empty = ctx.props().workspace.is_empty_stage();
         let is_settings_open = self.settings_open
-            && matches!(self.session_props.has_table, Some(TableLoadState::Loaded));
+            && (is_empty || matches!(self.session_props.has_table, Some(TableLoadState::Loaded)));
 
         let mut class = classes!();
         if !is_settings_open {
@@ -73,7 +97,14 @@ impl PerspectiveViewer {
 
         let selected_tab = self.presentation_props.open_column_settings.tab;
         let plugin_name = self.renderer_props.plugin_name.clone();
-        let available_plugins = self.renderer_props.available_plugins.clone();
+        // The empty renderer never selects a plugin (selecting before the
+        // real plugins register pins its store to `Debug`), so its props
+        // carry no plugin list — read the registry instead.
+        let available_plugins = if is_empty {
+            self.registry_plugin_names()
+        } else {
+            self.renderer_props.available_plugins.clone()
+        };
         let has_table = self.session_props.has_table.clone();
         let named_column_count = self.renderer_props.config.config_column_names.len();
 
@@ -86,6 +117,7 @@ impl PerspectiveViewer {
             html! {
                 <SettingsPanel
                     on_close={on_close_settings}
+                    {is_empty}
                     on_resize={&self.on_resize}
                     on_select_column={on_open_expr_panel}
                     is_debug={self.debug_open}
@@ -129,6 +161,8 @@ impl PerspectiveViewer {
         // on toggle, and the divider/width-override machinery is identical
         // in both modes.
         let is_pinned = self.settings_geometry.column_settings_pinned;
+        // No columns exist at zero panels; never mount the drawer there.
+        let selected_column = selected_column.filter(|_| !is_empty);
         let column_settings_panel = html! {
             if let Some(selected_column) = selected_column {
                 <SplitPanel
@@ -203,6 +237,13 @@ impl PerspectiveViewer {
                 renderer_props={self.renderer_props.clone()}
                 presentation_props={self.presentation_props.clone()}
                 {is_settings_open}
+                {is_empty}
+                has_clients={!ctx.props().workspace.clients().is_empty()}
+                stage_error={self.stage_error.clone().filter(|_| is_empty)}
+                on_dismiss_stage_error={{
+                    let workspace = ctx.props().workspace.clone();
+                    Callback::from(move |()| workspace.set_stage_error(None))
+                }}
                 update_count={self.update_count}
                 panel_ids={ctx.props().workspace.panel_ids()}
                 panel_titles={ctx.props()

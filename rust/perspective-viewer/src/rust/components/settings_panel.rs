@@ -20,6 +20,7 @@ use super::column_selector::ColumnSelector;
 use super::plugin_selector::PluginSelector;
 use super::plugin_tab::PluginTab;
 use crate::components::debug_panel::DebugPanel;
+use crate::components::empty_placeholder::EmptyPlaceholder;
 use crate::config::{PluginStaticConfig, PluginUpdate};
 use crate::presentation::{ColumnLocator, ColumnSettingsTarget, OpenColumnSettings, Presentation};
 use crate::queries::{classify_column, is_pivot_column};
@@ -34,6 +35,13 @@ use crate::workspace::Workspace;
 #[derive(Clone, Properties)]
 pub struct SettingsPanelProps {
     pub on_close: Callback<()>,
+
+    /// The element is an EMPTY STAGE (zero panels): `session`/`renderer`
+    /// are the detached empty engines. The plugin selector is browse-only
+    /// (a pick touches no engine state and does not affect the first
+    /// panel), and the table-bound tabs render [`EmptyPlaceholder`].
+    #[prop_or_default]
+    pub is_empty: bool,
     pub on_resize: Rc<PubSub<()>>,
     pub on_select_column: Callback<Option<ColumnSettingsTarget>>,
     pub on_debug: Callback<()>,
@@ -114,6 +122,7 @@ pub struct SettingsPanelProps {
 impl PartialEq for SettingsPanelProps {
     fn eq(&self, rhs: &Self) -> bool {
         self.is_debug == rhs.is_debug
+            && self.is_empty == rhs.is_empty
             && self.plugin_name == rhs.plugin_name
             && self.available_plugins == rhs.available_plugins
             && self.has_table == rhs.has_table
@@ -178,8 +187,25 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
             })
     };
 
-    let plugin_name = props.plugin_name.clone();
+    // Empty stage: a UI-only plugin pick, shown by the selector but never
+    // applied to any engine — the first panel still draws its default
+    // plugin. Discarded whenever the element enters or leaves the empty
+    // stage.
+    let empty_pick = use_state_eq(|| None::<String>);
+    {
+        let empty_pick = empty_pick.clone();
+        use_effect_with(props.is_empty, move |_| empty_pick.set(None));
+    }
+
     let available_plugins = props.available_plugins.clone();
+    let plugin_name = if props.is_empty {
+        (*empty_pick)
+            .clone()
+            .or_else(|| available_plugins.first().cloned())
+    } else {
+        props.plugin_name.clone()
+    };
+
     let selected = props.selected_tab;
 
     // Shared trap-door width across tabs. Each tab subtree measures its
@@ -195,7 +221,18 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
         clone!(renderer, session, presentation);
         let session_metadata = props.metadata.clone();
         let view_config = props.view_config.clone();
+        let is_empty = props.is_empty;
+        let empty_pick = empty_pick.clone();
         Callback::from(move |plugin_name: String| {
+            // Empty stage: browse-only. Never touch the empty renderer —
+            // selecting a plugin there before the real plugins register
+            // pins its store to `Debug` — and there is no table whose
+            // features the rollup defaults below would read.
+            if is_empty {
+                empty_pick.set(Some(plugin_name));
+                return;
+            }
+
             if session.is_errored() || renderer.failure().is_some() {
                 return;
             }
@@ -355,7 +392,15 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                 />
                 { chat_tab_button }
             </div>
-            if selected == SelectedTab::Query {
+            if selected == SelectedTab::Chat {
+                // Element-level (not panel-bound), so it works on an empty
+                // stage too.
+                { chat_body }
+            } else if props.is_empty {
+                // Query/Plugin/Debug all read a panel's table, plugin
+                // schema or config, none of which exist at zero panels.
+                <EmptyPlaceholder />
+            } else if selected == SelectedTab::Query {
                 <ColumnSelector
                     on_resize={&props.on_resize}
                     {on_open_expr_panel}
@@ -387,8 +432,6 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                 // initial_width={width}
                 // on_auto_width={on_auto_width.clone()}
                 />
-            } else if selected == SelectedTab::Chat {
-                { chat_body }
             } else {
                 <DebugPanel
                     {presentation}
