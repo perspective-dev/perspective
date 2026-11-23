@@ -10,7 +10,12 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import type { DateFormatModifiers } from "@perspective-dev/viewer/column-format";
+import type {
+    DateFormatConfig,
+    DateFormatModifiers,
+    Formatter,
+} from "@perspective-dev/viewer";
+import { plugin_utils } from "../plugin_utils.ts";
 
 function niceNum(value: number, round: boolean): number {
     const exp = Math.floor(Math.log10(value));
@@ -127,53 +132,41 @@ export function formatTickValue(val: number): string {
 }
 
 /**
- * Cached `Intl.DateTimeFormat` per option shape. `Date.prototype.
- * toLocale*` constructs a fresh `DateTimeFormat` (plus its ICU
- * backing) on EVERY call — ~30µs each — which turned per-row label
- * synthesis over large pivots into a multi-second stall. A cached
- * formatter's `format()` is ~1µs. Keyed by precision tier and date options; the
- * default locale is fixed for the lifetime of the worker, so entries
- * never invalidate.
+ * Formatters by precision tier and date modifiers, never invalidated as the
+ * worker's locale is fixed.
  */
-const DATE_FORMAT_CACHE = new Map<string, Intl.DateTimeFormat>();
+const DATE_FORMAT_CACHE = new Map<string, Formatter>();
 
 function cachedDateFormat(
     tier: string,
-    options: Intl.DateTimeFormatOptions,
+    options: DateFormatConfig,
     modifiers?: DateFormatModifiers,
-): Intl.DateTimeFormat {
+): Formatter {
     const key = `${tier}|${modifiers?.timeZone ?? ""}|${modifiers?.hour12 ?? ""}`;
     let fmt = DATE_FORMAT_CACHE.get(key);
     if (!fmt) {
-        fmt = new Intl.DateTimeFormat(undefined, { ...options, ...modifiers });
+        fmt = plugin_utils().formatter("datetime", {
+            ...options,
+            ...modifiers,
+        })!;
+
         DATE_FORMAT_CACHE.set(key, fmt);
     }
 
     return fmt;
 }
 
-/**
- * Format a timestamp (ms since epoch) as a human-readable date/time label.
- * Adapts precision based on the tick spacing.
- */
-export function formatDateTickValue(
-    val: number,
+/** The formatter whose precision suits ticks `stepMs` apart, date-only without a step. */
+function dateTickFormatter(
     stepMs?: number,
     modifiers?: DateFormatModifiers,
-): string {
-    const d = new Date(val);
-    if (isNaN(d.getTime())) {
-        return formatTickValue(val);
-    }
-
-    // If step is provided, choose precision based on tick interval
+): Formatter {
     if (stepMs !== undefined && stepMs > 0) {
         const DAY = 86_400_000;
         const HOUR = 3_600_000;
         const MINUTE = 60_000;
 
         if (stepMs >= DAY * 28) {
-            // Monthly or longer — show year-month
             return cachedDateFormat(
                 "ym",
                 {
@@ -181,11 +174,10 @@ export function formatDateTickValue(
                     month: "short",
                 },
                 modifiers,
-            ).format(d);
+            );
         }
 
         if (stepMs >= DAY) {
-            // Daily — show month and day
             return cachedDateFormat(
                 "md",
                 {
@@ -193,11 +185,10 @@ export function formatDateTickValue(
                     day: "numeric",
                 },
                 modifiers,
-            ).format(d);
+            );
         }
 
         if (stepMs >= HOUR) {
-            // Hourly
             return cachedDateFormat(
                 "mdh",
                 {
@@ -206,11 +197,10 @@ export function formatDateTickValue(
                     hour: "numeric",
                 },
                 modifiers,
-            ).format(d);
+            );
         }
 
         if (stepMs >= MINUTE) {
-            // Minutes
             return cachedDateFormat(
                 "hm",
                 {
@@ -218,10 +208,9 @@ export function formatDateTickValue(
                     minute: "2-digit",
                 },
                 modifiers,
-            ).format(d);
+            );
         }
 
-        // Sub-minute
         return cachedDateFormat(
             "hms",
             {
@@ -230,10 +219,9 @@ export function formatDateTickValue(
                 second: "2-digit",
             },
             modifiers,
-        ).format(d);
+        );
     }
 
-    // Default: show date only
     return cachedDateFormat(
         "ymd",
         {
@@ -242,5 +230,40 @@ export function formatDateTickValue(
             day: "numeric",
         },
         modifiers,
-    ).format(d);
+    );
+}
+
+/**
+ * Format a timestamp (ms since epoch) as a date/time label whose precision
+ * suits the tick spacing.
+ */
+export function formatDateTickValue(
+    val: number,
+    stepMs?: number,
+    modifiers?: DateFormatModifiers,
+): string {
+    if (isNaN(new Date(val).getTime())) {
+        return formatTickValue(val);
+    }
+
+    return dateTickFormatter(stepMs, modifiers).format(val);
+}
+
+/** {@link formatDateTickValue} over every one of `vals` in one call. */
+export function formatDateTickValues(
+    vals: number[],
+    stepMs?: number,
+    modifiers?: DateFormatModifiers,
+): string[] {
+    const out = dateTickFormatter(stepMs, modifiers).format_strings(
+        new Float64Array(vals),
+    );
+
+    for (let i = 0; i < vals.length; i++) {
+        if (isNaN(new Date(vals[i]).getTime())) {
+            out[i] = formatTickValue(vals[i]);
+        }
+    }
+
+    return out;
 }

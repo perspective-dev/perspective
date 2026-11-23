@@ -59,6 +59,22 @@ pub impl ViewConfigUpdate {
             );
         }
 
+        let flips_to_rollup = self.group_rollup_mode.unwrap_or(current.group_rollup_mode)
+            == GroupRollupMode::Total
+            && self.group_by.as_ref().is_some_and(|x| !x.is_empty());
+
+        if flips_to_rollup
+            && !group_rollups.is_empty()
+            && !group_rollups.contains(&GroupRollupMode::Rollup)
+        {
+            match group_rollups.iter().find(|x| **x != GroupRollupMode::Total) {
+                Some(mode) => self.group_rollup_mode = Some(*mode),
+                None => self.group_by = None,
+            }
+
+            tracing::debug!("`group_by` needs a rollup mode the plugin does not accept");
+        }
+
         let split_rollup_features = metadata
             .get_features()
             .map(|x| x.get_split_rollup_modes())

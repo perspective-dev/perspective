@@ -133,6 +133,12 @@ pub enum ColumnSelectorMsg {
     Redraw,
     HoverActiveIndex(Option<usize>),
     Drop((String, DragTarget, DragEffect, usize)),
+
+    /// Deactivate every active column but the plugin's required ones.
+    ClearColumns,
+
+    /// Activate every inactive column.
+    AddAllColumns,
 }
 
 use ColumnSelectorMsg::*;
@@ -144,6 +150,66 @@ pub struct ColumnSelector {
     drag_container: DragDropContainer,
     column_dropdown: ColumnDropDownElement,
     on_reset: Rc<PubSub<()>>,
+}
+
+/// The number of leading active columns "Clear" keeps: the plugin's required
+/// columns, or one when it declares none.
+fn kept_columns(plugin_static_config: &PluginStaticConfig) -> usize {
+    plugin_static_config.min_config_columns.unwrap_or(0).max(1)
+}
+
+/// `columns` with `added` filling any empty required slot, then the tail from
+/// the last named slot on, past any optional named slots left empty.
+fn with_all_columns(
+    columns: &[Option<String>],
+    plugin_static_config: &PluginStaticConfig,
+    added: Vec<String>,
+) -> Vec<Option<String>> {
+    let positional = plugin_static_config.positional_columns();
+    let required = plugin_static_config
+        .min_config_columns
+        .unwrap_or(0)
+        .min(positional);
+
+    let mut added = added.into_iter();
+    let mut head: Vec<Option<String>> = columns.iter().take(positional).cloned().collect();
+    head.resize(positional, None);
+    for slot in head.iter_mut().take(required) {
+        if slot.is_none() {
+            *slot = added.next();
+        }
+    }
+
+    head.extend(
+        columns
+            .iter()
+            .skip(positional)
+            .filter(|x| x.is_some())
+            .cloned(),
+    );
+    head.extend(added.map(Some));
+    head
+}
+
+/// Commit `columns` as the active columns, closing the column settings of a
+/// column it removes.
+fn apply_columns(props: &ColumnSelectorProps, columns: Vec<Option<String>>) {
+    let update = ViewConfigUpdate {
+        columns: Some(columns),
+        ..ViewConfigUpdate::default()
+    };
+
+    close_column_settings_if_displaced(
+        &props.presentation,
+        &props.renderer,
+        &props.metadata,
+        &props.view_config,
+        &update,
+    );
+
+    if let Ok(task) = apply_and_render(&props.session, &props.renderer, update) {
+        spawn_owned("column-selector", task);
+    }
 }
 
 fn close_column_settings_if_displaced(
@@ -310,6 +376,44 @@ impl Component for ColumnSelector {
             },
             Drop((_, _, DragEffect::Move(DragTarget::Active), _)) => true,
             Drop((..)) => true,
+            ClearColumns => {
+                let columns = &ctx.props().view_config.columns;
+                let keep = kept_columns(&ctx.props().plugin_static_config);
+                if columns.len() > keep {
+                    apply_columns(ctx.props(), columns[..keep].to_vec());
+                }
+
+                false
+            },
+            AddAllColumns => {
+                let props = ctx.props();
+                let iter = ColumnsIteratorSet::new(
+                    &props.view_config,
+                    &props.metadata,
+                    &props.renderer,
+                    &props.presentation,
+                );
+
+                let added: Vec<String> = iter
+                    .expression()
+                    .chain(iter.window())
+                    .chain(iter.inactive())
+                    .map(|x| x.name.to_owned())
+                    .collect();
+
+                if !added.is_empty() {
+                    apply_columns(
+                        props,
+                        with_all_columns(
+                            &props.view_config.columns,
+                            &props.plugin_static_config,
+                            added,
+                        ),
+                    );
+                }
+
+                false
+            },
         }
     }
 
@@ -341,6 +445,7 @@ impl Component for ColumnSelector {
         };
 
         let is_last_column = config.columns.len() == 1;
+        let can_clear = config.columns.len() > kept_columns(&ctx.props().plugin_static_config);
         let is_aggregated = config.is_aggregated();
         let columns_iter = ColumnsIteratorSet::new(&config, metadata, renderer, presentation);
         let onselect = ctx.link().callback(|()| Redraw);
@@ -486,11 +591,15 @@ impl Component for ColumnSelector {
                     .is_some_and(|entry| !entry.is_empty());
 
                 let on_open_expr_panel = &ctx.props().on_open_expr_panel;
+                let on_clear =
+                    (idx == 0 && can_clear).then(|| ctx.link().callback(|()| ClearColumns));
+
                 html_nested! {
                     <ScrollPanelItem {key} {size_hint}>
                         <ActiveColumn
                             {column_dropdown}
                             {idx}
+                            {on_clear}
                             {is_aggregated}
                             {is_editing}
                             {is_expression}
@@ -572,7 +681,13 @@ impl Component for ColumnSelector {
         if inactive_children.is_empty() {
             active_columns.push(add_column)
         } else {
+            let add_all = left_click(ctx.link().callback(|_| AddAllColumns));
             inactive_children.insert(0, add_column);
+            inactive_children.insert(0, html_nested! {
+                <ScrollPanelItem key="__add_all_columns__" size_hint=0_f64>
+                    <span id="add-all-columns" onmousedown={add_all} />
+                </ScrollPanelItem>
+            });
         }
 
         let mut selected_columns = vec![html! {

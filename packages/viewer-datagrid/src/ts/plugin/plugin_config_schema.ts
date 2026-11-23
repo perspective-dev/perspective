@@ -10,29 +10,16 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-import { mixRgb, parseColor, rgbToHex } from "../color_utils.ts";
+import type { ColumnConfigSchema } from "@perspective-dev/viewer";
+import { plugin_utils } from "../plugin_utils.ts";
 import type {
-    Align,
     CommandColumn,
     DatagridPluginConfig,
     DatagridPluginElement,
 } from "../types.ts";
-import type { ColumnConfigSchema } from "./column_config_schema.ts";
 import { is_command_scope } from "../commands.ts";
 
 type ControlSpec = Record<string, unknown> & { kind: string };
-
-export const ALIGNS: readonly Align[] = [
-    "top-left",
-    "top",
-    "top-right",
-    "left",
-    "center",
-    "right",
-    "bottom-left",
-    "bottom",
-    "bottom-right",
-];
 
 export const COMMAND_COLUMNS: readonly CommandColumn[] = [
     "none",
@@ -46,29 +33,6 @@ export function parse_command_column(raw: unknown): CommandColumn {
     return COMMAND_COLUMNS.includes(raw as CommandColumn)
         ? (raw as CommandColumn)
         : "left";
-}
-
-/** An `align` value from a token, or `undefined` for anything else. */
-export function parse_align(raw: unknown): Align | undefined {
-    return ALIGNS.includes(raw as Align) ? (raw as Align) : undefined;
-}
-
-/** CSS generic font families, which are never quoted when applied. */
-export const GENERIC_FONT_FAMILIES: readonly string[] = [
-    "inherit",
-    "monospace",
-    "sans-serif",
-    "serif",
-    "system-ui",
-];
-
-/** The CSS `font-family` value for a `font_family` config value. */
-export function css_font_family(family: string): string {
-    if (GENERIC_FONT_FAMILIES.includes(family)) {
-        return family;
-    }
-
-    return `"${family.replace(/["\\]/g, "\\$&")}"`;
 }
 
 /** Line height of a wrapped cell's block, as a multiple of its font size. */
@@ -106,6 +70,7 @@ const UNSET_COLOR = "rgba(0, 0, 0, 0)";
  * into background when the theme defines none.
  */
 export function default_zebra_color(elem: Element): string {
+    const { mixRgb, parseColor, rgbToHex } = plugin_utils().color;
     const style = window.getComputedStyle(elem);
     const read = (name: string) => {
         const raw = style.getPropertyValue(name).trim();
@@ -174,7 +139,7 @@ export default function plugin_config_schema(
     fields.push({
         kind: "Bool",
         key: "column_menus" satisfies keyof DatagridPluginConfig,
-        default: true,
+        default: false,
     });
 
     if (is_command_scope(this, "datagrid-row")) {

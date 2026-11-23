@@ -51,10 +51,6 @@ protobuf-src = ["dep:protobuf-src"]
 # to skip metadata generation. This currently only affects docs.
 omit_metadata = []
 
-# Should `talc` be used as a global allocator? Allows enhanced runtime metrics
-# via `Client::system_info`.
-talc-allocator = ["talc"]
-
 [lib]
 crate-type = ["rlib"]
 path = "src/rust/lib.rs"
@@ -86,7 +82,6 @@ rand = { version = ">=0.9,<1" }
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = { version = "0.11" }
 serde_json = { version = "1.0.107", features = ["raw_value", "preserve_order"] }
-talc = { version = "4.4.3", features = ["counters"], optional = true }
 thiserror = { version = "1.0.55" }
 tracing = { version = "0.1.36" }
 

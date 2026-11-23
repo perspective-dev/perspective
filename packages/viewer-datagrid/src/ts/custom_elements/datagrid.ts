@@ -12,7 +12,6 @@
 
 import {
     PRIVATE_PLUGIN_SYMBOL,
-    readThemeStyle,
     reconcile_column_widths,
     width_config_delta,
 } from "../model/index.ts";
@@ -22,15 +21,14 @@ import { save } from "../plugin/save.ts";
 import { hit_test } from "../plugin/hit_test.ts";
 import { command_scopes_changed } from "../commands.ts";
 import { draw } from "../plugin/draw.ts";
-import column_config_schema, {
-    ColumnConfigSchema,
-} from "../plugin/column_config_schema.ts";
+import column_config_schema from "../plugin/column_config_schema.ts";
 import plugin_config_schema from "../plugin/plugin_config_schema.ts";
 import datagridStyles from "../../../dist/css/perspective-viewer-datagrid.css";
-import { format_raw } from "../data_listener/format_cell.ts";
+import { plugin_utils } from "../plugin_utils.ts";
 
 import type { ColumnWindow, View, ViewWindow } from "@perspective-dev/client";
 import type {
+    ColumnConfigSchema,
     HTMLPerspectiveViewerElement,
     IPerspectiveViewerPlugin,
     PerspectiveHitTest,
@@ -49,7 +47,6 @@ import type {
 } from "../types.ts";
 import { RegularTableElement } from "regular-table";
 import type { CellScalar } from "regular-table/dist/esm/types.js";
-import { isMetaColumn } from "../model/meta_columns.ts";
 
 /**
  * The custom element class for this plugin.  The interface methods for this
@@ -72,7 +69,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
     _bold: boolean = false;
     _italic: boolean = false;
     _word_wrap: boolean = false;
-    _column_menus: boolean = true;
+    _column_menus: boolean = false;
     _command_column: CommandColumn = "left";
     _command_cells: boolean = true;
     _align?: Align;
@@ -148,7 +145,9 @@ export class HTMLPerspectiveViewerDatagridPluginElement
         const Elem = HTMLPerspectiveViewerDatagridPluginElement;
         if (!Elem._sheet) {
             Elem._sheet = new CSSStyleSheet();
-            Elem._sheet.replaceSync(datagridStyles);
+            Elem._sheet.replaceSync(
+                plugin_utils().cell_style.css + datagridStyles,
+            );
         }
 
         const shadow = this.attachShadow({ mode: "open" });
@@ -205,6 +204,7 @@ export class HTMLPerspectiveViewerDatagridPluginElement
             // loaded by default.
             priority: 1,
             can_render_column_styles: true,
+            renders_text: true,
         };
     }
 
@@ -274,8 +274,9 @@ export class HTMLPerspectiveViewerDatagridPluginElement
             >,
         ]);
 
+        const utils = plugin_utils();
         const keys = Object.keys(json as Record<string, unknown[]>).filter(
-            (x) => !isMetaColumn(x),
+            (x) => !utils.column_style.isMetaColumn(x),
         );
 
         const names = area[area.length - 1] ?? [];
@@ -293,19 +294,33 @@ export class HTMLPerspectiveViewerDatagridPluginElement
 
         const formatters = keys.map((_, cidx) => {
             const name = String(names[cidx] ?? "");
-            return format_raw(
+            return utils.format.format_raw(
                 this.model!._schema[name],
                 pluginConfig?.[name] || {},
             );
         });
 
+        const columns = keys.map(
+            (key) => (json as Record<string, unknown[]>)[key],
+        );
+
+        const texts = formatters.map(
+            (formatter, cidx) =>
+                formatter &&
+                formatter.format_strings(
+                    new Float64Array(columns[cidx] as number[]),
+                ),
+        );
+
         let out = "";
         for (let ridx = 0; ridx < nrows; ridx++) {
             for (let cidx = 0; cidx < keys.length; cidx++) {
-                const col = (json as Record<string, unknown[]>)[keys[cidx]];
+                const col = columns[cidx];
                 const formatter = formatters[cidx];
-                if (formatter) {
-                    out += formatter.format(col[ridx]) + "\t";
+                if (formatter && ridx < col.length) {
+                    out += texts[cidx]![ridx] + "\t";
+                } else if (formatter) {
+                    out += formatter.format(col[ridx] as number) + "\t";
                 } else {
                     out += col[ridx] + "\t";
                 }
@@ -404,11 +419,18 @@ export class HTMLPerspectiveViewerDatagridPluginElement
             return;
         }
 
-        Object.assign(this.model, readThemeStyle(this.regular_table));
+        Object.assign(
+            this.model,
+            plugin_utils().theme_style.readThemeStyle(this.regular_table),
+        );
         sync_wrap_lines.call(this);
     }
 
     delete(): void {
+        plugin_utils().format.free_formatters(
+            (this.regular_table as any)[PRIVATE_PLUGIN_SYMBOL] ?? {},
+        );
+
         this.disconnectedCallback();
         this._toolbar = undefined;
         if ((this.regular_table as any).table_model) {

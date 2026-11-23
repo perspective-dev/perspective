@@ -87,6 +87,11 @@ pub struct ActiveColumnProps {
     #[prop_or_default]
     pub col_type: Option<ColumnType>,
 
+    /// Fires when this column's "Clear" button, beside its slot label, is
+    /// clicked; only the first active column has one.
+    #[prop_or_default]
+    pub on_clear: Option<Callback<()>>,
+
     /// Session metadata snapshot — threaded from `SessionProps`.
     pub metadata: SessionMetadataRc,
 
@@ -109,6 +114,7 @@ impl PartialEq for ActiveColumnProps {
             && self.is_window == rhs.is_window
             && self.is_modified == rhs.is_modified
             && self.show_edit_btn == rhs.show_edit_btn
+            && self.on_clear.is_some() == rhs.on_clear.is_some()
             && self.col_type == rhs.col_type
             && self.metadata == rhs.metadata
             && self.view_config == rhs.view_config
@@ -256,6 +262,16 @@ impl Component for ActiveColumn {
             } => (label.clone(), ColumnState::Invalid),
         };
 
+        let clear = ctx
+            .props()
+            .on_clear
+            .as_ref()
+            .filter(|_| name.0.is_some())
+            .map(|on_clear| {
+                let onmousedown = left_click(on_clear.reform(|_| ()));
+                html! { <span id="clear-columns" {onmousedown} /> }
+            });
+
         let ondragenter = ctx.props().ondragenter.reform(move |event: DragEvent| {
             // Safari does not set `relatedTarget` so this event must be allowed
             // to bubble so we can count entry/exit stacks to
@@ -303,6 +319,7 @@ impl Component for ActiveColumn {
                         data-index={ctx.props().idx.to_string()}
                         ondragenter={ondragenter.clone()}
                     >
+                        { clear }
                         <EmptyColumn {column_dropdown} {exclude} {on_select} />
                     </div>
                 }
@@ -317,6 +334,7 @@ impl Component for ActiveColumn {
                         data-index={ctx.props().idx.to_string()}
                         ondragenter={ondragenter.clone()}
                     >
+                        { clear }
                         <InvalidColumn />
                     </div>
                 }
@@ -382,6 +400,7 @@ impl Component for ActiveColumn {
                         {onmouseout}
                         ondragenter={ondragenter.clone()}
                     >
+                        { clear }
                         <span {class} onmousedown={remove_column} />
                         <ColumnSelectorColumnRow
                             name={name.clone()}

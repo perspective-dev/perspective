@@ -32,11 +32,13 @@ test.describe("Panel activation", () => {
                 await v.restore({
                     plugin: "Datagrid",
                     columns: ["Sales", "Profit"],
+                    plugin_config: { column_menus: true },
                 });
                 await v.addPanel({
                     plugin: "Datagrid",
                     table: tableName,
                     columns: ["State", "Sales"],
+                    plugin_config: { column_menus: true },
                 });
                 await v.toggleConfig(true);
                 await v.flush();

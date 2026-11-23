@@ -24,6 +24,7 @@ All commands in this guide are run from the repository root.
 | `rust/perspective-viewer`                                     | `@perspective-dev/viewer`, the `<perspective-viewer>` Custom Element |
 | `rust/perspective`                                            | The `perspective` Rust crate                                         |
 | `packages/viewer-datagrid`, `packages/viewer-charts`          | Viewer plugins                                                       |
+| `packages/viewer-summary`                                     | The Summary viewer plugin                                            |
 | `packages/react`, `packages/jupyterlab`, `packages/anywidget` | Framework and notebook integrations                                  |
 | `tools/scripts`, `tools/test`, `tools/bench`                  | Build scripts, the shared test harness and the benchmark suite       |
 | `examples`, `docs`                                            | Example projects and the documentation site                          |

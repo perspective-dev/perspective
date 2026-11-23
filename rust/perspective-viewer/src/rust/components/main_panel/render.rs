@@ -369,6 +369,8 @@ impl MainPanel {
                         presentation={ctx.props().presentation.clone()}
                         {theme}
                         {maximized}
+                        is_settings_open={ctx.props().is_settings_open}
+                        open_column={ctx.props().presentation_props.open_column_settings.name()}
                         commands={self.context_menu_commands.clone()}
                         on_custom={ctx.link().callback(MainPanelMsg::CustomCommand)}
                         on_command={ctx.link().callback(MainPanelMsg::Command)}

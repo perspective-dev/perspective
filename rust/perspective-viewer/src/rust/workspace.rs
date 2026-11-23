@@ -450,6 +450,11 @@ impl Workspace {
         self.0.borrow_mut().pending_layout = Some(layout);
     }
 
+    /// The staged layout tree, if any, without consuming it.
+    pub fn pending_layout(&self) -> Option<crate::js::Layout> {
+        self.0.borrow().pending_layout.clone()
+    }
+
     /// Take (consume) the staged layout tree, if any.
     pub fn take_pending_layout(&self) -> Option<crate::js::Layout> {
         self.0.borrow_mut().pending_layout.take()

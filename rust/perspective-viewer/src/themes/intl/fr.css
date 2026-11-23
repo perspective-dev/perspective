@@ -19,10 +19,13 @@ perspective-viewer {
     --psp-label--transpose-button--content: "Échanger";
     --psp-label--config-button--content: "Configurer";
     --psp-label--all-columns--content: "Toutes les colonnes";
+    --psp-label--add-all-columns--content: "+ Toutes";
+    --psp-label--clear-columns--content: "Effacer";
     --psp-label--untitled--content: "Sans titre";
 
     /* Plugin names */
     --psp-plugin-name--datagrid--content: "Grille de données";
+    --psp-plugin-name--summary--content: "Résumé";
     --psp-plugin-name--treemap--content: "Treemap";
     --psp-plugin-name--sunburst--content: "Sunburst";
     --psp-plugin-name--heatmap--content: "Carte de chaleur";
@@ -59,7 +62,6 @@ perspective-viewer {
     --psp-label--copy-button--content: "Copier";
     --psp-label--export-button--content: "Exporter";
     --psp-label--reset-button--content: "Réinitialiser";
-    --psp-label--new-panel-button--content: "Nouveau";
     --psp-label--new-from-table--content: "Nouveau depuis une table";
     --psp-label--new-from-panel--content: "Nouveau depuis un panneau";
     --psp-label--apply-button--content: "Appliquer";
@@ -171,7 +173,13 @@ perspective-viewer {
     --psp-label--row-height--content: "Hauteur de ligne";
     --psp-label--zebra-rows--content: "Lignes zébrées";
     --psp-label--zebra-color--content: "Couleur zébrée";
+    --psp-label--label-position--content: "Position du libellé";
+    --psp-label--value-fit--content: "Taille de la valeur";
+    --psp-label--layout-mode--content: "Disposition";
+    --psp-label--grid-columns--content: "Colonnes de la grille";
+    --psp-label--grid-rows--content: "Lignes de la grille";
     --psp-label--chart-type--content: "Type de glyphe";
+    --psp-label--new-panel-button--content: "Nouveau";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "Axe Y double automatique";

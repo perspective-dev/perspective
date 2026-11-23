@@ -51,6 +51,7 @@ test.describe("header th recycling", () => {
             group_by: ["Region"],
             split_by: ["Category"],
             settings: true,
+            plugin_config: { column_menus: true },
         });
         await restore({
             settings: true,

@@ -36,10 +36,11 @@ regular-table {
 
             &.psp-menu-open {
                 box-shadow:
-                    inset -2px 0px 0px var(--psp--color),
-                    inset 2px 0px 0px var(--psp--color),
+                    inset -1px 0px 0px var(--psp--color),
+                    inset 1px 0px 0px var(--psp--color),
                     0px 1px 0px
-                        var(--psp-datagrid--hover--border-color, #c5c9d080);
+                        var(--psp-datagrid--hover--border-color, #c5c9d080),
+                    5px 0px 0px var(--psp-box-shadow--color);
             }
         }
 
@@ -48,10 +49,11 @@ regular-table {
                 .psp-select-region-inactive
             ).psp-menu-open {
             box-shadow:
-                inset -2px 0px 0px var(--psp--color),
-                inset 2px 0px 0px var(--psp--color),
-                inset 0px -2px 0px var(--psp--color),
-                0px 1px 0px var(--psp-datagrid--hover--border-color, #c5c9d080);
+                inset -1px 0px 0px var(--psp--color),
+                inset 1px 0px 0px var(--psp--color),
+                inset 0px -1px 0px var(--psp--color),
+                0px 1px 0px var(--psp-datagrid--hover--border-color, #c5c9d080),
+                5px 0px 0px var(--psp-box-shadow--color);
         }
 
         tr:hover

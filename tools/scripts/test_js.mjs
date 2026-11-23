@@ -33,6 +33,7 @@ const IS_PLAYWRIGHT = get_scope().reduce(
             "viewer",
             "viewer-datagrid",
             "viewer-charts",
+            "viewer-summary",
             "viewer-workspace",
             "workspace",
         ].includes(pkg),

@@ -15,7 +15,7 @@
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(inline_js = r#"
-    export function bootstrap(psp, name, clsname, statics) {
+    export function bootstrap(psp, name, clsname, statics, static_getters) {
         if (customElements.get(name)) {
             console.warn(`Custom element "${name}" is already registered; skipping duplicate registration (Perspective was loaded more than once on this page).`);
             return;
@@ -55,12 +55,26 @@ use wasm_bindgen::prelude::*;
             });
         }
 
+        for (const key of static_getters) {
+            Object.defineProperty(x, key, {
+                get: function() {
+                    return psp[key].call(psp);
+                }
+            });
+        }
+
         customElements.define(name, x);
     }
 "#)]
 extern "C" {
     #[wasm_bindgen(js_name = "bootstrap")]
-    fn js_bootstrap(psp: &JsValue, name: &str, cls: &str, statics: js_sys::Array) -> JsValue;
+    fn js_bootstrap(
+        psp: &JsValue,
+        name: &str,
+        cls: &str,
+        statics: js_sys::Array,
+        static_getters: js_sys::Array,
+    ) -> JsValue;
 }
 
 /// A trait which allows the [`define_web_component`] method to create a
@@ -74,6 +88,10 @@ pub trait CustomElementMetadata {
     /// [optional] The names of the methods which should be static on the
     /// element.
     const STATICS: &'static [&'static str] = [].as_slice();
+
+    /// [optional] The names of the module functions which should be static
+    /// getters on the element.
+    const STATIC_GETTERS: &'static [&'static str] = [].as_slice();
 
     /// [optional] The name of the Rust struct.
     const TYPE_NAME: &'static str = std::any::type_name::<Self>();
@@ -95,5 +113,10 @@ pub fn define_web_component<T: CustomElementMetadata>(module: &JsValue) {
         T::CUSTOM_ELEMENT_NAME,
         T::struct_name(),
         T::STATICS.iter().cloned().map(JsValue::from).collect(),
+        T::STATIC_GETTERS
+            .iter()
+            .cloned()
+            .map(JsValue::from)
+            .collect(),
     );
 }

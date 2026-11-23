@@ -195,8 +195,8 @@ pub struct MainPanel {
     /// chrome and slotted light DOM alike — on the composed path.
     _contextmenu_listener: Closure<dyn FnMut(web_sys::Event)>,
 
-    /// Bubble-phase `pointerdown` listener on the viewer host that activates
-    /// the panel whose frame is on the event's composed path.
+    /// Bubble-phase primary-button `pointerdown` listener on the viewer host
+    /// that activates the panel whose frame is on the event's composed path.
     _pointerdown_listener: Closure<dyn FnMut(web_sys::Event)>,
 
     /// The `<regular-layout>` ELEMENT the layout listeners are attached to.
@@ -214,10 +214,6 @@ pub struct MainPanel {
     /// Ids gone from the model whose `removePanel` has been issued to the
     /// layout and not yet committed.
     pending_removals: HashSet<String>,
-
-    /// Ids observed in a committed layout tree, the only model-held panels a
-    /// later commit can report closed.
-    on_screen: HashSet<String>,
 
     /// The in-flight panel drag, from its first `BeforeResize` until it is
     /// dropped on `LayoutUpdated` (the drop).
@@ -364,7 +360,8 @@ impl Component for MainPanel {
         let pointerdown_cb = ctx.link().callback(MainPanelMsg::PanelPointerDown);
         let viewer_elem = ctx.props().presentation.viewer_elem().clone();
         let pointerdown_listener = Closure::wrap(Box::new(move |event: web_sys::Event| {
-            if let Some(frame) = panel_frame_on_path(&event, viewer_elem.unchecked_ref())
+            if event.unchecked_ref::<web_sys::MouseEvent>().button() == 0
+                && let Some(frame) = panel_frame_on_path(&event, viewer_elem.unchecked_ref())
                 && !frame.class_list().contains("closing")
                 && let Some(name) = frame.get_attribute("name")
             {
@@ -395,7 +392,6 @@ impl Component for MainPanel {
             layout_ref: NodeRef::default(),
             inserted: Vec::new(),
             pending_removals: HashSet::new(),
-            on_screen: HashSet::new(),
             _layout_update_listener: listener,
             _layout_select_listener: select_listener,
             _layout_before_resize_listener: before_resize_listener,

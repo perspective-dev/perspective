@@ -87,6 +87,19 @@ impl PartialEq for ConfigSelectorProps {
     }
 }
 
+/// Whether the active plugin can draw a `group_by` at all.
+fn accepts_group_by(props: &ConfigSelectorProps) -> bool {
+    let rollup_features = props
+        .metadata
+        .get_features()
+        .map(|x| x.get_group_rollup_modes())
+        .unwrap_or_default();
+
+    props
+        .plugin_static_config
+        .accepts_group_by(&rollup_features)
+}
+
 #[derive(Debug)]
 pub enum ConfigSelectorMsg {
     DragOver(usize, DragTarget),
@@ -272,6 +285,11 @@ impl Component for ConfigSelector {
                 false
             },
             ConfigSelectorMsg::Close(..) => false,
+            ConfigSelectorMsg::Drop(_, DragTarget::GroupBy, ..)
+                if !accepts_group_by(ctx.props()) =>
+            {
+                false
+            },
             ConfigSelectorMsg::Drop(column, action, effect, index)
                 if action != DragTarget::Active && !action.is_staged() =>
             {
@@ -675,6 +693,7 @@ impl Component for ConfigSelector {
                             name="group_by"
                             role_label={plugin_roles.0.clone()}
                             disabled={config.group_rollup_mode == GroupRollupMode::Total}
+                            is_invalid={!accepts_group_by(ctx.props())}
                             parent={ctx.link().clone()}
                             column_dropdown={column_dropdown.clone()}
                             exclude={config.group_by.iter().cloned().collect::<HashSet<_>>()}

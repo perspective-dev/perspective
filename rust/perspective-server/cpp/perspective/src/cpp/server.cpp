@@ -2378,6 +2378,20 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             (*features->mutable_filter_ops())[proto::ColumnType::BOOLEAN] =
                 opts2;
 
+            const auto add_extrema_by =
+                [](proto::GetFeaturesResp_AggregateOptions& opts) {
+                    for (const auto by_type :
+                         {proto::ColumnType::FLOAT,
+                          proto::ColumnType::DATE,
+                          proto::ColumnType::DATETIME}) {
+                        for (const auto* name : {"min by", "max by"}) {
+                            auto* agg = opts.add_aggregates();
+                            agg->set_name(name);
+                            agg->add_args(by_type);
+                        }
+                    }
+                };
+
             proto::GetFeaturesResp_AggregateOptions string_opts;
             string_opts.add_aggregates()->set_name("count");
             string_opts.add_aggregates()->set_name("any");
@@ -2392,12 +2406,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             string_opts.add_aggregates()->set_name("q1");
             string_opts.add_aggregates()->set_name("q3");
             string_opts.add_aggregates()->set_name("unique");
-            auto args1 = string_opts.add_aggregates();
-            args1->set_name("min by");
-            args1->add_args(proto::ColumnType::FLOAT);
-            auto args2 = string_opts.add_aggregates();
-            args2->set_name("max by");
-            args2->add_args(proto::ColumnType::FLOAT);
+            add_extrema_by(string_opts);
             (*features->mutable_aggregates())[proto::ColumnType::STRING] =
                 string_opts;
 
@@ -2450,12 +2459,7 @@ ProtoServer::_handle_request(std::uint32_t client_id, Request&& req) {
             auto args3 = number_opts.add_aggregates();
             args3->set_name("weighted mean");
             args3->add_args(proto::ColumnType::FLOAT);
-            auto args4 = number_opts.add_aggregates();
-            args4->set_name("min by");
-            args4->add_args(proto::ColumnType::FLOAT);
-            auto args5 = number_opts.add_aggregates();
-            args5->set_name("max by");
-            args5->add_args(proto::ColumnType::FLOAT);
+            add_extrema_by(number_opts);
             (*features->mutable_aggregates())[proto::ColumnType::INTEGER] =
                 number_opts;
 

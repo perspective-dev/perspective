@@ -21,6 +21,7 @@ import type { ColumnType, ViewWindow, Filter } from "@perspective-dev/client";
 import type { ConfigDefaultsOptions } from "../../dist/ts-rs/ConfigDefaultsOptions.d.ts";
 import type { ColumnConfigDefaultsOptions } from "../../dist/ts-rs/ColumnConfigDefaultsOptions.d.ts";
 import type { PerspectiveSelectDetail } from "./select-detail.ts";
+import type { PluginUtils } from "./plugin_utils/index.ts";
 
 export { PerspectiveSelectDetail } from "./select-detail.ts";
 export type {
@@ -254,6 +255,21 @@ export interface PerspectiveViewerElementExt {
         type?: ColumnType;
         defaults: Record<string, unknown>;
     }>;
+
+    /**
+     * The code `<perspective-viewer>` shares with its plugins: value
+     * formatting, color parsing, theme reading, cell styling and settings
+     * schema helpers.
+     *
+     * @category Plugin
+     * @example
+     * ```javascript
+     * const { plugin_utils } = customElements.get("perspective-viewer");
+     * const formatter = plugin_utils.formatter("float", { style: "percent" });
+     * console.log(formatter.format(0.25));
+     * ```
+     */
+    readonly plugin_utils: PluginUtils;
 
     get_wasm_module(): WebAssembly.Module;
 

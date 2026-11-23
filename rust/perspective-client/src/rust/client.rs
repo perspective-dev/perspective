@@ -923,23 +923,14 @@ impl Client {
                 #[cfg(target_family = "wasm")]
                 let timestamp = None;
 
-                #[cfg(feature = "talc-allocator")]
-                let (client_used, client_heap) = {
-                    let (client_used, client_heap) = crate::utils::get_used();
-                    (Some(client_used as u64), Some(client_heap as u64))
-                };
-
-                #[cfg(not(feature = "talc-allocator"))]
-                let (client_used, client_heap) = (None, None);
-
                 let info = SystemInfo {
                     heap_size: resp.heap_size,
                     used_size: resp.used_size,
                     cpu_time: resp.cpu_time,
                     cpu_time_epoch: resp.cpu_time_epoch,
                     timestamp,
-                    client_heap,
-                    client_used,
+                    client_heap: None,
+                    client_used: None,
                 };
 
                 Ok(info)

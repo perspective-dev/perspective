@@ -38,6 +38,7 @@ import { viewToColumnDataMap } from "../data/view-reader.ts";
 import { TILE_SOURCES, type TileSourceSpec } from "../map/tile-source.ts";
 import { loadFontDeduped } from "./font-loader.ts";
 import { installSessionHost } from "./session-host.ts";
+import { bind_plugin_utils } from "../plugin_utils.ts";
 import { deferIfDraining, unregister } from "../render/scheduler.ts";
 
 /**
@@ -853,6 +854,7 @@ async function bootstrapWorker(
     )) as typeof wasm_module_type;
 
     await module.initSync({ module: msg.clientWasm });
+    bind_plugin_utils(module);
 
     // Register every `@font-face` the host found in its document so
     // Canvas2D `ctx.font` lookups inside this worker resolve correctly.

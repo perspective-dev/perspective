@@ -20,16 +20,8 @@ import {
     get_psp_type,
 } from "../types.ts";
 import type { ColumnType } from "@perspective-dev/client";
-import {
-    css_font_family,
-    measure_px,
-    wrap_lines,
-} from "../plugin/plugin_config_schema.ts";
-
-import { cell_style_numeric } from "./table_cell/numeric.ts";
-import { cell_style_string } from "./table_cell/string.ts";
-import { cell_style_datetime } from "./table_cell/datetime.ts";
-import { cell_style_boolean } from "./table_cell/boolean.ts";
+import { measure_px, wrap_lines } from "../plugin/plugin_config_schema.ts";
+import { plugin_utils } from "../plugin_utils.ts";
 import { cell_style_row_header } from "./table_cell/row_header.ts";
 import { is_type_text_editable } from "../event_handlers/edit_focus.ts";
 import {
@@ -72,14 +64,7 @@ interface ColState {
 
 const HEADER_ALIGNMENT: ColumnAlignment = { text: "left", vertical: "middle" };
 
-function resolve_alignment(
-    align: Align | undefined,
-    is_numeric: boolean,
-): ColumnAlignment {
-    if (align === undefined) {
-        return { text: is_numeric ? "right" : "left", vertical: "middle" };
-    }
-
+function resolve_alignment(align: Align): ColumnAlignment {
     return {
         text: align.endsWith("left")
             ? "left"
@@ -147,6 +132,16 @@ export function applyBodyCellStyles(
         "flat-group-rollup-mode",
         model._config.group_rollup_mode === "flat",
     );
+
+    const {
+        cell_style: {
+            cell_style_boolean,
+            cell_style_datetime,
+            cell_style_numeric,
+            cell_style_string,
+        },
+        schema: { css_font_family },
+    } = plugin_utils();
 
     const is_rollup_mode = model._config.group_rollup_mode === "rollup";
     const n_split_by = model._config.split_by.length;
@@ -278,7 +273,11 @@ export function applyBodyCellStyles(
                 size_key,
                 isHeader
                     ? HEADER_ALIGNMENT
-                    : resolve_alignment(c.align ?? model._align, c.is_numeric),
+                    : resolve_alignment(
+                          c.align ??
+                              model._align ??
+                              (c.is_numeric ? "right" : "left"),
+                      ),
             );
         }
 

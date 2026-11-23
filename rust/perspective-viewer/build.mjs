@@ -83,6 +83,7 @@ export async function build_all() {
         {
             entryPoints: ["src/ts/perspective-viewer.ts"],
             format: "esm",
+            loader: { ".css": "text" },
             minify: false,
             minifySyntax: !process.env.PSP_DEBUG,
             minifyIdentifiers: !process.env.PSP_DEBUG,
@@ -99,12 +100,12 @@ export async function build_all() {
                 }),
             ],
         },
-        // Dependency-free leaf modules, published as the `./select-detail`
-        // and `./column-format` subpath exports. Plugin packages import these
-        // instead of the package root, which would link the entire viewer and
-        // its wasm asset into a plugin's standalone `dist/cdn` bundle.
+        // A dependency-free leaf module, published as the `./select-detail`
+        // subpath export. Plugin packages import this instead of the package
+        // root, which would link the entire viewer and its wasm asset into a
+        // plugin's standalone `dist/cdn` bundle.
         {
-            entryPoints: ["src/ts/select-detail.ts", "src/ts/column-format.ts"],
+            entryPoints: ["src/ts/select-detail.ts"],
             format: "esm",
             outdir: "dist/esm",
         },
@@ -120,7 +121,7 @@ export async function build_all() {
         {
             entryPoints: ["src/ts/perspective-viewer.cdn.ts"],
             format: "esm",
-            loader: { ".wasm": "file" },
+            loader: { ".wasm": "file", ".css": "text" },
             outfile: "dist/cdn/perspective-viewer.js",
             plugins: [
                 WorkerPlugin({

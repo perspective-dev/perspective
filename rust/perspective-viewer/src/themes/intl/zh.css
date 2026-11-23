@@ -19,10 +19,13 @@ perspective-viewer {
     --psp-label--transpose-button--content: "交换";
     --psp-label--config-button--content: "配置";
     --psp-label--all-columns--content: "所有列";
+    --psp-label--add-all-columns--content: "+ 全部";
+    --psp-label--clear-columns--content: "清除";
     --psp-label--untitled--content: "无标题";
 
     /* Plugin names */
     --psp-plugin-name--datagrid--content: "数据网格";
+    --psp-plugin-name--summary--content: "摘要";
     --psp-plugin-name--treemap--content: "树形图";
     --psp-plugin-name--sunburst--content: "旭日图";
     --psp-plugin-name--heatmap--content: "热力图";
@@ -59,7 +62,6 @@ perspective-viewer {
     --psp-label--copy-button--content: "复制";
     --psp-label--export-button--content: "导出";
     --psp-label--reset-button--content: "重置";
-    --psp-label--new-panel-button--content: "新建";
     --psp-label--new-from-table--content: "从表新建";
     --psp-label--new-from-panel--content: "从面板新建";
     --psp-label--apply-button--content: "应用";
@@ -171,7 +173,13 @@ perspective-viewer {
     --psp-label--row-height--content: "行高";
     --psp-label--zebra-rows--content: "斑马行";
     --psp-label--zebra-color--content: "斑马色";
+    --psp-label--label-position--content: "标签位置";
+    --psp-label--value-fit--content: "数值大小";
+    --psp-label--layout-mode--content: "布局";
+    --psp-label--grid-columns--content: "网格列数";
+    --psp-label--grid-rows--content: "网格行数";
     --psp-label--chart-type--content: "图元类型";
+    --psp-label--new-panel-button--content: "新建";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "自动双Y轴";

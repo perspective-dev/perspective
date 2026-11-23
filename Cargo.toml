@@ -36,7 +36,7 @@ members = [
 
 [profile.dev]
 panic = "abort"
-opt-level = "s"
+opt-level = 2
 
 [profile.release]
 panic = "abort"
@@ -45,9 +45,34 @@ codegen-units = 1
 lto = true
 strip = true
 
+[profile.release.package]
+calendrical_calculations = { opt-level = 3 }
+core_maths = { opt-level = 3 }
+fixed_decimal = { opt-level = 3 }
+icu_calendar = { opt-level = 3 }
+icu_datetime = { opt-level = 3 }
+icu_decimal = { opt-level = 3 }
+icu_experimental = { opt-level = 3 }
+icu_locale_core = { opt-level = 3 }
+icu_pattern = { opt-level = 3 }
+icu_plurals = { opt-level = 3 }
+icu_provider = { opt-level = 3 }
+icu_time = { opt-level = 3 }
+libm = { opt-level = 3 }
+litemap = { opt-level = 3 }
+potential_utf = { opt-level = 3 }
+ryu = { opt-level = 3 }
+smallvec = { opt-level = 3 }
+tinystr = { opt-level = 3 }
+writeable = { opt-level = 3 }
+yoke = { opt-level = 3 }
+zerofrom = { opt-level = 3 }
+zerotrie = { opt-level = 3 }
+zerovec = { opt-level = 3 }
+
 [profile.fast]
 inherits = "release"
-opt-level = 1
+opt-level = "s"
 codegen-units = 256
 lto = "off"
 incremental = true

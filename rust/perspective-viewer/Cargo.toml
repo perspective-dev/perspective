@@ -35,9 +35,9 @@ path = "src/rust/lib.rs"
 
 [features]
 external-bootstrap = []
+bundled-locale-data = ["dep:jiff"]
 metadata = []
 default = ["llm-agent"]
-talc-allocator = ["perspective-js/talc-allocator"]
 trace-allocator = ["perspective-js/trace-allocator"]
 llm-agent = []
 
@@ -67,6 +67,21 @@ derivative = "2.2.0"
 # Easy way to define & implement a singleton trait (type extension)
 extend = "1.1.2"
 
+fixed_decimal = { version = "=0.7.3", features = ["ryu"] }
+icu_calendar = { version = "=2.4.0" }
+icu_datetime = { version = "=2.4.0" }
+icu_decimal = { version = "=2.4.0", features = ["alloc", "unstable"] }
+icu_experimental = { version = "=0.7.0" }
+icu_locale_core = { version = "=2.4.0", features = ["alloc"] }
+icu_plurals = { version = "=2.4.0" }
+icu_provider = { version = "=2.4.0" }
+icu_time = { version = "=2.4.0" }
+jiff = { version = "=1.0.1", optional = true, default-features = false, features = [
+  "std",
+  "tzdb-bundle-always",
+] }
+writeable = { version = "=0.6.4" }
+
 # General async tools
 futures = "0.3.31"
 
@@ -75,8 +90,6 @@ itertools = "0.14.0"
 
 # JavaScript stdlib bindings
 js-sys = "0.3.85"
-
-macro_rules_attribute = "0.2.2"
 
 # Parse ExprTK for syntax highlighting.
 nom = "7.1.1"

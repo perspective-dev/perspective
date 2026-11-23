@@ -1421,4 +1421,93 @@ export default [
         },
         viewport: { width: 600, height: 450 },
     },
+    {
+        name: "Summary",
+        description: "Summary. One big number: total Sales.",
+        config: {
+            title: "Summary",
+            plugin: "Summary",
+            columns: ["Sales"],
+            columns_config: {
+                Sales: {
+                    number_format: {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                    },
+                },
+            },
+        },
+    },
+    {
+        name: "Summary Mixed Types",
+        description:
+            "Summary. Tiles for float, integer, date and string columns, each with an aggregate that keeps its type.",
+        config: {
+            title: "Summary Mixed Types",
+            plugin: "Summary",
+            columns: ["Sales", "Quantity", "Discount", "Order Date", "Segment"],
+            aggregates: {
+                Sales: "sum",
+                Quantity: "sum",
+                Discount: "avg",
+                "Order Date": "max",
+                Segment: "dominant",
+            },
+        },
+    },
+    {
+        name: "Summary Split By",
+        description: "Summary. Sales and Profit tiles for each Region.",
+        config: {
+            title: "Summary Split By",
+            plugin: "Summary",
+            columns: ["Sales", "Profit"],
+            split_by: ["Region"],
+        },
+    },
+    {
+        name: "Summary Split By 2",
+        description:
+            "Summary. Sales by Region and Category, grouped by Region with each Region's total.",
+        config: {
+            title: "Summary Split By 2",
+            plugin: "Summary",
+            columns: ["Sales"],
+            split_by: ["Region", "Category"],
+            split_rollup_mode: "rollup",
+            plugin_config: { layout_mode: "hierarchy" },
+        },
+    },
+    {
+        name: "Summary Bars",
+        description:
+            "Summary. Sales, Profit and Quantity for each Region, drawn as bars.",
+        config: {
+            title: "Summary Bars",
+            plugin: "Summary",
+            columns: ["Sales", "Profit", "Quantity"],
+            split_by: ["Region"],
+            columns_config: {
+                Sales: { fg_mode: "bar", fg_gradient: 800000 },
+                Profit: { fg_mode: "bar", fg_gradient: 120000 },
+                Quantity: { fg_mode: "bar", fg_gradient: 15000 },
+            },
+        },
+    },
+    {
+        name: "Summary Label Bars",
+        description:
+            "Summary. Sales, Profit and Quantity for each Category, drawn as bars with the value overlaid.",
+        config: {
+            title: "Summary Label Bars",
+            plugin: "Summary",
+            columns: ["Sales", "Profit", "Quantity"],
+            split_by: ["Category"],
+            columns_config: {
+                Sales: { fg_mode: "label-bar", fg_gradient: 900000 },
+                Profit: { fg_mode: "label-bar", fg_gradient: 150000 },
+                Quantity: { fg_mode: "label-bar", fg_gradient: 25000 },
+            },
+        },
+    },
 ];

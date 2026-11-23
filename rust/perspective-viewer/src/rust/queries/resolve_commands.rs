@@ -37,6 +37,9 @@ impl CommandLocation {
 pub struct ResolvedCommands {
     pub context: JsValue,
     pub commands: Vec<CommandSpec>,
+
+    /// The one column the gesture's hit targets, if it targets exactly one.
+    pub column: Option<String>,
 }
 
 /// The panel whose active plugin element is `plugin`.
@@ -74,11 +77,15 @@ pub async fn resolve_commands(
         _ => None,
     };
 
+    let column = hit.as_ref().and_then(hit_column);
     let context = match command_context(panel, location, Some(point), hit) {
         Ok(context) => context,
         Err(err) => {
             tracing::error!("Failed to build command context: {err}");
-            return ResolvedCommands::default();
+            return ResolvedCommands {
+                column,
+                ..ResolvedCommands::default()
+            };
         },
     };
 
@@ -95,7 +102,24 @@ pub async fn resolve_commands(
         )
         .unwrap_or_default();
 
-    ResolvedCommands { context, commands }
+    ResolvedCommands {
+        context,
+        commands,
+        column,
+    }
+}
+
+/// The one column a resolved `hit` targets, if it targets exactly one.
+fn hit_column(hit: &JsValue) -> Option<String> {
+    let names: Array = Reflect::get(hit, &"column_names".into())
+        .ok()?
+        .dyn_into()
+        .ok()?;
+    if names.length() == 1 {
+        names.get(0).as_string()
+    } else {
+        None
+    }
 }
 
 /// Evaluate the app's schema at `location` for every ref in `refs` against

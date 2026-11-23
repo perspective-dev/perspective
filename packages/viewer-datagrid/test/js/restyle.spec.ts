@@ -120,6 +120,7 @@ test.describe("Datagrid restyle()", () => {
                 theme: "Pro Light",
                 settings: true,
                 sort: [["Row ID", "desc"]],
+                plugin_config: { column_menus: true },
             });
         });
 

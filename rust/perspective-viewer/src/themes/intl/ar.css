@@ -18,9 +18,12 @@ perspective-viewer {
     --psp-label--transpose-button--content: "تبديل";
     --psp-label--config-button--content: "تكوين";
     --psp-label--all-columns--content: "كل الأعمدة";
+    --psp-label--add-all-columns--content: "+ الكل";
+    --psp-label--clear-columns--content: "مسح";
     --psp-label--untitled--content: "بدون عنوان";
 
     --psp-plugin-name--datagrid--content: "شبكة البيانات";
+    --psp-plugin-name--summary--content: "ملخص";
     --psp-plugin-name--treemap--content: "خريطة شجرية";
     --psp-plugin-name--sunburst--content: "مخطط شمسي";
     --psp-plugin-name--heatmap--content: "خريطة حرارية";
@@ -55,7 +58,6 @@ perspective-viewer {
     --psp-label--copy-button--content: "نسخ";
     --psp-label--export-button--content: "تصدير";
     --psp-label--reset-button--content: "إعادة تعيين";
-    --psp-label--new-panel-button--content: "جديد";
     --psp-label--new-from-table--content: "جديد من جدول";
     --psp-label--new-from-panel--content: "جديد من لوحة";
     --psp-label--apply-button--content: "تطبيق";
@@ -174,7 +176,13 @@ perspective-viewer {
     --psp-label--row-height--content: "ارتفاع الصف";
     --psp-label--zebra-rows--content: "صفوف متناوبة";
     --psp-label--zebra-color--content: "لون التناوب";
+    --psp-label--label-position--content: "موضع التسمية";
+    --psp-label--value-fit--content: "حجم القيمة";
+    --psp-label--layout-mode--content: "التخطيط";
+    --psp-label--grid-columns--content: "أعمدة الشبكة";
+    --psp-label--grid-rows--content: "صفوف الشبكة";
     --psp-label--chart-type--content: "نوع الشكل";
+    --psp-label--new-panel-button--content: "جديد";
 
     --psp-label--auto-alt-y-axis--content: "محور Y تلقائي";
     --psp-label--facet-mode--content: "وضع التقسيم";

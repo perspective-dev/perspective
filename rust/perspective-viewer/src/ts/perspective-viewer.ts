@@ -40,13 +40,7 @@ export { HTMLPerspectiveViewerPluginElement } from "./plugin.ts";
 export { providers } from "./providers.ts";
 export type { AgentProviderPreset } from "./providers.ts";
 
-export {
-    createNumberFormatter,
-    createDatetimeFormatter,
-    createDateFormatter,
-    sourceColumn,
-} from "./column-format.ts";
-export type { NumberFormatConfig, DateFormatConfig } from "./column-format.ts";
+export type * from "./plugin_utils/index.ts";
 
 export type * from "./extensions.ts";
 export { PerspectiveSelectDetail } from "./select-detail.ts";

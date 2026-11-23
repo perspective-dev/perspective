@@ -16,9 +16,6 @@ mod clone;
 mod logging;
 mod rand_sequence;
 
-#[cfg(feature = "talc-allocator")]
-mod talc_allocator;
-
 #[cfg(test)]
 mod tests;
 
@@ -27,8 +24,6 @@ use std::time::SystemTimeError;
 
 use rand::prelude::*;
 use rand::rngs::StdRng;
-#[cfg(feature = "talc-allocator")]
-pub(crate) use talc_allocator::get_used;
 use thiserror::*;
 
 use crate::proto;

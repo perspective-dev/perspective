@@ -83,6 +83,10 @@ pub enum PerspectiveViewerMsg {
         sender: Option<Sender<()>>,
         toggle: bool,
     },
+
+    /// Open the column settings of `target`, opening the settings pane in the
+    /// same commit when it is closed.
+    OpenSettingsWithColumn(ColumnSettingsTarget),
     PreloadFontsUpdate,
 
     /// Element-level reset (the public `reset()` API): reset EVERY panel and
@@ -181,7 +185,7 @@ pub enum PerspectiveViewerMsg {
     /// host box is unchanged, so nothing else resizes the plugins), which
     /// leaves canvas plugins CSS-stretched at their old backing size. API
     /// entry points send [`Self::ToggleSettingsInit`].
-    ToggleSettingsComplete(SettingsUpdate, Sender<()>),
+    ToggleSettingsComplete(SettingsUpdate, Option<ColumnSettingsTarget>, Sender<()>),
 
     /// Toggle (or force) the settings pane with the FULL choreography:
     /// presize every visible plugin to its post-toggle box, commit the

@@ -726,4 +726,42 @@
         background-color: var(--psp--color);
         border-color: var(--psp--color);
     }
+
+    #active-columns #clear-columns,
+    #sub-columns #add-all-columns {
+        position: absolute;
+        right: 0;
+        z-index: 1;
+        font-size: var(--label--font-size, 0.75em);
+        padding: var(--column_type--padding, 0px 0px 0px 0px);
+        color: var(--psp-inactive--color);
+        cursor: pointer;
+        user-select: none;
+    }
+
+    #active-columns #clear-columns {
+        margin-top: -43px;
+        margin-right: 30px;
+    }
+
+    #sub-columns #add-all-columns {
+        top: -30px;
+        right: 30px;
+        height: 28px;
+        display: inline-flex;
+        align-items: flex-end;
+    }
+
+    #active-columns #clear-columns:hover,
+    #sub-columns #add-all-columns:hover {
+        color: var(--psp--color, inherit);
+    }
+
+    #active-columns #clear-columns:before {
+        content: var(--psp-label--clear-columns--content, var(--psp-missing));
+    }
+
+    #sub-columns #add-all-columns:before {
+        content: var(--psp-label--add-all-columns--content, var(--psp-missing));
+    }
 }
