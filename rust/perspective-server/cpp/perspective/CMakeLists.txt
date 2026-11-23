@@ -439,7 +439,9 @@ list(APPEND all_deps_INCLUDE_DIRS
     ${exprtk_INCLUDE_DIRS})
 
 # Protobuf setup
-set(protobuf_BUILD_TESTS OFF FORCE)
+set(protobuf_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+# Always use protobuf's bundled abseil, never a host install (conda/Homebrew/system)
+set(protobuf_FORCE_FETCH_DEPENDENCIES ON CACHE BOOL "" FORCE)
 add_subdirectory(${PSP_CMAKE_MODULE_PATH}/../cpp/protos "${CMAKE_BINARY_DIR}/protos-build")
 
 # ####################

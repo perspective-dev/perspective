@@ -15,6 +15,7 @@ from datetime import datetime, date, timezone
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import time
 from pytest import fixture
 from random import random, randint, choice
 from faker import Faker
@@ -32,6 +33,7 @@ import json
 
 
 os.environ["TZ"] = "UTC"
+time.tzset()
 
 
 def new_encoder(self, obj):
