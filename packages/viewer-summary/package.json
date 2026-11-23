@@ -1,6 +1,6 @@
 {
     "name": "@perspective-dev/viewer-summary",
-    "version": "5.9.4",
+    "version": "5.10.0",
     "description": "Summary (KPI tile) plugin for `<perspective-viewer>`, showing each column's total as fitted text.",
     "keywords": [
         "perspective",

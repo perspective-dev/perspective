@@ -1,6 +1,14 @@
+# [v5.10.0](https://github.com/perspective-dev/perspective/releases/tag/v5.10.0)
+
+_23 November 2026_ ([Full changelog](https://github.com/perspective-dev/perspective/compare/v5.9.4...v5.10.0))
+
+Features
+
+- New `Summary` plugin [#3296](https://github.com/perspective-dev/perspective/pull/3296)
+
 # [v5.9.4](https://github.com/perspective-dev/perspective/releases/tag/v5.9.4)
 
-_20 November 2026_ ([Full changelog](https://github.com/perspective-dev/perspective/compare/v5.9.3...v5.9.4))
+_19 November 2026_ ([Full changelog](https://github.com/perspective-dev/perspective/compare/v5.9.3...v5.9.4))
 
 Features
 

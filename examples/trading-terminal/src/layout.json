@@ -1,5 +1,5 @@
 {
-    "version": "5.9.4",
+    "version": "5.10.0",
     "active": "scatter",
     "layout": {
         "type": "split-layout",
@@ -44,7 +44,7 @@
     },
     "panels": {
         "scatter": {
-            "version": "5.9.4",
+            "version": "5.10.0",
             "columns_config": {},
             "plugin": "X/Y Scatter",
             "plugin_config": {},
@@ -75,7 +75,7 @@
             }
         },
         "sectors": {
-            "version": "5.9.4",
+            "version": "5.10.0",
             "columns_config": {},
             "plugin": "Y Bar",
             "plugin_config": {
@@ -103,7 +103,7 @@
             "aggregates": {}
         },
         "securities": {
-            "version": "5.9.4",
+            "version": "5.10.0",
             "columns_config": {},
             "plugin": "Datagrid",
             "plugin_config": {},
