@@ -15,9 +15,8 @@ import { armInvariants } from "./harness.ts";
 const TABLE = "load-viewer-csv";
 
 const SECOND_CLIENT = async (name: string) => {
-    const { default: perspective } = await import(
-        "/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-    );
+    const { default: perspective } =
+        await import("/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
     const worker = await perspective.worker();
     await worker.table("a,b\n1,2", { name });

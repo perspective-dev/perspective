@@ -19,12 +19,7 @@ import type {
 
 /** Where a tile's column label sits relative to its value. */
 export type LabelPosition =
-    | "auto"
-    | "top"
-    | "bottom"
-    | "left"
-    | "right"
-    | "none";
+    "auto" | "top" | "bottom" | "left" | "right" | "none";
 
 /** Whether every tile shares one value text size or each fits its own. */
 export type ValueFit = "uniform" | "independent";

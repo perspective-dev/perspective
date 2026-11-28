@@ -266,10 +266,7 @@ export async function createModel(
                 .getComputedStyle(regular)
                 .getPropertyValue("--datagrid-virtual-mode")
                 ?.trim() || "both") as
-                | "both"
-                | "horizontal"
-                | "vertical"
-                | "none",
+                "both" | "horizontal" | "vertical" | "none",
             column_classes: true,
         },
     );

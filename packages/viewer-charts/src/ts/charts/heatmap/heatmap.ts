@@ -78,8 +78,8 @@ export class HeatmapChart extends AbstractChart {
     _locations: HeatmapLocations | null = null;
     _cornerBuffer: WebGLBuffer | null = null;
     _gradientCache:
-        | import("../../webgl/gradient-texture.ts").GradientTextureCache
-        | null = null;
+        import("../../webgl/gradient-texture.ts").GradientTextureCache | null =
+        null;
 
     _xLevels: CategoricalLevel[] = [];
     _yLevels: CategoricalLevel[] = [];

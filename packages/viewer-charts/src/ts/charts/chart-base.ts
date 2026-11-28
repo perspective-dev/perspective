@@ -507,8 +507,7 @@ export abstract class AbstractChart implements ChartImplementation {
             }
 
             const dateFormat = columnCfg?.date_format as
-                | DateFormatConfig
-                | undefined;
+                DateFormatConfig | undefined;
 
             const modifiers = utils.date_format_modifiers(dateFormat);
             if (type === "datetime" && modifiers && !fmt) {
@@ -537,8 +536,7 @@ export abstract class AbstractChart implements ChartImplementation {
         const utils = plugin_utils();
         if (type === "integer" || type === "float") {
             const numberFormat = cfg.number_format as
-                | NumberFormatConfig
-                | undefined;
+                NumberFormatConfig | undefined;
             if (!numberFormat) {
                 return undefined;
             }

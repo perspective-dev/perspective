@@ -545,10 +545,7 @@ export function join(
  */
 export function table(
     init_data:
-        | string
-        | ArrayBuffer
-        | Record<string, any>
-        | Record<string, unknown>[],
+        string | ArrayBuffer | Record<string, any> | Record<string, unknown>[],
     options?: perspective_client.TableInitOptions,
 ) {
     return SYNC_CLIENT.table(init_data, options);

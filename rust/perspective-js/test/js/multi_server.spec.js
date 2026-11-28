@@ -19,9 +19,8 @@ import { make_client, PerspectiveServer } from "@perspective-dev/client";
         test("Construct Table from remote View", async function ({ page }) {
             await page.goto("/rust/perspective-js/test/html/test.html");
             const [json0, json1] = await page.evaluate(async () => {
-                let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-                );
+                let perspective =
+                    await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
                 perspective.init_client(
                     fetch(
@@ -48,9 +47,8 @@ import { make_client, PerspectiveServer } from "@perspective-dev/client";
         }) {
             await page.goto("/rust/perspective-js/test/html/test.html");
             const [json0, json1] = await page.evaluate(async () => {
-                let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-                );
+                let perspective =
+                    await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
                 perspective.init_client(
                     fetch(
@@ -79,9 +77,8 @@ import { make_client, PerspectiveServer } from "@perspective-dev/client";
         test("Removes transfer to new table", async function ({ page }) {
             await page.goto("/rust/perspective-js/test/html/test.html");
             const [json0, json1] = await page.evaluate(async () => {
-                let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-                );
+                let perspective =
+                    await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
                 perspective.init_client(
                     fetch(
@@ -115,9 +112,8 @@ import { make_client, PerspectiveServer } from "@perspective-dev/client";
         }) {
             await page.goto("/rust/perspective-js/test/html/test.html");
             const [json0, json1] = await page.evaluate(async () => {
-                let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-                );
+                let perspective =
+                    await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
                 perspective.init_client(
                     fetch(
@@ -176,9 +172,8 @@ import { make_client, PerspectiveServer } from "@perspective-dev/client";
         }) {
             await page.goto("/rust/perspective-js/test/html/test.html");
             const [json0, json1] = await page.evaluate(async () => {
-                let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-                );
+                let perspective =
+                    await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
                 perspective.init_client(
                     fetch(
@@ -227,9 +222,8 @@ import { make_client, PerspectiveServer } from "@perspective-dev/client";
         }) {
             await page.goto("/rust/perspective-js/test/html/test.html");
             const [json0, json1] = await page.evaluate(async () => {
-                let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-                );
+                let perspective =
+                    await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
                 perspective.init_client(
                     fetch(
@@ -284,9 +278,8 @@ import { make_client, PerspectiveServer } from "@perspective-dev/client";
         }) {
             await page.goto("/rust/perspective-js/test/html/test.html");
             const [json0, json1] = await page.evaluate(async () => {
-                let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-                );
+                let perspective =
+                    await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
                 perspective.init_client(
                     fetch(
@@ -354,9 +347,8 @@ import { make_client, PerspectiveServer } from "@perspective-dev/client";
         }) {
             await page.goto("/rust/perspective-js/test/html/test.html");
             const result = await page.evaluate(async () => {
-                let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-                );
+                let perspective =
+                    await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
                 perspective.init_client(
                     fetch(
@@ -429,9 +421,8 @@ import { make_client, PerspectiveServer } from "@perspective-dev/client";
         }) {
             await page.goto("/rust/perspective-js/test/html/test.html");
             const result = await page.evaluate(async () => {
-                let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-                );
+                let perspective =
+                    await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
                 perspective.init_client(
                     fetch(
@@ -506,9 +497,8 @@ import { make_client, PerspectiveServer } from "@perspective-dev/client";
         }) {
             await page.goto("/rust/perspective-js/test/html/test.html");
             const result = await page.evaluate(async () => {
-                let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-                );
+                let perspective =
+                    await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
                 perspective.init_client(
                     fetch(
@@ -543,9 +533,8 @@ import { make_client, PerspectiveServer } from "@perspective-dev/client";
         }) {
             await page.goto("/rust/perspective-js/test/html/test.html");
             const result = await page.evaluate(async () => {
-                let perspective = await import(
-                    "http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-                );
+                let perspective =
+                    await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
                 perspective.init_client(
                     fetch(

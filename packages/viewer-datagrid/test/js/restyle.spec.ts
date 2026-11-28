@@ -98,8 +98,7 @@ async function read_max_cell_background(page: any) {
             "#bg_color-label ~ * .gradient-stop-handle input, fieldset:has(#bg_color-label) .gradient-stop-handle input",
         );
         const last = handles?.[handles.length - 1] as
-            | HTMLInputElement
-            | undefined;
+            HTMLInputElement | undefined;
         return {
             cell: norm(td.style.backgroundColor),
             theme_var: norm(datagrid.model._pos_bg_color[0]),

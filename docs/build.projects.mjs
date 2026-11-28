@@ -14,7 +14,7 @@ import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import puppeteer from "puppeteer";
+import { chromium } from "@playwright/test";
 import { TextWriter, Uint8ArrayReader, ZipReader } from "@zip.js/zip.js";
 import { COLLAGE, collage } from "./build.collage.mjs";
 import { screenshotTheme } from "./build.screenshot.mjs";
@@ -245,10 +245,10 @@ async function run() {
         ],
     });
 
-    const browser = await puppeteer.launch({ headless: true });
+    const browser = await chromium.launch({ channel: "chromium" });
     const page = await browser.newPage();
     await page.goto(`http://localhost:${PORT}/index.html`, {
-        waitUntil: "networkidle2",
+        waitUntil: "networkidle",
     });
 
     const ids = await page.evaluate(async () => {

@@ -102,11 +102,7 @@ interface RendererHandle {
 }
 
 type PendingRenderType =
-    | "saveZoom"
-    | "hitTest"
-    | "loadAndRender"
-    | "snapshotPng"
-    | "resize";
+    "saveZoom" | "hitTest" | "loadAndRender" | "snapshotPng" | "resize";
 interface PendingRenderRequest {
     kind: PendingRenderType;
     resolve: (v: any) => void;
@@ -164,8 +160,8 @@ export class RendererTransport {
     private _onZoomChanged: ((isDefault: boolean) => void) | null = null;
 
     private _onPluginConfigDelta:
-        | ((fields: Record<string, string | number | boolean>) => void)
-        | null = null;
+        ((fields: Record<string, string | number | boolean>) => void) | null =
+        null;
 
     /**
      * Cached zoom-default flag pushed by the renderer after each zoom

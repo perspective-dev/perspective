@@ -308,8 +308,7 @@ export class CartesianChart extends AbstractChart {
     _lastXTicks: number[] | null = null;
     _lastYTicks: number[] | null = null;
     _lastGradientStops:
-        | import("../../theme/gradient.ts").GradientStop[]
-        | null = null;
+        import("../../theme/gradient.ts").GradientStop[] | null = null;
     _lastHasColorCol = false;
 
     // Memoized categorical LUT stops — `ensureGradientTexture` uses

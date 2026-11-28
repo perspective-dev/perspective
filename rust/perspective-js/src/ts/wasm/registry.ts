@@ -39,19 +39,14 @@ const PSP_MINOR_VERSION = __PSP_VERSION__.split(".").slice(0, 2).join(".");
  * A WebAssembly binary in a form `init()` accepts.
  */
 export type WasmBinary =
-    | Uint8Array
-    | ArrayBuffer
-    | Response
-    | WebAssembly.Module;
+    Uint8Array | ArrayBuffer | Response | WebAssembly.Module;
 
 /**
  * A WebAssembly binary, a promise of one, or a thunk which is only invoked
  * when the binary is first needed.
  */
 export type WasmSource =
-    | WasmBinary
-    | Promise<WasmBinary>
-    | (() => Promise<WasmBinary>);
+    WasmBinary | Promise<WasmBinary> | (() => Promise<WasmBinary>);
 
 /**
  * The WebAssembly binaries to register with `init()`, by role.

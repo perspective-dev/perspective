@@ -112,7 +112,7 @@ export async function collage(page, ids, theme, { out, port }) {
             `<img src="http://localhost:${port}/projects/${theme}/${present[i % present.length]}.png" />`,
     ).join("");
 
-    await page.setViewport({ width: COLLAGE_WIDTH, height });
+    await page.setViewportSize({ width: COLLAGE_WIDTH, height });
     await page.setContent(
         `<!doctype html><html><head><style>
             html, body { margin: 0; padding: 0; background: ${COLLAGE_BG[theme]}; }
@@ -150,6 +150,7 @@ export async function collage(page, ids, theme, { out, port }) {
             [...document.querySelectorAll(".collage img")].every(
                 (x) => x.complete,
             ),
+        undefined,
         { timeout: SETTLE_TIMEOUT },
     );
 

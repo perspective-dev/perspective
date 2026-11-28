@@ -20,9 +20,8 @@ const OTHER = "clients-other";
 test.beforeEach(async ({ page }) => {
     await ready({ page });
     await page.evaluate(async (name) => {
-        const { default: perspective } = await import(
-            "/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-        );
+        const { default: perspective } =
+            await import("/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
         const worker = await perspective.worker();
         await worker.table("a,b\n1,2", { name });

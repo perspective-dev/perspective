@@ -1023,7 +1023,9 @@ function cemReturn(ts, checker, known, node) {
     return signature
         ? {
               type: cemType(
-                  checker.typeToString(signature.getReturnType()),
+                  checker.typeToString(
+                      checker.getReturnTypeOfSignature(signature),
+                  ),
                   known,
               ),
           }
@@ -1043,7 +1045,7 @@ function cemIsPublic(ts, member) {
         return false;
     }
 
-    const flags = ts.getCombinedModifierFlags(member);
+    const flags = member.modifierFlags;
     return !(flags & (ts.ModifierFlags.Private | ts.ModifierFlags.Protected));
 }
 
@@ -1064,8 +1066,7 @@ function cemMembers(
         const name = member.name.getText();
         const doc = cemDoc(member);
         const is_static =
-            force_static ||
-            !!(ts.getCombinedModifierFlags(member) & ts.ModifierFlags.Static);
+            force_static || !!(member.modifierFlags & ts.ModifierFlags.Static);
 
         const base = { name, privacy: "public" };
         if (is_static) {
@@ -1076,7 +1077,10 @@ function cemMembers(
             base.description = doc.description;
         }
 
-        if (ts.isMethodDeclaration(member) || ts.isMethodSignature(member)) {
+        if (
+            ts.isMethodDeclaration(member) ||
+            ts.isMethodSignatureDeclaration(member)
+        ) {
             const entry = { kind: "method", ...base };
             const parameters = cemParameters(
                 ts,
@@ -1100,14 +1104,17 @@ function cemMembers(
             }
 
             out.push(entry);
-        } else if (ts.isGetAccessor(member) || ts.isSetAccessor(member)) {
+        } else if (
+            ts.isGetAccessorDeclaration(member) ||
+            ts.isSetAccessorDeclaration(member)
+        ) {
             const existing = accessors.get(name);
             if (existing) {
                 delete existing.readonly;
                 continue;
             }
 
-            const type_node = ts.isGetAccessor(member)
+            const type_node = ts.isGetAccessorDeclaration(member)
                 ? member.type
                 : member.parameters[0]?.type;
 
@@ -1129,7 +1136,7 @@ function cemMembers(
             out.push(entry);
         } else if (
             ts.isPropertyDeclaration(member) ||
-            ts.isPropertySignature(member)
+            ts.isPropertySignatureDeclaration(member)
         ) {
             const entry = {
                 kind: "field",
@@ -1144,9 +1151,7 @@ function cemMembers(
                 ),
             };
 
-            if (
-                ts.getCombinedModifierFlags(member) & ts.ModifierFlags.Readonly
-            ) {
+            if (member.modifierFlags & ts.ModifierFlags.Readonly) {
                 entry.readonly = true;
             }
 
@@ -1238,7 +1243,7 @@ function cemVariable(ts, checker, known, { statement, declaration }, name) {
                 : checker.typeToString(
                       checker.getTypeAtLocation(declaration),
                       undefined,
-                      ts.TypeFormatFlags.NoTruncation,
+                      ts.NodeBuilderFlags.NoTruncation,
                   ),
             known,
         ),
@@ -1256,7 +1261,7 @@ function cemEvents(ts, checker, known, iface) {
     const seen = new Set();
     for (const member of iface.members) {
         if (
-            !ts.isMethodSignature(member) ||
+            !ts.isMethodSignatureDeclaration(member) ||
             member.name.getText() !== "addEventListener"
         ) {
             continue;
@@ -1332,23 +1337,32 @@ function cemValueExports(ts, entry) {
 export async function buildCustomElementsManifest(
     out_file = "dist/custom-elements.json",
 ) {
-    const ts = (await import("typescript")).default;
-    const config = ts.parseJsonConfigFileContent(
-        ts.readConfigFile("tsconfig.json", ts.sys.readFile).config,
-        ts.sys,
-        ".",
-    );
+    const { API, NodeBuilderFlags } = await import("typescript/unstable/sync");
+    const ts = {
+        ...(await import("typescript/unstable/ast")),
+        NodeBuilderFlags,
+    };
+    const config = path.resolve("tsconfig.json");
+    const api = new API({ cwd: process.cwd() });
+    try {
+        const snapshot = api.updateSnapshot({ openProjects: [config] });
+        const project = snapshot.getProject(config);
+        if (!project) {
+            throw new Error(`custom-elements.json: ${config} did not load`);
+        }
 
-    const program = ts.createProgram(
-        [
-            CEM_ENTRY,
-            CEM_WASM_DTS,
-            ...CEM_ELEMENTS.map((x) => x.statics?.file).filter(Boolean),
-        ],
-        { ...config.options, noEmit: true },
-    );
+        return writeCustomElementsManifest(
+            ts,
+            project.program,
+            project.checker,
+            out_file,
+        );
+    } finally {
+        api.close();
+    }
+}
 
-    const checker = program.getTypeChecker();
+function writeCustomElementsManifest(ts, program, checker, out_file) {
     const known = cemKnownTypes();
     const source = (file) => {
         const sf = program.getSourceFile(path.resolve(file));
