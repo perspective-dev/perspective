@@ -12,7 +12,7 @@
 
 use yew::prelude::*;
 
-use crate::components::window_editor::{WindowEditor, WindowEditorProps};
+use crate::components::column_settings_sidebar::window_editor::{WindowEditor, WindowEditorProps};
 use crate::ui::{SaveSettings, SaveSettingsProps};
 
 #[derive(PartialEq, Properties, Clone)]

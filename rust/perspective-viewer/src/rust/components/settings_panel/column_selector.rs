@@ -1,0 +1,703 @@
+// ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+// ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+// ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+// ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+// ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+// ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+// ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+// ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+// ┃ This file is part of the Perspective library, distributed under the terms ┃
+// ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+// ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+mod active_column;
+mod add_expression_button;
+mod config_selector;
+mod derived_control;
+mod inactive_column;
+
+use std::iter::*;
+use std::rc::Rc;
+
+use perspective_client::config::{ViewConfig, ViewConfigUpdate};
+use web_sys::*;
+use yew::prelude::*;
+
+use self::active_column::*;
+use self::add_expression_button::AddExpressionButton;
+use self::config_selector::ConfigSelector;
+use self::derived_control::DerivedControl;
+use self::inactive_column::*;
+use crate::components::columns::column_dropdown::{ColumnDropDownElement, ColumnDropDownPortal};
+use crate::config::PluginStaticConfig;
+use crate::presentation::{ColumnLocator, ColumnSettingsTarget, DragDropContainer, Presentation};
+use crate::queries::{ActiveColumnState, ActiveColumnStateData, ColumnsIteratorSet};
+use crate::renderer::*;
+use crate::session::drag_drop_update::*;
+use crate::session::*;
+use crate::tasks::{apply_and_render, close_column_settings_if_displaced};
+use crate::ui::{Orientation, ScrollPanel, ScrollPanelItem, SplitPanel};
+use crate::utils::*;
+use crate::workspace::Workspace;
+
+#[derive(Properties)]
+pub struct ColumnSelectorProps {
+    /// Fires when the expression/config column is open.
+    pub on_open_expr_panel: Callback<ColumnSettingsTarget>,
+
+    /// This is passed to the add_expression_button for styling.
+    pub selected_column: Option<ColumnLocator>,
+
+    /// Value props threaded from root's `SessionProps` / `RendererProps`.
+    pub has_table: Option<TableLoadState>,
+    pub named_column_count: usize,
+
+    /// The ACTIVE plugin's declared contract — see the identically named
+    /// prop on `SettingsPanelProps`.
+    pub plugin_static_config: Rc<PluginStaticConfig>,
+    pub view_config: PtrEqRc<ViewConfig>,
+
+    /// Snapshot of the active plugin's `columns_config` bucket, whose
+    /// non-empty entries mark their active columns as modified.
+    pub columns_config: PtrEqRc<ColumnConfigMap>,
+    pub drag_column: Option<String>,
+
+    /// Cloned session metadata snapshot — threaded from `SessionProps`
+    /// so that metadata changes trigger re-renders via prop diffing.
+    pub metadata: SessionMetadataRc,
+
+    /// Selected theme name, threaded for PortalModal consumers.
+    pub selected_theme: Option<String>,
+
+    // State
+    pub session: Session,
+    pub renderer: Renderer,
+    pub workspace: Workspace,
+    pub presentation: Presentation,
+
+    /// Fires when this component is resized via the UI.
+    #[prop_or_default]
+    pub on_resize: Option<Rc<PubSub<()>>>,
+
+    /// Trap-door width pinned by the parent `SettingsPanel` so switching
+    /// tabs doesn't shrink the panel. Threaded into the inner
+    /// `ScrollPanel` as `initial_width`.
+    #[prop_or_default]
+    pub initial_width: f64,
+
+    /// Fires when the inner `ScrollPanel` measures its natural width.
+    /// Routed up to `SettingsPanel` which keeps the running max.
+    #[prop_or_default]
+    pub on_auto_width: Callback<f64>,
+
+    /// External "release the trap-door" signal from the outer settings
+    /// split-panel divider reset. Forwarded into `self.on_reset` so both
+    /// inner `ScrollPanel`s drop their cached `viewport_width`.
+    #[prop_or_default]
+    pub on_dimensions_reset: Option<Rc<PubSub<()>>>,
+}
+
+impl PartialEq for ColumnSelectorProps {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.selected_column == rhs.selected_column
+            && self.has_table == rhs.has_table
+            && self.named_column_count == rhs.named_column_count
+            && self.plugin_static_config == rhs.plugin_static_config
+            && self.view_config == rhs.view_config
+            && self.columns_config == rhs.columns_config
+            && self.drag_column == rhs.drag_column
+            && self.metadata == rhs.metadata
+            && self.selected_theme == rhs.selected_theme
+            && self.initial_width == rhs.initial_width
+    }
+}
+
+#[derive(Debug)]
+pub enum ColumnSelectorMsg {
+    /// Triggers a plain re-render; used as `onselect`/`ondragenter` callbacks
+    /// from `ConfigSelector` after it mutates the view config.
+    Redraw,
+    HoverActiveIndex(Option<usize>),
+    Drop((String, DragTarget, DragEffect, usize)),
+
+    /// Deactivate every active column but the plugin's required ones.
+    ClearColumns,
+
+    /// Activate every inactive column.
+    AddAllColumns,
+}
+
+use ColumnSelectorMsg::*;
+
+/// A `ColumnSelector` controls the `columns` field of the `ViewConfig`,
+/// deriving its options from the table columns and `ViewConfig` expressions.
+pub struct ColumnSelector {
+    _subscriptions: Vec<Subscription>,
+    drag_container: DragDropContainer,
+    column_dropdown: ColumnDropDownElement,
+    on_reset: Rc<PubSub<()>>,
+}
+
+/// The number of leading active columns "Clear" keeps: the plugin's required
+/// columns, or one when it declares none.
+fn kept_columns(plugin_static_config: &PluginStaticConfig) -> usize {
+    plugin_static_config.min_config_columns.unwrap_or(0).max(1)
+}
+
+/// `columns` with `added` filling any empty required slot, then the tail from
+/// the last named slot on, past any optional named slots left empty.
+fn with_all_columns(
+    columns: &[Option<String>],
+    plugin_static_config: &PluginStaticConfig,
+    added: Vec<String>,
+) -> Vec<Option<String>> {
+    let positional = plugin_static_config.positional_columns();
+    let required = plugin_static_config
+        .min_config_columns
+        .unwrap_or(0)
+        .min(positional);
+
+    let mut added = added.into_iter();
+    let mut head: Vec<Option<String>> = columns.iter().take(positional).cloned().collect();
+    head.resize(positional, None);
+    for slot in head.iter_mut().take(required) {
+        if slot.is_none() {
+            *slot = added.next();
+        }
+    }
+
+    head.extend(
+        columns
+            .iter()
+            .skip(positional)
+            .filter(|x| x.is_some())
+            .cloned(),
+    );
+    head.extend(added.map(Some));
+    head
+}
+
+/// Commit `columns` as the active columns, closing the column settings of a
+/// column it removes.
+fn apply_columns(props: &ColumnSelectorProps, columns: Vec<Option<String>>) {
+    let update = ViewConfigUpdate {
+        columns: Some(columns),
+        ..ViewConfigUpdate::default()
+    };
+
+    close_column_settings_if_displaced(
+        &props.presentation,
+        &props.renderer,
+        &props.metadata,
+        &props.view_config,
+        &update,
+    );
+
+    if let Ok(task) = apply_and_render(&props.session, &props.renderer, update) {
+        spawn_owned("column-selector", task);
+    }
+}
+
+impl Component for ColumnSelector {
+    type Message = ColumnSelectorMsg;
+    type Properties = ColumnSelectorProps;
+
+    fn create(ctx: &Context<Self>) -> Self {
+        let ColumnSelectorProps {
+            presentation,
+            session,
+            ..
+        } = ctx.props();
+
+        let drop_sub = {
+            let cb = ctx.link().callback(ColumnSelectorMsg::Drop);
+            presentation.drop_received.add_listener(cb)
+        };
+
+        let drag_container = DragDropContainer::new(|| {}, {
+            let link = ctx.link().clone();
+            move || link.send_message(ColumnSelectorMsg::HoverActiveIndex(None))
+        });
+
+        let column_dropdown = ColumnDropDownElement::new(session.clone());
+        let on_reset: Rc<PubSub<()>> = Default::default();
+        let mut subscriptions = vec![drop_sub];
+        if let Some(outer_reset) = ctx.props().on_dimensions_reset.as_ref() {
+            let on_reset = on_reset.clone();
+            subscriptions.push(outer_reset.add_listener(move |()| on_reset.emit(())));
+        }
+
+        Self {
+            _subscriptions: subscriptions,
+            drag_container,
+            column_dropdown,
+            on_reset,
+        }
+    }
+
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            Redraw => true,
+            HoverActiveIndex(Some(to_index)) => ctx
+                .props()
+                .presentation
+                .notify_drag_enter(DragTarget::Active, to_index),
+            HoverActiveIndex(_) => {
+                ctx.props()
+                    .presentation
+                    .notify_drag_leave(DragTarget::Active);
+                true
+            },
+            Drop((column, DragTarget::Active, DragEffect::Move(DragTarget::Active), index)) => {
+                let is_invalid = {
+                    let config = &ctx.props().view_config;
+                    let from_index = config
+                        .columns
+                        .iter()
+                        .position(|x| x.as_ref() == Some(&column));
+
+                    let min_cols = ctx.props().renderer.metadata().min_config_columns;
+                    let is_to_empty = !config
+                        .columns
+                        .get(index)
+                        .map(|x| x.is_some())
+                        .unwrap_or_default();
+
+                    min_cols
+                        .and_then(|x| from_index.map(|fi| fi < x))
+                        .unwrap_or_default()
+                        && is_to_empty
+                };
+                if !is_invalid {
+                    let col_type = ctx
+                        .props()
+                        .metadata
+                        .get_column_table_type(column.as_str())
+                        .unwrap();
+
+                    let update = ctx.props().view_config.create_drag_drop_update(
+                        column,
+                        col_type,
+                        index,
+                        DragTarget::Active,
+                        DragEffect::Move(DragTarget::Active),
+                        &ctx.props().renderer.metadata(),
+                        ctx.props().metadata.get_features().unwrap(),
+                    );
+
+                    close_column_settings_if_displaced(
+                        &ctx.props().presentation,
+                        &ctx.props().renderer,
+                        &ctx.props().metadata,
+                        &ctx.props().view_config,
+                        &update,
+                    );
+
+                    let session = ctx.props().session.clone();
+                    let renderer = ctx.props().renderer.clone();
+                    if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                        spawn_owned("column-selector", task);
+                    }
+                }
+
+                true
+            },
+            Drop((column, DragTarget::Active, effect, index)) => {
+                let col_type = ctx
+                    .props()
+                    .metadata
+                    .get_column_table_type(column.as_str())
+                    .unwrap();
+                let update = ctx.props().view_config.create_drag_drop_update(
+                    column,
+                    col_type,
+                    index,
+                    DragTarget::Active,
+                    effect,
+                    &ctx.props().renderer.metadata(),
+                    ctx.props().metadata.get_features().unwrap(),
+                );
+
+                close_column_settings_if_displaced(
+                    &ctx.props().presentation,
+                    &ctx.props().renderer,
+                    &ctx.props().metadata,
+                    &ctx.props().view_config,
+                    &update,
+                );
+
+                let session = ctx.props().session.clone();
+                let renderer = ctx.props().renderer.clone();
+                if let Ok(task) = apply_and_render(&session, &renderer, update) {
+                    spawn_owned("column-selector", task);
+                }
+
+                true
+            },
+            Drop((_, _, DragEffect::Move(DragTarget::Active), _)) => true,
+            Drop((..)) => true,
+            ClearColumns => {
+                let columns = &ctx.props().view_config.columns;
+                let keep = kept_columns(&ctx.props().plugin_static_config);
+                if columns.len() > keep {
+                    apply_columns(ctx.props(), columns[..keep].to_vec());
+                }
+
+                false
+            },
+            AddAllColumns => {
+                let props = ctx.props();
+                let iter = ColumnsIteratorSet::new(
+                    &props.view_config,
+                    &props.metadata,
+                    &props.renderer,
+                    &props.presentation,
+                );
+
+                let added: Vec<String> = iter
+                    .expression()
+                    .chain(iter.window())
+                    .chain(iter.inactive())
+                    .map(|x| x.name.to_owned())
+                    .collect();
+
+                if !added.is_empty() {
+                    apply_columns(
+                        props,
+                        with_all_columns(
+                            &props.view_config.columns,
+                            &props.plugin_static_config,
+                            added,
+                        ),
+                    );
+                }
+
+                false
+            },
+        }
+    }
+
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let ColumnSelectorProps {
+            session,
+            renderer,
+            presentation,
+            ..
+        } = ctx.props();
+        let metadata = &ctx.props().metadata;
+
+        // When `config.columns` is empty but the table has columns (transient
+        // state during `load()` after `reset()` clears the config), fill in
+        // all table columns as active — matching `validate_view_config()`.
+        let prop_config = &ctx.props().view_config;
+        let config = if prop_config.columns.is_empty() {
+            if let Some(table_cols) = metadata.get_table_columns() {
+                ViewConfig {
+                    columns: table_cols.iter().map(|c| Some(c.clone())).collect(),
+                    ..(**prop_config).clone()
+                }
+                .into()
+            } else {
+                prop_config.clone()
+            }
+        } else {
+            prop_config.clone()
+        };
+
+        let is_last_column = config.columns.len() == 1;
+        let can_clear = config.columns.len() > kept_columns(&ctx.props().plugin_static_config);
+        let is_aggregated = config.is_aggregated();
+        let columns_iter = ColumnsIteratorSet::new(&config, metadata, renderer, presentation);
+        let onselect = ctx.link().callback(|()| Redraw);
+        let ondragenter = ctx.link().callback(HoverActiveIndex);
+        let ondragover = Callback::from(|_event: DragEvent| _event.prevent_default());
+        let ondrop = Callback::from({
+            clone!(presentation);
+            move |event| presentation.notify_drop(&event)
+        });
+
+        let ondragend = Callback::from({
+            clone!(presentation);
+            move |_| presentation.notify_drag_end()
+        });
+
+        let mut active_classes = classes!("scrollable");
+        if ctx.props().drag_column.is_some() {
+            active_classes.push("dragdrop-highlight");
+        };
+
+        if is_aggregated {
+            active_classes.push("is-aggregated");
+        }
+
+        let size_hint = 28.0f64.mul_add(
+            (config.group_by.len()
+                + config.split_by.len()
+                + config.filter.len()
+                + config.sort.len()) as f64,
+            metadata
+                .get_features()
+                .map(|x| {
+                    let mut y = 0.0;
+                    if !x.filter_ops.is_empty() {
+                        y += 1.0;
+                    }
+
+                    if x.group_by {
+                        y += 1.0;
+                    }
+
+                    if x.split_by {
+                        y += 1.0;
+                    }
+
+                    if x.sort {
+                        y += 1.0;
+                    }
+
+                    y * 55.0
+                })
+                .unwrap_or_default(),
+        );
+
+        let derived_control = html_nested! {
+            <ScrollPanelItem key="derived_control" size_hint=0_f64>
+                <DerivedControl
+                    session={ctx.props().session.clone()}
+                    renderer={ctx.props().renderer.clone()}
+                    presentation={ctx.props().presentation.clone()}
+                    workspace={ctx.props().workspace.clone()}
+                    metadata={ctx.props().metadata.clone()}
+                    view_config={ctx.props().view_config.clone()}
+                    table={ctx.props().session.get_table().map(|x| x.get_name().to_owned())}
+                />
+            </ScrollPanelItem>
+        };
+
+        let config_selector = html_nested! {
+            <ScrollPanelItem key="config_selector" {size_hint}>
+                <ConfigSelector
+                    onselect={onselect.clone()}
+                    on_open_expr_panel={ctx.props().on_open_expr_panel.clone()}
+                    selected_column={ctx.props().selected_column.clone()}
+                    ondragenter={ctx.link().callback(|()| Redraw)}
+                    view_config={ctx.props().view_config.clone()}
+                    drag_column={ctx.props().drag_column.clone()}
+                    metadata={metadata.clone()}
+                    selected_theme={ctx.props().selected_theme.clone()}
+                    plugin_static_config={ctx.props().plugin_static_config.clone()}
+                    {presentation}
+                    {renderer}
+                    {session}
+                />
+            </ScrollPanelItem>
+        };
+
+        let mut named_count = ctx.props().named_column_count;
+        let mut active_columns: Vec<_> = columns_iter
+            .active()
+            .enumerate()
+            .map(|(idx, name): (usize, ActiveColumnState)| {
+                let ondragenter = ondragenter.reform(move |_| Some(idx));
+                let size_hint = if named_count > 0 { 50.0 } else { 28.0 };
+                named_count = named_count.saturating_sub(1);
+                let key = name
+                    .get_name()
+                    .map(|x| x.to_owned())
+                    .unwrap_or_else(|| format!("__auto_{idx}__"));
+
+                let column_dropdown = self.column_dropdown.clone();
+                let is_editing = matches!(
+                    &ctx.props().selected_column,
+                    Some(ColumnLocator::Table(x))
+                        | Some(ColumnLocator::Expression(x))
+                        | Some(ColumnLocator::Window(x))
+                if x == &key );
+
+                // Compute metadata-derived props here so that changes to
+                // session metadata propagate via prop diffing.
+                // For DragOver placeholders, resolve the type from the
+                // dragged column (since `get_name()` returns `None`).
+                let col_type = name
+                    .get_name()
+                    .and_then(|n| metadata.get_column_table_type(n))
+                    .or_else(|| {
+                        if matches!(name.state, ActiveColumnStateData::DragOver) {
+                            presentation
+                                .get_drag_column()
+                                .and_then(|c| metadata.get_column_table_type(&c))
+                        } else {
+                            None
+                        }
+                    });
+
+                let is_expression = name
+                    .get_name()
+                    .map(|n| metadata.is_column_expression(n))
+                    .unwrap_or(false);
+
+                let is_window = name
+                    .get_name()
+                    .map(|n| metadata.is_column_window(n))
+                    .unwrap_or(false);
+
+                let can_render_styles =
+                    name.get_name().is_some() && renderer.can_render_column_styles();
+
+                let show_edit_btn = is_expression || is_window || can_render_styles;
+                let is_modified = name
+                    .get_name()
+                    .and_then(|n| ctx.props().columns_config.get(n))
+                    .is_some_and(|entry| !entry.is_empty());
+
+                let on_open_expr_panel = &ctx.props().on_open_expr_panel;
+                let on_clear =
+                    (idx == 0 && can_clear).then(|| ctx.link().callback(|()| ClearColumns));
+
+                html_nested! {
+                    <ScrollPanelItem {key} {size_hint}>
+                        <ActiveColumn
+                            {column_dropdown}
+                            {idx}
+                            {on_clear}
+                            {is_aggregated}
+                            {is_editing}
+                            {is_expression}
+                            {is_window}
+                            {is_modified}
+                            {show_edit_btn}
+                            {col_type}
+                            {is_last_column}
+                            view_config={config.clone()}
+                            metadata={metadata.clone()}
+                            {name}
+                            {on_open_expr_panel}
+                            {ondragenter}
+                            ondragend={&ondragend}
+                            onselect={&onselect}
+                            {presentation}
+                            {renderer}
+                            {session}
+                        />
+                    </ScrollPanelItem>
+                }
+            })
+            .collect();
+
+        let mut inactive_children: Vec<_> = columns_iter
+            .expression()
+            .chain(columns_iter.window())
+            .chain(columns_iter.inactive())
+            .enumerate()
+            .map(|(idx, vc)| {
+                let selected_column = ctx.props().selected_column.as_ref();
+                let is_editing = matches!(
+                    selected_column,
+                    Some(ColumnLocator::Expression(x)) | Some(ColumnLocator::Window(x))
+                        if x.as_str() == vc.name
+                );
+                let is_expression = metadata.is_column_expression(vc.name);
+                let is_window = metadata.is_column_window(vc.name);
+                html_nested! {
+                    <ScrollPanelItem key={vc.name} size_hint=28.0>
+                        <InactiveColumn
+                            {idx}
+                            visible={vc.is_visible}
+                            name={vc.name.to_owned()}
+                            {is_editing}
+                            {is_expression}
+                            {is_window}
+                            view_config={config.clone()}
+                            metadata={metadata.clone()}
+                            onselect={&onselect}
+                            ondragend={&ondragend}
+                            on_open_expr_panel={&ctx.props().on_open_expr_panel}
+                            {presentation}
+                            {renderer}
+                            {session}
+                        />
+                    </ScrollPanelItem>
+                }
+            })
+            .collect();
+
+        let size = 28.0;
+
+        let add_column = if metadata.get_features().unwrap().expressions {
+            html_nested! {
+                <ScrollPanelItem key="__add_expression__" size_hint={size}>
+                    <AddExpressionButton
+                        on_open_expr_panel={&ctx.props().on_open_expr_panel}
+                        selected_column={ctx.props().selected_column.clone()}
+                    />
+                </ScrollPanelItem>
+            }
+        } else {
+            html_nested! {
+                <ScrollPanelItem key="__add_expression__" size_hint=0_f64><span /></ScrollPanelItem>
+            }
+        };
+
+        if inactive_children.is_empty() {
+            active_columns.push(add_column)
+        } else {
+            let add_all = left_click(ctx.link().callback(|_| AddAllColumns));
+            inactive_children.insert(0, add_column);
+            inactive_children.insert(0, html_nested! {
+                <ScrollPanelItem key="__add_all_columns__" size_hint=0_f64>
+                    <span id="add-all-columns" onmousedown={add_all} />
+                </ScrollPanelItem>
+            });
+        }
+
+        let mut selected_columns = vec![html! {
+            <div id="selected-columns" key="__active_columns__">
+                <ScrollPanel
+                    id="active-columns"
+                    omit_autosize_div={true}
+                    class={active_classes}
+                    dragover={ondragover}
+                    dragenter={&self.drag_container.dragenter}
+                    dragleave={&self.drag_container.dragleave}
+                    viewport_ref={&self.drag_container.noderef}
+                    initial_width={ctx.props().initial_width}
+                    on_auto_width={ctx.props().on_auto_width.clone()}
+                    drop={ondrop}
+                    on_resize={&ctx.props().on_resize}
+                    on_dimensions_reset={&self.on_reset}
+                    children={std::iter::once(derived_control).chain(std::iter::once(config_selector)).chain(active_columns).collect::<Vec<_>>()}
+                />
+            </div>
+        }];
+
+        if !inactive_children.is_empty() {
+            selected_columns.push(html! {
+                <ScrollPanel
+                    id="sub-columns"
+                    key="__sub_columns__"
+                    class={classes!("scrollable")}
+                    on_resize={&ctx.props().on_resize}
+                    on_dimensions_reset={&self.on_reset}
+                    children={inactive_children}
+                />
+            })
+        }
+
+        html! {
+            <>
+                <SplitPanel
+                    no_wrap=true
+                    on_reset={self.on_reset.callback()}
+                    skip_empty=true
+                    orientation={Orientation::Vertical}
+                >
+                    { for selected_columns }
+                </SplitPanel>
+                <ColumnDropDownPortal
+                    element={self.column_dropdown.clone()}
+                    theme={ctx.props().selected_theme.clone().unwrap_or_default()}
+                />
+            </>
+        }
+    }
+}

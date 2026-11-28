@@ -10,8 +10,10 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 mod attributes_tab;
-
-pub(crate) mod style_tab;
+mod editable_header;
+mod expression_editor;
+mod style_tab;
+mod window_editor;
 mod window_tab;
 
 use std::rc::Rc;
@@ -25,12 +27,14 @@ use yew::{Callback, Component, Html, Properties, html, props};
 use self::attributes_tab::AttributesTabProps;
 use self::style_tab::StyleTabProps;
 use crate::components::column_settings_sidebar::attributes_tab::AttributesTab;
+use crate::components::column_settings_sidebar::editable_header::{
+    EditableHeader, EditableHeaderProps,
+};
+use crate::components::column_settings_sidebar::expression_editor::ExpressionEditorProps;
 use crate::components::column_settings_sidebar::style_tab::StyleTab;
+use crate::components::column_settings_sidebar::window_editor::WindowEditorProps;
 use crate::components::column_settings_sidebar::window_tab::{WindowTab, WindowTabProps};
-use crate::components::editable_header::{EditableHeader, EditableHeaderProps};
-use crate::components::expression_editor::ExpressionEditorProps;
-use crate::components::type_icon::TypeIconType;
-use crate::components::window_editor::WindowEditorProps;
+use crate::components::columns::type_icon::TypeIconType;
 use crate::presentation::{ColumnLocator, ColumnSettingsTab, Presentation};
 use crate::queries::{has_column_config, is_pivot_only_column};
 use crate::renderer::{ConfigDefaultsSlots, Renderer};

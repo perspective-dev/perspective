@@ -14,16 +14,13 @@ use perspective_client::JoinType;
 use perspective_js::utils::*;
 use yew::prelude::*;
 
-use super::ViewLabels;
 use super::join_form::{JoinField, JoinForm, input_value, join_type_name};
 use super::table_rows::{TableKind, table_rows};
 use crate::components::error_dialog::ErrorDialog;
-use crate::components::viewer::PerspectiveViewerMsg;
-use crate::config::ViewerConfigInitial;
+use crate::components::view_label::ViewLabels;
 use crate::queries::{ClientStatus, StatusState, WorkspaceStatus};
-use crate::session::MissingTable;
 use crate::tasks::{
-    WorkspaceHost, create_join, create_panel, delete_derived, delete_join, reconnect_client,
+    WorkspaceHost, create_join, create_table_panel, delete_derived, delete_join, reconnect_client,
     refresh_listings,
 };
 use crate::ui::{ControlGroup, intl_content_style};
@@ -449,27 +446,8 @@ impl Component for TablesTab {
                 let effect = host.workspace.effects().guard();
                 ApiFuture::spawn(async move {
                     let _effect = effect;
-                    let notify = host
-                        .dispatch
-                        .reform(|()| PerspectiveViewerMsg::LayoutChanged);
-
-                    let created = create_panel(
-                        &host.elem,
-                        &host.presentation,
-                        &host.workspace,
-                        &notify,
-                        None,
-                        ViewerConfigInitial::new(table),
-                        Some(client),
-                        MissingTable::Error,
-                    )
-                    .await;
-
-                    match created {
-                        Ok(id) => host
-                            .dispatch
-                            .emit(PerspectiveViewerMsg::SetActivePanel(id.to_string(), None)),
-                        Err(err) => link.send_message(TablesTabMsg::Failed(format!("{err}"))),
+                    if let Err(err) = create_table_panel(&host, client, table).await {
+                        link.send_message(TablesTabMsg::Failed(format!("{err}")));
                     }
 
                     Ok(())

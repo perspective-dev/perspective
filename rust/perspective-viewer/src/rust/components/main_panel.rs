@@ -21,9 +21,14 @@
 //! - [`reconcile`] — the `rendered` layout reconcile + per-panel theme stamp.
 //! - [`render`] — the `view` (status bar, cells, tabs, menu).
 
+mod export_menus;
+mod panel_menu;
+mod panel_tab;
 mod presize;
 mod reconcile;
 mod render;
+mod render_warning;
+mod status_bar;
 mod update;
 
 pub mod msg;
@@ -35,8 +40,8 @@ use perspective_js::utils::JsValueSerdeExt;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
-pub use self::msg::{MainPanelMsg, MenuOrigin, MenuRequest};
-use super::panel_menu::PanelCommand;
+use self::msg::{MainPanelMsg, MenuOrigin, MenuRequest};
+use crate::components::panel_command::PanelCommand;
 use crate::presentation::{Presentation, PresentationProps};
 use crate::queries::ResolvedCommands;
 use crate::renderer::*;
@@ -72,7 +77,7 @@ pub struct MainPanelProps {
     /// command the root executes (New/Duplicate/Reset/ToggleMaster/Close).
     /// Maximize/Restore are handled HERE (this component owns the layout
     /// element), and Export/Copy end-to-end by
-    /// [`PanelMenu`](super::panel_menu::PanelMenu) itself.
+    /// [`PanelMenu`](self::panel_menu::PanelMenu) itself.
     pub on_panel_command: Callback<(String, PanelCommand)>,
 
     /// Snapshots threaded from root.  Read for `has_table`, `title` here in
@@ -255,7 +260,7 @@ pub struct MainPanel {
     /// Open context menu as `(client x, client y, target panel id)`; outer
     /// `None` when closed. A `None` *panel id* is the target-less menu (no
     /// active panel to resolve to — "New" only). Rendered as a
-    /// cursor-anchored [`PanelMenu`](super::panel_menu::PanelMenu) overlay.
+    /// cursor-anchored [`PanelMenu`](self::panel_menu::PanelMenu) overlay.
     context_menu: Option<(f64, f64, Option<String>)>,
 
     /// The custom commands of the open context menu.

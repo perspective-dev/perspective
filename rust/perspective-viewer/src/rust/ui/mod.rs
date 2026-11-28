@@ -53,6 +53,5 @@ pub use form::palette_selector::PaletteSelector;
 pub use form::save_settings::{SaveSettings, SaveSettingsProps};
 pub use form::select_enum_field::SelectEnumField;
 pub use form::select_value_field::SelectValueField;
-pub use form::symbol_selector::SymbolSelector;
 pub use portal::{MODAL_SLOT, PortalModal, session_anchor};
 pub use style::StyleProvider;

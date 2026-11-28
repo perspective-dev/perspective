@@ -1,0 +1,489 @@
+// ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+// ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+// ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+// ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+// ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+// ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+// ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+// ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+// ┃ This file is part of the Perspective library, distributed under the terms ┃
+// ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+// ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+use std::collections::HashSet;
+use std::marker::PhantomData;
+
+use derivative::Derivative;
+use perspective_client::proto::ColumnType;
+use web_sys::*;
+use yew::html::Scope;
+use yew::prelude::*;
+
+use crate::components::columns::column_dropdown::{ColumnDropDownElement, InPlaceColumn};
+use crate::components::columns::empty_column::EmptyColumn;
+use crate::components::columns::invalid_column::InvalidColumn;
+use crate::components::columns::type_icon::TypeIcon;
+use crate::presentation::{DragDropContainer, Presentation};
+use crate::ui::intl_slug;
+use crate::utils::{DragTarget, left_click};
+
+#[derive(Properties, Derivative)]
+#[derivative(Clone(bound = ""))]
+pub struct DragDropListProps<T, U>
+where
+    T: Component,
+    U: Component,
+    <U as Component>::Properties: DragDropListItemProps,
+{
+    pub parent: Scope<T>,
+
+    pub presentation: Presentation,
+    pub name: &'static str,
+
+    /// The drop zone this list is, sent with every [`DragListEvent`].
+    pub target: DragTarget,
+    pub column_dropdown: ColumnDropDownElement,
+    pub exclude: HashSet<String>,
+    pub children: ChildrenWithProps<U>,
+
+    #[prop_or_default]
+    pub disabled: bool,
+
+    #[prop_or_default]
+    pub is_dragover: Option<(
+        usize,
+        <<U as Component>::Properties as DragDropListItemProps>::Item,
+    )>,
+
+    #[prop_or_default]
+    pub allow_duplicates: bool,
+
+    /// Single-slot mode: the list holds at most one item, a dragover
+    /// preview REPLACES the current item rather than inserting beside it,
+    /// and the trailing `EmptyColumn` autocomplete renders only while the
+    /// slot is empty.
+    #[prop_or_default]
+    pub single_slot: bool,
+
+    /// The plugin-declared visual role this slot fills, e.g. `"X Axis"`
+    /// for a `Y Line`'s `group_by` (see `PluginStaticConfig`). Rendered
+    /// as the slot's label THROUGH the intl indirection: the role is a
+    /// key, not display text, so `--psp-label--role--x-axis--content`
+    /// supplies the words and a language variant can override them. A
+    /// role with no such label falls back to the declared English, and
+    /// no role at all falls back to the slot's own generic label.
+    #[prop_or_default]
+    pub role_label: Option<AttrValue>,
+
+    /// The in-flight drag is INVALID for this list (a parent-defined rule,
+    /// e.g. the window editor's Table-columns-only slots): the dragover
+    /// preview is suppressed and the invalid-X overlay renders instead,
+    /// like a duplicate drag over `group_by`/`split_by`. The parent's drop
+    /// handler is still responsible for ignoring the drop itself.
+    #[prop_or_default]
+    pub is_invalid: bool,
+}
+
+impl<T, U> PartialEq for DragDropListProps<T, U>
+where
+    T: Component,
+    U: Component,
+    <U as Component>::Properties: DragDropListItemProps,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.target == other.target
+            && self.children == other.children
+            && self.allow_duplicates == other.allow_duplicates
+            && self.is_dragover == other.is_dragover
+            && self.disabled == other.disabled
+            && self.single_slot == other.single_slot
+            && self.is_invalid == other.is_invalid
+            && self.role_label == other.role_label
+    }
+}
+
+pub enum DragDropListMsg {
+    Freeze(bool),
+}
+
+/// A sub-selector for a list-like component of a `JsViewConfig`, such as
+/// `filters` and `sort`.  
+///
+/// `DragDropList` is parameterized by two `Component`
+/// types, the parent component `T` and the inner item compnent `U`, which must
+/// additionally implement `DragDropListItemProps` trait on its own `Properties`
+/// associated type.
+///
+/// Before you ask:  yes, `frozen_size` needs to be a float64 since `flex`
+/// containers can have fractional dimensions.
+pub struct DragDropList<T, U>
+where
+    T: Component,
+    T::Message: From<DragListEvent>,
+    U: Component,
+    <U as Component>::Properties: DragDropListItemProps,
+{
+    parent_type: PhantomData<T>,
+    item_type: PhantomData<U>,
+    elem: NodeRef,
+    frozen_size: Option<f64>,
+}
+
+impl<T, U> Component for DragDropList<T, U>
+where
+    T: Component,
+    T::Message: From<DragListEvent>,
+    U: Component,
+    <U as Component>::Properties: DragDropListItemProps,
+{
+    type Message = DragDropListMsg;
+    type Properties = DragDropListProps<T, U>;
+
+    fn create(_ctx: &Context<Self>) -> Self {
+        Self {
+            parent_type: PhantomData,
+            item_type: PhantomData,
+            elem: NodeRef::default(),
+            frozen_size: None,
+        }
+    }
+
+    fn changed(&mut self, _ctx: &Context<Self>, _old: &Self::Properties) -> bool {
+        true
+    }
+
+    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            // When a dragover occurs and a new Column is inserted into the
+            // selector, the geometry of the selector may expand and cause a
+            // parent reflow, which annoyingly changes the drag status and
+            // glitchiness occurs. By using `Freeze` when a dragenter occurs,
+            // the element's width will be frozen until `drop` or `dragleave`.
+            DragDropListMsg::Freeze(freeze) => {
+                if freeze && self.frozen_size.is_none() {
+                    let elem = self.elem.cast::<HtmlElement>().unwrap();
+                    self.frozen_size = Some({
+                        // recovered by parsing the generated stylesheet ...
+                        let txt = window()
+                            .unwrap()
+                            .get_computed_style(&elem)
+                            .unwrap()
+                            .unwrap()
+                            .get_property_value("width")
+                            .unwrap();
+
+                        // Strip "px" suffix, e.g. "24.876px".
+                        let px = &txt[..txt.len() - 2];
+                        px.parse::<f64>().unwrap()
+                    });
+                    true
+                } else if !freeze {
+                    // Don't render because the invoker will do so through
+                    // `dragdrop`.
+                    self.frozen_size = None;
+                    false
+                } else {
+                    false
+                }
+            },
+        }
+    }
+
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let target = ctx.props().target;
+        let dragover = Callback::from(|_event: DragEvent| _event.prevent_default());
+
+        // On dragleave, signal the parent but no need to redraw as parent will
+        // call `change()` when resetting props.
+        let drag_container = DragDropContainer::new(
+            {
+                let total = ctx.props().children.len();
+                let parent = ctx.props().parent.clone();
+                let link = ctx.link().clone();
+                move || {
+                    link.send_message(DragDropListMsg::Freeze(true));
+                    parent.send_message(DragListEvent::DragEnter(target, total))
+                }
+            },
+            {
+                let parent = ctx.props().parent.clone();
+                let link = ctx.link().clone();
+                move || {
+                    link.send_message(DragDropListMsg::Freeze(false));
+                    parent.send_message(DragListEvent::DragLeave(target))
+                }
+            },
+        );
+
+        let drop = Callback::from({
+            let presentation = ctx.props().presentation.clone();
+            let link = ctx.link().clone();
+            move |event| {
+                link.send_message(DragDropListMsg::Freeze(false));
+                presentation.notify_drop(&event);
+            }
+        });
+
+        // Held by per-row `ondragenter` closures below so they can re-arm
+        // the `safaridragleave` flag on the container element when the
+        // row stops dragenter from bubbling. See the comment inside the
+        // closure for why this matters.
+        let container_noderef = drag_container.noderef.clone();
+
+        let invalid_drag: bool;
+        let mut valid_duplicate_drag = false;
+
+        let columns_html = if ctx.props().single_slot {
+            invalid_drag = ctx.props().is_invalid && ctx.props().is_dragover.is_some();
+
+            // Dragging the slot's own pill over its own slot is a no-op
+            // move - keep showing the pill instead of the drop preview
+            // (mirrors the multi-column branch's `is_self_move` handling).
+            let is_self_move = ctx
+                .props()
+                .presentation
+                .get_drag_target()
+                .map(|x| x == target)
+                .unwrap_or_default();
+
+            let close = left_click(
+                ctx.props()
+                    .parent
+                    .callback(move |_| DragListEvent::Close(target, 0)),
+            );
+            let dragenter = ctx.props().parent.callback({
+                let container_noderef = container_noderef.clone();
+                move |event: DragEvent| {
+                    event.stop_propagation();
+                    event.prevent_default();
+                    if event.related_target().is_none()
+                        && let Some(elem) = container_noderef.cast::<HtmlElement>()
+                    {
+                        let _ = elem.dataset().set("safaridragleave", "true");
+                    }
+                    DragListEvent::DragEnter(target, 0)
+                }
+            });
+
+            if ctx.props().is_dragover.is_some() && !is_self_move && !invalid_drag {
+                html! {
+                    <div class="pivot-column" ondragenter={dragenter}>
+                        <div class="config-drop" />
+                    </div>
+                }
+            } else if let Some(column) = ctx.props().children.iter().next() {
+                html! {
+                    <div class="pivot-column" ondragenter={dragenter}>
+                        { Html::from(column) }
+                        <span class="row_close" onmousedown={close} />
+                    </div>
+                }
+            } else {
+                html! {}
+            }
+        } else {
+            let mut columns = ctx
+                .props()
+                .children
+                .iter()
+                .map(|x| (true, Some(x)))
+                .enumerate()
+                .collect::<Vec<_>>();
+
+            invalid_drag = if ctx.props().is_invalid && ctx.props().is_dragover.is_some() {
+                // Parent-defined invalidity: no preview, X overlay only.
+                true
+            } else if let Some((x, column)) = &ctx.props().is_dragover {
+                let index = *x;
+                let is_append = index == columns.len();
+                let is_self_move = ctx
+                    .props()
+                    .presentation
+                    .get_drag_target()
+                    .map(|x| x == target)
+                    .unwrap_or_default();
+
+                let is_duplicate = columns
+                    .iter()
+                    .position(|x| x.1.1.as_ref().unwrap().props.get_item() == *column);
+
+                valid_duplicate_drag = is_duplicate.is_some() && !ctx.props().allow_duplicates;
+                if let Some(duplicate) = is_duplicate
+                    && !is_append
+                    && (!ctx.props().allow_duplicates || is_self_move)
+                {
+                    columns.remove(duplicate);
+                }
+
+                // If inserting into the middle of the list, use
+                // the length of the existing element to prevent
+                // jitter as the underlying dragover zone moves.
+                if index < columns.len() {
+                    columns.insert(index, (usize::MAX, (false, None)));
+                    false
+                } else if (!is_append && !ctx.props().allow_duplicates)
+                    || ((!is_append || !is_self_move)
+                        && (is_duplicate.is_none() || ctx.props().allow_duplicates))
+                {
+                    columns.push((usize::MAX, (false, None)));
+                    false
+                } else {
+                    true
+                }
+            } else {
+                false
+            };
+
+            columns
+                .into_iter()
+                .enumerate()
+                .map(|(idx, column)| {
+                    let close = left_click(
+                        ctx.props()
+                            .parent
+                            .callback(move |_| DragListEvent::Close(target, idx)),
+                    );
+                    let dragenter = ctx.props().parent.callback({
+                        let link = ctx.link().clone();
+                        let container_noderef = container_noderef.clone();
+                        move |event: DragEvent| {
+                            event.stop_propagation();
+                            event.prevent_default();
+                            // Safari: `relatedTarget` is always null on
+                            // dragleave, so `dragleave_helper` uses a
+                            // `data-safaridragleave` flag set by the
+                            // container's own dragenter to distinguish
+                            // child-crossing leaves (consume the flag)
+                            // from real leaves (no flag → fire callback).
+                            // The `stop_propagation` above blocks the
+                            // container's dragenter, so the flag would
+                            // never be re-armed after the first consume —
+                            // any further internal boundary crossing
+                            // would demote the state out of
+                            // `DragOverInProgress` and the next drop
+                            // would be silently rejected. Set the flag
+                            // here so each row-targeted dragenter
+                            // refills the pool.
+                            if event.related_target().is_none()
+                                && let Some(elem) = container_noderef.cast::<HtmlElement>()
+                            {
+                                let _ = elem.dataset().set("safaridragleave", "true");
+                            }
+                            link.send_message(DragDropListMsg::Freeze(true));
+                            DragListEvent::DragEnter(target, idx)
+                        }
+                    });
+
+                    if let (key, (true, Some(column))) = column {
+                        html! {
+                            <div {key} class="pivot-column" ondragenter={dragenter}>
+                                { Html::from(column) }
+                                <span class="row_close" onmousedown={close} />
+                            </div>
+                        }
+                    } else if let (key, (_, Some(column))) = column {
+                        html! {
+                            <div {key} class="pivot-column" ondragenter={dragenter}>
+                                { Html::from(column) }
+                                <span class="row_close" style="opacity: 0.3" />
+                            </div>
+                        }
+                    } else {
+                        let (key, _) = column;
+                        html! {
+                            <div {key} class="pivot-column" ondragenter={dragenter}>
+                                <div class="config-drop" />
+                            </div>
+                        }
+                    }
+                })
+                .collect::<Html>()
+        };
+
+        let show_empty = if ctx.props().single_slot {
+            ctx.props().children.is_empty() && ctx.props().is_dragover.is_none()
+        } else {
+            ctx.props().is_dragover.is_none() | (!invalid_drag && valid_duplicate_drag)
+        };
+
+        let column_dropdown = ctx.props().column_dropdown.clone();
+        let exclude = ctx.props().exclude.clone();
+        let on_select = ctx
+            .props()
+            .parent
+            .callback(move |col| DragListEvent::Create(target, col));
+        let class = classes!("rrow");
+        let is_enabled = true;
+
+        // The role is data from the plugin, so the var NAME is built
+        // here while the var VALUE stays in the stylesheets - custom
+        // properties inherit, so the label's `:before` picks it up.
+        let role_style = ctx.props().role_label.as_ref().map(|role| {
+            let slug = intl_slug(role);
+
+            // The second var is a PRESENCE FLAG: CSS cannot ask whether a
+            // custom property is set, so the slot's stylesheet reads it as
+            // the secondary label's `display` and gets `none` by fallback
+            // when no role was declared.
+            format!(
+                "--psp-label--pivot--content: var(--psp-label--role--{slug}--content, \
+                 \"{role}\"); --psp-label--pivot-secondary--display: inline-block"
+            )
+        });
+
+        html! {
+            <div ref={&self.elem} {class}>
+                <div
+                    id={ctx.props().name}
+                    style={role_style}
+                    ondragover={is_enabled.then_some(dragover)}
+                    ondragenter={is_enabled.then_some(drag_container.dragenter)}
+                    ondragleave={is_enabled.then_some(drag_container.dragleave)}
+                    ref={drag_container.noderef}
+                    ondrop={is_enabled.then_some(drop)}
+                >
+                    <div class="psp-text-field">
+                        <ul class="psp-text-field__input" for={ctx.props().name}>
+                            { columns_html }
+                            if ctx.props().disabled && ctx.props().is_dragover.is_none() {
+                                <div class="pivot-column">
+                                    <div class="pivot-column-border pivot-column-total">
+                                        <span class="drag-handle icon" />
+                                        <TypeIcon ty={ColumnType::Integer} />
+                                        <span class="column_name">{ "TOTAL" }</span>
+                                    </div>
+                                    <span
+                                        class="toggle-mode is_column_active"
+                                        onmousedown={left_click(ctx.props().parent.callback(move |_| DragListEvent::Close(target, 0)))}
+                                    />
+                                </div>
+                            } else if show_empty {
+                                <EmptyColumn {column_dropdown} {exclude} {on_select} />
+                            } else if invalid_drag {
+                                <InvalidColumn />
+                            }
+                        </ul>
+                        <label class="pivot-selector-label" for={ctx.props().name} />
+                    </div>
+                </div>
+            </div>
+        }
+    }
+}
+
+/// Must be implemented by `Properties` of children of `DragDropList`, returning
+/// the value a DragDropItem represents.
+pub trait DragDropListItemProps: Properties {
+    type Item: Clone + PartialEq;
+    fn get_item(&self) -> Self::Item;
+}
+
+/// A [`DragDropList`] interaction, sent to the parent `Component` as its
+/// `Message` via `From`.
+pub enum DragListEvent {
+    DragEnter(DragTarget, usize),
+    DragLeave(DragTarget),
+    Close(DragTarget, usize),
+    Create(DragTarget, InPlaceColumn),
+}

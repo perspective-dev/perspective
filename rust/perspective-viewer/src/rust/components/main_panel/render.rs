@@ -18,10 +18,10 @@ use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
 use super::{MainPanel, MainPanelMsg, MainPanelProps, MenuOrigin};
-use crate::components::panel_menu::PanelMenu;
-use crate::components::panel_tab::PanelTab;
-use crate::components::render_warning::RenderWarning;
-use crate::components::status_bar::StatusBar;
+use crate::components::main_panel::panel_menu::PanelMenu;
+use crate::components::main_panel::panel_tab::PanelTab;
+use crate::components::main_panel::render_warning::RenderWarning;
+use crate::components::main_panel::status_bar::StatusBar;
 use crate::js::RegularLayout;
 use crate::session::TableLoadState;
 use crate::tasks::dismiss_render_warning_callback;

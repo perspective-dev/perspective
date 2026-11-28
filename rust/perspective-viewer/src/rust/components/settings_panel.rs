@@ -10,17 +10,23 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+mod column_selector;
+mod debug_panel;
+mod empty_placeholder;
+mod plugin_selector;
+mod plugin_tab;
+
 use std::rc::Rc;
 
 use perspective_client::config::{ViewConfig, ViewConfigUpdate};
 use perspective_js::utils::ApiFuture;
 use yew::prelude::*;
 
-use super::column_selector::ColumnSelector;
-use super::plugin_selector::PluginSelector;
-use super::plugin_tab::PluginTab;
-use crate::components::debug_panel::DebugPanel;
-use crate::components::empty_placeholder::EmptyPlaceholder;
+use self::column_selector::ColumnSelector;
+use self::debug_panel::DebugPanel;
+use self::empty_placeholder::EmptyPlaceholder;
+use self::plugin_selector::PluginSelector;
+use self::plugin_tab::PluginTab;
 use crate::components::error_dialog::ErrorDialog;
 use crate::config::{PluginStaticConfig, PluginUpdate};
 use crate::presentation::{ColumnLocator, ColumnSettingsTarget, OpenColumnSettings, Presentation};

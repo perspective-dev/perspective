@@ -11,10 +11,9 @@
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
 mod agg_depth_selector;
-pub(crate) mod alignment_field;
-pub(crate) mod font_field;
-pub(crate) mod primitive_field;
-mod symbol;
+mod datetime_column_style;
+mod number_series_style;
+mod number_string_format;
 
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
@@ -24,15 +23,17 @@ use perspective_client::config::ColumnType;
 use yew::{Callback, Html, Properties, function_component, html};
 
 use self::agg_depth_selector::*;
-use self::alignment_field::AlignmentField;
-use self::font_field::FontField;
-use self::primitive_field::{
-    BoolField, ColorField, EnumField, GradientStopsField, NumberFieldPrimitive, PaletteField,
-};
-use crate::components::column_settings_sidebar::style_tab::symbol::SymbolStyle;
-use crate::components::datetime_column_style::DatetimeColumnStyle;
-use crate::components::number_series_style::NumberSeriesStyle;
-use crate::components::style_controls::CustomNumberFormat;
+use self::datetime_column_style::DatetimeColumnStyle;
+use self::number_series_style::NumberSeriesStyle;
+use self::number_string_format::CustomNumberFormat;
+use crate::components::style_fields::alignment_field::AlignmentField;
+use crate::components::style_fields::bool_field::BoolField;
+use crate::components::style_fields::color_field::ColorField;
+use crate::components::style_fields::enum_field::EnumField;
+use crate::components::style_fields::font_field::FontField;
+use crate::components::style_fields::gradient_stops_field::GradientStopsField;
+use crate::components::style_fields::number_field::NumberFieldPrimitive;
+use crate::components::style_fields::palette_field::PaletteField;
 use crate::config::{
     Alignment, ColumnConfigFieldUpdate, ControlSpec, CustomNumberFormatConfig,
     DatetimeColumnStyleConfig, DatetimeFormat, FontToggle, NumberFormatDefaults,
@@ -269,27 +270,6 @@ fn render_leaf(spec: ControlSpec, keys: &[String], ctx: &FieldRenderCtx) -> Opti
                     {config}
                     {default_format}
                     on_change={on_change.clone()}
-                    keys={keys.to_vec()}
-                />
-            }
-        },
-        ControlSpec::Symbols {
-            default: default_config,
-        } => {
-            let restored_config: HashMap<String, String> = raw_config
-                .as_ref()
-                .and_then(|m| m.get("symbols"))
-                .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or_default();
-
-            html! {
-                <SymbolStyle
-                    {default_config}
-                    restored_config={Some(restored_config)}
-                    on_change={on_change.clone()}
-                    column_name={props.column_name.clone()}
-                    selected_theme={props.selected_theme.clone()}
-                    session={props.session.clone()}
                     keys={keys.to_vec()}
                 />
             }

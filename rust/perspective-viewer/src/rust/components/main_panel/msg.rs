@@ -12,7 +12,7 @@
 
 use std::rc::Rc;
 
-use crate::components::panel_menu::PanelCommand;
+use crate::components::panel_command::PanelCommand;
 use crate::queries::ResolvedCommands;
 
 /// Which surface a context-menu gesture landed on.
@@ -79,8 +79,8 @@ pub enum MainPanelMsg {
     /// x, y). Fired by the imperative `contextmenu` listener on the viewer
     /// host — see `_contextmenu_listener` — and by each `PanelTab`.
     /// `Some(id)` activates that panel and opens its
-    /// [`PanelMenu`](crate::components::panel_menu::PanelMenu) at the
-    /// cursor; `None` (no frame on the composed path — status bar,
+    /// [`PanelMenu`](crate::components::main_panel::panel_menu::PanelMenu) at
+    /// the cursor; `None` (no frame on the composed path — status bar,
     /// sidebars, the empty stage) resolves to the ACTIVE panel, else to a
     /// target-less menu offering only "New", whose items create the first
     /// panel.

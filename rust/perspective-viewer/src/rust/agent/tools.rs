@@ -1080,10 +1080,6 @@ fn control_schema_entries(spec: &ControlSpec) -> Vec<(String, Value)> {
                 json!({ "description": "Series stack group" }),
             ),
         ],
-        ControlSpec::Symbols { .. } => vec![(
-            "symbols".to_owned(),
-            json!({ "type": "object", "description": "Map of column values to symbol names" }),
-        )],
         ControlSpec::NumberFormat { .. } => vec![(
             "number_format".to_owned(),
             json!({ "type": "object", "description": "Intl.NumberFormat-style options" }),

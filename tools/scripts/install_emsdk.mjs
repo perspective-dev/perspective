@@ -47,6 +47,31 @@ function toolchain_install() {
     console.log(`-- Emscripten ${emscripten} installed`);
 }
 
+// Install the `tsc` Emscripten pins for `--emit-tsd` into its own `node_modules`, because emsdk's `npm ci --production` omits that devDependency and Emscripten then falls back to the workspace `tsc` on `PATH`, whose TypeScript 7 rejects the `--outFile` it passes.
+function emscripten_tsc_install() {
+    const root = path.join(base(), "upstream", "emscripten");
+    const manifest = JSON.parse(
+        fs.readFileSync(path.join(root, "package.json"), "utf8"),
+    );
+
+    const range = manifest.devDependencies.typescript;
+    const prefix = path.join(root, "node_modules", ".psp-tsc");
+    const bin = path.join(root, "node_modules", ".bin");
+    const target = "../.psp-tsc/node_modules/typescript/bin/tsc";
+    console.log(`-- Installing Emscripten's typescript@${range}`);
+    $.sync`npm install --no-save --no-package-lock --ignore-scripts --prefix ${prefix} typescript@${range}`;
+    fs.mkdirSync(bin, { recursive: true });
+    if (os.type() == "Windows_NT") {
+        fs.writeFileSync(
+            path.join(bin, "tsc.cmd"),
+            `@node "%~dp0\\${target.replace(/\//g, "\\")}" %*\r\n`,
+        );
+    } else {
+        fs.rmSync(path.join(bin, "tsc"), { force: true });
+        fs.symlinkSync(target, path.join(bin, "tsc"));
+    }
+}
+
 function repo_check() {
     return fs.existsSync(path.join(base(), "emsdk_env.sh"));
 }
@@ -63,4 +88,5 @@ if (!process.env.PSP_SKIP_EMSDK_INSTALL) {
     }
 
     toolchain_install();
+    emscripten_tsc_install();
 }

@@ -10,31 +10,20 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+#[cfg(feature = "llm-agent")]
+mod chat_panel;
 mod join_form;
 mod table_rows;
 mod tables_tab;
 
-use std::rc::Rc;
-
 use yew::prelude::*;
 
 use self::tables_tab::TablesTab;
-use crate::components::json_panel::{JsonPanel, JsonSource};
+use crate::components::editors::json_panel::{JsonPanel, JsonSource};
+use crate::components::view_label::ViewLabels;
 use crate::queries::WorkspaceStatus;
 use crate::tasks::WorkspaceHost;
 use crate::ui::SidebarCloseButton;
-
-/// A panel listed under its `Client` in the Tables tab's Views.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ViewLabel {
-    pub id: String,
-    pub title: Option<String>,
-
-    /// Whether a `Table` can be derived from this panel's `View` now.
-    pub derivable: bool,
-}
-
-pub type ViewLabels = Rc<Vec<ViewLabel>>;
 
 /// A tab of the [`WorkspacePanel`].
 #[derive(Debug, PartialEq, Clone, Copy, Default)]
@@ -131,9 +120,7 @@ pub fn WorkspacePanel(props: &WorkspacePanelProps) -> Html {
         },
         #[cfg(feature = "llm-agent")]
         WorkspaceTab::Chat => html! {
-            <crate::components::chat_panel::ChatPanel
-                agent={props.host.presentation.agent.clone()}
-            />
+            <self::chat_panel::ChatPanel agent={props.host.presentation.agent.clone()} />
         },
         #[cfg(not(feature = "llm-agent"))]
         WorkspaceTab::Chat => html! {},

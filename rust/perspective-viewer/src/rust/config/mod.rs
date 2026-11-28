@@ -14,11 +14,9 @@
 //! state, suitable for persistence, history, etc. features.
 
 mod column_config_schema;
-mod columns_config;
 mod command_schema;
 mod datetime_column_style;
 mod export_method;
-mod kvpair;
 mod number_series_style;
 mod number_string_format;
 mod options;
@@ -27,7 +25,6 @@ pub mod view_config;
 mod viewer_config;
 
 pub use column_config_schema::*;
-pub use columns_config::*;
 pub use command_schema::*;
 pub use datetime_column_style::*;
 pub use export_method::*;

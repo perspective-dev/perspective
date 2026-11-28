@@ -22,7 +22,7 @@ use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
 use super::{MainPanel, MainPanelMsg, MenuOrigin, MenuRequest};
-use crate::components::panel_menu::PanelCommand;
+use crate::components::panel_command::PanelCommand;
 use crate::config::CommandLocation;
 use crate::js::{Layout, LayoutExt, RegularLayout};
 use crate::queries::{ResolvedCommands, resolve_commands};

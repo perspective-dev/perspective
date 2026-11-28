@@ -367,7 +367,6 @@ test.describe("Config defaults delivery", () => {
             "anchor",
             "width",
             "color",
-            "symbols",
             "aggregate_depth",
         ]) {
             consoleLogs.expectedLogs.push(
@@ -383,7 +382,6 @@ test.describe("Config defaults delivery", () => {
             anchor: "center",
             width: 500,
             color: "not-a-color",
-            symbols: { East: "circle" },
             aggregate_depth: 1,
         });
 

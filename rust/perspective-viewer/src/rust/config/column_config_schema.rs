@@ -15,10 +15,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use super::{
-    ChartType, CustomNumberFormatConfig, DatetimeFormat, KeyValueOpts,
-    NumberSeriesStyleDefaultConfig,
-};
+use super::{ChartType, CustomNumberFormatConfig, DatetimeFormat, NumberSeriesStyleDefaultConfig};
 use crate::utils::{CssKind, GradientStopSpec, canonicalize_gradient_stops};
 
 /// The full schema for one column at one point in time. Plugins may return
@@ -173,9 +170,6 @@ pub enum ControlSpec {
     },
     NumberSeriesStyle {
         default: NumberSeriesStyleDefaultConfig,
-    },
-    Symbols {
-        default: KeyValueOpts,
     },
     NumberFormat {
         /// Plugin-declared default format, keyed like `number_format`
@@ -483,7 +477,6 @@ impl ControlSpec {
             .flatten()
             .collect(),
             ControlSpec::NumberSeriesStyle { .. } => vec!["chart_type", "stack"],
-            ControlSpec::Symbols { .. } => vec!["symbols"],
             ControlSpec::NumberFormat { .. } => vec!["number_format"],
             ControlSpec::AggregateDepth => vec!["aggregate_depth"],
             ControlSpec::Enum { key, .. }
@@ -760,9 +753,6 @@ impl ControlSpec {
             },
             ControlSpec::NumberSeriesStyle { default } if key == "stack" => {
                 default.stack = Some(expect_bool(value)?);
-            },
-            ControlSpec::Symbols { .. } if key == "symbols" => {
-                return Err("`symbols` has no overridable default".to_owned());
             },
             ControlSpec::AggregateDepth if key == "aggregate_depth" => {
                 return Err("`aggregate_depth` has no overridable default".to_owned());

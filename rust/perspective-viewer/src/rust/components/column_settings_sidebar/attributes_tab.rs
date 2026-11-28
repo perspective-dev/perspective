@@ -12,7 +12,9 @@
 
 use yew::{Html, Properties, function_component, html};
 
-use crate::components::expression_editor::{ExpressionEditor, ExpressionEditorProps};
+use crate::components::column_settings_sidebar::expression_editor::{
+    ExpressionEditor, ExpressionEditorProps,
+};
 use crate::ui::{SaveSettings, SaveSettingsProps};
 
 #[derive(PartialEq, Properties, Clone)]
